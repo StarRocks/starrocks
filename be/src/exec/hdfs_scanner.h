@@ -18,6 +18,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include "exec/hash_joiner.h"
+#include "exec/mor_processor.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
@@ -356,11 +357,9 @@ private:
     std::atomic<bool> _closed = false;
     bool _keep_priority = false;
     Status _build_scanner_context();
-    Status _build_hash_joiner_for_mor_if_needed();
     MonotonicStopWatch _pending_queue_sw;
     void update_hdfs_counter(HdfsScanProfile* profile);
-
-    std::atomic<bool> _prepared_probe = false;
+    Status _init_mor_processor(RuntimeState* runtime_state, const HdfsScannerParams& params);
 
 protected:
     std::atomic_bool _pending_token = false;
@@ -376,10 +375,8 @@ protected:
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
     std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
     int64_t _total_running_time = 0;
-    std::shared_ptr<HashJoiner> _hash_joiner = nullptr;
-    std::vector<ExprContext*> _join_exprs;
-    std::unique_ptr<RowDescriptor> _build_row_desc;
-    std::unique_ptr<RowDescriptor> _probe_row_desc;
+
+    std::shared_ptr<MorProcessor> _mor_processor;
 };
 
 } // namespace starrocks

@@ -468,7 +468,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
         {
             // output default values for build-columns as placeholder.
             SCOPED_TIMER(_probe_state->output_build_column_timer);
-            if (_table_items->with_external_table_mor) {
+            if (_table_items->mor_reader_mode) {
                 return;
             }
 

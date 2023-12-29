@@ -124,7 +124,7 @@ struct JoinHashTableItems {
     float keys_per_bucket = 0;
     size_t used_buckets = 0;
     bool cache_miss_serious = false;
-    bool with_external_table_mor = false;
+    bool mor_reader_mode = false;
 
     float get_keys_per_bucket() const { return keys_per_bucket; }
     bool ht_cache_miss_serious() const { return cache_miss_serious; }
@@ -266,7 +266,7 @@ struct HashTableParam {
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
-    bool with_external_table_mor = false;
+    bool mor_reader_mode = false;
 };
 
 template <class T>
@@ -562,7 +562,7 @@ private:
     void _build_output(ChunkPtr* chunk) {
         SCOPED_TIMER(_probe_state->output_build_column_timer);
 
-        if (_table_items->with_external_table_mor) {
+        if (_table_items->mor_reader_mode) {
             return;
         }
         bool to_nullable = _table_items->right_to_nullable;

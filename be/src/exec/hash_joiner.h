@@ -73,7 +73,7 @@ struct HashJoinerParam {
                     TPlanNodeType::type probe_node_type, bool build_conjunct_ctxs_is_empty,
                     std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters, std::set<SlotId> build_output_slots,
                     std::set<SlotId> probe_output_slots, const TJoinDistributionMode::type distribution_mode,
-                    bool with_external_table_mor)
+                    bool mor_reader_mode)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _node_id(node_id),
@@ -93,7 +93,7 @@ struct HashJoinerParam {
               _build_output_slots(std::move(build_output_slots)),
               _probe_output_slots(std::move(probe_output_slots)),
               _distribution_mode(distribution_mode),
-              _with_external_table_mor(with_external_table_mor) {}
+              _mor_reader_mode(mor_reader_mode) {}
 
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
@@ -119,7 +119,7 @@ struct HashJoinerParam {
     std::set<SlotId> _probe_output_slots;
 
     const TJoinDistributionMode::type _distribution_mode;
-    const bool _with_external_table_mor;
+    const bool _mor_reader_mode;
 };
 
 inline bool could_short_circuit(TJoinOp::type join_type) {
@@ -452,7 +452,7 @@ private:
     HashJoinBuildMetrics* _build_metrics;
     HashJoinProbeMetrics* _probe_metrics;
     size_t _hash_table_build_rows{};
-    bool _with_external_table_mor = false;
+    bool _mor_reader_mode = false;
 };
 
 } // namespace starrocks

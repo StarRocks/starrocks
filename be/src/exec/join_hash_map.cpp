@@ -320,7 +320,7 @@ void JoinHashTable::create(const HashTableParam& param) {
     _table_items->with_other_conjunct = param.with_other_conjunct;
     _table_items->join_type = param.join_type;
     _table_items->row_desc = param.row_desc;
-    _table_items->with_external_table_mor = param.with_external_table_mor;
+    _table_items->mor_reader_mode = param.mor_reader_mode;
 
     if (_table_items->join_type == TJoinOp::RIGHT_SEMI_JOIN || _table_items->join_type == TJoinOp::RIGHT_ANTI_JOIN ||
         _table_items->join_type == TJoinOp::RIGHT_OUTER_JOIN) {
@@ -361,7 +361,7 @@ void JoinHashTable::create(const HashTableParam& param) {
         for (const auto& slot : tuple_desc->slots()) {
             HashTableSlotDescriptor hash_table_slot;
             hash_table_slot.slot = slot;
-            if (!param.with_external_table_mor &&
+            if (!param.mor_reader_mode &&
                 (param.build_output_slots.empty() ||
                  std::find(param.build_output_slots.begin(), param.build_output_slots.end(), slot->id()) !=
                          param.build_output_slots.end() ||
@@ -385,7 +385,7 @@ void JoinHashTable::create(const HashTableParam& param) {
         }
     }
 
-    if (param.with_external_table_mor) {
+    if (param.mor_reader_mode) {
         for (const auto& build_slot : _table_items->build_slots) {
             bool found_build_slot = false;
             for (auto probe_slot : _table_items->probe_slots) {
