@@ -42,6 +42,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
@@ -130,6 +131,8 @@ public class LoadPlanner {
     // Routine load related structs
     TRoutineLoadTask routineLoadTask;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
+
+    private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
 
     private Boolean missAutoIncrementColumn = Boolean.FALSE;
 
@@ -230,6 +233,10 @@ public class LoadPlanner {
 
     public void setMergeConditionStr(String mergeConditionStr) {
         this.mergeConditionStr = mergeConditionStr;
+    }
+
+    public void setJsonOptions(LoadJob.JSONOptions options) {
+        this.jsonOptions = options;
     }
 
     public void plan() throws UserException {
@@ -378,6 +385,7 @@ public class LoadPlanner {
             fileScanNode.setLoadInfo(loadJobId, txnId, destTable, brokerDesc, fileGroups, strictMode,
                     parallelInstanceNum);
             fileScanNode.setUseVectorizedLoad(true);
+            fileScanNode.setJSONOptions(jsonOptions);
             fileScanNode.init(analyzer);
             fileScanNode.finalizeStats(analyzer);
             scanNode = fileScanNode;
