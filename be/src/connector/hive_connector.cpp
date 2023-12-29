@@ -263,7 +263,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         std::vector<SlotDescriptor*> equality_delete_slots;
         for (SlotDescriptor* d_slot_desc : delete_column_tuple_desc->slots()) {
             _equality_delete_slots.emplace_back(d_slot_desc);
-            if (id_to_slots.contains(d_slot_desc->id())) {
+            if (!id_to_slots.contains(d_slot_desc->id())) {
                 _materialize_slots.push_back(d_slot_desc);
                 _materialize_index_in_chunk.push_back(delete_column_index++);
             }

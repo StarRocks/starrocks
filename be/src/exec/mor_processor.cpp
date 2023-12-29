@@ -57,19 +57,19 @@ Status IcebergMorProcessor::init(RuntimeState* runtime_state, const HdfsScannerP
 }
 
 Status IcebergMorProcessor::build_hash_table(RuntimeState* runtime_state) {
-        RETURN_IF_ERROR(_hash_joiner->build_ht(runtime_state));
-        _hash_joiner->enter_probe_phase();
-        return Status::OK();
+    RETURN_IF_ERROR(_hash_joiner->build_ht(runtime_state));
+    _hash_joiner->enter_probe_phase();
+    return Status::OK();
 }
 
 Status IcebergMorProcessor::get_next(RuntimeState* state, RuntimeProfile* prorile, ChunkPtr* chunk) {
-        if (!_prepared_probe.load()) {
-            RETURN_IF_ERROR(_hash_joiner->prepare_prober(state, prorile));
-            _prepared_probe.store(true);
-        }
-        RETURN_IF_ERROR(_hash_joiner->push_chunk(state, std::move(*chunk)));
-        *chunk = std::move(_hash_joiner->pull_chunk(state)).value();
-        return Status::OK();
+    if (!_prepared_probe.load()) {
+        RETURN_IF_ERROR(_hash_joiner->prepare_prober(state, prorile));
+        _prepared_probe.store(true);
+    }
+    RETURN_IF_ERROR(_hash_joiner->push_chunk(state, std::move(*chunk)));
+    *chunk = std::move(_hash_joiner->pull_chunk(state)).value();
+    return Status::OK();
 }
 
 void IcebergMorProcessor::close(RuntimeState* runtime_state) {
