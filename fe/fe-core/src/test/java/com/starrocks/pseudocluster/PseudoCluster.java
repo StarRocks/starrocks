@@ -29,7 +29,7 @@ import com.staros.proto.WorkerInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.ClientPool;
@@ -60,6 +60,7 @@ import java.sql.SQLSyntaxErrorException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -269,6 +270,10 @@ public class PseudoCluster {
         return backends.get(host);
     }
 
+    public Collection<PseudoBackend> getBackends() {
+        return backends.values();
+    }
+
     public PseudoBackend getBackendByHost(String host) {
         PseudoBackend be = backends.get(host);
         if (be == null) {
@@ -294,7 +299,7 @@ public class PseudoCluster {
             }
             OlapTable olapTable = (OlapTable) table;
             List<Long> ret = Lists.newArrayList();
-            for (Partition partition : olapTable.getPartitions()) {
+            for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
                 for (MaterializedIndex index : partition.getMaterializedIndices(
                         MaterializedIndex.IndexExtState.ALL)) {
                     for (Tablet tablet : index.getTablets()) {
@@ -410,7 +415,7 @@ public class PseudoCluster {
         dataSource.setMaxIdle(40);
         cluster.dataSource = dataSource;
 
-        ClientPool.heartbeatPool = cluster.heartBeatPool;
+        ClientPool.beHeartbeatPool = cluster.heartBeatPool;
         ClientPool.backendPool = cluster.backendThriftPool;
         BrpcProxy.setInstance(cluster.brpcProxy);
 

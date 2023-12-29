@@ -50,6 +50,8 @@ public class TableStatsCacheLoader implements AsyncCacheLoader<TableStatsCacheKe
                 throw e;
             } catch (Exception e) {
                 throw new CompletionException(e);
+            } finally {
+                ConnectContext.remove();
             }
         }, executor);
     }
@@ -84,6 +86,8 @@ public class TableStatsCacheLoader implements AsyncCacheLoader<TableStatsCacheKe
                 throw e;
             } catch (Exception e) {
                 throw new CompletionException(e);
+            } finally {
+                ConnectContext.remove();
             }
         }, executor);
     }

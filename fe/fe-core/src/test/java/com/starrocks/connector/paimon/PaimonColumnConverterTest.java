@@ -34,6 +34,7 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
+import org.apache.paimon.types.VarBinaryType;
 import org.apache.paimon.types.VarCharType;
 import org.junit.Assert;
 import org.junit.Test;
@@ -51,6 +52,13 @@ public class PaimonColumnConverterTest {
     }
 
     @Test
+    public void testConvertVarBinary() {
+        VarBinaryType paimonType = new VarBinaryType();
+        Type result = ColumnTypeConverter.fromPaimonType(paimonType);
+        Assert.assertEquals(result, Type.VARBINARY);
+    }
+
+    @Test
     public void testConvertChar() {
         CharType paimonType = new CharType(10);
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
@@ -62,7 +70,7 @@ public class PaimonColumnConverterTest {
     public void testConvertVarchar() {
         VarCharType paimonType = new VarCharType();
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
-        Type srType = ScalarType.createDefaultExternalTableString();
+        Type srType = ScalarType.createDefaultCatalogString();
         Assert.assertEquals(result, srType);
     }
 
@@ -154,7 +162,7 @@ public class PaimonColumnConverterTest {
         Type result = ColumnTypeConverter.fromPaimonType(paimonType);
         Assert.assertTrue(result instanceof com.starrocks.catalog.MapType);
         com.starrocks.catalog.MapType srType = (com.starrocks.catalog.MapType) result;
-        Assert.assertEquals(ScalarType.createDefaultExternalTableString(), srType.getKeyType());
+        Assert.assertEquals(ScalarType.createDefaultCatalogString(), srType.getKeyType());
         Assert.assertEquals(Type.DATETIME, srType.getValueType());
     }
 

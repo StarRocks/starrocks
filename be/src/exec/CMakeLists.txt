@@ -28,6 +28,8 @@ set(EXEC_FILES
     scan_node.cpp
     select_node.cpp
     sort_exec_exprs.cpp
+    short_circuit.cpp
+    short_circuit_hybrid.cpp
     olap_common.cpp
     tablet_info.cpp
     tablet_sink.cpp
@@ -79,6 +81,7 @@ set(EXEC_FILES
     except_node.cpp
     file_scanner.cpp
     orc_scanner.cpp
+    orc_writer.cpp
     jni_scanner.cpp
     arrow_to_starrocks_converter.cpp
     arrow_to_json_converter.cpp
@@ -105,6 +108,7 @@ set(EXEC_FILES
     table_function_node.cpp
     schema_scanner.cpp
     schema_scan_node.cpp
+    dictionary_cache_writer.cpp
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_delete_file_iterator.cpp
     schema_scanner/schema_tables_scanner.cpp
@@ -133,6 +137,7 @@ set(EXEC_FILES
     schema_scanner/schema_be_configs_scanner.cpp
     schema_scanner/schema_be_threads_scanner.cpp
     schema_scanner/schema_be_logs_scanner.cpp
+    schema_scanner/schema_fe_metrics_scanner.cpp
     schema_scanner/schema_fe_tablet_schedules_scanner.cpp
     schema_scanner/schema_be_compactions_scanner.cpp
     schema_scanner/schema_be_bvars_scanner.cpp
@@ -144,6 +149,9 @@ set(EXEC_FILES
     schema_scanner/schema_helper.cpp
     schema_scanner/schema_routine_load_jobs_scanner.cpp
     schema_scanner/schema_stream_loads_scanner.cpp
+    schema_scanner/schema_be_datacache_metrics_scanner.cpp
+    schema_scanner/sys_object_dependencies.cpp
+    schema_scanner/sys_fe_locks.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
@@ -191,10 +199,12 @@ set(EXEC_FILES
     pipeline/sink/iceberg_table_sink_operator.cpp
     pipeline/sink/hive_table_sink_operator.cpp
     pipeline/sink/table_function_table_sink_operator.cpp
+    pipeline/sink/blackhole_table_sink_operator.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp
     pipeline/sink/export_sink_operator.cpp
+    pipeline/sink/dictionary_cache_sink_operator.cpp
     pipeline/sink/mysql_table_sink_operator.cpp
     pipeline/sink/memory_scratch_sink_operator.cpp
     pipeline/select_operator.cpp

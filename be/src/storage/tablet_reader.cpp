@@ -14,6 +14,7 @@
 
 #include "storage/tablet_reader.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "column/datum_convert.h"
@@ -127,7 +128,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
 Status TabletReader::_init_collector_for_pk_index_read() {
     DCHECK(_reader_params != nullptr);
     // get pk eq predicates, and convert these predicates to encoded pk column
-    const auto& tablet_schema = _tablet->tablet_schema();
+    const auto& tablet_schema = _tablet_schema;
     vector<ColumnId> pk_column_ids;
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_column_ids.emplace_back(i);
@@ -194,7 +195,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     rs_opts.runtime_state = _reader_params->runtime_state;
     rs_opts.profile = _reader_params->profile;
     rs_opts.use_page_cache = _reader_params->use_page_cache;
-    rs_opts.tablet_schema = _tablet->tablet_schema();
+    rs_opts.tablet_schema = _tablet_schema;
     rs_opts.global_dictmaps = _reader_params->global_dictmaps;
     rs_opts.unused_output_column_ids = _reader_params->unused_output_column_ids;
     rs_opts.runtime_range_pruner = _reader_params->runtime_range_pruner;
@@ -208,7 +209,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
         return Status::InternalError(strings::Substitute("segment_idx out of range tablet:$0 $1 >= $2",
                                                          _tablet->tablet_id(), segment_idx, rowset->num_segments()));
     }
-    rs_opts.rowid_range_option->add(rowset.get(), rowset->segments()[segment_idx].get(), rowid_range);
+    rs_opts.rowid_range_option->add(rowset.get(), rowset->segments()[segment_idx].get(), rowid_range, true);
 
     std::vector<ChunkIteratorPtr> iters;
     RETURN_IF_ERROR(rowset->get_segment_iterators(schema(), rs_opts, &iters));
@@ -253,7 +254,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     KeysType keys_type = _tablet_schema->keys_type();
     RETURN_IF_ERROR(_init_predicates(params));
     RETURN_IF_ERROR(_init_delete_predicates(params, &_delete_predicates));
-    RETURN_IF_ERROR(parse_seek_range(_tablet, params.range, params.end_range, params.start_key, params.end_key,
+    RETURN_IF_ERROR(parse_seek_range(_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
     rs_opts.predicates = _pushdown_predicates;
     RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, rs_opts.predicates,
@@ -277,11 +278,12 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     }
     rs_opts.meta = _tablet->data_dir()->get_meta();
     rs_opts.rowid_range_option = params.rowid_range_option;
-    rs_opts.short_key_ranges = params.short_key_ranges;
+    rs_opts.short_key_ranges_option = params.short_key_ranges_option;
+    rs_opts.asc_hint = _is_asc_hint;
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
-        if (params.rowid_range_option != nullptr && !params.rowid_range_option->match_rowset(rowset.get())) {
+        if (params.rowid_range_option != nullptr && !params.rowid_range_option->contains_rowset(rowset.get())) {
             continue;
         }
 
@@ -347,6 +349,10 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
         }
     } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr) ||
                (select_all_keys && seg_iters.size() == 1)) {
+        // The segments may be in order after compaction. At this time, we prefer to read the later segments first.
+        if (!_is_asc_hint) {
+            std::reverse(seg_iters.begin(), seg_iters.end());
+        }
         //             UnionIterator
         //                   |
         //       +-----------+-----------+
@@ -564,7 +570,7 @@ Status TabletReader::_to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, cons
 }
 
 // convert vector<OlapTuple> to vector<SeekRange>
-Status TabletReader::parse_seek_range(const TabletSharedPtr& tablet,
+Status TabletReader::parse_seek_range(const TabletSchemaCSPtr& tablet_schema,
                                       TabletReaderParams::RangeStartOperation range_start_op,
                                       TabletReaderParams::RangeEndOperation range_end_op,
                                       const std::vector<OlapTuple>& range_start_key,
@@ -586,8 +592,8 @@ Status TabletReader::parse_seek_range(const TabletSharedPtr& tablet,
     for (size_t i = 0; i < n; i++) {
         SeekTuple lower;
         SeekTuple upper;
-        RETURN_IF_ERROR(_to_seek_tuple(tablet->tablet_schema(), range_start_key[i], &lower, mempool));
-        RETURN_IF_ERROR(_to_seek_tuple(tablet->tablet_schema(), range_end_key[i], &upper, mempool));
+        RETURN_IF_ERROR(_to_seek_tuple(tablet_schema, range_start_key[i], &lower, mempool));
+        RETURN_IF_ERROR(_to_seek_tuple(tablet_schema, range_end_key[i], &upper, mempool));
         ranges->emplace_back(SeekRange{std::move(lower), std::move(upper)});
         ranges->back().set_inclusive_lower(lower_inclusive);
         ranges->back().set_inclusive_upper(upper_inclusive);

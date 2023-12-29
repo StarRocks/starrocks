@@ -76,7 +76,7 @@ protected:
                const std::string& expected_value, const size_t expected_rows, bool is_failed = false) {
         auto file = _create_file(filepath);
         auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                        std::filesystem::file_size(filepath));
+                                                        std::filesystem::file_size(filepath), 0);
 
         // --------------init context---------------
         auto ctx = _create_scan_context();
@@ -94,7 +94,7 @@ protected:
             return;
         }
         if (!status.ok()) {
-            std::cout << status.get_error_msg() << std::endl;
+            std::cout << status.message() << std::endl;
         }
         ASSERT_TRUE(status.ok());
 
@@ -114,7 +114,7 @@ protected:
             chunk->reset();
             status = file_reader->get_next(&chunk);
             if (!status.ok() && !status.is_end_of_file()) {
-                std::cout << status.get_error_msg() << std::endl;
+                std::cout << status.message() << std::endl;
                 break;
             }
             check_chunk_values(chunk, expected_value);

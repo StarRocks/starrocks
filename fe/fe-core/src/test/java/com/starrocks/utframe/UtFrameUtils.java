@@ -57,6 +57,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
@@ -241,7 +242,7 @@ public class UtFrameUtils {
             return;
         }
         try {
-            ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
+            ClientPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
             startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB);
@@ -412,7 +413,10 @@ public class UtFrameUtils {
 
     private static <R> R buildPlan(ConnectContext connectContext, String originStmt,
                                    GetPlanHook<R> returnedSupplier) throws Exception {
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
         connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+        connectContext.setThreadLocalInfo();
         originStmt = LogUtil.removeLineSeparator(originStmt);
 
         List<StatementBase> statements;
@@ -451,6 +455,33 @@ public class UtFrameUtils {
         } finally {
             // before returning we have to restore session variable.
             connectContext.setSessionVariable(oldSessionVariable);
+        }
+    }
+
+    public static Pair<String, Pair<ExecPlan, String>> getFragmentPlanWithTrace(
+            ConnectContext connectContext, String sql, String module) throws Exception {
+        if (Strings.isNullOrEmpty(module)) {
+            Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+            Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, "");
+            return Pair.create(planPair.first, planAndTrace);
+        } else {
+            Tracers.register(connectContext);
+            Tracers.init(connectContext, Tracers.Mode.LOGS, module);
+            try {
+
+                Pair<String, ExecPlan> planPair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
+                String pr = Tracers.printLogs();
+                Pair<ExecPlan, String> planAndTrace = Pair.create(planPair.second, pr);
+                return Pair.create(planPair.first, planAndTrace);
+            } catch (Exception e) {
+                String pr = Tracers.printLogs();
+                if (!Strings.isNullOrEmpty(pr)) {
+                    System.out.println(pr);
+                }
+                throw e;
+            } finally {
+                Tracers.close();
+            }
         }
     }
 
@@ -974,6 +1005,7 @@ public class UtFrameUtils {
         ctx.setCurrentUserIdentity(userIdentity);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         ctx.setQualifiedUser(userIdentity.getUser());
+        ctx.setQueryId(UUIDUtil.genUUID());
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         globalStateMgr.initAuth(true);
         ctx.setGlobalStateMgr(globalStateMgr);
@@ -982,4 +1014,20 @@ public class UtFrameUtils {
         return ctx;
     }
 
+    public static boolean matchPlanWithoutId(String expect, String actual) {
+        String trimedExpect = expect.replaceAll("\\d+:\\s*", "")
+                .replaceAll("\\[\\d+,", "[")
+                .replaceAll("<slot \\d+>", "<slot>");
+        String trimedActual = actual.replaceAll("\\d+:\\s*", "")
+                .replaceAll("\\[\\d+,", "[")
+                .replaceAll("<slot \\d+>", "<slot>");
+        boolean ret = trimedActual.contains(trimedExpect);
+        if (!ret) {
+            System.out.println("trimedExpect:");
+            System.out.println(trimedExpect);
+            System.out.println("trimedActual:");
+            System.out.println(trimedActual);
+        }
+        return ret;
+    }
 }

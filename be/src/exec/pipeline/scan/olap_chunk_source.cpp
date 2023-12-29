@@ -20,6 +20,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/map_util.h"
+#include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -81,6 +82,15 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
+TCounterMinMaxType::type OlapChunkSource::_get_counter_min_max_type(const std::string& metric_name) {
+    const auto& skip_min_max_metrics = _morsel->skip_min_max_metrics();
+    if (skip_min_max_metrics.find(metric_name) != skip_min_max_metrics.end()) {
+        return TCounterMinMaxType::SKIP_ALL;
+    }
+
+    return TCounterMinMaxType::MIN_MAX_ALL;
+}
+
 void OlapChunkSource::_init_counter(RuntimeState* state) {
     _bytes_read_counter = ADD_COUNTER(_runtime_profile, "BytesRead", TUnit::BYTES);
     _rows_read_counter = ADD_COUNTER(_runtime_profile, "RowsRead", TUnit::UNIT);
@@ -108,12 +118,17 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _bi_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BitmapIndexFilterRows", TUnit::UNIT, segment_init_name);
     _bf_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT, segment_init_name);
     _seg_zm_filtered_counter =
-            ADD_CHILD_COUNTER(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, segment_init_name);
+            ADD_CHILD_COUNTER_SKIP_MIN_MAX(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT,
+                                           _get_counter_min_max_type("SegmentZoneMapFilterRows"), segment_init_name);
     _seg_rt_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, segment_init_name);
     _zm_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, segment_init_name);
-    _sk_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT, segment_init_name);
+    _sk_filtered_counter =
+            ADD_CHILD_COUNTER_SKIP_MIN_MAX(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT,
+                                           _get_counter_min_max_type("ShortKeyFilterRows"), segment_init_name);
+    _rows_after_sk_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemainingRowsAfterShortKeyFilter", TUnit::UNIT, segment_init_name);
     _column_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnIteratorInit", segment_init_name);
     _bitmap_index_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "BitmapIndexIteratorInit", segment_init_name);
     _zone_map_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "ZoneMapIndexFiter", segment_init_name);
@@ -300,6 +315,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     RETURN_IF_ERROR(_get_tablet(_scan_range));
 
+    auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _scan_range->tablet_id);
+
     auto tablet_schema_ptr = _tablet->tablet_schema();
     _tablet_schema = TabletSchema::copy(tablet_schema_ptr);
 
@@ -311,6 +328,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
         for (const auto& column_desc : _scan_node->thrift_olap_scan_node().columns_desc) {
             _tablet_schema->append_column(TabletColumn(column_desc));
         }
+        _tablet_schema->generate_sort_key_idxes();
     }
 
     RETURN_IF_ERROR(_init_global_dicts(&_params));
@@ -337,6 +355,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     DCHECK(_params.global_dictmaps != nullptr);
     RETURN_IF_ERROR(_prj_iter->init_encoded_schema(*_params.global_dictmaps));
     RETURN_IF_ERROR(_prj_iter->init_output_schema(*_params.unused_output_column_ids));
+    _reader->set_is_asc_hint(_scan_op->is_asc());
 
     RETURN_IF_ERROR(_reader->prepare());
     RETURN_IF_ERROR(_reader->open(_params));
@@ -347,6 +366,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(),
                                                _runtime_state->use_column_pool()));
+    auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _tablet->tablet_id());
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
 }
 
@@ -481,6 +501,7 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_stats_filtered);
     COUNTER_UPDATE(_bf_filtered_counter, _reader->stats().rows_bf_filtered);
     COUNTER_UPDATE(_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
+    COUNTER_UPDATE(_rows_after_sk_filtered_counter, _reader->stats().rows_after_key_range);
     COUNTER_UPDATE(_rows_key_range_counter, _reader->stats().rows_key_range_num);
 
     COUNTER_UPDATE(_read_pages_num_counter, _reader->stats().total_pages_num);

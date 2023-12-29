@@ -42,6 +42,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
@@ -131,7 +132,11 @@ public class LoadPlanner {
     TRoutineLoadTask routineLoadTask;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
 
+    private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
+
     private Boolean missAutoIncrementColumn = Boolean.FALSE;
+
+    private String mergeConditionStr;
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
                        boolean strictMode, String timezone, long timeoutS,
@@ -224,6 +229,14 @@ public class LoadPlanner {
 
     public void setPartialUpdateMode(TPartialUpdateMode mode) {
         this.partialUpdateMode = mode;
+    }
+
+    public void setMergeConditionStr(String mergeConditionStr) {
+        this.mergeConditionStr = mergeConditionStr;
+    }
+
+    public void setJsonOptions(LoadJob.JSONOptions options) {
+        this.jsonOptions = options;
     }
 
     public void plan() throws UserException {
@@ -372,6 +385,7 @@ public class LoadPlanner {
             fileScanNode.setLoadInfo(loadJobId, txnId, destTable, brokerDesc, fileGroups, strictMode,
                     parallelInstanceNum);
             fileScanNode.setUseVectorizedLoad(true);
+            fileScanNode.setJSONOptions(jsonOptions);
             fileScanNode.init(analyzer);
             fileScanNode.finalizeStats(analyzer);
             scanNode = fileScanNode;
@@ -434,7 +448,7 @@ public class LoadPlanner {
             if (completeTabletSink) {
                 ((OlapTableSink) dataSink).init(loadId, txnId, dbId, timeoutS);
                 ((OlapTableSink) dataSink).setPartialUpdateMode(partialUpdateMode);
-                ((OlapTableSink) dataSink).complete();
+                ((OlapTableSink) dataSink).complete(mergeConditionStr);
             }
             // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
             context.getSessionVariable().setPreferComputeNode(false);
@@ -454,7 +468,7 @@ public class LoadPlanner {
             OlapTableSink dataSink = (OlapTableSink) fragments.get(0).getSink();
             dataSink.init(loadId, txnId, dbId, timeoutS);
             dataSink.setPartialUpdateMode(partialUpdateMode);
-            dataSink.complete();
+            dataSink.complete(mergeConditionStr);
         }
         this.txnId = txnId;
     }

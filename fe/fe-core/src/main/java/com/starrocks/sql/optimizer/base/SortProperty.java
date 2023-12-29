@@ -22,17 +22,22 @@ import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
+import org.apache.commons.collections4.CollectionUtils;
+
+import java.util.List;
 
 public class SortProperty implements PhysicalProperty {
     private final OrderSpec spec;
 
-    public static final SortProperty EMPTY = new SortProperty();
 
-    public SortProperty() {
-        this.spec = OrderSpec.createEmpty();
+    public static SortProperty createProperty(List<Ordering> orderDescs) {
+        if (CollectionUtils.isEmpty(orderDescs)) {
+            return EmptySortProperty.INSTANCE;
+        } else {
+            return new SortProperty(new OrderSpec(orderDescs));
+        }
     }
-
-    public SortProperty(OrderSpec spec) {
+    protected SortProperty(OrderSpec spec) {
         this.spec = spec;
     }
 
@@ -41,7 +46,7 @@ public class SortProperty implements PhysicalProperty {
     }
 
     public boolean isEmpty() {
-        return spec.getOrderDescs().isEmpty();
+        return false;
     }
 
     @Override
@@ -75,5 +80,10 @@ public class SortProperty implements PhysicalProperty {
                 TopNType.ROW_NUMBER, false,
                 true, null, null),
                 Lists.newArrayList(child));
+    }
+
+    @Override
+    public String toString() {
+        return spec.getOrderDescs().toString();
     }
 }

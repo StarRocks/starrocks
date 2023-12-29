@@ -175,6 +175,10 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterHeapSort::runtime_filters(ObjectPoo
     const auto& top_cursor_column = top_cursor.data_segment()->order_by_columns[0];
     bool is_close_interval = _sort_desc.num_columns() != 1;
 
+    if (top_cursor_column->is_null(cursor_rid)) {
+        return nullptr;
+    }
+
     if (_runtime_filter.empty()) {
         auto rf = type_dispatch_predicate<JoinRuntimeFilter*>(
                 (*_sort_exprs)[0]->root()->type().type, false, detail::SortRuntimeFilterBuilder(), pool,

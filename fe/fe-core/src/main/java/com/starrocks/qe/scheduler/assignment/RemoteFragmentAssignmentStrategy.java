@@ -95,7 +95,7 @@ public class RemoteFragmentAssignmentStrategy implements FragmentAssignmentStrat
         int maxParallelism = 0;
 
         List<Long> selectedComputedNodes = workerProvider.selectAllComputeNodes();
-        if (!selectedComputedNodes.isEmpty()) {
+        if (workerProvider.isPreferComputeNode() && !selectedComputedNodes.isEmpty()) {
             workerIdSet.addAll(selectedComputedNodes);
             // make olapScan maxParallelism equals prefer compute node number
             maxParallelism = workerIdSet.size() * fragment.getParallelExecNum();

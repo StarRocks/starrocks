@@ -15,15 +15,23 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
+import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.TableScan;
+import org.apache.iceberg.exceptions.NoSuchTableException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+
+import static com.starrocks.connector.PartitionUtil.convertIcebergPartitionToPartitionName;
 
 public interface IcebergCatalog {
 
@@ -56,8 +64,43 @@ public interface IcebergCatalog {
 
     Table getTable(String dbName, String tableName) throws StarRocksConnectorException;
 
+    default boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
+        try {
+            getTable(dbName, tableName);
+            return true;
+        } catch (NoSuchTableException e) {
+            return false;
+        }
+    }
+
+    default List<String> listPartitionNames(String dbName, String tableName, ExecutorService executorService) {
+        org.apache.iceberg.Table icebergTable = getTable(dbName, tableName);
+        List<String> partitionNames = Lists.newArrayList();
+
+        // all partitions specs are unpartitioned
+        if (icebergTable.specs().values().stream().allMatch(PartitionSpec::isUnpartitioned)) {
+            return partitionNames;
+        }
+
+        TableScan tableScan = icebergTable.newScan().planWith(executorService);
+        List<FileScanTask> tasks = Lists.newArrayList(tableScan.planFiles());
+
+        for (FileScanTask fileScanTask : tasks) {
+            StructLike partition = fileScanTask.file().partition();
+            partitionNames.add(convertIcebergPartitionToPartitionName(fileScanTask.spec(), partition));
+        }
+        return partitionNames;
+    }
 
     default void deleteUncommittedDataFiles(List<String> fileLocations) {
     }
 
+    default void refreshTable(String dbName, String tableName, ExecutorService refreshExecutor) {
+    }
+
+    default void invalidateCacheWithoutTable(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+    }
+
+    default void invalidateCache(CachingIcebergCatalog.IcebergTableName icebergTableName) {
+    }
 }

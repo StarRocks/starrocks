@@ -120,7 +120,7 @@ public abstract class Type implements Cloneable {
             ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
 
     public static final ScalarType VARCHAR = ScalarType.createVarcharType(-1);
-    public static final ScalarType STRING = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+    public static final ScalarType STRING = ScalarType.createVarcharType(ScalarType.OLAP_MAX_VARCHAR_LENGTH);
     public static final ScalarType DEFAULT_STRING = ScalarType.createDefaultString();
     public static final ScalarType HLL = ScalarType.createHllType();
     public static final ScalarType CHAR = ScalarType.createCharType(-1);
@@ -1775,5 +1775,15 @@ public abstract class Type implements Cloneable {
 
     public String canonicalName() {
         return toString();
+    }
+
+    // This is used for information_schema.COLUMNS DATA_TYPE
+    public String toMysqlDataTypeString() {
+        return "unknown";
+    }
+
+    // This is used for information_schema.COLUMNS COLUMN_TYPE
+    public String toMysqlColumnTypeString() {
+        return "unknown";
     }
 }

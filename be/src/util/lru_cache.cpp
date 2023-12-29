@@ -193,22 +193,22 @@ void LRUCache::set_capacity(size_t capacity) {
     }
 }
 
-uint64_t LRUCache::get_lookup_count() {
+uint64_t LRUCache::get_lookup_count() const {
     std::lock_guard l(_mutex);
     return _lookup_count;
 }
 
-uint64_t LRUCache::get_hit_count() {
+uint64_t LRUCache::get_hit_count() const {
     std::lock_guard l(_mutex);
     return _hit_count;
 }
 
-size_t LRUCache::get_usage() {
+size_t LRUCache::get_usage() const {
     std::lock_guard l(_mutex);
     return _usage;
 }
 
-size_t LRUCache::get_capacity() {
+size_t LRUCache::get_capacity() const {
     std::lock_guard l(_mutex);
     return _capacity;
 }
@@ -461,14 +461,14 @@ uint64_t ShardedLRUCache::new_id() {
     return ++(_last_id);
 }
 
-size_t ShardedLRUCache::_get_stat(size_t (LRUCache::*mem_fun)()) {
+size_t ShardedLRUCache::_get_stat(size_t (LRUCache::*mem_fun)() const) const {
     size_t n = 0;
     for (auto& shard : _shards) {
         n += (shard.*mem_fun)();
     }
     return n;
 }
-size_t ShardedLRUCache::get_capacity() {
+size_t ShardedLRUCache::get_capacity() const {
     return _get_stat(&LRUCache::get_capacity);
 }
 
@@ -480,15 +480,15 @@ void ShardedLRUCache::prune() {
     VLOG(7) << "Successfully prune cache, clean " << num_prune << " entries.";
 }
 
-size_t ShardedLRUCache::get_memory_usage() {
+size_t ShardedLRUCache::get_memory_usage() const {
     return _get_stat(&LRUCache::get_usage);
 }
 
-size_t ShardedLRUCache::get_lookup_count() {
+size_t ShardedLRUCache::get_lookup_count() const {
     return _get_stat(&LRUCache::get_lookup_count);
 }
 
-size_t ShardedLRUCache::get_hit_count() {
+size_t ShardedLRUCache::get_hit_count() const {
     return _get_stat(&LRUCache::get_hit_count);
 }
 

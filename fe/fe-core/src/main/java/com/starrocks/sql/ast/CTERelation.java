@@ -24,6 +24,7 @@ public class CTERelation extends Relation {
     private final String name;
     private final QueryStatement cteQueryStatement;
     private boolean resolvedInFromClause;
+    private int refs = 0; // consume refs
 
     public CTERelation(int cteMouldId, String name, List<String> columnOutputNames,
                        QueryStatement cteQueryStatement) {
@@ -37,6 +38,7 @@ public class CTERelation extends Relation {
         this.name = name;
         this.explicitColumnNames = columnOutputNames;
         this.cteQueryStatement = cteQueryStatement;
+        this.refs = 0;
     }
 
     public int getCteMouldId() {
@@ -53,6 +55,14 @@ public class CTERelation extends Relation {
 
     public void setResolvedInFromClause(boolean resolvedInFromClause) {
         this.resolvedInFromClause = resolvedInFromClause;
+    }
+
+    public void addTableRef() {
+        refs++;
+    }
+
+    public int getRefs() {
+        return refs;
     }
 
     public boolean isResolvedInFromClause() {

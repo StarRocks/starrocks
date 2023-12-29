@@ -137,8 +137,8 @@ public class StatisticsExecutorTest extends PlanTestBase {
                             "and column_name = \"c1\" " +
                             "GROUP BY table_uuid, column_name UNION ALL " +
                             "SELECT cast(6 as INT), column_name, sum(row_count), cast(sum(data_size) as bigint), " +
-                            "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as varchar(1048576))) as string), " +
-                            "cast(min(cast(min as varchar(1048576))) as string) " +
+                            "hll_union_agg(ndv), sum(null_count),  cast(max(cast(max as varchar(1073741824))) as string), " +
+                            "cast(min(cast(min as varchar(1073741824))) as string) " +
                             "FROM external_column_statistics " +
                             "WHERE table_uuid = \"hive0.partitioned_db.t1.0\"" +
                             " and column_name = \"c2\" " +

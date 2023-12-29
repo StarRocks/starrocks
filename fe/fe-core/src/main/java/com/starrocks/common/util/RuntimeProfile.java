@@ -651,20 +651,23 @@ public class RuntimeProfile {
                     break;
                 }
 
-                Counter minCounter = profile.getCounter(MERGED_INFO_PREFIX_MIN + name);
-                if (minCounter != null) {
-                    alreadyMerged = true;
-                    if (minCounter.getValue() < minValue) {
-                        minValue = minCounter.getValue();
+                if (!counter.isSkipMinMax()) {
+                    Counter minCounter = profile.getCounter(MERGED_INFO_PREFIX_MIN + name);
+                    if (minCounter != null) {
+                        alreadyMerged = true;
+                        if (minCounter.getValue() < minValue) {
+                            minValue = minCounter.getValue();
+                        }
+                    }
+                    Counter maxCounter = profile.getCounter(MERGED_INFO_PREFIX_MAX + name);
+                    if (maxCounter != null) {
+                        alreadyMerged = true;
+                        if (maxCounter.getValue() > maxValue) {
+                            maxValue = maxCounter.getValue();
+                        }
                     }
                 }
-                Counter maxCounter = profile.getCounter(MERGED_INFO_PREFIX_MAX + name);
-                if (maxCounter != null) {
-                    alreadyMerged = true;
-                    if (maxCounter.getValue() > maxValue) {
-                        maxValue = maxCounter.getValue();
-                    }
-                }
+
                 counters.add(counter);
             }
             Counter mergedCounter;
@@ -688,14 +691,16 @@ public class RuntimeProfile {
                 }
                 mergedCounter.setValue(mergedValue);
 
-                Counter minCounter =
-                        mergedProfile.addCounter(MERGED_INFO_PREFIX_MIN + name, type, mergedCounter.getStrategy(),
-                                name);
-                Counter maxCounter =
-                        mergedProfile.addCounter(MERGED_INFO_PREFIX_MAX + name, type, mergedCounter.getStrategy(),
-                                name);
-                minCounter.setValue(minValue);
-                maxCounter.setValue(maxValue);
+                if (!mergedCounter.isSkipMinMax()) {
+                    Counter minCounter =
+                            mergedProfile.addCounter(MERGED_INFO_PREFIX_MIN + name, type, mergedCounter.getStrategy(),
+                                    name);
+                    Counter maxCounter =
+                            mergedProfile.addCounter(MERGED_INFO_PREFIX_MAX + name, type, mergedCounter.getStrategy(),
+                                    name);
+                    minCounter.setValue(minValue);
+                    maxCounter.setValue(maxValue);
+                }
             }
 
         }

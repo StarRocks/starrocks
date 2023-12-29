@@ -848,10 +848,6 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
     }
     auto st = _add_tablet_unlocked(tablet, update_meta, force);
     LOG_IF(WARNING, !st.ok()) << "Fail to add tablet " << tablet->full_name();
-    // no concurrent access here
-    if (config::enable_event_based_compaction_framework) {
-        StorageEngine::instance()->compaction_manager()->update_tablet_async(tablet);
-    }
 
     return st;
 }
@@ -921,13 +917,14 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
 
     StarRocksMetrics::instance()->report_all_tablets_requests_total.increment(1);
 
+    size_t max_tablet_rowset_num = 0;
     for (const auto& tablets_shard : _tablets_shards) {
         std::shared_lock rlock(tablets_shard.lock);
         for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
             TTablet t_tablet;
             TTabletInfo tablet_info;
             tablet_ptr->build_tablet_report_info(&tablet_info);
-
+            max_tablet_rowset_num = std::max(max_tablet_rowset_num, tablet_ptr->version_count());
             // find expired transaction corresponding to this tablet
             TabletInfo tinfo(tablet_id, tablet_ptr->schema_hash(), tablet_ptr->tablet_uid());
             auto find = expire_txn_map.find(tinfo);
@@ -942,7 +939,9 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
             }
         }
     }
-    LOG(INFO) << "Report all " << tablets_info->size() << " tablets info";
+    LOG(INFO) << "Report all " << tablets_info->size()
+              << " tablets info. max_tablet_rowset_num:" << max_tablet_rowset_num;
+    StarRocksMetrics::instance()->max_tablet_rowset_num.set_value(max_tablet_rowset_num);
     return Status::OK();
 }
 
@@ -1358,15 +1357,18 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
             for (old_col_idx = 0; old_col_idx < old_num_columns; ++old_col_idx) {
                 auto old_name = base_tablet_schema->column(old_col_idx).name();
                 if (old_name == column.column_name) {
-                    uint32_t old_unique_id = base_tablet->tablet_schema()->column(old_col_idx).unique_id();
-                    if (column.col_unique_id > 0) {
-                        DCHECK(column.col_unique_id == old_unique_id);
-                        if (column.col_unique_id != old_unique_id) {
-                            std::string msg = strings::Substitute(
-                                    "Tablet[$0] column[$1] has different column unique id during schema change. $2(FE) "
-                                    "vs $3(BE)",
-                                    base_tablet->tablet_id(), old_col_idx, column.col_unique_id, old_unique_id);
-                            return Status::InternalError(msg);
+                    uint32_t old_unique_id = base_tablet_schema->column(old_col_idx).unique_id();
+                    if (normal_request.tablet_schema.schema_version <= base_tablet_schema->schema_version() + 1) {
+                        if (column.col_unique_id > 0) {
+                            DCHECK(column.col_unique_id == old_unique_id);
+                            if (column.col_unique_id != old_unique_id) {
+                                std::string msg = strings::Substitute(
+                                        "Tablet[$0] column[$1] has different column unique id during schema change. "
+                                        "$2(FE) "
+                                        "vs $3(BE)",
+                                        base_tablet->tablet_id(), old_col_idx, column.col_unique_id, old_unique_id);
+                                return Status::InternalError(msg);
+                            }
                         }
                     }
 

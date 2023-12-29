@@ -72,6 +72,7 @@ import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import org.apache.commons.collections.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
@@ -173,6 +174,9 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_QUERY_REWRITE_CONSISTENCY = "query_rewrite_consistency";
     public static final String PROPERTIES_RESOURCE_GROUP = "resource_group";
 
+    public static final String PROPERTIES_WAREHOUSE = "warehouse";
+    public static final String PROPERTIES_WAREHOUSE_ID = "warehouse_id";
+
     public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
 
     public static final String PROPERTIES_STORAGE_VOLUME = "storage_volume";
@@ -196,7 +200,8 @@ public class PropertyAnalyzer {
      */
     public static final String PROPERTY_MV_SORT_KEYS = "mv_sort_keys";
 
-    // light schema change
+    // fast schema evolution
+    public static final String PROPERTIES_USE_FAST_SCHEMA_EVOLUTION = "fast_schema_evolution";
     public static final String PROPERTIES_USE_LIGHT_SCHEMA_CHANGE = "light_schema_change";
 
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
@@ -366,7 +371,7 @@ public class PropertyAnalyzer {
             } catch (NumberFormatException e) {
                 throw new AnalysisException("Bucket size: " + e.getMessage());
             }
-            if (bucketSize <= 0) {
+            if (bucketSize < 0) {
                 throw new AnalysisException("Illegal bucket size: " + bucketSize);
             }
             return bucketSize;
@@ -492,7 +497,7 @@ public class PropertyAnalyzer {
         }
 
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             backendIds.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodeIds());
             if (RunMode.defaultReplicationNum() > backendIds.size()) {
                 throw new AnalysisException("Number of available CN nodes is " + backendIds.size()
@@ -539,7 +544,8 @@ public class PropertyAnalyzer {
             } else if (olapTable.supportsUpdate() && storageType.equalsIgnoreCase(TStorageType.COLUMN_WITH_ROW.name())) {
                 tStorageType = TStorageType.COLUMN_WITH_ROW;
                 if (!olapTable.supportColumnWithRow()) {
-                    throw new AnalysisException("Olap Table must have more value columns exclude key columns");
+                    throw new AnalysisException("Column With Row Table must have more value columns exclude key columns "
+                            + "or column's type not supported");
                 }
             } else {
                 throw new AnalysisException("Invalid storage type: " + storageType + ", maybe row store need primary key");
@@ -599,21 +605,25 @@ public class PropertyAnalyzer {
         return schemaVersion;
     }
 
-    public static Boolean analyzeUseLightSchemaChange(Map<String, String> properties) throws AnalysisException {
+    public static Boolean analyzeUseFastSchemaEvolution(Map<String, String> properties) throws AnalysisException {
         if (properties == null || properties.isEmpty()) {
-            return Config.allow_default_light_schema_change;
+            return Config.enable_fast_schema_evolution;
         }
-        String value = properties.get(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+        String value = properties.get(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION);
         if (null == value) {
-            return Config.allow_default_light_schema_change;
+            value = properties.get(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
+            if (null == value) {
+                return Config.enable_fast_schema_evolution;
+            }
         }
+        properties.remove(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION);
         properties.remove(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE);
         if (Boolean.TRUE.toString().equalsIgnoreCase(value)) {
             return true;
         } else if (Boolean.FALSE.toString().equalsIgnoreCase(value)) {
             return false;
         }
-        throw new AnalysisException(PROPERTIES_USE_LIGHT_SCHEMA_CHANGE
+        throw new AnalysisException(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION
             + " must be `true` or `false`");
     }
 
@@ -939,7 +949,7 @@ public class PropertyAnalyzer {
         List<UniqueConstraint> mvUniqueConstraints = Lists.newArrayList();
         if (analyzedTable.isMaterializedView() && analyzedTable.hasUniqueConstraints()) {
             mvUniqueConstraints = analyzedTable.getUniqueConstraints().stream().filter(
-                    uniqueConstraint -> parentTable.getName().equals(uniqueConstraint.getTableName()))
+                    uniqueConstraint -> StringUtils.areTableNamesEqual(parentTable, uniqueConstraint.getTableName()))
                     .collect(Collectors.toList());
         }
 
@@ -1090,7 +1100,11 @@ public class PropertyAnalyzer {
             return null;
         }
         properties.remove(PROPERTIES_DATACACHE_PARTITION_DURATION);
-        return TimeUtils.parseHumanReadablePeriodOrDuration(text);
+        try {
+            return TimeUtils.parseHumanReadablePeriodOrDuration(text);
+        } catch (DateTimeParseException ex) {
+            throw new AnalysisException(ex.getMessage());
+        }
     }
 
     public static TPersistentIndexType analyzePersistentIndexType(Map<String, String> properties) throws AnalysisException {
@@ -1099,6 +1113,8 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_PERSISTENT_INDEX_TYPE);
             if (type.equalsIgnoreCase("LOCAL")) {
                 return TPersistentIndexType.LOCAL;
+            } else if (type.equalsIgnoreCase("CLOUD_NATIVE")) {
+                return TPersistentIndexType.CLOUD_NATIVE;
             } else {
                 throw new AnalysisException("Invalid persistent index type: " + type);
             }
@@ -1122,5 +1138,25 @@ public class PropertyAnalyzer {
             throw new AnalysisException(ex.getMessage());
         }
         return periodDuration;
+    }
+
+    /**
+     * Generate a string representation of properties like ('a'='1', 'b'='2')
+     */
+    public static String stringifyProperties(Map<String, String> properties) {
+        if (MapUtils.isEmpty(properties)) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder("(");
+        boolean first = true;
+        for (var entry : properties.entrySet()) {
+            if (!first) {
+                sb.append(",");
+            }
+            first = false;
+            sb.append("'").append(entry.getKey()).append("'=").append("'").append(entry.getValue()).append("'");
+        }
+        sb.append(")");
+        return sb.toString();
     }
 }

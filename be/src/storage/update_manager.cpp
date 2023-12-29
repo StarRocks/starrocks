@@ -269,8 +269,7 @@ StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore*
         auto st = TabletMetaManager::delete_delta_column_group(meta, &wb, dcg.first, dcg.second);
         if (!st.ok()) {
             // continue if error
-            LOG(WARNING) << "clear delta column group failed, tablet_id: " << tablet_id
-                         << " st: " << st.get_error_msg();
+            LOG(WARNING) << "clear delta column group failed, tablet_id: " << tablet_id << " st: " << st.message();
         }
     }
     RETURN_IF_ERROR(meta->write_batch(&wb));
@@ -542,6 +541,16 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
             _index_cache.remove(index_entry);
         }
     }
+
+    // tablet maybe dropped during ingestion, add some log
+    if (!st.ok()) {
+        if (tablet->tablet_state() == TABLET_SHUTDOWN) {
+            std::string msg = strings::Substitute("tablet $0 in TABLET_SHUTDOWN, maybe deleted by other thread",
+                                                  tablet->tablet_id());
+            LOG(WARNING) << msg;
+        }
+    }
+
     VLOG(1) << "UpdateManager::on_rowset_finished finish tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;
     return st;

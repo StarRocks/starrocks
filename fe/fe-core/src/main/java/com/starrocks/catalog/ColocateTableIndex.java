@@ -49,6 +49,8 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.lake.LakeTable;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -490,8 +492,9 @@ public class ColocateTableIndex implements Writable {
         Database db = GlobalStateMgr.getCurrentState().getDb(groupId.dbId);
         int numOfTablets = 0;
         if (db != null && !allTableIds.isEmpty()) {
+            Locker locker = new Locker();
             try {
-                db.readLock();
+                locker.lockDatabase(db, LockType.READ);
                 for (long tableId : allTableIds) {
                     OlapTable tbl = (OlapTable) db.getTable(tableId);
                     if (tbl != null) {
@@ -499,7 +502,7 @@ public class ColocateTableIndex implements Writable {
                     }
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
         return numOfTablets;
@@ -987,6 +990,7 @@ public class ColocateTableIndex implements Writable {
             TablePropertyInfo info = new TablePropertyInfo(table.getId(), groupId, properties);
             GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColocate(info);
         }
+        table.lastSchemaUpdateTime.set(System.nanoTime());
         LOG.info("finished modify table's colocation property. table: {}, is replay: {}",
                 table.getName(), isReplay);
     }
@@ -996,7 +1000,8 @@ public class ColocateTableIndex implements Writable {
         Map<String, String> properties = info.getPropertyMap();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(info.getGroupId().dbId);
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable table = (OlapTable) db.getTable(tableId);
             modifyTableColocate(db, table, properties.get(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH), true,
@@ -1005,7 +1010,7 @@ public class ColocateTableIndex implements Writable {
             // should not happen
             LOG.warn("failed to replay modify table colocate", e);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -1066,7 +1071,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     private void constructLakeGroups(GlobalStateMgr globalStateMgr) {
-        if (!RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedNothingMode()) {
             return;
         }
 

@@ -47,6 +47,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DictionaryGetExpr;
+import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.QueryStatement;
 
@@ -117,8 +119,15 @@ public class AggregationAnalyzer {
         }
 
         @Override
+        public Boolean visitFieldReference(FieldReference node, Void context) {
+            String colInfo = node.getTblName() == null ? "column" : "column of " + node.getTblName().toString();
+            throw new SemanticException(colInfo + " must appear in the GROUP BY clause or be used in an aggregate function",
+                    node.getPos());
+        }
+
+        @Override
         public Boolean visitExpression(Expr node, Void context) {
-            throw new SemanticException(PARSER_ERROR_MSG.unsupportedExprWithInfo(node.toSql(), "GROUP BY"),
+            throw new SemanticException(node.toSql() + " must appear in the GROUP BY clause or be used in an aggregate function",
                     node.getPos());
         }
 
@@ -339,6 +348,11 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitDictQueryExpr(DictQueryExpr node, Void context) {
+            return node.getChildren().stream().allMatch(this::visit);
+        }
+
+        @Override
+        public Boolean visitDictionaryGetExpr(DictionaryGetExpr node, Void context) {
             return node.getChildren().stream().allMatch(this::visit);
         }
     }

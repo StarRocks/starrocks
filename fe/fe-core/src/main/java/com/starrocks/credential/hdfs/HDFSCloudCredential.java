@@ -23,9 +23,12 @@ import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;
 
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
+
 public class HDFSCloudCredential implements CloudCredential {
-    public static final String EMPTY = "empty";
-    private String authentication;
+    public static final String SIMPLE_AUTH = "simple";
+    public static final String KERBEROS_AUTH = "kerberos";
+    protected String authentication;
     private String userName;
     private String password;
     private String krbPrincipal;
@@ -65,19 +68,14 @@ public class HDFSCloudCredential implements CloudCredential {
 
     @Override
     public boolean validate() {
-        if (authentication.equals(EMPTY)) {
+        if (SIMPLE_AUTH.equals(authentication)) {
             return true;
         }
-
-        if (authentication.equals("simple")) {
-            return true;
-        }
-
-        if (authentication.equals("kerberos")) {
+        if (KERBEROS_AUTH.equals(authentication)) {
             if (krbPrincipal.isEmpty()) {
                 return false;
             }
-            return !(krbKeyTabData.isEmpty() && krbKeyTabFile.isEmpty());
+            return !(krbKeyTabFile.isEmpty() && krbKeyTabData.isEmpty());
         }
 
         return false;
@@ -104,6 +102,13 @@ public class HDFSCloudCredential implements CloudCredential {
         FileStoreInfo.Builder fileStore = FileStoreInfo.newBuilder();
         fileStore.setFsType(FileStoreType.HDFS);
         HDFSFileStoreInfo.Builder hdfsFileStoreInfo = HDFSFileStoreInfo.newBuilder();
+        if (!authentication.isEmpty()) {
+            hdfsFileStoreInfo.putConfiguration(HDFS_AUTHENTICATION, authentication);
+            if (authentication.equals(SIMPLE_AUTH) && !userName.isEmpty()) {
+                hdfsFileStoreInfo.setUsername(userName);
+            }
+        }
+        hdfsFileStoreInfo.putAllConfiguration(hadoopConfiguration);
         fileStore.setHdfsFsInfo(hdfsFileStoreInfo.build());
         return fileStore.build();
     }

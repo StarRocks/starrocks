@@ -18,7 +18,6 @@
 #include "cctz/time_zone.h"
 #include "column/array_column.h"
 #include "column/map_column.h"
-#include "column/struct_column.h"
 #include "exprs/cast_expr.h"
 #include "exprs/literal.h"
 #include "formats/orc/utils.h"
@@ -55,7 +54,7 @@ static Status decode_int_min_max(LogicalType ltype, const orc::proto::ColumnStat
             break;
         }
     }
-    return Status::NotFound("int column stats not found");
+    return Status::NotFound("OrcMinMaxFilter: int column stats not found");
 }
 
 static Status decode_double_min_max(LogicalType ltype, const orc::proto::ColumnStatistics& colStats,
@@ -74,7 +73,7 @@ static Status decode_double_min_max(LogicalType ltype, const orc::proto::ColumnS
             break;
         }
     }
-    return Status::NotFound("double column stats not found");
+    return Status::NotFound("OrcMinMaxFilter: double column stats not found");
 }
 static Status decode_string_min_max(LogicalType ltype, const orc::proto::ColumnStatistics& colStats,
                                     const ColumnPtr& min_col, const ColumnPtr& max_col) {
@@ -100,11 +99,11 @@ static Status decode_string_min_max(LogicalType ltype, const orc::proto::ColumnS
             break;
         }
     }
-    return Status::NotFound("string column stats not found");
+    return Status::NotFound("OrcMinMaxFilter: string column stats not found");
 }
 
-static Status decode_date_min_max(LogicalType ltype, const orc::proto::ColumnStatistics& colStats,
-                                  const ColumnPtr& min_col, const ColumnPtr& max_col) {
+static Status decode_date_min_max(const orc::proto::ColumnStatistics& colStats, const ColumnPtr& min_col,
+                                  const ColumnPtr& max_col) {
     if (colStats.has_datestatistics() && colStats.datestatistics().has_minimum() &&
         colStats.datestatistics().has_maximum()) {
         const auto& stats = colStats.datestatistics();
@@ -113,15 +112,20 @@ static Status decode_date_min_max(LogicalType ltype, const orc::proto::ColumnSta
         OrcDateHelper::orc_date_to_native_date(&max, stats.maximum());
         DOWN_CAST_ASSIGN_MIN_MAX(LogicalType::TYPE_DATE);
     }
-    return Status::NotFound("date column stats not found");
+    return Status::NotFound("OrcMinMaxFilter: date column stats not found");
 }
 
 // It's quite odd that, timestamp statistics stores milliseconds since unix epoch time.
 // but timestamp column vector batch stores seconds since unix epoch time.
 // https://orc.apache.org/specification/ORCv1/
-static Status decode_datetime_min_max(LogicalType ltype, const orc::proto::ColumnStatistics& colStats,
+static Status decode_datetime_min_max(const orc::Type* orc_type, const orc::proto::ColumnStatistics& colStats,
                                       int64_t tz_offset_in_seconds, const ColumnPtr& min_col,
                                       const ColumnPtr& max_col) {
+    if (orc_type->getKind() != orc::TypeKind::TIMESTAMP && orc_type->getKind() != orc::TypeKind::TIMESTAMP_INSTANT) {
+        return Status::InvalidArgument("OrcMinMaxFilter: Invalid ORC timestamp kind");
+    }
+    bool is_instant = orc_type->getKind() == orc::TypeKind::TIMESTAMP_INSTANT;
+
     if (colStats.has_timestampstatistics() && colStats.timestampstatistics().has_minimumutc() &&
         colStats.timestampstatistics().has_maximumutc()) {
         const auto& stats = colStats.timestampstatistics();
@@ -135,7 +139,7 @@ static Status decode_datetime_min_max(LogicalType ltype, const orc::proto::Colum
             }
             int64_t secs = ms / 1000;
             ns += (ms - secs * 1000) * 1000000L;
-            OrcTimestampHelper::orc_ts_to_native_ts(&min, utc_tzinfo, tz_offset_in_seconds, secs, ns, true);
+            OrcTimestampHelper::orc_ts_to_native_ts(&min, utc_tzinfo, tz_offset_in_seconds, secs, ns, is_instant);
         }
 
         {
@@ -146,16 +150,16 @@ static Status decode_datetime_min_max(LogicalType ltype, const orc::proto::Colum
             }
             int64_t secs = ms / 1000;
             ns += (ms - secs * 1000) * 1000000L;
-            OrcTimestampHelper::orc_ts_to_native_ts(&max, utc_tzinfo, tz_offset_in_seconds, secs, ns, true);
+            OrcTimestampHelper::orc_ts_to_native_ts(&max, utc_tzinfo, tz_offset_in_seconds, secs, ns, is_instant);
         }
 
         DOWN_CAST_ASSIGN_MIN_MAX(LogicalType::TYPE_DATETIME);
     }
-    return Status::NotFound("date column stats not found");
+    return Status::NotFound("OrcMinMaxFilter: date column stats not found");
 }
 
-Status OrcMinMaxDecoder::decode(SlotDescriptor* slot, const orc::proto::ColumnStatistics& stats, ColumnPtr min_col,
-                                ColumnPtr max_col, int64_t tz_offset_in_seconds) {
+Status OrcMinMaxDecoder::decode(SlotDescriptor* slot, const orc::Type* type, const orc::proto::ColumnStatistics& stats,
+                                ColumnPtr min_col, ColumnPtr max_col, int64_t tz_offset_in_seconds) {
     if (slot->is_nullable()) {
         auto* a = ColumnHelper::as_raw_column<NullableColumn>(min_col);
         auto* b = ColumnHelper::as_raw_column<NullableColumn>(max_col);
@@ -182,11 +186,10 @@ Status OrcMinMaxDecoder::decode(SlotDescriptor* slot, const orc::proto::ColumnSt
         return decode_string_min_max(ltype, stats, min_col, max_col);
 
     case LogicalType::TYPE_DATE:
-        return decode_date_min_max(ltype, stats, min_col, max_col);
+        return decode_date_min_max(stats, min_col, max_col);
 
     case LogicalType::TYPE_DATETIME:
-        return decode_datetime_min_max(ltype, stats, tz_offset_in_seconds, min_col, max_col);
-
+        return decode_datetime_min_max(type, stats, tz_offset_in_seconds, min_col, max_col);
     default:
         return Status::NotSupported("Not support to decode min/max from orc column stats. type = " +
                                     std::to_string(ltype));

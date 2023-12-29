@@ -34,8 +34,6 @@ OlapMetaReader::OlapMetaReader() : MetaReader() {}
 Status OlapMetaReader::_init_params(const OlapMetaReaderParams& read_params) {
     read_params.check_validation();
     _tablet = read_params.tablet;
-    _version = read_params.version;
-    _chunk_size = read_params.chunk_size;
     _params = read_params;
 
     return Status::OK();
@@ -57,7 +55,6 @@ Status OlapMetaReader::init(const OlapMetaReaderParams& read_params) {
 }
 
 Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_params) {
-    _collect_context.seg_collecter_params.max_cid = 0;
     auto tablet_schema = read_params.tablet_schema;
     for (const auto& it : *(read_params.id_to_names)) {
         std::string col_name = "";
@@ -81,7 +78,6 @@ Status OlapMetaReader::_build_collect_context(const OlapMetaReaderParams& read_p
 
         // get column id
         _collect_context.seg_collecter_params.cids.emplace_back(index);
-        _collect_context.seg_collecter_params.max_cid = std::max(_collect_context.seg_collecter_params.max_cid, index);
 
         // get result slot id
         _collect_context.result_slot_ids.emplace_back(it.first);
@@ -123,7 +119,7 @@ Status OlapMetaReader::_get_segments(const TabletSharedPtr& tablet, const Versio
     Status acquire_rowset_st;
     {
         std::shared_lock l(tablet->get_header_lock());
-        acquire_rowset_st = tablet->capture_consistent_rowsets(_version, &_rowsets);
+        acquire_rowset_st = tablet->capture_consistent_rowsets(_params.version, &_rowsets);
     }
 
     if (!acquire_rowset_st.ok()) {
@@ -146,7 +142,7 @@ Status OlapMetaReader::_get_segments(const TabletSharedPtr& tablet, const Versio
 }
 
 Status OlapMetaReader::do_get_next(ChunkPtr* result) {
-    const uint32_t chunk_capacity = _chunk_size;
+    const uint32_t chunk_capacity = _params.chunk_size;
     uint16_t chunk_start = 0;
 
     *result = std::make_shared<Chunk>();

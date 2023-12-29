@@ -28,7 +28,7 @@ public class PartitionPruneTest extends PlanTestBase {
         FeConstants.runningUnitTest = true;
         starRocksAssert.withTable("CREATE TABLE `ptest` (\n"
                 + "  `k1` int(11) NOT NULL COMMENT \"\",\n"
-                + "  `d2` date NOT NULL COMMENT \"\",\n"
+                + "  `d2` date    NULL COMMENT \"\",\n"
                 + "  `v1` int(11) NULL COMMENT \"\",\n"
                 + "  `v2` int(11) NULL COMMENT \"\",\n"
                 + "  `v3` int(11) NULL COMMENT \"\"\n"
@@ -109,6 +109,21 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
+    public void testPruneNullPredicate() throws Exception {
+        String sql = "select * from ptest where (cast(d2 as int) / null) is null";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "partitions=4/4");
+
+        sql = "select * from ptest where (cast(d2 as int) * null) <=> null";
+        plan = getFragmentPlan(sql);
+        assertCContains(plan, "partitions=4/4");
+
+        sql = "select * from ptest where d2 is null;";
+        plan = getFragmentPlan(sql);
+        assertCContains(plan, "partitions=1/4");
+    }
+
+    @Test
     public void testInClauseCombineOr_1() throws Exception {
         String plan = getFragmentPlan("select * from ptest where (d2 > '1000-01-01') or (d2 in (null, '2020-01-01'));");
         assertTrue(plan.contains("  0:OlapScanNode\n" +
@@ -153,9 +168,9 @@ public class PartitionPruneTest extends PlanTestBase {
     }
 
     @Test
-    public void testPruneIsNull() throws Exception {
-        String sql = "select * from ptest where (cast(d2 as int) / null) is null";
+    public void testNullException() throws Exception {
+        String sql = "select * from ptest partition(p202007) where d2 is null";
         String plan = getFragmentPlan(sql);
-        assertCContains(plan, "partitions=4/4");
+        assertCContains(plan, "partitions=0/4");
     }
 }

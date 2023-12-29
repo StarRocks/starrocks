@@ -46,6 +46,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -74,7 +76,9 @@ import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /*
@@ -225,6 +229,7 @@ public class SystemHandler extends AlterHandler {
             throws DdlException {
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
         List<Backend> decommissionBackends = Lists.newArrayList();
+        Set<Long> decommissionIds = new HashSet<>();
 
         long needCapacity = 0L;
         long releaseCapacity = 0L;
@@ -242,6 +247,7 @@ public class SystemHandler extends AlterHandler {
             needCapacity += backend.getDataUsedCapacityB();
             releaseCapacity += backend.getAvailableCapacityB();
             decommissionBackends.add(backend);
+            decommissionIds.add(backend.getId());
         }
 
         if (decommissionBackends.isEmpty()) {
@@ -250,7 +256,7 @@ public class SystemHandler extends AlterHandler {
         }
 
         // when decommission backends in shared_data mode, unnecessary to check clusterCapacity or table replica
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             return decommissionBackends;
         }
 
@@ -259,6 +265,10 @@ public class SystemHandler extends AlterHandler {
             throw new DdlException("It will cause insufficient disk space if these BEs are decommissioned.");
         }
 
+        long availableBackendCnt = infoService.getAvailableBackendIds()
+                .stream()
+                .filter(beId -> !decommissionIds.contains(beId))
+                .count();
         short maxReplicationNum = 0;
         LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         for (long dbId : localMetastore.getDbIds()) {
@@ -266,7 +276,8 @@ public class SystemHandler extends AlterHandler {
             if (db == null) {
                 continue;
             }
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 for (Table table : db.getTables()) {
                     if (table instanceof OlapTable) {
@@ -276,8 +287,7 @@ public class SystemHandler extends AlterHandler {
                             short replicationNum = partitionInfo.getReplicationNum(partitionId);
                             if (replicationNum > maxReplicationNum) {
                                 maxReplicationNum = replicationNum;
-                                if (infoService.getAvailableBackendIds().size() - decommissionBackends.size() <
-                                        maxReplicationNum) {
+                                if (availableBackendCnt < maxReplicationNum) {
                                     decommissionBackends.clear();
                                     throw new DdlException(
                                             "It will cause insufficient BE number if these BEs are decommissioned " +
@@ -290,7 +300,7 @@ public class SystemHandler extends AlterHandler {
                     }
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
 

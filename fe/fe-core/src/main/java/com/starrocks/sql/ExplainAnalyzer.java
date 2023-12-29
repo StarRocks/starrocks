@@ -362,10 +362,12 @@ public class ExplainAnalyzer {
                     "]");
         }
         if (!isRuntimeProfile) {
-            appendSummaryLine("CollectProfileTime: ", summaryProfile.containsInfoString(ProfileManager.PROFILE_TIME) ?
-                    summaryProfile.getInfoString(ProfileManager.PROFILE_TIME) :
-                    summaryProfile.getCounter(ProfileManager.PROFILE_TIME));
+            appendSummaryLine("CollectProfileTime: ",
+                    summaryProfile.containsInfoString(ProfileManager.PROFILE_COLLECT_TIME) ?
+                            summaryProfile.getInfoString(ProfileManager.PROFILE_COLLECT_TIME) :
+                            summaryProfile.getCounter(ProfileManager.PROFILE_COLLECT_TIME));
         }
+        appendSummaryLine("FrontendProfileMergeTime: ", executionProfile.getCounter("FrontendProfileMergeTime"));
         popIndent(); // metric indent
 
         // 3. Memory Usage

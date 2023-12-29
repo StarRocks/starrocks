@@ -69,7 +69,7 @@ protected:
                                   uint32_t match_count);
     static void check_probe_state(const JoinHashTableItems& table_items, const HashTableProbeState& probe_state,
                                   JoinMatchFlag match_flag, uint32_t step, uint32_t match_count,
-                                  uint32_t probe_row_count, bool has_null_build_tuple);
+                                  uint32_t probe_row_count);
     static void check_build_index(const Buffer<uint32_t>& first, const Buffer<uint32_t>& next, uint32_t row_count);
     static void check_build_index(const Buffer<uint8_t>& nulls, const Buffer<uint32_t>& first,
                                   const Buffer<uint32_t>& next, uint32_t row_count);
@@ -93,7 +93,6 @@ protected:
 
     // flag: 0(all 0), 1(all 1), 2(half 0), 3(one third 0)
     static Buffer<uint8_t> create_bools(uint32_t count, int32_t flag);
-    static ColumnPtr create_tuple_column(const Buffer<uint8_t>& data);
     static ColumnPtr create_column(LogicalType LT);
     static ColumnPtr create_column(LogicalType LT, uint32_t start, uint32_t count);
     static ColumnPtr create_nullable_column(LogicalType LT);
@@ -125,14 +124,6 @@ protected:
     TypeDescriptor _tinyint_type;
     TypeDescriptor _varchar_type;
 };
-
-ColumnPtr JoinHashMapTest::create_tuple_column(const Buffer<uint8_t>& data) {
-    ColumnPtr column = BooleanColumn::create();
-    for (auto v : data) {
-        column->append_datum(v);
-    }
-    return column;
-}
 
 Buffer<uint8_t> JoinHashMapTest::create_bools(uint32_t count, int32_t flag) {
     Buffer<uint8_t> nulls(count);
@@ -469,10 +460,9 @@ void JoinHashMapTest::check_match_index(const Buffer<uint32_t>& probe_match_inde
 
 void JoinHashMapTest::check_probe_state(const JoinHashTableItems& table_items, const HashTableProbeState& probe_state,
                                         JoinMatchFlag match_flag, uint32_t step, uint32_t match_count,
-                                        uint32_t probe_row_count, bool has_null_build_tuple) {
+                                        uint32_t probe_row_count) {
     ASSERT_EQ(probe_state.match_flag, match_flag);
     ASSERT_EQ(probe_state.has_remain, (step + 1) * config::vector_chunk_size < probe_row_count * match_count);
-    ASSERT_EQ(probe_state.has_null_build_tuple, has_null_build_tuple);
     if (probe_row_count * match_count > (step + 1) * config::vector_chunk_size) {
         ASSERT_EQ(probe_state.count, config::vector_chunk_size);
         if (is_check_cur_row_match_count(table_items.join_type, table_items.with_other_conjunct)) {
@@ -539,7 +529,6 @@ void JoinHashMapTest::prepare_probe_state(HashTableProbeState* probe_state, uint
     probe_state->probe_pool = std::make_unique<MemPool>();
     probe_state->search_ht_timer = ADD_TIMER(_runtime_profile, "SearchHashTableTime");
     probe_state->output_probe_column_timer = ADD_TIMER(_runtime_profile, "OutputProbeColumnTime");
-    probe_state->output_tuple_column_timer = ADD_TIMER(_runtime_profile, "OutputTupleColumnTime");
     probe_state->build_index.resize(config::vector_chunk_size + 8);
     probe_state->probe_index.resize(config::vector_chunk_size + 8);
     probe_state->next.resize(config::vector_chunk_size);
@@ -695,7 +684,6 @@ void JoinHashMapTest::check_empty_hash_map(TJoinOp::type join_type, int num_prob
     param.search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTime");
     param.output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTime");
     param.output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTime");
-    param.output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTime");
 
     JoinHashTable hash_table;
     hash_table.create(param);
@@ -711,7 +699,7 @@ void JoinHashMapTest::check_empty_hash_map(TJoinOp::type join_type, int num_prob
     probe_key_columns.emplace_back(probe_chunk->columns()[1]);
 
     Columns build_key_columns{build_chunk->columns()[0], build_chunk->columns()[1]};
-    hash_table.append_chunk(runtime_state.get(), build_chunk, build_key_columns);
+    hash_table.append_chunk(build_chunk, build_key_columns);
     (void)hash_table.build(runtime_state.get());
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();
@@ -1068,7 +1056,6 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
     auto build_row_desc = create_build_desc(runtime_state.get(), _object_pool, &row_desc_builder, false);
 
     HashTableParam param;
-    param.need_create_tuple_columns = false;
     param.with_other_conjunct = false;
     param.join_type = TJoinOp::INNER_JOIN;
     param.row_desc = row_desc.get();
@@ -1080,7 +1067,6 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
     param.search_ht_timer = ADD_TIMER(_runtime_profile, "search_ht");
     param.output_build_column_timer = ADD_TIMER(_runtime_profile, "output_build_column");
     param.output_probe_column_timer = ADD_TIMER(_runtime_profile, "output_probe_column");
-    param.output_tuple_column_timer = ADD_TIMER(_runtime_profile, "output_tuple_column");
 
     JoinHashTable ht;
 
@@ -1104,7 +1090,7 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
     // build and probe
     ht.create(param);
     Columns key_columns{build_chunk->columns()[0]};
-    ht.append_chunk(_runtime_state.get(), build_chunk, key_columns);
+    ht.append_chunk(build_chunk, key_columns);
     (void)ht.build(_runtime_state.get());
     (void)ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
 
@@ -1128,7 +1114,6 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFuncNullable) {
     auto build_row_desc = create_build_desc(runtime_state.get(), _object_pool, &row_desc_builder, true);
 
     HashTableParam param;
-    param.need_create_tuple_columns = false;
     param.with_other_conjunct = false;
     param.join_type = TJoinOp::INNER_JOIN;
     param.row_desc = row_desc.get();
@@ -1140,7 +1125,6 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFuncNullable) {
     param.search_ht_timer = ADD_TIMER(_runtime_profile, "search_ht");
     param.output_build_column_timer = ADD_TIMER(_runtime_profile, "output_build_column");
     param.output_probe_column_timer = ADD_TIMER(_runtime_profile, "output_probe_column");
-    param.output_tuple_column_timer = ADD_TIMER(_runtime_profile, "output_tuple_column");
 
     JoinHashTable ht;
 
@@ -1170,7 +1154,7 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFuncNullable) {
     // build and probe
     ht.create(param);
     Columns key_columns{build_chunk->columns()[0]};
-    ht.append_chunk(_runtime_state.get(), build_chunk, key_columns);
+    ht.append_chunk(build_chunk, key_columns);
     (void)ht.build(_runtime_state.get());
     (void)ht.probe(_runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
 
@@ -1425,7 +1409,6 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildProbeFuncNullable) {
         probe_state.probe_index.assign(4096 + 8, 0);                                                          \
         probe_state.build_index.assign(4096 + 8, 0);                                                          \
         probe_state.probe_match_index.assign(4096 + 8, 0);                                                    \
-        probe_state.has_null_build_tuple = false;                                                             \
         if (group == 0) {                                                                                     \
             join_hash_map->FUNC<FIRST>(runtime_state.get(), build_data, probe_data);                          \
         } else {                                                                                              \
@@ -1665,7 +1648,6 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinFoundEmpty) {
         ASSERT_GE(probe_state.cur_probe_index, 2048);
     }
     ASSERT_EQ(probe_state.count, 4096);
-    ASSERT_FALSE(probe_state.has_null_build_tuple);
     for (uint32_t i = 0; i < probe_state.count; i += 1) {
         results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
     }
@@ -1676,7 +1658,6 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinFoundEmpty) {
     ASSERT_EQ(probe_state.cur_probe_index, 0);
     ASSERT_EQ(probe_state.count, 1904);
     ASSERT_EQ(probe_state.cur_row_match_count, 0);
-    ASSERT_FALSE(probe_state.has_null_build_tuple);
     for (uint32_t i = 0; i < probe_state.count; i += 1) {
         results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
     }
@@ -1712,7 +1693,7 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmpty) {
     auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
     join_hash_map->_probe_from_ht_for_left_outer_left_anti_full_outer_join_with_other_conjunct<true>(
             _runtime_state.get(), build_data, probe_data);
-    this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count, false);
+    this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count);
     this->check_match_index(probe_state.probe_match_index, 0, config::vector_chunk_size, match_count);
 }
 
@@ -1738,7 +1719,6 @@ TEST_F(JoinHashMapTest, ProbeFromHtForLeftJoinNextEmptyCoro) {
     std::vector<std::pair<uint32_t, uint32_t>> results;
     ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
     ASSERT_EQ(probe_state.count, 4096);
-    ASSERT_FALSE(probe_state.has_null_build_tuple);
     for (uint32_t i = 0; i < probe_state.count; i += 1) {
         results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
     }
@@ -1794,15 +1774,13 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunct) {
         auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
         join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<true>(
                 _runtime_state.get(), build_data, probe_data);
-        this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count,
-                                false);
+        this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 0, match_count, probe_row_count);
 
         // second probe
         join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
         join_hash_map->_probe_from_ht_for_right_outer_right_semi_right_anti_join_with_other_conjunct<false>(
                 _runtime_state.get(), build_data, probe_data);
-        this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 1, match_count, probe_row_count,
-                                false);
+        this->check_probe_state(table_items, probe_state, JoinMatchFlag::NORMAL, 1, match_count, probe_row_count);
     }
 }
 
@@ -1828,7 +1806,6 @@ TEST_F(JoinHashMapTest, ProbeFromHtForRightXXXJoinWithOtherConjunctCoro) {
         std::vector<std::pair<uint32_t, uint32_t>> results;
         ASSERT_EQ(probe_state.match_flag, JoinMatchFlag::NORMAL);
         ASSERT_EQ(probe_state.count, 4096);
-        ASSERT_FALSE(probe_state.has_null_build_tuple);
         for (uint32_t i = 0; i < probe_state.count; i += 1) {
             results.push_back(std::make_pair(probe_state.probe_index[i], probe_state.build_index[i]));
         }
@@ -1887,7 +1864,6 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
     param.search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTime");
     param.output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTime");
     param.output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTime");
-    param.output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTime");
 
     JoinHashTable hash_table;
     hash_table.create(param);
@@ -1898,7 +1874,7 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
     probe_key_columns.emplace_back(probe_chunk->columns()[0]);
 
     Columns build_keys_column{build_chunk->columns()[0]};
-    hash_table.append_chunk(runtime_state.get(), build_chunk, build_keys_column);
+    hash_table.append_chunk(build_chunk, build_keys_column);
     (void)hash_table.build(runtime_state.get());
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();
@@ -1952,7 +1928,6 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
     param.search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTime");
     param.output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTime");
     param.output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTime");
-    param.output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTime");
 
     JoinHashTable hash_table;
     hash_table.create(param);
@@ -1964,7 +1939,7 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
 
     Columns build_key_columns;
     build_key_columns.emplace_back(build_chunk->columns()[0]);
-    hash_table.append_chunk(runtime_state.get(), build_chunk, build_key_columns);
+    hash_table.append_chunk(build_chunk, build_key_columns);
     (void)hash_table.build(runtime_state.get());
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();
@@ -2020,7 +1995,6 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
     param.search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTime");
     param.output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTime");
     param.output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTime");
-    param.output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTime");
 
     JoinHashTable hash_table;
     hash_table.create(param);
@@ -2032,7 +2006,7 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
     probe_key_columns.emplace_back(probe_chunk->columns()[1]);
 
     Columns build_key_columns{build_chunk->columns()[0], build_chunk->columns()[1]};
-    hash_table.append_chunk(runtime_state.get(), build_chunk, build_key_columns);
+    hash_table.append_chunk(build_chunk, build_key_columns);
     (void)hash_table.build(runtime_state.get());
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();
@@ -2085,7 +2059,6 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
     param.search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTime");
     param.output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTime");
     param.output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTime");
-    param.output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTime");
 
     JoinHashTable hash_table;
     hash_table.create(param);
@@ -2097,7 +2070,7 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
     probe_key_columns.emplace_back(probe_chunk->columns()[1]);
 
     Columns build_key_columns{build_chunk->columns()[0], build_chunk->columns()[1]};
-    hash_table.append_chunk(runtime_state.get(), build_chunk, build_key_columns);
+    hash_table.append_chunk(build_chunk, build_key_columns);
     (void)hash_table.build(runtime_state.get());
 
     ChunkPtr result_chunk = std::make_shared<Chunk>();
@@ -2329,208 +2302,6 @@ TEST_F(JoinHashMapTest, SerializedJoinBuildFuncForPartialNullColumn) {
     auto nulls = create_bools(build_row_count, 4);
     check_build_index(nulls, table_items.first, table_items.next, build_row_count);
     check_build_slice(nulls, table_items.build_slice, build_row_count);
-}
-
-// NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, BuildTupleOutputForTupleNotExist1) {
-    uint32_t build_row_count = 10;
-    uint32_t probe_row_count = 5;
-    auto uint8_array_1 = create_bools(build_row_count, 2);
-    auto uint8_array_2 = create_bools(build_row_count, 3);
-
-    ColumnPtr build_tuple_column_1 = create_tuple_column(uint8_array_1);
-    ColumnPtr build_tuple_column_2 = create_tuple_column(uint8_array_2);
-
-    JoinHashTableItems table_items;
-    table_items.build_chunk = std::make_shared<Chunk>();
-    table_items.build_chunk->append_tuple_column(build_tuple_column_1, 0);
-    table_items.build_chunk->append_tuple_column(build_tuple_column_2, 1);
-    table_items.output_build_tuple_ids = {0, 1};
-
-    HashTableProbeState probe_state;
-    probe_state.has_null_build_tuple = false;
-    probe_state.count = probe_row_count;
-    for (uint32_t i = 0; i < probe_row_count; i++) {
-        probe_state.build_index.emplace_back(i + 1);
-    }
-
-    ChunkPtr probe_chunk = std::make_shared<Chunk>();
-    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_build_tuple_output(&probe_chunk);
-
-    // check
-    ASSERT_EQ(probe_chunk->num_columns(), 2);
-    ColumnPtr probe_tuple_column_1 = probe_chunk->get_tuple_column_by_id(0);
-    ColumnPtr probe_tuple_column_2 = probe_chunk->get_tuple_column_by_id(1);
-
-    for (uint32_t i = 0; i < probe_row_count; i++) {
-        ASSERT_EQ(probe_tuple_column_1->get(i).get_int8(), (i + 1) % 2 == 0);
-    }
-    for (uint32_t i = 0; i < probe_row_count; i++) {
-        ASSERT_EQ(probe_tuple_column_2->get(i).get_int8(), (i + 1) % 3 == 0);
-    }
-}
-
-// NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, BuildTupleOutputForTupleNotExist2) {
-    // prepare data
-    uint32_t build_row_count = 10;
-    uint32_t probe_row_count = 5;
-    auto uint8_array_1 = create_bools(build_row_count, 2);
-    auto uint8_array_2 = create_bools(build_row_count, 3);
-
-    ColumnPtr build_tuple_column_1 = create_tuple_column(uint8_array_1);
-    ColumnPtr build_tuple_column_2 = create_tuple_column(uint8_array_2);
-
-    JoinHashTableItems table_items;
-    table_items.build_chunk = std::make_shared<Chunk>();
-    table_items.build_chunk->append_tuple_column(build_tuple_column_1, 0);
-    table_items.build_chunk->append_tuple_column(build_tuple_column_2, 1);
-    table_items.output_build_tuple_ids = {0, 1};
-
-    HashTableProbeState probe_state;
-    probe_state.has_null_build_tuple = true;
-    probe_state.count = probe_row_count;
-    for (uint32_t i = 0; i < probe_row_count; i++) {
-        if (i == 1 || i == 2) {
-            probe_state.build_index.emplace_back(0);
-        } else {
-            probe_state.build_index.emplace_back(i + 1);
-        }
-    }
-
-    // exec
-    ChunkPtr probe_chunk = std::make_shared<Chunk>();
-    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_build_tuple_output(&probe_chunk);
-
-    // check
-    ASSERT_EQ(probe_chunk->num_columns(), 2);
-    ColumnPtr probe_tuple_column_1 = probe_chunk->get_tuple_column_by_id(0);
-    ColumnPtr probe_tuple_column_2 = probe_chunk->get_tuple_column_by_id(1);
-
-    for (uint32_t i = 0; i < probe_row_count; i++) {
-        if (i == 1 || i == 2) {
-            ASSERT_EQ(probe_tuple_column_1->get(i).get_int8(), 0);
-        } else {
-            ASSERT_EQ(probe_tuple_column_1->get(i).get_int8(), (i + 1) % 2 == 0);
-        }
-    }
-    for (uint32_t i = 0; i < probe_row_count; i++) {
-        if (i == 1 || i == 2) {
-            ASSERT_EQ(probe_tuple_column_2->get(i).get_int8(), 0);
-        } else {
-            ASSERT_EQ(probe_tuple_column_2->get(i).get_int8(), (i + 1) % 3 == 0);
-        }
-    }
-}
-
-// NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, BuildTupleOutputForTupleExist1) {
-    // prepare data
-    uint32_t probe_row_count = 5;
-
-    JoinHashTableItems table_items;
-    table_items.build_chunk = std::make_shared<Chunk>();
-    table_items.output_build_tuple_ids = {0, 1};
-    table_items.right_to_nullable = true;
-
-    HashTableProbeState probe_state;
-    probe_state.has_null_build_tuple = true;
-    probe_state.count = probe_row_count;
-    for (uint32_t i = 0; i < probe_row_count; i++) {
-        probe_state.build_index.emplace_back(i + 1);
-    }
-
-    // exec
-    ChunkPtr probe_chunk = std::make_shared<Chunk>();
-    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_build_tuple_output(&probe_chunk);
-
-    // check
-    ASSERT_EQ(probe_chunk->num_columns(), 2);
-    ColumnPtr probe_tuple_column_1 = probe_chunk->get_tuple_column_by_id(0);
-    ColumnPtr probe_tuple_column_2 = probe_chunk->get_tuple_column_by_id(1);
-
-    for (uint32_t i = 0; i < probe_row_count; i++) {
-        ASSERT_EQ(probe_tuple_column_1->get(i).get_int8(), 1);
-    }
-    for (uint32_t i = 0; i < probe_row_count; i++) {
-        ASSERT_EQ(probe_tuple_column_2->get(i).get_int8(), 1);
-    }
-}
-
-// NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, BuildTupleOutputForTupleExist2) {
-    // prepare data
-    uint32_t probe_row_count = 5;
-
-    JoinHashTableItems table_items;
-    table_items.build_chunk = std::make_shared<Chunk>();
-    table_items.output_build_tuple_ids = {0, 1};
-    table_items.right_to_nullable = true;
-
-    HashTableProbeState probe_state;
-    probe_state.has_null_build_tuple = true;
-    probe_state.count = probe_row_count;
-    for (uint32_t i = 0; i < probe_row_count; i++) {
-        if (i == 1 || i == 2) {
-            probe_state.build_index.emplace_back(0);
-        } else {
-            probe_state.build_index.emplace_back(1);
-        }
-    }
-
-    // exec
-    ChunkPtr probe_chunk = std::make_shared<Chunk>();
-    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_build_tuple_output(&probe_chunk);
-
-    // check
-    ASSERT_EQ(probe_chunk->num_columns(), 2);
-    ColumnPtr probe_tuple_column_1 = probe_chunk->get_tuple_column_by_id(0);
-    ColumnPtr probe_tuple_column_2 = probe_chunk->get_tuple_column_by_id(1);
-
-    for (uint32_t i = 0; i < probe_row_count; i++) {
-        if (i == 1 || i == 2) {
-            ASSERT_EQ(probe_tuple_column_1->get(i).get_int8(), 0);
-        } else {
-            ASSERT_EQ(probe_tuple_column_1->get(i).get_int8(), 1);
-        }
-    }
-    for (uint32_t i = 0; i < probe_row_count; i++) {
-        if (i == 1 || i == 2) {
-            ASSERT_EQ(probe_tuple_column_1->get(i).get_int8(), 0);
-        } else {
-            ASSERT_EQ(probe_tuple_column_2->get(i).get_int8(), 1);
-        }
-    }
-}
-
-// NOLINTNEXTLINE
-TEST_F(JoinHashMapTest, BuildTupleOutputForTupleExist3) {
-    // prepare data
-    uint32_t probe_row_count = 5;
-
-    JoinHashTableItems table_items;
-    table_items.build_chunk = std::make_shared<Chunk>();
-    table_items.output_build_tuple_ids = {0, 1};
-    table_items.right_to_nullable = false;
-
-    HashTableProbeState probe_state;
-    probe_state.has_null_build_tuple = true;
-    probe_state.count = probe_row_count;
-    for (uint32_t i = 0; i < probe_row_count; i++) {
-        probe_state.build_index.emplace_back(i + 1);
-    }
-
-    // exec
-    ChunkPtr probe_chunk = std::make_shared<Chunk>();
-    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
-    join_hash_map->_build_tuple_output(&probe_chunk);
-
-    // check
-    ASSERT_EQ(probe_chunk->num_columns(), 0);
 }
 
 // NOLINTNEXTLINE

@@ -50,7 +50,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                             PrivilegeType.ALTER,
                             PrivilegeType.CREATE_VIEW,
                             PrivilegeType.CREATE_FUNCTION,
-                            PrivilegeType.CREATE_MATERIALIZED_VIEW))
+                            PrivilegeType.CREATE_MATERIALIZED_VIEW,
+                            PrivilegeType.CREATE_PIPE))
 
                     .put(ObjectType.SYSTEM, ImmutableList.of(
                             PrivilegeType.GRANT,
@@ -98,6 +99,12 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                     .put(ObjectType.RESOURCE_GROUP, ImmutableList.of(
                             PrivilegeType.ALTER,
                             PrivilegeType.DROP))
+
+                    .put(ObjectType.PIPE, ImmutableList.of(
+                            PrivilegeType.ALTER,
+                            PrivilegeType.DROP,
+                            PrivilegeType.USAGE
+                    ))
 
                     .put(ObjectType.GLOBAL_FUNCTION, ImmutableList.of(
                             PrivilegeType.USAGE,
@@ -159,6 +166,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             return ResourceGroupPEntryObject.generate(mgr, objectTokens);
         } else if (ObjectType.STORAGE_VOLUME.equals(objectType)) {
             return StorageVolumePEntryObject.generate(mgr, objectTokens);
+        } else if (ObjectType.PIPE.equals(objectType)) {
+            return PipePEntryObject.generate(mgr, objectTokens);
         }
         throw new PrivilegeException(UNEXPECTED_TYPE + objectType.name());
     }

@@ -14,20 +14,25 @@
 
 #include "runtime/global_dict/parser.h"
 
+#include "column/array_column.h"
 #include "column/chunk.h"
 #include "column/column_builder.h"
+#include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "common/global_types.h"
 #include "common/statusor.h"
 #include "exprs/dictmapping_expr.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
+#include "exprs/placeholder_ref.h"
+#include "gen_cpp/Exprs_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/global_dict/config.h"
 #include "runtime/global_dict/dict_column.h"
 #include "runtime/global_dict/miscs.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/runtime_state.h"
+#include "runtime/types.h"
 #include "simd/gather.h"
 #include "types/logical_type.h"
 
@@ -59,19 +64,61 @@ public:
                 _data_column_ptr = _dict_opt_ctx->convert_column;
             }
         }
+
+        DCHECK_GE(_origin_expr.get_num_children(), 2);
+        auto place = get_place_holder(_origin_expr.get_child(1));
+        auto type = place->type();
+        if (type.type == LogicalType::TYPE_VARCHAR) {
+            _input_type = LogicalType::TYPE_VARCHAR;
+        } else if (type.is_array_type() && type.children[0].type == LogicalType::TYPE_VARCHAR) {
+            _input_type = LogicalType::TYPE_ARRAY;
+        }
     }
 
+    PlaceHolderRef* get_place_holder(Expr* root) {
+        if (auto f = dynamic_cast<PlaceHolderRef*>(root)) {
+            return down_cast<PlaceHolderRef*>(f);
+        }
+        for (auto child : root->children()) {
+            PlaceHolderRef* p = nullptr;
+            if ((p = get_place_holder(child)) != nullptr) {
+                return p;
+            }
+        }
+        return nullptr;
+    };
+
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
+        if (_input_type != LogicalType::TYPE_ARRAY && _input_type != LogicalType::TYPE_VARCHAR) {
+            return Status::InternalError(fmt::format("dictFuncExpr can't resolve type: {}", _dict_opt_ctx->slot_id));
+        }
+
+        auto& input = ptr->get_column_by_slot_id(_dict_opt_ctx->slot_id);
         size_t num_rows = ptr->num_rows();
+
+        if (_input_type == LogicalType::TYPE_VARCHAR) {
+            return _translate_string(input, num_rows);
+        } else {
+            return _translate_array(input, num_rows);
+        }
+
+        return Status::InternalError(fmt::format("dictFuncExpr error on dict: {}", _dict_opt_ctx->slot_id));
+    }
+
+    Expr* clone(ObjectPool* pool) const override { return pool->add(new DictFuncExpr(_origin_expr, _dict_opt_ctx)); }
+
+private:
+    ColumnPtr _translate_string(ColumnPtr& input, size_t num_rows) {
         if (_always_null) {
             return ColumnHelper::create_const_null_column(num_rows);
         }
+
         if (_always_const) {
             auto res = _dict_opt_ctx->convert_column->clone();
             res->resize(num_rows);
             return res;
         }
-        auto& input = ptr->get_column_by_slot_id(_dict_opt_ctx->slot_id);
+
         // is const column
         if (input->only_null() || input->is_constant()) {
             if (_null_column_ptr && _null_column_ptr.get()->is_null(0)) {
@@ -79,6 +126,7 @@ public:
             } else {
                 auto idx = input->get(0);
                 auto res = _data_column_ptr->clone_empty();
+
                 res->append_datum(_data_column_ptr->get(idx.get_int32()));
                 return ConstColumn::create(std::move(res));
             }
@@ -111,13 +159,48 @@ public:
                 return res;
             }
         }
-
-        return nullptr;
     }
 
-    Expr* clone(ObjectPool* pool) const override { return pool->add(new DictFuncExpr(_origin_expr, _dict_opt_ctx)); }
+    ColumnPtr _translate_array(ColumnPtr& array, size_t num_rows) {
+        if ((array->only_null())) {
+            return ColumnHelper::create_const_null_column(num_rows);
+        }
 
-private:
+        ArrayColumn* array_col = nullptr;
+        TypeDescriptor stringType;
+        stringType.type = TYPE_VARCHAR;
+        if (array->is_constant()) {
+            auto* const_column = down_cast<ConstColumn*>(array.get());
+            array_col = down_cast<ArrayColumn*>(const_column->data_column().get());
+
+            auto element = array_col->elements_column();
+            auto offsets = UInt32Column::create(array_col->offsets());
+
+            ColumnPtr string_col = _translate_string(element, element->size());
+            string_col = ColumnHelper::unfold_const_column(stringType, element->size(), string_col);
+            return ConstColumn::create(ArrayColumn::create(string_col, offsets), num_rows);
+        } else if (array->is_nullable()) {
+            auto nullable = down_cast<NullableColumn*>(array.get());
+            array_col = down_cast<ArrayColumn*>(nullable->data_column().get());
+            NullColumnPtr array_null = NullColumn::create(*nullable->null_column());
+
+            auto element = array_col->elements_column();
+            auto offsets = UInt32Column::create(array_col->offsets());
+
+            ColumnPtr string_col = _translate_string(element, element->size());
+            string_col = ColumnHelper::unfold_const_column(stringType, element->size(), string_col);
+            return NullableColumn::create(ArrayColumn::create(string_col, offsets), array_null);
+        } else {
+            array_col = down_cast<ArrayColumn*>(array.get());
+            auto element = array_col->elements_column();
+            auto offsets = UInt32Column::create(array_col->offsets());
+
+            ColumnPtr string_col = _translate_string(element, element->size());
+            string_col = ColumnHelper::unfold_const_column(stringType, element->size(), string_col);
+            return ArrayColumn::create(string_col, offsets);
+        }
+    }
+
     // res[i] = mapping[index[i]]
     std::vector<uint32_t> _code_convert(const std::vector<int32_t>& index, const std::vector<int16_t>& mapping) {
         std::vector<uint32_t> res(index.size());
@@ -140,6 +223,9 @@ private:
     // data column ptr
     ColumnPtr _data_column_ptr;
 
+    // mark intput column type
+    LogicalType _input_type = TYPE_UNKNOWN;
+
     DictOptimizeContext* _dict_opt_ctx;
 };
 
@@ -147,6 +233,12 @@ void DictOptimizeParser::_check_could_apply_dict_optimize(Expr* expr, DictOptimi
     if (auto f = dynamic_cast<DictMappingExpr*>(expr)) {
         dict_opt_ctx->slot_id = f->slot_id();
         dict_opt_ctx->could_apply_dict_optimize = true;
+    }
+}
+
+void DictOptimizeParser::close() noexcept {
+    for (auto& [k, v] : _dict_exprs) {
+        v->close(_runtime_state);
     }
 }
 
@@ -161,9 +253,13 @@ Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictO
     dict_opt_ctx->slot_id = need_decode_slot_id;
     SlotId expr_slot_id = slots.back();
 
-    DCHECK(_mutable_dict_maps->count(need_decode_slot_id) > 0);
     if (_mutable_dict_maps->count(need_decode_slot_id) == 0) {
-        return Status::InternalError(fmt::format("couldn't found dict cid:{}", need_decode_slot_id));
+        if (_dict_exprs.count(need_decode_slot_id) == 0) {
+            return Status::InternalError(fmt::format("couldn't found dict cid:{}", need_decode_slot_id));
+        } else {
+            DictOptimizeContext doc;
+            RETURN_IF_ERROR(eval_expression(_dict_exprs[need_decode_slot_id], &doc, need_decode_slot_id));
+        }
     }
 
     auto& column_dict_map = _mutable_dict_maps->at(need_decode_slot_id).first;
@@ -185,8 +281,9 @@ Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictO
     // if dict expr return type not equels to origin expr return type
     // it means dict expr return a lowcardinality column. we need insert it
     // to global dicts
-    if (origin_expr->type().type != dict_mapping->type().type) {
-        DCHECK_EQ(origin_expr->type().type, TYPE_VARCHAR);
+    if ((origin_expr->type().type != dict_mapping->type().type) ||
+        (origin_expr->type().is_array_type() && dict_mapping->type().is_array_type() &&
+         origin_expr->type().children[0].type != dict_mapping->type().children[0].type)) {
         DCHECK_GE(targetSlotId, 0);
         ColumnViewer<TYPE_VARCHAR> viewer(result_column);
         int num_rows = codes.size();
@@ -237,8 +334,10 @@ Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictO
         }
 
         dict_opt_ctx->convert_column = builder.build(false);
-        DCHECK_EQ(_mutable_dict_maps->count(targetSlotId), 0);
-        _mutable_dict_maps->emplace(targetSlotId, std::make_pair(std::move(result_map), std::move(rresult_map)));
+
+        if (_mutable_dict_maps->count(targetSlotId) == 0) {
+            _mutable_dict_maps->emplace(targetSlotId, std::make_pair(std::move(result_map), std::move(rresult_map)));
+        }
     }
     return Status::OK();
 }
@@ -264,7 +363,64 @@ Status DictOptimizeParser::rewrite_expr(ExprContext* ctx, Expr* expr, SlotId slo
     return Status::OK();
 }
 
-Status DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
+Status DictOptimizeParser::eval_dict_expr(SlotId id) {
+    if (_dict_exprs.count(id) == 0) {
+        // none expr
+        return Status::InternalError(fmt::format("not found dict expr on slot: {}", id));
+    }
+    DictOptimizeContext doc;
+    return eval_expression(_dict_exprs[id], &doc, id);
+}
+
+void DictOptimizeParser::set_output_slot_id(std::vector<ExprContext*>* pexpr_ctxs,
+                                            const std::vector<SlotId>& slot_ids) {
+    auto& expr_ctxs = *pexpr_ctxs;
+    for (int i = 0; i < expr_ctxs.size(); ++i) {
+        auto& expr_ctx = expr_ctxs[i];
+        auto expr = expr_ctx->root();
+        if (auto f = dynamic_cast<DictMappingExpr*>(expr)) {
+            f->set_output_id(slot_ids[i]);
+        }
+    }
+}
+
+static void expr_disable_open_rewrite(Expr* root) {
+    if (auto f = dynamic_cast<DictMappingExpr*>(root)) {
+        f->disable_open_rewrite();
+    }
+
+    for (auto& child : root->children()) {
+        expr_disable_open_rewrite(child);
+    }
+}
+
+void DictOptimizeParser::disable_open_rewrite(const std::vector<ExprContext*>* pexpr_ctxs) {
+    auto& expr_ctxs = *pexpr_ctxs;
+    for (int i = 0; i < expr_ctxs.size(); ++i) {
+        auto& expr_ctx = expr_ctxs[i];
+        auto expr = expr_ctx->root();
+        expr_disable_open_rewrite(expr);
+    }
+}
+
+Status DictOptimizeParser::init_dict_exprs(const std::map<int, TExpr>& exprs) {
+    for (auto& [k, v] : exprs) {
+        ExprContext* expr_ctx = nullptr;
+        RETURN_IF_ERROR(Expr::create_expr_tree(&_free_pool, v, &expr_ctx, _runtime_state));
+        auto expr = expr_ctx->root();
+        if (auto f = dynamic_cast<DictMappingExpr*>(expr)) {
+            f->set_output_id(k);
+            f->disable_open_rewrite();
+            RETURN_IF_ERROR(expr_ctx->prepare(_runtime_state));
+            RETURN_IF_ERROR(expr_ctx->open(_runtime_state));
+            _dict_exprs.emplace(k, expr_ctx);
+        }
+    }
+
+    return Status::OK();
+}
+
+Status DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_ctxs,
                                               const std::vector<SlotId>& slot_ids) {
     auto& expr_ctxs = *pexpr_ctxs;
     for (int i = 0; i < expr_ctxs.size(); ++i) {
@@ -275,16 +431,15 @@ Status DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_c
     return Status::OK();
 }
 
-Status DictOptimizeParser::rewrite_conjuncts(std::vector<ExprContext*>* pconjuncts_ctxs, RuntimeState* state) {
-    return _rewrite_expr_ctxs(pconjuncts_ctxs, state, std::vector<SlotId>(pconjuncts_ctxs->size(), -1));
+Status DictOptimizeParser::rewrite_conjuncts(std::vector<ExprContext*>* pconjuncts_ctxs) {
+    auto& expr_ctxs = *pconjuncts_ctxs;
+    for (int i = 0; i < expr_ctxs.size(); ++i) {
+        auto& expr_ctx = expr_ctxs[i];
+        auto expr = expr_ctx->root();
+        RETURN_IF_ERROR(rewrite_expr(expr_ctx, expr, -1));
+    }
+    return Status::OK();
 }
-
-Status DictOptimizeParser::rewrite_exprs(std::vector<ExprContext*>* pexpr_ctxs, RuntimeState* state,
-                                         const std::vector<SlotId>& target_slotids) {
-    return _rewrite_expr_ctxs(pexpr_ctxs, state, target_slotids);
-}
-
-void DictOptimizeParser::close(RuntimeState* state) noexcept {}
 
 void DictOptimizeParser::check_could_apply_dict_optimize(ExprContext* expr_ctx, DictOptimizeContext* dict_opt_ctx) {
     _check_could_apply_dict_optimize(expr_ctx->root(), dict_opt_ctx);

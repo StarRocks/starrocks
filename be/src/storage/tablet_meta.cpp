@@ -139,6 +139,17 @@ Status TabletMeta::create_from_file(const string& file_path) {
     return Status::OK();
 }
 
+Status TabletMeta::create_from_memory(std::string_view data) {
+    TabletMetaPB tablet_meta_pb;
+    Status st = ProtobufFileWithHeader::load(&tablet_meta_pb, data);
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to load tablet meta from memory: " << st;
+        return st;
+    }
+    init_from_pb(&tablet_meta_pb);
+    return Status::OK();
+}
+
 Status TabletMeta::reset_tablet_uid(const string& file_path) {
     Status res;
     TabletMeta tmp_tablet_meta;
@@ -182,7 +193,7 @@ Status TabletMeta::save_meta(DataDir* data_dir) {
 void TabletMeta::save_tablet_schema(const TabletSchemaCSPtr& tablet_schema, DataDir* data_dir) {
     std::unique_lock wrlock(_meta_lock);
     _schema = tablet_schema;
-    _save_meta(data_dir);
+    (void)_save_meta(data_dir);
 }
 
 Status TabletMeta::_save_meta(DataDir* data_dir) {

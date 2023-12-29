@@ -36,6 +36,14 @@ public class IcebergFilter {
         this.predicate = predicate;
     }
 
+    public String getDatabaseName() {
+        return databaseName;
+    }
+
+    public String getTableName() {
+        return tableName;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {
@@ -49,7 +57,7 @@ public class IcebergFilter {
         return snapshotId == that.snapshotId &&
                 Objects.equals(databaseName, that.databaseName) &&
                 Objects.equals(tableName, that.tableName) &&
-                predicate.equals(that.predicate);
+                predicate.equivalent(that.predicate);
     }
 
     @Override

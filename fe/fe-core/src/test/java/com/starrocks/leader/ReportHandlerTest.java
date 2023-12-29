@@ -353,6 +353,7 @@ public class ReportHandlerTest {
                 replica.setMaxRowsetCreationTime(System.currentTimeMillis() / 1000);
             }
         }
+        Config.tablet_sched_max_migration_task_sent_once = 1000000;
         Config.primary_key_disk_schedule_time = 0;
         ReportHandler.handleMigration(tabletMetaMigrationMap, 10001);
     }

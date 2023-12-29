@@ -184,12 +184,12 @@ JVMClass& JVMFunctionHelper::function_state_clazz() {
     return *_function_states_clazz;
 }
 
-#define CHECK_FUNCTION_EXCEPTION(_env, name)                  \
-    if (auto e = _env->ExceptionOccurred()) {                 \
-        LOCAL_REF_GUARD(e);                                   \
-        _env->ExceptionClear();                               \
-        LOG(WARNING) << "Exception happend when call " #name; \
-        return "";                                            \
+#define CHECK_FUNCTION_EXCEPTION(_env, name)                   \
+    if (auto e = _env->ExceptionOccurred()) {                  \
+        LOCAL_REF_GUARD(e);                                    \
+        _env->ExceptionClear();                                \
+        LOG(WARNING) << "Exception happened when call " #name; \
+        return "";                                             \
     }
 
 #define RETURN_ERROR_IF_EXCEPTION(env, errmsg)                                   \
@@ -444,7 +444,7 @@ DirectByteBuffer::~DirectByteBuffer() {
             _handle = nullptr;
             return Status::OK();
         });
-        ret->get_future().get();
+        (void)ret->get_future().get();
     }
 }
 
@@ -459,7 +459,7 @@ void JavaGlobalRef::clear() {
             _handle = nullptr;
             return Status::OK();
         });
-        ret->get_future().get();
+        (void)ret->get_future().get();
     }
 }
 

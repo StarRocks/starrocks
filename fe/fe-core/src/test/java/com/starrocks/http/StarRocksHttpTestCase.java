@@ -128,6 +128,48 @@ public abstract class StarRocksHttpTestCase {
     @Mocked
     private static EditLog editLog;
 
+    public static int detectUsableSocketPort() {
+        try (ServerSocket socket = new ServerSocket(0)) {
+            socket.setReuseAddress(true);
+            return socket.getLocalPort();
+        } catch (Exception e) {
+            throw new IllegalStateException("Could not find a free TCP/IP port");
+        }
+    }
+
+    public static OlapTable newEmptyTable(String name) {
+        GlobalStateMgr.getCurrentInvertedIndex().clear();
+        Column k1 = new Column("k1", Type.BIGINT);
+        Column k2 = new Column("k2", Type.DOUBLE);
+        Column k3 = new Column("k3", Type.DATETIME);
+        List<Column> columns = new ArrayList<>();
+        columns.add(k1);
+        columns.add(k2);
+        columns.add(k3);
+
+        // index
+        MaterializedIndex baseIndex = new MaterializedIndex(testIndexId, MaterializedIndex.IndexState.NORMAL);
+
+
+        // partition
+        HashDistributionInfo distributionInfo = new HashDistributionInfo(10, Lists.newArrayList(k1));
+        Partition partition = new Partition(testPartitionId, "testPartition", baseIndex, distributionInfo);
+        partition.updateVisibleVersion(testStartVersion);
+        partition.setNextVersion(testStartVersion + 1);
+
+        // table
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(testPartitionId, DataProperty.DEFAULT_DATA_PROPERTY);
+        partitionInfo.setReplicationNum(testPartitionId, (short) 3);
+        partitionInfo.setIsInMemory(testPartitionId, false);
+        OlapTable table = new OlapTable(testTableId, name, columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        table.addPartition(partition);
+        table.setIndexMeta(testIndexId, "testIndex", columns, 0, testSchemaHash, (short) 1,
+                TStorageType.COLUMN, KeysType.AGG_KEYS);
+        table.setBaseIndexId(testIndexId);
+        return table;
+    }
+
     public static OlapTable newTable(String name) {
         GlobalStateMgr.getCurrentInvertedIndex().clear();
         Column k1 = new Column("k1", Type.BIGINT);
@@ -218,6 +260,8 @@ public abstract class StarRocksHttpTestCase {
             db.registerTableUnlocked(table1);
             EsTable esTable = newEsTable("es_table");
             db.registerTableUnlocked(esTable);
+            OlapTable newEmptyTable = newEmptyTable("test_empty_table");
+            db.registerTableUnlocked(newEmptyTable);
             ConcurrentHashMap<String, Database> nameToDb = new ConcurrentHashMap<>();
             nameToDb.put(db.getFullName(), db);
             new Expectations(globalStateMgr) {
@@ -291,6 +335,8 @@ public abstract class StarRocksHttpTestCase {
             db.registerTableUnlocked(table1);
             EsTable esTable = newEsTable("es_table");
             db.registerTableUnlocked(esTable);
+            OlapTable newEmptyTable = newEmptyTable("test_empty_table");
+            db.registerTableUnlocked(newEmptyTable);
             new Expectations(globalStateMgr) {
                 {
                     globalStateMgr.getAuth();
@@ -345,6 +391,10 @@ public abstract class StarRocksHttpTestCase {
                     globalStateMgr.getMetadataMgr().getTable("default_catalog", "testDb", "testTbl");
                     minTimes = 0;
                     result = table;
+
+                    globalStateMgr.getMetadataMgr().getTable("default_catalog", "testDb", "test_empty_table");
+                    minTimes = 0;
+                    result = newEmptyTable;
                 }
             };
 

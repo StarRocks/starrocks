@@ -14,7 +14,9 @@
 
 #include "exec/olap_scan_node.h"
 
+#include <algorithm>
 #include <chrono>
+#include <functional>
 #include <thread>
 
 #include "column/column_pool.h"
@@ -66,6 +68,17 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     if (tnode.olap_scan_node.__isset.output_chunk_by_bucket) {
         _output_chunk_by_bucket = tnode.olap_scan_node.output_chunk_by_bucket;
+    }
+
+    // desc hint related optimize only takes effect when there is no order requirement
+    if (!_sorted_by_keys_per_tablet) {
+        if (tnode.olap_scan_node.__isset.output_asc_hint) {
+            _output_asc_hint = tnode.olap_scan_node.output_asc_hint;
+        }
+
+        if (tnode.olap_scan_node.__isset.partition_order_hint) {
+            _partition_order_hint = tnode.olap_scan_node.partition_order_hint;
+        }
     }
 
     if (_olap_scan_node.__isset.bucket_exprs) {
@@ -121,13 +134,13 @@ Status OlapScanNode::prepare(RuntimeState* state) {
 Status OlapScanNode::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_CANCELLED(state);
+    DictOptimizeParser::disable_open_rewrite(&_conjunct_ctxs);
     RETURN_IF_ERROR(ExecNode::open(state));
 
     Status status;
     RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &status));
     _update_status(status);
 
-    _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
     DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, _olap_scan_node.dict_string_id_to_int_ids,
                                            &(_tuple_desc->decoded_slots()));
 
@@ -236,8 +249,6 @@ void OlapScanNode::close(RuntimeState* state) {
     while (_result_chunks.blocking_get(&chunk)) {
         chunk.reset();
     }
-
-    _dict_optimize_parser.close(state);
 
     if (runtime_state() != nullptr) {
         // Reduce the memory usage if the the average string size is greater than 512.
@@ -397,8 +408,21 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
         morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
     }
 
+    if (partition_order_hint().has_value()) {
+        bool asc = partition_order_hint().value();
+        std::stable_sort(morsels.begin(), morsels.end(), [asc](auto& l, auto& r) {
+            auto l_partition_id = down_cast<pipeline::ScanMorsel*>(l.get())->partition_id();
+            auto r_partition_id = down_cast<pipeline::ScanMorsel*>(r.get())->partition_id();
+            if (asc) {
+                return std::less()(l_partition_id, r_partition_id);
+            } else {
+                return std::greater()(l_partition_id, r_partition_id);
+            }
+        });
+    }
+
     if (output_chunk_by_bucket()) {
-        std::sort(morsels.begin(), morsels.end(), [](auto& l, auto& r) {
+        std::stable_sort(morsels.begin(), morsels.end(), [](auto& l, auto& r) {
             return down_cast<pipeline::ScanMorsel*>(l.get())->owner_id() <
                    down_cast<pipeline::ScanMorsel*>(r.get())->owner_id();
         });
@@ -631,7 +655,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     std::vector<ExprContext*> conjunct_ctxs;
     _conjuncts_manager.get_not_push_down_conjuncts(&conjunct_ctxs);
 
-    RETURN_IF_ERROR(_dict_optimize_parser.rewrite_conjuncts(&conjunct_ctxs, state));
+    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&conjunct_ctxs));
 
     int tablet_count = _scan_ranges.size();
     for (int k = 0; k < tablet_count; ++k) {

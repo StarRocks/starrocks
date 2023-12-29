@@ -23,6 +23,8 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static com.starrocks.sql.common.TimeUnitUtils.TIME_MAP;
 
@@ -33,6 +35,8 @@ public class MaterializedViewPartitionFunctionChecker {
     }
 
     public static final Map<String, CheckPartitionFunction> FN_NAME_TO_PATTERN;
+    public static final String SUPPORTED_DATE_REGEX = "%Y.*%m.*%d";
+    public static final Pattern SUPPORTED_DATE_PATTERN = Pattern.compile(SUPPORTED_DATE_REGEX);
 
     static {
         FN_NAME_TO_PATTERN = Maps.newHashMap();
@@ -120,13 +124,20 @@ public class MaterializedViewPartitionFunctionChecker {
         }
 
         Expr child0 = fnExpr.getChild(0);
-        if (child0 instanceof SlotRef) {
-            SlotRef slotRef = (SlotRef) child0;
-            PrimitiveType primitiveType = slotRef.getType().getPrimitiveType();
-            // must check slotRef type, because function analyze don't check it.
-            return primitiveType == PrimitiveType.CHAR || primitiveType == PrimitiveType.VARCHAR;
+        if (!(child0 instanceof SlotRef)) {
+            return false;
         }
 
-        return false;
+        SlotRef slotRef = (SlotRef) child0;
+        PrimitiveType primitiveType = slotRef.getType().getPrimitiveType();
+        // must check slotRef type, because function analyze don't check it.
+        if (primitiveType != PrimitiveType.CHAR && primitiveType != PrimitiveType.VARCHAR) {
+            return false;
+        }
+
+        StringLiteral format = fnExpr.getChild(1).cast();
+        String dateFormat = format.getStringValue();
+        Matcher foreignKeyMatcher = SUPPORTED_DATE_PATTERN.matcher(dateFormat);
+        return foreignKeyMatcher.find();
     }
 }

@@ -81,6 +81,9 @@ public:
     // Find the non-null value in reversed order in [start, end), return start if all null
     static size_t last_nonnull(const Column* col, size_t start, size_t end);
 
+    // Find first value in range [start, end) that not equal to target
+    static int64_t find_first_not_equal(Column* column, int64_t target, int64_t start, int64_t end);
+
     template <LogicalType Type>
     static inline ColumnPtr create_const_column(const RunTimeCppType<Type>& value, size_t chunk_size) {
         static_assert(!lt_is_decimal<Type>,

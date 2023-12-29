@@ -18,6 +18,7 @@
 
 #include "column/binary_column.h"
 #include "column/chunk_extra_data.h"
+#include "column/column_helper.h"
 #include "column/field.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
@@ -138,6 +139,18 @@ TEST_F(ChunkTest, test_chunk_downgrade) {
 }
 
 // NOLINTNEXTLINE
+TEST_F(ChunkTest, test_is_column_nullable) {
+    Chunk chunk;
+    auto c1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), false);
+    auto c2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
+    chunk.append_column(c1, 1);
+    chunk.append_column(c2, 2);
+
+    ASSERT_FALSE(chunk.is_column_nullable(1));
+    ASSERT_TRUE(chunk.is_column_nullable(2));
+}
+
+// NOLINTNEXTLINE
 TEST_F(ChunkTest, test_construct) {
     auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
 
@@ -209,7 +222,7 @@ TEST_F(ChunkTest, get_column_by_index) {
 TEST_F(ChunkTest, test_copy_one_row) {
     auto chunk = std::make_unique<Chunk>(make_columns(2), make_schema(2));
 
-    std::unique_ptr<Chunk> new_chunk = chunk->clone_empty_with_tuple();
+    std::unique_ptr<Chunk> new_chunk = chunk->clone_empty();
     for (size_t i = 0; i < chunk->num_rows(); ++i) {
         new_chunk->append(*chunk, i, 1);
     }

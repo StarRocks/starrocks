@@ -67,13 +67,14 @@ public class ProfileManager {
     public static final String START_TIME = "Start Time";
     public static final String END_TIME = "End Time";
     public static final String TOTAL_TIME = "Total";
+    public static final String RETRY_TIMES = "Retry Times";
     public static final String QUERY_TYPE = "Query Type";
     public static final String QUERY_STATE = "Query State";
     public static final String SQL_STATEMENT = "Sql Statement";
     public static final String USER = "User";
     public static final String DEFAULT_DB = "Default Db";
     public static final String VARIABLES = "Variables";
-    public static final String PROFILE_TIME = "Collect Profile Time";
+    public static final String PROFILE_COLLECT_TIME = "Collect Profile Time";
 
     public static final ArrayList<String> PROFILE_HEADERS = new ArrayList<>(
             Arrays.asList(QUERY_ID, USER, DEFAULT_DB, SQL_STATEMENT, QUERY_TYPE,
@@ -219,6 +220,16 @@ public class ProfileManager {
             readLock.unlock();
         }
         return result;
+    }
+
+    public void removeProfile(String queryId) {
+        writeLock.lock();
+        try {
+            loadProfileMap.remove(queryId);
+            profileMap.remove(queryId);
+        } finally {
+            writeLock.unlock();
+        }
     }
 
     public String getProfile(String queryId) {

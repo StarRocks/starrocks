@@ -26,8 +26,13 @@ import java.util.List;
 
 public class HivePartitionPruneTest extends ConnectorPlanTestBase {
     @Before
-    public void setUp() throws DdlException {
-        GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.partitioned_db");
+    public void setUp() {
+        super.setUp();
+        try {
+            GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.partitioned_db");
+        } catch (DdlException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     @Test
@@ -78,18 +83,24 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "PARTITION PREDICATES: ((4: par_col = 0) AND (abs(4: par_col) = 3)) " +
                 "OR (4: par_col = 5), 4: par_col IN (0, 5)\n" +
+                "     NO EVAL-PARTITION PREDICATES: ((4: par_col = 0) AND (abs(4: par_col) = 3)) " +
+                "OR (4: par_col = 5)\n" +
                 "     partitions=1/3");
 
         sql = "select * from t1 where abs(par_col) = 3 and par_col = 0 or par_col = 2";
         plan = getFragmentPlan(sql);
         assertContains(plan, "PARTITION PREDICATES: ((abs(4: par_col) = 3) AND (4: par_col = 0)) " +
                 "OR (4: par_col = 2), 4: par_col IN (0, 2)\n" +
+                "     NO EVAL-PARTITION PREDICATES: ((abs(4: par_col) = 3) AND (4: par_col = 0)) " +
+                "OR (4: par_col = 2)\n" +
                 "     partitions=2/3");
 
         sql = "select * from t1 where abs(par_col) = 3 and par_col = 10 or par_col = 2";
         plan = getFragmentPlan(sql);
         assertContains(plan, "PARTITION PREDICATES: ((abs(4: par_col) = 3) AND (4: par_col = 10)) " +
                 "OR (4: par_col = 2), 4: par_col IN (10, 2)\n" +
+                "     NO EVAL-PARTITION PREDICATES: ((abs(4: par_col) = 3) AND (4: par_col = 10)) " +
+                "OR (4: par_col = 2)\n" +
                 "     partitions=1/3");
 
         sql = "select * from t1 where abs(par_col) = 1 and abs(par_col) = 3 or par_col = 10";
@@ -122,6 +133,14 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         assertContains(plan, "PARTITION PREDICATES: (abs(4: par_col) = 1) OR (abs(4: par_col) = 2)\n" +
                 "     NO EVAL-PARTITION PREDICATES: (abs(4: par_col) = 1) OR (abs(4: par_col) = 2)\n" +
                 "     partitions=3/3");
+
+        sql = "select * from t1 where par_col = 0 or (par_col = 1 and abs(par_col) = 2);";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PARTITION PREDICATES: (4: par_col = 0) OR ((4: par_col = 1) " +
+                "AND (abs(4: par_col) = 2)), 4: par_col IN (0, 1)\n" +
+                "     NO EVAL-PARTITION PREDICATES: (4: par_col = 0) OR ((4: par_col = 1) " +
+                "AND (abs(4: par_col) = 2))\n" +
+                "     partitions=2/3");
     }
 
     @Test
@@ -153,5 +172,11 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         Assert.assertEquals(node1.getScanNodePredicates().getSelectedPartitionIds().size(), 1);
         Assert.assertFalse(node0.getScanNodePredicates().getSelectedPartitionIds().equals(
                 node1.getScanNodePredicates().getSelectedPartitionIds()));
+    }
+
+    @Test
+    public void testLikeInPartitionColumn() throws Exception {
+        String sql = "select * from hive0.datacache_db.single_partition_table where l_shipdate LIKE '1998-01-03'";
+        assertPlanContains(sql, "partitions=1/1");
     }
 }

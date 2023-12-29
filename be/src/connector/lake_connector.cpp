@@ -14,15 +14,14 @@
 
 #include "connector/lake_connector.h"
 
-#include "common/constexpr.h"
 #include "exec/connector_scan_node.h"
 #include "exec/olap_scan_prepare.h"
-#include "gen_cpp/InternalService_types.h"
 #include "runtime/global_dict/parser.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/conjunctive_predicates.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
+#include "storage/lake/versioned_tablet.h"
 #include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
@@ -81,10 +80,9 @@ private:
     std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
     std::vector<OlapScanRange*> _scanner_ranges;
     OlapScanConjunctsManager _conjuncts_manager;
-    DictOptimizeParser _dict_optimize_parser;
 
-    std::shared_ptr<const TabletSchema> _tablet_schema;
-    int64_t _version = 0;
+    lake::VersionedTablet _tablet;
+    TabletSchemaCSPtr _tablet_schema;
     TabletReaderParams _params{};
     std::shared_ptr<lake::TabletReader> _reader;
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
@@ -132,6 +130,7 @@ private:
     RuntimeProfile::Counter* _seg_zm_filtered_counter = nullptr;
     RuntimeProfile::Counter* _seg_rt_filtered_counter = nullptr;
     RuntimeProfile::Counter* _sk_filtered_counter = nullptr;
+    RuntimeProfile::Counter* _rows_after_sk_filtered_counter = nullptr;
     RuntimeProfile::Counter* _block_seek_timer = nullptr;
     RuntimeProfile::Counter* _block_seek_counter = nullptr;
     RuntimeProfile::Counter* _block_load_timer = nullptr;
@@ -223,8 +222,6 @@ Status LakeDataSource::open(RuntimeState* state) {
 
     // eval const conjuncts
     RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status));
-
-    _dict_optimize_parser.set_mutable_dict_maps(state, state->mutable_query_global_dict_map());
     DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, thrift_lake_scan_node.dict_string_id_to_int_ids,
                                            &(tuple_desc->decoded_slots()));
 
@@ -271,7 +268,6 @@ void LakeDataSource::close(RuntimeState* state) {
         _reader.reset();
     }
     _predicate_free_pool.clear();
-    _dict_optimize_parser.close(state);
 }
 
 Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
@@ -310,9 +306,10 @@ Status LakeDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
 }
 
 Status LakeDataSource::get_tablet(const TInternalScanRange& scan_range) {
-    _version = strtoul(scan_range.version.c_str(), nullptr, 10);
-    ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(scan_range.tablet_id));
-    ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
+    int64_t tablet_id = scan_range.tablet_id;
+    int64_t version = strtoul(scan_range.version.c_str(), nullptr, 10);
+    ASSIGN_OR_RETURN(_tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(tablet_id, version));
+    _tablet_schema = _tablet.get_schema();
     return Status::OK();
 }
 
@@ -469,8 +466,7 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(init_reader_params(_scanner_ranges, scanner_columns, reader_columns));
     starrocks::Schema child_schema = ChunkHelper::convert_schema(_tablet_schema, reader_columns);
 
-    ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_scan_range.tablet_id));
-    ASSIGN_OR_RETURN(_reader, tablet.new_reader(_version, std::move(child_schema)));
+    ASSIGN_OR_RETURN(_reader, _tablet.new_reader(std::move(child_schema)));
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
@@ -495,7 +491,7 @@ Status LakeDataSource::build_scan_range(RuntimeState* state) {
     // Get key_ranges and not_push_down_conjuncts from _conjuncts_manager.
     RETURN_IF_ERROR(_conjuncts_manager.get_key_ranges(&_key_ranges));
     _conjuncts_manager.get_not_push_down_conjuncts(&_not_push_down_conjuncts);
-    RETURN_IF_ERROR(_dict_optimize_parser.rewrite_conjuncts(&_not_push_down_conjuncts, state));
+    RETURN_IF_ERROR(state->mutable_dict_optimize_parser()->rewrite_conjuncts(&_not_push_down_conjuncts));
 
     int scanners_per_tablet = 64;
     int num_ranges = _key_ranges.size();
@@ -542,6 +538,8 @@ void LakeDataSource::init_counter(RuntimeState* state) {
     _zm_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, segment_init_name);
     _sk_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT, segment_init_name);
+    _rows_after_sk_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "RemainingRowsAfterShortKeyFilter", TUnit::UNIT, segment_init_name);
     _rows_key_range_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyRangeNumber", TUnit::UNIT, segment_init_name);
     _column_iterator_init_timer = ADD_CHILD_TIMER(_runtime_profile, "ColumnIteratorInit", segment_init_name);
@@ -657,6 +655,7 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_stats_filtered);
     COUNTER_UPDATE(_bf_filtered_counter, _reader->stats().rows_bf_filtered);
     COUNTER_UPDATE(_sk_filtered_counter, _reader->stats().rows_key_range_filtered);
+    COUNTER_UPDATE(_rows_after_sk_filtered_counter, _reader->stats().rows_after_key_range);
     COUNTER_UPDATE(_rows_key_range_counter, _reader->stats().rows_key_range_num);
 
     COUNTER_UPDATE(_bi_filtered_counter, _reader->stats().rows_bitmap_index_filtered);

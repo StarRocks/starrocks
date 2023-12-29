@@ -154,4 +154,10 @@ public class LakeTableTest {
         Assert.assertNull(table.delete(true));
         Assert.assertNotNull(table.delete(false));
     }
+
+    @Test
+    public void testDeserialize() {
+        LakeTable lakeTable = new LakeTable();
+        Assert.assertNotNull(lakeTable.getIndexIdToMeta());
+    }
 }

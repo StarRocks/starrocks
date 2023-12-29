@@ -58,6 +58,12 @@ size_t NullableColumn::null_count(size_t offset, size_t count) const {
     return SIMD::count_nonzero(_null_column->raw_data() + offset, count);
 }
 
+void NullableColumn::remove_first_n_values(size_t count) {
+    _data_column->remove_first_n_values(count);
+    _null_column->remove_first_n_values(count);
+    _has_null = SIMD::contain_nonzero(_null_column->get_data(), 0, _null_column->size());
+}
+
 void NullableColumn::append_datum(const Datum& datum) {
     if (datum.is_null()) {
         append_nulls(1);
@@ -109,7 +115,7 @@ void NullableColumn::append_selective(const Column& src, const uint32_t* indexes
     DCHECK_EQ(_null_column->size(), _data_column->size());
 }
 
-void NullableColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) {
+void NullableColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     DCHECK_EQ(_null_column->size(), _data_column->size());
     size_t orig_size = _null_column->size();
     if (src.only_null()) {
@@ -119,12 +125,12 @@ void NullableColumn::append_value_multiple_times(const Column& src, uint32_t ind
 
         DCHECK_EQ(src_column._null_column->size(), src_column._data_column->size());
 
-        _null_column->append_value_multiple_times(*src_column._null_column, index, size, deep_copy);
-        _data_column->append_value_multiple_times(*src_column._data_column, index, size, deep_copy);
+        _null_column->append_value_multiple_times(*src_column._null_column, index, size);
+        _data_column->append_value_multiple_times(*src_column._data_column, index, size);
         _has_null = _has_null || SIMD::contain_nonzero(_null_column->get_data(), orig_size, size);
     } else {
         _null_column->resize(orig_size + size);
-        _data_column->append_value_multiple_times(src, index, size, deep_copy);
+        _data_column->append_value_multiple_times(src, index, size);
     }
 
     DCHECK_EQ(_null_column->size(), _data_column->size());

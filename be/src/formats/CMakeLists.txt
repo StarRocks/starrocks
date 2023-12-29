@@ -39,6 +39,7 @@ add_library(Formats STATIC
         avro/numeric_column.cpp
         avro/binary_column.cpp
         orc/orc_chunk_reader.cpp
+        orc/orc_chunk_writer.cpp
         orc/orc_input_stream.cpp
         orc/orc_mapping.cpp
         orc/orc_memory_pool.cpp

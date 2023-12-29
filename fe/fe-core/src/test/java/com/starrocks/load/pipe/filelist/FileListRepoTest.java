@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.load.pipe.PipeId;
@@ -26,6 +27,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResultBatch;
 import mockit.Expectations;
 import mockit.Mock;
@@ -157,6 +159,12 @@ public class FileListRepoTest {
                 "`last_modified`, `staged_time`, `start_load`, `finish_load`, `error_info`, `insert_label` " +
                 "FROM _statistics_.pipe_file_list WHERE `pipe_id` = 1 AND `state` = 'UNLOADED'", sql);
 
+        // listFilesByPath
+        sql = RepoAccessor.getInstance().buildListFileByPath(1, "file1.parquet");
+        Assert.assertEquals("SELECT `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, " +
+                "`last_modified`, `staged_time`, `start_load`, `finish_load`, `error_info`, `insert_label` " +
+                "FROM _statistics_.pipe_file_list WHERE `pipe_id` = 1 AND `file_name` = 'file1.parquet'", sql);
+
         // select staged
         sql = RepoAccessor.getInstance().buildSelectStagedFiles(records);
         Assert.assertEquals("SELECT `pipe_id`, `file_name`, `file_version`, `file_size`, `state`, " +
@@ -190,7 +198,7 @@ public class FileListRepoTest {
     }
 
     @Test
-    public void testCreator() throws RuntimeException {
+    public void testCreator() throws RuntimeException, UserException {
         mockExecutor();
         new MockUp<RepoCreator>() {
             @Mock
@@ -213,13 +221,30 @@ public class FileListRepoTest {
         Assert.assertFalse(creator.isTableExists());
         Assert.assertFalse(creator.isTableCorrected());
 
-        // succeed
-        // failed for the first time
+        // create with 1 replica
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public int getTotalBackendNumber() {
+                return 1;
+            }
+        };
         new MockUp<RepoExecutor>() {
             @Mock
             public void executeDDL(String sql) {
             }
         };
+        creator.run();
+        Assert.assertTrue(creator.isTableExists());
+        Assert.assertFalse(creator.isTableCorrected());
+
+        // be corrected to 3 replicas
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public int getTotalBackendNumber() {
+                return 3;
+            }
+        };
+
         creator.run();
         Assert.assertTrue(creator.isDatabaseExists());
         Assert.assertTrue(creator.isTableExists());
@@ -227,7 +252,6 @@ public class FileListRepoTest {
     }
 
     @Test
-    @Ignore("jvm crash FIXME(murphy)")
     public void testRepo() {
         FileListTableRepo repo = new FileListTableRepo();
         repo.setPipeId(new PipeId(1, 1));
@@ -248,6 +272,10 @@ public class FileListRepoTest {
         // listUnloadedFiles
         Assert.assertTrue(repo.listFilesByState(FileListRepo.PipeFileState.UNLOADED, 0).isEmpty());
         Assert.assertTrue(accessor.listFilesByState(1, FileListRepo.PipeFileState.UNLOADED, 0).isEmpty());
+
+        // listFileByPath
+        Assert.assertThrows(IllegalArgumentException.class, () -> repo.listFilesByPath("not-exists"));
+        Assert.assertThrows(IllegalArgumentException.class, () -> accessor.listFilesByPath(1, "not-exists"));
 
         // selectStagedFiles
         PipeFileRecord record = new PipeFileRecord();

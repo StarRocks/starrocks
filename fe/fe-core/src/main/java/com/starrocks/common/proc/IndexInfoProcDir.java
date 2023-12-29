@@ -45,6 +45,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 
 import java.util.List;
 import java.util.Set;
@@ -74,7 +76,8 @@ public class IndexInfoProcDir implements ProcDirInterface {
 
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             if (table.isNativeTableOrMaterializedView()) {
                 OlapTable olapTable = (OlapTable) table;
@@ -113,7 +116,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
 
             return result;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -134,7 +137,8 @@ public class IndexInfoProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid index id format: " + idxIdStr);
         }
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             List<Column> schema = null;
             Set<String> bfColumns = null;
@@ -154,7 +158,7 @@ public class IndexInfoProcDir implements ProcDirInterface {
             }
             return node;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 

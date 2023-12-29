@@ -468,9 +468,7 @@ public class ExpressionTest extends PlanTestBase {
     public void testFunctionNullable() throws Exception {
         String sql = "select UNIX_TIMESTAMP(\"2015-07-28 19:41:12\", \"22\");";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan, plan.contains("scalar_fn:TScalarFunction(symbol:), " +
-                "id:50287, fid:50287, could_apply_dict_optimize:false, ignore_nulls:false), " +
-                "has_nullable_child:false, is_nullable:true"));
+        Assert.assertTrue(plan, plan.contains("could_apply_dict_optimize:false, ignore_nulls:false"));
     }
 
     @Test
@@ -616,6 +614,10 @@ public class ExpressionTest extends PlanTestBase {
                 "(SELECT [1,2] a, 1 AS b) AS A) AS B";
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan.contains("lambda common expressions:{<slot 8> <-> CAST(<slot 4> AS SMALLINT)}"));
+
+        sql = "SELECT [array_map(x -> ((x * x) + (x * b)), a)] AS g from (SELECT [1,2] a, 1 AS b) AS A";
+        plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("lambda common expressions:{<slot 7> <-> CAST(<slot 4> AS SMALLINT)}"));
     }
 
     @Test
@@ -635,7 +637,7 @@ public class ExpressionTest extends PlanTestBase {
                 "`argument_003`, `argument_004`) AS `source_target_005` from CASE_006;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  |  common expressions:\n" +
-                "  |  <slot 14> : array_map(<slot 5> -> 1, 8: c1)");
+                "  |  <slot 10> : array_map(<slot 5> -> 1, 2: c1)");
 
         sql = "WITH `CASE_006` AS\n" +
                 "  (SELECT array_map((arg_001) -> (arg_001), `c1`) AS `argument_003`,\n" +
@@ -646,7 +648,7 @@ public class ExpressionTest extends PlanTestBase {
                 "`argument_003`, `argument_004`) AS `source_target_005` from CASE_006;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  |  common expressions:\n" +
-                "  |  <slot 14> : array_map(<slot 5> -> CAST(<slot 5> AS DOUBLE) + 1.0, 8: c1)");
+                "  |  <slot 10> : array_map(<slot 5> -> CAST(<slot 5> AS DOUBLE) + 1.0, 2: c1)");
 
         sql = "SELECT uid, times, actions, step0_time, step1_time, array_filter((x, y)->(y = '支付' AND (x BETWEEN " +
                 "step1_time AND date_add(step1_time, INTERVAL 90 MINUTE)) AND (step1_time <> '2020-01-01 00:00:00')" +

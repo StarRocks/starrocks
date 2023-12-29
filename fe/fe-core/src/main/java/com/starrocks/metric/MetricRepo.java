@@ -65,7 +65,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.metric.Metric.MetricType;
 import com.starrocks.metric.Metric.MetricUnit;
-import com.starrocks.monitor.jvm.JvmService;
+import com.starrocks.monitor.jvm.JvmStatCollector;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.proto.PKafkaOffsetProxyRequest;
 import com.starrocks.proto.PKafkaOffsetProxyResult;
@@ -73,6 +73,7 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
@@ -424,10 +425,10 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ROUTINE_LOAD_ERROR_ROWS);
 
         COUNTER_UNFINISHED_BACKUP_JOB = new LongCounterMetric("unfinished_backup_job", MetricUnit.REQUESTS,
-        "current unfinished backup job");
+                "current unfinished backup job");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_BACKUP_JOB);
         COUNTER_UNFINISHED_RESTORE_JOB = new LongCounterMetric("unfinished_restore_job", MetricUnit.REQUESTS,
-        "current unfinished restore job");
+                "current unfinished restore job");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_RESTORE_JOB);
         List<Database> dbs = Lists.newArrayList();
         if (GlobalStateMgr.getCurrentState().getIdToDb() != null) {
@@ -563,7 +564,7 @@ public final class MetricRepo {
                 "The count of txns") {
             @Override
             public Long getValue() {
-                return (long) GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionNum();
+                return (long) GlobalStateMgr.getCurrentGlobalTransactionMgr().getFinishedTransactionNum();
             }
         };
         txnCnt.addLabel(new MetricLabel("type", "txn_count"));
@@ -573,7 +574,7 @@ public final class MetricRepo {
                 "The bytes of txns") {
             @Override
             public Long getValue() {
-                return GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionNum()
+                return GlobalStateMgr.getCurrentGlobalTransactionMgr().getFinishedTransactionNum()
                         * SizeEstimator.estimate(new TransactionState());
             }
         };
@@ -793,8 +794,8 @@ public final class MetricRepo {
     public static void updateRoutineLoadProcessMetrics() {
         List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadMgr().getRoutineLoadJobByState(
                 Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
-                                RoutineLoadJob.JobState.PAUSED,
-                                RoutineLoadJob.JobState.RUNNING));
+                        RoutineLoadJob.JobState.PAUSED,
+                        RoutineLoadJob.JobState.RUNNING));
 
         List<RoutineLoadJob> kafkaJobs = jobs.stream()
                 .filter(job -> (job instanceof KafkaRoutineLoadJob)
@@ -876,8 +877,8 @@ public final class MetricRepo {
         updateMetrics();
 
         // jvm
-        JvmService jvmService = new JvmService();
-        JvmStats jvmStats = jvmService.stats();
+        JvmStatCollector jvmStatCollector = new JvmStatCollector();
+        JvmStats jvmStats = jvmStatCollector.stats();
         visitor.visitJvm(jvmStats);
 
         // starrocks metrics
@@ -910,6 +911,9 @@ public final class MetricRepo {
             collectRoutineLoadProcessMetrics(visitor);
         }
 
+        // collect starmgr related metrics as well
+        StarMgrServer.getCurrentState().visitMetrics(visitor);
+
         // node info
         visitor.getNodeInfo();
         return visitor.build();
@@ -929,23 +933,22 @@ public final class MetricRepo {
             if (null == db) {
                 continue;
             }
-            db.readLock();
-            try {
-                for (Table table : db.getTables()) {
-                    TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(table.getId());
-                    for (Metric m : entity.getMetrics()) {
-                        if (minifyTableMetrics && (null == m.getValue() ||
-                                (MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L))) {
-                            continue;
-                        }
-                        m.addLabel(new MetricLabel("db_name", dbName))
-                                .addLabel(new MetricLabel("tbl_name", table.getName()))
-                                .addLabel(new MetricLabel("tbl_id", String.valueOf(table.getId())));
-                        visitor.visit(m);
+
+            // NOTE: avoid holding database lock here, since we only read all tables, and immutable fields of table
+            for (Table table : db.getTables()) {
+                long tableId = table.getId();
+                String tableName = table.getName();
+                TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
+                for (Metric m : entity.getMetrics()) {
+                    if (minifyTableMetrics && (null == m.getValue() ||
+                            (MetricType.COUNTER == m.type && (Long) m.getValue() == 0L))) {
+                        continue;
                     }
+                    m.addLabel(new MetricLabel("db_name", dbName))
+                            .addLabel(new MetricLabel("tbl_name", tableName))
+                            .addLabel(new MetricLabel("tbl_id", String.valueOf(tableId)));
+                    visitor.visit(m);
                 }
-            } finally {
-                db.readUnlock();
             }
         }
     }

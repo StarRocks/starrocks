@@ -93,14 +93,14 @@ Status GroupReader::_do_get_next(ChunkPtr* chunk, size_t* row_count) {
     {
         SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
         SCOPED_RAW_TIMER(&_param.stats->group_dict_filter_ns);
-        has_filter = _filter_chunk_with_dict_filter(&active_chunk, &chunk_filter);
+        ASSIGN_OR_RETURN(has_filter, _filter_chunk_with_dict_filter(&active_chunk, &chunk_filter));
     }
 
     // row id filter
     if ((nullptr != _need_skip_rowids) && !_need_skip_rowids->empty()) {
         int64_t current_chunk_base_row = _row_group_first_row + _raw_rows_read - count;
         {
-            SCOPED_RAW_TIMER(&_param.stats->build_iceberg_pos_filter_ns);
+            SCOPED_RAW_TIMER(&_param.stats->iceberg_delete_file_build_filter_ns);
             auto start_str = _need_skip_rowids->lower_bound(current_chunk_base_row);
             auto end_str = _need_skip_rowids->upper_bound(current_chunk_base_row + count - 1);
             for (; start_str != end_str; start_str++) {
@@ -150,7 +150,7 @@ Status GroupReader::_do_get_next(ChunkPtr* chunk, size_t* row_count) {
         }
         active_chunk->merge(std::move(*lazy_chunk));
     } else if (active_rows == 0) {
-        _param.stats->skip_read_rows += count;
+        _param.stats->late_materialize_skip_rows += count;
         _column_reader_opts.context->rows_to_skip += count;
         *row_count = 0;
         return status;
@@ -197,7 +197,7 @@ Status GroupReader::_do_get_next_new(ChunkPtr* chunk, size_t* row_count) {
         // row id filter
         if ((nullptr != _need_skip_rowids) && !_need_skip_rowids->empty()) {
             {
-                SCOPED_RAW_TIMER(&_param.stats->build_iceberg_pos_filter_ns);
+                SCOPED_RAW_TIMER(&_param.stats->iceberg_delete_file_build_filter_ns);
                 auto start_str = _need_skip_rowids->lower_bound(r.begin());
                 auto end_str = _need_skip_rowids->upper_bound(r.end() - 1);
 
@@ -216,7 +216,7 @@ Status GroupReader::_do_get_next_new(ChunkPtr* chunk, size_t* row_count) {
             has_filter = true;
             ASSIGN_OR_RETURN(size_t hit_count, _read_range_round_by_round(r, &chunk_filter, &active_chunk));
             if (hit_count == 0) {
-                _param.stats->skip_read_rows += count;
+                _param.stats->late_materialize_skip_rows += count;
                 continue;
             }
             active_chunk->filter_range(chunk_filter, 0, count);
@@ -294,8 +294,8 @@ StatusOr<size_t> GroupReader::_read_range_round_by_round(const Range<uint64_t>& 
             SCOPED_RAW_TIMER(&_param.stats->expr_filter_ns);
             SCOPED_RAW_TIMER(&_param.stats->group_dict_filter_ns);
             for (const auto& sub_field_path : _dict_column_sub_field_paths[col_idx]) {
-                _column_readers[slot_id]->filter_dict_column((*chunk)->get_column_by_slot_id(slot_id), filter,
-                                                             sub_field_path, 0);
+                RETURN_IF_ERROR(_column_readers[slot_id]->filter_dict_column((*chunk)->get_column_by_slot_id(slot_id),
+                                                                             filter, sub_field_path, 0));
                 hit_count = SIMD::count_nonzero(*filter);
                 if (hit_count == 0) {
                     return hit_count;
@@ -522,8 +522,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             offset = column.data_page_offset;
         }
         int64_t size = column.total_compressed_size;
-        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size, .active = active};
-        ranges->emplace_back(r);
+        ranges->emplace_back(offset, size, active);
         *end_offset = std::max(*end_offset, offset + size);
     }
 }
@@ -565,8 +564,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             offset = column.data_page_offset;
         }
         int64_t size = column.total_compressed_size;
-        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size, .active = active};
-        ranges->emplace_back(r);
+        ranges->emplace_back(offset, size, active);
         *end_offset = std::max(*end_offset, offset + size);
     }
 }
@@ -674,7 +672,7 @@ void GroupReader::_init_chunk_dict_column(ChunkPtr* chunk) {
     }
 }
 
-bool GroupReader::_filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter) {
+StatusOr<bool> GroupReader::_filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter) {
     if (_dict_column_indices.size() == 0) {
         return false;
     }
@@ -682,8 +680,8 @@ bool GroupReader::_filter_chunk_with_dict_filter(ChunkPtr* chunk, Filter* filter
         const auto& column = _param.read_cols[col_idx];
         SlotId slot_id = column.slot_id;
         for (const auto& sub_field_path : _dict_column_sub_field_paths[col_idx]) {
-            _column_readers[slot_id]->filter_dict_column((*chunk)->get_column_by_slot_id(slot_id), filter,
-                                                         sub_field_path, 0);
+            RETURN_IF_ERROR(_column_readers[slot_id]->filter_dict_column((*chunk)->get_column_by_slot_id(slot_id),
+                                                                         filter, sub_field_path, 0));
         }
     }
     return true;

@@ -211,4 +211,19 @@ public class LocalTabletTest {
         Assert.assertEquals(tablet.getBackends().size(), 2);
 
     }
+
+    @Test
+    public void testGetReplicaInfos() {
+        LocalTablet tablet = new LocalTablet();
+
+        Replica replica1 = new Replica(1L, 10001L, 8,
+                -1, 10, 10, ReplicaState.NORMAL, 9, 8);
+        Replica replica2 = new Replica(1L, 10002L, 9,
+                -1, 10, 10, ReplicaState.NORMAL, -1, 9);
+        tablet.addReplica(replica1, false);
+        tablet.addReplica(replica2, false);
+
+        String infos = tablet.getReplicaInfos();
+        System.out.println(infos);
+    }
 }

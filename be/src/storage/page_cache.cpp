@@ -63,6 +63,10 @@ void StoragePageCache::release_global_cache() {
     }
 }
 
+void StoragePageCache::prune() {
+    _cache->prune();
+}
+
 static void init_metrics() {
     StarRocksMetrics::instance()->metrics()->register_metric("page_cache_lookup_count", &page_cache_lookup_count);
     StarRocksMetrics::instance()->metrics()->register_hook("page_cache_lookup_count", []() {

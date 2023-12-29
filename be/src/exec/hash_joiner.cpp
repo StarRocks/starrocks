@@ -19,17 +19,14 @@
 #include <memory>
 
 #include "column/column_helper.h"
-#include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/hash_join_components.h"
 #include "exec/spill/spiller.hpp"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
-#include "exprs/runtime_filter_bank.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
-#include "runtime/runtime_filter_worker.h"
 #include "simd/simd.h"
 #include "util/debug_util.h"
 #include "util/runtime_profile.h"
@@ -40,7 +37,6 @@ void HashJoinProbeMetrics::prepare(RuntimeProfile* runtime_profile) {
     search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTime");
     output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTime");
     output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTime");
-    output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTime");
     probe_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "ProbeConjunctEvaluateTime");
     other_join_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "OtherJoinConjunctEvaluateTime");
     where_conjunct_evaluate_timer = ADD_TIMER(runtime_profile, "WhereConjunctEvaluateTime");
@@ -128,19 +124,16 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
 
     auto& hash_table = _hash_join_builder->hash_table();
     hash_table.set_probe_profile(probe_metrics().search_ht_timer, probe_metrics().output_probe_column_timer,
-                                 probe_metrics().output_tuple_column_timer, probe_metrics().output_build_column_timer);
+                                 probe_metrics().output_build_column_timer);
 
     _hash_table_param.search_ht_timer = probe_metrics().search_ht_timer;
     _hash_table_param.output_build_column_timer = probe_metrics().output_build_column_timer;
     _hash_table_param.output_probe_column_timer = probe_metrics().output_probe_column_timer;
-    _hash_table_param.output_tuple_column_timer = probe_metrics().output_tuple_column_timer;
 
     return Status::OK();
 }
 
 void HashJoiner::_init_hash_table_param(HashTableParam* param) {
-    // Pipeline query engine always needn't create tuple columns
-    param->need_create_tuple_columns = false;
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
     param->join_type = _join_type;
     param->row_desc = &_row_descriptor;
@@ -169,7 +162,7 @@ void HashJoiner::_init_hash_table_param(HashTableParam* param) {
         }
     }
 }
-Status HashJoiner::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk) {
+Status HashJoiner::append_chunk_to_ht(const ChunkPtr& chunk) {
     if (_phase != HashJoinPhase::BUILD) {
         return Status::OK();
     }
@@ -178,7 +171,7 @@ Status HashJoiner::append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk
     }
 
     update_build_rows(chunk->num_rows());
-    RETURN_IF_ERROR(_hash_join_builder->append_chunk(state, chunk));
+    RETURN_IF_ERROR(_hash_join_builder->append_chunk(chunk));
 
     return Status::OK();
 }
@@ -260,7 +253,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
     auto& ht = _hash_join_builder->hash_table();
 
     if (_phase == HashJoinPhase::PROBE || !_hash_join_prober->probe_chunk_empty()) {
-        ASSIGN_OR_RETURN(chunk, _hash_join_prober->probe_chunk(state, &ht));
+        ASSIGN_OR_RETURN(chunk, _hash_join_prober->probe_chunk(state, &ht))
         return chunk;
     }
 
@@ -271,7 +264,7 @@ StatusOr<ChunkPtr> HashJoiner::_pull_probe_output_chunk(RuntimeState* state) {
         }
 
         bool has_remain = false;
-        ASSIGN_OR_RETURN(chunk, _hash_join_prober->probe_remain(state, &ht, &has_remain));
+        ASSIGN_OR_RETURN(chunk, _hash_join_prober->probe_remain(state, &ht, &has_remain))
 
         if (!has_remain) {
             enter_eos_phase();
@@ -322,7 +315,7 @@ void HashJoiner::reference_hash_table(HashJoiner* src_join_builder) {
     _hash_table_param = src_join_builder->hash_table_param();
     hash_table = src_join_builder->_hash_join_builder->hash_table().clone_readable_table();
     hash_table.set_probe_profile(probe_metrics().search_ht_timer, probe_metrics().output_probe_column_timer,
-                                 probe_metrics().output_tuple_column_timer, probe_metrics().output_build_column_timer);
+                                 probe_metrics().output_build_column_timer);
 
     // _hash_table_build_rows is root truth, it used to by _short_circuit_break().
     _hash_table_build_rows = src_join_builder->_hash_table_build_rows;
@@ -384,7 +377,7 @@ Status HashJoiner::_calc_filter_for_other_conjunct(ChunkPtr* chunk, Filter& filt
     filter.assign((*chunk)->num_rows(), 1);
 
     for (auto* ctx : _other_join_conjunct_ctxs) {
-        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate((*chunk).get()));
+        ASSIGN_OR_RETURN(ColumnPtr column, ctx->evaluate((*chunk).get()))
         size_t true_count = ColumnHelper::count_true_with_notnull(column);
 
         if (true_count == column->size()) {
@@ -557,6 +550,7 @@ Status HashJoiner::_create_runtime_in_filters(RuntimeState* state) {
 }
 
 Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t limit) {
+    SCOPED_TIMER(build_metrics().build_runtime_filter_timer);
     auto& ht = _hash_join_builder->hash_table();
     for (auto* rf_desc : _build_runtime_filters) {
         rf_desc->set_is_pipeline(true);
@@ -573,7 +567,20 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
         int expr_order = rf_desc->build_expr_order();
         ColumnPtr column = ht.get_key_columns()[expr_order];
         bool eq_null = _is_null_safes[expr_order];
-        _runtime_bloom_filter_build_params.emplace_back(pipeline::RuntimeBloomFilterBuildParam(eq_null, column));
+        MutableJoinRuntimeFilterPtr filter = nullptr;
+        auto multi_partitioned = rf_desc->layout().pipeline_level_multi_partitioned();
+        if (multi_partitioned) {
+            LogicalType build_type = rf_desc->build_expr_type();
+            filter = std::shared_ptr<JoinRuntimeFilter>(
+                    RuntimeFilterHelper::create_runtime_bloom_filter(nullptr, build_type));
+            if (filter == nullptr) continue;
+            filter->set_join_mode(rf_desc->join_mode());
+            filter->init(ht.get_row_count());
+            RETURN_IF_ERROR(RuntimeFilterHelper::fill_runtime_bloom_filter(column, build_type, filter.get(),
+                                                                           kHashJoinKeyColumnOffset, eq_null));
+        }
+        _runtime_bloom_filter_build_params.emplace_back(pipeline::RuntimeBloomFilterBuildParam(
+                multi_partitioned, eq_null, std::move(column), std::move(filter)));
     }
     return Status::OK();
 }

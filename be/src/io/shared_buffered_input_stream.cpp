@@ -16,7 +16,9 @@
 
 #include "common/config.h"
 #include "gutil/strings/fastmem.h"
+#include "runtime/current_thread.h"
 #include "util/runtime_profile.h"
+
 namespace starrocks::io {
 
 SharedBufferedInputStream::SharedBufferedInputStream(std::shared_ptr<SeekableInputStream> stream, std::string filename,
@@ -129,7 +131,7 @@ Status SharedBufferedInputStream::_set_io_ranges_separately(const std::vector<IO
             sb.align(_align_size, _file_size);
             _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
         } else {
-            if (r.active) {
+            if (r.is_active) {
                 small_active_ranges.emplace_back(r);
             } else {
                 small_lazy_flag[index] = true;
@@ -199,6 +201,7 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
     ASSIGN_OR_RETURN(auto ret, find_shared_buffer(offset, nbytes));
     SharedBuffer& sb = *ret;
     if (sb.buffer.capacity() == 0) {
+        RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit("read into shared buffer"));
         SCOPED_RAW_TIMER(&_shared_io_timer);
         _shared_io_count += 1;
         _shared_io_bytes += sb.size;
@@ -214,9 +217,6 @@ void SharedBufferedInputStream::release() {
 }
 
 void SharedBufferedInputStream::release_to_offset(int64_t offset) {
-    if (_align_size != 0) {
-        offset = (offset + _align_size - 1) / _align_size * _align_size;
-    }
     auto it = _map.upper_bound(offset);
     _map.erase(_map.begin(), it);
 }

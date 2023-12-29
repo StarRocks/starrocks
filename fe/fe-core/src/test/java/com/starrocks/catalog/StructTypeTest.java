@@ -71,7 +71,7 @@ public class StructTypeTest {
         // "struct<struct_test:int,c1:struct<c1:int,cc1:string>>"
         StructType c1 = new StructType(Lists.newArrayList(
                 new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
-                new StructField("cc1", ScalarType.createDefaultExternalTableString())
+                new StructField("cc1", ScalarType.createDefaultCatalogString())
         ));
         StructType root = new StructType(Lists.newArrayList(
                 new StructField("struct_test", ScalarType.createType(PrimitiveType.INT)),
@@ -111,7 +111,7 @@ public class StructTypeTest {
         // matched
         StructType mc1 = new StructType(Lists.newArrayList(
                 new StructField("c1", ScalarType.createType(PrimitiveType.INT)),
-                new StructField("cc1", ScalarType.createDefaultExternalTableString())
+                new StructField("cc1", ScalarType.createDefaultCatalogString())
         ));
         StructType matched = new StructType(Lists.newArrayList(
                 new StructField("struct_test", ScalarType.createType(PrimitiveType.INT)),
@@ -121,7 +121,7 @@ public class StructTypeTest {
 
         // Won't match with different subfield order
         StructType mc2 = new StructType(Lists.newArrayList(
-                new StructField("cc1", ScalarType.createDefaultExternalTableString()),
+                new StructField("cc1", ScalarType.createDefaultCatalogString()),
                 new StructField("c1", ScalarType.createType(PrimitiveType.INT))
         ));
         StructType matchedDiffOrder = new StructType(Lists.newArrayList(

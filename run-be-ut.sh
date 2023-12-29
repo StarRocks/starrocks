@@ -39,7 +39,8 @@ Usage: $0 <options>
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
      --module                       module to run uts
-     --use-staros                   enable to build with staros
+     --enable-shared-data           enable to build with shared-data feature support
+     --use-staros                   DEPRECATED. an alias of --enable-shared-data option
      -j                             build parallel
 
   Eg.
@@ -64,6 +65,7 @@ OPTS=$(getopt \
   -l 'with-aws' \
   -l 'with-bench' \
   -l 'use-staros' \
+  -l 'enable-shared-data' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -95,7 +97,7 @@ while true; do
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
-        --use-staros) USE_STAROS=ON; shift ;;
+        --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
@@ -151,10 +153,8 @@ if [ "${USE_STAROS}" == "ON"  ]; then
   export STARLET_INSTALL_DIR
 fi
 
-# Temporarily keep the default behavior same as before to avoid frequent thirdparty update.
-# Once the starcache version is stable, we will turn on it by default.
 if [[ -z ${WITH_STARCACHE} ]]; then
-  WITH_STARCACHE=${USE_STAROS}
+    WITH_STARCACHE=ON
 fi
 
 ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
@@ -237,22 +237,27 @@ if [ -d ${STARROCKS_TEST_BINARY_DIR}/util/test_data ]; then
 fi
 cp -r ${STARROCKS_HOME}/be/test/util/test_data ${STARROCKS_TEST_BINARY_DIR}/util/
 
-test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
-    | grep -v starrocks_test \
+test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test*" \
+    | grep -v starrocks_test_part1 \
+    | grep -v starrocks_test_part2 \
     | grep -v bench_test \
     | grep -e "$TEST_MODULE" `
 
 # run cases in starrocks_test in parallel if has gtest-parallel script.
 # reference: https://github.com/google/gtest-parallel
 if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then
-  echo "Run test: ${STARROCKS_TEST_BINARY_DIR}/starrocks_test"
+  echo "Run test: ${STARROCKS_TEST_BINARY_DIR}/starrocks_test_part1 ${STARROCKS_TEST_BINARY_DIR}/starrocks_test_part2"
   if [ ${DRY_RUN} -eq 0 ]; then
     if [ -x "${GTEST_PARALLEL}" ]; then
-        ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test \
+        ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test_part1 \
+            --gtest_filter=${TEST_NAME} \
+            --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
+        ${GTEST_PARALLEL} ${STARROCKS_TEST_BINARY_DIR}/starrocks_test_part2 \
             --gtest_filter=${TEST_NAME} \
             --serialize_test_cases ${GTEST_PARALLEL_OPTIONS}
     else
-        ${STARROCKS_TEST_BINARY_DIR}/starrocks_test $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
+        ${STARROCKS_TEST_BINARY_DIR}/starrocks_test_part1 $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
+        ${STARROCKS_TEST_BINARY_DIR}/starrocks_test_part2 $GTEST_OPTIONS --gtest_filter=${TEST_NAME}
     fi
   fi
 fi

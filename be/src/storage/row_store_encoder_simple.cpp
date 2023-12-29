@@ -37,14 +37,14 @@ Status RowStoreEncoderSimple::encode_columns_to_full_row_column(const Schema& sc
     size_t num_value_cols = columns.size();
     int num_key_cols = schema.num_key_fields();
 
+    //TODO prevent stack variables oom when column size is large
     std::vector<int32_t> offsets;
     std::string header;
     std::string null_bitmap_str;
     std::string offset_str;
     std::string buff;
-    std::string value_buff;
     BitmapValue null_bitmap;
-    dest.reserve(dest.size() + num_rows);
+    dest.reserve(num_rows);
 
     for (size_t i = 0; i < num_rows; i++) {
         header.clear();
@@ -57,20 +57,22 @@ Status RowStoreEncoderSimple::encode_columns_to_full_row_column(const Schema& sc
         encode_header(num_value_cols, &header);
         // bitset + offset+ value
         for (int j = 0; j < num_value_cols; j++) {
-            value_buff.clear();
             size_t idx = j + num_key_cols;
             if (columns[j]->get(i).is_null()) {
                 if (schema.field(idx)->is_nullable()) {
                     null_bitmap.add(j);
+                    offsets.emplace_back(0);
                 } else {
                     return Status::InternalError("null value in non-null filed, check value correct.");
                 }
             } else {
-                //TODO(jkj) check varialbe field length
-                auto value_buffer_start = reinterpret_cast<uint8_t*>(&value_buff[0]);
-                uint32_t len = columns[j]->serialize(i, value_buffer_start);
-                buff.append(reinterpret_cast<const char*>(value_buffer_start), len);
-                offsets.emplace_back(len);
+                // TODO(jkj) stack maybe oom
+                // check varialbe field length, value_buff not reserved
+                size_t size = columns[j]->serialize_size(i);
+                char value_buff[size];
+                columns[j]->serialize(i, (uint8_t*)value_buff);
+                buff.append(reinterpret_cast<const char*>(value_buff), size);
+                offsets.emplace_back(size);
             }
         }
         encode_null_bitmap(null_bitmap, &null_bitmap_str);
@@ -108,9 +110,8 @@ Status RowStoreEncoderSimple::decode_columns_from_full_row_column(const Schema& 
         Slice s = full_row_column.get_slice(i);
         int32_t version = RowStoreEncoderType::SIMPLE;
 
-        size_t num_cols = schema.num_fields();
         size_t num_key_cols = schema.num_key_fields();
-        int32_t num_value_cols = num_cols - num_key_cols;
+        int32_t num_value_cols = 0;
 
         // header 8 bytes
         decode_header(&s, &version, num_value_cols);

@@ -26,6 +26,10 @@ class Schema;
 using SchemaPtr = std::shared_ptr<Schema>;
 struct ShortKeyOption;
 using ShortKeyOptionPtr = std::unique_ptr<ShortKeyOption>;
+struct ShortKeyRangeOption;
+using ShortKeyRangeOptionPtr = std::shared_ptr<ShortKeyRangeOption>;
+struct ShortKeyRangesOption;
+using ShortKeyRangesOptionPtr = std::shared_ptr<ShortKeyRangesOption>;
 
 // ShortKeyOption represents a sub key range endpoint splitted from a key range.
 // It could be a completed tuple key, or a short key with specific short_key_schema.
@@ -63,6 +67,15 @@ public:
 public:
     const ShortKeyOptionPtr lower;
     const ShortKeyOptionPtr upper;
+};
+
+struct ShortKeyRangesOption {
+public:
+    ShortKeyRangesOption(vector<ShortKeyRangeOptionPtr>&& short_key_ranges, bool is_first_split_of_tablet)
+            : short_key_ranges(std::move(short_key_ranges)), is_first_split_of_tablet(is_first_split_of_tablet) {}
+
+    std::vector<ShortKeyRangeOptionPtr> short_key_ranges;
+    const bool is_first_split_of_tablet;
 };
 
 } // namespace starrocks

@@ -78,6 +78,8 @@ public class DefaultWorkerProvider implements WorkerProvider {
      */
     private final boolean usedComputeNode;
 
+    private final boolean preferComputeNode;
+
     public static class Factory implements WorkerProvider.Factory {
         @Override
         public DefaultWorkerProvider captureAvailableWorkers(SystemInfoService systemInfoService,
@@ -87,7 +89,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
             ImmutableMap<Long, ComputeNode> idToComputeNode =
                     buildComputeNodeInfo(systemInfoService, numUsedComputeNodes);
             ImmutableMap<Long, ComputeNode> idToBackend;
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (RunMode.isSharedDataMode()) {
                 idToBackend = idToComputeNode;
             } else {
                 idToBackend = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
@@ -103,9 +105,6 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
                 LOG.debug("idToComputeNode: {}", idToComputeNode);
             }
-
-            // Backends and compute nodes are identical in the SHARED_DATA mode.
-            preferComputeNode = preferComputeNode || RunMode.getCurrentRunMode() == RunMode.SHARED_DATA;
 
             return new DefaultWorkerProvider(idToBackend, idToComputeNode,
                     filterAvailableWorkers(idToBackend), filterAvailableWorkers(idToComputeNode),
@@ -128,7 +127,9 @@ public class DefaultWorkerProvider implements WorkerProvider {
         this.selectedWorkerIds = Sets.newConcurrentHashSet();
 
         this.hasComputeNode = MapUtils.isNotEmpty(availableID2ComputeNode);
-        this.usedComputeNode = hasComputeNode && preferComputeNode;
+        // Backends and compute nodes are identical in the SHARED_DATA mode.
+        this.usedComputeNode = hasComputeNode && (preferComputeNode || RunMode.isSharedDataMode());
+        this.preferComputeNode = preferComputeNode;
     }
 
     @Override
@@ -215,6 +216,11 @@ public class DefaultWorkerProvider implements WorkerProvider {
     }
 
     @Override
+    public boolean isPreferComputeNode() {
+        return preferComputeNode;
+    }
+
+    @Override
     public String toString() {
         return toString(usedComputeNode);
     }
@@ -265,7 +271,7 @@ public class DefaultWorkerProvider implements WorkerProvider {
 
     private static ImmutableMap<Long, ComputeNode> buildComputeNodeInfo(SystemInfoService systemInfoService,
                                                                         int numUsedComputeNodes) {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             return GlobalStateMgr.getCurrentWarehouseMgr().getComputeNodesFromWarehouse();
         }
 

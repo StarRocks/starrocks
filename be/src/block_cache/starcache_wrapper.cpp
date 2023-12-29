@@ -41,7 +41,7 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     return to_status(_cache->init(opt));
 }
 
-Status StarCacheWrapper::write_cache(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) {
+Status StarCacheWrapper::write_buffer(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) {
     if (!options) {
         return to_status(_cache->set(key, buffer.const_raw_buf(), nullptr));
     }
@@ -56,8 +56,23 @@ Status StarCacheWrapper::write_cache(const std::string& key, const IOBuffer& buf
     return st;
 }
 
-Status StarCacheWrapper::read_cache(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
-                                    ReadCacheOptions* options) {
+Status StarCacheWrapper::write_object(const std::string& key, const void* ptr, size_t size,
+                                      std::function<void()> deleter, CacheHandle* handle, WriteCacheOptions* options) {
+    if (!options) {
+        return to_status(_cache->set_object(key, ptr, size, deleter, handle, nullptr));
+    }
+    starcache::WriteOptions opts;
+    opts.ttl_seconds = options->ttl_seconds;
+    opts.overwrite = options->overwrite;
+    auto st = to_status(_cache->set_object(key, ptr, size, deleter, handle, &opts));
+    if (st.ok()) {
+        options->stats.write_mem_bytes = size;
+    }
+    return st;
+}
+
+Status StarCacheWrapper::read_buffer(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
+                                     ReadCacheOptions* options) {
     if (!options) {
         return to_status(_cache->read(key, off, size, &buffer->raw_buf(), nullptr));
     }
@@ -70,15 +85,25 @@ Status StarCacheWrapper::read_cache(const std::string& key, size_t off, size_t s
     return st;
 }
 
-Status StarCacheWrapper::remove_cache(const std::string& key) {
+Status StarCacheWrapper::read_object(const std::string& key, CacheHandle* handle, ReadCacheOptions* options) {
+    if (!options) {
+        return to_status(_cache->get_object(key, handle, nullptr));
+    }
+    starcache::ReadOptions opts;
+    auto st = to_status(_cache->get_object(key, handle, &opts));
+    if (st.ok()) {
+        options->stats.read_mem_bytes = opts.stats.read_mem_bytes;
+    }
+    return st;
+}
+
+Status StarCacheWrapper::remove(const std::string& key) {
     _cache->remove(key);
     return Status::OK();
 }
 
-std::unordered_map<std::string, double> StarCacheWrapper::cache_stats() {
-    // TODO: fill some statistics information
-    std::unordered_map<std::string, double> stats;
-    return stats;
+const DataCacheMetrics StarCacheWrapper::cache_metrics() {
+    return _cache->metrics();
 }
 
 void StarCacheWrapper::record_read_remote(size_t size, int64_t lateny_us) {

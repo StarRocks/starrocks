@@ -125,6 +125,7 @@ PROPERTIES (
 "replication_num" = "1"
 );
 set enable_profile=true;
+set enable_async_profile=false;
 select count(*) from t1;
 shell: curl '${url}/metrics' | grep starrocks_fe_memory | grep \"query_profile_count\" | awk '{if ($NF >= 1) print "true"; else print "false";}'
 

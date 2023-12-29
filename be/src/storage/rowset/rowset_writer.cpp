@@ -52,6 +52,7 @@
 #include "serde/column_array_serde.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
+#include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
 #include "storage/metadata_util.h"
 #include "storage/olap_define.h"
@@ -883,7 +884,9 @@ Status HorizontalRowsetWriter::_final_merge() {
 
         ChunkIteratorPtr itr;
         // create temporary segment files at first, then merge them and create final segment files if schema change with sorting
-        if (_context.schema_change_sorting) {
+        if (seg_iterators.empty()) {
+            itr = new_empty_iterator(schema, config::vector_chunk_size);
+        } else if (_context.schema_change_sorting) {
             if (_context.tablet_schema->keys_type() == KeysType::DUP_KEYS ||
                 _context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
                 itr = new_heap_merge_iterator(seg_iterators);

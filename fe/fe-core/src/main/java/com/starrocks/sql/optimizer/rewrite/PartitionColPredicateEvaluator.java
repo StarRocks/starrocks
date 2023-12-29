@@ -166,11 +166,11 @@ public class PartitionColPredicateEvaluator {
             BinaryType type = predicate.getBinaryType();
             predicate.getChild(0).accept(this, null);
             ConstantOperator constantOperator = (ConstantOperator) predicate.getChild(1);
+            Type childType = predicate.getChild(0).getType();
             LiteralExpr literalExpr;
             try {
                 if (constantOperator.isNull()) {
-                    Type columnType = Type.fromPrimitiveType(partitionColumn.getPrimitiveType());
-                    literalExpr = LiteralExpr.createInfinity(columnType, false);
+                    literalExpr = LiteralExpr.createInfinity(childType, false);
                 } else {
                     literalExpr = ColumnFilterConverter.convertLiteral(constantOperator);
                 }
@@ -178,7 +178,7 @@ public class PartitionColPredicateEvaluator {
                 return createAllTrueBitSet();
             }
             PartitionKey conditionKey = new PartitionKey();
-            conditionKey.pushColumn(literalExpr, partitionColumn.getPrimitiveType());
+            conditionKey.pushColumn(literalExpr, childType.getPrimitiveType());
             Range<PartitionKey> predicateRange;
             switch (type) {
                 case EQ:
@@ -201,7 +201,13 @@ public class PartitionColPredicateEvaluator {
                 default:
                     predicateRange = Range.all();
             }
-            return evaluateRangeHitSet(predicate.getChild(0), predicateRange);
+            
+            BitSet res = evaluateRangeHitSet(predicate.getChild(0), predicateRange);
+            if (type == BinaryType.EQ_FOR_NULL) {
+                res.or(evaluateNullRangeHitSet(predicate.getChild(0), childType));
+            }
+
+            return res;
         }
 
         @Override
@@ -229,12 +235,13 @@ public class PartitionColPredicateEvaluator {
                     .filter(e -> !e.isNull()).sorted().collect(Collectors.toList());
             BitSet res = new BitSet();
             boolean encounterEx = false;
+            PrimitiveType childType = predicate.getChild(0).getType().getPrimitiveType();
             if (IN_OPERANDS_LIMIT >= constList.size()) {
                 for (ConstantOperator constantOperator : constList) {
                     try {
                         LiteralExpr literalExpr = ColumnFilterConverter.convertLiteral(constantOperator);
                         PartitionKey conditionKey = new PartitionKey();
-                        conditionKey.pushColumn(literalExpr, partitionColumn.getPrimitiveType());
+                        conditionKey.pushColumn(literalExpr, childType);
                         Range<PartitionKey> predicateRange = Range.closed(conditionKey, conditionKey);
                         res.or(evaluateRangeHitSet(predicate.getChild(0), predicateRange));
                     } catch (AnalysisException e) {
@@ -247,9 +254,9 @@ public class PartitionColPredicateEvaluator {
                     LiteralExpr min = ColumnFilterConverter.convertLiteral(constList.get(0));
                     LiteralExpr max = ColumnFilterConverter.convertLiteral(constList.get(constList.size() - 1));
                     PartitionKey minKey = new PartitionKey();
-                    minKey.pushColumn(min, partitionColumn.getPrimitiveType());
+                    minKey.pushColumn(min, childType);
                     PartitionKey maxKey = new PartitionKey();
-                    maxKey.pushColumn(max, partitionColumn.getPrimitiveType());
+                    maxKey.pushColumn(max, childType);
                     Range<PartitionKey> coarseRange = Range.range(minKey, BoundType.CLOSED, maxKey, BoundType.CLOSED);
                     res.or(evaluateRangeHitSet(predicate.getChild(0), coarseRange));
                 } catch (AnalysisException e) {
@@ -267,14 +274,23 @@ public class PartitionColPredicateEvaluator {
         public BitSet visitIsNullPredicate(IsNullPredicateOperator predicate, Void context) {
             predicate.getChild(0).accept(this, null);
             PartitionKey conditionKey = new PartitionKey();
-            Type columnType = Type.fromPrimitiveType(partitionColumn.getPrimitiveType());
+            Type columnType = predicate.getChild(0).getType();
             try {
-                conditionKey.pushColumn(LiteralExpr.createInfinity(columnType, false), partitionColumn.getPrimitiveType());
+                conditionKey.pushColumn(LiteralExpr.createInfinity(columnType, false), columnType.getPrimitiveType());
             } catch (AnalysisException e) {
                 return createAllTrueBitSet();
             }
             Range<PartitionKey> predicateRange = Range.closed(conditionKey, conditionKey);
-            return evaluateRangeHitSet(predicate.getChild(0), predicateRange);
+            BitSet res = evaluateRangeHitSet(predicate.getChild(0), predicateRange);
+            res.or(evaluateNullRangeHitSet(predicate.getChild(0), columnType));
+            return res;
+        }
+
+        private BitSet evaluateNullRangeHitSet(ScalarOperator scalarOperator, Type columnType) {
+            PartitionKey nullKey = new PartitionKey();
+            nullKey.pushColumn(NullLiteral.create(columnType), columnType.getPrimitiveType());
+            Range<PartitionKey> nullRange = Range.closed(nullKey, nullKey);
+            return evaluateRangeHitSet(scalarOperator, nullRange);
         }
 
         private BitSet evaluateRangeHitSet(ScalarOperator scalarOperator, Range<PartitionKey> predicateRange) {

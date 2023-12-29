@@ -112,6 +112,18 @@ public class IcebergFileStats {
         return getBoundStatistic(fieldId, minValues);
     }
 
+    public boolean canUseStats(Integer fieldId, Map<Integer, Object> values) {
+        if (idToTypeMapping == null || values == null) {
+            return false;
+        }
+
+        if (idToTypeMapping.get(fieldId) == null || values.get(fieldId) == null) {
+            return false;
+        }
+
+        return true;
+    }
+
     private Optional<Double> getBoundStatistic(Integer fieldId, Map<Integer, Object> boundValues) {
         if (idToTypeMapping == null || boundValues == null) {
             return Optional.empty();

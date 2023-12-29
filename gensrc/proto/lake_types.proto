@@ -54,6 +54,8 @@ message RowsetMetadataPB {
     optional int64 num_rows = 4;
     optional int64 data_size = 5;
     optional DeletePredicatePB delete_predicate = 6;
+    // approximate, BE upgrade from old version can't get exact number of dels
+    optional int64 num_dels = 7;
 }
 
 
@@ -62,6 +64,7 @@ message RowsetMetadataPB {
 // the type is is to make it upgradable for compatibility.
 enum PersistentIndexTypePB {
     LOCAL = 0;
+    CLOUD_NATIVE = 1;
 }
 
 message TabletMetadataPB {
@@ -127,12 +130,18 @@ message TxnLogPB {
         repeated MetadataUpdateInfoPB metadata_update_infos = 1;
     }
 
+    message OpReplication {
+        optional ReplicationTxnMetaPB txn_meta = 1;
+        repeated OpWrite op_writes = 2;
+    }
+
     optional int64 tablet_id = 1;
     optional int64 txn_id = 2;
     optional OpWrite op_write = 3;
     optional OpCompaction op_compaction = 4;
     optional OpSchemaChange op_schema_change = 5;
     optional OpAlterMetadata op_alter_metadata = 6;
+    optional OpReplication op_replication = 7;
 }
 
 message TabletMetadataLockPB {}

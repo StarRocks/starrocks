@@ -23,6 +23,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DnsCache;
+import com.starrocks.datacache.DataCacheMetrics;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.GlobalVariable;
@@ -40,6 +41,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -107,6 +109,8 @@ public class ComputeNode implements IComputable, Writable {
     // It must be true for Backend
     @SerializedName("isSetStoragePath")
     private volatile boolean isSetStoragePath = false;
+
+    private volatile DataCacheMetrics dataCacheMetrics = null;
 
     private volatile int numRunningQueries = 0;
     private volatile long memLimitBytes = 0;
@@ -370,6 +374,10 @@ public class ComputeNode implements IComputable, Writable {
         this.lastUpdateResourceUsageMs = System.currentTimeMillis();
     }
 
+    public void updateDataCacheMetrics(DataCacheMetrics dataCacheMetrics) {
+        this.dataCacheMetrics = dataCacheMetrics;
+    }
+
     public void updateResourceGroupUsage(List<Pair<ResourceGroup, TResourceGroupUsage>> groupAndUsages) {
         Map<Long, ResourceGroupUsage> newGroupIdToUsage = groupAndUsages.stream().collect(Collectors.toMap(
                 groupAndUsage -> groupAndUsage.first.getId(),
@@ -492,12 +500,12 @@ public class ComputeNode implements IComputable, Writable {
                 this.brpcPort = hbResponse.getBrpcPort();
             }
 
-            if (RunMode.allowCreateLakeTable() && this.starletPort != hbResponse.getStarletPort()) {
+            if (RunMode.isSharedDataMode() && this.starletPort != hbResponse.getStarletPort()) {
                 isChanged = true;
                 this.starletPort = hbResponse.getStarletPort();
             }
 
-            if (RunMode.allowCreateLakeTable() && this.isSetStoragePath != hbResponse.isSetStoragePath()) {
+            if (RunMode.isSharedDataMode() && this.isSetStoragePath != hbResponse.isSetStoragePath()) {
                 isChanged = true;
                 this.isSetStoragePath = hbResponse.isSetStoragePath();
             }
@@ -575,6 +583,10 @@ public class ComputeNode implements IComputable, Writable {
         }
 
         return isChanged;
+    }
+
+    public Optional<DataCacheMetrics> getDataCacheMetrics() {
+        return Optional.ofNullable(dataCacheMetrics);
     }
 
     public boolean isResourceUsageFresh() {

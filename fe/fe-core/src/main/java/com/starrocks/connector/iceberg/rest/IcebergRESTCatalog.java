@@ -98,6 +98,11 @@ public class IcebergRESTCatalog implements IcebergCatalog {
     }
 
     @Override
+    public boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
+        return delegate.tableExists(TableIdentifier.of(dbName, tableName));
+    }
+
+    @Override
     public List<String> listAllDatabases() {
         return delegate.listNamespaces().stream()
                 .map(ns -> ns.level(0))

@@ -58,4 +58,7 @@ public class  PrivilegeBuiltinConstants {
     public static final long ALL_RESOURCE_GROUP_ID = -1; // -1 represent all resource group
 
     public static final String ALL_STORAGE_VOLUMES_ID = "ALL_STORAGE_VOLUMES_ID";
+
+    public static final long ALL_PIPES_ID = -5;
+
 }

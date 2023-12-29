@@ -43,36 +43,6 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
-    using ProcessByPartitionIfNecessaryFunc = Status (AnalyticSinkOperator::*)(RuntimeState* state);
-    using ProcessByPartitionFunc = void (AnalyticSinkOperator::*)(RuntimeState* state, size_t chunk_size,
-                                                                  bool is_new_partition);
-
-    // Process partition when all the data of current partition is reached
-    Status _process_by_partition_if_necessary_materializing(RuntimeState* state);
-    // For window frame `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`
-    Status _process_by_partition_if_necessary_for_unbounded_preceding_rows_frame_streaming(RuntimeState* state);
-    // For window frame `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`
-    Status _process_by_partition_if_necessary_for_unbounded_preceding_range_frame_streaming(RuntimeState* state);
-    ProcessByPartitionIfNecessaryFunc _process_by_partition_if_necessary = nullptr;
-
-    // For window frame `ROWS|RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING`
-    void _process_by_partition_for_unbounded_frame(RuntimeState* state, size_t chunk_size, bool is_new_partition);
-    // For window frame `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`
-    // materializing means that although the frame is `ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`, we
-    // cannot evaluate window function until all the data of current partition is reached
-    // For example, `ntile` need all the data to calculate the bucket step
-    void _process_by_partition_for_unbounded_preceding_rows_frame_materializing(RuntimeState* state, size_t chunk_size,
-                                                                                bool is_new_partition);
-    // For window frame `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`
-    // materializing means that although the frame is `RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW`, we
-    // cannot evaluate window function until all the data of current partition is reached
-    // For example, `cume_dist` need all the data to calculate
-    void _process_by_partition_for_unbounded_preceding_range_frame_materializing(RuntimeState* state, size_t chunk_size,
-                                                                                 bool is_new_partition);
-    // For window frame `ROWS BETWEEN N PRECEDING AND CURRENT ROW`
-    void _process_by_partition_for_sliding_frame(RuntimeState* state, size_t chunk_size, bool is_new_partition);
-    ProcessByPartitionFunc _process_by_partition = nullptr;
-
     TPlanNode _tnode;
     // It is used to perform analytic algorithms
     // shared by AnalyticSourceOperator

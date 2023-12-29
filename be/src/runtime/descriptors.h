@@ -219,6 +219,18 @@ public:
     HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~HdfsTableDescriptor() override = default;
     bool has_partition() const override { return true; }
+    const std::string& get_hive_column_names() const;
+    const std::string& get_hive_column_types() const;
+    const std::string& get_input_format() const;
+    const std::string& get_serde_lib() const;
+    const std::map<std::string, std::string> get_serde_properties() const;
+
+private:
+    std::string _serde_lib;
+    std::string _input_format;
+    std::string _hive_column_names;
+    std::string _hive_column_types;
+    std::map<std::string, std::string> _serde_properties;
 };
 
 class IcebergTableDescriptor : public HiveTableDescriptor {
@@ -245,6 +257,17 @@ public:
     FileTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~FileTableDescriptor() override = default;
     bool has_partition() const override { return false; }
+    const std::string& get_table_locations() const;
+    const std::string& get_hive_column_names() const;
+    const std::string& get_hive_column_types() const;
+    const std::string& get_input_format() const;
+    const std::string& get_serde_lib() const;
+
+private:
+    std::string _serde_lib;
+    std::string _input_format;
+    std::string _hive_column_names;
+    std::string _hive_column_types;
 };
 
 class DeltaLakeTableDescriptor : public HiveTableDescriptor {
@@ -278,16 +301,21 @@ public:
     PaimonTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~PaimonTableDescriptor() override = default;
     bool has_partition() const override { return false; }
-    const std::string& get_catalog_type() const;
-    const std::string& get_metastore_uri() const;
-    const std::string& get_warehouse_path() const;
+    const std::string& get_paimon_native_table() const;
+
+private:
+    std::string _paimon_native_table;
+};
+
+class OdpsTableDescriptor : public HiveTableDescriptor {
+public:
+    OdpsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~OdpsTableDescriptor() override = default;
+    bool has_partition() const override { return false; }
     const std::string& get_database_name() const;
     const std::string& get_table_name() const;
 
 private:
-    std::string _catalog_type;
-    std::string _metastore_uri;
-    std::string _warehouse_path;
     std::string _database_name;
     std::string _table_name;
 };

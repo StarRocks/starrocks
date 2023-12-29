@@ -17,12 +17,10 @@
 #include <gtest/gtest.h>
 
 #include "butil/file_util.h"
-#include "column/column_helper.h"
 #include "column/column_pool.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
-#include "gtest/gtest.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
@@ -36,7 +34,6 @@
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
 #include "storage/storage_engine.h"
-#include "storage/tablet_meta.h"
 #include "storage/update_manager.h"
 #include "testutil/assert.h"
 #include "util/cpu_info.h"
@@ -51,7 +48,7 @@ class EngineStorageMigrationTaskTest : public testing::Test {
 public:
     static void SetUpTestCase() { init(); }
 
-    static void TearDownTestCase() {}
+    static void TearDownTestCase() { config::enable_event_based_compaction_framework = true; }
 
     static TabletSharedPtr create_pk_tablet(int64_t tablet_id, int32_t schema_hash) {
         TCreateTabletReq request;
@@ -131,6 +128,7 @@ public:
     }
 
     static void init() {
+        config::enable_event_based_compaction_framework = false;
         /*
             create duplicated key tablet
         */
@@ -586,11 +584,9 @@ int main(int argc, char** argv) {
         return -1;
     }
     auto* global_env = starrocks::GlobalEnv::GetInstance();
-    auto st = global_env->init();
-    st.permit_unchecked_error();
+    (void)global_env->init();
     auto* exec_env = starrocks::ExecEnv::GetInstance();
-    st = exec_env->init(paths);
-    st.permit_unchecked_error();
+    (void)exec_env->init(paths);
     int r = RUN_ALL_TESTS();
 
     sleep(10);

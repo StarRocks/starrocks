@@ -40,6 +40,7 @@ import com.starrocks.thrift.TUniqueId;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 public abstract class Coordinator {
@@ -71,6 +72,10 @@ public abstract class Coordinator {
                                                 List<ScanNode> scanNodes, String timezone, long startTime,
                                                 Map<String, String> sessionVariables,
                                                 long execMemLimit);
+
+        Coordinator createRefreshDictionaryCacheScheduler(ConnectContext context, TUniqueId queryId,
+                                                DescriptorTable descTable, List<PlanFragment> fragments,
+                                                List<ScanNode> scanNodes);
     }
 
     // ------------------------------------------------------------------------------------
@@ -152,13 +157,15 @@ public abstract class Coordinator {
     // Methods for profile.
     // ------------------------------------------------------------------------------------
 
-    public abstract void endProfile();
+    public abstract void collectProfileSync();
+
+    public abstract boolean tryProcessProfileAsync(Consumer<Boolean> task);
 
     public abstract void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier);
 
     public abstract void setExecPlan(ExecPlan execPlan);
 
-    public abstract RuntimeProfile buildMergedQueryProfile();
+    public abstract RuntimeProfile buildQueryProfile(boolean needMerge);
 
     public abstract RuntimeProfile getQueryProfile();
 

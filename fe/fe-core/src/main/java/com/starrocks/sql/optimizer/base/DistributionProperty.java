@@ -20,25 +20,31 @@ import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 
+import static com.starrocks.sql.optimizer.base.DistributionSpec.DistributionType.ANY;
 import static com.starrocks.sql.optimizer.base.DistributionSpec.DistributionType.SHUFFLE;
 
 public class DistributionProperty implements PhysicalProperty {
     private final DistributionSpec spec;
     private final boolean isCTERequired;
 
-    public static final DistributionProperty EMPTY = new DistributionProperty();
-
-    public DistributionProperty() {
-        this.spec = DistributionSpec.createAnyDistributionSpec();
-        this.isCTERequired = false;
+    public static DistributionProperty createProperty(DistributionSpec spec) {
+        return createProperty(spec, false);
     }
 
-    public DistributionProperty(DistributionSpec spec) {
-        this.spec = spec;
-        this.isCTERequired = false;
+    public static DistributionProperty createProperty(DistributionSpec spec, boolean isCTERequired) {
+        if (spec.type == ANY) {
+            return EmptyDistributionProperty.INSTANCE;
+        } else {
+            return new DistributionProperty(spec, isCTERequired);
+        }
     }
 
-    public DistributionProperty(DistributionSpec spec, boolean isCTERequired) {
+    protected DistributionProperty() {
+        spec = AnyDistributionSpec.INSTANCE;
+        isCTERequired = false;
+    }
+
+    protected DistributionProperty(DistributionSpec spec, boolean isCTERequired) {
         this.spec = spec;
         this.isCTERequired = isCTERequired;
     }
@@ -67,10 +73,6 @@ public class DistributionProperty implements PhysicalProperty {
         return isCTERequired;
     }
 
-    public DistributionProperty copyWithSpec(DistributionSpec distributionSpec) {
-        return new DistributionProperty(distributionSpec, isCTERequired);
-    }
-
     @Override
     public boolean isSatisfy(PhysicalProperty other) {
         if (((DistributionProperty) other).isCTERequired()) {
@@ -91,8 +93,8 @@ public class DistributionProperty implements PhysicalProperty {
         if (spec.getType() == SHUFFLE) {
             HashDistributionSpec hashDistributionSpec = ((HashDistributionSpec) spec);
             if (!hashDistributionSpec.isAllNullStrict()) {
-                return new DistributionProperty(hashDistributionSpec.getNullStrictSpec(
-                        hashDistributionSpec.getPropertyInfo()), isCTERequired);
+                return DistributionProperty.createProperty(hashDistributionSpec.getNullStrictSpec(
+                        hashDistributionSpec.getEquivDesc()), isCTERequired);
             }
         }
         return this;
@@ -114,5 +116,10 @@ public class DistributionProperty implements PhysicalProperty {
 
         DistributionProperty rhs = (DistributionProperty) obj;
         return spec.equals(rhs.getSpec()) && isCTERequired == rhs.isCTERequired;
+    }
+
+    @Override
+    public String toString() {
+        return spec.toString();
     }
 }

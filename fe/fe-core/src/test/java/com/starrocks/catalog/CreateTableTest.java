@@ -291,6 +291,50 @@ public class CreateTableTest {
     }
 
     @Test
+    public void testPartitionByExprDynamicPartition() {
+        ExceptionChecker
+                .expectThrowsNoException(() -> createTable("CREATE TABLE test.partition_str2date (\n" +
+                        "        create_time varchar(100),\n" +
+                        "        sku_id varchar(100),\n" +
+                        "        total_amount decimal,\n" +
+                        "        id int\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(str2date(create_time, '%Y-%m-%d %H:%i:%s'))(\n" +
+                        "START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                        ")\n" +
+                        "PROPERTIES(\n" +
+                        "\t\"replication_num\" = \"1\",\n" +
+                        "    \"dynamic_partition.enable\" = \"true\",\n" +
+                        "    \"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                        "    \"dynamic_partition.start\" = \"-3\",\n" +
+                        "    \"dynamic_partition.end\" = \"3\",\n" +
+                        "    \"dynamic_partition.prefix\" = \"p\",\n" +
+                        "    \"dynamic_partition.buckets\" = \"32\",\n" +
+                        "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
+                        ");"));
+        ExceptionChecker
+                .expectThrowsNoException(() -> createTable("CREATE TABLE test.partition_from_unixtime (\n" +
+                        "        create_time bigint,\n" +
+                        "        sku_id varchar(100),\n" +
+                        "        total_amount decimal,\n" +
+                        "        id int\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(from_unixtime(create_time))(\n" +
+                        "START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                        ")\n" +
+                        "PROPERTIES(\n" +
+                        "\t\"replication_num\" = \"1\",\n" +
+                        "    \"dynamic_partition.enable\" = \"true\",\n" +
+                        "    \"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                        "    \"dynamic_partition.start\" = \"-3\",\n" +
+                        "    \"dynamic_partition.end\" = \"3\",\n" +
+                        "    \"dynamic_partition.prefix\" = \"p\",\n" +
+                        "    \"dynamic_partition.buckets\" = \"32\",\n" +
+                        "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
+                        ");"));
+    }
+
+    @Test
     public void testAbnormal() throws DdlException {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "FLOAT column can not be distribution column",
@@ -1670,5 +1714,17 @@ public class CreateTableTest {
                 ");";
 
         ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.withTable(sql1));
+    }
+
+    @Test
+    public void testReservedColumnName() {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "create table tbl_simple_pk(key0 string, __op boolean) primary key(key0)" +
+                " distributed by hash(key0) properties(\"replication_num\"=\"1\");";
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Getting analyzing error." +
+                " Detail message: Column name [__op] is a system reserved name." +
+                " If you are sure you want to use it, please set FE configuration allow_system_reserved_names",
+                () -> starRocksAssert.withTable(sql1));
     }
 }

@@ -1,4 +1,7 @@
 -- name: test_sync_materialized_view_rewrite
+admin set frontend config('alter_scheduler_interval_millisecond' = '100');
+-- result:
+-- !result
 CREATE TABLE `duplicate_tbl` (
     `k1` date NULL COMMENT "",   
     `k2` datetime NULL COMMENT "",   
@@ -63,6 +66,59 @@ function: wait_materialized_view_finish()
 -- result:
 None
 -- !result
+CREATE MATERIALIZED VIEW mv_5
+AS SELECT k1, MIN(k6+k7) as min1, SUM(k9) as sum1, MAX(k10 + 2 * k11) as max1, SUM(2 * k13) as sum2 FROM duplicate_tbl GROUP BY k1;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select k1, sum(k6) as k6, max(k7) as k7 from duplicate_tbl group by 1 order by 1", "mv_1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select k1, sum(k6 + 1) as k6, max(k7 * 10) as k7 from duplicate_tbl group by 1 order by 1", "mv_2")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select k1, count(k6 + 1) as c_k6, min(k7 * 10) as m_k7 from duplicate_tbl group by 1 order by 1", "mv_3")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("SELECT k1, MIN(k6), MIN(k7), MIN(k8), SUM(k9), MAX(k10), MIN(k11), MIN(k12), SUM(k13) FROM duplicate_tbl GROUP BY k1 order by 1", "mv_4")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("SELECT k1, MIN(k6+k7) as min1, SUM(k9) as sum1, MAX(k10 + 2 * k11) as max1, SUM(2 * k13) FROM duplicate_tbl GROUP BY k1", "mv_5")
+-- result:
+None
+-- !result
+select k1, sum(k6) as k6, max(k7) as k7 from duplicate_tbl group by 1 order by 1,2;
+-- result:
+2023-06-15	3	1
+2023-06-16	1	1
+-- !result
+select k1, sum(k6 + 1) as k6, max(k7 * 10) as k7 from duplicate_tbl group by 1 order by 1,2;
+-- result:
+2023-06-15	6	10
+2023-06-16	2	10
+-- !result
+select k1, count(k6 + 1) as c_k6, min(k7 * 10) as m_k7 from duplicate_tbl group by 1 order by 1,2;
+-- result:
+2023-06-15	3	10
+2023-06-16	1	10
+-- !result
+SELECT k1, MIN(k6), MIN(k7), MIN(k8), SUM(k9), MAX(k10), MIN(k11), MIN(k12), SUM(k13) FROM duplicate_tbl GROUP BY k1 order by 1,2;
+-- result:
+2023-06-15	1	1	1	3	1	1.0	1.0	3.000000000
+2023-06-16	1	1	1	1	1	1.0	1.0	1.000000000
+-- !result
+SELECT k1, MIN(k6+k7) as min1, SUM(k9) as sum1, MAX(k10 + 2 * k11) as max1, SUM(2 * k13) FROM duplicate_tbl GROUP BY k1 order by 1,2;
+-- result:
+2023-06-15	2	3	3.0	6.000000000
+2023-06-16	2	1	3.0	2.000000000
+-- !result
 insert into duplicate_tbl values 
     ('2023-06-15', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
     ('2023-06-15', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
@@ -71,25 +127,50 @@ insert into duplicate_tbl values
 ;
 -- result:
 -- !result
-select k1, sum(k6) as k6, max(k7) as k7 from duplicate_tbl group by 1 order by 1;
+function: check_hit_materialized_view("select k1, sum(k6) as k6, max(k7) as k7 from duplicate_tbl group by 1 order by 1", "mv_1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select k1, sum(k6 + 1) as k6, max(k7 * 10) as k7 from duplicate_tbl group by 1 order by 1", "mv_2")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select k1, count(k6 + 1) as c_k6, min(k7 * 10) as m_k7 from duplicate_tbl group by 1 order by 1", "mv_3")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("SELECT k1, MIN(k6), MIN(k7), MIN(k8), SUM(k9), MAX(k10), MIN(k11), MIN(k12), SUM(k13) FROM duplicate_tbl GROUP BY k1 order by 1", "mv_4")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("SELECT k1, MIN(k6+k7) as min1, SUM(k9) as sum1, MAX(k10 + 2 * k11) as max1, SUM(2 * k13) FROM duplicate_tbl GROUP BY k1", "mv_5")
+-- result:
+None
+-- !result
+select k1, sum(k6) as k6, max(k7) as k7 from duplicate_tbl group by 1 order by 1,2;
 -- result:
 2023-06-15	6	1
 2023-06-16	2	1
 -- !result
-select k1, sum(k6 + 1) as k6, max(k7 * 10) as k7 from duplicate_tbl group by 1 order by 1;
+select k1, sum(k6 + 1) as k6, max(k7 * 10) as k7 from duplicate_tbl group by 1 order by 1,2;
 -- result:
 2023-06-15	12	10
 2023-06-16	4	10
 -- !result
-select k1, count(k6 + 1) as c_k6, min(k7 * 10) as m_k7 from duplicate_tbl group by 1 order by 1;
+select k1, count(k6 + 1) as c_k6, min(k7 * 10) as m_k7 from duplicate_tbl group by 1 order by 1,2;
 -- result:
 2023-06-15	6	10
 2023-06-16	2	10
 -- !result
-SELECT k1, MIN(k6), MIN(k7), MIN(k8), SUM(k9), MAX(k10), MIN(k11), MIN(k12), SUM(k13) FROM duplicate_tbl GROUP BY k1 order by 1;
+SELECT k1, MIN(k6), MIN(k7), MIN(k8), SUM(k9), MAX(k10), MIN(k11), MIN(k12), SUM(k13) FROM duplicate_tbl GROUP BY k1 order by 1,2;
 -- result:
 2023-06-15	1	1	1	6	1	1.0	1.0	6.000000000
 2023-06-16	1	1	1	2	1	1.0	1.0	2.000000000
+-- !result
+SELECT k1, MIN(k6+k7) as min1, SUM(k9) as sum1, MAX(k10 + 2 * k11) as max1, SUM(2 * k13) FROM duplicate_tbl GROUP BY k1 order by 1,2;
+-- result:
+2023-06-15	2	6	3.0	12.000000000
+2023-06-16	2	2	3.0	4.000000000
 -- !result
 drop materialized view mv_1;
 -- result:
@@ -103,7 +184,9 @@ drop materialized view mv_3;
 drop materialized view mv_4;
 -- result:
 -- !result
--- name: test_case_when
+drop materialized view mv_5;
+-- result:
+-- !result
 drop table if exists case_when_tbl1;
 -- result:
 -- !result
@@ -114,7 +197,7 @@ DUPLICATE KEY(k1)
 DISTRIBUTED BY HASH(k1);
 -- result:
 -- !result
-insert into case_when_tbl1 values (1,'xian');
+insert into case_when_tbl1 values (1,'xian'), (2, 'beijing'), (3, 'hangzhou');
 -- result:
 -- !result
 create materialized view case_when_mv1 AS SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city FROM case_when_tbl1;
@@ -124,9 +207,66 @@ function: wait_materialized_view_finish()
 -- result:
 None
 -- !result
-SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city FROM case_when_tbl1;
+create materialized view case_when_mv2 AS SELECT k1, (CASE k2 WHEN 'beijing' THEN concat(k1, 'bigcity') ELSE concat(k1, 'smallcity') END) as case2 FROM case_when_tbl1;
+-- result:
+-- !result
+function: wait_materialized_view_finish()
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city FROM case_when_tbl1", "case_when_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("SELECT k1, (CASE k2 WHEN 'beijing' THEN concat(k1, 'bigcity') ELSE concat(k1, 'smallcity') END) as city FROM case_when_tbl1", "case_when_mv2")
+-- result:
+None
+-- !result
+SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city FROM case_when_tbl1 order by 1, 2;
 -- result:
 1	smallcity
+2	bigcity
+3	smallcity
+-- !result
+SELECT k1, (CASE k2 WHEN 'beijing' THEN concat(k1, 'bigcity') ELSE concat(k1, 'smallcity') END) as city FROM case_when_tbl1 order by 1,2;
+-- result:
+1	1smallcity
+2	2bigcity
+3	3smallcity
+-- !result
+insert into duplicate_tbl values 
+    ('2023-06-15', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
+    ('2023-06-15', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
+    ('2023-06-15', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0),
+    ('2023-06-16', '2023-06-15 00:00:00', 'a', 'a', false, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0)
+;
+-- result:
+-- !result
+function: check_hit_materialized_view("SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city FROM case_when_tbl1", "case_when_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view(" SELECT k1, (CASE k2 WHEN 'beijing' THEN concat(k1, 'bigcity') ELSE concat(k1, 'smallcity') END) as city FROM case_when_tbl1", "case_when_mv2")
+-- result:
+None
+-- !result
+SELECT k1, (CASE k2 WHEN 'beijing' THEN 'bigcity' ELSE 'smallcity' END) as city FROM case_when_tbl1 order by 1,2;
+-- result:
+1	smallcity
+2	bigcity
+3	smallcity
+-- !result
+SELECT k1, (CASE k2 WHEN 'beijing' THEN concat(k1, 'bigcity') ELSE concat(k1, 'smallcity') END) as city FROM case_when_tbl1 order by 1,2;
+-- result:
+1	1smallcity
+2	2bigcity
+3	3smallcity
+-- !result
+drop materialized view case_when_mv1;
+-- result:
+-- !result
+drop materialized view case_when_mv2;
+-- result:
 -- !result
 drop table if exists case_when_tbl1;
 -- result:

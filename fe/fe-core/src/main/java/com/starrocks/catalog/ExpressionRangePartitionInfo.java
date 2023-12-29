@@ -32,6 +32,7 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
@@ -116,7 +117,11 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
                 Column partitionColumn = partitionNameColumnMap.get(slotRef.getColumnName());
                 slotRef.setType(partitionColumn.getType());
                 slotRef.setNullable(partitionColumn.isAllowNull());
-                PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
+                try {
+                    PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
+                } catch (SemanticException ex) {
+                    LOG.warn("Failed to analyze partition expr: {}", expr.toSql(), ex);
+                }
             }
         }
         this.partitionExprs = partitionExprs;
@@ -196,7 +201,11 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
                     if (slotRef.getColumnName().equalsIgnoreCase(partitionColumn.getName())) {
                         slotRef.setType(partitionColumn.getType());
                         slotRef.setNullable(partitionColumn.isAllowNull());
-                        PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
+                        try {
+                            PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
+                        } catch (SemanticException ex) {
+                            LOG.warn("Failed to analyze partition expr: {}", expr.toSql(), ex);
+                        }
                     }
                 }
             }

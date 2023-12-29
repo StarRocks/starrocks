@@ -21,9 +21,11 @@ import com.starrocks.credential.aws.AWSCloudCredential;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
 import com.starrocks.credential.gcp.GCPCloudConfigurationProvoder;
 import com.starrocks.credential.hdfs.HDFSCloudConfigurationProvider;
+import com.starrocks.credential.hdfs.StrictHDFSCloudConfigurationProvider;
 import com.starrocks.credential.tencent.TencentCloudConfigurationProvider;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.iceberg.aws.AwsProperties;
+import org.apache.iceberg.aws.AwsClientProperties;
+import org.apache.iceberg.aws.s3.S3FileIOProperties;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -37,15 +39,28 @@ public class CloudConfigurationFactory {
             new AliyunCloudConfigurationProvider(),
             new TencentCloudConfigurationProvider(),
             new HDFSCloudConfigurationProvider(),
-            new CloudConfigurationProvider() {
-                @Override
-                public CloudConfiguration build(Map<String, String> properties) {
-                    return new CloudConfiguration();
-                }
-            });
+            (Map<String, String> properties) -> new CloudConfiguration());
+
+    static ImmutableList<CloudConfigurationProvider> strictCloudConfigurationFactoryChain = ImmutableList.of(
+            new AWSCloudConfigurationProvider(),
+            new AzureCloudConfigurationProvider(),
+            new GCPCloudConfigurationProvoder(),
+            new AliyunCloudConfigurationProvider(),
+            new TencentCloudConfigurationProvider(),
+            new HDFSCloudConfigurationProvider(),
+            new StrictHDFSCloudConfigurationProvider(),
+            (Map<String, String> properties) -> new CloudConfiguration());
 
     public static CloudConfiguration buildCloudConfigurationForStorage(Map<String, String> properties) {
-        for (CloudConfigurationProvider factory : cloudConfigurationFactoryChain) {
+        return buildCloudConfigurationForStorage(properties, false);
+    }
+
+    public static CloudConfiguration buildCloudConfigurationForStorage(Map<String, String> properties, boolean strictMode) {
+        ImmutableList<CloudConfigurationProvider> factories = cloudConfigurationFactoryChain;
+        if (strictMode) {
+            factories = strictCloudConfigurationFactoryChain;
+        }
+        for (CloudConfigurationProvider factory : factories) {
             CloudConfiguration cloudConfiguration = factory.build(properties);
             if (cloudConfiguration != null) {
                 cloudConfiguration.loadCommonFields(properties);
@@ -69,10 +84,10 @@ public class CloudConfigurationFactory {
 
     public static CloudConfiguration buildCloudConfigurationForTabular(Map<String, String> properties) {
         Map<String, String> copiedProperties = new HashMap<>();
-        String sessionAk = properties.getOrDefault(AwsProperties.S3FILEIO_ACCESS_KEY_ID, null);
-        String sessionSk = properties.getOrDefault(AwsProperties.S3FILEIO_SECRET_ACCESS_KEY, null);
-        String sessionToken = properties.getOrDefault(AwsProperties.S3FILEIO_SESSION_TOKEN, null);
-        String region = properties.getOrDefault(AwsProperties.CLIENT_REGION, null);
+        String sessionAk = properties.getOrDefault(S3FileIOProperties.ACCESS_KEY_ID, null);
+        String sessionSk = properties.getOrDefault(S3FileIOProperties.SECRET_ACCESS_KEY, null);
+        String sessionToken = properties.getOrDefault(S3FileIOProperties.SESSION_TOKEN, null);
+        String region = properties.getOrDefault(AwsClientProperties.CLIENT_REGION, null);
         if (sessionAk != null && sessionSk != null && sessionToken != null && region != null) {
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, sessionAk);
             copiedProperties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, sessionSk);

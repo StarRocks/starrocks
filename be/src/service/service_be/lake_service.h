@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #pragma once
+#include <span>
 
 #include "gen_cpp/lake_service.pb.h"
 
@@ -42,6 +43,10 @@ public:
                        const ::starrocks::lake::DeleteTabletRequest* request,
                        ::starrocks::lake::DeleteTabletResponse* response, ::google::protobuf::Closure* done) override;
 
+    void delete_txn_log(::google::protobuf::RpcController* controller,
+                        const ::starrocks::lake::DeleteTxnLogRequest* request,
+                        ::starrocks::lake::DeleteTxnLogResponse* response, ::google::protobuf::Closure* done) override;
+
     void compact(::google::protobuf::RpcController* controller, const ::starrocks::lake::CompactRequest* request,
                  ::starrocks::lake::CompactResponse* response, ::google::protobuf::Closure* done) override;
 
@@ -59,6 +64,11 @@ public:
                              const ::starrocks::lake::PublishLogVersionRequest* request,
                              ::starrocks::lake::PublishLogVersionResponse* response,
                              ::google::protobuf::Closure* done) override;
+
+    void publish_log_version_batch(::google::protobuf::RpcController* controller,
+                                   const ::starrocks::lake::PublishLogVersionBatchRequest* request,
+                                   ::starrocks::lake::PublishLogVersionResponse* response,
+                                   ::google::protobuf::Closure* done) override;
 
     void lock_tablet_metadata(::google::protobuf::RpcController* controller,
                               const ::starrocks::lake::LockTabletMetadataRequest* request,
@@ -92,6 +102,14 @@ public:
                      ::starrocks::lake::VacuumFullResponse* response, ::google::protobuf::Closure* done) override;
 
 private:
+    void _submit_publish_log_version_task(const int64_t* tablet_ids, size_t tablet_size, const int64_t* txn_ids,
+                                          const int64_t* log_versions, size_t txn_size,
+                                          ::starrocks::lake::PublishLogVersionResponse* response);
+
+private:
+    static constexpr int64_t kDefaultTimeoutForGetTabletStat = 5 * 60 * 1000L;  // 5 minutes
+    static constexpr int64_t kDefaultTimeoutForPublishVersion = 1 * 60 * 1000L; // 1 minute
+
     ExecEnv* _env;
     lake::TabletManager* _tablet_mgr;
 };

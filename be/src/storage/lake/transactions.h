@@ -46,9 +46,9 @@ class TabletManager;
 StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t base_version,
                                             int64_t new_version, std::span<const int64_t> txn_ids, int64_t commit_time);
 
-// Publish a new version of a transaction log.
+// Publish a batch new versions of transaction logs.
 //
-// This function does the following:
+// For every transaction log, this function does the following:
 // 1. copy the transaction log identified by 'txn_id' to a new file identified by 'log_version'
 // 2. Delete the transaction log identified by 'txn_id' in an asynchronous manner
 //
@@ -60,7 +60,8 @@ StatusOr<TabletMetadataPtr> publish_version(TabletManager* tablet_mgr, int64_t t
 //
 // Return:
 // - Returns OK if the copy was successful, asynchronous deletion does not affect the return value.
-Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id, int64_t log_version);
+Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_ids,
+                           const int64_t* log_versions, int txns_size);
 
 // Aborts a transaction with the specified transaction IDs on the given tablet.
 //
@@ -74,7 +75,10 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t
 // - tablet_mgr A pointer to the TabletManager object managing the tablet, cannot be nullptr
 // - tablet_id The ID of the tablet where the transaction will be aborted.
 // - txn_ids A `std::span` of `int64_t` containing the transaction IDs to be aborted.
+// - txn_types A `std::span` of `int32_t(TxnTypePB)` containing the transaction types to be aborted.
+//             Using int32_t instead of TxnTypePB due to protobuf uses int32_t to store enum
 //
-void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const int64_t> txn_ids);
+void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const int64_t> txn_ids,
+               std::span<const int32_t> txn_types);
 
 } // namespace starrocks::lake

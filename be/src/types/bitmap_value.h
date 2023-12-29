@@ -59,16 +59,26 @@ namespace starrocks {
 
 namespace detail {
 class Roaring64Map;
-}
+class BitmapValueIter;
+} // namespace detail
 // Represent the in-memory and on-disk structure of StarRocks's BITMAP data type.
 // Optimize for the case where the bitmap contains 0 or 1 element which is common
 // for streaming load scenario.
 class BitmapValue {
 public:
+    friend class BitmapValueIter;
+
+    enum BitmapDataType {
+        EMPTY = 0,
+        SINGLE = 1, // single element
+        BITMAP = 2, // more than one elements
+        SET = 3
+    };
+
     // Construct an empty bitmap.
     BitmapValue();
 
-    BitmapValue(const BitmapValue& other, bool deep_copy = true);
+    BitmapValue(const BitmapValue& other);
     BitmapValue& operator=(const BitmapValue& other);
 
     BitmapValue(BitmapValue&& other) noexcept;
@@ -86,7 +96,37 @@ public:
     // Construct a bitmap from given elements.
     explicit BitmapValue(const std::vector<uint64_t>& bits);
 
-    void add(uint64_t value);
+    // It is recommended to use batch writing to improve performance, such as add_many.
+    void add(uint64_t value) {
+        switch (_type) {
+        case EMPTY:
+            _sv = value;
+            _type = SINGLE;
+            break;
+        case SINGLE:
+            //there is no need to convert the type if two variables are equal
+            if (_sv == value) {
+                break;
+            }
+
+            _set = std::make_unique<phmap::flat_hash_set<uint64_t>>();
+            _set->insert(_sv);
+            _set->insert(value);
+            _type = SET;
+            break;
+        case BITMAP:
+            _copy_on_write();
+            _bitmap->add(value);
+            break;
+        case SET:
+            if (_set->size() < 32) {
+                _set->insert(value);
+            } else {
+                _from_set_to_bitmap();
+                _bitmap->add(value);
+            }
+        }
+    }
 
     void add_many(size_t n_args, const uint32_t* vals);
 
@@ -112,7 +152,7 @@ public:
     BitmapValue& operator^=(const BitmapValue& rhs);
 
     // check if value x is present
-    bool contains(uint64_t x);
+    bool contains(uint64_t x) const;
 
     // TODO should the return type be uint64_t?
     int64_t cardinality() const;
@@ -150,29 +190,68 @@ public:
     void compress() const;
 
     void clear();
+    void reset();
 
-    int64_t sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap);
+    int64_t sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) const;
 
-    int64_t bitmap_subset_limit_internal(const int64_t& range_start, const int64_t& limit, BitmapValue* ret_bitmap);
+    int64_t bitmap_subset_limit_internal(const int64_t& range_start, const int64_t& limit,
+                                         BitmapValue* ret_bitmap) const;
 
     int64_t bitmap_subset_in_range_internal(const int64_t& range_start, const int64_t& range_end,
-                                            BitmapValue* ret_bitmap);
+                                            BitmapValue* ret_bitmap) const;
+
+    std::vector<BitmapValue> split_bitmap(size_t batch_size);
+
+    BitmapDataType type() const { return _type; }
+    bool is_shared() const { return _bitmap.use_count() > 1; }
 
 private:
-    void _convert_to_smaller_type();
+    void _from_bitmap_to_smaller_type();
     void _from_set_to_bitmap();
 
-    enum BitmapDataType {
-        EMPTY = 0,
-        SINGLE = 1, // single element
-        BITMAP = 2, // more than one elements
-        SET = 3
-    };
+    // The implementation of this function needs to place .h,
+    // otherwise it cannot be inlined and affects the performance of BitmapValue::add.
+    ALWAYS_INLINE void _copy_on_write() {
+        if (UNLIKELY(_bitmap == nullptr)) {
+            _bitmap = std::make_shared<detail::Roaring64Map>();
+            return;
+        }
+
+        if (UNLIKELY(_bitmap.use_count() > 1)) {
+            _bitmap = std::make_shared<detail::Roaring64Map>(*_bitmap);
+        }
+    }
 
     // Use shared_ptr, not unique_ptr, because we want to avoid unnecessary copy
     std::shared_ptr<detail::Roaring64Map> _bitmap = nullptr;
     std::unique_ptr<phmap::flat_hash_set<uint64_t>> _set;
     uint64_t _sv = 0; // store the single value when _type == SINGLE
     BitmapDataType _type{EMPTY};
+};
+
+class BitmapValueIter {
+public:
+    void reset(const BitmapValue& bitmap) {
+        _bitmap = &bitmap;
+        _offset = 0;
+        _cardinality = bitmap.cardinality();
+        if (bitmap.type() == BitmapValue::BitmapDataType::BITMAP) {
+            _bitmap_iter = std::make_unique<detail::Roaring64MapSetBitForwardIterator>(*bitmap._bitmap);
+        } else {
+            _bitmap_iter.reset();
+        }
+    }
+
+    uint64_t next_batch(uint64_t* values, uint64_t count);
+    uint64_t offset() { return _offset; }
+    void set_offset(uint64_t offset) { _offset = offset; }
+
+private:
+    uint64_t _remain_rows() const { return _cardinality - _offset; }
+
+    const BitmapValue* _bitmap = nullptr;
+    uint64_t _offset = 0;
+    uint64_t _cardinality = 0;
+    std::unique_ptr<detail::Roaring64MapSetBitForwardIterator> _bitmap_iter;
 };
 } // namespace starrocks

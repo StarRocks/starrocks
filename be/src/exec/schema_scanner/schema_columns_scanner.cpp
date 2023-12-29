@@ -322,8 +322,12 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
             // DATA_TYPE
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(8);
-                std::string str = to_mysql_data_type_string(_desc_result.columns[_column_index].columnDesc);
-                Slice value(str.c_str(), str.length());
+                std::string value;
+                if (_desc_result.columns[_column_index].columnDesc.__isset.dataType) {
+                    value = _desc_result.columns[_column_index].columnDesc.dataType;
+                } else {
+                    value = to_mysql_data_type_string(_desc_result.columns[_column_index].columnDesc);
+                }
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;
@@ -420,7 +424,12 @@ Status SchemaColumnsScanner::fill_chunk(ChunkPtr* chunk) {
             // COLUMN_TYPE
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(16);
-                std::string value = type_to_string(_desc_result.columns[_column_index].columnDesc);
+                std::string value;
+                if (_desc_result.columns[_column_index].columnDesc.__isset.columnTypeStr) {
+                    value = _desc_result.columns[_column_index].columnDesc.columnTypeStr;
+                } else {
+                    value = type_to_string(_desc_result.columns[_column_index].columnDesc);
+                }
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
             }
             break;

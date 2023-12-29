@@ -25,6 +25,8 @@ public class CloudConfigurationConstants {
     public static final String AWS_S3_SECRET_KEY = "aws.s3.secret_key";
     public static final String AWS_S3_SESSION_TOKEN = "aws.s3.session_token";
     public static final String AWS_S3_IAM_ROLE_ARN = "aws.s3.iam_role_arn";
+    public static final String AWS_S3_STS_REGION = "aws.s3.sts.region";
+    public static final String AWS_S3_STS_ENDPOINT = "aws.s3.sts.endpoint";
     public static final String AWS_S3_EXTERNAL_ID = "aws.s3.external_id";
     public static final String AWS_S3_REGION = "aws.s3.region";
     public static final String AWS_S3_ENDPOINT = "aws.s3.endpoint";
@@ -51,6 +53,8 @@ public class CloudConfigurationConstants {
     public static final String AWS_GLUE_SECRET_KEY = "aws.glue.secret_key";
     public static final String AWS_GLUE_SESSION_TOKEN = "aws.glue.session_token";
     public static final String AWS_GLUE_IAM_ROLE_ARN = "aws.glue.iam_role_arn";
+    public static final String AWS_GLUE_STS_REGION = "aws.glue.sts.region";
+    public static final String AWS_GLUE_STS_ENDPOINT = "aws.glue.sts.endpoint";
     public static final String AWS_GLUE_EXTERNAL_ID = "aws.glue.external_id";
     public static final String AWS_GLUE_REGION = "aws.glue.region";
     public static final String AWS_GLUE_ENDPOINT = "aws.glue.endpoint";
@@ -98,6 +102,7 @@ public class CloudConfigurationConstants {
     public static final String HDFS_PASSWORD = "hadoop.password";
     public static final String HDFS_KERBEROS_PRINCIPAL_DEPRECATED = "kerberos_principal";
     public static final String HDFS_KERBEROS_PRINCIPAL = "hadoop.kerberos.principal";
+    public static final String HDFS_KERBEROS_TICKET_CACHE_PATH = "hadoop.security.kerberos.ticket.cache.path";
     @Deprecated
     public static final String HDFS_KERBEROS_KEYTAB_DEPRECATED = "kerberos_keytab";
     public static final String HADOOP_KERBEROS_KEYTAB = "hadoop.kerberos.keytab";
@@ -105,11 +110,6 @@ public class CloudConfigurationConstants {
     @Deprecated
     public static final String HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED = "kerberos_keytab_content";
     public static final String HADOOP_KERBEROS_KEYTAB_CONTENT = "hadoop.kerberos.keytab_content";
-    public static final String HDFS_CONFIG_RESOURCES = "hadoop.config.resources";
-    public static final String HDFS_RUNTIME_JARS = "hadoop.runtime.jars";
-
-    public static final String HDFS_CLOUD_CONFIGURATION_STRING = "hadoop.cloud.configuration.string";
-    public static final String HDFS_CONFIG_RESOURCES_LOADED = "hadoop.config.resources.loaded";
 
     // Credential for Aliyun OSS
     public static final String ALIYUN_OSS_ACCESS_KEY = "aliyun.oss.access_key";

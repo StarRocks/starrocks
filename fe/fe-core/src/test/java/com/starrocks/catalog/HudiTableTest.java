@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableList;
@@ -28,6 +27,7 @@ import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.HudiTableFactory;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -44,8 +44,12 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static com.starrocks.server.ExternalTableFactory.RESOURCE;
 
 public class HudiTableTest {
     private static ConnectContext connectContext;
@@ -123,8 +127,6 @@ public class HudiTableTest {
         Assert.fail("No exception throws.");
     }
 
-
-
     @Test(expected = DdlException.class)
     public void testNoDb() throws Exception {
         String createTableSql = "create external table db.hudi_tbl (col1 int, col2 int) engine=hudi properties " +
@@ -186,16 +188,16 @@ public class HudiTableTest {
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.DOUBLE)),
                 ScalarType.createType(PrimitiveType.DOUBLE));
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(Schema.create(Schema.Type.STRING)),
-                ScalarType.createDefaultExternalTableString());
+                ScalarType.createDefaultCatalogString());
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
-                Schema.createArray(Schema.create(Schema.Type.INT))),
+                        Schema.createArray(Schema.create(Schema.Type.INT))),
                 new ArrayType(ScalarType.createType(PrimitiveType.INT)));
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createFixed("FIXED", "FIXED", "F", 1)),
                 ScalarType.createType(PrimitiveType.VARCHAR));
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createMap(Schema.create(Schema.Type.INT))),
-                new MapType(ScalarType.createDefaultExternalTableString(), ScalarType.createType(PrimitiveType.INT)));
+                new MapType(ScalarType.createDefaultCatalogString(), ScalarType.createType(PrimitiveType.INT)));
         Assert.assertEquals(ColumnTypeConverter.fromHudiType(
                         Schema.createUnion(Schema.create(Schema.Type.INT))),
                 ScalarType.createType(PrimitiveType.INT));
@@ -248,5 +250,33 @@ public class HudiTableTest {
         TTableDescriptor tTableDescriptor = table.toThrift(ImmutableList.of());
         Assert.assertEquals("db0", tTableDescriptor.getDbName());
         Assert.assertEquals("table0", tTableDescriptor.getTableName());
+    }
+
+    @Test
+    public void testCreateTableResourceName() throws DdlException {
+        String resourceName = "Hudi_resource_29bb53dc_7e04_11ee_9b35_00163e0e489a";
+        Map<String, String> properties = new HashMap() {
+            {
+                put(RESOURCE, resourceName);
+            }
+        };
+        HudiTable.Builder tableBuilder = HudiTable.builder()
+                .setId(1000)
+                .setTableName("supplier")
+                .setCatalogName("hudi_catalog")
+                .setHiveDbName("hudi_oss_tpch_1g_parquet_gzip")
+                .setHiveTableName("supplier")
+                .setResourceName(resourceName)
+                .setFullSchema(new ArrayList<>())
+                .setDataColNames(new ArrayList<>())
+                .setPartitionColNames(Lists.newArrayList())
+                .setCreateTime(10)
+                .setHudiProperties(new HashMap<>());
+        HudiTable oTable = tableBuilder.build();
+
+        HudiTable.Builder newBuilder = HudiTable.builder();
+        HudiTableFactory.copyFromCatalogTable(newBuilder, oTable, properties);
+        HudiTable table = newBuilder.build();
+        Assert.assertEquals(table.getResourceName(), resourceName);
     }
 }

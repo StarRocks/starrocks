@@ -64,6 +64,7 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
@@ -71,6 +72,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.nio.channels.SocketChannel;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -161,8 +163,8 @@ public class ConnectContext {
     protected StmtExecutor executor;
     // Command this connection is processing.
     protected MysqlCommand command;
-    // Timestamp in millisecond last command starts at
-    protected long startTime = System.currentTimeMillis();
+    // last command start time
+    protected Instant startTime = Instant.now();
     // Cache thread info for this connection.
     protected ThreadInfo threadInfo;
 
@@ -314,6 +316,19 @@ public class ConnectContext {
         threadLocalInfo.set(this);
     }
 
+    /**
+     * Set this connect to thread-local if not exists
+     *
+     * @return set or not
+     */
+    public boolean setThreadLocalInfoIfNotExists() {
+        if (threadLocalInfo.get() == null) {
+            threadLocalInfo.set(this);
+            return true;
+        }
+        return false;
+    }
+
     public void setGlobalStateMgr(GlobalStateMgr globalStateMgr) {
         this.globalStateMgr = globalStateMgr;
     }
@@ -424,11 +439,15 @@ public class ConnectContext {
     }
 
     public long getStartTime() {
+        return startTime.toEpochMilli();
+    }
+
+    public Instant getStartTimeInstant() {
         return startTime;
     }
 
     public void setStartTime() {
-        startTime = System.currentTimeMillis();
+        startTime = Instant.now();
         returnRows = 0;
     }
 
@@ -440,7 +459,7 @@ public class ConnectContext {
         return returnRows;
     }
 
-    public void resetRetureRows() {
+    public void resetReturnRows() {
         returnRows = 0;
     }
 
@@ -557,6 +576,25 @@ public class ConnectContext {
         this.lastQueryId = queryId;
     }
 
+    public boolean isProfileEnabled() {
+        if (sessionVariable == null) {
+            return false;
+        }
+        if (sessionVariable.isEnableProfile()) {
+            return true;
+        }
+        if (!sessionVariable.isEnableBigQueryProfile()) {
+            return false;
+        }
+        return System.currentTimeMillis() - getStartTime() >
+                1000L * sessionVariable.getBigQueryProfileSecondThreshold();
+    }
+
+    public boolean needMergeProfile() {
+        return isProfileEnabled() &&
+                sessionVariable.getPipelineProfileLevel() < TPipelineProfileLevel.DETAIL.getValue();
+    }
+
     public byte[] getAuthDataSalt() {
         return authDataSalt;
     }
@@ -634,6 +672,10 @@ public class ConnectContext {
 
     public void setCurrentWarehouse(String currentWarehouse) {
         this.currentWarehouse = currentWarehouse;
+    }
+
+    public void setCurrentWarehouseId(long id) {
+        // not implemented in this codebase
     }
 
     public void setParentConnectContext(ConnectContext parent) {
@@ -714,11 +756,12 @@ public class ConnectContext {
     }
 
     public void checkTimeout(long now) {
-        if (startTime <= 0) {
+        long startTimeMillis = getStartTime();
+        if (startTimeMillis <= 0) {
             return;
         }
 
-        long delta = now - startTime;
+        long delta = now - startTimeMillis;
         boolean killFlag = false;
         boolean killConnection = false;
         if (command == MysqlCommand.COM_SLEEP) {
@@ -809,6 +852,34 @@ public class ConnectContext {
         return executor;
     }
 
+    public ScopeGuard bindScope() {
+        return ScopeGuard.setIfNotExists(this);
+    }
+
+    /**
+     * Set thread-local context for the scope, and remove it after leaving the scope
+     */
+    public static class ScopeGuard implements AutoCloseable {
+
+        private boolean set = false;
+
+        private ScopeGuard() {
+        }
+
+        public static ScopeGuard setIfNotExists(ConnectContext session) {
+            ScopeGuard res = new ScopeGuard();
+            res.set = session.setThreadLocalInfoIfNotExists();
+            return res;
+        }
+
+        @Override
+        public void close() {
+            if (set) {
+                ConnectContext.remove();
+            }
+        }
+    }
+
     public class ThreadInfo {
         public boolean isRunning() {
             return state.isRunning();
@@ -831,7 +902,7 @@ public class ConnectContext {
             // connection start Time
             row.add(TimeUtils.longToTimeString(connectionStartTime));
             // Time
-            row.add("" + (nowMs - startTime) / 1000);
+            row.add("" + (nowMs - getStartTime()) / 1000);
             // State
             row.add(state.toString());
             // Info

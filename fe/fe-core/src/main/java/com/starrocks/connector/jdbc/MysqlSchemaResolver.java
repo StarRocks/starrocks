@@ -58,6 +58,32 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
     }
 
     @Override
+    public boolean checkAndSetSupportPartitionInformation(Connection connection) {
+        String catalogSchema = "information_schema";
+        String partitionInfoTable = "partitions";
+        // Different types of MySQL protocol databases have different case names for schema and table names,
+        // which need to be converted to lowercase for comparison
+        try (ResultSet catalogSet = connection.getMetaData().getCatalogs()) {
+            while (catalogSet.next()) {
+                String schemaName = catalogSet.getString("TABLE_CAT");
+                if (schemaName.equalsIgnoreCase(catalogSchema)) {
+                    try (ResultSet tableSet = connection.getMetaData().getTables(catalogSchema, null, null, null)) {
+                        while (tableSet.next()) {
+                            String tableName = tableSet.getString("TABLE_NAME");
+                            if (tableName.equalsIgnoreCase(partitionInfoTable)) {
+                                return this.supportPartitionInformation = true;
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            throw new StarRocksConnectorException(e.getMessage());
+        }
+        return this.supportPartitionInformation = false;
+    }
+
+    @Override
     public Type convertColumnType(int dataType, String typeName, int columnSize, int digits) {
         PrimitiveType primitiveType;
         boolean isUnsigned = typeName.toLowerCase().contains("unsigned");
@@ -133,7 +159,8 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
     public List<String> listPartitionNames(Connection connection, String databaseName, String tableName) {
         String partitionNamesQuery =
                 "SELECT PARTITION_DESCRIPTION as NAME FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? " +
-                "AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL";
+                "AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL " +
+                "AND ( PARTITION_METHOD = 'RANGE' or PARTITION_METHOD = 'RANGE COLUMNS') ORDER BY PARTITION_DESCRIPTION";
         try (PreparedStatement ps = connection.prepareStatement(partitionNamesQuery)) {
             ps.setString(1, databaseName);
             ps.setString(2, tableName);
@@ -159,7 +186,8 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
     @Override
     public List<String> listPartitionColumns(Connection connection, String databaseName, String tableName) {
         String partitionColumnsQuery = "SELECT DISTINCT PARTITION_EXPRESSION FROM INFORMATION_SCHEMA.PARTITIONS " +
-                "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL";
+                "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND PARTITION_NAME IS NOT NULL " +
+                "AND ( PARTITION_METHOD = 'RANGE' or PARTITION_METHOD = 'RANGE COLUMNS')";
         try (PreparedStatement ps = connection.prepareStatement(partitionColumnsQuery)) {
             ps.setString(1, databaseName);
             ps.setString(2, tableName);
@@ -211,7 +239,8 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         final String partitionsQuery = "SELECT PARTITION_DESCRIPTION AS NAME, " +
                 "IF(UPDATE_TIME IS NULL, CREATE_TIME, UPDATE_TIME) AS MODIFIED_TIME " +
                 "FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? " +
-                "AND PARTITION_NAME IS NOT NULL";
+                "AND PARTITION_NAME IS NOT NULL " +
+                "AND ( PARTITION_METHOD = 'RANGE' or PARTITION_METHOD = 'RANGE COLUMNS') ORDER BY PARTITION_DESCRIPTION";
         final String nonPartitionQuery = "SELECT TABLE_NAME AS NAME, " +
                 "IF(UPDATE_TIME IS NULL, CREATE_TIME, UPDATE_TIME) AS MODIFIED_TIME " +
                 "FROM INFORMATION_SCHEMA.PARTITIONS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? ";

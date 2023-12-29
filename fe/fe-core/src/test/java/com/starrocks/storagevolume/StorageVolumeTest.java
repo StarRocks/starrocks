@@ -22,11 +22,13 @@ import com.staros.proto.AwsSimpleCredentialInfo;
 import com.staros.proto.AzBlobFileStoreInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
+import com.staros.proto.HDFSFileStoreInfo;
 import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.FastByteArrayOutputStream;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.connector.hadoop.HadoopExt;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
@@ -62,10 +64,11 @@ import static com.starrocks.credential.CloudConfigurationConstants.AWS_S3_USE_IN
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_ENDPOINT;
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN;
 import static com.starrocks.credential.CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY;
-import static com.starrocks.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_CONFIG_RESOURCES;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_DEPRECATED;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL_DEPRECATED;
+import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_TICKET_CACHE_PATH;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD;
 import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME;
 
@@ -195,7 +198,7 @@ public class StorageVolumeTest {
     @Test
     public void testHDFSSimpleCredential() {
         Map<String, String> storageParams = new HashMap<>();
-        storageParams.put(HDFS_AUTHENTICATION, "simple");
+        storageParams.put(HDFS_AUTHENTICATION, HDFSCloudCredential.SIMPLE_AUTH);
         storageParams.put(HDFS_USERNAME, "username");
         storageParams.put(HDFS_PASSWORD, "password");
         storageParams.put("dfs.nameservices", "ha_cluster");
@@ -210,11 +213,25 @@ public class StorageVolumeTest {
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
         HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
-        Assert.assertEquals("simple", hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication());
+        Assert.assertEquals(HDFSCloudCredential.SIMPLE_AUTH, hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication());
         Assert.assertEquals(5, hdfsCloudConfiguration.getHdfsCloudCredential().getHadoopConfiguration().size());
+        FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
+        Assert.assertEquals(FileStoreType.HDFS, fileStore.getFsType());
+        Assert.assertTrue(fileStore.hasHdfsFsInfo());
+        HDFSFileStoreInfo hdfsFileStoreInfo = fileStore.getHdfsFsInfo();
+        Assert.assertEquals("username", hdfsFileStoreInfo.getUsername());
+        Assert.assertEquals("simple", hdfsFileStoreInfo.getConfigurationMap().get(HDFS_AUTHENTICATION));
+        Assert.assertEquals("ha_cluster", hdfsFileStoreInfo.getConfigurationMap().get("dfs.nameservices"));
+        Assert.assertEquals("ha_n1,ha_n2", hdfsFileStoreInfo.getConfigurationMap().get("dfs.ha.namenodes.ha_cluster"));
+        Assert.assertEquals("<hdfs_host>:<hdfs_port>",
+                hdfsFileStoreInfo.getConfiguration().get("dfs.namenode.rpc-address.ha_cluster.ha_n1"));
+        Assert.assertEquals("<hdfs_host>:<hdfs_port>",
+                hdfsFileStoreInfo.getConfiguration().get("dfs.namenode.rpc-address.ha_cluster.ha_n2"));
+        Assert.assertEquals("org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+                hdfsFileStoreInfo.getConfiguration().get("dfs.client.failover.proxy.provider"));
 
         Map<String, String> storageParams1 = new HashMap<>();
-        storageParams1.put(HDFS_AUTHENTICATION, "simple");
+        storageParams1.put(HDFS_AUTHENTICATION, HDFSCloudCredential.SIMPLE_AUTH);
         storageParams1.put(HDFS_USERNAME, "username");
         storageParams1.put(HDFS_PASSWORD, "password");
         sv = new StorageVolume("2", "test", "hdfs", Arrays.asList("hdfs://abc"),
@@ -222,16 +239,22 @@ public class StorageVolumeTest {
         cloudConfiguration = sv.getCloudConfiguration();
         Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
         hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
-        Assert.assertEquals("simple", hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication());
+        Assert.assertEquals(HDFSCloudCredential.SIMPLE_AUTH, hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication());
         Assert.assertEquals(0, hdfsCloudConfiguration.getHdfsCloudCredential().getHadoopConfiguration().size());
+        fileStore = cloudConfiguration.toFileStoreInfo();
+        Assert.assertEquals(FileStoreType.HDFS, fileStore.getFsType());
+        Assert.assertTrue(fileStore.hasHdfsFsInfo());
+        hdfsFileStoreInfo = fileStore.getHdfsFsInfo();
+        Assert.assertEquals("username", hdfsFileStoreInfo.getUsername());
     }
 
     @Test
     public void testHDFSKerberosCredential() throws AnalysisException {
         Map<String, String> storageParams = new HashMap<>();
-        storageParams.put(HDFS_AUTHENTICATION, "kerberos");
-        storageParams.put(HDFS_KERBEROS_PRINCIPAL, "nn/abc@ABC.COM");
-        storageParams.put(HADOOP_KERBEROS_KEYTAB, "/keytab/hive.keytab");
+        storageParams.put(HDFS_AUTHENTICATION, HDFSCloudCredential.KERBEROS_AUTH);
+        storageParams.put(HDFS_KERBEROS_PRINCIPAL_DEPRECATED, "nn/abc@ABC.COM");
+        storageParams.put(HDFS_KERBEROS_KEYTAB_DEPRECATED, "/keytab/hive.keytab");
+        storageParams.put(HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED, "YWFhYWFh");
         storageParams.put("dfs.nameservices", "ha_cluster");
         storageParams.put("dfs.ha.namenodes.ha_cluster", "ha_n1,ha_n2");
         storageParams.put("dfs.namenode.rpc-address.ha_cluster.ha_n1", "<hdfs_host>:<hdfs_port>");
@@ -246,6 +269,39 @@ public class StorageVolumeTest {
         HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
         Assert.assertEquals("kerberos", hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication());
         Assert.assertEquals(5, hdfsCloudConfiguration.getHdfsCloudCredential().getHadoopConfiguration().size());
+        FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
+        Assert.assertEquals(FileStoreType.HDFS, fileStore.getFsType());
+        Assert.assertTrue(fileStore.hasHdfsFsInfo());
+        HDFSFileStoreInfo hdfsFileStoreInfo = fileStore.getHdfsFsInfo();
+        Assert.assertEquals(HDFSCloudCredential.KERBEROS_AUTH, hdfsFileStoreInfo.getConfigurationMap().get(HDFS_AUTHENTICATION));
+        Assert.assertEquals(5, hdfsCloudConfiguration.getHdfsCloudCredential().getHadoopConfiguration().size());
+        Assert.assertEquals("ha_cluster", hdfsFileStoreInfo.getConfigurationMap().get("dfs.nameservices"));
+        Assert.assertEquals("ha_n1,ha_n2", hdfsFileStoreInfo.getConfigurationMap().get("dfs.ha.namenodes.ha_cluster"));
+        Assert.assertEquals("<hdfs_host>:<hdfs_port>",
+                hdfsFileStoreInfo.getConfigurationMap().get("dfs.namenode.rpc-address.ha_cluster.ha_n1"));
+        Assert.assertEquals("<hdfs_host>:<hdfs_port>",
+                hdfsFileStoreInfo.getConfigurationMap().get("dfs.namenode.rpc-address.ha_cluster.ha_n2"));
+        Assert.assertEquals("org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider",
+                hdfsFileStoreInfo.getConfigurationMap().get("dfs.client.failover.proxy.provider"));
+
+        storageParams.clear();
+        storageParams.put(HDFS_AUTHENTICATION, HDFSCloudCredential.KERBEROS_AUTH);
+        storageParams.put(HDFS_KERBEROS_TICKET_CACHE_PATH, "/path/to/ticket/cache/path");
+        sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
+                storageParams, true, "");
+        cloudConfiguration = sv.getCloudConfiguration();
+        Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
+        hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
+        Assert.assertEquals(HDFSCloudCredential.KERBEROS_AUTH,
+                hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication());
+        Assert.assertEquals(1, hdfsCloudConfiguration.getHdfsCloudCredential().getHadoopConfiguration().size());
+        fileStore = cloudConfiguration.toFileStoreInfo();
+        Assert.assertEquals(FileStoreType.HDFS, fileStore.getFsType());
+        Assert.assertTrue(fileStore.hasHdfsFsInfo());
+        hdfsFileStoreInfo = fileStore.getHdfsFsInfo();
+        Assert.assertEquals("kerberos", hdfsFileStoreInfo.getConfigurationMap().get(HDFS_AUTHENTICATION));
+        Assert.assertEquals("/path/to/ticket/cache/path",
+                hdfsFileStoreInfo.getConfigurationMap().get(HDFS_KERBEROS_TICKET_CACHE_PATH));
     }
 
     @Test
@@ -256,10 +312,28 @@ public class StorageVolumeTest {
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
         Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
         HDFSCloudConfiguration hdfsCloudConfiguration = (HDFSCloudConfiguration) cloudConfiguration;
-        Assert.assertEquals(hdfsCloudConfiguration.getHdfsCloudCredential().getAuthentication(), HDFSCloudCredential.EMPTY);
         FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
         Assert.assertEquals(FileStoreType.HDFS, fileStore.getFsType());
         Assert.assertTrue(fileStore.hasHdfsFsInfo());
+    }
+
+    @Test
+    public void testHDFSViewFS() {
+        Map<String, String> storageParams = new HashMap<>();
+        storageParams.put("fs.viewfs.mounttable.ClusterX.link./data", "hdfs://nn1-clusterx.example.com:8020/data");
+        storageParams.put("fs.viewfs.mounttable.ClusterX.link./project", "hdfs://nn2-clusterx.example.com:8020/project");
+        StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
+                storageParams, true, "");
+        CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
+        Assert.assertEquals(CloudType.HDFS, cloudConfiguration.getCloudType());
+        FileStoreInfo fileStore = cloudConfiguration.toFileStoreInfo();
+        Assert.assertEquals(FileStoreType.HDFS, fileStore.getFsType());
+        Assert.assertTrue(fileStore.hasHdfsFsInfo());
+        HDFSFileStoreInfo hdfsFileStoreInfo = fileStore.getHdfsFsInfo();
+        Assert.assertEquals("hdfs://nn1-clusterx.example.com:8020/data",
+                hdfsFileStoreInfo.getConfigurationMap().get("fs.viewfs.mounttable.ClusterX.link./data"));
+        Assert.assertEquals("hdfs://nn2-clusterx.example.com:8020/project",
+                hdfsFileStoreInfo.getConfigurationMap().get("fs.viewfs.mounttable.ClusterX.link./project"));
     }
 
     @Test
@@ -280,7 +354,7 @@ public class StorageVolumeTest {
         }
 
         Map<String, String> storageParams = new HashMap<>();
-        storageParams.put(HDFS_CONFIG_RESOURCES, confFile);
+        storageParams.put(HadoopExt.HADOOP_CONFIG_RESOURCES, confFile);
         StorageVolume sv = new StorageVolume("1", "test", "hdfs", Arrays.asList("hdfs://abc"),
                 storageParams, true, "");
         CloudConfiguration cloudConfiguration = sv.getCloudConfiguration();
@@ -292,7 +366,7 @@ public class StorageVolumeTest {
 
         Configuration conf = new Configuration();
         hdfsCloudConfiguration.applyToConfiguration(conf);
-        Assert.assertEquals(conf.get("XXX"), "YYY");
+        Assert.assertEquals(conf.get("XXX"), null);
     }
 
     @Test
@@ -388,6 +462,26 @@ public class StorageVolumeTest {
         fs = FileStoreInfo.newBuilder().setS3FsInfo(s3fs).setFsKey("0").setFsType(FileStoreType.S3).build();
         sv = StorageVolume.fromFileStoreInfo(fs);
         Assert.assertEquals(CloudType.AWS, sv.getCloudConfiguration().getCloudType());
+
+        HDFSFileStoreInfo hdfs = HDFSFileStoreInfo.newBuilder().setUsername("username")
+                .putConfiguration(HDFS_AUTHENTICATION, "simple")
+                .putConfiguration("dfs.nameservices", "ha_cluster")
+                .putConfiguration("dfs.ha.namenodes.ha_cluster", "ha_n1,ha_n2")
+                .putConfiguration("dfs.namenode.rpc-address.ha_cluster.ha_n1", "<hdfs_host>:<hdfs_port>")
+                .putConfiguration("dfs.namenode.rpc-address.ha_cluster.ha_n2", "<hdfs_host>:<hdfs_port>")
+                .putConfiguration("dfs.client.failover.proxy.provider",
+                        "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider").build();
+        fs = FileStoreInfo.newBuilder().setHdfsFsInfo(hdfs).setFsKey("0").setFsType(FileStoreType.HDFS).build();
+        sv = StorageVolume.fromFileStoreInfo(fs);
+        Assert.assertEquals(CloudType.HDFS, sv.getCloudConfiguration().getCloudType());
+
+        hdfs = HDFSFileStoreInfo.newBuilder().putConfiguration(HDFS_AUTHENTICATION, "kerberos")
+                .putConfiguration(HDFS_KERBEROS_PRINCIPAL_DEPRECATED, "nn/abc@ABC.COM")
+                .putConfiguration(HDFS_KERBEROS_KEYTAB_DEPRECATED, "/keytab/hive.keytab")
+                .putConfiguration(HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED, "YWFhYWFh").build();
+        fs = FileStoreInfo.newBuilder().setHdfsFsInfo(hdfs).setFsKey("0").setFsType(FileStoreType.HDFS).build();
+        sv = StorageVolume.fromFileStoreInfo(fs);
+        Assert.assertEquals(CloudType.HDFS, sv.getCloudConfiguration().getCloudType());
     }
 
     @Test

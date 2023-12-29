@@ -42,6 +42,10 @@ public:
     // Convert TabletSchema to Schema with changing format v1 type to format v2 type.
     static Schema convert_schema(const TabletSchemaCSPtr& schema, const std::vector<ColumnId>& cids);
 
+    // Convert TabletColumns to Schema order by col_names
+    static SchemaPtr convert_schema(const std::vector<TabletColumn*>& columns,
+                                    const std::vector<std::string_view>& col_names);
+
     // Get schema with format v2 type containing short key columns from TabletSchema.
     static Schema get_short_key_schema(const TabletSchemaCSPtr& schema);
 
@@ -50,6 +54,9 @@ public:
 
     // Get schema with format v2 type containing sort key columns filled by primary key columns from TabletSchema.
     static Schema get_sort_key_schema_by_primary_key(const starrocks::TabletSchemaCSPtr& tablet_schema);
+
+    // Get non nullable version schema
+    static SchemaPtr get_non_nullable_schema(const starrocks::SchemaPtr& schema, const std::vector<int>* keys);
 
     static ColumnId max_column_id(const Schema& schema);
 

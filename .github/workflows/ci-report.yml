@@ -104,7 +104,7 @@ jobs:
             export JAVA_HOME=/var/local/env/jdk1.8.0_202;
             export PATH=$JAVA_HOME/bin:$PATH;
             java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-              --cover /var/local/env/empty_cov_result --github-token ${{ secrets.PAT }} \
+              --cover /var/local/env/empty_cov_result --github-token ${{ secrets.GITHUB_TOKEN }} \
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
           fi
 
@@ -170,12 +170,12 @@ jobs:
           export PATH=$JAVA_HOME/bin:$PATH;
           if [[ -e "${fe_path}/diff.txt" ]]; then
             java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-              --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.PAT }} \
+              --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.GITHUB_TOKEN }} \
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco \
               -d ${fe_path}/diff.txt -dt file
           else
             java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-              --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.PAT }} \
+              --cover ${{ github.workspace }}/result/ --github-token ${{ secrets.GITHUB_TOKEN }} \
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type jacoco
           fi
           rm -rf coverchecker
@@ -245,7 +245,7 @@ jobs:
             export JAVA_HOME=/var/local/env/jdk1.8.0_202;
             export PATH=$JAVA_HOME/bin:$PATH;
             java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-              --cover /var/local/env/be_empty_coverage.xml --github-token ${{ secrets.PAT }} --pr ${PR_NUMBER} \
+              --cover /var/local/env/be_empty_coverage.xml --github-token ${{ secrets.GITHUB_TOKEN }} --pr ${PR_NUMBER} \
               --repo ${{ github.repository }} --threshold 80 --github-url api.github.com -type cobertura --module BE
           fi
 
@@ -283,7 +283,7 @@ jobs:
               total_xml=${be_path}/be_ut_coverage.xml
           fi
           java -jar cover-checker-console/target/cover-checker-console-1.4.0-jar-with-dependencies.jar \
-            --cover ${total_xml} --github-token ${{ secrets.PAT }} --repo ${{ github.repository }} \
+            --cover ${total_xml} --github-token ${{ secrets.GITHUB_TOKEN }} --repo ${{ github.repository }} \
             --threshold 80 --github-url api.github.com --pr ${PR_NUMBER} -type cobertura --module BE \
             -d ${be_path}/diff.txt -dt file
 

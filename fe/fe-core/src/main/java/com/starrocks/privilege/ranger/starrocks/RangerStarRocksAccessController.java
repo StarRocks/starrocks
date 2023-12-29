@@ -27,6 +27,7 @@ import com.starrocks.privilege.RangerAccessController;
 import com.starrocks.privilege.ranger.RangerStarRocksAccessRequest;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.pipe.PipeName;
 import org.apache.ranger.plugin.policyengine.RangerAccessResult;
 import org.apache.ranger.plugin.policyengine.RangerPolicyEngine;
 
@@ -239,7 +240,7 @@ public class RangerStarRocksAccessController extends RangerAccessController {
             throws AccessDeniedException {
         Database database = GlobalStateMgr.getCurrentState().getDb(db);
         for (Table table : database.getTables()) {
-            if (table.isView()) {
+            if (table.isOlapView()) {
                 checkViewAction(userIdentity, roleIds, new TableName(database.getFullName(), table.getName()), privilegeType);
             } else if (table.isMaterializedView()) {
                 checkMaterializedViewAction(userIdentity, roleIds,
@@ -268,6 +269,22 @@ public class RangerStarRocksAccessController extends RangerAccessController {
             throws AccessDeniedException {
         RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.RESOURCE_GROUP, Lists.newArrayList(name));
         hasPermission(resource, currentUser, privilegeType);
+    }
+
+    @Override
+    public void checkPipeAction(UserIdentity currentUser, Set<Long> roleIds, PipeName name, PrivilegeType privilegeType)
+            throws AccessDeniedException {
+        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.PIPE,
+                Lists.newArrayList(name.getDbName(), name.getPipeName()));
+        hasPermission(resource, currentUser, privilegeType);
+    }
+
+    @Override
+    public void checkAnyActionOnPipe(UserIdentity currentUser, Set<Long> roleIds, PipeName pipe)
+            throws AccessDeniedException {
+        RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.PIPE,
+                Lists.newArrayList(pipe.getDbName(), pipe.getPipeName()));
+        hasPermission(resource, currentUser, PrivilegeType.ANY);
     }
 
     @Override

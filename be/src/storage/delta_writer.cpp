@@ -198,7 +198,7 @@ Status DeltaWriter::_init() {
 
     // build tablet schema in request level
     auto tablet_schema_ptr = _tablet->tablet_schema();
-    RETURN_IF_ERROR(_build_current_tablet_schema(_opt.index_id, _opt.ptable_schema_param, _tablet->tablet_schema()));
+    RETURN_IF_ERROR(_build_current_tablet_schema(_opt.index_id, _opt.ptable_schema_param, tablet_schema_ptr));
     size_t real_num_columns = _tablet_schema->num_columns();
     if (_tablet->is_column_with_row_store()) {
         if (_tablet_schema->columns().back().name() != "__row") {
@@ -222,15 +222,18 @@ Status DeltaWriter::_init() {
             }
             writer_context.referenced_column_ids.push_back(index);
         }
-        int64_t average_row_size = _tablet->updates()->get_average_row_size();
-        if (average_row_size != 0) {
-            _memtable_buffer_row = config::write_buffer_size / average_row_size;
-        } else {
-            // If tablet is a new created tablet and has no historical data, average_row_size is 0
-            // And we use schema size as average row size. If there are complex type(i.e. BITMAP/ARRAY) or varchar,
-            // we will consider it as 16 bytes.
-            average_row_size = _tablet_schema->estimate_row_size(16);
-            _memtable_buffer_row = config::write_buffer_size / average_row_size;
+        if (_opt.partial_update_mode == PartialUpdateMode::ROW_MODE) {
+            // no need to control memtable row when using column mode, because we don't need to fill missing column
+            int64_t average_row_size = _tablet->updates()->get_average_row_size();
+            if (average_row_size != 0) {
+                _memtable_buffer_row = config::write_buffer_size / average_row_size;
+            } else {
+                // If tablet is a new created tablet and has no historical data, average_row_size is 0
+                // And we use schema size as average row size. If there are complex type(i.e. BITMAP/ARRAY) or varchar,
+                // we will consider it as 16 bytes.
+                average_row_size = _tablet_schema->estimate_row_size(16);
+                _memtable_buffer_row = config::write_buffer_size / average_row_size;
+            }
         }
         auto sort_key_idxes = _tablet_schema->sort_key_idxes();
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
@@ -264,11 +267,11 @@ Status DeltaWriter::_init() {
         writer_context.tablet_schema = _tablet_schema;
     }
 
-    auto sort_key_idxes = _tablet->tablet_schema()->sort_key_idxes();
+    auto sort_key_idxes = tablet_schema_ptr->sort_key_idxes();
     std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
     bool auto_increment_in_sort_key = false;
     for (auto& idx : sort_key_idxes) {
-        auto& col = _tablet->tablet_schema()->column(idx);
+        auto& col = tablet_schema_ptr->column(idx);
         if (col.is_auto_increment()) {
             auto_increment_in_sort_key = true;
             break;
@@ -371,12 +374,12 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
                                                  _opt.tablet_id, _replica_state_name(_replica_state)));
     }
 
-    if (!_mem_table->check_supported_column_partial_update(chunk)) {
+    if (_tablet->keys_type() == KeysType::PRIMARY_KEYS && !_mem_table->check_supported_column_partial_update(chunk)) {
         return Status::InternalError(
                 fmt::format("can't partial update for column with row. tablet_id: {}", _opt.tablet_id));
     }
     Status st;
-    bool full = _mem_table->insert(chunk, indexes, from, size);
+    ASSIGN_OR_RETURN(auto full, _mem_table->insert(chunk, indexes, from, size));
     _last_write_ts = butil::gettimeofday_s();
     _write_buffer_size = _mem_table->write_buffer_size();
     if (_mem_tracker->limit_exceeded()) {

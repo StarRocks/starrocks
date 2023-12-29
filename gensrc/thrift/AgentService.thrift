@@ -72,6 +72,11 @@ enum TTabletType {
     TABLET_TYPE_LAKE = 2
 }
 
+enum TTxnType {
+    TXN_NORMAL = 0,
+    TXN_REPLICATION = 1
+}
+
 struct TBinlogConfig {
     // Version of the configuration, and FE should deliver it to
     // the BE when executing 'ALTER TABLE'. The configuration with
@@ -86,6 +91,7 @@ struct TBinlogConfig {
 // don't forget to also add type to PersistentIndexTypePB
 enum TPersistentIndexType {
     LOCAL = 0
+    CLOUD_NATIVE = 1
 }
 
 struct TCreateTabletReq {
@@ -134,6 +140,13 @@ struct TAlterTabletMaterializedColumnReq {
     3: optional map<i32, Exprs.TExpr> mc_exprs
 }
 
+enum TAlterJobType {
+    ROLLUP = 0,
+    SCHEMA_CHANGE = 1,
+    DECOMMISSION_BACKEND = 2
+}
+
+
 // This v2 request will replace the old TAlterTabletReq.
 // TAlterTabletReq should be deprecated after new alter job process merged.
 struct TAlterTabletReqV2 {
@@ -151,6 +164,11 @@ struct TAlterTabletReqV2 {
     12: optional InternalService.TQueryGlobals query_globals
     13: optional InternalService.TQueryOptions query_options
     14: optional list<Descriptors.TColumn> columns
+    // synchronized materialized view parameters
+    15: optional TAlterJobType alter_job_type = TAlterJobType.SCHEMA_CHANGE
+    16: optional Descriptors.TDescriptorTable desc_tbl
+    17: optional Exprs.TExpr where_expr
+    18: optional list<string> base_table_column_names 
 }
 
 struct TAlterMaterializedViewParam {
@@ -321,6 +339,7 @@ struct TPublishVersionRequest {
     4: optional i64 commit_timestamp
     5: optional string txn_trace_parent
     6: optional bool enable_sync_publish = false
+    7: optional TTxnType txn_type = TTxnType.TXN_NORMAL
 }
 
 struct TClearAlterTaskRequest {
@@ -331,6 +350,7 @@ struct TClearAlterTaskRequest {
 struct TClearTransactionTaskRequest {
     1: required Types.TTransactionId transaction_id
     2: required list<Types.TPartitionId> partition_id
+    3: optional TTxnType txn_type = TTxnType.TXN_NORMAL
 }
 
 struct TRecoverTabletReq {
@@ -339,6 +359,45 @@ struct TRecoverTabletReq {
     3: optional Types.TVersion version
     4: optional Types.TVersionHash version_hash // Deprecated
 }
+
+struct TRemoteSnapshotRequest {
+     1: optional Types.TTransactionId transaction_id
+     2: optional Types.TTableId table_id
+     3: optional Types.TPartitionId partition_id
+     4: optional Types.TTabletId tablet_id
+     5: optional TTabletType tablet_type
+     6: optional Types.TSchemaHash schema_hash
+     7: optional Types.TVersion visible_version
+     8: optional string src_token
+     9: optional Types.TTabletId src_tablet_id
+     10: optional TTabletType src_tablet_type
+     11: optional Types.TSchemaHash src_schema_hash
+     12: optional Types.TVersion src_visible_version
+     13: optional list<Types.TBackend> src_backends
+     14: optional i32 timeout_sec
+ }
+
+ struct TRemoteSnapshotInfo {
+     1: optional Types.TBackend backend
+     2: optional string snapshot_path
+     3: optional bool incremental_snapshot
+ }
+
+ struct TReplicateSnapshotRequest {
+     1: optional Types.TTransactionId transaction_id
+     2: optional Types.TTableId table_id
+     3: optional Types.TPartitionId partition_id
+     4: optional Types.TTabletId tablet_id
+     5: optional TTabletType tablet_type
+     6: optional Types.TSchemaHash schema_hash
+     7: optional Types.TVersion visible_version
+     8: optional string src_token
+     9: optional Types.TTabletId src_tablet_id
+     10: optional TTabletType src_tablet_type
+     11: optional Types.TSchemaHash src_schema_hash
+     12: optional Types.TVersion src_visible_version
+     13: optional list<TRemoteSnapshotInfo> src_snapshot_infos
+ }
 
 enum TTabletMetaType {
     PARTITIONID,
@@ -408,6 +467,8 @@ struct TAgentTaskRequest {
     26: optional TUpdateTabletMetaInfoReq update_tablet_meta_info_req
     27: optional TDropAutoIncrementMapReq drop_auto_increment_map_req
     28: optional TCompactionReq compaction_req
+    29: optional TRemoteSnapshotRequest remote_snapshot_req
+    30: optional TReplicateSnapshotRequest replicate_snapshot_req
 }
 
 struct TAgentResult {

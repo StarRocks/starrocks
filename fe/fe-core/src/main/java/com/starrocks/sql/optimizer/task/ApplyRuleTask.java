@@ -19,6 +19,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -65,17 +67,16 @@ public class ApplyRuleTask extends OptimizerTask {
 
     @Override
     public void execute() {
-        if (groupExpression.hasRuleExplored(rule) ||
-                groupExpression.isUnused()) {
+        if (groupExpression.hasRuleExplored(rule) || groupExpression.isUnused()) {
             return;
         }
-        SessionVariable sessionVariable = context.getOptimizerContext().getSessionVariable();
         // Apply rule and get all new OptExpressions
         Pattern pattern = rule.getPattern();
         Binder binder = new Binder(pattern, groupExpression);
         OptExpression extractExpr = binder.next();
         List<OptExpression> newExpressions = Lists.newArrayList();
         List<OptExpression> extractExpressions = Lists.newArrayList();
+        SessionVariable sessionVariable = context.getOptimizerContext().getSessionVariable();
         while (extractExpr != null) {
             if (!rule.check(extractExpr, context.getOptimizerContext())) {
                 extractExpr = binder.next();
@@ -85,6 +86,16 @@ public class ApplyRuleTask extends OptimizerTask {
             List<OptExpression> targetExpressions;
             try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, rule.getClass().getSimpleName())) {
                 targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
+            } catch (StarRocksPlannerException e) {
+                if (e.getType() == ErrorType.RULE_EXHAUSTED) {
+                    break;
+                } else {
+                    throw e;
+                }
+            }
+            if (rule.exhausted(context.getOptimizerContext())) {
+                OptimizerTraceUtil.logRuleExhausted(context.getOptimizerContext(), rule);
+                break;
             }
 
             newExpressions.addAll(targetExpressions);
@@ -104,6 +115,12 @@ public class ApplyRuleTask extends OptimizerTask {
             }
 
             GroupExpression newGroupExpression = result.second;
+            if (sessionVariable.isEnableMaterializedViewForceRewrite()) {
+                // new bitset should derive old bitset's info to track the lineage of applied rules.
+                newGroupExpression.mergeAppliedRules(groupExpression.getAppliedRuleMasks());
+                // new bitset add new rule which it's derived from.
+                newGroupExpression.addNewAppliedRule(rule);
+            }
             if (newGroupExpression.getOp().isLogical()) {
                 // For logic newGroupExpression, optimize it
                 pushTask(new OptimizeExpressionTask(context, newGroupExpression, isExplore));

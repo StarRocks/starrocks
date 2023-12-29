@@ -66,7 +66,7 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable {
     private transient ReentrantReadWriteLock lock;
 
     public InsertOverwriteJobMgr() {
-        this.overwriteJobMap = Maps.newHashMap();
+        this.overwriteJobMap = Maps.newConcurrentMap();
         this.tableToOverwriteJobs = Maps.newHashMap();
         ThreadFactory threadFactory = new DefaultThreadFactory("cancel-thread");
         this.cancelJobExecutorService = Executors.newSingleThreadExecutor(threadFactory);
@@ -210,12 +210,7 @@ public class InsertOverwriteJobMgr implements Writable, GsonPostProcessable {
     }
 
     public long getJobNum() {
-        lock.readLock().lock();
-        try {
-            return overwriteJobMap.size();
-        } finally {
-            lock.readLock().unlock();
-        }
+        return overwriteJobMap.size();
     }
 
     public long getRunningJobSize() {

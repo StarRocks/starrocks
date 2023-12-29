@@ -1,31 +1,10 @@
-[sql]
-select
-    c_count,
-    count(*) as custdist
-from
-    (
-        select
-            c_custkey,
-            count(o_orderkey) as c_count
-        from
-            customer left outer join orders on
-                        c_custkey = o_custkey
-                    and o_comment not like '%unusual%deposits%'
-        group by
-            c_custkey
-    ) a
-group by
-    c_count
-order by
-    custdist desc,
-    c_count desc ;
 [fragment statistics]
 PLAN FRAGMENT 0(F06)
 Output Exprs:18: count | 19: count
 Input Partition: UNPARTITIONED
 RESULT SINK
 
-12:MERGING-EXCHANGE
+13:MERGING-EXCHANGE
 distribution type: GATHER
 cardinality: 10031873
 column statistics:
@@ -36,9 +15,9 @@ PLAN FRAGMENT 1(F05)
 
 Input Partition: HASH_PARTITIONED: 18: count
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 12
+OutPut Exchange Id: 13
 
-11:SORT
+12:SORT
 |  order by: [19, BIGINT, false] DESC, [18, BIGINT, true] DESC
 |  offset: 0
 |  hasNullableGenerateChild: true
@@ -47,8 +26,8 @@ OutPut Exchange Id: 12
 |  * count-->[0.0, 1.125E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |  * count-->[0.0, 1.0031873E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |
-10:AGGREGATE (update finalize)
-|  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; result nullable: false]
+11:AGGREGATE (merge finalize)
+|  aggregate: count[([19: count, BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false]
 |  group by: [18: count, BIGINT, true]
 |  hasNullableGenerateChild: true
 |  cardinality: 10031873
@@ -56,7 +35,7 @@ OutPut Exchange Id: 12
 |  * count-->[0.0, 1.125E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |  * count-->[0.0, 1.0031873E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |
-9:EXCHANGE
+10:EXCHANGE
 distribution type: SHUFFLE
 partition exprs: [18: count, BIGINT, true]
 cardinality: 10031873
@@ -65,8 +44,18 @@ PLAN FRAGMENT 2(F04)
 
 Input Partition: HASH_PARTITIONED: 10: o_custkey
 OutPut Partition: HASH_PARTITIONED: 18: count
-OutPut Exchange Id: 09
+OutPut Exchange Id: 10
 
+9:AGGREGATE (update serialize)
+|  STREAMING
+|  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; result nullable: false]
+|  group by: [18: count, BIGINT, true]
+|  hasNullableGenerateChild: true
+|  cardinality: 10031873
+|  column statistics:
+|  * count-->[0.0, 1.125E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
+|  * count-->[0.0, 1.0031873E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
+|
 8:Project
 |  output columns:
 |  18 <-> [18: count, BIGINT, false]
@@ -158,4 +147,3 @@ column statistics:
 * o_custkey-->[1.0, 1.5E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
 * o_comment-->[-Infinity, Infinity, 0.0, 79.0, 1.10204136E8] ESTIMATE
 [end]
-

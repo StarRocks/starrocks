@@ -14,6 +14,7 @@
 
 #include "exprs/java_function_call_expr.h"
 
+#include <any>
 #include <memory>
 #include <sstream>
 #include <tuple>
@@ -42,7 +43,6 @@ namespace starrocks {
 struct UDFFunctionCallHelper {
     JavaUDFContext* fn_desc;
     JavaMethodDescriptor* call_desc;
-    std::vector<std::string> _data_buffer;
 
     // Now we don't support logical type function
     ColumnPtr call(FunctionContext* ctx, Columns& columns, size_t size) {
@@ -108,7 +108,7 @@ StatusOr<ColumnPtr> JavaFunctionCallExpr::evaluate_checked(ExprContext* context,
         res = _call_helper->call(context->fn_context(_fn_context_index), columns, ptr != nullptr ? ptr->num_rows() : 1);
         return Status::OK();
     };
-    call_function_in_pthread(_runtime_state, call_udf)->get_future().get();
+    (void)call_function_in_pthread(_runtime_state, call_udf)->get_future().get();
     return res;
 }
 
@@ -120,7 +120,7 @@ JavaFunctionCallExpr::~JavaFunctionCallExpr() {
         this->_call_helper.reset();
         return Status::OK();
     });
-    promise->get_future().get();
+    (void)promise->get_future().get();
 }
 
 // TODO support prepare UDF
@@ -158,6 +158,64 @@ bool JavaFunctionCallExpr::is_constant() const {
     return Expr::is_constant();
 }
 
+StatusOr<std::shared_ptr<JavaUDFContext>> JavaFunctionCallExpr::_build_udf_func_desc(
+        ExprContext* context, FunctionContext::FunctionStateScope scope, const std::string& libpath) {
+    auto desc = std::make_shared<JavaUDFContext>();
+    // init class loader and analyzer
+    desc->udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
+    RETURN_IF_ERROR(desc->udf_classloader->init());
+    desc->analyzer = std::make_unique<ClassAnalyzer>();
+
+    ASSIGN_OR_RETURN(desc->udf_class, desc->udf_classloader->getClass(_fn.scalar_fn.symbol));
+
+    auto add_method = [&](const std::string& name, std::unique_ptr<JavaMethodDescriptor>* res) {
+        bool has_method = false;
+        std::string method_name = name;
+        std::string signature;
+        std::vector<MethodTypeDescriptor> mtdesc;
+        RETURN_IF_ERROR(desc->analyzer->has_method(desc->udf_class.clazz(), method_name, &has_method));
+        if (has_method) {
+            RETURN_IF_ERROR(desc->analyzer->get_signature(desc->udf_class.clazz(), method_name, &signature));
+            RETURN_IF_ERROR(desc->analyzer->get_method_desc(signature, &mtdesc));
+            *res = std::make_unique<JavaMethodDescriptor>();
+            (*res)->name = std::move(method_name);
+            (*res)->signature = std::move(signature);
+            (*res)->method_desc = std::move(mtdesc);
+            ASSIGN_OR_RETURN((*res)->method, desc->analyzer->get_method_object(desc->udf_class.clazz(), name));
+        }
+        return Status::OK();
+    };
+
+    // Now we don't support prepare/close for UDF
+    // RETURN_IF_ERROR(add_method("prepare", &desc->prepare));
+    // RETURN_IF_ERROR(add_method("method_close", &desc->close));
+    RETURN_IF_ERROR(add_method("evaluate", &desc->evaluate));
+
+    // create UDF function instance
+    ASSIGN_OR_RETURN(desc->udf_handle, desc->udf_class.newInstance());
+    // BatchEvaluateStub
+    auto* stub_clazz = BatchEvaluateStub::stub_clazz_name;
+    auto* stub_method_name = BatchEvaluateStub::batch_evaluate_method_name;
+    auto udf_clazz = desc->udf_class.clazz();
+    auto update_method = desc->evaluate->method.handle();
+
+    ASSIGN_OR_RETURN(auto update_stub_clazz, desc->udf_classloader->genCallStub(stub_clazz, udf_clazz, update_method,
+                                                                                ClassLoader::BATCH_EVALUATE));
+    ASSIGN_OR_RETURN(auto method, desc->analyzer->get_method_object(update_stub_clazz.clazz(), stub_method_name));
+    auto function_ctx = context->fn_context(_fn_context_index);
+    desc->call_stub = std::make_unique<BatchEvaluateStub>(
+            function_ctx, desc->udf_handle.handle(), std::move(update_stub_clazz), JavaGlobalRef(std::move(method)));
+
+    if (desc->prepare != nullptr) {
+        // we only support fragment local scope to call prepare
+        if (scope == FunctionContext::FRAGMENT_LOCAL) {
+            // TODO: handle prepare function
+        }
+    }
+
+    return desc;
+}
+
 Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
                                   FunctionContext::FunctionStateScope scope) {
     // init parent open
@@ -172,74 +230,33 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
             const_columns.emplace_back(std::move(child_col));
         }
     }
-    auto open_state = [this, scope, context]() {
-        // init class loader and analyzer
-        std::string libpath;
-        auto function_cache = UserFunctionCache::instance();
-        RETURN_IF_ERROR(function_cache->get_libpath(_fn.fid, _fn.hdfs_location, _fn.checksum, &libpath));
-        _func_desc->udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
-        RETURN_IF_ERROR(_func_desc->udf_classloader->init());
-        _func_desc->analyzer = std::make_unique<ClassAnalyzer>();
-
-        ASSIGN_OR_RETURN(_func_desc->udf_class, _func_desc->udf_classloader->getClass(_fn.scalar_fn.symbol));
-
-        auto add_method = [&](const std::string& name, std::unique_ptr<JavaMethodDescriptor>* res) {
-            bool has_method = false;
-            std::string method_name = name;
-            std::string signature;
-            std::vector<MethodTypeDescriptor> mtdesc;
-            RETURN_IF_ERROR(_func_desc->analyzer->has_method(_func_desc->udf_class.clazz(), method_name, &has_method));
-            if (has_method) {
-                RETURN_IF_ERROR(
-                        _func_desc->analyzer->get_signature(_func_desc->udf_class.clazz(), method_name, &signature));
-                RETURN_IF_ERROR(_func_desc->analyzer->get_method_desc(signature, &mtdesc));
-                *res = std::make_unique<JavaMethodDescriptor>();
-                (*res)->name = std::move(method_name);
-                (*res)->signature = std::move(signature);
-                (*res)->method_desc = std::move(mtdesc);
-                ASSIGN_OR_RETURN((*res)->method,
-                                 _func_desc->analyzer->get_method_object(_func_desc->udf_class.clazz(), name));
-            }
-            return Status::OK();
+    // cacheable
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto get_func_desc = [this, scope, context, state](const std::string& lib) -> StatusOr<std::any> {
+            std::any func_desc;
+            auto call = [&]() {
+                ASSIGN_OR_RETURN(func_desc, _build_udf_func_desc(context, scope, lib));
+                return Status::OK();
+            };
+            RETURN_IF_ERROR(call_function_in_pthread(state, call)->get_future().get());
+            return func_desc;
         };
 
-        // Now we don't support prepare/close for UDF
-        // RETURN_IF_ERROR(add_method("prepare", &_func_desc->prepare));
-        // RETURN_IF_ERROR(add_method("method_close", &_func_desc->close));
-        RETURN_IF_ERROR(add_method("evaluate", &_func_desc->evaluate));
-
-        // create UDF function instance
-        ASSIGN_OR_RETURN(_func_desc->udf_handle, _func_desc->udf_class.newInstance());
-        // BatchEvaluateStub
-        auto* stub_clazz = BatchEvaluateStub::stub_clazz_name;
-        auto* stub_method_name = BatchEvaluateStub::batch_evaluate_method_name;
-        auto udf_clazz = _func_desc->udf_class.clazz();
-        auto update_method = _func_desc->evaluate->method.handle();
-
-        ASSIGN_OR_RETURN(auto update_stub_clazz,
-                         _func_desc->udf_classloader->genCallStub(stub_clazz, udf_clazz, update_method,
-                                                                  ClassLoader::BATCH_EVALUATE));
-        ASSIGN_OR_RETURN(auto method,
-                         _func_desc->analyzer->get_method_object(update_stub_clazz.clazz(), stub_method_name));
-        auto function_ctx = context->fn_context(_fn_context_index);
-        _func_desc->call_stub =
-                std::make_unique<BatchEvaluateStub>(function_ctx, _func_desc->udf_handle.handle(),
-                                                    std::move(update_stub_clazz), JavaGlobalRef(std::move(method)));
+        auto function_cache = UserFunctionCache::instance();
+        if (_fn.__isset.isolated && !_fn.isolated) {
+            ASSIGN_OR_RETURN(auto desc, function_cache->load_cacheable_java_udf(_fn.fid, _fn.hdfs_location,
+                                                                                _fn.checksum, get_func_desc));
+            _func_desc = std::any_cast<std::shared_ptr<JavaUDFContext>>(desc);
+        } else {
+            std::string libpath;
+            RETURN_IF_ERROR(function_cache->get_libpath(_fn.fid, _fn.hdfs_location, _fn.checksum, &libpath));
+            ASSIGN_OR_RETURN(auto desc, get_func_desc(libpath));
+            _func_desc = std::any_cast<std::shared_ptr<JavaUDFContext>>(desc);
+        }
 
         _call_helper = std::make_shared<UDFFunctionCallHelper>();
         _call_helper->fn_desc = _func_desc.get();
         _call_helper->call_desc = _func_desc->evaluate.get();
-
-        if (_func_desc->prepare != nullptr) {
-            // we only support fragment local scope to call prepare
-            if (scope == FunctionContext::FRAGMENT_LOCAL) {
-                // TODO: handle prepare function
-            }
-        }
-        return Status::OK();
-    };
-    if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        RETURN_IF_ERROR(call_function_in_pthread(state, open_state)->get_future().get());
     }
     return Status::OK();
 }
@@ -255,20 +272,10 @@ void JavaFunctionCallExpr::close(RuntimeState* state, ExprContext* context, Func
         }
         return Status::OK();
     };
-    call_function_in_pthread(state, function_close)->get_future().get();
+    (void)call_function_in_pthread(state, function_close)->get_future().get();
     Expr::close(state, context, scope);
 }
 
-void JavaFunctionCallExpr::_call_udf_close() {
-    auto& helper = JVMFunctionHelper::getInstance();
-    JNIEnv* env = helper.getEnv();
-    jmethodID methodID = env->GetMethodID(_func_desc->udf_class.clazz(), _func_desc->close->name.c_str(),
-                                          _func_desc->close->signature.c_str());
-    env->CallVoidMethod(_func_desc->udf_handle.handle(), methodID);
-    if (jthrowable jthr = env->ExceptionOccurred(); jthr) {
-        LOG(WARNING) << "Exception occur:" << helper.dumpExceptionString(jthr);
-        env->ExceptionClear();
-    }
-}
+void JavaFunctionCallExpr::_call_udf_close() {}
 
 } // namespace starrocks

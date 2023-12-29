@@ -7,3 +7,99 @@ alter table t distributed by hash(k);
 function: wait_optimize_table_finish()
 select * from t;
 show partitions from t;
+
+-- name: test_optimize_table_by_partition_name
+CREATE TABLE `duplicate_table_with_null_partition` (
+    `k1` date,
+    `k2` datetime,
+    `k3` char(20),
+    `k4` varchar(20),
+    `k5` boolean,
+    `k6` tinyint,
+    `k7` smallint,
+    `k8` int,
+    `k9` bigint,
+    `k10` largeint,
+    `k11` float,
+    `k12` double,
+    `k13` decimal(27,9)
+)
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)
+COMMENT "OLAP"
+PARTITION BY RANGE(`k1`)
+(
+    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
+)
+DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "3",
+    "storage_format" = "v2"
+);
+alter table duplicate_table_with_null_partition PARTITIONS(p202006,p202007,p202008) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 4;
+function: wait_optimize_table_finish()
+
+-- name: test_change_no_partition_distribution
+create table t(k int) distributed by hash(k) buckets 10;
+insert into t values(1),(2),(3);
+select * from t;
+
+alter table t distributed by hash(k) buckets 4;
+function: wait_optimize_table_finish()
+show create table t;
+select * from t;
+
+alter table t distributed by random;
+function: wait_optimize_table_finish()
+show create table t;
+select * from t;
+
+-- name: test_change_partition_distribution
+create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
+(
+    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
+) distributed by hash(k) buckets 10;
+insert into t values(1, '2020-06-01'),(2, '2020-07-01'),(3, '2020-08-01');
+
+alter table t distributed by hash(k) buckets 4;
+function: wait_optimize_table_finish()
+show create table t;
+select * from t;
+
+alter table t distributed by hash(k);
+function: wait_optimize_table_finish()
+show create table t;
+select * from t;
+
+alter table t distributed by hash(k1) buckets 4;
+function: wait_optimize_table_finish()
+show create table t;
+select * from t;
+
+alter table t distributed by random;
+function: wait_optimize_table_finish()
+show create table t;
+select * from t;
+
+-- name: test_change_partial_partition_distribution
+create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
+(
+    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
+) distributed by hash(k) buckets 10;
+insert into t values(1, '2020-06-01'),(2, '2020-07-01'),(3, '2020-08-01');
+
+alter table t partitions(p202006,p202008) distributed by hash(k) buckets 4;
+function: wait_optimize_table_finish()
+show create table t;
+select * from t;
+
+alter table t partitions(p202006,p202008) distributed by hash(k1) buckets 4;
+show create table t;
+
+alter table t partitions(p202006,p202008) distributed by random;
+show create table t;

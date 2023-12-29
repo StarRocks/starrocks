@@ -61,6 +61,11 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
         // this is a load plan, and load is not finished, just make a brief report
         runtime_state->update_report_load_status(&params);
         params.__set_load_type(runtime_state->query_options().load_job_type);
+
+        if (query_ctx->enable_profile()) {
+            profile->to_thrift(&params.profile);
+            params.__isset.profile = true;
+        }
     } else {
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
             runtime_state->update_report_load_status(&params);
@@ -300,8 +305,7 @@ ExecStateReporter::ExecStateReporter() {
 }
 
 void ExecStateReporter::submit(std::function<void()>&& report_task) {
-    auto st = _thread_pool->submit_func(std::move(report_task));
-    st.permit_unchecked_error();
+    (void)_thread_pool->submit_func(std::move(report_task));
 }
 
 } // namespace starrocks::pipeline

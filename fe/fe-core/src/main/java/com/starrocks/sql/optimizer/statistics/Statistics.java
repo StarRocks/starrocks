@@ -49,7 +49,11 @@ public class Statistics {
         boolean nonEmpty = false;
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
             if (outputColumns.contains(entry.getKey().getId())) {
-                totalSize += entry.getValue().getAverageRowSize();
+                if (!entry.getValue().isUnknown()) {
+                    totalSize += entry.getValue().getAverageRowSize();
+                } else {
+                    totalSize += entry.getKey().getType().getTypeSize();
+                }
                 nonEmpty = true;
             }
         }
@@ -61,8 +65,15 @@ public class Statistics {
 
     public double getComputeSize() {
         // Make it at least 1 byte, otherwise the cost model would propagate estimate error
-        return Math.max(1.0, this.columnStatistics.values().stream().map(ColumnStatistic::getAverageRowSize).
-                reduce(0.0, Double::sum)) * outputRowCount;
+        double totalSize = 0;
+        for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
+            if (!entry.getValue().isUnknown()) {
+                totalSize += entry.getValue().getAverageRowSize();
+            } else {
+                totalSize += entry.getKey().getType().getTypeSize();
+            }
+        }
+        return Math.max(totalSize, 1.0) * outputRowCount;
     }
 
     public ColumnStatistic getColumnStatistic(ColumnRefOperator column) {

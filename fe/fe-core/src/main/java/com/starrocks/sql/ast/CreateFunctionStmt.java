@@ -60,6 +60,7 @@ public class CreateFunctionStmt extends DdlStmt {
     public static final String SYMBOL_KEY = "symbol";
     public static final String MD5_CHECKSUM = "md5";
     public static final String TYPE_KEY = "type";
+    public static final String ISOLATION_KEY = "isolation";
     public static final String TYPE_STARROCKS_JAR = "StarrocksJar";
     public static final String EVAL_METHOD_NAME = "evaluate";
     public static final String CREATE_METHOD_NAME = "create";
@@ -89,6 +90,7 @@ public class CreateFunctionStmt extends DdlStmt {
     private String objectFile;
     private Function function;
     private String checksum;
+    private String isolation;
 
     private static final ImmutableMap<PrimitiveType, Class> PRIMITIVE_TYPE_TO_JAVA_CLASS_TYPE =
             new ImmutableMap.Builder<PrimitiveType, Class>()
@@ -321,7 +323,7 @@ public class CreateFunctionStmt extends DdlStmt {
         argsDef.analyze();
         returnType.analyze();
 
-        intermediateType = TypeDef.createVarchar(ScalarType.MAX_VARCHAR_LENGTH);
+        intermediateType = TypeDef.createVarchar(ScalarType.OLAP_MAX_VARCHAR_LENGTH);
 
         String type = properties.get(TYPE_KEY);
         if (TYPE_STARROCKS_JAR.equals(type)) {
@@ -332,6 +334,9 @@ public class CreateFunctionStmt extends DdlStmt {
         if (Strings.isNullOrEmpty(objectFile)) {
             throw new AnalysisException("No 'object_file' in properties");
         }
+
+        isolation = properties.get(ISOLATION_KEY);
+
         try {
             computeObjectChecksum();
         } catch (IOException | NoSuchAlgorithmException e) {
@@ -420,7 +425,7 @@ public class CreateFunctionStmt extends DdlStmt {
         function = ScalarFunction.createUdf(
                 functionName, argsDef.getArgTypes(),
                 returnType.getType(), argsDef.isVariadic(), TFunctionBinaryType.SRJAR,
-                objectFile, mainClass.getCanonicalName(), "", "");
+                objectFile, mainClass.getCanonicalName(), "", "", !"shared".equalsIgnoreCase(isolation));
         function.setChecksum(checksum);
     }
 

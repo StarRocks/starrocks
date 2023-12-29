@@ -1,0 +1,20 @@
+-- name: test_select_into_outfile
+
+-- src table
+create table t1 (c1 int, c2 binary);
+insert into t1 select 1, bitmap_to_binary(bitmap_agg(generate_series)) from TABLE(generate_series(1,10));
+
+-- output
+select * from t1 into outfile "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/" format as parquet;
+
+-- insert into binary table
+create table t2 (c1 int, c2 binary);
+
+-- input
+insert into t2 select * from files (
+    "path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/*",
+    "format" = "parquet"
+);
+select c1, bitmap_to_string(bitmap_from_binary(c2)) from t2;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/test_files_sink/${uuid0} >/dev/null || echo "exit 0" >/dev/null

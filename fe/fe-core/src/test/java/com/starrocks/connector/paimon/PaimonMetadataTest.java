@@ -89,9 +89,7 @@ public class PaimonMetadataTest {
 
     @Before
     public void setUp() {
-
-        this.metadata = new PaimonMetadata("paimon_catalog", new HdfsEnvironment(), paimonNativeCatalog,
-                "filesystem", null, "hdfs://127.0.0.1:9999/warehouse");
+        this.metadata = new PaimonMetadata("paimon_catalog", new HdfsEnvironment(), paimonNativeCatalog);
 
         BinaryRow row1 = new BinaryRow(2);
         BinaryRowWriter writer = new BinaryRowWriter(row1, 10);
@@ -155,6 +153,17 @@ public class PaimonMetadataTest {
         Assert.assertTrue(paimonTable.getBaseSchema().get(1).isAllowNull());
         Assert.assertEquals("paimon_catalog", paimonTable.getCatalogName());
         Assert.assertEquals("paimon_catalog.db1.tbl1.0", paimonTable.getUUID());
+    }
+
+    @Test
+    public void testTableExists(@Mocked AbstractFileStoreTable paimonNativeTable) {
+        new Expectations() {
+            {
+                paimonNativeCatalog.tableExists((Identifier) any);
+                result = true;
+            }
+        };
+        Assert.assertTrue(metadata.tableExists("db1", "tbl1"));
     }
 
     @Test

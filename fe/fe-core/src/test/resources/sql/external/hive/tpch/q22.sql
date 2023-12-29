@@ -1,48 +1,10 @@
-[sql]
-select
-    cntrycode,
-    count(*) as numcust,
-    sum(c_acctbal) as totacctbal
-from
-    (
-        select
-            substring(c_phone , 1  ,2) as cntrycode,
-            c_acctbal
-        from
-            customer
-        where
-                substring(c_phone , 1  ,2)  in
-                ('21', '28', '24', '32', '35', '34', '37')
-          and c_acctbal > (
-            select
-                avg(c_acctbal)
-            from
-                customer
-            where
-                    c_acctbal > 0.00
-              and substring(c_phone , 1  ,2)  in
-                  ('21', '28', '24', '32', '35', '34', '37')
-        )
-          and not exists (
-                select
-                    *
-                from
-                    orders
-                where
-                        o_custkey = c_custkey
-            )
-    ) as custsale
-group by
-    cntrycode
-order by
-    cntrycode ;
 [fragment statistics]
 PLAN FRAGMENT 0(F09)
 Output Exprs:29: substring | 30: count | 31: sum
 Input Partition: UNPARTITIONED
 RESULT SINK
 
-18:MERGING-EXCHANGE
+19:MERGING-EXCHANGE
 distribution type: GATHER
 cardinality: 1500000
 column statistics:
@@ -54,9 +16,9 @@ PLAN FRAGMENT 1(F08)
 
 Input Partition: HASH_PARTITIONED: 29: substring
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 18
+OutPut Exchange Id: 19
 
-17:SORT
+18:SORT
 |  order by: [29, VARCHAR, true] ASC
 |  offset: 0
 |  cardinality: 1500000
@@ -65,8 +27,8 @@ OutPut Exchange Id: 18
 |  * count-->[0.0, 1500000.0, 0.0, 8.0, 1500000.0] ESTIMATE
 |  * sum-->[-1380.4847206423183, 13804.97145129049, 0.0, 8.0, 1086564.0] ESTIMATE
 |
-16:AGGREGATE (update finalize)
-|  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; result nullable: false], sum[([6: c_acctbal, DECIMAL64(15,2), true]); args: DECIMAL64; result: DECIMAL128(38,2); args nullable: true; result nullable: true]
+17:AGGREGATE (merge finalize)
+|  aggregate: count[([30: count, BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false], sum[([31: sum, DECIMAL128(38,2), true]); args: DECIMAL64; result: DECIMAL128(38,2); args nullable: true; result nullable: true]
 |  group by: [29: substring, VARCHAR, true]
 |  cardinality: 1500000
 |  column statistics:
@@ -74,7 +36,7 @@ OutPut Exchange Id: 18
 |  * count-->[0.0, 1500000.0, 0.0, 8.0, 1500000.0] ESTIMATE
 |  * sum-->[-1380.4847206423183, 13804.97145129049, 0.0, 8.0, 1086564.0] ESTIMATE
 |
-15:EXCHANGE
+16:EXCHANGE
 distribution type: SHUFFLE
 partition exprs: [29: substring, VARCHAR, true]
 cardinality: 1500000
@@ -83,8 +45,18 @@ PLAN FRAGMENT 2(F07)
 
 Input Partition: HASH_PARTITIONED: 20: o_custkey
 OutPut Partition: HASH_PARTITIONED: 29: substring
-OutPut Exchange Id: 15
+OutPut Exchange Id: 16
 
+15:AGGREGATE (update serialize)
+|  STREAMING
+|  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; result nullable: false], sum[([6: c_acctbal, DECIMAL64(15,2), true]); args: DECIMAL64; result: DECIMAL128(38,2); args nullable: true; result nullable: true]
+|  group by: [29: substring, VARCHAR, true]
+|  cardinality: 1500000
+|  column statistics:
+|  * substring-->[-Infinity, Infinity, 0.0, 15.0, 3750000.0] ESTIMATE
+|  * count-->[0.0, 1500000.0, 0.0, 8.0, 1500000.0] ESTIMATE
+|  * sum-->[-1380.4847206423183, 13804.97145129049, 0.0, 8.0, 1086564.0] ESTIMATE
+|
 14:Project
 |  output columns:
 |  6 <-> [6: c_acctbal, DECIMAL64(15,2), true]
@@ -228,4 +200,3 @@ probe runtime filters:
 column statistics:
 * o_custkey-->[1.0, 1.5E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
 [end]
-

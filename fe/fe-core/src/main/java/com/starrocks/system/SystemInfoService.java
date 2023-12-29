@@ -57,7 +57,14 @@ import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.NetUtils;
+import com.starrocks.datacache.DataCacheMetrics;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.CancelDecommissionDiskInfo;
+import com.starrocks.persist.CancelDisableDiskInfo;
+import com.starrocks.persist.DecommissionDiskInfo;
+import com.starrocks.persist.DisableDiskInfo;
 import com.starrocks.persist.DropComputeNodeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -106,8 +113,8 @@ public class SystemInfoService implements GsonPostProcessable {
     @SerializedName(value = "ce")
     private volatile ConcurrentHashMap<Long, ComputeNode> idToComputeNodeRef;
 
-    private long lastBackendIdForCreation = -1;
-    private long lastBackendIdForOther = -1;
+    private long lastNodeIdForCreation = -1;
+    private long lastNodeIdForOther = -1;
 
     private volatile ImmutableMap<Long, AtomicLong> idToReportVersionRef;
     private volatile ImmutableMap<Long, DiskInfo> pathHashToDishInfoRef;
@@ -263,7 +270,7 @@ public class SystemInfoService implements GsonPostProcessable {
         String opMessage;
         formatSb.append("%s:%d's host has been modified to %s");
         if (candidateBackends.size() >= 2) {
-            formatSb.append("\nplease exectue %d times, to modify the remaining backends\n");
+            formatSb.append("\nplease execute %d times, to modify the remaining backends\n");
             for (int i = 1; i < candidateBackends.size(); i++) {
                 Backend be = candidateBackends.get(i);
                 formatSb.append(be.getHost() + ":" + be.getHeartbeatPort() + "\n");
@@ -308,7 +315,7 @@ public class SystemInfoService implements GsonPostProcessable {
         BackendCoreStat.removeNumOfHardwareCoresOfBe(dropComputeNode.getId());
 
         // remove worker
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             long starletPort = dropComputeNode.getStarletPort();
             // only need to remove worker after be reported its staretPort
             if (starletPort != 0) {
@@ -355,7 +362,8 @@ public class SystemInfoService implements GsonPostProcessable {
         List<Long> dbs = globalStateMgr.getDbIds();
 
         dbs.stream().map(globalStateMgr::getDb).forEach(db -> {
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 db.getTables().stream()
                         .filter(table -> table.isOlapTableOrMaterializedView())
@@ -383,7 +391,7 @@ public class SystemInfoService implements GsonPostProcessable {
                             });
                         });
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         });
     }
@@ -415,7 +423,7 @@ public class SystemInfoService implements GsonPostProcessable {
         BackendCoreStat.removeNumOfHardwareCoresOfBe(droppedBackend.getId());
 
         // remove worker
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             long starletPort = droppedBackend.getStarletPort();
             // only need to remove worker after be reported its staretPort
             if (starletPort != 0) {
@@ -430,6 +438,127 @@ public class SystemInfoService implements GsonPostProcessable {
 
         // backends is changed, regenerated tablet number metrics
         MetricRepo.generateBackendsTabletMetrics();
+    }
+
+    private Backend getBackendByHostPort(String hostPort) throws DdlException {
+        String[] items = hostPort.split(":");
+        if (items.length != 2) {
+            throw new DdlException("invalid BE format: " + hostPort + ", host and port should be separated by ':'");
+        }
+
+        int port;
+        try {
+            port = Integer.parseInt(items[1]);
+        } catch (NumberFormatException e) {
+            throw new DdlException("invalid port format: " + items[1]);
+        }
+
+        Backend backend = getBackendWithHeartbeatPort(items[0], port);
+        if (backend == null) {
+            throw new DdlException("Backend: " + hostPort + " does not exist");
+        }
+        return backend;
+    }
+
+    public void decommissionDisks(String beHostPort, List<String> diskList) throws DdlException {
+        Backend backend = getBackendByHostPort(beHostPort);
+        for (String disk : diskList) {
+            backend.decommissionDisk(disk);
+        }
+
+        GlobalStateMgr.getCurrentState().getEditLog()
+                .logDecommissionDisk(new DecommissionDiskInfo(backend.getId(), diskList));
+    }
+
+    public void cancelDecommissionDisks(String beHostPort, List<String> diskList) throws DdlException {
+        Backend backend = getBackendByHostPort(beHostPort);
+        for (String disk : diskList) {
+            backend.cancelDecommissionDisk(disk);
+        }
+
+        GlobalStateMgr.getCurrentState().getEditLog()
+                .logCancelDecommissionDisk(new CancelDecommissionDiskInfo(backend.getId(), diskList));
+    }
+
+    public void disableDisks(String beHostPort, List<String> diskList) throws DdlException {
+        Backend backend = getBackendByHostPort(beHostPort);
+        for (String disk : diskList) {
+            backend.disableDisk(disk);
+        }
+
+        GlobalStateMgr.getCurrentState().getEditLog().logDisableDisk(new DisableDiskInfo(backend.getId(), diskList));
+    }
+
+    public void cancelDisableDisks(String beHostPort, List<String> diskList) throws DdlException {
+        Backend backend = getBackendByHostPort(beHostPort);
+        for (String disk : diskList) {
+            backend.cancelDisableDisk(disk);
+        }
+
+        GlobalStateMgr.getCurrentState().getEditLog()
+                .logCancelDisableDisk(new CancelDisableDiskInfo(backend.getId(), diskList));
+    }
+
+    public void replayDecommissionDisks(DecommissionDiskInfo info) {
+        Backend backend = getBackend(info.getBeId());
+        if (backend == null) {
+            LOG.warn("replay decommission disk failed, backend:{} does not exist", info.getBeId());
+            return;
+        }
+        for (String disk : info.getDiskList()) {
+            try {
+                backend.decommissionDisk(disk);
+            } catch (DdlException e) {
+                LOG.warn("replay decommission disk failed", e);
+            }
+        }
+    }
+
+    public void replayCancelDecommissionDisks(CancelDecommissionDiskInfo info) {
+        Backend backend = getBackend(info.getBeId());
+        if (backend == null) {
+            LOG.warn("replay cancel decommission disk failed, backend:{} does not exist", info.getBeId());
+            return;
+        }
+        for (String disk : info.getDiskList()) {
+            try {
+                backend.cancelDecommissionDisk(disk);
+            } catch (DdlException e) {
+                LOG.warn("replay cancel decommission disk failed", e);
+            }
+        }
+    }
+
+    public void replayDisableDisks(DisableDiskInfo info) {
+        Backend backend = getBackend(info.getBeId());
+        if (backend == null) {
+            LOG.warn("replay disable disk failed, backend:{} does not exist", info.getBeId());
+            return;
+        }
+
+        for (String disk : info.getDiskList()) {
+            try {
+                backend.disableDisk(disk);
+            } catch (DdlException e) {
+                LOG.warn("replay disable disk failed", e);
+            }
+        }
+    }
+
+    public void replayCancelDisableDisks(CancelDisableDiskInfo info) {
+        Backend backend = getBackend(info.getBeId());
+        if (backend == null) {
+            LOG.warn("replay cancel disable disk failed, backend:{} does not exist", info.getBeId());
+            return;
+        }
+
+        for (String disk : info.getDiskList()) {
+            try {
+                backend.cancelDisableDisk(disk);
+            } catch (DdlException e) {
+                LOG.warn("replay cancel disable disk failed", e);
+            }
+        }
     }
 
     // only for test
@@ -454,6 +583,15 @@ public class SystemInfoService implements GsonPostProcessable {
             backend = idToComputeNodeRef.get(nodeId);
         }
         return backend;
+    }
+
+    public void updateDataCacheMetrics(long backendId, DataCacheMetrics dataCacheMetrics) {
+        ComputeNode node = getBackendOrComputeNode(backendId);
+        if (node == null) {
+            LOG.warn("updateDataCacheMetrics receives a non-exist backend/compute [id={}]", backendId);
+            return;
+        }
+        node.updateDataCacheMetrics(dataCacheMetrics);
     }
 
     public void updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,
@@ -615,6 +753,11 @@ public class SystemInfoService implements GsonPostProcessable {
         return idToBackendRef.size();
     }
 
+    public int getTotalComputeNodeNumber() {
+        return idToComputeNodeRef.size();
+    }
+
+
     public int getAliveComputeNodeNumber() {
         return getComputeNodeIds(true).size();
     }
@@ -705,12 +848,18 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public List<Backend> getAvailableBackends() {
         return getBackends().stream()
-                .filter(v -> v.isAvailable())
+                .filter(ComputeNode::isAvailable)
                 .collect(Collectors.toList());
     }
 
     public List<ComputeNode> getComputeNodes() {
         return Lists.newArrayList(idToComputeNodeRef.values());
+    }
+
+    public List<ComputeNode> getAvailableComputeNodes() {
+        return getComputeNodes().stream()
+                .filter(ComputeNode::isAvailable)
+                .collect(Collectors.toList());
     }
 
     public Stream<ComputeNode> backendAndComputeNodeStream() {
@@ -721,24 +870,53 @@ public class SystemInfoService implements GsonPostProcessable {
                                                          TStorageMedium storageMedium) {
 
         return seqChooseBackendIds(backendNum, needAvailable, isCreate,
-                v -> !v.diskExceedLimitByStorageMedium(storageMedium));
+                v -> !v.checkDiskExceedLimitForCreate(storageMedium));
+    }
+
+    public Long seqChooseBackendOrComputeId() throws UserException {
+        List<Long> backendIds = seqChooseBackendIds(1, true, false);
+        if (CollectionUtils.isNotEmpty(backendIds)) {
+            return backendIds.get(0);
+        }
+        if (RunMode.isSharedNothingMode()) {
+            throw new UserException("No backend alive.");
+        }
+        List<Long> computeNodes = seqChooseComputeNodes(1, true, false);
+        if (CollectionUtils.isNotEmpty(computeNodes)) {
+            return computeNodes.get(0);
+        }
+        throw new UserException("No backend or compute node alive.");
     }
 
     public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate) {
 
-        return seqChooseBackendIds(backendNum, needAvailable, isCreate, v -> !v.diskExceedLimit());
+        if (isCreate) {
+            return seqChooseBackendIds(backendNum, needAvailable, true, v -> !v.checkDiskExceedLimitForCreate());
+        } else {
+            return seqChooseBackendIds(backendNum, needAvailable, false, v -> !v.checkDiskExceedLimit());
+        }
+    }
+
+    public List<Long> seqChooseComputeNodes(int computeNodeNum, boolean needAvailable, boolean isCreate) {
+
+        final List<ComputeNode> candidateComputeNodes = needAvailable ? getAvailableComputeNodes() : getComputeNodes();
+        if (CollectionUtils.isEmpty(candidateComputeNodes)) {
+            LOG.warn("failed to find any compute nodes, needAvailable={}", needAvailable);
+            return Collections.emptyList();
+        }
+
+        return seqChooseNodeIds(computeNodeNum, isCreate, candidateComputeNodes);
     }
 
     private List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate,
                                            Predicate<? super Backend> predicate) {
-
         final List<Backend> candidateBackends = needAvailable ? getAvailableBackends() : getBackends();
         if (CollectionUtils.isEmpty(candidateBackends)) {
             LOG.warn("failed to find any backend, needAvailable={}", needAvailable);
             return Collections.emptyList();
         }
 
-        final List<Backend> filteredBackends = candidateBackends.stream()
+        final List<ComputeNode> filteredBackends = candidateBackends.stream()
                 .filter(predicate)
                 .collect(Collectors.toList());
 
@@ -752,66 +930,66 @@ public class SystemInfoService implements GsonPostProcessable {
                     candidateBackends.size(), needAvailable, backendInfo);
             return Collections.emptyList();
         }
-        return seqChooseBackendIds(backendNum, isCreate, filteredBackends);
+        return seqChooseNodeIds(backendNum, isCreate, filteredBackends);
     }
 
     /**
-     * choose backends by round-robin
+     * choose nodes by round-robin
      *
-     * @param backendNum  number of backend wanted
-     * @param isCreate    last backend id for creation
-     * @param srcBackends list of the candidate backends
-     * @return empty list if not enough backend, otherwise return a list of backend's id
+     * @param nodeNum  number of node wanted
+     * @param isCreate last node id for creation
+     * @param srcNodes list of the candidate nodes
+     * @return empty list if not enough node, otherwise return a list of node's id
      */
-    public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean isCreate, final List<Backend> srcBackends) {
+    public synchronized List<Long> seqChooseNodeIds(int nodeNum, boolean isCreate, final List<ComputeNode> srcNodes) {
 
-        long lastBackendId;
+        long lastNodeId;
 
         if (isCreate) {
-            lastBackendId = lastBackendIdForCreation;
+            lastNodeId = lastNodeIdForCreation;
         } else {
-            lastBackendId = lastBackendIdForOther;
+            lastNodeId = lastNodeIdForOther;
         }
 
         // host -> BE list
-        Map<String, List<Backend>> backendMaps = Maps.newHashMap();
-        for (Backend backend : srcBackends) {
-            String host = backend.getHost();
+        Map<String, List<ComputeNode>> nodeMaps = Maps.newHashMap();
+        for (ComputeNode node : srcNodes) {
+            String host = node.getHost();
 
-            if (!backendMaps.containsKey(host)) {
-                backendMaps.put(host, Lists.newArrayList());
+            if (!nodeMaps.containsKey(host)) {
+                nodeMaps.put(host, Lists.newArrayList());
             }
 
-            backendMaps.get(host).add(backend);
+            nodeMaps.get(host).add(node);
         }
 
         // if more than one backend exists in same host, select a backend at random
-        List<Backend> backends = Lists.newArrayList();
-        for (List<Backend> list : backendMaps.values()) {
+        List<ComputeNode> nodes = Lists.newArrayList();
+        for (List<ComputeNode> list : nodeMaps.values()) {
             Collections.shuffle(list);
-            backends.add(list.get(0));
+            nodes.add(list.get(0));
         }
 
-        List<Long> backendIds = Lists.newArrayList();
-        // get last backend index
-        int lastBackendIndex = -1;
+        List<Long> nodeIds = Lists.newArrayList();
+        // get last node index
+        int lastNodeIndex = -1;
         int index = -1;
-        for (Backend backend : backends) {
+        for (ComputeNode node : nodes) {
             index++;
-            if (backend.getId() == lastBackendId) {
-                lastBackendIndex = index;
+            if (node.getId() == lastNodeId) {
+                lastNodeIndex = index;
                 break;
             }
         }
-        Iterator<Backend> iterator = Iterators.cycle(backends);
+        Iterator<ComputeNode> iterator = Iterators.cycle(nodes);
         index = -1;
         boolean failed = false;
         // 2 cycle at most
-        int maxIndex = 2 * backends.size();
-        while (iterator.hasNext() && backendIds.size() < backendNum) {
-            Backend backend = iterator.next();
+        int maxIndex = 2 * nodes.size();
+        while (iterator.hasNext() && nodeIds.size() < nodeNum) {
+            ComputeNode node = iterator.next();
             index++;
-            if (index <= lastBackendIndex) {
+            if (index <= lastNodeIndex) {
                 continue;
             }
 
@@ -820,34 +998,34 @@ public class SystemInfoService implements GsonPostProcessable {
                 break;
             }
 
-            long backendId = backend.getId();
-            if (!backendIds.contains(backendId)) {
-                backendIds.add(backendId);
-                lastBackendId = backendId;
+            long nodeId = node.getId();
+            if (!nodeIds.contains(nodeId)) {
+                nodeIds.add(nodeId);
+                lastNodeId = nodeId;
             } else {
                 failed = true;
                 break;
             }
         }
 
-        if (backendIds.size() != backendNum) {
+        if (nodeIds.size() != nodeNum) {
             failed = true;
         }
 
         if (failed) {
             // debug: print backend info when the selection failed
-            for (Backend backend : backends) {
-                LOG.debug("random select: {}", backend);
+            for (ComputeNode node : nodes) {
+                LOG.debug("random select: {}", node);
             }
             return Collections.emptyList();
         }
 
         if (isCreate) {
-            lastBackendIdForCreation = lastBackendId;
+            lastNodeIdForCreation = lastNodeId;
         } else {
-            lastBackendIdForOther = lastBackendId;
+            lastNodeIdForOther = lastNodeId;
         }
-        return backendIds;
+        return nodeIds;
     }
 
     public ImmutableMap<Long, Backend> getIdToBackend() {
@@ -868,17 +1046,21 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void updateBackendReportVersion(long backendId, long newReportVersion, long dbId) {
-        AtomicLong atomicLong = null;
-        if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-            if (db != null) {
-                atomicLong.set(newReportVersion);
-                LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
+        ComputeNode node = getBackendOrComputeNode(backendId);
+        // only backend need to report version
+        if (node != null && (node instanceof Backend)) {
+            AtomicLong atomicLong = null;
+            if ((atomicLong = idToReportVersionRef.get(backendId)) != null) {
+                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                if (db != null) {
+                    atomicLong.set(newReportVersion);
+                    LOG.debug("update backend {} report version: {}, db: {}", backendId, newReportVersion, dbId);
+                } else {
+                    LOG.warn("failed to update backend report version, db {} does not exist", dbId);
+                }
             } else {
-                LOG.warn("failed to update backend report version, db {} does not exist", dbId);
+                LOG.warn("failed to update backend report version, backend {} does not exist", backendId);
             }
-        } else {
-            LOG.warn("failed to update backend report version, backend {} does not exist", backendId);
         }
     }
 
@@ -1018,7 +1200,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         // clear map in starosAgent
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             long starletPort = cn.getStarletPort();
             if (starletPort == 0) {
                 return;
@@ -1045,7 +1227,7 @@ public class SystemInfoService implements GsonPostProcessable {
         }
 
         // clear map in starosAgent
-        if (RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedDataMode()) {
             long starletPort = backend.getStarletPort();
             if (starletPort == 0) {
                 return;
@@ -1097,7 +1279,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void checkClusterCapacity() throws DdlException {
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             return;
         }
 

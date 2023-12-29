@@ -44,6 +44,7 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
@@ -158,6 +159,8 @@ public class FileScanNode extends LoadScanNode {
     // 3. use vectorized engine
     private boolean useVectorizedLoad;
 
+    private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
+
     private boolean nullExprInAutoIncrement;
     private static class ParamCreateContext {
         public BrokerFileGroup fileGroup;
@@ -258,6 +261,10 @@ public class FileScanNode extends LoadScanNode {
         this.useVectorizedLoad = useVectorizedLoad;
     }
 
+    public void setJSONOptions(LoadJob.JSONOptions options) {
+        this.jsonOptions = options;
+    }
+
     public boolean nullExprInAutoIncrement() {
         return nullExprInAutoIncrement;
     }
@@ -303,6 +310,7 @@ public class FileScanNode extends LoadScanNode {
         params.setTrim_space(fileGroup.isTrimspace());
         params.setEnclose(fileGroup.getEnclose());
         params.setEscape(fileGroup.getEscape());
+        params.setJson_file_size_limit(Config.json_file_size_limit);
         initColumns(context);
         initWhereExpr(fileGroup.getWhereExpr(), analyzer);
     }
@@ -415,6 +423,7 @@ public class FileScanNode extends LoadScanNode {
         context.params.setSrc_tuple_id(context.tupleDescriptor.getId().asInt());
         context.params.setDest_tuple_id(desc.getId().asInt());
         context.params.setStrict_mode(strictMode);
+        context.params.setJson_file_size_limit(Config.json_file_size_limit);
         // Need re compute memory layout after set some slot descriptor to nullable
         context.tupleDescriptor.computeMemLayout();
     }
@@ -512,7 +521,7 @@ public class FileScanNode extends LoadScanNode {
         nodes = Lists.newArrayList();
 
         // TODO: need to refactor after be split into cn + dn
-        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+        if (RunMode.isSharedDataMode()) {
             Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
             for (long cnId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
                 ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(cnId);
@@ -540,7 +549,10 @@ public class FileScanNode extends LoadScanNode {
                 return TFileFormatType.FORMAT_PARQUET;
             } else if (fileFormat.toLowerCase().equals("orc")) {
                 return TFileFormatType.FORMAT_ORC;
+            } else if (fileFormat.toLowerCase().equals("json")) {
+                return TFileFormatType.FORMAT_JSON;
             }
+            // Attention: The compression type of csv format is from the suffix of filename.
         }
 
         String lowerCasePath = path.toLowerCase();
@@ -603,6 +615,11 @@ public class FileScanNode extends LoadScanNode {
             TBrokerRangeDesc rangeDesc =
                     createBrokerRangeDesc(curFileOffset, fileStatus, formatType, rangeBytes, columnsFromPath,
                             numberOfColumnsFromFile);
+
+            rangeDesc.setStrip_outer_array(jsonOptions.stripOuterArray);
+            rangeDesc.setJsonpaths(jsonOptions.jsonPaths);
+            rangeDesc.setJson_root(jsonOptions.jsonRoot);
+
             brokerScanRange(smallestLocations.first).addToRanges(rangeDesc);
             smallestLocations.second += rangeBytes;
             locationsHeap.add(smallestLocations);

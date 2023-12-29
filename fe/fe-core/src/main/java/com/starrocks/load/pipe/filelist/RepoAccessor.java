@@ -17,6 +17,7 @@ package com.starrocks.load.pipe.filelist;
 import com.google.common.base.Preconditions;
 import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.thrift.TResultBatch;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -57,6 +58,24 @@ public class RepoAccessor {
             res = PipeFileRecord.fromResultBatch(batch);
         } catch (Exception e) {
             LOG.error("listUnloadedFiles failed", e);
+            throw e;
+        }
+        return res;
+    }
+
+    public PipeFileRecord listFilesByPath(long pipeId, String path) {
+        PipeFileRecord res = null;
+        try {
+            String sql = buildListFileByPath(pipeId, path);
+            List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
+            if (CollectionUtils.isEmpty(batch)) {
+                throw new IllegalArgumentException("file not found: " + path);
+            } else if (batch.size() > 1) {
+                throw new IllegalArgumentException("too many files found but expect 1: " + path);
+            }
+            res = PipeFileRecord.fromResultBatch(batch).get(0);
+        } catch (Exception e) {
+            LOG.error("listFilesByPath failed: pipeId={} path={}", pipeId, path, e);
             throw e;
         }
         return res;
@@ -137,6 +156,10 @@ public class RepoAccessor {
                         pipeId, Strings.quote(state.toString())) :
                 String.format(FileListTableRepo.SELECT_FILES_BY_STATE_WITH_LIMIT,
                         pipeId, Strings.quote(state.toString()), limit);
+    }
+
+    protected String buildListFileByPath(long pipeId, String path) {
+        return String.format(FileListTableRepo.SELECT_FILES_BY_PATH, pipeId, Strings.quote(path));
     }
 
     protected String buildDeleteByPipe(long pipeId) {

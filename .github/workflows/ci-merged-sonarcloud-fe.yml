@@ -10,7 +10,8 @@ on:
 
 jobs:
   sonarcloud-fe:
-    runs-on: [self-hosted, normal]
+    runs-on: ubuntu-latest
+    if: github.repository == 'StarRocks/starrocks'
     steps:
       - name: clean
         run: |
@@ -21,6 +22,18 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+
+      - name: Set up JDK 11
+        uses: actions/setup-java@v3
+        with:
+          java-version: 11
+          distribution: 'adopt'
+
       - name: Cache SonarCloud packages
         uses: actions/cache@v3
         with:
@@ -28,25 +41,28 @@ jobs:
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-maven
+
+      - name: Setup thrift
+        uses: dodopizza/setup-thrift@v1
+        with:
+          version: 0.13.0
+
       - name: Analyze FE
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: f0fb4d25c03bae90c2e994c45c29c49dc86fc169
         run: |
-          set -x
-          export JAVA_HOME=/var/local/env/jdk17.0.8;
-          export PATH=$JAVA_HOME/bin:/var/local/env/tools/maven/bin:$PATH;
-          export MAVEN_OPTS=-D"maven.repo.local"=/var/local/env/.m2/repository;
+          thrift --version
+          whereis thrift
           export STARROCKS_HOME=${{ github.workspace }}
           source env.sh
           mkdir -p thirdparty/installed/bin/
-          cd thirdparty/installed/bin/ && ln -s /var/local/env/tools/thrift_0.13/thrift thrift
+          cd thirdparty/installed/bin/ && ln -s /usr/local/bin/thrift thrift
           cd ${{ github.workspace }}/fe
-          sed -i 's#<tasks>#<target>#g' fe-core/pom.xml
-          sed -i 's#</tasks>#</target>#g' fe-core/pom.xml
           mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
-
-      - name: clean
-        if: always()
-        run: |
-          rm -rf ${{ github.workspace }}/*

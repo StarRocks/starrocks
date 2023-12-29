@@ -18,7 +18,6 @@
 package com.starrocks.task;
 
 public abstract class LoadEtlTask {
-    protected static final String QUALITY_FAIL_MSG = "quality not good enough to cancel";
     public static final String DPP_NORMAL_ALL = "dpp.norm.ALL";
     public static final String DPP_ABNORMAL_ALL = "dpp.abnorm.ALL";
 }

@@ -825,3 +825,55 @@ select array_intersect([row(1,2,3), row(3,4,5)], [row(3,4,5)]);
 select array_contains_all([row(1,2,3), row(3,4,5)], [row(3,4,5)]);
 select array_filter([row(1,2,3), row(3,4,5), row(4,5,6)], [0,1,0]);
 select cardinality([row(1,2,3), row(3,4,5)]);
+
+select array_contains_seq([1,2,3,4], [2,3]);
+select array_contains_seq([1,2,3,4], [3,2]);
+select array_contains_seq([1,2,3,4], [1,2,3]);
+select array_contains_seq([1,2,3,4], [1,2,4]);
+select array_contains_seq([], []);
+select array_contains_seq([1,null], [null]);
+select array_contains_seq([1.0,2,3,4], [1]);
+select array_contains_seq([cast(1.0 as decimal),2,3,4], [cast(1 as int)]);
+select array_contains_seq(['a','b','c'], ['a','b']);
+select array_contains_seq(['a','b','c'], ['a','c']);
+select array_contains_seq([[1, 2], [3, 4], [5, 6]], [[1, 2], [3, 4]]);
+select array_contains_seq([json_keys('{"a":1,"b":2}')], [json_keys('{"a":1}')]);
+select array_contains_seq([json_keys('{"a":1,"b":2}')], [json_keys('{"a":1,"b":2}')]);
+select array_contains_seq([map([1,2,5],[2,4,5])], [map([1,2,5],[2,4,5])]);
+select array_contains_seq([map([1,2,5],[2,4,5])], [map([1,2],[2,4])]);
+select array_contains_seq([1, 2, NULL, 3, 4], ['a']);
+select array_contains_seq([1, 2, NULL, 3, 4], [2,3]);
+select array_contains_seq([1, 2, NULL, 3, 4], null);
+select array_contains_seq(null, [2,3]);
+select array_contains_seq([1, 2, NULL, 3, 4], [null,null]);
+select array_contains_seq([1, 2, NULL], [null,2]);
+select array_contains_seq(null, null);
+select array_contains_seq([1, 1, 2, NULL], [1,2]);
+
+CREATE TABLE array_test_01 (
+pk bigint not null ,
+i_0   Array<BigInt>,
+i_1   Array<BigInt>,
+ai_0  Array<Array<BigInt>>,
+ai_1  Array<Array<BigInt>>
+) ENGINE=OLAP
+DUPLICATE KEY(`pk`)
+DISTRIBUTED BY HASH(`pk`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false"
+);
+insert into array_test_01 values
+(1,[null,1],[null],[null],[[]]),
+(2,[null],[1,3,4,5,1,2],[[null,1],null],[[1,null]]),
+(3,[],[],[[],null,[1,1]],[[1,1]]),
+(4,null,[],[[1,1]],[[1,1],null]),
+(5,[4,4,4],[4,null],[null],[null]),
+(6,[1,1,2,1,1,2,3,3],[1,2,3],[[1]],[[1],[2],null,[null]]);
+select array_contains_seq(i_0,i_1) from array_test_01 order by pk;
+select array_contains_seq(i_0,i_0) from array_test_01 order by pk;
+select array_contains_seq(i_1,i_0) from array_test_01 order by pk;
+select array_contains_seq(ai_0, ai_1) from array_test_01 order by pk;
+select array_contains_seq(ai_1, ai_1) from array_test_01 order by pk;
+select array_contains_seq(ai_1, ai_0) from array_test_01 order by pk;
+select array_contains_seq(ai_0,null) from array_test_01 order by pk;

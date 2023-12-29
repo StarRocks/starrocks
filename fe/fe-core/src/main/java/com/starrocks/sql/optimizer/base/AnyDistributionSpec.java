@@ -18,7 +18,9 @@ package com.starrocks.sql.optimizer.base;
 import java.util.Objects;
 
 public class AnyDistributionSpec extends DistributionSpec {
-    public AnyDistributionSpec() {
+
+    public static final AnyDistributionSpec INSTANCE = new AnyDistributionSpec();
+    private AnyDistributionSpec() {
         super(DistributionType.ANY);
     }
 

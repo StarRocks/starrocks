@@ -32,6 +32,8 @@ namespace lake {
 
 class UpdateManager;
 
+enum RecoverFlag { OK = 0, RECOVER_WITHOUT_PUBLISH, RECOVER_WITH_PUBLISH };
+
 class MetaFileBuilder {
 public:
     explicit MetaFileBuilder(Tablet tablet, std::shared_ptr<TabletMetadata> metadata_ptr);
@@ -55,6 +57,12 @@ public:
     // collect files that need to removed
     std::shared_ptr<std::vector<std::string>> trash_files() { return _trash_files; }
 
+    // update num dels in rowset meta, `segment_id_to_add_dels` record each segment's incremental del count
+    Status update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels);
+
+    void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
+    RecoverFlag recover_flag() const { return _recover_flag; }
+
 private:
     // update delvec in tablet meta
     Status _finalize_delvec(int64_t version, int64_t txn_id);
@@ -77,26 +85,11 @@ private:
     std::unordered_map<std::string, uint32_t> _cache_key_to_segment_id;
     // ready to be removed
     std::shared_ptr<std::vector<std::string>> _trash_files;
+    // When recover flag isn't ok, need recover later
+    RecoverFlag _recover_flag = RecoverFlag::OK;
 };
 
-class MetaFileReader {
-public:
-    explicit MetaFileReader(const std::string& filepath, bool fill_cache);
-    ~MetaFileReader() {}
-    // load tablet meta from file
-    Status load();
-    // try to load tablet meta from cache first, if not exist then load from file
-    Status load_by_cache(const std::string& filepath, TabletManager* tablet_mgr);
-    Status get_del_vec(TabletManager* tablet_mgr, uint32_t segment_id, DelVector* delvec);
-    StatusOr<TabletMetadataPtr> get_meta();
-
-private:
-    std::unique_ptr<RandomAccessFile> _access_file;
-    std::shared_ptr<TabletMetadata> _tablet_meta;
-    Status _err_status;
-    bool _load;
-};
-
+Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, DelVector* delvec);
 bool is_primary_key(TabletMetadata* metadata);
 bool is_primary_key(const TabletMetadata& metadata);
 

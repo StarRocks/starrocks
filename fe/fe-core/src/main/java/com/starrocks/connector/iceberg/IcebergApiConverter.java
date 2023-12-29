@@ -15,6 +15,7 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
@@ -26,6 +27,13 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
+import com.starrocks.sql.ast.AddColumnClause;
+import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.DropColumnClause;
+import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.thrift.TIcebergColumnStats;
 import com.starrocks.thrift.TIcebergDataFile;
 import com.starrocks.thrift.TIcebergSchema;
@@ -36,6 +44,7 @@ import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
+import org.apache.iceberg.UpdateSchema;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
@@ -49,6 +58,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Collectors;
 
 import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
@@ -269,15 +279,18 @@ public class IcebergApiConverter {
 
         if ("parquet".equalsIgnoreCase(fileFormat)) {
             tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "parquet");
-            compressionCodec = createProperties.getOrDefault("compression_codec", TableProperties.PARQUET_COMPRESSION_DEFAULT);
+            compressionCodec =
+                    createProperties.getOrDefault("compression_codec", TableProperties.PARQUET_COMPRESSION_DEFAULT);
             tableProperties.put(TableProperties.PARQUET_COMPRESSION, compressionCodec);
         } else if ("avro".equalsIgnoreCase(fileFormat)) {
             tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "avro");
-            compressionCodec = createProperties.getOrDefault("compression_codec", TableProperties.AVRO_COMPRESSION_DEFAULT);
+            compressionCodec =
+                    createProperties.getOrDefault("compression_codec", TableProperties.AVRO_COMPRESSION_DEFAULT);
             tableProperties.put(TableProperties.AVRO_COMPRESSION, compressionCodec);
         } else if ("orc".equalsIgnoreCase(fileFormat)) {
             tableProperties.put(TableProperties.DEFAULT_FILE_FORMAT, "orc");
-            compressionCodec = createProperties.getOrDefault("compression_codec", TableProperties.ORC_COMPRESSION_DEFAULT);
+            compressionCodec =
+                    createProperties.getOrDefault("compression_codec", TableProperties.ORC_COMPRESSION_DEFAULT);
             tableProperties.put(TableProperties.ORC_COMPRESSION, compressionCodec);
         } else if (fileFormat != null) {
             throw new IllegalArgumentException("Unsupported format in USING: " + fileFormat);
@@ -286,7 +299,103 @@ public class IcebergApiConverter {
         if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionCodec.toLowerCase(Locale.ROOT))) {
             throw new IllegalArgumentException("Unsupported compression codec in USING: " + compressionCodec);
         }
+        tableProperties.put(TableProperties.FORMAT_VERSION, "1");
 
         return tableProperties.build();
+    }
+
+    public static void applySchemaChanges(UpdateSchema updateSchema, List<AlterClause> alterClauses) {
+        for (AlterClause clause : alterClauses) {
+            if (clause instanceof AddColumnClause) {
+                AddColumnClause addColumnClause = (AddColumnClause) clause;
+                ColumnPosition pos = addColumnClause.getColPos();
+                Column column = addColumnClause.getColumnDef().toColumn();
+
+                // All non-partition columns must use NULL as the default value.
+                if (!column.isAllowNull()) {
+                    throw new StarRocksConnectorException("column in iceberg table must be nullable.");
+                }
+                updateSchema.addColumn(
+                        column.getName(),
+                        toIcebergColumnType(column.getType()),
+                        column.getComment());
+
+                // AFTER column / FIRST
+                if (pos != null) {
+                    if (pos.isFirst()) {
+                        updateSchema.moveFirst(column.getName());
+                    } else if (pos.getLastCol() != null) {
+                        updateSchema.moveAfter(column.getName(), pos.getLastCol());
+                    } else {
+                        throw new StarRocksConnectorException("Unsupported position: " + pos);
+                    }
+                }
+            } else if (clause instanceof AddColumnsClause) {
+                AddColumnsClause addColumnsClause = (AddColumnsClause) clause;
+                List<Column> columns = addColumnsClause
+                        .getColumnDefs()
+                        .stream()
+                        .map(ColumnDef::toColumn)
+                        .collect(Collectors.toList());
+
+                for (Column column : columns) {
+                    if (!column.isAllowNull()) {
+                        throw new StarRocksConnectorException("column in iceberg table must be nullable.");
+                    }
+                    updateSchema.addColumn(
+                            column.getName(),
+                            toIcebergColumnType(column.getType()),
+                            column.getComment());
+                }
+            } else if (clause instanceof DropColumnClause) {
+                DropColumnClause dropColumnClause = (DropColumnClause) clause;
+                String columnName = dropColumnClause.getColName();
+                updateSchema.deleteColumn(columnName);
+            } else if (clause instanceof ColumnRenameClause) {
+                ColumnRenameClause columnRenameClause = (ColumnRenameClause) clause;
+                updateSchema.renameColumn(columnRenameClause.getColName(), columnRenameClause.getNewColName());
+            } else if (clause instanceof ModifyColumnClause) {
+                ModifyColumnClause modifyColumnClause = (ModifyColumnClause) clause;
+                ColumnPosition colPos = modifyColumnClause.getColPos();
+                Column column = modifyColumnClause.getColumnDef().toColumn();
+                org.apache.iceberg.types.Type colType = toIcebergColumnType(column.getType());
+
+                // UPDATE column type
+                if (!colType.isPrimitiveType()) {
+                    throw new StarRocksConnectorException(
+                            "Cannot modify " + column.getName() + ", not a primitive type");
+                }
+                updateSchema.updateColumn(column.getName(), colType.asPrimitiveType());
+
+                // UPDATE comment
+                if (column.getComment() != null) {
+                    updateSchema.updateColumnDoc(column.getName(), column.getComment());
+                }
+
+                // NOT NULL / NULL
+                if (column.isAllowNull()) {
+                    updateSchema.makeColumnOptional(column.getName());
+                } else {
+                    throw new StarRocksConnectorException(
+                            "column in iceberg table must be nullable.");
+                }
+
+                // AFTER column / FIRST
+                if (colPos != null) {
+                    if (colPos.isFirst()) {
+                        updateSchema.moveFirst(column.getName());
+                    } else if (colPos.getLastCol() != null) {
+                        updateSchema.moveAfter(column.getName(), colPos.getLastCol());
+                    } else {
+                        throw new StarRocksConnectorException("Unsupported position: " + colPos);
+                    }
+                }
+            } else {
+                throw new StarRocksConnectorException(
+                        "Unsupported alter operation for iceberg connector");
+            }
+        }
+
+        updateSchema.commit();
     }
 }

@@ -47,6 +47,7 @@ import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MetaVersion;
@@ -83,6 +84,7 @@ import com.starrocks.plugin.PluginInfo;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
 import com.starrocks.scheduler.mv.MVMaintenanceJob;
@@ -113,6 +115,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStateBatch;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -386,6 +389,11 @@ public class EditLog {
                     globalStateMgr.replayRenamePartition(info);
                     break;
                 }
+                case OperationType.OP_RENAME_COLUMN_V2: {
+                    ColumnRenameInfo info = (ColumnRenameInfo) journal.getData();
+                    globalStateMgr.replayRenameColumn(info);
+                    break;
+                }
                 case OperationType.OP_BACKUP_JOB:
                 case OperationType.OP_BACKUP_JOB_V2: {
                     BackupJob job = (BackupJob) journal.getData();
@@ -475,6 +483,11 @@ public class EditLog {
                 case OperationType.OP_DELETE_REPLICA_V2: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
                     globalStateMgr.replayDeleteReplica(info);
+                    break;
+                }
+                case OperationType.OP_BATCH_DELETE_REPLICA_BATCH: {
+                    BatchDeleteReplicaInfo info = (BatchDeleteReplicaInfo) journal.getData();
+                    globalStateMgr.replayBatchDeleteReplica(info);
                     break;
                 }
                 case OperationType.OP_ADD_COMPUTE_NODE: {
@@ -611,6 +624,12 @@ public class EditLog {
                     final TransactionState state = (TransactionState) journal.getData();
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionState(state);
                     LOG.debug("opcode: {}, tid: {}", opCode, state.getTransactionId());
+                    break;
+                }
+                case OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH: {
+                    final TransactionStateBatch stateBatch = (TransactionStateBatch) journal.getData();
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionStateBatch(stateBatch);
+                    LOG.debug("opcode: {}, tids: {}", opCode, stateBatch.getTxnIds());
                     break;
                 }
                 case OperationType.OP_DELETE_TRANSACTION_STATE: {
@@ -1141,6 +1160,46 @@ public class EditLog {
                     globalStateMgr.getPipeManager().getRepo().replay(opEntry);
                     break;
                 }
+                case OperationType.OP_CREATE_DICTIONARY: {
+                    Dictionary dictionary = (Dictionary) journal.getData();
+                    globalStateMgr.getDictionaryMgr().replayCreateDictionary(dictionary);
+                    break;
+                }
+                case OperationType.OP_DROP_DICTIONARY: {
+                    DropDictionaryInfo dropInfo = (DropDictionaryInfo) journal.getData();
+                    globalStateMgr.getDictionaryMgr().replayDropDictionary(dropInfo.getDictionaryName());
+                    break;
+                }
+                case OperationType.OP_MODIFY_DICTIONARY_MGR: {
+                    DictionaryMgrInfo modifyInfo = (DictionaryMgrInfo) journal.getData();
+                    globalStateMgr.getDictionaryMgr().replayModifyDictionaryMgr(modifyInfo);
+                    break;
+                }
+                case OperationType.OP_DECOMMISSION_DISK: {
+                    DecommissionDiskInfo info = (DecommissionDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayDecommissionDisks(info);
+                    break;
+                }
+                case OperationType.OP_CANCEL_DECOMMISSION_DISK: {
+                    CancelDecommissionDiskInfo info = (CancelDecommissionDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayCancelDecommissionDisks(info);
+                    break;
+                }
+                case OperationType.OP_DISABLE_DISK: {
+                    DisableDiskInfo info = (DisableDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayDisableDisks(info);
+                    break;
+                }
+                case OperationType.OP_CANCEL_DISABLE_DISK: {
+                    CancelDisableDiskInfo info = (CancelDisableDiskInfo) journal.getData();
+                    globalStateMgr.getClusterInfo().replayCancelDisableDisks(info);
+                    break;
+                }
+                case OperationType.OP_REPLICATION_JOB: {
+                    ReplicationJobLog replicationJobLog = (ReplicationJobLog) journal.getData();
+                    globalStateMgr.getReplicationMgr().replayReplicationJob(replicationJobLog.getReplicationJob());
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1175,7 +1234,8 @@ public class EditLog {
         // it will write log before global state mgr becomes leader
         Preconditions.checkState(RunMode.getCurrentRunMode() != RunMode.SHARED_NOTHING ||
                                  GlobalStateMgr.getCurrentState().isLeader(),
-                "Current node is not leader, submit log is not allowed");
+                "Current node is not leader, but" +
+                GlobalStateMgr.getCurrentState().getFeType() + ", submit log is not allowed");
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
         // 1. serialized
@@ -1484,6 +1544,10 @@ public class EditLog {
         }
     }
 
+    public void logBatchDeleteReplica(BatchDeleteReplicaInfo info) {
+        logEdit(OperationType.OP_BATCH_DELETE_REPLICA_BATCH, info);
+    }
+
     public void logTimestamp(Timestamp stamp) {
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
             logJsonObject(OperationType.OP_TIMESTAMP_V2, stamp);
@@ -1657,6 +1721,10 @@ public class EditLog {
         } else {
             logEdit(OperationType.OP_UPSERT_TRANSACTION_STATE, transactionState);
         }
+    }
+
+    public void logInsertTransactionStateBatch(TransactionStateBatch stateBatch) {
+        logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH, stateBatch);
     }
 
     public void logBackupJob(BackupJob job) {
@@ -2157,5 +2225,42 @@ public class EditLog {
 
     public void logDropStorageVolume(DropStorageVolumeLog log) {
         logEdit(OperationType.OP_DROP_STORAGE_VOLUME, log);
+    }
+
+    public void logReplicationJob(ReplicationJob replicationJob) {
+        ReplicationJobLog replicationJobLog = new ReplicationJobLog(replicationJob);
+        logEdit(OperationType.OP_REPLICATION_JOB, replicationJobLog);
+    }
+
+    public void logColumnRename(ColumnRenameInfo columnRenameInfo) {
+        logJsonObject(OperationType.OP_RENAME_COLUMN_V2, columnRenameInfo);
+    }
+
+    public void logCreateDictionary(Dictionary info) {
+        logEdit(OperationType.OP_CREATE_DICTIONARY, info);
+    }
+
+    public void logDropDictionary(DropDictionaryInfo info) {
+        logEdit(OperationType.OP_DROP_DICTIONARY, info);
+    }
+
+    public void logModifyDictionaryMgr(DictionaryMgrInfo info) {
+        logEdit(OperationType.OP_MODIFY_DICTIONARY_MGR, info);
+    }
+
+    public void logDecommissionDisk(DecommissionDiskInfo info) {
+        logEdit(OperationType.OP_DECOMMISSION_DISK, info);
+    }
+
+    public void logCancelDecommissionDisk(CancelDecommissionDiskInfo info) {
+        logEdit(OperationType.OP_CANCEL_DECOMMISSION_DISK, info);
+    }
+
+    public void logDisableDisk(DisableDiskInfo info) {
+        logEdit(OperationType.OP_DISABLE_DISK, info);
+    }
+
+    public void logCancelDisableDisk(CancelDisableDiskInfo info) {
+        logEdit(OperationType.OP_CANCEL_DISABLE_DISK, info);
     }
 }

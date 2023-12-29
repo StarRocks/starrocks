@@ -15,7 +15,7 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"light_schema_change" = "true",
+"fast_schema_evolution" = "true",
 "compression" = "LZ4"
 );
 -- !result
@@ -35,14 +35,13 @@ PROPERTIES (
 "in_memory" = "false",
 "enable_persistent_index" = "false",
 "replicated_storage" = "true",
-"light_schema_change" = "true",
+"fast_schema_evolution" = "true",
 "compression" = "LZ4"
 );
 -- !result
 -- name: test_invalid_bucket_size
-create table t(k int) properties('bucket_size'='0');
+create table t0(k int) properties('bucket_size'='0');
 -- result:
-E: (1064, 'Unexpected exception: Illegal bucket size: 0')
 -- !result
 create table t(k int) properties('bucket_size'='-1');
 -- result:
@@ -53,7 +52,6 @@ create table t(k int) properties('bucket_size'='1024');
 -- !result
 alter table t set('bucket_size'='0');
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Illegal bucket size: 0.')
 -- !result
 alter table t set('bucket_size'='-1');
 -- result:
@@ -93,21 +91,7 @@ select count(*) from information_schema.be_tablets t1, information_schema.tables
 alter table t set('bucket_size'='1');
 -- result:
 -- !result
-insert into t values(1);
--- result:
--- !result
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
--- result:
-18
--- !result
-insert into t values(1);
--- result:
--- !result
-select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
--- result:
-27
--- !result
--- name: test_range_partition
+-- name: test_range_partition @sequential
 create database ttt;
 -- result:
 -- !result
@@ -160,12 +144,12 @@ select count(*) from information_schema.be_tablets t1, information_schema.tables
 -- !result
 select * from t;
 -- result:
-2021-01-05	1
-2021-01-01	1
 2021-01-01	1
 2021-01-03	1
+2021-01-01	1
+2021-01-05	1
 -- !result
--- name: test_list_partition
+-- name: test_list_partition @sequential
 create database ddd;
 -- result:
 -- !result
@@ -218,12 +202,12 @@ select count(*) from information_schema.be_tablets t1, information_schema.tables
 -- !result
 select * from t;
 -- result:
-2021-01-01	1
-2021-01-03	1
 2021-01-05	1
 2021-01-01	1
+2021-01-01	1
+2021-01-03	1
 -- !result
--- name: test_expr_partition
+-- name: test_expr_partition @sequential
 create database eee;
 -- result:
 -- !result
@@ -275,4 +259,188 @@ select * from t;
 2021-01-05	1
 2021-01-01	1
 2021-01-01	1
+-- !result
+-- name: test_schema_change @sequential
+create table t(k date, v int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "1"
+);
+-- result:
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+insert into t values('2021-01-03', 1);
+-- result:
+-- !result
+insert into t values('2021-01-05', 1);
+-- result:
+-- !result
+insert into t values('2021-01-01', 1);
+-- result:
+-- !result
+insert into t values('2021-01-01', 2);
+-- result:
+-- !result
+insert into t values('2021-01-03', 2);
+-- result:
+-- !result
+insert into t values('2021-01-05', 2);
+-- result:
+-- !result
+insert into t values('2021-01-01', 2);
+-- result:
+-- !result
+insert into t values('2021-01-01', 3);
+-- result:
+-- !result
+insert into t values('2021-01-03', 3);
+-- result:
+-- !result
+insert into t values('2021-01-05', 3);
+-- result:
+-- !result
+insert into t values('2021-01-01', 3);
+-- result:
+-- !result
+select * from t;
+-- result:
+2021-01-01	1
+2021-01-01	2
+2021-01-01	3
+2021-01-01	2
+2021-01-01	3
+2021-01-01	1
+2021-01-03	2
+2021-01-03	3
+2021-01-05	2
+2021-01-03	1
+2021-01-05	3
+2021-01-05	1
+-- !result
+alter table t add column c bigint;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t;
+-- result:
+2021-01-01	3	None
+2021-01-03	3	None
+2021-01-01	1	None
+2021-01-03	1	None
+2021-01-01	2	None
+2021-01-05	3	None
+2021-01-01	3	None
+2021-01-01	1	None
+2021-01-05	1	None
+2021-01-03	2	None
+2021-01-01	2	None
+2021-01-05	2	None
+-- !result
+alter table t order by (k,c,v);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+select * from t;
+-- result:
+2021-01-01	None	1
+2021-01-01	None	2
+2021-01-01	None	3
+2021-01-01	None	3
+2021-01-01	None	1
+2021-01-03	None	2
+2021-01-03	None	3
+2021-01-03	None	1
+2021-01-01	None	2
+2021-01-05	None	3
+2021-01-05	None	1
+2021-01-05	None	2
+-- !result
+-- name: test_mv @sequential
+create table t(k date, v int, v1 int) DUPLICATE KEY(k) PARTITION BY DATE_TRUNC('DAY', `k`)
+PROPERTIES (
+"replication_num" = "1",
+"bucket_size" = "1"
+);
+-- result:
+-- !result
+insert into t values('2021-01-01', 1, 1);
+-- result:
+-- !result
+insert into t values('2021-01-03', 1, 1);
+-- result:
+-- !result
+insert into t values('2021-01-05', 1, 1);
+-- result:
+-- !result
+insert into t values('2021-01-01', 1, 1);
+-- result:
+-- !result
+insert into t values('2021-01-01', 2, 2);
+-- result:
+-- !result
+insert into t values('2021-01-03', 2, 2);
+-- result:
+-- !result
+insert into t values('2021-01-05', 2, 2);
+-- result:
+-- !result
+insert into t values('2021-01-01', 2, 2);
+-- result:
+-- !result
+insert into t values('2021-01-01', 3, 3);
+-- result:
+-- !result
+insert into t values('2021-01-03', 3, 3);
+-- result:
+-- !result
+insert into t values('2021-01-05', 3, 3);
+-- result:
+-- !result
+insert into t values('2021-01-01', 3, 3);
+-- result:
+-- !result
+select * from t;
+-- result:
+2021-01-01	2	2
+2021-01-05	2	2
+2021-01-01	2	2
+2021-01-01	3	3
+2021-01-01	3	3
+2021-01-03	1	1
+2021-01-01	1	1
+2021-01-05	3	3
+2021-01-01	1	1
+2021-01-03	2	2
+2021-01-05	1	1
+2021-01-03	3	3
+-- !result
+create materialized view mv as select k, v1 from t;
+-- result:
+-- !result
+function: wait_alter_table_finish("rollup", 8)
+-- result:
+None
+-- !result
+select k, v1 from t;
+-- result:
+2021-01-05	3
+2021-01-01	3
+2021-01-01	2
+2021-01-05	1
+2021-01-01	1
+2021-01-01	1
+2021-01-03	3
+2021-01-01	2
+2021-01-05	2
+2021-01-01	3
+2021-01-03	1
+2021-01-03	2
 -- !result

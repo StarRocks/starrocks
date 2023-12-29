@@ -16,7 +16,6 @@ package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -37,9 +36,9 @@ public class OuterJoinReorderTest extends PlanTestBase {
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("joinAssocRuleSqls")
-    void joinAssociativityRuleSql(Pair<String, String> pair) throws Exception {
-        String plan = getFragmentPlan(pair.first);
-        assertContains(plan, pair.second);
+    void joinAssociativityRuleSql(String sql, String expectedPlan) throws Exception {
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, expectedPlan);
     }
 
 
@@ -70,12 +69,12 @@ public class OuterJoinReorderTest extends PlanTestBase {
                 "on (ref_2.v8 = ref_3.v10) inner join t4 as ref_4 on (ref_2.v9 = ref_4.v14) " +
                 "where (space(cast(ref_4.v15 as INT)) <= ref_4.v14) or ( ref_1.v5 = tan(cast(ref_1.v6 as DOUBLE))) " +
                 "limit 111;");
-        planList.add("16:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
+        planList.add("13:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 10: v9 = 15: v14\n" +
-                "  |  other join predicates: (CAST(space(CAST(16: v15 AS INT)) AS DOUBLE) <= CAST(15: v14 AS DOUBLE)) " +
-                "OR (CAST(6: v5 AS DOUBLE) = tan(CAST(7: v6 AS DOUBLE)))");
+                "  |  equal join conjunct: 8: v7 = 17: cast\n" +
+                "  |  other join predicates: (CAST(space(CAST(16: v15 AS INT)) AS DOUBLE) <= CAST(15: v14 AS DOUBLE))" +
+                " OR (CAST(6: v5 AS DOUBLE) = tan(CAST(7: v6 AS DOUBLE)))");
 
         sqlList.add("select tmp.a, t0.v3 from t0 left join (select * from test_all_type, unnest(split(t1a, ',')) " +
                 "as unnest_tbl(a)) tmp on t0.v1 = tmp.a join t1 on t0.v2 = t1.v4");
@@ -140,7 +139,19 @@ public class OuterJoinReorderTest extends PlanTestBase {
                 "  |  other predicates: 8: v8 <=> 2: v2\n" +
                 "  |  \n" +
                 "  |----13:EXCHANGE");
-        List<Pair<String, String>> zips = zipSqlAndPlan(sqlList, planList);
-        return zips.stream().map(e -> Arguments.of(e));
+        sqlList.add("select * from (select t0.*, concat(abs(abs(v7)), ifnull(v8, 1), null) from colocate_t0 t0 left join" +
+                " t2 on v2 = v7) t left join colocate_t1 on v1 = v4");
+        planList.add("4:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 2> : 2: v2\n" +
+                "  |  <slot 3> : 3: v3\n" +
+                "  |  <slot 7> : concat(CAST(abs(abs(4: v7)) AS VARCHAR), CAST(ifnull(5: v8, 1) AS VARCHAR), NULL)\n" +
+                "  |  \n" +
+                "  3:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 4: v7");
+        List<Arguments> zips = zipSqlAndPlan(sqlList, planList);
+        return zips.stream();
     }
 }

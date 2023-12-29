@@ -1,0 +1,26 @@
+-- name: test_intervals_trino
+set sql_dialect='Trino';
+
+select date_add('day', -1, date(concat(substr('2023-12-10', 1, 7), '-01')));
+SELECT date_add('day', -1, TIMESTAMP '2020-03-01 00:00:00');
+
+select date('2023-12-10')-interval '1' day;
+select date('2023-12-10 01:00:00')-interval '1' day;
+
+SELECT date_add('day', -1, '2023-12-10');
+SELECT date_add('day', -1, '2023-12-10 01:00:00');
+
+SELECT date_add('day', -1, date '2023-12-10');
+SELECT date_add('day', -1, TIMESTAMP '2023-12-10 01:00:00');
+
+select date '2023-12-10' - interval '1' day;
+select TIMESTAMP '2023-12-10 01:00:00' - interval '1' day;
+
+
+select '2023-12-10' - interval '1' day;
+select '2023-12-10 01:00:00' - interval '1' day;
+
+select cast('2023-12-10' as date) - interval '1' day;
+select cast('2023-12-10 02:00:00' as TIMESTAMP) - interval '1' day;
+
+select length(CURRENT_DATE  - interval '1' day);

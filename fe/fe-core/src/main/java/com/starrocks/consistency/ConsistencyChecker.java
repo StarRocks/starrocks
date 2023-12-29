@@ -51,6 +51,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.consistency.CheckConsistencyJob.JobState;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.CheckConsistencyTask;
@@ -276,7 +278,8 @@ public class ConsistencyChecker extends FrontendDaemon {
         try {
             while ((chosenOne = dbQueue.poll()) != null) {
                 Database db = (Database) chosenOne;
-                db.readLock();
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
                 try {
                     // sort tables
                     List<Table> tables = db.getTables();
@@ -365,7 +368,7 @@ public class ConsistencyChecker extends FrontendDaemon {
                         } // end while partitionQueue
                     } // end while tableQueue
                 } finally {
-                    db.readUnlock();
+                    locker.unLockDatabase(db, LockType.READ);
                 }
             } // end while dbQueue
         } finally {
@@ -390,12 +393,33 @@ public class ConsistencyChecker extends FrontendDaemon {
 
     public void replayFinishConsistencyCheck(ConsistencyCheckInfo info, GlobalStateMgr globalStateMgr) {
         Database db = globalStateMgr.getDb(info.getDbId());
-        db.writeLock();
+        if (db == null) {
+            LOG.warn("replay finish consistency check failed, db is null, info: {}", info);
+            return;
+        }
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable table = (OlapTable) db.getTable(info.getTableId());
+            if (table == null) {
+                LOG.warn("replay finish consistency check failed, table is null, info: {}", info);
+                return;
+            }
             Partition partition = table.getPartition(info.getPartitionId());
+            if (partition == null) {
+                LOG.warn("replay finish consistency check failed, partition is null, info: {}", info);
+                return;
+            }
             MaterializedIndex index = partition.getIndex(info.getIndexId());
+            if (index == null) {
+                LOG.warn("replay finish consistency check failed, index is null, info: {}", info);
+                return;
+            }
             LocalTablet tablet = (LocalTablet) index.getTablet(info.getTabletId());
+            if (tablet == null) {
+                LOG.warn("replay finish consistency check failed, tablet is null, info: {}", info);
+                return;
+            }
 
             long lastCheckTime = info.getLastCheckTime();
             db.setLastCheckTime(lastCheckTime);
@@ -407,7 +431,7 @@ public class ConsistencyChecker extends FrontendDaemon {
 
             tablet.setIsConsistent(info.isConsistent());
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 

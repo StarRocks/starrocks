@@ -452,6 +452,10 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
             // Duplicated
             return Status::InternalError("Double execute");
         }
+        // check if shutting down in progress under the lock
+        if (_closed) {
+            return Status::Cancelled("FragmentManager shutdown in progress.");
+        }
         // register exec_state before starting exec thread
         _fragment_map.insert(std::make_pair(fragment_instance_id, exec_state));
     }
@@ -460,7 +464,7 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
     if (!st.ok()) {
         exec_state->cancel(PPlanFragmentCancelReason::INTERNAL_ERROR);
         std::string error_msg = strings::Substitute("Put planfragment $0 to thread pool failed. err = $1",
-                                                    print_id(fragment_instance_id), st.get_error_msg());
+                                                    print_id(fragment_instance_id), st.message());
         LOG(WARNING) << error_msg;
         {
             // Remove the exec state added
@@ -537,10 +541,21 @@ void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& par
 }
 
 void FragmentMgr::close() {
-    std::lock_guard<std::mutex> lock(_lock);
-    for (auto& it : _fragment_map) {
-        WARN_IF_ERROR(cancel(it.second->fragment_instance_id(), PPlanFragmentCancelReason::USER_CANCEL),
-                      strings::Substitute("Fail to cancel fragment $0", print_id(it.first)));
+    std::vector<TUniqueId> frag_instance_ids;
+    {
+        std::lock_guard<std::mutex> lock(_lock);
+        // reject all fragments from now on.
+        // expect no fragment can be added into `_fragment_map` after the lock is released.
+        _closed = true;
+        frag_instance_ids.reserve(_fragment_map.size());
+        for (auto& it : _fragment_map) {
+            frag_instance_ids.push_back(it.first);
+        }
+    }
+    // cancel all the fragments without lock.
+    for (auto& id : frag_instance_ids) {
+        WARN_IF_ERROR(cancel(id, PPlanFragmentCancelReason::USER_CANCEL),
+                      strings::Substitute("Fail to cancel fragment $0", print_id(id)));
     }
 }
 

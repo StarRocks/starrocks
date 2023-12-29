@@ -37,7 +37,6 @@ package com.starrocks.http;
 import com.starrocks.common.Config;
 import com.starrocks.http.action.BackendAction;
 import com.starrocks.http.action.HaAction;
-import com.starrocks.http.action.HelpAction;
 import com.starrocks.http.action.IndexAction;
 import com.starrocks.http.action.LogAction;
 import com.starrocks.http.action.QueryAction;
@@ -85,6 +84,7 @@ import com.starrocks.http.rest.ShowProcAction;
 import com.starrocks.http.rest.ShowRuntimeInfoAction;
 import com.starrocks.http.rest.StopFeAction;
 import com.starrocks.http.rest.StorageTypeCheckAction;
+import com.starrocks.http.rest.SyncCloudTableMetaAction;
 import com.starrocks.http.rest.TableQueryPlanAction;
 import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
@@ -157,7 +157,6 @@ public class HttpServer {
         QueryProfileAction.registerAction(controller);
         SessionAction.registerAction(controller);
         VariableAction.registerAction(controller);
-        HelpAction.registerAction(controller);
         StaticResourceAction.registerAction(controller);
         HaAction.registerAction(controller);
 
@@ -185,6 +184,7 @@ public class HttpServer {
         ConnectionAction.registerAction(controller);
         ShowDataAction.registerAction(controller);
         QueryDumpAction.registerAction(controller);
+        SyncCloudTableMetaAction.registerAction(controller);
         // for stop FE
         StopFeAction.registerAction(controller);
         ExecuteSqlAction.registerAction(controller);
@@ -257,7 +257,8 @@ public class HttpServer {
         public void run() {
             // Configure the server.
             EventLoopGroup bossGroup = new NioEventLoopGroup();
-            EventLoopGroup workerGroup = new NioEventLoopGroup();
+            int numWorkerThreads = Math.max(0, Config.http_worker_threads_num);
+            EventLoopGroup workerGroup = new NioEventLoopGroup(numWorkerThreads);
             try {
                 serverBootstrap = new ServerBootstrap();
                 serverBootstrap.option(ChannelOption.SO_BACKLOG, Config.http_backlog_num);

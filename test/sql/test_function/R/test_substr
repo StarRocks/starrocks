@@ -1,0 +1,75 @@
+-- name: test_substr
+create table t1 (id int, v bigint) distributed by hash(id) properties ("replication_num" = "1");
+-- result:
+-- !result
+select SUBSTR('', 9223372036854775807) ;
+-- result:
+E: (1064, 'Unexpected exception: Cast argument 9223372036854775807 to int type failed.')
+-- !result
+select SUBSTR('', 9223372036854775807, 465254298) ;
+-- result:
+E: (1064, 'Unexpected exception: Cast argument 9223372036854775807 to int type failed.')
+-- !result
+select SUBSTR('', -9223372036854775807, 465254298) ;
+-- result:
+E: (1064, 'Unexpected exception: Cast argument -9223372036854775807 to int type failed.')
+-- !result
+select SUBSTR('', 9223372036854775806, 465254298) ;
+-- result:
+E: (1064, 'Unexpected exception: Cast argument 9223372036854775806 to int type failed.')
+-- !result
+select SUBSTRING('', 9223372036854775807) ;
+-- result:
+E: (1064, 'Unexpected exception: Cast argument 9223372036854775807 to int type failed.')
+-- !result
+select SUBSTRING('', 9223372036854775807, 465254298) ;
+-- result:
+E: (1064, 'Unexpected exception: Cast argument 9223372036854775807 to int type failed.')
+-- !result
+select SUBSTRING('', -9223372036854775807, 465254298) ;
+-- result:
+E: (1064, 'Unexpected exception: Cast argument -9223372036854775807 to int type failed.')
+-- !result
+select SUBSTRING('', 9223372036854775806, 465254298) ;
+-- result:
+E: (1064, 'Unexpected exception: Cast argument 9223372036854775806 to int type failed.')
+-- !result
+insert into t1 values(1, 9223372036854775807), (2, -9223372036854775807), (3, 9223372036854775806);
+-- result:
+-- !result
+select SUBSTR('', v) from t1;
+-- result:
+None
+None
+None
+-- !result
+select SUBSTR('', v, id) from t1;
+-- result:
+None
+None
+None
+-- !result
+select SUBSTR('STARROCKS', v, id) from t1;
+-- result:
+None
+None
+None
+-- !result
+select SUBSTRING('', v) from t1;
+-- result:
+None
+None
+None
+-- !result
+select SUBSTRING('', v, id) from t1;
+-- result:
+None
+None
+None
+-- !result
+select SUBSTRING('STARROCKS', v, id) from t1;
+-- result:
+None
+None
+None
+-- !result

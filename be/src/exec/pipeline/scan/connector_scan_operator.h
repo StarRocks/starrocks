@@ -127,7 +127,7 @@ private:
 
     const int64_t _limit; // -1: no limit
     const std::vector<ExprContext*>& _runtime_in_filters;
-    const RuntimeFilterProbeCollector* _runtime_bloom_filters;
+    RuntimeFilterProbeCollector* _runtime_bloom_filters;
 
     // copied from scan node and merge predicates from runtime filter.
     std::vector<ExprContext*> _conjunct_ctxs;

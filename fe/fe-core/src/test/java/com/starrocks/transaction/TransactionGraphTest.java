@@ -131,4 +131,93 @@ public class TransactionGraphTest {
         assertEquals(nTxn, txnPolled);
         assertEquals(0, graph.size());
     }
+
+    @Test
+    public void testGetTxnsWithTxnDependencyBatch() {
+        int maxBatchSize = 5;
+        int minBatchSize = 2;
+
+        // TransactionGraph
+        // table1: txn1 -> txn4 -> txn6
+        // table2: txn2 -> txn5
+        // table3: txn3
+        // test txns with single table
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(1, Lists.newArrayList(1L));
+        graph.add(2, Lists.newArrayList(2L));
+        graph.add(3, Lists.newArrayList(3L));
+        graph.add(4, Lists.newArrayList(1L));
+        graph.add(5, Lists.newArrayList(2L));
+        graph.add(6, Lists.newArrayList(1L));
+
+        List<Long> txnIds = graph.getTxnsWithoutDependency();
+        assertEquals(txnIds.size(), 3);
+        assertEquals(3, graph.getTxnsWithTxnDependencyBatch(minBatchSize, maxBatchSize, 1).size());
+        assertEquals(0, graph.getTxnsWithTxnDependencyBatch(minBatchSize, maxBatchSize, 3).size());
+
+        // test txns with multi tables
+        TransactionGraph graph2 = new TransactionGraph();
+        graph2.add(1, Lists.newArrayList(1L, 2L));
+
+        txnIds = graph2.getTxnsWithoutDependency();
+        assertEquals(txnIds.size(), 1);
+        List<Long> batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(1, 5, txnIds.get(0));
+        assertEquals(1, batchTxnIds.size());
+        assertEquals(txnIds.get(0).longValue(), 1);
+
+        // TransactionGraph
+        // table1:  ------------------> txn1 ------------> txn2 --------------> txn3
+        // table2:  ------------------> txn1
+        graph2.add(2, Lists.newArrayList(1L));
+        graph2.add(3, Lists.newArrayList(1L));
+        txnIds = graph2.getTxnsWithoutDependency();
+        assertEquals(txnIds.size(), 1);
+        batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(1, 5, txnIds.get(0));
+        assertEquals(batchTxnIds.get(0).longValue(), 1);
+
+        graph2.remove(1);
+        batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(1, 5, 2);
+        assertEquals(batchTxnIds.size(), 2);
+        assertEquals(batchTxnIds.get(0).longValue(), 2);
+        assertEquals(batchTxnIds.get(1).longValue(), 3);
+
+        // TransactionGraph
+        // table1:  ------------> txn2 -------------> txn3  ----------> txn4 -------> txn5  ------> txn7
+        // table2:  --------------------------------------------------> txn4 -------> txn6  ------> txn7
+        graph2.add(4, Lists.newArrayList(1L, 2L));
+        graph2.add(5, Lists.newArrayList(1L));
+        graph2.add(6, Lists.newArrayList(2L));
+        graph2.add(7, Lists.newArrayList(1L, 2L));
+
+        txnIds = graph2.getTxnsWithoutDependency();
+        assertEquals(txnIds.size(), 1);
+        batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(1, 5, 2);
+        assertEquals(batchTxnIds.size(), 2);
+        graph.remove(2);
+        graph.remove(3);
+
+        txnIds = graph2.getTxnsWithoutDependency();
+        assertEquals(txnIds.size(), 1);
+        batchTxnIds = graph2.getTxnsWithTxnDependencyBatch(1, 5, 4);
+        assertEquals(batchTxnIds.size(), 1);
+    }
+
+    @Test
+    public void testPrintGraph() {
+        TransactionGraph graph = new TransactionGraph();
+        graph.add(1, Lists.newArrayList(1L));
+        graph.add(2, Lists.newArrayList(2L));
+        graph.add(3, Lists.newArrayList(3L));
+        graph.add(4, Lists.newArrayList(1L));
+        graph.add(5, Lists.newArrayList(2L));
+        graph.add(6, Lists.newArrayList(3L));
+        graph.add(7, Lists.newArrayList(1L));
+        graph.add(8, Lists.newArrayList(4L));
+
+        String graphPrint = "1->4->7\n" +
+                "2->5\n" +
+                "3->6\n" +
+                "8\n";
+        assertEquals(graphPrint, graph.debug());
+    }
 }

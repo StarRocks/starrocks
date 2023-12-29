@@ -18,7 +18,7 @@ namespace starrocks::pipeline {
 
 void TableFunctionOperator::close(RuntimeState* state) {
     if (_table_function != nullptr && _table_function_state != nullptr) {
-        _table_function->close(state, _table_function_state);
+        (void)_table_function->close(state, _table_function_state);
         _table_function_state = nullptr;
     }
     Operator::close(state);
@@ -109,7 +109,7 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
     std::vector<ColumnPtr> output_columns;
 
     if (_table_function_result.second == nullptr) {
-        RETURN_IF_ERROR(_process_table_function());
+        RETURN_IF_ERROR(_process_table_function(state));
     }
 
     output_columns.reserve(_outer_slots.size());
@@ -124,7 +124,7 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
         if (!_table_function_result.first.empty() && _next_output_row < _table_function_result.first[0]->size()) {
             _copy_result(output_columns, max_chunk_size);
         } else if (_table_function_state->processed_rows() < _input_chunk->num_rows()) {
-            RETURN_IF_ERROR(_process_table_function());
+            RETURN_IF_ERROR(_process_table_function(state));
         } else {
             DCHECK(!has_output());
             DCHECK(need_input());
@@ -166,18 +166,18 @@ ChunkPtr TableFunctionOperator::_build_chunk(const std::vector<ColumnPtr>& colum
     return chunk;
 }
 
-Status TableFunctionOperator::_process_table_function() {
+Status TableFunctionOperator::_process_table_function(RuntimeState* state) {
     SCOPED_TIMER(_table_function_exec_timer);
     COUNTER_UPDATE(_table_function_exec_counter, 1);
     _input_index_of_first_result = _table_function_state->processed_rows();
     _next_output_row = 0;
     _next_output_row_offset = 0;
 
-    _table_function_result = _table_function->process(_table_function_state);
+    _table_function_result = _table_function->process(state, _table_function_state);
     return _table_function_state->status();
 }
 
-Status TableFunctionOperator::reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
+Status TableFunctionOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
     _input_chunk.reset();
     _input_index_of_first_result = 0;
     _next_output_row_offset = 0;

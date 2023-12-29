@@ -127,8 +127,8 @@ public class ColumnFilterConverterTest {
         assertTrue(result.containsKey("name"));
         assertTrue(result.containsKey("sex"));
 
-        assertEquals(new IntLiteral(1), result.get("age").lowerBound);
-        assertEquals(new IntLiteral(1), result.get("age").upperBound);
+        assertEquals(new IntLiteral(1), result.get("age").getLowerBound());
+        assertEquals(new IntLiteral(1), result.get("age").getUpperBound());
 
         assertEquals(4, result.get("name").getInPredicateLiterals().size());
         assertEquals(new StringLiteral("1"), result.get("name").getInPredicateLiterals().get(0));
@@ -136,8 +136,8 @@ public class ColumnFilterConverterTest {
         assertEquals(new StringLiteral("3"), result.get("name").getInPredicateLiterals().get(2));
         assertEquals(new StringLiteral("4"), result.get("name").getInPredicateLiterals().get(3));
 
-        assertEquals(new NullLiteral(), result.get("sex").lowerBound);
-        assertEquals(new NullLiteral(), result.get("sex").upperBound);
+        assertEquals(new NullLiteral(), result.get("sex").getLowerBound());
+        assertEquals(new NullLiteral(), result.get("sex").getUpperBound());
     }
 
     @Test
@@ -158,8 +158,8 @@ public class ColumnFilterConverterTest {
             Map<String, PartitionColumnFilter> result = ColumnFilterConverter.convertColumnFilter(list);
             assertEquals(result.size(), 1);
             PartitionColumnFilter filter = result.get("c0");
-            assertEquals(filter.lowerBound, new NullLiteral());
-            assertEquals(filter.upperBound, new NullLiteral());
+            assertEquals(filter.getLowerBound(), new NullLiteral());
+            assertEquals(filter.getUpperBound(), new NullLiteral());
         }
     }
 

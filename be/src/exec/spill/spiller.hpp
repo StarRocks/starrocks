@@ -24,6 +24,7 @@
 #include "common/status.h"
 #include "exec/spill/common.h"
 #include "exec/spill/executor.h"
+#include "exec/spill/input_stream.h"
 #include "exec/spill/serde.h"
 #include "exec/spill/spill_components.h"
 #include "exec/spill/spiller.h"
@@ -146,26 +147,34 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
     RETURN_IF_ERROR(captured_mem_table->done());
     _running_flush_tasks++;
     // TODO: handle spill queue
-    auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table), trace = TraceInfo(state)]() {
+    auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table),
+                 trace = TraceInfo(state)](auto& yield_ctx) {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
         RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
+        DEFER_GUARD_END(guard);
         SCOPED_TIMER(_spiller->metrics().flush_timer);
         DCHECK_GT(_running_flush_tasks, 0);
         DCHECK(has_pending_data());
         //
-        auto defer = DeferOp([&]() {
+        auto defer = CancelableDefer([&]() {
             {
                 std::lock_guard _(_mutex);
                 _mem_table_pool.emplace(std::move(mem_table));
             }
-
             _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
-            guard.scoped_end();
+            yield_ctx.set_finished();
         });
+
         if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
             return Status::OK();
         }
-        _spiller->update_spilled_task_status(flush_task(state, mem_table));
+
+        int yield = false;
+        _spiller->update_spilled_task_status(yieldable_flush_task(yield_ctx, state, mem_table, &yield));
+        if (yield) {
+            defer.cancel();
+        }
+
         return Status::OK();
     };
     // submit io task
@@ -192,7 +201,6 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
         return Status::OK();
     }
 
-    DCHECK(_stream->enable_prefetch());
     // if all is well and input stream enable prefetch and not eof
     if (!_stream->eof()) {
         // make sure _running_restore_tasks < io_tasks_per_scan_operator to avoid scan overloaded
@@ -200,24 +208,31 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
             return Status::OK();
         }
         _running_restore_tasks++;
-        auto restore_task = [this, guard, trace = TraceInfo(state)]() {
+        auto restore_task = [this, guard, trace = TraceInfo(state), _stream = _stream](auto& yield_ctx) {
             SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
-            RETURN_IF(!guard.scoped_begin(), Status::OK());
+            RETURN_IF(!guard.scoped_begin(), (void)0);
+            DEFER_GUARD_END(guard);
             {
-                auto defer = DeferOp([&]() { _running_restore_tasks--; });
+                auto defer = CancelableDefer([&]() {
+                    _running_restore_tasks--;
+                    yield_ctx.set_finished();
+                });
                 Status res;
-                SerdeContext ctx;
-                res = _stream->prefetch(ctx);
+                SerdeContext serd_ctx;
+                int yield = false;
 
-                if (!res.is_end_of_file() && !res.ok()) {
+                YieldableRestoreTask task(_stream);
+                res = task.do_read(yield_ctx, serd_ctx, &yield);
+
+                if (yield) {
+                    defer.cancel();
+                }
+
+                if (!res.is_ok_or_eof()) {
                     _spiller->update_spilled_task_status(std::move(res));
                 }
-                if (!res.ok()) {
-                    _finished_restore_tasks++;
-                }
+                _finished_restore_tasks += !res.ok();
             };
-            guard.scoped_end();
-            return Status::OK();
         };
         RETURN_IF_ERROR(executor.submit(std::move(restore_task)));
         COUNTER_UPDATE(_spiller->metrics().restore_io_task_count, 1);
@@ -243,7 +258,7 @@ Status PartitionedSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chun
                                [&chunk](SpilledPartition* partition, const std::vector<uint32_t>& selection,
                                         int32_t from, int32_t size) {
                                    auto mem_table = partition->spill_writer->mem_table();
-                                   mem_table->append_selective(*chunk, selection.data(), from, size);
+                                   (void)mem_table->append_selective(*chunk, selection.data(), from, size);
                                    partition->mem_size = mem_table->mem_usage();
                                    partition->num_rows += size;
                                });
@@ -282,21 +297,26 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
     _running_flush_tasks++;
 
     auto task = [this, guard = guard, splitting_partitions = std::move(splitting_partitions),
-                 spilling_partitions = std::move(spilling_partitions), trace = TraceInfo(state)]() {
+                 spilling_partitions = std::move(spilling_partitions), trace = TraceInfo(state)](auto& yield_ctx) {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
         RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
-        RACE_DETECT(detect_flush, var1);
+        DEFER_GUARD_END(guard);
         // concurrency test
-        auto defer = DeferOp([&]() {
+        RACE_DETECT(detect_flush, var1);
+        auto defer = CancelableDefer([&]() {
             _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
-            guard.scoped_end();
+            yield_ctx.set_finished();
         });
 
         if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
             return Status::OK();
         }
-
-        _spiller->update_spilled_task_status(_flush_task(splitting_partitions, spilling_partitions));
+        int yield = false;
+        _spiller->update_spilled_task_status(
+                yieldable_flush_task(yield_ctx, splitting_partitions, spilling_partitions, &yield));
+        if (yield) {
+            defer.cancel();
+        }
         return Status::OK();
     };
 
@@ -306,4 +326,5 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
 
     return Status::OK();
 }
+
 } // namespace starrocks::spill
