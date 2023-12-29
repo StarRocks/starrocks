@@ -65,10 +65,22 @@ struct HdfsScanStats {
     // page skip
     int64_t page_skip = 0;
 
+<<<<<<< HEAD
     // ORC only!
     int64_t delete_build_ns = 0;
     int64_t delete_file_per_scan = 0;
     std::vector<int64_t> stripe_sizes;
+=======
+    // late materialize round-by-round
+    int64_t group_min_round_cost = 0;
+
+    std::vector<int64_t> orc_stripe_sizes;
+
+    // Iceberg v2 only!
+    int64_t iceberg_delete_file_build_ns = 0;
+    int64_t iceberg_delete_files_per_scan = 0;
+    int64_t iceberg_delete_file_build_filter_ns = 0;
+>>>>>>> c75784c1bc ([Enhancement] Avoid high IOPS in orc reader when datacache enabled (#38115))
 };
 
 class HdfsParquetProfile;
