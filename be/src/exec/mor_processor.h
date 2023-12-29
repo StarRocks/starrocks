@@ -42,7 +42,6 @@ public:
 
     virtual Status build_hash_table(RuntimeState* runtime_state) { return Status::OK(); }
     virtual Status append_chunk_to_hashtable(ChunkPtr& chunk) { return Status::OK(); }
-
 };
 
 class IcebergMORProcessor final : public DefaultMORProcessor {
