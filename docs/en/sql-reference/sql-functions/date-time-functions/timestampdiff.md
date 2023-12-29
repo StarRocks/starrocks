@@ -10,7 +10,7 @@ Returns the interval from `datetime_expr2` to `datetime_expr1`. `datetime_expr1`
 
 The unit for the integer result and the interval should be one of the following:
 
-SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, or YEAR.
+MILLISECOND, SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, or YEAR.
 
 ## Syntax
 
