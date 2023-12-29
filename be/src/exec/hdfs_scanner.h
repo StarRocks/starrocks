@@ -77,7 +77,7 @@ struct HdfsScanStats {
     int64_t group_min_round_cost = 0;
 
     // ORC only!
-    std::vector<int64_t> stripe_sizes;
+    std::vector<int64_t> orc_stripe_sizes;
 
     // Iceberg v2 only!
     int64_t iceberg_delete_file_build_ns = 0;
