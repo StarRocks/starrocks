@@ -402,7 +402,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             s.offset = stripeInfo.offset();
             s.length = stripeInfo.datalength() + stripeInfo.indexlength() + stripeInfo.footerlength();
             stripes.emplace_back(s);
-            _app_stats.stripe_sizes.push_back(s.length);
+            _app_stats.orc_stripe_sizes.push_back(s.length);
         }
         orc_hdfs_file_stream->setStripes(std::move(stripes));
     }
@@ -548,26 +548,33 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
     return Status::OK();
 }
 
-static const std::string kORCProfileSectionPrefix = "ORC";
-
 void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
-    RuntimeProfile::Counter* stripe_sizes_counter = nullptr;
-    RuntimeProfile::Counter* stripe_number_counter = nullptr;
+    const std::string orcProfileSectionPrefix = "ORC";
+
     RuntimeProfile* root = profile->runtime_profile;
+    ADD_COUNTER(root, orcProfileSectionPrefix, TUnit::NONE);
 
-    ADD_COUNTER(root, kORCProfileSectionPrefix, TUnit::NONE);
+    do_update_iceberg_v2_counter(root, orcProfileSectionPrefix);
 
-    do_update_iceberg_v2_counter(root, kORCProfileSectionPrefix);
-
-    // we expect to get average stripe size instead of sum.
-    stripe_sizes_counter = root->add_child_counter("StripeSizes", TUnit::BYTES,
-                                                   RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
-                                                   kORCProfileSectionPrefix);
-    stripe_number_counter = ADD_CHILD_COUNTER(root, "StripeNumber", TUnit::UNIT, kORCProfileSectionPrefix);
-    for (auto v : _app_stats.stripe_sizes) {
-        COUNTER_UPDATE(stripe_sizes_counter, v);
+    double total_stripe_size = 0;
+    for (const auto& v : _app_stats.orc_stripe_sizes) {
+        total_stripe_size += v;
     }
-    COUNTER_UPDATE(stripe_number_counter, _app_stats.stripe_sizes.size());
+    double avg_stripe_size = 0;
+    if (_app_stats.orc_stripe_sizes.size() > 0) {
+        // _app_stats.orc_stripe_sizes maybe zero
+        avg_stripe_size = total_stripe_size / _app_stats.orc_stripe_sizes.size();
+    }
+
+    RuntimeProfile::Counter* stripe_avg_size_counter = root->add_child_counter(
+            "PerFilePerStripeAvgSize", TUnit::BYTES,
+            RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG), orcProfileSectionPrefix);
+    RuntimeProfile::Counter* stripe_number_counter = root->add_child_counter(
+            "PerFileStripeNumber", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
+            orcProfileSectionPrefix);
+
+    COUNTER_UPDATE(stripe_avg_size_counter, avg_stripe_size);
+    COUNTER_UPDATE(stripe_number_counter, _app_stats.orc_stripe_sizes.size());
 }
 
 } // namespace starrocks
