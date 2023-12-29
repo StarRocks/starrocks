@@ -1,7 +1,7 @@
 
 ### 创建数据库
 
-在 `StarRocks > ` 提示符下输入以下两行语句，并在每行后按 **Enter** 键：
+执行以下语句创建数据库，并切换到该数据库下。
 
 ```sql
 CREATE DATABASE IF NOT EXISTS quickstart;
@@ -13,7 +13,7 @@ USE quickstart;
 
 #### Crashdata 表
 
-车祸数据集中包含较多字段。以下创建的 Crashdata 表的字段经过裁剪，仅包括可能有助于回答有关天气对驾驶条件的影响问题的字段。
+车祸数据集中包含较多字段。以下创建的 Crashdata 表的字段经过裁剪，仅包含可能有助于回答有关天气对驾驶条件有影响的字段。
 
 ```sql
 CREATE TABLE IF NOT EXISTS crashdata (
