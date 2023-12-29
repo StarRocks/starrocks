@@ -80,7 +80,7 @@ select last_query_id();
 +--------------------------------------+
 
 -- Obtain the query profile.
-select get_query_profile('502f3c04-8f5c-11ee-a41f-b22a2c00f66b')\G;
+select get_query_profile('502f3c04-8f5c-11ee-a41f-b22a2c00f66b')\G
 ```
 
 ## 分析 Query Profile
