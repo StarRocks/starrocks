@@ -170,11 +170,7 @@ PARTITION BY RANGE(`k1`)
     PARTITION p1 VALUES LESS THAN ('2019-05-31'),
     PARTITION p2 VALUES LESS THAN ('2019-06-30')
 )
-<<<<<<< HEAD
-DISTRIBUTED BY HASH(`k2`) BUCKETS 8
-=======
 DISTRIBUTED BY HASH(`k2`)  BUCKETS 6
->>>>>>> 81f9e569b8 ([Doc] Update Colocate_join example (#38024))
 PROPERTIES (
     "colocate_with" = "group1"
 );
@@ -193,11 +189,7 @@ CREATE TABLE `tbl2` (
     `v1` double SUM NOT NULL COMMENT ""
 ) ENGINE=OLAP
 AGGREGATE KEY(`k1`, `k2`)
-<<<<<<< HEAD
-DISTRIBUTED BY HASH(`k2`) BUCKETS 8
-=======
 DISTRIBUTED BY HASH(`k2`)  BUCKETS 6
->>>>>>> 81f9e569b8 ([Doc] Update Colocate_join example (#38024))
 PROPERTIES (
     "colocate_with" = "group1"
 );
