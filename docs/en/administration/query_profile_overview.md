@@ -75,7 +75,7 @@ select last_query_id();
 | bd3335ce-8dde-11ee-92e4-3269eb8da7d1 |
 +--------------------------------------+
 -- Obtain the query profile.
-select get_query_profile('502f3c04-8f5c-11ee-a41f-b22a2c00f66b')\G;
+select get_query_profile('502f3c04-8f5c-11ee-a41f-b22a2c00f66b')\G
 ```
 
 ## Analyze Query Profile
