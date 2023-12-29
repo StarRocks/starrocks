@@ -42,6 +42,16 @@ StarRocks 的版本号由三个数字表示，格式为 **Major.Minor.Patch**，
   - 您必须从 v1.19 升级到 v2.0。
   - 您必须从 v2.5 升级到 v3.0。
 
+> **注意**
+>
+> 如果您需要进行连续的大版本升级，比如从 2.4->2.5->3.0->3.1->3.2，或者在升级之后进行了回滚，之后再次执行升级，比如 2.5->3.0->2.5->3.0，
+> 为了避免部分 FE 节点元数据升级失败，需要在相邻的两次升级之间执行如下操作：
+>
+> 1. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 创建新的元数据快照文件。
+> 2. 等待元数据快照文件同步至其他 FE 节点。
+>
+> 您可以通过查看 Leader FE 节点的日志文件 **fe.log** 确认元数据快照文件是否推送完成。如果日志打印以下内容，则说明快照文件推送完成："push image.xxx from subdir [] to other nodes. totally xx nodes, push succeeded xx nodes"。
+
 ### 升级流程
 
 StarRocks 支持**滚动升级**，允许您在不停止服务的情况下升级您的集群。按照设计，BE 和 CN 向后兼容 FE。因此，**您需要先升级 BE 和 CN，然后升级 FE**，以便让您的集群在升级的同时也能正常运行。错误的升级顺序可能会导致 FE 与 BE/CN 不兼容，进而导致服务崩溃。对于 FE 节点，您必须先升级所有 Follower FE 节点，最后升级 Leader FE 节点。
@@ -189,12 +199,3 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
    ```
 
 5. 重复以上步骤升级其他 Follower FE 节点，最后升级 Leader FE 节点。
-
-  > **注意**
-  >
-  > 如果您从 v2.5 升级至 v3.0 之后，进行了回滚，然后再次升级至 v3.0，为了避免部分 Follower FE 节点元数据升级失败，则必须在升级完成后执行以下步骤：
-  >
-  > 1. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 创建新的元数据快照文件。
-  > 2. 等待元数据快照文件同步至其他 FE 节点。
-  >
-  > 您可以通过查看 Leader FE 节点的日志文件 **fe.log** 确认元数据快照文件是否推送完成。如果日志打印以下内容，则说明快照文件推送完成："push image.* from subdir [] to other nodes. totally xx nodes, push successed xx nodes"。
