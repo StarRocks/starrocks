@@ -732,7 +732,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             uint64_t index_size = 0;
             uint64_t footer_position = 0;
             padding_char_columns(partial_schema, *partial_tschema, source_chunk_ptr.get());
-            ASSIGN_OR_RETURN(auto delta_column_group_writer, build_writer_fn(each.first, partial_tschema, idx++));
+            ASSIGN_OR_RETURN(auto delta_column_group_writer, build_writer_fn(each.first, partial_tschema, idx));
             RETURN_IF_ERROR(delta_column_group_writer->append_chunk(*source_chunk_ptr));
             RETURN_IF_ERROR(delta_column_group_writer->finalize(&segment_file_size, &index_size, &footer_position));
             int64_t t5 = MonotonicMillis();
@@ -745,6 +745,7 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             dcg_column_files[each.first].push_back(file_name(delta_column_group_writer->segment_path()));
             handle_cnt++;
         }
+        idx++;
         // 3.7. reclaim update chunk cache
         reclaim_update_cache_fn(false);
     }
@@ -752,13 +753,8 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
     for (const auto& each : rss_rowid_to_update_rowid) {
         update_rows += each.second.size();
         _rssid_to_delta_column_group[each.first] = std::make_shared<DeltaColumnGroup>();
-<<<<<<< HEAD
-        _rssid_to_delta_column_group[each.first]->init(latest_applied_version.major() + 1, dcg_column_ids,
-                                                       dcg_column_files);
-=======
-        _rssid_to_delta_column_group[each.first]->init(latest_applied_version.major_number() + 1,
-                                                       dcg_column_ids[each.first], dcg_column_files[each.first]);
->>>>>>> 29d0912fa0 ([Enhancement] improve partial update by column when when there is too many segment files (#38069))
+        _rssid_to_delta_column_group[each.first]->init(latest_applied_version.major() + 1, dcg_column_ids[each.first],
+                                                       dcg_column_files[each.first]);
     }
     // reclaim update cache at final step
     reclaim_update_cache_fn(true);
