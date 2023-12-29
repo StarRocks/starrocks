@@ -81,6 +81,7 @@
 #include "util/thrift_rpc_helper.h"
 #include "util/time.h"
 #include "util/uid_util.h"
+#include "util/url_coding.h"
 
 namespace starrocks {
 
@@ -233,9 +234,27 @@ int StreamLoadAction::on_header(HttpRequest* req) {
     ctx->load_type = TLoadType::MANUAL_LOAD;
     ctx->load_src_type = TLoadSourceType::RAW;
 
-    ctx->db = req->param(HTTP_DB_KEY);
-    ctx->table = req->param(HTTP_TABLE_KEY);
     ctx->label = req->header(HTTP_LABEL_KEY);
+    if (!url_decode(req->param(HTTP_DB_KEY), &ctx->db)) {
+        std::string error_msg = fmt::format("failed to decode the db key in the stream load url, "
+                "please make sure the url is encoded rightly. uri={}, db_key={}, label={}.",
+                req->uri(), req->param(HTTP_DB_KEY, ctx->label);
+        LOG(WARNING) << error_msg;
+        ctx->status = Status::InternalError(error_msg);
+        _send_reply(req, error_msg);
+        return -1;
+    }
+
+    if (!url_decode(req->param(HTTP_TABLE_KEY), &ctx->db)) {
+        std::string error_msg = fmt::format("failed to decode the table key in the stream load url, "
+                "please make sure the url is encoded rightly. uri={}, table_key={}, db={}, label={}.",
+                req->uri(), req->param(HTTP_TABLE_KEY, ctx->db, ctx->label);
+        LOG(WARNING) << error_msg;
+        ctx->status = Status::InternalError(error_msg);
+        _send_reply(req, error_msg);
+        return -1;
+    }
+
     if (ctx->label.empty()) {
         ctx->label = generate_uuid_string();
     }
