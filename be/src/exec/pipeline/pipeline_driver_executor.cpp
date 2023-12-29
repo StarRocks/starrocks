@@ -35,7 +35,8 @@ GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_
                                               : std::make_unique<QuerySharedDriverQueue>()),
           _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
-          _exec_state_reporter(new ExecStateReporter()) {
+          _exec_state_reporter(new ExecStateReporter()),
+          _audit_statistics_reporter(new AuditStatisticsReporter()) {
     REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_schedule_count, [this]() { return _schedule_count.load(); });
     REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_execution_time, [this]() { return _driver_execution_ns.load(); });
     REGISTER_GAUGE_STARROCKS_METRIC(pipe_driver_queue_len, [this]() { return _driver_queue->size(); });
@@ -336,7 +337,16 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
     this->_exec_state_reporter->submit(std::move(report_task));
 }
 
-void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) {
+void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool* done) {
+    // It should be guaranteed that the done flag must be set to true in any cases.
+    // If the async task is submitted successfully, the done flag will be set to true in the lambda function.
+    // Otherwise, the done flag will be set to true in the defer object.
+    bool submit_success = false;
+    DeferOp defer([&]() {
+        if (!submit_success) {
+            *done = true;
+        }
+    });
     auto query_statistics = query_ctx->final_query_statistic();
 
     TReportAuditStatisticsParams params;
@@ -355,17 +365,24 @@ void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, Frag
     auto exec_env = fragment_ctx->runtime_state()->exec_env();
     auto fragment_id = fragment_ctx->fragment_instance_id();
 
-    auto status = AuditStatisticsReporter::report_audit_statistics(params, exec_env, fe_addr);
-    if (!status.ok()) {
-        if (status.is_not_found()) {
-            LOG(INFO) << "[Driver] Fail to report audit statistics due to query not found: fragment_instance_id="
-                      << print_id(fragment_id);
+    auto report_task = [=]() {
+        *done = true;
+        auto status = AuditStatisticsReporter::report_audit_statistics(params, exec_env, fe_addr);
+        if (!status.ok()) {
+            if (status.is_not_found()) {
+                LOG(INFO) << "[Driver] Fail to report audit statistics due to query not found: fragment_instance_id="
+                          << print_id(fragment_id);
+            } else {
+                LOG(WARNING) << "[Driver] Fail to report audit statistics fragment_instance_id="
+                             << print_id(fragment_id) << ", status: " << status.to_string();
+            }
         } else {
-            LOG(WARNING) << "[Driver] Fail to report audit statistics fragment_instance_id=" << print_id(fragment_id)
-                         << ", status: " << status.to_string();
+            LOG(INFO) << "[Driver] Succeed to report audit statistics: fragment_instance_id=" << print_id(fragment_id);
         }
-    } else {
-        LOG(INFO) << "[Driver] Succeed to report audit statistics: fragment_instance_id=" << print_id(fragment_id);
+    };
+    auto st = this->_audit_statistics_reporter->submit(std::move(report_task));
+    if (st.ok()) {
+        submit_success = true;
     }
 }
 
