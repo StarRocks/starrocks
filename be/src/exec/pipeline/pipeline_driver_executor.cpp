@@ -137,7 +137,7 @@ void GlobalDriverExecutor::_worker_thread() {
                 _finalize_driver(driver, runtime_state, driver->driver_state());
                 continue;
             } else if (!driver->is_ready()) {
-                // Enabling blocked driver a change to trigger exec state report.
+                // Offer blocked driver a chance to trigger profile report.
                 driver->report_exec_state_if_necessary();
                 _blocked_driver_poller->add_blocked_driver(driver);
                 continue;

@@ -132,6 +132,14 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
                     Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION_COUNT, new Type[] {Type.BITMAP},
                             IS_IDENTICAL));
             return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
+        } else if (functionName.equals(FunctionSet.BITMAP_AGG) &&
+                mvColumn.getAggregationType() == AggregateType.BITMAP_UNION) {
+            CallOperator callOperator = new CallOperator(FunctionSet.BITMAP_UNION,
+                    queryAggFunc.getType(),
+                    queryAggFunc.getChildren(),
+                    Expr.getBuiltinFunction(FunctionSet.BITMAP_UNION, new Type[] {Type.BITMAP},
+                            IS_IDENTICAL));
+            return (CallOperator) replaceColumnRefRewriter.rewrite(callOperator);
         } else if (
                 (functionName.equals(FunctionSet.NDV) || functionName.equals(FunctionSet.APPROX_COUNT_DISTINCT))
                         && mvColumn.getAggregationType() == AggregateType.HLL_UNION) {

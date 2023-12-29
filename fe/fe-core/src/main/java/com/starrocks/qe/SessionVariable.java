@@ -436,6 +436,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PLAN_SERIALIZE_CONCURRENTLY = "enable_plan_serialize_concurrently";
 
+    public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -600,6 +602,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SHORT_CIRCUIT = "enable_short_circuit";
 
     public static final String ENABLE_HYPERSCAN_VEC = "enable_hyperscan_vec";
+
+    // whether rewrite bitmap_union(to_bitmap(x)) to bitmap_agg(x) directly.
+    public static final String ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG = "enable_rewrite_bitmap_union_to_bitamp_agg";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1239,6 +1244,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableArrayLowCardinalityOptimize;
     }
 
+    @VarAttr(name = ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG)
+    private boolean enableRewriteBitmapUnionToBitmapAgg = true;
+
+    public boolean isEnableRewriteBitmapUnionToBitmapAgg() {
+        return enableRewriteBitmapUnionToBitmapAgg;
+    }
+
+    public void setEnableRewriteBitmapUnionToBitmapAgg(boolean enableRewriteBitmapUnionToBitmapAgg) {
+        this.enableRewriteBitmapUnionToBitmapAgg = enableRewriteBitmapUnionToBitmapAgg;
+    }
+
     public long getCboPushDownTopNLimit() {
         return cboPushDownTopNLimit;
     }
@@ -1609,6 +1625,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = FOLLOWER_QUERY_FORWARD_MODE, flag = VariableMgr.INVISIBLE | VariableMgr.DISABLE_FORWARD_TO_LEADER)
     private String followerForwardMode = "";
+
+    @VarAttr(name = ENABLE_STRICT_ORDER_BY)
+    private boolean enableStrictOrderBy = true;
 
     public void setFollowerQueryForwardMode(String mode) {
         this.followerForwardMode = mode;
@@ -3017,6 +3036,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSkewJoinRandRange(int skewJoinRandRange) {
         this.skewJoinRandRange = skewJoinRandRange;
+    }
+
+    public boolean isEnableStrictOrderBy() {
+        return enableStrictOrderBy;
+    }
+
+    public void setEnableStrictOrderBy(boolean enableStrictOrderBy) {
+        this.enableStrictOrderBy = enableStrictOrderBy;
     }
 
     // Serialize to thrift object
