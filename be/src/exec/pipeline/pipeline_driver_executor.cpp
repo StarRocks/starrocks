@@ -338,6 +338,9 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
 }
 
 void GlobalDriverExecutor::report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool* done) {
+    // It should be guaranteed that the done flag must be set to true in any cases.
+    // If the async task is submitted successfully, the done flag will be set to true in the lambda function.
+    // Otherwise, the done flag will be set to true in the defer object.
     bool submit_success = false;
     DeferOp defer([&]() {
         if (!submit_success) {
