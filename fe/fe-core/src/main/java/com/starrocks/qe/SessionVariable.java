@@ -587,6 +587,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SHORT_CIRCUIT = "enable_short_circuit";
 
+<<<<<<< HEAD
+=======
+    public static final String ENABLE_HYPERSCAN_VEC = "enable_hyperscan_vec";
+
+    // whether rewrite bitmap_union(to_bitmap(x)) to bitmap_agg(x) directly.
+    public static final String ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG = "enable_rewrite_bitmap_union_to_bitamp_agg";
+
+>>>>>>> b7636a3888 ([Enhancement] Convert bitmap_union(to_bitmap(int type) to bitmap_agg (#23656))
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1192,6 +1200,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
     private long cboPushDownTopNLimit = 1000;
 
+<<<<<<< HEAD
+=======
+    @VarAttr(name = ENABLE_HYPERSCAN_VEC)
+    private boolean enableHyperscanVec = true;
+
+    @VarAttr(name = ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG)
+    private boolean enableRewriteBitmapUnionToBitmapAgg = true;
+
+    public boolean isEnableRewriteBitmapUnionToBitmapAgg() {
+        return enableRewriteBitmapUnionToBitmapAgg;
+    }
+
+    public void setEnableRewriteBitmapUnionToBitmapAgg(boolean enableRewriteBitmapUnionToBitmapAgg) {
+        this.enableRewriteBitmapUnionToBitmapAgg = enableRewriteBitmapUnionToBitmapAgg;
+    }
+
+>>>>>>> b7636a3888 ([Enhancement] Convert bitmap_union(to_bitmap(int type) to bitmap_agg (#23656))
     public long getCboPushDownTopNLimit() {
         return cboPushDownTopNLimit;
     }
