@@ -1572,8 +1572,10 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
     int64_t wait_start = MonotonicMillis();
     while (true) {
         if (_apply_stopped) {
-            return Status::InternalError(strings::Substitute("wait_for_version version:$0 failed: apply stopped $1",
-                                                             version.to_string(), _debug_string(false, true)));
+            return Status::InternalError(
+                    strings::Substitute("wait_for_version version:$0 failed: apply stopped, tablet "
+                                        "might have been dropped due to certain reasons and you can retry. $1",
+                                        version.to_string(), _debug_string(false, true)));
         }
         _apply_version_changed.wait_for(ul, std::chrono::seconds(2));
         if (_error) {
