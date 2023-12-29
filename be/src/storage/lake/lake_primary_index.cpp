@@ -110,7 +110,8 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
         case PersistentIndexTypePB::CLOUD_NATIVE: {
             LOG(INFO) << "use cloud native persistent index";
             _persistent_index = std::make_unique<LakePersistentIndex>(tablet_mgr, metadata->id());
-            return Status::OK();
+            return dynamic_cast<LakePersistentIndex*>(_persistent_index.get())
+                    ->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
         }
         default:
             LOG(WARNING) << "only support LOCAL lake_persistent_index_type for now";

@@ -32,7 +32,7 @@ public:
 
     // Does NOT take the ownership of |tablet_mgr| and |metadata|.
     explicit Rowset(TabletManager* tablet_mgr, int64_t tablet_id, const RowsetMetadataPB* metadata, int index,
-                    TabletSchemaPtr tablet_schema);
+                    TabletSchemaPtr tablet_schema, int64_t version);
 
     // Create a Rowset based on the rowset metadata of index |rowset_index| saved in the tablet metadata
     // pointed by |tablet_metadata|.
@@ -43,7 +43,7 @@ public:
     // Requires:
     //  - |tablet_mgr| and |tablet_metadata| is not nullptr
     //  - 0 <= |rowset_index| && |rowset_index| < tablet_metadata->rowsets_size()
-    explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index);
+    explicit Rowset(TabletManager* tablet_mgr, TabletMetadataPtr tablet_metadata, int rowset_index, int64_t version);
 
     ~Rowset();
 
@@ -86,6 +86,8 @@ public:
 
     [[nodiscard]] int index() const { return _index; }
 
+    [[nodiscard]] int64_t version() const { return _version; }
+
     [[nodiscard]] const RowsetMetadataPB& metadata() const { return *_metadata; }
 
     [[nodiscard]] StatusOr<std::vector<SegmentPtr>> segments(bool fill_cache);
@@ -108,13 +110,17 @@ private:
     int _index;
     TabletSchemaPtr _tablet_schema;
     TabletMetadataPtr _tablet_metadata;
+    int64_t _version;
 };
 
 inline std::vector<RowsetPtr> Rowset::get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata) {
     std::vector<RowsetPtr> rowsets;
     rowsets.reserve(tablet_metadata->rowsets_size());
+    LOG(INFO) << "rowset size " << tablet_metadata->rowsets_size(); 
     for (int i = 0, size = tablet_metadata->rowsets_size(); i < size; ++i) {
-        auto rowset = std::make_shared<Rowset>(tablet_mgr, tablet_metadata, i);
+        auto version = tablet_metadata->rowsets(i).version();
+        LOG(INFO) << version;
+        auto rowset = std::make_shared<Rowset>(tablet_mgr, tablet_metadata, i, version);
         rowsets.emplace_back(std::move(rowset));
     }
     return rowsets;

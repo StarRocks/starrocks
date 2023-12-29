@@ -266,7 +266,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     for (auto&& each : new_del_vecs) {
         builder->append_delvec(each.second, each.first);
     }
-    builder->apply_opwrite(op_write, replace_segments, orphan_files);
+    builder->apply_opwrite(op_write, replace_segments, orphan_files, new_version);
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
 
     TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);
@@ -617,8 +617,8 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     }
     // 1. iterate output rowset, update primary index and generate delvec
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(metadata.schema());
-    Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/,
-                         tablet_schema);
+    Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &op_compaction.output_rowset(), -1 /*unused*/, tablet_schema,
+                         -1 /*unused*/);
     auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet.id(), txn_id));
     compaction_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());
     // only use state entry once, remove it when publish finish or fail
@@ -669,6 +669,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
         builder->append_delvec(each.second, each.first);
     }
     builder->apply_opcompaction(op_compaction, max_rowset_id);
+    builder->apply_opcompaction(op_compaction, version);
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
 
     TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);
@@ -846,7 +847,7 @@ void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet&
     const int segments_size = txnlog.op_compaction().output_rowset().segments_size();
     if (segments_size <= 0) return;
     Rowset output_rowset(tablet.tablet_mgr(), tablet.id(), &txnlog.op_compaction().output_rowset(), -1 /*unused*/,
-                         tablet_schema);
+                         tablet_schema, -1 /*unused*/);
     // use tabletid-txnid as compaction state cache's key, so it can retry safe.
     auto compaction_entry = _compaction_cache.get_or_create(cache_key(tablet.id(), txnlog.txn_id()));
     compaction_entry->update_expire_time(MonotonicMillis() + get_cache_expire_ms());

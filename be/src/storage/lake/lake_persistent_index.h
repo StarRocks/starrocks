@@ -80,6 +80,9 @@ public:
 
     void set_txn_id(int64_t txn_id) { _txn_id = txn_id; }
 
+    Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
+                                 const MetaFileBuilder* builder);
+
 private:
     void flush_to_immutable_memtable();
 
