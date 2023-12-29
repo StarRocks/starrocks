@@ -731,12 +731,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.lazy_column_coalesce_counter = get_lazy_column_coalesce_counter();
 
     if (!_equality_delete_slots.empty()) {
-        MORParams mor_params;
+        MORParams& mor_params = scanner_params.mor_params;
         mor_params.tuple_desc = _tuple_desc;
         mor_params.equality_slots = _equality_delete_slots;
         mor_params.mor_tuple_id = _provider->_hdfs_scan_node.mor_tuple_id;
         mor_params.runtime_profile = _runtime_profile;
-        scanner_params.mor_params = mor_params;
     }
 
     for (const auto& delete_file : scan_range.delete_files) {
