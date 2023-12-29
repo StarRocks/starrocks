@@ -56,12 +56,7 @@ private:
 
 class VerticalPkTabletWriter : public VerticalGeneralTabletWriter {
 public:
-<<<<<<< HEAD
-    explicit VerticalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
-                                    std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
-=======
     explicit VerticalPkTabletWriter(int64_t tablet_id, std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
->>>>>>> 9cc0fbaa0b... Remove the tablet from the tablet writer member variable and use tablet_id instead
                                     uint32_t max_rows_per_segment);
 
     ~VerticalPkTabletWriter() override;
