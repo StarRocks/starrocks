@@ -126,8 +126,9 @@ public class CreateViewTest {
         starRocksAssert.withTable("create table sample_data (\n" +
                         "    timestamp DATETIME not null,\n" +
                         "    username string,\n" +
-                        "    price int null\n" +
-                        ")PROPERTIES (\n" +
+                        "    price int null\n" + ")ENGINE=OLAP \n" +
+                        "DISTRIBUTED BY HASH(`timestamp`) BUCKETS 32 \n" +
+                        "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\");")
                 .withView("create view test_ignore_nulls as select\n" +
                         "    timestamp,\n" +
