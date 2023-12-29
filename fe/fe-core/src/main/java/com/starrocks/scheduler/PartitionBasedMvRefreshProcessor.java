@@ -654,11 +654,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             Map<Boolean, List<TableSnapshotInfo>> snapshotInfoSplits = snapshotBaseTables.values()
                     .stream()
                     .collect(Collectors.partitioningBy(s -> s.getBaseTable().isNativeTableOrMaterializedView()));
+            Set<Long> refBaseTableIds = refTableAndPartitionNames.keySet().stream()
+                    .map(t -> t.getBaseTable().getId())
+                    .collect(Collectors.toSet());
             if (snapshotInfoSplits.get(true) != null) {
-                updateMetaForOlapTable(refreshContext, snapshotInfoSplits.get(true));
+                updateMetaForOlapTable(refreshContext, snapshotInfoSplits.get(true), refBaseTableIds);
             }
             if (snapshotInfoSplits.get(false) != null) {
-                updateMetaForExternalTable(refreshContext, snapshotInfoSplits.get(false));
+                updateMetaForExternalTable(refreshContext, snapshotInfoSplits.get(false), refBaseTableIds);
             }
 
             // update mv status message
@@ -724,12 +727,29 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     private void updateMetaForOlapTable(MaterializedView.AsyncRefreshContext refreshContext,
-                                        List<TableSnapshotInfo> changedTablePartitionInfos) {
+                                        List<TableSnapshotInfo> changedTablePartitionInfos,
+                                        Set<Long> refBaseTableIds) {
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> currentVersionMap =
                 refreshContext.getBaseTableVisibleVersionMap();
+        boolean hasNextPartitionToRefresh = mvContext.hasNextBatchPartition();
         // update version map of materialized view
         for (TableSnapshotInfo snapshotInfo : changedTablePartitionInfos) {
             Table snapshotTable = snapshotInfo.getBaseTable();
+            // Non-ref-base-tables should be update meta at the last refresh, otherwise it may
+            // cause wrong results for rewrite or refresh.
+            // eg:
+            // tblA : partition table, has partitions: p0, p1, p2
+            // tblB : non-partition table
+            // MV: tblA a join tblB b on a.dt=b.dt
+            // case: tblB has been updated,
+            // run1: tblA(p0) + tblB, (X)
+            // run2: tblA(p1) + tblB, (X)
+            // run3: tblA(p2) + tblB, (Y)
+            // In the run1/run2 should only update the tblA's partition info, but tblB's partition
+            // info meta should be updated at the last refresh.
+            if (hasNextPartitionToRefresh && !refBaseTableIds.contains(snapshotTable.getId())) {
+                continue;
+            }
             Long tableId = snapshotTable.getId();
             currentVersionMap.computeIfAbsent(tableId, (v) -> Maps.newConcurrentMap());
             Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
@@ -761,13 +781,30 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     private void updateMetaForExternalTable(MaterializedView.AsyncRefreshContext refreshContext,
-                                            List<TableSnapshotInfo> changedTablePartitionInfos) {
+                                            List<TableSnapshotInfo> changedTablePartitionInfos,
+                                            Set<Long> refBaseTableIds) {
         Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> currentVersionMap =
                 refreshContext.getBaseTableInfoVisibleVersionMap();
+        boolean hasNextBatchPartition = mvContext.hasNextBatchPartition();
         // update version map of materialized view
         for (TableSnapshotInfo snapshotInfo : changedTablePartitionInfos) {
             BaseTableInfo baseTableInfo = snapshotInfo.getBaseTableInfo();
-
+            Table snapshotTable = snapshotInfo.getBaseTable();
+            // Non-ref-base-tables should be update meta at the last refresh, otherwise it may
+            // cause wrong results for rewrite or refresh.
+            // eg:
+            // tblA : partition table, has partitions: p0, p1, p2
+            // tblB : non-partition table
+            // MV: tblA a join tblB b on a.dt=b.dt
+            // case: tblB has been updated,
+            // run1: tblA(p0) + tblB, (X)
+            // run2: tblA(p1) + tblB, (X)
+            // run3: tblA(p2) + tblB, (Y)
+            // In the run1/run2 should only update the tblA's partition info, but tblB's partition
+            // info meta should be updated at the last refresh.
+            if (hasNextBatchPartition && !refBaseTableIds.contains(snapshotTable.getId())) {
+                continue;
+            }
             currentVersionMap.computeIfAbsent(baseTableInfo, (v) -> Maps.newConcurrentMap());
             Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
                     currentVersionMap.get(baseTableInfo);
