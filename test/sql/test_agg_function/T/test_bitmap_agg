@@ -9,8 +9,7 @@ CREATE TABLE t1 (
     c7 string
     )
 DUPLICATE KEY(c1)
-DISTRIBUTED BY HASH(c1)
-BUCKETS 1
+DISTRIBUTED BY HASH(c1) BUCKETS 3
 PROPERTIES ("replication_num" = "1");
 
 INSERT INTO t1 values
@@ -27,3 +26,53 @@ SELECT BITMAP_TO_STRING(BITMAP_AGG(c4)) FROM t1;
 SELECT BITMAP_TO_STRING(BITMAP_AGG(c5)) FROM t1;
 SELECT BITMAP_TO_STRING(BITMAP_AGG(c6)) FROM t1;
 SELECT BITMAP_TO_STRING(BITMAP_AGG(c7)) FROM t1;
+
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c2))) FROM t1;
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c3))) FROM t1;
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c4))) FROM t1;
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c5))) FROM t1;
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c6))) FROM t1;
+
+create materialized view mv1 as select c1, bitmap_agg(c2), bitmap_agg(c3), bitmap_agg(c4) from t1 group by c1;
+function: wait_materialized_view_finish()
+function: check_hit_materialized_view("select bitmap_agg(c2), bitmap_agg(c3), bitmap_agg(c4) from t1 group by c1", "mv1")
+function: check_hit_materialized_view("select bitmap_union(to_bitmap(c2)), bitmap_union(to_bitmap(c3)), bitmap_agg(c4) from t1 group by c1", "mv1")
+function: check_hit_materialized_view("select bitmap_union(to_bitmap(c2)), bitmap_union(to_bitmap(c3)), bitmap_agg(c4) from t1 group by c1", "mv1")
+function: check_hit_materialized_view("select count(distinct c2), bitmap_union(to_bitmap(c3)), bitmap_agg(c4) from t1 group by c1", "mv1")
+function: check_hit_materialized_view("SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c2))) FROM t1", "mv1")
+function: check_hit_materialized_view("select bitmap_union_count(to_bitmap(c4)), bitmap_agg(c4) from t1 group by c1", "mv1")
+function: check_hit_materialized_view("select c1, count(distinct c2), count(distinct c3), count(distinct c4) from t1 group by c1", "mv1")
+function: check_hit_materialized_view("select c1, multi_distinct_count(c3), multi_distinct_count(c4) from t1 group by c1", "mv1")
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c2))) FROM t1;
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c3))) FROM t1;
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c4))) FROM t1;
+select c1, BITMAP_TO_STRING(bitmap_union(to_bitmap(c2))), BITMAP_TO_STRING(bitmap_union(to_bitmap(c3))), BITMAP_TO_STRING(bitmap_agg(c4)) from t1 group by c1 order by c1;
+select c1, count(distinct c2), bitmap_union(to_bitmap(c3)), bitmap_agg(c4) from t1 group by c1 order by c1;
+select c1, bitmap_union_count(to_bitmap(c4)), BITMAP_TO_STRING(bitmap_agg(c4)) from t1 group by c1 order by c1;
+select c1, multi_distinct_count(c2), multi_distinct_count(c3), multi_distinct_count(c4) from t1 group by c1 order by c1;
+select c1, count(distinct c2), count(distinct c3), count(distinct c4) from t1 group by c1 order by c1;
+drop materialized view mv1;
+
+create materialized view mv2
+distributed by random
+refresh deferred manual
+as select c1, bitmap_agg(c2), bitmap_agg(c3), bitmap_agg(c4) from t1 group by c1;
+refresh materialized view mv2 with sync mode;
+function: check_hit_materialized_view("select bitmap_agg(c2), bitmap_agg(c3), bitmap_agg(c4) from t1 group by c1", "mv2")
+function: check_hit_materialized_view("select bitmap_union(to_bitmap(c2)), bitmap_union(to_bitmap(c3)), bitmap_agg(c4) from t1 group by c1", "mv2")
+function: check_hit_materialized_view("select bitmap_union(to_bitmap(c2)), bitmap_union(to_bitmap(c3)), bitmap_agg(c4) from t1 group by c1", "mv2")
+function: check_hit_materialized_view("select count(distinct c2), bitmap_union(to_bitmap(c3)), bitmap_agg(c4) from t1 group by c1", "mv2")
+function: check_hit_materialized_view("SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c2))) FROM t1", "mv2")
+function: check_hit_materialized_view("select bitmap_union_count(to_bitmap(c4)), bitmap_agg(c4) from t1 group by c1", "mv2")
+--function: check_hit_materialized_view("select c1, count(distinct c2), count(distinct c3), count(distinct c4) from t1 group by c1", "mv2")
+function: check_hit_materialized_view("select c1, multi_distinct_count(c3), multi_distinct_count(c4) from t1 group by c1", "mv2")
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c2))) FROM t1;
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c3))) FROM t1;
+SELECT BITMAP_TO_STRING(BITMAP_UNION(TO_BITMAP(c4))) FROM t1;
+select BITMAP_TO_STRING(bitmap_union(to_bitmap(c2))), BITMAP_TO_STRING(bitmap_union(to_bitmap(c3))), BITMAP_TO_STRING(bitmap_agg(c4)) from t1 group by c1 order by c1;
+select c1, count(distinct c2), bitmap_union(to_bitmap(c3)), bitmap_agg(c4) from t1 group by c1 order by c1;
+select c1, bitmap_union_count(to_bitmap(c4)), BITMAP_TO_STRING(bitmap_agg(c4)) from t1 group by c1 order by c1;
+select c1, count(distinct c2), count(distinct c3), count(distinct c4) from t1 group by c1 order by c1;
+select c1, multi_distinct_count(c2), multi_distinct_count(c3), multi_distinct_count(c4) from t1 group by c1 order by c1;
+
+drop materialized view mv2;

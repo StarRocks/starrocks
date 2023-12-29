@@ -2767,6 +2767,28 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testCountDistinctToBitmapCount7() {
+        String mv = "select user_id, time, bitmap_agg(tag_id) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
+        // rewrite count distinct to bitmap_count(bitmap_union(to_bitmap(x)));
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_agg(tag_id)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_agg(tag_id) x from user_tags group by user_id, time;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount8() {
+        String mv = "select user_id, time, bitmap_agg(tag_id % 10) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id % 10)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id % 10))) x from user_tags group by user_id;");
+        // rewrite count distinct to bitmap_count(bitmap_union(to_bitmap(x)));
+        testRewriteOK(mv, "select user_id, count(distinct tag_id % 10) x from user_tags group by user_id;");
+        // bitmap_agg
+        testRewriteOK(mv, "select user_id, bitmap_agg(tag_id % 10) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_agg(tag_id % 10) x from user_tags group by user_id;");
+    }
+
+    @Test
     public void testStrColumnCountDistinctToBitmapCount1() {
         {
             String mv = "select user_id, bitmap_union(bitmap_hash(user_name)) from user_tags group by user_id;";
@@ -3010,7 +3032,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         }
 
         {
-            this.setTracLogModule("MV");
             String mv = "SELECT count(lo_linenumber)\n" +
                     "FROM lineorder inner join customer on lo_custkey = c_custkey\n" +
                     "WHERE `c_name` != 'name'; ";
@@ -5232,7 +5253,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         connectContext.getSessionVariable()
                 .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
         {
-            this.setTracLogModule("MV");
             MVRewriteChecker checker = testRewriteOK(mv, query);
             checker.contains("UNION");
         }

@@ -23,6 +23,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.Arrays;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
+import static com.starrocks.catalog.FunctionSet.BITMAP_AGG;
 import static com.starrocks.catalog.FunctionSet.BITMAP_HASH;
 import static com.starrocks.catalog.FunctionSet.BITMAP_UNION;
 import static com.starrocks.catalog.FunctionSet.BITMAP_UNION_COUNT;
@@ -62,6 +63,12 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
             } else {
                 return new RewriteEquivalentContext(arg0, op);
             }
+        } else if (aggFuncName.equals(BITMAP_AGG)) {
+            ScalarOperator arg0 = aggFunc.getChild(0);
+            if (arg0 == null) {
+                return null;
+            }
+            return new RewriteEquivalentContext(arg0, op);
         }
         return null;
     }
@@ -96,7 +103,8 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
         CallOperator aggFunc = (CallOperator) newInput;
         String aggFuncName = aggFunc.getFnName();
         boolean isRollup = shuttleContext.isRollup();
-        if (aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct() || aggFuncName.equals(MULTI_DISTINCT_COUNT)) {
+        if (aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct() ||
+                aggFuncName.equals(MULTI_DISTINCT_COUNT)) {
             ScalarOperator arg0 = aggFunc.getChild(0);
             if (!arg0.equals(eqChild)) {
                 return null;
@@ -119,6 +127,16 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
                 return null;
             }
             return rewriteImpl(aggFunc, replace, isRollup);
+        } else if (aggFuncName.equals(BITMAP_AGG)) {
+            ScalarOperator arg0 = aggFunc.getChild(0);
+            if (!arg0.equals(eqChild)) {
+                return null;
+            }
+            return new CallOperator(BITMAP_UNION,
+                    aggFunc.getType(),
+                    Arrays.asList(replace),
+                    Expr.getBuiltinFunction(BITMAP_UNION, new Type[] {Type.BITMAP},
+                            IS_IDENTICAL));
         }
         return null;
     }
