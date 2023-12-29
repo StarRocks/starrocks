@@ -1412,9 +1412,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         // properties
         Map<String, String> properties = buildProperties(context.properties());
-        if (context.setVarHint() != null) {
-            properties.putAll(extractVarHints(hintMap.get(context)));
-        }
+        properties.putAll(extractVarHints(hintMap.get(context)));
         CreateTableAsSelectStmt createTableAsSelectStmt = null;
         InsertStmt insertStmt = null;
         if (context.createTableAsSelectStatement() != null) {
