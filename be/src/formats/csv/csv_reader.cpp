@@ -299,6 +299,14 @@ Status CSVReader::more_rows() {
             break;
 
         case ENCLOSE_ESCAPE:
+            if (UNLIKELY(is_row_delimiter(notGetLine))) {
+                curState = NEWROW;
+                break;
+            }
+            if (UNLIKELY(is_column_delimiter(notGetLine))) {
+                curState = COLUMN_DELIMITER;
+                break;
+            }
             curState = preState;
             _buff.skip(1);
             break;

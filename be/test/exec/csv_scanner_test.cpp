@@ -108,7 +108,58 @@ private:
     ObjectPool _obj_pool;
 };
 
-class CSVScannerTrimSpaceTest : public CSVScannerTest {};
+class CSVScannerV2Test : public CSVScannerTest {};
+
+TEST_P(CSVScannerV2Test, test_trim_space) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(2);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file16");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", "|", 0, true, '"');
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    scanner->use_v2(_use_v2);
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(2, chunk->num_rows());
+
+    EXPECT_EQ(1, chunk->get(0)[0].get_int32());
+    EXPECT_EQ(3, chunk->get(1)[0].get_int32());
+
+    EXPECT_EQ("aa  ", chunk->get(0)[1].get_slice());
+    EXPECT_EQ(" bb", chunk->get(1)[1].get_slice());
+}
+
+TEST_P(CSVScannerV2Test, test_enclose) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR),
+                                      TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(types.size());
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file22");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", ",", 0, false, '"');
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    scanner->use_v2(_use_v2);
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(1, chunk->num_rows());
+
+    EXPECT_EQ("118,99", chunk->get(0)[0].get_slice());
+    EXPECT_EQ("143", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("4.0", chunk->get(0)[2].get_slice());
+    EXPECT_EQ("\"21.03.2016\"", chunk->get(0)[3].get_slice());
+    std::cout << "yyyy: " << chunk->get(0)[3].get_slice() << "aa" << std::endl;
+}
 
 TEST_P(CSVScannerTest, test_scalar_types) {
     std::vector<TypeDescriptor> types;
@@ -696,32 +747,7 @@ TEST_P(CSVScannerTest, test_skip_header) {
     EXPECT_EQ(0, chunk->get(4)[1].get_int32());
 }
 
-TEST_P(CSVScannerTrimSpaceTest, test_trim_space) {
-    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)};
-
-    std::vector<TBrokerRangeDesc> ranges;
-    TBrokerRangeDesc range;
-    range.__set_num_of_columns_from_file(2);
-    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file16");
-    ranges.push_back(range);
-
-    auto scanner = create_csv_scanner(types, ranges, "\n", "|", 0, true, '"');
-    Status st = scanner->open();
-    ASSERT_TRUE(st.ok()) << st.to_string();
-
-    scanner->use_v2(_use_v2);
-
-    ChunkPtr chunk = scanner->get_next().value();
-    EXPECT_EQ(2, chunk->num_rows());
-
-    EXPECT_EQ(1, chunk->get(0)[0].get_int32());
-    EXPECT_EQ(3, chunk->get(1)[0].get_int32());
-
-    EXPECT_EQ("aa  ", chunk->get(0)[1].get_slice());
-    EXPECT_EQ(" bb", chunk->get(1)[1].get_slice());
-}
-
-TEST_P(CSVScannerTrimSpaceTest, test_trim_space_with_ENCLOSE) {
+TEST_P(CSVScannerV2Test, test_trim_space_with_ENCLOSE) {
     std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT)};
 
     std::vector<TBrokerRangeDesc> ranges;
@@ -1030,6 +1056,6 @@ TEST_P(CSVScannerTest, test_column_count_inconsistent) {
 }
 
 INSTANTIATE_TEST_CASE_P(CSVScannerTestParams, CSVScannerTest, Values(true, false));
-INSTANTIATE_TEST_CASE_P(CSVScannerTestParams, CSVScannerTrimSpaceTest, Values(true));
+INSTANTIATE_TEST_CASE_P(CSVScannerTestParams, CSVScannerV2Test, Values(true));
 
 } // namespace starrocks
