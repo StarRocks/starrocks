@@ -632,7 +632,7 @@ columnNameWithComment
 // ------------------------------------------- Task Statement ----------------------------------------------------------
 
 submitTaskStatement
-    : SUBMIT setVarHint* TASK qualifiedName? properties?
+    : SUBMIT TASK qualifiedName? properties?
     AS (createTableAsSelectStatement | insertStatement )
     ;
 
@@ -1245,17 +1245,17 @@ partitionRenameClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT setVarHint* (INTO | OVERWRITE) (qualifiedName | (FILES propertyList) | (BLACKHOLE '(' ')')) partitionNames?
+    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName | (FILES propertyList) | (BLACKHOLE '(' ')')) partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
 
 updateStatement
-    : explainDesc? withClause? UPDATE setVarHint* qualifiedName SET assignmentList fromClause (WHERE where=expression)?
+    : explainDesc? withClause? UPDATE qualifiedName SET assignmentList fromClause (WHERE where=expression)?
     ;
 
 deleteStatement
-    : explainDesc? withClause? DELETE setVarHint* FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
+    : explainDesc? withClause? DELETE FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
@@ -1470,12 +1470,12 @@ typeList
 // ------------------------------------------- Load Statement ----------------------------------------------------------
 
 loadStatement
-    : LOAD setVarHint* LABEL label=labelName
+    : LOAD LABEL label=labelName
         data=dataDescList?
         broker=brokerDesc?
         (BY system=identifierOrString)?
         (PROPERTIES props=propertyList)?
-    | LOAD setVarHint* LABEL label=labelName
+    | LOAD LABEL label=labelName
         data=dataDescList?
         resource=resourceDesc
         (PROPERTIES props=propertyList)?
@@ -2189,7 +2189,7 @@ limitElement
     ;
 
 querySpecification
-    : SELECT setVarHint* setQuantifier? selectItem (',' selectItem)*
+    : SELECT setQuantifier? selectItem (',' selectItem)*
       fromClause
       ((WHERE where=expression)? (GROUP BY groupingElement)? (HAVING having=expression)?
        (QUALIFY qualifyFunction=selectItem comparisonOperator limit=INTEGER_VALUE)?)
@@ -2286,10 +2286,6 @@ outerAndSemiJoinType
 bracketHint
     : '[' identifier (',' identifier)* ']'
     | '[' identifier '|' primaryExpression literalExpressionList']'
-    ;
-
-setVarHint
-    : '/*+' SET_VAR '(' hintMap (',' hintMap)* ')' '*/'
     ;
 
 hintMap
