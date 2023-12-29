@@ -39,7 +39,7 @@ PROPERTIES (
 );
 -- result:
 -- !result
-CREATE MATERIALIZED VIEW `mv1`
+CREATE MATERIALIZED VIEW `test_union_mv1_${uuid0}`
 PARTITION BY (`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 2
 REFRESH ASYNC
@@ -55,11 +55,11 @@ select k1, v1, v2 from t2;
 insert into t1 values ("202301",1,1),("202305",1,2);
 -- result:
 -- !result
-function: wait_async_materialized_view_finish("mv1")
+function: wait_async_materialized_view_finish("test_union_mv1_${uuid0}")
 -- result:
 None
 -- !result
-select * from mv1 order by k1, v1;
+select * from test_union_mv1_${uuid0} order by k1, v1;
 -- result:
 202301	1	1
 202305	1	2
@@ -70,7 +70,7 @@ drop table t1;
 drop table t2;
 -- result:
 -- !result
-drop materialized view mv1;
+drop materialized view test_union_mv1_${uuid0};
 -- result:
 -- !result
 CREATE TABLE `t1` (
@@ -109,7 +109,7 @@ PROPERTIES (
 insert into t1 values (202301,1,1),(202305,1,2);
 -- result:
 -- !result
-CREATE MATERIALIZED VIEW `mv1`
+CREATE MATERIALIZED VIEW `test_union_mv2_${uuid0}`
 PARTITION BY (`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 2
 REFRESH ASYNC
@@ -123,11 +123,11 @@ union
 select k1, v1, v2 from t2;
 -- result:
 -- !result
-function: wait_async_materialized_view_finish("mv1")
+function: wait_async_materialized_view_finish("test_union_mv2_${uuid0}")
 -- result:
 None
 -- !result
-select * from mv1 order by k1, v1;
+select * from test_union_mv2_${uuid0} order by k1, v1;
 -- result:
 202305	1	2
 -- !result
@@ -137,6 +137,6 @@ drop table t1;
 drop table t2;
 -- result:
 -- !result
-drop materialized view mv1;
+drop materialized view test_union_mv2_${uuid0};
 -- result:
 -- !result
