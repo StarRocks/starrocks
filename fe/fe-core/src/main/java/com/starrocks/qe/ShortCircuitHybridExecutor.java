@@ -52,6 +52,7 @@ import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
@@ -76,6 +77,8 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
         Queue<RowBatch> rowBatchQueue = new LinkedList<>();
         AtomicReference<RuntimeProfile> runtimeProfile = new AtomicReference<>();
         AtomicLong affectedRows = new AtomicLong();
+
+        AtomicInteger i = new AtomicInteger();
         be2ShortCircuitRequests.forEach((beAddress, tRequest) -> {
             PBackendService service = BrpcProxy.getBackendService(beAddress);
             try {
@@ -102,7 +105,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
 
                 byte[] serialResult = pRequest.getSerializedResult();
                 RowBatch rowBatch = new RowBatch();
-                rowBatch.setEos(true);
+                rowBatch.setEos(i.incrementAndGet() == be2ShortCircuitRequests.keys().size());
                 if (serialResult != null && serialResult.length > 0) {
                     TDeserializer deserializer = new TDeserializer();
                     TResultBatch resultBatch = new TResultBatch();
