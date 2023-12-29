@@ -556,9 +556,14 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
 
     do_update_iceberg_v2_counter(root, orcProfileSectionPrefix);
 
-    size_t total_stripe_size = 0;
+    double total_stripe_size = 0;
     for (const auto& v : _app_stats.orc_stripe_sizes) {
         total_stripe_size += v;
+    }
+    double avg_stripe_size = 0;
+    if (total_stripe_size > 0) {
+        // _app_stats.orc_stripe_sizes maybe zero
+        avg_stripe_size = total_stripe_size / _app_stats.orc_stripe_sizes.size();
     }
 
     RuntimeProfile::Counter* stripe_avg_size_counter = root->add_child_counter(
@@ -568,7 +573,7 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
             "EachFileStripeNumber", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
             orcProfileSectionPrefix);
 
-    COUNTER_UPDATE(stripe_avg_size_counter, static_cast<double>(total_stripe_size) / _app_stats.orc_stripe_sizes.size());
+    COUNTER_UPDATE(stripe_avg_size_counter, avg_stripe_size);
     COUNTER_UPDATE(stripe_number_counter, _app_stats.orc_stripe_sizes.size());
 }
 
