@@ -131,7 +131,7 @@ Status ORCPositionDeleteBuilder::build(const std::string& timezone, const std::s
 }
 
 Status ORCEqualityDeleteBuilder::build(const std::string& timezone, const std::string& delete_file_path,
-                                       int64_t file_length, const std::shared_ptr<HashJoiner> hash_joiner,
+                                       int64_t file_length, const std::shared_ptr<DefaultMORProcessor> mor_processor,
                                        std::vector<SlotDescriptor*> slot_descs, RuntimeState* state) {
     std::unique_ptr<RandomAccessFile> file;
     ASSIGN_OR_RETURN(file, _fs->new_random_access_file(delete_file_path));
@@ -170,7 +170,7 @@ Status ORCEqualityDeleteBuilder::build(const std::string& timezone, const std::s
         }
 
         ChunkPtr chunk = ret.value();
-        RETURN_IF_ERROR(hash_joiner->append_chunk_to_ht(chunk));
+        RETURN_IF_ERROR(mor_processor->append_chunk_to_ht(chunk));
     }
     return Status::OK();
 }

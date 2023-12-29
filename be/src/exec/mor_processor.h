@@ -23,47 +23,50 @@
 
 namespace starrocks {
 
-struct HdfsScannerParams;
-class MorProcessor {
-public:
-    MorProcessor() = default;
-    virtual ~MorProcessor() = default;
-
-    virtual Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) { return Status::OK(); }
-    virtual Status get_next(RuntimeState* state, RuntimeProfile* profile, ChunkPtr* chunk) { return Status::OK(); }
-
-    virtual void close(RuntimeState* runtime_state) { }
-
-    virtual Status build_hash_table(RuntimeState* runtime_state) { return Status::OK(); }
-
-    virtual std::shared_ptr<HashJoiner> hash_joiner() {
-        return nullptr;
-    }
+struct MORParams {
+    TupleDescriptor* tuple_desc = nullptr;
+    std::vector<SlotDescriptor*> equality_slots;
+    RuntimeProfile* runtime_profile = nullptr;
+    int mor_tuple_id;
 };
 
-class IcebergMorProcessor final: public MorProcessor {
+class DefaultMORProcessor {
 public:
-    IcebergMorProcessor() = default;
-    ~IcebergMorProcessor() override = default;
+    DefaultMORProcessor() = default;
+    virtual ~DefaultMORProcessor() = default;
 
-    Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
-    Status get_next(RuntimeState* state, RuntimeProfile* prifile, ChunkPtr* chunk) override;
+    virtual Status init(RuntimeState* runtime_state, const MORParams& params) { return Status::OK(); }
+    virtual Status get_next(RuntimeState* state, ChunkPtr* chunk) { return Status::OK(); }
+
+    virtual void close(RuntimeState* runtime_state) {}
+
+    virtual Status build_hash_table(RuntimeState* runtime_state) { return Status::OK(); }
+    virtual Status append_chunk_to_ht(ChunkPtr& chunk) { return Status::OK(); }
+
+    virtual std::shared_ptr<HashJoiner> hash_joiner() { return nullptr; }
+};
+
+class IcebergMORProcessor final : public DefaultMORProcessor {
+public:
+    IcebergMORProcessor(RuntimeProfile* runtime_profile) : _runtime_profile(runtime_profile) {}
+    ~IcebergMORProcessor() override = default;
+
+    Status init(RuntimeState* runtime_state, const MORParams& params) override;
+    Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
     void close(RuntimeState* runtime_state) override;
+    Status append_chunk_to_ht(ChunkPtr& chunk) override;
     Status build_hash_table(RuntimeState* runtime_state) override;
-
-    std::shared_ptr<HashJoiner> hash_joiner() override {
-        return _hash_joiner;
-    }
 
 protected:
     std::vector<ExprContext*> _join_exprs;
 
 private:
-    std::shared_ptr<HashJoiner> _hash_joiner = nullptr;
+    HashJoiner* _hash_joiner = nullptr;
     std::unique_ptr<RowDescriptor> _build_row_desc;
     std::unique_ptr<RowDescriptor> _probe_row_desc;
     ObjectPool _pool;
     std::atomic<bool> _prepared_probe = false;
+    RuntimeProfile* _runtime_profile = nullptr;
 };
 
-}
+} // namespace starrocks

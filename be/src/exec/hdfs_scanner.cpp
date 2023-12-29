@@ -82,7 +82,7 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
     _runtime_state = runtime_state;
     _scanner_params = scanner_params;
 
-    RETURN_IF_ERROR(_init_mor_processor(runtime_state, scanner_params));
+    RETURN_IF_ERROR(_init_mor_processor(runtime_state, scanner_params.mor_params));
     Status status = do_init(runtime_state, scanner_params);
     RETURN_IF_ERROR(_mor_processor->build_hash_table(runtime_state));
 
@@ -150,13 +150,13 @@ Status HdfsScanner::_build_scanner_context() {
     return Status::OK();
 }
 
-Status HdfsScanner::_init_mor_processor(RuntimeState* runtime_state, const HdfsScannerParams& params) {
-    if (_scanner_params.equality_slots.empty()) {
-        _mor_processor = std::make_shared<MorProcessor>();
+Status HdfsScanner::_init_mor_processor(RuntimeState* runtime_state, const MORParams& params) {
+    if (params.equality_slots.empty()) {
+        _mor_processor = std::make_shared<DefaultMORProcessor>();
         return Status::OK();
     }
 
-    _mor_processor = std::make_shared<IcebergMorProcessor>();
+    _mor_processor = std::make_shared<IcebergMORProcessor>(params.runtime_profile);
     RETURN_IF_ERROR(_mor_processor->init(runtime_state, params));
     return Status::OK();
 }
@@ -171,7 +171,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
             SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
             RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_params.conjunct_ctxs, (*chunk).get()));
         }
-        RETURN_IF_ERROR(_mor_processor->get_next(runtime_state, _scanner_params.profile->runtime_profile, chunk));
+        RETURN_IF_ERROR(_mor_processor->get_next(runtime_state, chunk));
     } else if (status.is_end_of_file()) {
         // do nothing.
     } else {
