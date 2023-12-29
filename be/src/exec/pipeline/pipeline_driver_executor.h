@@ -51,7 +51,7 @@ public:
     virtual void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
                                    bool done) = 0;
 
-    virtual void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) = 0;
+    virtual void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool* done) = 0;
 
     virtual void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const = 0;
 
@@ -74,9 +74,16 @@ public:
     void change_num_threads(int32_t num_threads) override;
     void submit(DriverRawPtr driver) override;
     void cancel(DriverRawPtr driver) override;
+<<<<<<< HEAD
     void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
                            bool done) override;
     void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) override;
+=======
+    void close() override;
+    void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status, bool done,
+                           bool attach_profile) override;
+    void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool* done) override;
+>>>>>>> 65441903f2 ([Enhancement] Make audit report for insert into statement asynchronous (#38032))
 
     void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const override;
 
@@ -101,6 +108,7 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool;
     PipelineDriverPollerPtr _blocked_driver_poller;
     std::unique_ptr<ExecStateReporter> _exec_state_reporter;
+    std::unique_ptr<AuditStatisticsReporter> _audit_statistics_reporter;
 
     std::atomic<int> _next_id = 0;
     std::atomic_int64_t _schedule_count = 0;
