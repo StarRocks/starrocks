@@ -60,6 +60,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -317,12 +318,15 @@ public class TaskManager {
         try {
             Constants.TaskRunState taskRunState = taskRun.getFuture().get();
             if (taskRunState != Constants.TaskRunState.SUCCESS) {
-                throw new DmlException("execute task: %s failed. task source:%s, task run state:%s",
-                        task.getName(), task.getSource(), taskRunState);
+                String msg = taskRun.getStatus().getErrorMessage();
+                throw new DmlException("execute task %s failed: %s", task.getName(), msg);
             }
             return submitResult;
+        } catch (InterruptedException | ExecutionException e) {
+            Throwable rootCause = e.getCause();
+            throw new DmlException("execute task %s failed: %s", rootCause, task.getName(), rootCause.getMessage());
         } catch (Exception e) {
-            throw new DmlException("execute task: %s failed.", e, task.getName());
+            throw new DmlException("execute task %s failed: %s", e, task.getName(), e.getMessage());
         }
     }
 
