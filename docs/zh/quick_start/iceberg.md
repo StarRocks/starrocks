@@ -7,14 +7,14 @@ toc_max_heading_level: 2
 import DataLakeIntro from '../assets/commonMarkdown/datalakeIntro.md'
 import Clients from '../assets/quick-start/_clientsCompose.mdx'
 
-# 基于 Apache Iceberg 的湖仓分析
+# 基于 Apache Iceberg 的数据湖分析
 
-## 概述
+## 简介
 
-- 使用 Docker Compose 部署对象存储、Apache Spark、Iceberg Catalog 和 StarRocks
-- 将 2023 年 5 月份的纽约市绿色出租车数据导入至 Iceberg 数据湖。
-- 配置 StarRocks 访问 Iceberg Catalog
-- 使用 StarRocks 查询数据湖中的数据
+- 使用 Docker Compose 部署对象存储、Apache Spark、Iceberg Catalog 和 StarRocks。
+- 将 2023 年 5 月份的纽约市绿色出租车数据导入 Iceberg 数据湖。
+- 配置 StarRocks 以访问 Iceberg Catalog。
+- 使用 StarRocks 查询数据湖中的数据。
 
 <DataLakeIntro />
 
@@ -22,13 +22,13 @@ import Clients from '../assets/quick-start/_clientsCompose.mdx'
 
 ### Docker
 
-- [Docker](https://docs.docker.com/engine/install/)
-- 为 Docker 分配 5 GB RAM
-- 为 Docker 分配 20 GB 空闲磁盘空间
+- [安装 Docker](https://docs.docker.com/engine/install/)。
+- 为 Docker 分配 5 GB RAM。
+- 为 Docker 分配 20 GB 的空闲磁盘空间。
 
 ### SQL 客户端
 
-您可以使用 Docker 环境中提供的 SQL 客户端，也可以使用系统上的客户端。多数与 MySQL 兼容的客户端都可以使用，包括本教程中涵盖的 DBeaver 和 MySQL WorkBench。
+您可以使用 Docker 环境提供的 SQL 客户端，也可以使用系统上的客户端。多数与 MySQL 兼容的客户端都可以使用，包括本教程中涵盖的 DBeaver 和 MySQL Workbench。
 
 ### curl
 
@@ -39,24 +39,27 @@ import Clients from '../assets/quick-start/_clientsCompose.mdx'
 ## 术语
 
 ### FE
-前端引擎（Frontend Engine）。FE 节点负责元数据管理、客户端连接管理、查询计划和查询调度。每个 FE 在其内存中存储和维护完整的元数据副本，这确保了每个 FE 都能提供无差别的服务。
+
+FE 节点负责元数据管理、客户端连接管理、查询计划和查询调度。每个 FE 在其内存中存储和维护完整的元数据副本，确保每个 FE 都能提供无差别的服务。
 
 ### CN
-计算节点（Compute Node）。CN 节点负责在**存算分离**或**存算一体**集群中负责执行查询。
+
+CN 节点负责在**存算分离**或**存算一体**集群中执行查询。
 
 ### BE
-后端引擎（Backend Engine）。BE 节点在**存算一体**集群中负责数据存储和执行查询。在使用 External Catalog（例如本指南中使用的 Iceberg Catalog）时，BE 仅存储本地数据。
+
+BE 节点在**存算一体**集群中负责数据存储和执行查询。使用 External Catalog（例如本指南中使用的 Iceberg Catalog）时，BE 仅存储本地数据。
 
 ---
 
 ## 环境
 
-本教程中使用了六个容器（服务），并且全部使用 Docker Compose 部署。这些服务及其职责如下：
+本教程使用了六个容器（服务），并且全部使用 Docker Compose 部署。这些服务及其职责如下：
 
 | 服务                | 职责                                                                |
 |---------------------|---------------------------------------------------------------------|
-| **`starrocks-fe`**  | 元数据管理、客户端连接、查询规划和调度                                |
-| **`starrocks-be`**  | 执行查询计划                                                      |
+| **`starrocks-fe`**  | 负责元数据管理、客户端连接、查询规划和调度                                |
+| **`starrocks-be`**  | 负责执行查询计划                                                      |
 | **`rest`**          | 提供 Iceberg Catalog（元数据服务）                                        |
 | **`spark-iceberg`** | 用于运行 PySpark 的 Apache Spark 环境                               |
 | **`mc`**            | MinIO 配置（MinIO 命令行客户端）                                     |
@@ -64,7 +67,7 @@ import Clients from '../assets/quick-start/_clientsCompose.mdx'
 
 ## 下载 Docker 配置和纽约市绿色出租车数据
 
-StarRocks 提供了一个 Docker Compose 文件，用以搭建包含以上必要容器的环境。请使用 curl 下载 Compose 文件和数据集。
+StarRocks 提供了一个 Docker Compose 文件，用于搭建包含以上必要容器的环境。请使用 curl 下载 Compose 文件和数据集。
 
 Docker Compose 文件：
 ```bash
@@ -81,7 +84,7 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 ## 在 Docker 中启动环境
 
 :::tip
-从包含 `docker-compose.yml` 文件的路径运行所有 `docker compose` 命令。
+请从包含 `docker-compose.yml` 文件的路径运行所有 `docker compose` 命令。
 :::
 
 ```bash
@@ -101,12 +104,12 @@ docker compose up -d
 
 ## 检查环境状态
 
-检查服务的进度。FE 和 CN 大约需要 30 秒才能变为 `healthy` 状态。
+启动完成后，您还需要检查服务的进度。FE 和 CN 大约需要 30 秒才能变为 `healthy` 状态。
 
-运行 `docker compose ps` 直到 FE 和 BE 的状态变为 `healthy`。其余的服务没有健康检查配置，但您需要与它们进行交互，以了解它们的工作状态是否正常：
+请运行 `docker compose ps` 命令，直到 FE 和 BE 的状态变为 `healthy`。其他服务没有健康检查配置，但您需要与它们进行交互，以了解它们的工作状态是否正常：
 
 :::tip
-如果您已安装了 `jq` 并希望从 `docker compose ps` 得到一个较短的列表，可以尝试以下命令：
+如果您已安装了 `jq` 并希望通过 `docker compose ps` 命令得到更加简短的返回，可以尝试以下命令：
 
 ```bash
 docker compose ps --format json | jq '{Service: .Service, State: .State, Status: .Status}'
@@ -132,7 +135,7 @@ starrocks-fe    4 minutes ago   Up 4 minutes (healthy)   0.0.0.0:8030->8030/tcp,
 
 ## PySpark
 
-Iceberg 有多种交互方式，本教程使用 PySpark。如果您不了解 PySpark，可以从“更多信息”部分中找到相关文档。以下提供了您需要运行的所有命令。
+Iceberg 有多种交互方式，本教程使用 PySpark。如果您对 PySpark 不熟悉，可以从“更多信息”部分找到相关文档。以下步骤提供了您需要运行的所有命令。
 
 ### 拷贝数据集
 
@@ -151,7 +154,7 @@ cp green_tripdata_2023-05.parquet spark-iceberg:/opt/spark/
 docker compose exec -it spark-iceberg pyspark
 ```
 
-```py
+```plain
 Welcome to
       ____              __
      / __/__  ___ _____/ /__
@@ -285,7 +288,7 @@ PROPERTIES
 
 #### PROPERTIES
 
-| Property                         | Description                                                                             |
+| 属性                              | 描述                                                                                   |
 |:---------------------------------|:----------------------------------------------------------------------------------------|
 | `type`                           | 在此示例中，类型为 `iceberg`。其他选项包括 Hive、Hudi、Delta Lake 和 JDBC。                    |
 | `iceberg.catalog.type`           | 在此示例中使用了 `rest`。Tabular 提供了所使用的 Docker 镜像，并使用 REST。                      |
