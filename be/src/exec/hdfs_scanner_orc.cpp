@@ -561,7 +561,7 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
         total_stripe_size += v;
     }
     double avg_stripe_size = 0;
-    if (total_stripe_size > 0) {
+    if ( _app_stats.orc_stripe_sizes.size() > 0) {
         // _app_stats.orc_stripe_sizes maybe zero
         avg_stripe_size = total_stripe_size / _app_stats.orc_stripe_sizes.size();
     }
