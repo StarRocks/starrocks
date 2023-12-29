@@ -622,6 +622,14 @@ public class FunctionSet {
             .add(FunctionSet.CORR)
             .build();
 
+    public static final Set<String> IGNORE_NULL_WINDOW_FUNCTION =
+            ImmutableSet.<String>builder().add(FunctionSet.FIRST_VALUE)
+                    .add(FunctionSet.LAST_VALUE)
+                    .add(FunctionSet.FIRST_VALUE_REWRITE)
+                    .add(FunctionSet.LEAD)
+                    .add(FunctionSet.LAG)
+                    .build();
+
     public static final Set<String> INFORMATION_FUNCTIONS = ImmutableSet.<String>builder()
             .add(CONNECTION_ID)
             .add(CATALOG)
