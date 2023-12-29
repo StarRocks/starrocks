@@ -62,7 +62,7 @@ static bvar::LatencyRecorder g_del_txn_log_latency("lake", "del_txn_log");
 
 TabletManager::TabletManager(std::shared_ptr<LocationProvider> location_provider, UpdateManager* update_mgr,
                              int64_t cache_capacity)
-        : _location_provider(location_provider),
+        : _location_provider(std::move(location_provider)),
           _metacache(std::make_unique<Metacache>(cache_capacity)),
           _compaction_scheduler(std::make_unique<CompactionScheduler>(this)),
           _update_mgr(update_mgr) {
