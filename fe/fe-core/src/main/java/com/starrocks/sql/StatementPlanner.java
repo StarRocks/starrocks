@@ -53,7 +53,7 @@ public class StatementPlanner {
         Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
         boolean needWholePhaseLock = true;
 
-        try {
+        try (ConnectContext.ScopeGuard guard = session.bindScope()) {
             lock(dbs);
             try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Analyzer")) {
                 Analyzer.analyze(stmt, session);
