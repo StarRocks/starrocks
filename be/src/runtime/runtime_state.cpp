@@ -254,7 +254,7 @@ void RuntimeState::log_error(const Status& status) {
         return;
     }
 
-    log_error(status.message());
+    log_error(status);
 }
 
 void RuntimeState::get_unreported_errors(std::vector<std::string>* new_errors) {
