@@ -320,7 +320,9 @@ public:
             }
             auto& offsets = array_col->offsets_column()->get_data();
             offsets.push_back(offsets.back() + elem_size);
+            (*state_impl.data_columns)[i].reset();
         }
+        state_impl.data_columns->clear();
 
         // should check overflow after append, otherwise the result column with multi row will be overflow.
         if (UNLIKELY(state_impl.check_overflow(*to, ctx))) {
@@ -347,11 +349,28 @@ public:
         if (UNLIKELY(state_impl.check_overflow(ctx))) {
             return;
         }
-        auto elem_size = (*state_impl.data_columns)[0]->size();
         auto res = (*state_impl.data_columns)[0];
-        auto tmp = (*state_impl.data_columns)[0]->clone_empty();
-        if (state_impl.data_columns->size() > 1) {
-            Permutation perm;
+        auto elem_size = (*state_impl.data_columns)[0]->size();
+        auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(to));
+        if (to->is_nullable()) {
+            down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
+        }
+        DCHECK(!res->is_constant());
+        /*
+        if (res->is_constant()) {
+            if (ctx->get_is_distinct()) {
+                elem_size = 1;
+            }
+            if (res->only_null()) {
+                array_col->elements_column()->append_nulls(elem_size);
+            } else {
+                array_col->elements_column()->append(*ColumnHelper::unpack_and_duplicate_const_column(elem_size, res),
+                                                     0, elem_size);
+            }
+            return;
+        }*/
+        Permutation perm;
+        if (!ctx->get_is_asc_order().empty()) {
             Columns order_by_columns;
             SortDescs sort_desc(ctx->get_is_asc_order(), ctx->get_nulls_first());
             order_by_columns.assign(state_impl.data_columns->begin() + 1, state_impl.data_columns->end());
@@ -367,48 +386,62 @@ public:
                 ctx->set_error(st.to_string().c_str(), false);
                 return;
             }
-            materialize_column_by_permutation(tmp.get(), {(*state_impl.data_columns)[0]}, perm);
-            res = ColumnPtr(std::move(tmp));
         }
         // further remove duplicated values
-        // TODO(fzh) optimize N*N
+        // TODO(fzh) optimize N*N, since distinct is often rewritten to group by, the distinct values are not too many.
+        Buffer<bool> duplicated_flags;
         if (ctx->get_is_distinct()) {
+            duplicated_flags.resize(elem_size);
             bool is_duplicated = false;
-            Filter filter(elem_size, 1);
             phmap::flat_hash_set<uint32_t> sets;
             std::vector<uint32_t> hash(elem_size, 0);
             res->fnv_hash(hash.data(), 0, elem_size);
             for (auto row_id = 0; row_id < elem_size; row_id++) {
+                is_duplicated = false;
                 if (!sets.contains(hash[row_id])) {
                     sets.emplace(hash[row_id]);
-                    continue;
+                } else {
+                    for (auto next_id = 0; next_id < row_id; next_id++) {
+                        if (hash[row_id] == hash[next_id] && res->equals(next_id, *res, row_id)) {
+                            is_duplicated = true;
+                            break;
+                        }
+                    }
                 }
-                for (auto next_id = 0; next_id < row_id; next_id++) {
-                    if (hash[row_id] == hash[next_id] && res->equals(next_id, *res, row_id)) {
-                        is_duplicated = true;
-                        filter[row_id] = 0;
-                        break;
+                duplicated_flags[row_id] = is_duplicated;
+            }
+        }
+        Buffer<uint32_t> index;
+        if (!duplicated_flags.empty() || !perm.empty()) {
+            auto res_num = 0;
+            index.resize(elem_size);
+            for (auto row_id = 0; row_id < elem_size; row_id++) {
+                if (duplicated_flags.empty()) {
+                    index[res_num++] = perm[row_id].index_in_chunk;
+                } else {
+                    if (perm.empty()) {
+                        if (!duplicated_flags[row_id]) {
+                            index[res_num++] = row_id;
+                        }
+                    } else {
+                        if (!duplicated_flags[perm[row_id].index_in_chunk]) {
+                            index[res_num++] = perm[row_id].index_in_chunk;
+                        }
                     }
                 }
             }
-            if (is_duplicated) {
-                elem_size = res->filter(filter);
-            }
+            index.resize(res_num);
+            elem_size = res_num;
         }
-
-        auto array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(to));
-        if (to->is_nullable()) {
-            down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
-        }
-        if (res->only_null()) {
-            array_col->elements_column()->append_nulls(elem_size);
+        array_col->elements_column()->reserve(array_col->elements_column()->size() + elem_size);
+        if (index.empty()) {
+            array_col->elements_column()->append(*res, 0, elem_size);
         } else {
-            array_col->elements_column()->append(*ColumnHelper::unpack_and_duplicate_const_column(elem_size, res), 0,
-                                                 elem_size);
+            array_col->elements_column()->append_selective(*res, index);
         }
+        state_impl.data_columns->clear(); // early release memory
         auto& offsets = array_col->offsets_column()->get_data();
         offsets.push_back(offsets.back() + elem_size);
-
         // should check overflow after append, otherwise the result column with multi row will be overflow.
         if (UNLIKELY(state_impl.check_overflow(*to, ctx))) {
             return;
