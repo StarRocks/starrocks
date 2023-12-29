@@ -12,7 +12,7 @@ Review the information in this section before upgrading, and perform any recomme
 
 ### StarRocks versions
 
-The version of StarRocks is represented by three numbers in the form **Major.Minor.Patch**, for example, `2.5.4`. The first number represents the major version of StarRocks, the second number represents the minor version, and the third number represents the patch version.
+The version of StarRocks is represented by three digits in the form **Major.Minor.Patch**, for example, `2.5.4`. The first digit represents the major version of StarRocks, the second digit represents the minor version, and the third digit represents the patch version.
 
 ### Upgrade paths
 
