@@ -57,8 +57,7 @@ public:
         _mem_tracker = std::make_unique<MemTracker>(-1);
         _location_provider = std::make_shared<lake::FixedLocationProvider>(kTestGroupPath);
         _update_manager = std::make_unique<lake::UpdateManager>(_location_provider);
-        _tablet_manager =
-                std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
+        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
 
         _load_channel_mgr = std::make_unique<LoadChannelMgr>();
 
