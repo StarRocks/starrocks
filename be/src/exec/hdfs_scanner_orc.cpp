@@ -542,7 +542,8 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
     return Status::OK();
 }
 
-static const std::string kORCProfileSectionPrefix = "ORC";
+void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
+    const std::string orcProfileSectionPrefix = "ORC";
 
 void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* delete_build_timer = nullptr;
@@ -550,6 +551,7 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* stripe_sizes_counter = nullptr;
     RuntimeProfile::Counter* stripe_number_counter = nullptr;
     RuntimeProfile* root = profile->runtime_profile;
+    ADD_COUNTER(root, orcProfileSectionPrefix, TUnit::NONE);
 
     ADD_COUNTER(root, kORCProfileSectionPrefix, TUnit::UNIT);
 
