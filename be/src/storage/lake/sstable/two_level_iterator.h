@@ -6,6 +6,7 @@
 #include "common/status.h"
 
 namespace starrocks {
+class Slice;
 namespace lake {
 namespace sstable {
 

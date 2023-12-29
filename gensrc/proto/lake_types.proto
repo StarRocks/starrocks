@@ -177,3 +177,7 @@ message TxnLogPB {
 
 message TabletMetadataLockPB {}
 
+message IndexValueInfoPB {
+    repeated int64 versions = 1;
+    repeated int64 values = 2;
+}

@@ -15,22 +15,36 @@
 #include "storage/lake/sstable/lake_persistent_index_sst.h"
 
 #include "fs/fs.h"
+#include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/sstable/table_builder.h"
 
 namespace starrocks {
 
 namespace lake {
 
-Status LakePersistentIndexSstable::build_sstable(phmap::btree_map<std::string, IndexValue, std::less<>>& memtable,
-                                                 WritableFile* wf, uint64_t* filesz) {
+Status LakePersistentIndexSstable::build_sstable(
+        phmap::btree_map<std::string, std::list<std::pair<int64_t, IndexValue>>, std::less<>>& memtable,
+        WritableFile* wf, uint64_t* filesz) {
     sstable::Options options;
     sstable::TableBuilder builder(options, wf);
     for (const auto& pair : memtable) {
-        builder.Add(Slice(pair.first), Slice(pair.second.v, 8));
+        auto index_value_info_pb = std::make_shared<IndexValueInfoPB>();
+        to_protobuf(pair.second, index_value_info_pb.get());
+        builder.Add(Slice(pair.first), Slice(index_value_info_pb->SerializeAsString()));
     }
     RETURN_IF_ERROR(builder.Finish());
     *filesz = builder.FileSize();
     return Status::OK();
+}
+
+void LakePersistentIndexSstable::to_protobuf(const std::list<std::pair<int64_t, IndexValue>>& index_value_infos,
+                                             IndexValueInfoPB* index_value_info_pb) {
+    auto it = index_value_infos.begin();
+    while (it != index_value_infos.end()) {
+        index_value_info_pb->mutable_versions()->Add((*it).first);
+        index_value_info_pb->mutable_values()->Add((*it).second.get_value());
+        ++it;
+    }
 }
 
 } // namespace lake

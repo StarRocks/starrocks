@@ -204,8 +204,7 @@ TEST_F(LakePersistentIndexTest, test_minor_compaction) {
     int64_t version = 0;
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
-    auto index = std::make_unique<LakePersistentIndex>(&tablet);
+    auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
     index->set_txn_id(txn_id);
     index->update_version(version);
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), false));

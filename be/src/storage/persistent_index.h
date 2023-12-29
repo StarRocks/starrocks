@@ -701,7 +701,7 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array for return values
-    virtual Status get(size_t n, const Slice* keys, IndexValue* values);
+    virtual Status get(size_t n, const Slice* keys, IndexValue* values, int64_t version = -1);
 
     Status get_from_one_immutable_index(ImmutableIndex* immu_index, size_t n, const Slice* keys, IndexValue* values,
                                         std::map<size_t, KeysInfo>* keys_info_by_key_size, KeysInfo* found_keys_info);
@@ -713,20 +713,20 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
     virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                          IOStat* stat = nullptr);
+                          IOStat* stat = nullptr, int64_t version = -1);
 
     // batch insert, return error if key already exists
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
     // |check_l1|: also check l1 for insertion consistency(key must not exist previously), may imply heavy IO costs
-    virtual Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
+    virtual Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1, int64_t version = -1);
 
     // batch erase
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |old_values|: return old values if key exist, or set to NullValue if not
-    virtual Status erase(size_t n, const Slice* keys, IndexValue* old_values);
+    virtual Status erase(size_t n, const Slice* keys, IndexValue* old_values, int64_t version = -1);
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // batch replace
@@ -745,7 +745,7 @@ public:
     // |max_src_rssid|: maximum of rssid array
     // |failed|: return not match rowid
     virtual Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
-                               std::vector<uint32_t>* failed);
+                               std::vector<uint32_t>* failed, int64_t version = -1);
 
     Status flush_advance();
 

@@ -3619,7 +3619,7 @@ void PersistentIndex::_get_l2_stat(const std::vector<std::unique_ptr<ImmutableIn
             });
 }
 
-Status PersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
+Status PersistentIndex::get(size_t n, const Slice* keys, IndexValue* values, int64_t version) {
     std::map<size_t, KeysInfo> not_founds_by_key_size;
     size_t num_found = 0;
     RETURN_IF_ERROR(_l0->get(n, keys, values, &num_found, not_founds_by_key_size));
@@ -3702,7 +3702,7 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
 }
 
 Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                               IOStat* stat) {
+                               IOStat* stat, int64_t version) {
     std::map<size_t, KeysInfo> not_founds_by_key_size;
     size_t num_found = 0;
     MonotonicStopWatch watch;
@@ -3741,7 +3741,7 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
     return st;
 }
 
-Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
+Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1, int64_t version) {
     std::set<size_t> check_l1_l2_key_sizes;
     RETURN_IF_ERROR(_l0->insert(n, keys, values, check_l1_l2_key_sizes));
     if (!_l1_vec.empty()) {
@@ -3776,7 +3776,7 @@ Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* va
     return _flush_advance_or_append_wal(n, keys, values, nullptr);
 }
 
-Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values) {
+Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values, int64_t version) {
     std::map<size_t, KeysInfo> not_founds_by_key_size;
     size_t num_erased = 0;
     RETURN_IF_ERROR(_l0->erase(n, keys, old_values, &num_erased, not_founds_by_key_size));
@@ -3822,7 +3822,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
 }
 
 Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
-                                    std::vector<uint32_t>* failed) {
+                                    std::vector<uint32_t>* failed, int64_t version) {
     std::vector<IndexValue> found_values;
     found_values.resize(n);
     RETURN_IF_ERROR(get(n, keys, found_values.data()));

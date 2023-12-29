@@ -16,6 +16,7 @@
 
 #include <string>
 
+#include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/sstable/table.h"
 #include "storage/persistent_index.h"
 #include "storage/storage_engine.h"
@@ -32,8 +33,12 @@ public:
     LakePersistentIndexSstable() {}
     ~LakePersistentIndexSstable() {}
 
-    static Status build_sstable(phmap::btree_map<std::string, IndexValue, std::less<>>& memtable, WritableFile* wf,
-                                uint64_t* filesz);
+    static Status build_sstable(
+            phmap::btree_map<std::string, std::list<std::pair<int64_t, IndexValue>>, std::less<>>& memtable,
+            WritableFile* wf, uint64_t* filesz);
+
+    static void to_protobuf(const std::list<std::pair<int64_t, IndexValue>>& index_value_infos,
+                            IndexValueInfoPB* index_value_info_pb);
 
 private:
     std::unique_ptr<sstable::Table> _sst;

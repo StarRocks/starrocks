@@ -38,7 +38,7 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array for return values
-    Status get(size_t n, const Slice* keys, IndexValue* values) override;
+    Status get(size_t n, const Slice* keys, IndexValue* values, int64_t version = -1) override;
 
     // batch upsert
     // |n|: size of key/value array
@@ -47,20 +47,20 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                  IOStat* stat = nullptr) override;
+                  IOStat* stat = nullptr, int64_t version = -1) override;
 
     // batch insert, return error if key already exists
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
     // |check_l1|: also check l1 for insertion consistency(key must not exist previously), may imply heavy IO costs
-    Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) override;
+    Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1, int64_t version = -1) override;
 
     // batch erase
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |old_values|: return old values if key exist, or set to NullValue if not
-    Status erase(size_t n, const Slice* keys, IndexValue* old_values) override;
+    Status erase(size_t n, const Slice* keys, IndexValue* old_values, int64_t version = -1) override;
 
     // batch replace
     // |n|: size of key/value array
@@ -69,7 +69,7 @@ public:
     // |max_src_rssid|: maximum of rssid array
     // |failed|: return not match rowid
     Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
-                       std::vector<uint32_t>* failed) override;
+                       std::vector<uint32_t>* failed, int64_t version = -1) override;
 
     Status minor_compact();
 
