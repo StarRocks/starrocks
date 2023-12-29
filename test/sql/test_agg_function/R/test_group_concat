@@ -386,9 +386,9 @@ select group_concat(distinct name,subject order by 1,score,2) from ss order by 1
 -- result:
 TiEnglish,Ti物理Phy,TomMath,TomEnglish,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
 -- !result
-select group_concat(distinct name,subject order by score,length(name),1,2), count(distinct id), max(score)  from ss order by 1;
+select group_concat(distinct name,subject order by length(name),score,1,2), count(distinct id), max(score)  from ss order by 1;
 -- result:
-李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TomEnglish,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
+TiEnglish,Ti物理Phy,TomMath,TomEnglish,王武程咬金语文北京上海,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	6	99
 -- !result
 select group_concat(distinct name,subject order by score+1,1,2,4) from ss order by 1;
 -- result:
@@ -410,9 +410,9 @@ select group_concat(distinct null order by score,4.00) from ss order by 1;
 -- result:
 None
 -- !result
-select group_concat(distinct name order by score,4.00,1),group_concat(subject order by score,4.00,1),array_agg(subject order by score,4.00,1)  from ss order by 1;
+select group_concat(distinct name order by 1,score,4.00,1),group_concat(subject order by score,4.00,1),array_agg(subject order by score,4.00,1)  from ss order by 1;
 -- result:
-May,李四大闹天空,欧阳诸葛方程,王武程咬金,张三掩耳盗铃,Tom,张三此地无银三百两,Ti	English,数学大不列颠,英语外语美誉,语文北京上海,Math数学欧拉方程,Math,English,English,英文English,物理Phy	[null,null,null,null,"English","数学大不列颠","英语外语美誉","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]
+May,Ti,Tom,张三掩耳盗铃,张三此地无银三百两,李四大闹天空,欧阳诸葛方程,王武程咬金	English,数学大不列颠,英语外语美誉,语文北京上海,Math数学欧拉方程,Math,English,English,英文English,物理Phy	[null,null,null,null,"English","数学大不列颠","英语外语美誉","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss order by 1;
 -- result:
@@ -802,11 +802,11 @@ TiEnglish,Ti物理Phy,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方�
 -- !result
 select group_concat(distinct name,subject order by 1,score,2) from ss order by 1;
 -- result:
-TiEnglish,Ti物理Phy,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
+TiEnglish,Ti物理Phy,TomMath,TomEnglish,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
 -- !result
-select group_concat(distinct name,subject order by score,length(name),1,2), count(distinct id), max(score)  from ss order by 1;
+select group_concat(distinct name,subject order by length(name),score,1,2), count(distinct id), max(score)  from ss order by 1;
 -- result:
-TomEnglish,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
+TiEnglish,Ti物理Phy,TomMath,TomEnglish,王武程咬金语文北京上海,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	6	99
 -- !result
 select group_concat(distinct name,subject order by score+1,1,2,4) from ss order by 1;
 -- result:
@@ -828,9 +828,9 @@ select group_concat(distinct null order by score,4.00) from ss order by 1;
 -- result:
 None
 -- !result
-select group_concat(distinct name order by score,4.00, 1),group_concat(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss order by 1;
+select group_concat(distinct name order by 1,score,4.00, 1),group_concat(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss order by 1;
 -- result:
-May,Tom,李四大闹天空,欧阳诸葛方程,王武程咬金,张三掩耳盗铃,Ti,张三此地无银三百两	English,数学大不列颠,英语外语美誉,语文北京上海,Math数学欧拉方程,Math,English,English,英文English,物理Phy	[null,null,null,null,"English","数学大不列颠","英语外语美誉","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]
+May,Ti,Tom,张三掩耳盗铃,张三此地无银三百两,李四大闹天空,欧阳诸葛方程,王武程咬金	English,数学大不列颠,英语外语美誉,语文北京上海,Math数学欧拉方程,Math,English,English,英文English,物理Phy	[null,null,null,null,"English","数学大不列颠","英语外语美誉","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss order by 1;
 -- result:
@@ -1220,11 +1220,11 @@ TiEnglish,Ti物理Phy,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方�
 -- !result
 select group_concat(distinct name,subject order by 1,score,2) from ss order by 1;
 -- result:
-TiEnglish,Ti物理Phy,TomMath,TomEnglish,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
+TiEnglish,Ti物理Phy,TomEnglish,TomMath,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海
 -- !result
-select group_concat(distinct name,subject order by score,length(name),1,2), count(distinct id), max(score)  from ss order by 1;
+select group_concat(distinct name,subject order by length(name),score,1,2), count(distinct id), max(score)  from ss order by 1;
 -- result:
-TomEnglish,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,王武程咬金语文北京上海,张三掩耳盗铃Math数学欧拉方程,TomMath,TiEnglish,张三此地无银三百两英文English,Ti物理Phy	6	99
+TiEnglish,Ti物理Phy,TomMath,TomEnglish,王武程咬金语文北京上海,李四大闹天空英语外语美誉,欧阳诸葛方程数学大不列颠,张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English	6	99
 -- !result
 select group_concat(distinct name,subject order by score+1,1,2,4) from ss order by 1;
 -- result:
@@ -1246,9 +1246,9 @@ select group_concat(distinct null order by score,4.00) from ss order by 1;
 -- result:
 None
 -- !result
-select group_concat(distinct name order by score,4.00, 1),group_concat(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss order by 1;
+select group_concat(distinct name order by 1,score,4.00, 1),group_concat(subject order by score,4.00, 1),array_agg(subject order by score,4.00, 1)  from ss order by 1;
 -- result:
-May,Tom,李四大闹天空,欧阳诸葛方程,王武程咬金,张三掩耳盗铃,张三此地无银三百两,Ti	English,数学大不列颠,英语外语美誉,语文北京上海,Math数学欧拉方程,Math,English,English,英文English,物理Phy	[null,null,null,null,"English","数学大不列颠","英语外语美誉","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]
+May,Ti,Tom,张三掩耳盗铃,张三此地无银三百两,李四大闹天空,欧阳诸葛方程,王武程咬金	English,数学大不列颠,英语外语美誉,语文北京上海,Math数学欧拉方程,Math,English,English,英文English,物理Phy	[null,null,null,null,"English","数学大不列颠","英语外语美誉","语文北京上海","Math数学欧拉方程","Math","English","English","英文English","物理Phy"]
 -- !result
 select group_concat(distinct score order by 1,2) from ss order by 1;
 -- result:
