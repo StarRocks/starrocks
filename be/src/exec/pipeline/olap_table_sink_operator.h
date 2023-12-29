@@ -56,6 +56,14 @@ private:
     bool _is_finished = false;
     mutable bool _is_open_done = false;
     int32_t _sender_id;
+<<<<<<< HEAD
+=======
+    bool _is_cancelled = false;
+    bool _is_audit_report_done = true;
+
+    // temporarily save chunk during automatic partition creation
+    mutable ChunkPtr _automatic_partition_chunk;
+>>>>>>> 65441903f2 ([Enhancement] Make audit report for insert into statement asynchronous (#38032))
 };
 
 class OlapTableSinkOperatorFactory final : public OperatorFactory {
