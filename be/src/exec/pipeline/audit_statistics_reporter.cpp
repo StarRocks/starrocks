@@ -28,7 +28,7 @@ using apache::thrift::TProcessor;
 using apache::thrift::transport::TTransportException;
 
 AuditStatisticsReporter::AuditStatisticsReporter() {
-    auto status = ThreadPoolBuilder("audit_report") // exec state reporter
+    auto status = ThreadPoolBuilder("audit_report")
                           .set_min_threads(1)
                           .set_max_threads(2)
                           .set_max_queue_size(1000)
