@@ -252,12 +252,30 @@ public class CachedStatisticStorageTest {
                 .invoke(cachedStatisticStorage, "getConnectorTableStatistics", table,
                         ImmutableList.of("c1", "c2"));
         Assert.assertEquals(2, connectorColumnStatistics.size());
-        Assert.assertEquals(5, connectorColumnStatistics.get(0).getRowCount());
-        Assert.assertEquals(0, connectorColumnStatistics.get(0).getColumnStatistic().getMinValue(), 0.0001);
-        Assert.assertEquals(10, connectorColumnStatistics.get(0).getColumnStatistic().getMaxValue(), 0.0001);
-        Assert.assertEquals(0, connectorColumnStatistics.get(0).getColumnStatistic().getNullsFraction(), 0.0001);
-        Assert.assertEquals(20, connectorColumnStatistics.get(0).getColumnStatistic().getAverageRowSize(), 0.0001);
-        Assert.assertEquals(5, connectorColumnStatistics.get(0).getColumnStatistic().getDistinctValuesCount(), 0.0001);
+
+        if (!connectorColumnStatistics.get(0).isUnknown()) {
+            Assert.assertEquals(5, connectorColumnStatistics.get(0).getRowCount());
+            Assert.assertEquals(0, connectorColumnStatistics.get(0).getColumnStatistic().getMinValue(), 0.0001);
+            Assert.assertEquals(10, connectorColumnStatistics.get(0).getColumnStatistic().getMaxValue(), 0.0001);
+            Assert.assertEquals(0, connectorColumnStatistics.get(0).getColumnStatistic().getNullsFraction(),
+                    0.0001);
+            Assert.assertEquals(20, connectorColumnStatistics.get(0).getColumnStatistic().getAverageRowSize(),
+                    0.0001);
+            Assert.assertEquals(5, connectorColumnStatistics.get(0).getColumnStatistic().getDistinctValuesCount(),
+                    0.0001);
+        } else {
+            Assert.assertEquals(-1, connectorColumnStatistics.get(0).getRowCount());
+            Assert.assertEquals(Double.NEGATIVE_INFINITY, connectorColumnStatistics.get(0).getColumnStatistic().getMinValue(),
+                    0.0001);
+            Assert.assertEquals(Double.POSITIVE_INFINITY, connectorColumnStatistics.get(0).getColumnStatistic().getMaxValue(),
+                    0.0001);
+            Assert.assertEquals(0.0, connectorColumnStatistics.get(0).getColumnStatistic().getNullsFraction(),
+                    0.0001);
+            Assert.assertEquals(1.0, connectorColumnStatistics.get(0).getColumnStatistic().getAverageRowSize(),
+                    0.0001);
+            Assert.assertEquals(1.0, connectorColumnStatistics.get(0).getColumnStatistic().getDistinctValuesCount(),
+                    0.0001);
+        }
     }
 
     @Test
