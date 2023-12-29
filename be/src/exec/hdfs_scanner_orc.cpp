@@ -567,10 +567,10 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
     }
 
     RuntimeProfile::Counter* stripe_avg_size_counter = root->add_child_counter(
-            "EachFileEachStripeAvgSize", TUnit::BYTES,
+            "PerFilePerStripeAvgSize", TUnit::BYTES,
             RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG), orcProfileSectionPrefix);
     RuntimeProfile::Counter* stripe_number_counter = root->add_child_counter(
-            "EachFileStripeNumber", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
+            "PerFileStripeNumber", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
             orcProfileSectionPrefix);
 
     COUNTER_UPDATE(stripe_avg_size_counter, avg_stripe_size);
