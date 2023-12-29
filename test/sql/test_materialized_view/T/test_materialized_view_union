@@ -48,7 +48,7 @@ union all
 select k1, v1, v2 from t2;
 
 insert into t1 values ("202301",1,1),("202305",1,2);
-function: wait_async_materialized_view_finish("test_union_mv1_${uuid0}")
+refresh materialized view test_union_mv1_${uuid0} with sync mode;
 select * from test_union_mv1_${uuid0} order by k1, v1;
 drop table t1;
 drop table t2;
@@ -96,7 +96,7 @@ PROPERTIES (
 AS select k1, v1, v2 from t1
 union
 select k1, v1, v2 from t2;
-function: wait_async_materialized_view_finish("test_union_mv2_${uuid0}")
+refresh materialized view test_union_mv2_${uuid0} with sync mode;
 select * from test_union_mv2_${uuid0} order by k1, v1;
 drop table t1;
 drop table t2;
