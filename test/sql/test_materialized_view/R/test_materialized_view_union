@@ -55,10 +55,7 @@ select k1, v1, v2 from t2;
 insert into t1 values ("202301",1,1),("202305",1,2);
 -- result:
 -- !result
-function: wait_async_materialized_view_finish("test_union_mv1_${uuid0}")
--- result:
-None
--- !result
+refresh materialized view test_union_mv1_${uuid0} with sync mode;
 select * from test_union_mv1_${uuid0} order by k1, v1;
 -- result:
 202301	1	1
@@ -123,12 +120,10 @@ union
 select k1, v1, v2 from t2;
 -- result:
 -- !result
-function: wait_async_materialized_view_finish("test_union_mv2_${uuid0}")
--- result:
-None
--- !result
+refresh materialized view test_union_mv2_${uuid0} with sync mode;
 select * from test_union_mv2_${uuid0} order by k1, v1;
 -- result:
+202301	1	1
 202305	1	2
 -- !result
 drop table t1;
