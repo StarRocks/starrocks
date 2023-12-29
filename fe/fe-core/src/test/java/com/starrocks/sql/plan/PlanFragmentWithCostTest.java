@@ -1593,12 +1593,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             Assert.assertTrue(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
             Assert.assertTrue(execPlan.getFragments().get(2).isAssignScanRangesPerDriverSeq());
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
-                    "  |  STREAMING\n" +
-                    "  |  output: sum(4: count)\n" +
-                    "  |  group by: 4: count\n" +
-                    "  |  \n" +
-                    "  2:Project\n" +
+            assertContains(plan, "  2:Project\n" +
                     "  |  <slot 4> : 4: count\n" +
                     "  |  \n" +
                     "  1:AGGREGATE (update finalize)\n" +
