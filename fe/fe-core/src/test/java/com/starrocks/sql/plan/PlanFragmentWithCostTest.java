@@ -1629,13 +1629,13 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             Assert.assertFalse(execPlan.getFragments().get(1).isAssignScanRangesPerDriverSeq());
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "  3:AGGREGATE (update finalize)\n" +
-                    "  |  output: sum(4: count)\n" +
-                    "  |  group by: 2: v2, 4: count\n" +
+                    "  |  output: sum(8: count)\n" +
+                    "  |  group by: 6: v2, 8: count\n" +
                     "  |  withLocalShuffle: true\n" +
                     "  |  \n" +
                     "  2:AGGREGATE (update finalize)\n" +
-                    "  |  output: count(2: v2)\n" +
-                    "  |  group by: 2: v2\n" +
+                    "  |  output: count(6: v2)\n" +
+                    "  |  group by: 6: v2\n" +
                     "  |  withLocalShuffle: true\n" +
                     "  |  \n" +
                     "  0:OlapScanNode");
@@ -1651,17 +1651,12 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             Assert.assertTrue(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
             Assert.assertTrue(execPlan.getFragments().get(2).isAssignScanRangesPerDriverSeq());
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-            assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
-                    "  |  STREAMING\n" +
-                    "  |  output: sum(4: count)\n" +
-                    "  |  group by: 4: count\n" +
-                    "  |  \n" +
-                    "  2:Project\n" +
-                    "  |  <slot 4> : 4: count\n" +
+            assertContains(plan, "  2:Project\n" +
+                    "  |  <slot 8> : 8: count\n" +
                     "  |  \n" +
                     "  1:AGGREGATE (update finalize)\n" +
-                    "  |  output: count(1: v1)\n" +
-                    "  |  group by: 1: v1\n" +
+                    "  |  output: count(5: v1)\n" +
+                    "  |  group by: 5: v1\n" +
                     "  |  \n" +
                     "  0:OlapScanNode");
 
