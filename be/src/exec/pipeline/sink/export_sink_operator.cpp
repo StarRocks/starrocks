@@ -189,15 +189,10 @@ bool ExportSinkOperator::is_finished() const {
 
 Status ExportSinkOperator::set_finishing(RuntimeState* state) {
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-<<<<<<< HEAD
+        _is_audit_report_done = false;
         auto* executor = state->fragment_ctx()->enable_resource_group() ? state->exec_env()->wg_driver_executor()
                                                                         : state->exec_env()->driver_executor();
-        executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
-=======
-        _is_audit_report_done = false;
-        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx(),
-                                                                         &_is_audit_report_done);
->>>>>>> 65441903f2 ([Enhancement] Make audit report for insert into statement asynchronous (#38032))
+        executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx(), &_is_audit_report_done);
     }
     return _export_sink_buffer->set_finishing();
 }
