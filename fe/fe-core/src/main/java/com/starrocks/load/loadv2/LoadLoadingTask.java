@@ -104,6 +104,8 @@ public class LoadLoadingTask extends LoadTask {
     private final List<List<TBrokerFileStatus>> fileStatusList;
     private final int fileNum;
 
+    private final LoadJob.JSONOptions jsonOptions;
+
     private LoadLoadingTask(Builder builder) {
         super(builder.callback, TaskType.LOADING, builder.priority);
         this.db = builder.db;
@@ -129,6 +131,7 @@ public class LoadLoadingTask extends LoadTask {
         this.loadId = builder.loadId;
         this.fileStatusList = builder.fileStatusList;
         this.fileNum = builder.fileNum;
+        this.jsonOptions = builder.jsonOptions;
     }
 
     public void prepare() throws UserException {
@@ -137,6 +140,7 @@ public class LoadLoadingTask extends LoadTask {
                 brokerDesc, fileGroups, fileStatusList, fileNum);
         loadPlanner.setPartialUpdateMode(partialUpdateMode);
         loadPlanner.setMergeConditionStr(mergeConditionStr);
+        loadPlanner.setJsonOptions(jsonOptions);
         loadPlanner.plan();
     }
 
@@ -304,6 +308,8 @@ public class LoadLoadingTask extends LoadTask {
         private LoadTaskCallback callback;
         private int priority;
 
+        private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
+
         public Builder setCallback(LoadTaskCallback callback) {
             this.callback = callback;
             return this;
@@ -416,6 +422,11 @@ public class LoadLoadingTask extends LoadTask {
 
         public Builder setFileNum(int fileNum) {
             this.fileNum = fileNum;
+            return this;
+        }
+
+        public Builder setJSONOptions(LoadJob.JSONOptions options) {
+            this.jsonOptions = options;
             return this;
         }
 
