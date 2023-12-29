@@ -70,7 +70,6 @@ public class MaterializedViewLowCardTPCHTest extends MaterializedViewTestBase {
         connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
 
         FeConstants.USE_MOCK_DICT_MANAGER = true;
-        System.out.println(TpchSQL.Q12);
         String plan = getVerboseExplain(TpchSQL.Q12);
         assertCContains(plan, "group by: [90: l_shipmode, INT, true]");
         connectContext.getSessionVariable().setQueryDebugOptions("");

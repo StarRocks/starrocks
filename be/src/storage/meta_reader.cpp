@@ -112,7 +112,7 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
         const auto& field = _collect_context.seg_collecter_params.fields[i];
         if (field == "dict_merge") {
             TypeDescriptor item_desc;
-            item_desc = slot->type();
+            item_desc.type = TYPE_VARCHAR;
             TypeDescriptor desc;
             desc.type = TYPE_ARRAY;
             desc.children.emplace_back(item_desc);
