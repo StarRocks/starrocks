@@ -24,7 +24,7 @@ By analyzing the structure of Query Profile, you can easily observe that multipl
 - Pipeline
 - Operator
 
-You can control this merging behavior through a session variable `pipeline_profile_level`, which has two possible values:
+You can control this merging behavior through a session variable `pipeline_profile_level`, which has two valid values:
 
 - `1` (Default): StarRocks merges the metrics into a three-layer structure.
 - `2`: StarRocks does not merge the metrics. The original five-layer structure is retained.

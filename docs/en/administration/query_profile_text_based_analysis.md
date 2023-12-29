@@ -107,8 +107,7 @@ Example 2: Simulate and analyze an INSERT INTO statement. The loading transactio
 
 ## Limitations
 
+- `EXPLAIN ANALYZE INSERT INTO` statements are only supported for tables in the default catalog.
 - To achieve better visual effects, the output text contains ANSI characters to provide color, highlighting, and other features. It is recommended to use the MyCLI client. For clients that do not support ANSI features, such as the MySQL client, there may be some slight display disorders. Usually, they will not affect the usage. For example:
 
 ![img](../assets/Profile/text_based_profile_not_aligned.jpeg)
-
-- `EXPLAIN ANALYZE INSERT INTO` statements are only supported for tables in the default catalog.
