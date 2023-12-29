@@ -73,6 +73,21 @@ public class AnalyzeSingleTest {
     }
 
     @Test
+    public void testIdentifierStartWithDigit() {
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse("select * from a.11b", 0).get(0);
+        Assert.assertEquals("SELECT * FROM a.11b", AstToStringBuilder.toString(statementBase));
+
+        statementBase = com.starrocks.sql.parser.SqlParser.parse("select a.11b.22c, * from a.11b", 0).get(0);
+        Assert.assertEquals("SELECT a.11b.22c, * FROM a.11b", AstToStringBuilder.toString(statementBase));
+
+        statementBase = com.starrocks.sql.parser.SqlParser.parse("select 00a.11b.22c, * from 00a.11b", 0).get(0);
+        Assert.assertEquals("SELECT 00a.11b.22c, * FROM 00a.11b", AstToStringBuilder.toString(statementBase));
+
+        statementBase = com.starrocks.sql.parser.SqlParser.parse("select 11b.* from 11b", 0).get(0);
+        Assert.assertEquals("SELECT 11b.* FROM 11b", AstToStringBuilder.toString(statementBase));
+    }
+
+    @Test
     public void testPrefix() {
         analyzeSuccess("select t0.v1 from t0");
         analyzeSuccess("select t0.*, v3, v2 from t0");
@@ -311,6 +326,9 @@ public class AnalyzeSingleTest {
                 AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
 
         analyzeSuccess("select @@`sql_mode`");
+        analyzeSuccess("select @@SESSION.`sql_mode`");
+        analyzeSuccess("select @@SESSION.sql_mode");
+        analyzeSuccess("select @_123var");
     }
 
     @Test

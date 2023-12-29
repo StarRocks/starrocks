@@ -1746,7 +1746,7 @@ primaryExpression
     | primaryExpression COLLATE (identifier | string)                                     #collate
     | literalExpression                                                                   #literal
     | columnReference                                                                     #columnRef
-    | base = primaryExpression '.' fieldName = identifier                                 #dereference
+    | base = primaryExpression (DOT_IDENTIFIER | '.' fieldName = identifier )             #dereference
     | left = primaryExpression CONCAT right = primaryExpression                           #concat
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
@@ -2114,7 +2114,7 @@ decimalType
     ;
 
 qualifiedName
-    : identifier ('.' identifier)*
+    : identifier (DOT_IDENTIFIER | '.' identifier)*
     ;
 
 identifier
