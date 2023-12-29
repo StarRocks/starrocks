@@ -503,9 +503,13 @@ public:
                     elem_size);
             auto& offsets = array_col->offsets_column()->get_data();
             offsets.push_back(offsets.back() + elem_size);
+#ifndef BE_TEST
             (*state_impl.data_columns)[i].reset(); // early release memory
+#endif
         }
+#ifndef BE_TEST
         state_impl.data_columns->clear();
+#endif
     }
 
     // convert each cell of a row to a [nullable] array in a nullable struct, keep the same of chunk_size

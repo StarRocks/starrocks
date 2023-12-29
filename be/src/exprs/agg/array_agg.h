@@ -320,9 +320,13 @@ public:
             }
             auto& offsets = array_col->offsets_column()->get_data();
             offsets.push_back(offsets.back() + elem_size);
+#ifndef BE_TEST
             (*state_impl.data_columns)[i].reset();
+#endif
         }
+#ifndef BE_TEST
         state_impl.data_columns->clear();
+#endif
 
         // should check overflow after append, otherwise the result column with multi row will be overflow.
         if (UNLIKELY(state_impl.check_overflow(*to, ctx))) {
@@ -356,19 +360,6 @@ public:
             down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
         }
         DCHECK(!res->is_constant());
-        /*
-        if (res->is_constant()) {
-            if (ctx->get_is_distinct()) {
-                elem_size = 1;
-            }
-            if (res->only_null()) {
-                array_col->elements_column()->append_nulls(elem_size);
-            } else {
-                array_col->elements_column()->append(*ColumnHelper::unpack_and_duplicate_const_column(elem_size, res),
-                                                     0, elem_size);
-            }
-            return;
-        }*/
         Permutation perm;
         if (!ctx->get_is_asc_order().empty()) {
             Columns order_by_columns;
