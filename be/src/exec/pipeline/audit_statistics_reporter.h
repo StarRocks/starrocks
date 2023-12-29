@@ -16,14 +16,9 @@
 
 #include <memory>
 
-#include "exec/pipeline/fragment_context.h"
-#include "exec/pipeline/pipeline_fwd.h"
-#include "gen_cpp/FrontendService.h"
-#include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "service/backend_options.h"
 #include "util/threadpool.h"
 
 namespace starrocks::pipeline {
@@ -33,5 +28,10 @@ public:
 
     static Status report_audit_statistics(const TReportAuditStatisticsParams& params, ExecEnv* exec_env,
                                           const TNetworkAddress& fe_addr);
+
+    [[nodiscard]] Status submit(std::function<void()>&& report_task);
+
+private:
+    std::unique_ptr<ThreadPool> _thread_pool;
 };
 } // namespace starrocks::pipeline
