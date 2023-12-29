@@ -41,9 +41,8 @@ public:
     virtual void close(RuntimeState* runtime_state) {}
 
     virtual Status build_hash_table(RuntimeState* runtime_state) { return Status::OK(); }
-    virtual Status append_chunk_to_ht(ChunkPtr& chunk) { return Status::OK(); }
+    virtual Status append_chunk_to_hashtable(ChunkPtr& chunk) { return Status::OK(); }
 
-    virtual std::shared_ptr<HashJoiner> hash_joiner() { return nullptr; }
 };
 
 class IcebergMORProcessor final : public DefaultMORProcessor {
@@ -54,8 +53,8 @@ public:
     Status init(RuntimeState* runtime_state, const MORParams& params) override;
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
     void close(RuntimeState* runtime_state) override;
-    Status append_chunk_to_ht(ChunkPtr& chunk) override;
     Status build_hash_table(RuntimeState* runtime_state) override;
+    Status append_chunk_to_hashtable(ChunkPtr& chunk) override;
 
 protected:
     std::vector<ExprContext*> _join_exprs;

@@ -170,7 +170,7 @@ Status ORCEqualityDeleteBuilder::build(const std::string& timezone, const std::s
         }
 
         ChunkPtr chunk = ret.value();
-        RETURN_IF_ERROR(mor_processor->append_chunk_to_ht(chunk));
+        RETURN_IF_ERROR(mor_processor->append_chunk_to_hashtable(chunk));
     }
     return Status::OK();
 }
