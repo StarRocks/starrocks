@@ -56,6 +56,8 @@ private:
     bool _is_finished = false;
     mutable bool _is_open_done = false;
     int32_t _sender_id;
+
+    bool _is_audit_report_done = true;
 };
 
 class OlapTableSinkOperatorFactory final : public OperatorFactory {
