@@ -7,6 +7,9 @@ CREATE TABLE t0(k0 BIGINT, k1 DATETIME, v0 INT, v1 VARCHAR(100))
  properties('replication_num'='1');
 -- result:
 -- !result
+INSERT INTO t0 VALUES(0, '2024-01-01 00:00:00', 10, '100');
+-- result:
+-- !result
 ALTER TABLE t0 ADD COLUMN k0 FLOAT;
 -- result:
 E: (1064, 'Unexpected exception: Repeatedly add same column with different definition: k0')
@@ -93,8 +96,25 @@ ALTER TABLE t0 DROP COLUMN v1, DROP COLUMN v100;
 -- result:
 E: (1064, 'Unexpected exception: Column does not exists: v100')
 -- !result
+DESC t0;
+-- result:
+k0	bigint	NO	true	None	
+k1	datetime	NO	true	None	
+v0	int	YES	false	None	
+v1	varchar(100)	YES	false	None	
+-- !result
+SELECT * from t0;
+-- result:
+0	2024-01-01 00:00:00	10	100
+-- !result
 -- name: test_alter_unique_table_abnormal
-CREATE TABLE t1(k0 BIGINT, k1 DATETIME, v0 BIGINT, v1 VARCHAR(100)) unique key(k0, k1) distributed by hash(k0) buckets 1 properties('replication_num'='1');
+CREATE TABLE t1(k0 BIGINT, k1 DATETIME, v0 BIGINT, v1 VARCHAR(100))
+ unique key(k0, k1)
+ distributed by hash(k0) buckets 1
+ properties('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO t1 VALUES(0, '2024-01-01 00:00:00', 10, '100');
 -- result:
 -- !result
 ALTER TABLE t1 ADD column k2 SMALLINT KEY SUM;
@@ -143,8 +163,25 @@ ALTER TABLE t1 MODIFY COLUMN v1 VARCHAR(100) MAX;
 -- result:
 E: (1064, 'Unexpected exception: Can not assign aggregation method on column in Unique data model table: v1')
 -- !result
+DESC t1;
+-- result:
+k0	bigint	YES	true	None	
+k1	datetime	YES	true	None	
+v0	bigint	YES	false	None	
+v1	varchar(100)	YES	false	None	
+-- !result
+SELECT * from t1;
+-- result:
+0	2024-01-01 00:00:00	10	100
+-- !result
 -- name: test_alter_duplicate_table_abnormal
-CREATE TABLE t2(k0 BIGINT, k1 DATETIME, v0 BIGINT, v1 VARCHAR(100)) duplicate key(k0, k1) distributed by hash(k0) buckets 1 properties('replication_num'='1');
+CREATE TABLE t2(k0 BIGINT, k1 DATETIME, v0 BIGINT, v1 VARCHAR(100))
+ duplicate key(k0, k1)
+ distributed by hash(k0) buckets 1
+ properties('replication_num'='1');
+-- result:
+-- !result
+INSERT INTO t2 VALUES(0, '2024-01-01 00:00:00', 10, '100');
 -- result:
 -- !result
 ALTER TABLE t2 ADD column k2 SMALLINT KEY SUM;
@@ -177,4 +214,15 @@ E: (1064, 'Unexpected exception: Column does not exists: v100')
 ALTER TABLE t2 MODIFY COLUMN v1 VARCHAR(100) MAX;
 -- result:
 E: (1064, 'Unexpected exception: Can not assign aggregation method on column in Duplicate data model table: v1')
+-- !result
+DESC t2;
+-- result:
+k0	bigint	YES	true	None	
+k1	datetime	YES	true	None	
+v0	bigint	YES	false	None	
+v1	varchar(100)	YES	false	None	
+-- !result
+SELECT * from t2;
+-- result:
+0	2024-01-01 00:00:00	10	100
 -- !result
