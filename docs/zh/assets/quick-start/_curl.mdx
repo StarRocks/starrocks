@@ -1,4 +1,4 @@
-StarRocks 的 Stream Load 使用 curl 命令，其中涉及许多参数。以下仅包含此教程中使用到的参数，其余参数请参考更多信息部分。
+StarRocks 的 Stream Load 使用 curl 命令，涉及许多参数。以下仅列出此教程中使用到的参数，其余参数请参考更多信息部分。
 
 #### `--location-trusted`
 
@@ -18,7 +18,7 @@ T 代表传输（Transfer），用于指定需要传输的文件名。
 
 #### `column_separator:,`
 
-如果导入的文件使用单个 `,` 作为列分隔符，则设置如上所示。如果使用其他分隔符，则在此处设置该分隔符。常见选择包括 `\t`、`,` 和 `|`。
+如果导入的文件使用单个 `,` 作为列分隔符，则设置如上所示。如果使用其他分隔符，则在此处设置该分隔符。常见分隔符包括 `\t`、`,` 和 `|`。
 
 #### `skip_header:1`
 
@@ -52,7 +52,7 @@ T 代表传输（Transfer），用于指定需要传输的文件名。
 -H "columns:tmp_CRASH_DATE, tmp_CRASH_TIME, CRASH_DATE=str_to_date(concat_ws(' ', tmp_CRASH_DATE, tmp_CRASH_TIME), '%m/%d/%Y %H:%i')
 ```
 
-以上参数将操作 StarRocks 完成以下目标：
+通过设置以上参数可实现以下目标：
 
 1. 将 CSV 文件的第一列内容分配给 `tmp_CRASH_DATE`；
 2. 将 CSV 文件的第二列内容分配给 `tmp_CRASH_TIME`；
