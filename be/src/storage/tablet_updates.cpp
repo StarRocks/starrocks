@@ -2439,6 +2439,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         rowsets = _edit_version_infos[_apply_version_idx]->rowsets;
     }
     size_t total_valid_rowsets = 0;
+    size_t total_valid_segments = 0;
     size_t total_rows = 0;
     size_t total_bytes = 0;
     size_t total_segments = 0;
@@ -2460,6 +2461,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
             } else if (itr->second->compaction_score > 0) {
                 auto& stat = *itr->second;
                 total_valid_rowsets++;
+                total_valid_segments += stat.num_segments;
                 if (stat.num_rows == stat.num_dels) {
                     // add to compaction directly
                     info->inputs.push_back(itr->first);
@@ -2486,7 +2488,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     for (auto& e : candidates) {
         size_t new_rows = total_rows_after_compaction + e.num_rows - e.num_dels;
         size_t new_bytes = total_bytes_after_compaction + e.bytes * (e.num_rows - e.num_dels) / e.num_rows;
-        if (info->inputs.size() > 0 && new_bytes > config::update_compaction_result_bytes * 2) {
+        if (total_bytes_after_compaction > 0 && new_bytes > config::update_compaction_result_bytes * 2) {
             break;
         }
         // When we enable lazy delta column compaction, which means that we don't want to merge
@@ -2518,7 +2520,8 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     LOG(INFO) << "update compaction start tablet:" << _tablet.tablet_id()
               << " version:" << info->start_version.to_string() << " score:" << total_score
               << " pick:" << info->inputs.size() << "/valid:" << total_valid_rowsets << "/all:" << rowsets.size() << " "
-              << int_list_to_string(info->inputs) << " #segments:" << total_segments << " #rows:" << total_rows << "->"
+              << int_list_to_string(info->inputs) << " #pick_segments:" << total_segments
+              << " #valid_segments:" << total_valid_segments << " #rows:" << total_rows << "->"
               << total_rows_after_compaction << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
               << PrettyPrinter::print(total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
 
