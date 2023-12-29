@@ -852,6 +852,34 @@ public class ConnectContext {
         return executor;
     }
 
+    public ScopeGuard bindScope() {
+        return ScopeGuard.setIfNotExists(this);
+    }
+
+    /**
+     * Set thread-local context for the scope, and remove it after leaving the scope
+     */
+    public static class ScopeGuard implements AutoCloseable {
+
+        private boolean set = false;
+
+        private ScopeGuard() {
+        }
+
+        public static ScopeGuard setIfNotExists(ConnectContext session) {
+            ScopeGuard res = new ScopeGuard();
+            res.set = session.setThreadLocalInfoIfNotExists();
+            return res;
+        }
+
+        @Override
+        public void close() {
+            if (set) {
+                ConnectContext.remove();
+            }
+        }
+    }
+
     public class ThreadInfo {
         public boolean isRunning() {
             return state.isRunning();

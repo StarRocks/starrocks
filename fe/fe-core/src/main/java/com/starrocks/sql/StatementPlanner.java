@@ -103,9 +103,7 @@ public class StatementPlanner {
 
         // 1. For all queries, we need db lock when analyze phase
         Locker locker = new Locker();
-        boolean setThreadLocal = false;
-        try {
-            setThreadLocal = session.setThreadLocalInfoIfNotExists();
+        try (var guard = session.bindScope()) {
             lock(locker, dbs);
             try (Timer ignored = Tracers.watchScope("Analyzer")) {
                 Analyzer.analyze(stmt, session);
@@ -140,9 +138,6 @@ public class StatementPlanner {
                 unLock(locker, dbs);
             }
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
-            if (setThreadLocal) {
-                ConnectContext.remove();
-            }
         }
 
         return null;
