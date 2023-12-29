@@ -504,8 +504,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         materializedView = (MaterializedView) table;
         if (!materializedView.isActive()) {
-            String errorMsg = String.format("Materialized view: %s, id: %d is not active, " +
-                    "skip sync partition and data with base tables", materializedView.getName(), mvId);
+            String errorMsg = String.format("Materialized view: %s/%d is not active",
+                    materializedView.getName(), mvId);
             LOG.warn(errorMsg);
             throw new DmlException(errorMsg);
         }
