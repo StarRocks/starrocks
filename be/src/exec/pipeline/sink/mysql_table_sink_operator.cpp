@@ -79,7 +79,15 @@ void MysqlTableSinkIOBuffer::close(RuntimeState* state) {
 }
 
 void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
+<<<<<<< HEAD
     --_num_pending_chunks;
+=======
+    DeferOp op([&]() {
+        auto nc = _num_pending_chunks.fetch_sub(1);
+        DCHECK_GE(nc, 1L);
+    });
+
+>>>>>>> 7a71dc6d6a ([BugFix] fix sink operator dcheck fail occasionally (#38094))
     if (_is_finished) {
         return;
     }
@@ -102,7 +110,12 @@ void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& ite
     const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
+<<<<<<< HEAD
         DCHECK_EQ(_num_pending_chunks, 0);
+=======
+        auto nc = _num_pending_chunks.load();
+        DCHECK_EQ(nc, 1L);
+>>>>>>> 7a71dc6d6a ([BugFix] fix sink operator dcheck fail occasionally (#38094))
         close(_state);
         return;
     }

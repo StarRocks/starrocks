@@ -84,7 +84,15 @@ void ExportSinkIOBuffer::close(RuntimeState* state) {
 }
 
 void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
+<<<<<<< HEAD
     --_num_pending_chunks;
+=======
+    DeferOp op([&]() {
+        auto nc = _num_pending_chunks.fetch_sub(1);
+        DCHECK_GE(nc, 1L);
+    });
+
+>>>>>>> 7a71dc6d6a ([BugFix] fix sink operator dcheck fail occasionally (#38094))
     if (_is_finished) {
         return;
     }
