@@ -1794,7 +1794,12 @@ public class GlobalStateMgr {
 
     public long loadAlterJob(DataInputStream dis, long checksum) throws IOException {
         long newChecksum = checksum;
-        for (AlterJobV2.JobType type : AlterJobV2.JobType.values()) {
+        // Notice: The order in types must be ROLLUP, SCHEMA_CHANGE, DECOMMISSION_BACKEND,
+        // if changed, the image read will fail.
+        List<AlterJobV2.JobType> types = Lists.newArrayList(AlterJobV2.JobType.ROLLUP,
+                AlterJobV2.JobType.SCHEMA_CHANGE, AlterJobV2.JobType.DECOMMISSION_BACKEND);
+
+        for (AlterJobV2.JobType type : types) {
             newChecksum = loadAlterJob(dis, newChecksum, type);
         }
         LOG.info("finished replay alterJob from image");
