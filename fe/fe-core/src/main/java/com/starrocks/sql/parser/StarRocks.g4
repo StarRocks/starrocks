@@ -514,7 +514,7 @@ dropViewStatement
 // ------------------------------------------- Task Statement ----------------------------------------------------------
 
 submitTaskStatement
-    : SUBMIT setVarHint* TASK qualifiedName?
+    : SUBMIT TASK qualifiedName?
     AS (createTableAsSelectStatement | insertStatement )
     ;
 
@@ -1607,7 +1607,7 @@ limitElement
     ;
 
 querySpecification
-    : SELECT setVarHint* setQuantifier? selectItem (',' selectItem)*
+    : SELECT setQuantifier? selectItem (',' selectItem)*
       fromClause
       ((QUALIFY qualifyFunction=selectItem comparisonOperator limit=INTEGER_VALUE)?
       | (WHERE where=expression)? (GROUP BY groupingElement)? (HAVING having=expression)?)
@@ -1686,10 +1686,6 @@ outerAndSemiJoinType
 
 bracketHint
     : '[' identifier (',' identifier)* ']'
-    ;
-
-setVarHint
-    : '/*+' SET_VAR '(' hintMap (',' hintMap)* ')' '*/'
     ;
 
 hintMap
