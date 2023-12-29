@@ -17,17 +17,27 @@
 #include <thrift/Thrift.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
-#include "agent/master_info.h"
 #include "gen_cpp/FrontendService_types.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
-#include "service/backend_options.h"
 
 namespace starrocks::pipeline {
 
 using apache::thrift::TException;
 using apache::thrift::TProcessor;
 using apache::thrift::transport::TTransportException;
+
+AuditStatisticsReporter::AuditStatisticsReporter() {
+    auto status = ThreadPoolBuilder("audit_report")
+                          .set_min_threads(1)
+                          .set_max_threads(2)
+                          .set_max_queue_size(1000)
+                          .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                          .build(&_thread_pool);
+    if (!status.ok()) {
+        LOG(FATAL) << "Cannot create thread pool for ExecStateReport: error=" << status.to_string();
+    }
+}
 
 // including the final status when execution finishes.
 Status AuditStatisticsReporter::report_audit_statistics(const TReportAuditStatisticsParams& params, ExecEnv* exec_env,
@@ -73,5 +83,9 @@ Status AuditStatisticsReporter::report_audit_statistics(const TReportAuditStatis
         return rpc_status;
     }
     return rpc_status;
+}
+
+Status AuditStatisticsReporter::submit(std::function<void()>&& report_task) {
+    return _thread_pool->submit_func(std::move(report_task));
 }
 } // namespace starrocks::pipeline
