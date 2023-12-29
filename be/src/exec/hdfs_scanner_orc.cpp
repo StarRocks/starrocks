@@ -542,34 +542,31 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
     return Status::OK();
 }
 
+static const std::string kORCProfileSectionPrefix = "ORC";
+
 void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
-    const std::string orcProfileSectionPrefix = "ORC";
+    RuntimeProfile::Counter* delete_build_timer = nullptr;
+    RuntimeProfile::Counter* delete_file_per_scan_counter = nullptr;
+    RuntimeProfile::Counter* stripe_sizes_counter = nullptr;
+    RuntimeProfile::Counter* stripe_number_counter = nullptr;
+    RuntimeProfile* root = profile->runtime_profile;
 
-    void HdfsOrcScanner::do_update_counter(HdfsScanProfile * profile) {
-        RuntimeProfile::Counter* delete_build_timer = nullptr;
-        RuntimeProfile::Counter* delete_file_per_scan_counter = nullptr;
-        RuntimeProfile::Counter* stripe_sizes_counter = nullptr;
-        RuntimeProfile::Counter* stripe_number_counter = nullptr;
-        RuntimeProfile* root = profile->runtime_profile;
-        ADD_COUNTER(root, orcProfileSectionPrefix, TUnit::NONE);
+    ADD_COUNTER(root, kORCProfileSectionPrefix, TUnit::UNIT);
 
-        ADD_COUNTER(root, kORCProfileSectionPrefix, TUnit::UNIT);
+    delete_build_timer = ADD_CHILD_TIMER(root, "DeleteBuildTimer", kORCProfileSectionPrefix);
+    delete_file_per_scan_counter = ADD_CHILD_COUNTER(root, "DeleteFilesPerScan", TUnit::UNIT, kORCProfileSectionPrefix);
+    COUNTER_UPDATE(delete_build_timer, _stats.delete_build_ns);
+    COUNTER_UPDATE(delete_file_per_scan_counter, _stats.delete_file_per_scan);
 
-        delete_build_timer = ADD_CHILD_TIMER(root, "DeleteBuildTimer", kORCProfileSectionPrefix);
-        delete_file_per_scan_counter =
-                ADD_CHILD_COUNTER(root, "DeleteFilesPerScan", TUnit::UNIT, kORCProfileSectionPrefix);
-        COUNTER_UPDATE(delete_build_timer, _stats.delete_build_ns);
-        COUNTER_UPDATE(delete_file_per_scan_counter, _stats.delete_file_per_scan);
-
-        // we expect to get average stripe size instead of sum.
-        stripe_sizes_counter = root->add_child_counter(
-                "StripeSizes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
-                kORCProfileSectionPrefix);
-        stripe_number_counter = ADD_CHILD_COUNTER(root, "StripeNumber", TUnit::UNIT, kORCProfileSectionPrefix);
-        for (auto v : _stats.stripe_sizes) {
-            COUNTER_UPDATE(stripe_sizes_counter, v);
-        }
-        COUNTER_UPDATE(stripe_number_counter, _stats.stripe_sizes.size());
+    // we expect to get average stripe size instead of sum.
+    stripe_sizes_counter = root->add_child_counter("StripeSizes", TUnit::BYTES,
+                                                   RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
+                                                   kORCProfileSectionPrefix);
+    stripe_number_counter = ADD_CHILD_COUNTER(root, "StripeNumber", TUnit::UNIT, kORCProfileSectionPrefix);
+    for (auto v : _stats.stripe_sizes) {
+        COUNTER_UPDATE(stripe_sizes_counter, v);
     }
+    COUNTER_UPDATE(stripe_number_counter, _stats.stripe_sizes.size());
+}
 
 } // namespace starrocks
