@@ -439,7 +439,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         this.indexIdToMeta.put(indexId, indexMeta);
 
         this.baseTableInfos = Lists.newArrayList();
-        this.baseTableInfos.add(new BaseTableInfo(db.getId(), db.getFullName(), baseTable.getId()));
+        this.baseTableInfos.add(
+                new BaseTableInfo(db.getId(), db.getFullName(), baseTable.getId(), baseTable.getName()));
 
         Map<Long, Partition> idToPartitions = new HashMap<>(baseTable.idToPartition.size());
         Map<String, Partition> nameToPartitions = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
@@ -837,7 +838,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (baseTableIds != null) {
                 // for compatibility
                 for (long tableId : baseTableIds) {
-                    baseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), tableId));
+                    baseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), tableId, null));
                 }
             } else {
                 active = false;
@@ -868,6 +869,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                                     Sets.newHashSet(mvId)).build()
                     );
                 }
+            } else {
+                res = false;
+                setInactiveAndReason("base-table dropped: " + baseTableInfo.getTableName());
             }
         }
         analyzePartitionInfo();
