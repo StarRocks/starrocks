@@ -105,7 +105,7 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
     size_t remain_chunk_size = chunk_size;
     std::vector<ColumnPtr> output_columns;
 
-    RETURN_IF_ERROR(_process_table_function());
+    RETURN_IF_ERROR(_process_table_function(state));
 
     output_columns.reserve(_outer_slots.size());
     for (int _outer_slot : _outer_slots) {
@@ -202,17 +202,17 @@ ChunkPtr TableFunctionOperator::_build_chunk(const std::vector<ColumnPtr>& colum
     return chunk;
 }
 
-Status TableFunctionOperator::_process_table_function() {
+Status TableFunctionOperator::_process_table_function(RuntimeState* state) {
     if (!_table_function_result_eos) {
         SCOPED_TIMER(_table_function_exec_timer);
         COUNTER_UPDATE(_table_function_exec_counter, 1);
-        _table_function_result = _table_function->process(_table_function_state, &_table_function_result_eos);
+        _table_function_result = _table_function->process(state, _table_function_state, &_table_function_result_eos);
         DCHECK_EQ(_input_chunk->num_rows() + 1, _table_function_result.second->size());
         return _table_function_state->status();
     }
     return Status::OK();
 }
-Status TableFunctionOperator::reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
+Status TableFunctionOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
     _input_chunk.reset();
     _remain_repeat_times = 0;
     _input_chunk_index = 0;
