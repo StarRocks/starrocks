@@ -57,6 +57,12 @@ public class ExecuteExceptionHandler {
         }
     }
 
+    // If modifications are made to the partition files of a Hive table by user,
+    // such as through "insert overwrite partition", the Frontend couldn't be aware of these changes.
+    // As a result, queries may use the file information cached in the FE for execution.
+    // When the Backend cannot find the corresponding files, it returns a "Status::ACCESS_REMOTE_FILE_ERROR."
+    // To handle this exception, we perform a retry. Before initiating the retry, we need to
+    // refresh the metadata cache for the table and clear the query-level metadata cache.
     private static void handleRemoteFileNotFound(RemoteFileNotFoundException e, RetryContext context) {
         List<ScanNode> scanNodes = context.execPlan.getScanNodes();
         boolean existExternalCatalog = false;
