@@ -658,7 +658,7 @@ public class Optimizer {
 
         if (!sessionVariable.isMVPlanner()) {
             // add join implementRule
-            String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
+            String joinImplementationMode = connectContext.getSessionVariable().getJoinImplementationMode();
             if ("merge".equalsIgnoreCase(joinImplementationMode)) {
                 context.getRuleSet().addMergeJoinImplementationRule();
             } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {
