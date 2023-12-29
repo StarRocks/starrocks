@@ -20,6 +20,7 @@
 #include "storage/del_vector.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/metacache.h"
+#include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/update_manager.h"
 #include "storage/protobuf_file.h"
 #include "util/coding.h"
@@ -239,9 +240,14 @@ Status MetaFileBuilder::_finalize_delvec(int64_t version, int64_t txn_id) {
     return Status::OK();
 }
 
-void MetaFileBuilder::_finalize_sstable() {
-    if (_pindex_sstable != nullptr) {
-        _tablet_meta->mutable_pindex_sstable_meta()->mutable_sstables()->Add(std::move(*_pindex_sstable));
+void MetaFileBuilder::_finalize_sstable(int64_t version) {
+    if (!_sstables.empty()) {
+        auto pindex_sstable = std::make_unique<PersistentIndexSstablePB>();
+        pindex_sstable->set_version(version);
+        for (auto& s : _sstables) {
+            pindex_sstable->mutable_sstables()->Add(std::move(*s));
+        }
+        _tablet_meta->mutable_pindex_sstable_meta()->mutable_sstables()->Add(std::move(*pindex_sstable));
     }
 }
 
@@ -249,7 +255,7 @@ Status MetaFileBuilder::finalize(int64_t txn_id) {
     auto version = _tablet_meta->version();
     // finalize delvec
     RETURN_IF_ERROR(_finalize_delvec(version, txn_id));
-    _finalize_sstable();
+    _finalize_sstable(version);
     RETURN_IF_ERROR(_tablet.put_metadata(_tablet_meta));
     _update_mgr->update_primary_index_data_version(_tablet, version);
     _fill_delvec_cache();
@@ -276,6 +282,23 @@ void MetaFileBuilder::_fill_delvec_cache() {
         if (delvec_iter != _segmentid_to_delvec.end() && delvec_iter->second != nullptr) {
             _tablet.tablet_mgr()->metacache()->cache_delvec(cache_item.first, delvec_iter->second);
         }
+    }
+}
+
+void MetaFileBuilder::handle_failure() {
+    if (is_primary_key(_tablet_meta.get()) && !_has_finalized && _has_update_index) {
+        // if we meet failures and have not finalized yet, have to clear primary index cache,
+        // then we can retry again.
+        _update_mgr->remove_primary_index_cache(_tablet_meta->id());
+    }
+}
+
+void MetaFileBuilder::append_sstables(const std::vector<SstableInfo>& sstables) {
+    _sstables.reserve(sstables.size());
+    for (auto& sstable : sstables) {
+        auto sstable_pb = std::make_unique<SstablePB>();
+        sstable.to_pb(sstable_pb.get());
+        _sstables.emplace_back(std::move(sstable_pb));
     }
 }
 
@@ -348,6 +371,11 @@ void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite
     for (int i = 0; i < op_write.rowset().segments_size(); i++) {
         get_file_info_from_rowset(op_write.rowset(), rowset_id);
     }
+}
+
+bool is_cloud_native_pindex(const TabletMetadata& metadata) {
+    return metadata.enable_persistent_index() &&
+           metadata.persistent_index_type() == PersistentIndexTypePB::CLOUD_NATIVE;
 }
 
 } // namespace starrocks::lake

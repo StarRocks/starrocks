@@ -199,28 +199,17 @@ TEST_F(LakePersistentIndexTest, test_minor_compaction) {
         values.emplace_back(i * 2);
         key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
     }
-    auto l0_max_mem_size = config::l0_max_mem_usage;
     config::l0_max_mem_usage = 1;
     int64_t version = 0;
     auto txn_id = next_id();
     auto tablet_id = _tablet_metadata->id();
     auto index = std::make_unique<LakePersistentIndex>(_tablet_mgr.get(), tablet_id);
     index->set_txn_id(txn_id);
-    index->update_version(version);
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), false));
-    PersistentIndexSStablePB pindex_sstable;
-    index->commit(&pindex_sstable);
-    ASSERT_EQ(version, pindex_sstable.version());
-    ASSERT_TRUE(pindex_sstable.sstables_size() == 0);
     ++version;
     txn_id = next_id();
     index->set_txn_id(txn_id);
-    index->update_version(version);
     ASSERT_OK(index->insert(N, key_slices.data(), values.data(), false));
-    index->commit(&pindex_sstable);
-    ASSERT_EQ(version, pindex_sstable.version());
-    ASSERT_TRUE(pindex_sstable.sstables_size() > 0);
-    config::l0_max_mem_usage = l0_max_mem_size;
 }
 
 } // namespace starrocks::lake

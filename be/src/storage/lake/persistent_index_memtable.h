@@ -22,12 +22,17 @@
 #include "util/phmap/btree.h"
 
 namespace starrocks::lake {
-class PersistentIndexSStablePB;
+class SstablePB;
 class TabletManager;
 
 struct SstableInfo {
     std::string filename;
     uint64_t filesz;
+
+    void to_pb(SstablePB* sstable) const {
+        sstable->set_filename(filename);
+        sstable->set_filesz(filesz);
+    }
 };
 
 using IndexValueInfo = std::pair<int64_t, IndexValue>;

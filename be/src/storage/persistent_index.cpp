@@ -3804,7 +3804,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
 
 [[maybe_unused]] Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values,
                                                      const std::vector<uint32_t>& src_rssid,
-                                                     std::vector<uint32_t>* failed) {
+                                                     std::vector<uint32_t>* failed, int64_t version) {
     std::vector<IndexValue> found_values;
     found_values.resize(n);
     RETURN_IF_ERROR(get(n, keys, found_values.data()));

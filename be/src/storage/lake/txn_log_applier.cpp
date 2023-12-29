@@ -148,7 +148,7 @@ private:
             return Status::OK();
         }
         return _tablet.update_mgr()->publish_primary_key_tablet(op_write, txn_id, *_metadata, &_tablet, _index_entry,
-                                                                &_builder, _base_version);
+                                                                &_builder, _base_version, _new_version);
     }
 
     Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, int64_t txn_id) {
@@ -167,7 +167,7 @@ private:
             return Status::OK();
         }
         return _tablet.update_mgr()->publish_primary_compaction(op_compaction, txn_id, *_metadata, _tablet,
-                                                                _index_entry, &_builder, _base_version);
+                                                                _index_entry, &_builder, _base_version, _new_version);
     }
 
     Status apply_schema_change_log(const TxnLogPB_OpSchemaChange& op_schema_change) {

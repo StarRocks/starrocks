@@ -1229,19 +1229,21 @@ const Slice* PrimaryIndex::_build_persistent_keys(const Column& pks, uint32_t id
     }
 }
 
-Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks) {
+Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks,
+                                                   int64_t version) {
     std::vector<Slice> keys;
     std::vector<uint64_t> values;
     values.reserve(pks.size());
     RETURN_IF_ERROR(_build_persistent_values(rssid, rowids, 0, pks.size(), &values));
     const Slice* vkeys = _build_persistent_keys(pks, 0, pks.size(), &keys);
-    RETURN_IF_ERROR(_persistent_index->insert(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()), true));
+    RETURN_IF_ERROR(
+            _persistent_index->insert(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()), true, version));
     return Status::OK();
 }
 
 Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                                    uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes,
-                                                   IOStat* stat) {
+                                                   IOStat* stat, int64_t version) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     Status st;
     uint32_t n = idx_end - idx_begin;
@@ -1252,7 +1254,7 @@ Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowi
     const Slice* vkeys = _build_persistent_keys(pks, idx_begin, idx_end, &keys);
     RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, idx_begin, idx_end, &values));
     RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(values.data()),
-                                              reinterpret_cast<IndexValue*>(old_values.data()), stat));
+                                              reinterpret_cast<IndexValue*>(old_values.data()), stat, version));
     for (unsigned long old : old_values) {
         if ((old != NullIndexValue) && (old >> 32) == rssid) {
             LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid;
@@ -1265,12 +1267,12 @@ Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowi
     return st;
 }
 
-Status PrimaryIndex::_erase_persistent_index(const Column& key_col, DeletesMap* deletes) {
+Status PrimaryIndex::_erase_persistent_index(const Column& key_col, DeletesMap* deletes, int64_t version) {
     Status st;
     std::vector<Slice> keys;
     std::vector<uint64_t> old_values(key_col.size(), NullIndexValue);
     const Slice* vkeys = _build_persistent_keys(key_col, 0, key_col.size(), &keys);
-    st = _persistent_index->erase(key_col.size(), vkeys, reinterpret_cast<IndexValue*>(old_values.data()));
+    st = _persistent_index->erase(key_col.size(), vkeys, reinterpret_cast<IndexValue*>(old_values.data(), version));
     if (!st.ok()) {
         LOG(WARNING) << "erase persistent index failed";
     }
@@ -1294,14 +1296,15 @@ Status PrimaryIndex::_get_from_persistent_index(const Column& key_col, std::vect
 
 [[maybe_unused]] Status PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                                                 const vector<uint32_t>& src_rssid,
-                                                                vector<uint32_t>* deletes) {
+                                                                vector<uint32_t>* deletes, int64_t version) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     std::vector<Slice> keys;
     std::vector<uint64_t> values;
     values.reserve(pks.size());
     RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, 0, pks.size(), &values));
-    Status st = _persistent_index->try_replace(pks.size(), _build_persistent_keys(pks, 0, pks.size(), &keys),
-                                               reinterpret_cast<IndexValue*>(values.data()), src_rssid, deletes);
+    Status st =
+            _persistent_index->try_replace(pks.size(), _build_persistent_keys(pks, 0, pks.size(), &keys),
+                                           reinterpret_cast<IndexValue*>(values.data()), src_rssid, deletes, version);
     if (!st.ok()) {
         LOG(WARNING) << "try replace persistent index failed";
     }
@@ -1309,30 +1312,31 @@ Status PrimaryIndex::_get_from_persistent_index(const Column& key_col, std::vect
 }
 
 Status PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                               const uint32_t max_src_rssid, vector<uint32_t>* deletes) {
+                                               const uint32_t max_src_rssid, vector<uint32_t>* deletes,
+                                               int64_t version) {
     std::vector<Slice> keys;
     std::vector<uint64_t> values;
     values.reserve(pks.size());
     RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, 0, pks.size(), &values));
     Status st = _persistent_index->try_replace(pks.size(), _build_persistent_keys(pks, 0, pks.size(), &keys),
-                                               reinterpret_cast<IndexValue*>(values.data()), max_src_rssid, deletes);
+                                               reinterpret_cast<IndexValue*>(values.data()), max_src_rssid, deletes, version);
     if (!st.ok()) {
         LOG(WARNING) << "try replace persistent index failed";
     }
     return st;
 }
 
-Status PrimaryIndex::insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks) {
+Status PrimaryIndex::insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks, int64_t version) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     if (_persistent_index != nullptr) {
         auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
-        return _insert_into_persistent_index(rssid, rowids, pks);
+        return _insert_into_persistent_index(rssid, rowids, pks, version);
     } else {
         return _pkey_to_rssid_rowid->insert(rssid, rowids, pks, 0, pks.size());
     }
 }
 
-Status PrimaryIndex::insert(uint32_t rssid, uint32_t rowid_start, const Column& pks) {
+Status PrimaryIndex::insert(uint32_t rssid, uint32_t rowid_start, const Column& pks, int64_t version) {
     vector<uint32_t> rids(pks.size());
     for (int i = 0; i < rids.size(); i++) {
         rids[i] = rowid_start + i;
@@ -1341,11 +1345,11 @@ Status PrimaryIndex::insert(uint32_t rssid, uint32_t rowid_start, const Column& 
 }
 
 Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes,
-                            IOStat* stat) {
+                            IOStat* stat, int64_t version) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
-        st = _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes, stat);
+        st = _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes, stat, version);
     } else {
         _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes);
     }
@@ -1353,11 +1357,11 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
 }
 
 Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
-                            uint32_t idx_end, DeletesMap* deletes) {
+                            uint32_t idx_end, DeletesMap* deletes, int64_t version) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
-        st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes, nullptr);
+        st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes, nullptr, version);
     } else {
         _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes);
     }
@@ -1365,11 +1369,11 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
 }
 
 [[maybe_unused]] Status PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                                  const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes) {
+                                                  const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes, int64_t version) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
-        st = _replace_persistent_index(rssid, rowid_start, pks, src_rssid, deletes);
+        st = _replace_persistent_index(rssid, rowid_start, pks, src_rssid, deletes, version);
     } else {
         _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, src_rssid, 0, pks.size(), deletes);
     }
@@ -1377,23 +1381,23 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
 }
 
 Status PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
-                                 vector<uint32_t>* deletes) {
+                                 vector<uint32_t>* deletes, int64_t version) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
-        st = _replace_persistent_index(rssid, rowid_start, pks, max_src_rssid, deletes);
+        st = _replace_persistent_index(rssid, rowid_start, pks, max_src_rssid, deletes, version);
     } else {
         _pkey_to_rssid_rowid->try_replace(rssid, rowid_start, pks, max_src_rssid, 0, pks.size(), deletes);
     }
     return st;
 }
 
-Status PrimaryIndex::erase(const Column& key_col, DeletesMap* deletes) {
+Status PrimaryIndex::erase(const Column& key_col, DeletesMap* deletes, int64_t version) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
         auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
-        st = _erase_persistent_index(key_col, deletes);
+        st = _erase_persistent_index(key_col, deletes, version);
     } else {
         _pkey_to_rssid_rowid->erase(key_col, 0, key_col.size(), deletes);
     }

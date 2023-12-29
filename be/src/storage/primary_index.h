@@ -57,18 +57,19 @@ public:
     // insert new primary keys into this index. caller need to make sure key doesn't exists
     // in index
     // [not thread-safe]
-    Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks);
-    Status insert(uint32_t rssid, uint32_t rowid_start, const Column& pks);
+    Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks, int64_t version = -1);
+    Status insert(uint32_t rssid, uint32_t rowid_start, const Column& pks, int64_t version = -1);
 
     // insert new primary keys into this index. if a key already exists in the index, assigns
     // the new record's position to the mapped value corresponding to the key, and save the
     // old position to |deletes|.
     //
     // [not thread-safe]
-    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes, IOStat* stat = nullptr);
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes, IOStat* stat = nullptr,
+                  int64_t version = -1);
 
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                  DeletesMap* deletes);
+                  DeletesMap* deletes, int64_t version = -1);
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
@@ -82,7 +83,7 @@ public:
     //
     // [not thread-safe]
     [[maybe_unused]] Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                        const vector<uint32_t>& src_rssid, vector<uint32_t>* failed);
+                                        const vector<uint32_t>& src_rssid, vector<uint32_t>* failed, int64_t version = -1);
 
     // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
     // input rowsets' rowid greater than the max src rssid, this indicates that the row of output rowset is
@@ -95,13 +96,13 @@ public:
     //
     // [not thread-safe]
     Status try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks, const uint32_t max_src_rssid,
-                       vector<uint32_t>* failed);
+                       vector<uint32_t>* failed, int64_t version = -1);
 
     // |key_col| contains the *encoded* primary keys to be deleted from this index.
     // The position of deleted keys will be appended into |new_deletes|.
     //
     // [not thread-safe]
-    Status erase(const Column& pks, DeletesMap* deletes);
+    Status erase(const Column& pks, DeletesMap* deletes, int64_t version = -1);
 
     Status get(const Column& pks, std::vector<uint64_t>* rowids) const;
 
@@ -157,20 +158,22 @@ private:
     const Slice* _build_persistent_keys(const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                                         std::vector<Slice>* key_slices) const;
 
-    Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks);
+    Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks,
+                                         int64_t version);
 
     Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
-                                         uint32_t idx_end, DeletesMap* deletes, IOStat* stat);
+                                         uint32_t idx_end, DeletesMap* deletes, IOStat* stat, int64_t version);
 
-    Status _erase_persistent_index(const Column& key_col, DeletesMap* deletes);
+    Status _erase_persistent_index(const Column& key_col, DeletesMap* deletes, int64_t version);
 
     Status _get_from_persistent_index(const Column& key_col, std::vector<uint64_t>* rowids) const;
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     [[maybe_unused]] Status _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                                      const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes);
+                                                      const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes,
+                                                      int64_t version);
     Status _replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                     const uint32_t max_src_rssid, vector<uint32_t>* deletes);
+                                     const uint32_t max_src_rssid, vector<uint32_t>* deletes, int64_t version);
 
 protected:
     std::mutex _lock;

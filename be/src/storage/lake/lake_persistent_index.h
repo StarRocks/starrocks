@@ -19,6 +19,7 @@
 
 namespace starrocks::lake {
 
+class MetaFileBuilder;
 class PersistentIndexMemtable;
 class PersistentIndexSStablePB;
 class TabletManager;
@@ -75,9 +76,7 @@ public:
 
     Status major_compact(int64_t min_retain_version);
 
-    void commit(PersistentIndexSStablePB* pindex_sstable);
-
-    void update_version(int64_t version) { _version = version; }
+    void commit(MetaFileBuilder* builder);
 
     void set_txn_id(int64_t txn_id) { _txn_id = txn_id; }
 
@@ -92,7 +91,6 @@ private:
     std::vector<SstableInfo> _sstables;
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
-    int64_t _version{0};
     int64_t _txn_id{0};
 };
 

@@ -59,13 +59,13 @@ message SstablePB {
    optional int64 filesz = 2;
 }
 
-message PersistentIndexSStablePB {
+message PersistentIndexSstablePB {
     optional int64 version = 1;
     repeated SstablePB sstables = 2;
 }
 
-message PersistentIndexSStableMetaPB {
-    repeated PersistentIndexSStablePB sstables = 1;
+message PersistentIndexSstableMetaPB {
+    repeated PersistentIndexSstablePB sstables = 1;
 }
 
 message RowsetMetadataPB {

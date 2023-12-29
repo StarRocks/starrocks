@@ -15,6 +15,7 @@
 #include "storage/lake/lake_persistent_index.h"
 
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/lake/meta_file.h"
 #include "storage/lake/persistent_index_memtable.h"
 
 namespace starrocks::lake {
@@ -104,13 +105,8 @@ Status LakePersistentIndex::major_compact(int64_t min_retain_version) {
     return Status::OK();
 }
 
-void LakePersistentIndex::commit(PersistentIndexSStablePB* pindex_sstable) {
-    pindex_sstable->set_version(_version);
-    for (auto& s : _sstables) {
-        auto sstable = pindex_sstable->add_sstables();
-        sstable->set_filename(s.filename);
-        sstable->set_filesz(s.filesz);
-    }
+void LakePersistentIndex::commit(MetaFileBuilder* builder) {
+    builder->append_sstables(_sstables);
     _sstables.clear();
 }
 

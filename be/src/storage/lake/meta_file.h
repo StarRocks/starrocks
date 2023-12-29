@@ -30,6 +30,7 @@ class DelVector;
 
 namespace lake {
 
+struct SstableInfo;
 class UpdateManager;
 
 enum RecoverFlag { OK = 0, RECOVER_WITHOUT_PUBLISH, RECOVER_WITH_PUBLISH };
@@ -53,9 +54,8 @@ public:
 
     // update num dels in rowset meta, `segment_id_to_add_dels` record each segment's incremental del count
     Status update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels);
-    void set_pindex_sstable(std::shared_ptr<PersistentIndexSStablePB> pindex_sstable) {
-        _pindex_sstable = pindex_sstable;
-    }
+
+    void append_sstables(const std::vector<SstableInfo>& sstables);
 
     void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
     RecoverFlag recover_flag() const { return _recover_flag; }
@@ -66,7 +66,7 @@ private:
     // fill delvec cache, for better reading latency
     void _fill_delvec_cache();
 
-    void _finalize_sstable();
+    void _finalize_sstable(int64_t version);
 
 private:
     Tablet _tablet;
@@ -80,7 +80,7 @@ private:
     std::unordered_map<std::string, uint32_t> _cache_key_to_segment_id;
     // When recover flag isn't ok, need recover later
     RecoverFlag _recover_flag = RecoverFlag::OK;
-    std::shared_ptr<PersistentIndexSStablePB> _pindex_sstable = nullptr;
+    std::vector<std::unique_ptr<SstablePB>> _sstables;
 };
 
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, DelVector* delvec);
@@ -90,6 +90,8 @@ bool is_primary_key(const TabletMetadata& metadata);
 // TODO(yixin): cache rowset_rssid_to_path
 void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
                           std::unordered_map<uint32_t, FileInfo>& rssid_to_path);
+
+bool is_cloud_native_pindex(const TabletMetadata& metadata);
 
 } // namespace lake
 } // namespace starrocks
