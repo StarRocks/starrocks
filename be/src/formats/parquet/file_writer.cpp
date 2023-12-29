@@ -356,9 +356,9 @@ Status FileWriterBase::write(Chunk* chunk) {
     _generate_chunk_writer();
     RETURN_IF_ERROR(_chunk_writer->write(chunk));
 
-    // if (_chunk_writer->estimated_buffered_bytes() > _max_row_group_size) {
-    //     RETURN_IF_ERROR(_flush_row_group());
-    // }
+    if (_chunk_writer->estimated_buffered_bytes() > _max_row_group_size) {
+        RETURN_IF_ERROR(_flush_row_group());
+    }
 
     return Status::OK();
 }
@@ -482,7 +482,7 @@ Status AsyncFileWriter::_flush_row_group() {
 
 Status AsyncFileWriter::close(RuntimeState* state,
                               const std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)>& cb) {
-    bool ret = _executor_pool->try_offer([&, state, cb]() {
+    {
         SCOPED_TIMER(_io_timer);
         {
             auto lock = std::unique_lock(_m);
@@ -512,10 +512,6 @@ Status AsyncFileWriter::close(RuntimeState* state,
         if (cb != nullptr) {
             cb(this, state);
         }
-    });
-
-    if (!ret) {
-        return Status::InternalError("Submit close file task error");
     }
 
     return Status::OK();
