@@ -18,7 +18,6 @@
 
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
-// #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"

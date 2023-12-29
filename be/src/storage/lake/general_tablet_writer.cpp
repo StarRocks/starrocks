@@ -21,9 +21,9 @@
 #include "fs/fs_util.h"
 #include "serde/column_array_serde.h"
 #include "storage/lake/filenames.h"
+#include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/vacuum.h"
-#include "storage/lake/location_provider.h"
 #include "storage/rowset/segment_writer.h"
 
 namespace starrocks::lake {

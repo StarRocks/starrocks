@@ -21,8 +21,8 @@
 #include "fs/fs.h" // FileInfo
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/lake_types.pb.h"
-#include "storage/tablet_schema.h"
 #include "storage/lake/location_provider.h"
+#include "storage/tablet_schema.h"
 
 namespace starrocks {
 class Chunk;
@@ -107,7 +107,9 @@ public:
     // allow to set custom tablet schema for writer, used in partial update
     void set_tablet_schema(TabletSchemaCSPtr schema) { _schema = std::move(schema); }
 
-    void set_location_provider(const std::shared_ptr<LocationProvider> provider) { _location_provider = std::move(provider); }
+    void set_location_provider(const std::shared_ptr<LocationProvider> provider) {
+        _location_provider = std::move(provider);
+    }
     const std::shared_ptr<LocationProvider> location_provider() { return _location_provider; }
 
 protected:
