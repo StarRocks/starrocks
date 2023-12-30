@@ -44,7 +44,6 @@ import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.LogBuilder;
@@ -73,7 +72,6 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.RejectedExecutionException;
 
 /**
  * parent class of BrokerLoadJob and SparkLoadJob from load stmt
@@ -252,41 +250,13 @@ public abstract class BulkLoadJob extends LoadJob {
                         .build());
                 return;
             }
-            LoadTask loadTask = idToTasks.get(taskId);
-            if (loadTask == null) {
-                return;
-            }
-            if (loadTask.getRetryTime() <= 0) {
-                unprotectedExecuteCancel(failMsg, true);
-                logFinalOperation();
-                return;
-            } else {
-                failMsg.setMsg("Still retrying, error: " + failMsg.getMsg());
-                unprotectUpdateFailMsg(failMsg);
 
-                // retry task
-                idToTasks.remove(loadTask.getSignature());
-                if (loadTask instanceof LoadLoadingTask) {
-                    loadingStatus.getLoadStatistic().removeLoad(((LoadLoadingTask) loadTask).getLoadId());
-                }
-                loadTask.updateRetryInfo();
-                idToTasks.put(loadTask.getSignature(), loadTask);
-                // load id will be added to loadStatistic when executing this task
-                try {
-                    if (loadTask.getTaskType() == LoadTask.TaskType.PENDING) {
-                        submitTask(GlobalStateMgr.getCurrentState().getPendingLoadTaskScheduler(), loadTask);
-                    } else if (loadTask.getTaskType() == LoadTask.TaskType.LOADING) {
-                        submitTask(GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler(), loadTask);
-                    } else {
-                        throw new LoadException(String.format("Unknown load task type: %s. task id: %d, job id, %d",
-                                loadTask.getTaskType(), loadTask.getSignature(), id));
-                    }
-                } catch (RejectedExecutionException | LoadException e) {
-                    unprotectedExecuteCancel(failMsg, true);
-                    logFinalOperation();
-                    return;
-                }
+            if (failMsg.getMsg().contains("timeout")) {
+                return;
             }
+
+            unprotectedExecuteCancel(failMsg, true);
+            logFinalOperation();
         } finally {
             writeUnlock();
         }

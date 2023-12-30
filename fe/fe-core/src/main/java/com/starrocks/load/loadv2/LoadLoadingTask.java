@@ -125,7 +125,6 @@ public class LoadLoadingTask extends LoadTask {
         this.loadJobType = builder.loadJobType;
         this.originStmt = builder.originStmt;
         this.partialUpdateMode = builder.partialUpdateMode;
-        this.retryTime = 1; // load task retry does not satisfy transaction's atomic
         this.failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL);
         this.loadId = builder.loadId;
         this.fileStatusList = builder.fileStatusList;
@@ -153,9 +152,8 @@ public class LoadLoadingTask extends LoadTask {
 
     @Override
     protected void executeTask() throws Exception {
-        LOG.info("begin to execute loading task. load id: {} job: {}. db: {}, tbl: {}. left retry: {}",
-                DebugUtil.printId(loadId), callback.getCallbackId(), db.getOriginName(), table.getName(), retryTime);
-        retryTime--;
+        LOG.info("begin to execute loading task. load id: {} job: {}. db: {}, tbl: {}.",
+                DebugUtil.printId(loadId), callback.getCallbackId(), db.getOriginName(), table.getName());
         executeOnce();
     }
 

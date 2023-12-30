@@ -56,7 +56,6 @@ public abstract class LoadTask extends PriorityLeaderTask {
     protected LoadTaskCallback callback;
     protected TaskAttachment attachment;
     protected FailMsg failMsg = new FailMsg();
-    protected int retryTime = 1;
 
     public LoadTask(LoadTaskCallback callback, TaskType taskType, int priority) {
         super(priority);
@@ -105,13 +104,8 @@ public abstract class LoadTask extends PriorityLeaderTask {
      */
     abstract void executeTask() throws Exception;
 
-    public int getRetryTime() {
-        return retryTime;
-    }
-
     // Derived class may need to override this.
     public void updateRetryInfo() {
-        this.retryTime--;
         this.signature = GlobalStateMgr.getCurrentState().getNextId();
     }
 
