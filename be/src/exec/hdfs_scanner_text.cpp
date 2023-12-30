@@ -510,6 +510,8 @@ Status HdfsTextScanner::_build_hive_column_name_2_index() {
 }
 
 int64_t HdfsTextScanner::estimated_mem_usage() const {
+    int64_t value = HdfsScanner::estimated_mem_usage();
+    if (value != 0) return value;
     return _reader->buff_capacity() * 3 / 2;
 }
 

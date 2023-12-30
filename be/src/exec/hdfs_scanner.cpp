@@ -162,7 +162,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     }
     _app_stats.rows_read += (*chunk)->num_rows();
     return status;
-}
+}hi
 
 Status HdfsScanner::open(RuntimeState* runtime_state) {
     SCOPED_RAW_TIMER(&_total_running_time);
@@ -273,8 +273,7 @@ void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, c
 
 int64_t HdfsScanner::estimated_mem_usage() const {
     if (_shared_buffered_input_stream != nullptr) {
-        int64_t value = _shared_buffered_input_stream->estimated_mem_usage();
-        return value;
+        return _shared_buffered_input_stream->estimated_mem_usage();
     }
     // return 0 if we don't know estimated memory usage with high confidence.
     return 0;

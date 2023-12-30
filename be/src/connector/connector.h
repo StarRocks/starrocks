@@ -76,6 +76,11 @@ public:
 
     static const std::string PROFILE_NAME;
 
+    struct Profile {
+        int mem_alloc_failed_count;
+    };
+    void update_profile(const Profile& profile);
+
 protected:
     int64_t _read_limit = -1; // no limit
     bool _has_any_predicate = false;

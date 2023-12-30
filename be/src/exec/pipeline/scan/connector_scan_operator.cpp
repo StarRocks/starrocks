@@ -154,7 +154,7 @@ struct ConnectorScanOperatorAdaptiveProcessor {
     std::atomic_int64_t cs_total_scan_bytes = 0;
 
     // ----------------------
-    int64_t last_chunk_souce_finish_timestamp = 0;
+    std::atomic_int64_t last_chunk_souce_finish_timestamp = 0;
     int64_t check_all_io_tasks_last_timestamp = 0;
     int64_t adjust_io_tasks_last_timestamp = 0;
     int64_t last_driver_output_full_timestamp = 0;
@@ -554,26 +554,40 @@ ConnectorScanOperatorIOTasksMemLimiter* ConnectorChunkSource::_get_io_tasks_mem_
 void ConnectorChunkSource::close(RuntimeState* state) {
     if (_closed) return;
 
-    MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
-    mem_tracker->release(_request_mem_tracker_bytes);
+    ConnectorScanOperator* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
+    if (scan_op->_enable_adaptive_io_tasks) {
+        MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
+        mem_tracker->release(_request_mem_tracker_bytes);
 
-    ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
-    limiter->update_running_chunk_source_count(-1);
-    uint64_t chunk_num = std::min<uint64_t>(state->chunk_size(), _chunk_rows_read);
-    int64_t chunk_source_mem_bytes = _data_source->estimated_mem_usage() + avg_chunk_mem_bytes() * chunk_num;
-    limiter->update_chunk_source_mem_bytes(chunk_source_mem_bytes);
+        ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
+        limiter->update_running_chunk_source_count(-1);
+        uint64_t chunk_num = std::min<uint64_t>(state->chunk_size(), _chunk_rows_read);
 
-    [[maybe_unused]] auto build_debug_string = [&]() {
-        std::stringstream ss;
-        ss << "try_mem_tracker. query_id = " << print_id(state->query_id())
-           << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
-           << ", release. this = " << (void*)this << ", request mem bytes = " << _request_mem_tracker_bytes
-           << ", chunk source mem bytes = " << chunk_source_mem_bytes << ", chunk mem bytes = " << avg_chunk_mem_bytes()
-           << " * " << chunk_num << ", data source mem usage = " << _data_source->estimated_mem_usage();
-        return ss.str();
-    };
-    VLOG_OPERATOR << build_debug_string();
+        // if we don't know chunk source mem bytes for sure, we use estimated old value.
+        int64_t chunk_source_mem_bytes = _data_source->estimated_mem_usage();
+        if (chunk_source_mem_bytes != 0) {
+            chunk_source_mem_bytes += avg_row_mem_bytes() * chunk_num;
+            limiter->update_chunk_source_mem_bytes(chunk_source_mem_bytes);
+        }
 
+        [[maybe_unused]] auto build_debug_string = [&]() {
+            std::stringstream ss;
+            ss << "try_mem_tracker. query_id = " << print_id(state->query_id())
+               << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence()
+               << ", release. this = " << (void*)this << ", request mem bytes = " << _request_mem_tracker_bytes
+               << ", chunk source mem bytes = " << chunk_source_mem_bytes
+               << ", chunk mem bytes = " << avg_row_mem_bytes() << " * " << chunk_num
+               << ", data source mem usage = " << _data_source->estimated_mem_usage();
+            return ss.str();
+        };
+        VLOG_OPERATOR << build_debug_string();
+    }
+
+    {
+        connector::DataSource::Profile profile;
+        profile.mem_alloc_failed_count = _mem_alloc_failed_count;
+        _data_source->update_profile(profile);
+    }
     _closed = true;
     _data_source->close(state);
 }
@@ -583,36 +597,39 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
         return Status::OK();
     }
 
-    ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
-    _request_mem_tracker_bytes = limiter->chunk_source_mem_bytes.load();
+    ConnectorScanOperator* scan_op = down_cast<ConnectorScanOperator*>(_scan_op);
+    if (scan_op->_enable_adaptive_io_tasks) {
+        [[maybe_unused]] auto build_debug_string = [&](const std::string action) {
+            std::stringstream ss;
+            ss << "try_mem_tracker. query_id = " << print_id(state->query_id())
+               << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence() << ", "
+               << action << ". this = " << (void*)this << ", value = " << _request_mem_tracker_bytes;
+            return ss.str();
+        };
 
-    [[maybe_unused]] auto build_debug_string = [&](const std::string action) {
-        std::stringstream ss;
-        ss << "try_mem_tracker. query_id = " << print_id(state->query_id())
-           << ", op_id = " << _scan_op->get_plan_node_id() << "/" << _scan_op->get_driver_sequence() << ", " << action
-           << ". this = " << (void*)this << ", value = " << _request_mem_tracker_bytes;
-        return ss.str();
-    };
+        ConnectorScanOperatorIOTasksMemLimiter* limiter = _get_io_tasks_mem_limiter();
+        MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
 
-    MemTracker* mem_tracker = state->query_ctx()->connector_scan_mem_tracker();
-
-    int retry = 3;
-    while (retry > 0) {
-        retry--;
-        *mem_alloc_failed = false;
-        if (mem_tracker->try_consume(_request_mem_tracker_bytes) == nullptr) {
-            break;
+        int retry = 3;
+        while (retry > 0) {
+            retry--;
+            *mem_alloc_failed = false;
+            _request_mem_tracker_bytes = limiter->chunk_source_mem_bytes.load();
+            if (mem_tracker->try_consume(_request_mem_tracker_bytes) == nullptr) {
+                break;
+            }
+            *mem_alloc_failed = true;
+            VLOG_OPERATOR << build_debug_string("alloc failed");
+            sched_yield();
         }
-        *mem_alloc_failed = true;
-        // VLOG_OPERATOR << build_debug_string("alloc failed");
-        sched_yield();
-    }
-    if (*mem_alloc_failed) {
-        _request_mem_tracker_bytes = 0;
-        return Status::OK();
-    }
+        if (*mem_alloc_failed) {
+            _request_mem_tracker_bytes = 0;
+            return Status::OK();
+        }
 
-    VLOG_OPERATOR << build_debug_string("consume");
+        VLOG_OPERATOR << build_debug_string("consume");
+        limiter->update_running_chunk_source_count(1);
+    }
 
     RETURN_IF_ERROR(_data_source->open(state));
     if (!_data_source->has_any_predicate() && _limit != -1 && _limit < state->chunk_size()) {
@@ -620,8 +637,6 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
     } else {
         _ck_acc.set_max_size(state->chunk_size());
     }
-
-    limiter->update_running_chunk_source_count(1);
 
     _opened = true;
 
@@ -645,7 +660,8 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         bool mem_alloc_failed = false;
         RETURN_IF_ERROR(_open_data_source(state, &mem_alloc_failed));
         if (mem_alloc_failed) {
-            return Status::OK();
+            _mem_alloc_failed_count += 1;
+            return Status::ResourceBusy("");
         }
         if (state->is_cancelled()) {
             return Status::Cancelled("canceled state");
@@ -708,7 +724,7 @@ const workgroup::WorkGroupScanSchedEntity* ConnectorChunkSource::_scan_sched_ent
     return wg->connector_scan_sched_entity();
 }
 
-uint64_t ConnectorChunkSource::avg_chunk_mem_bytes() const {
+uint64_t ConnectorChunkSource::avg_row_mem_bytes() const {
     if (_chunk_rows_read == 0) return 0;
     return _chunk_mem_bytes / _chunk_rows_read;
 }

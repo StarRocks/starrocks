@@ -90,6 +90,7 @@ void ConnectorScanNode::_estimate_chunk_source_mem_bytes() {
     _data_source_provider->default_data_source_mem_bytes(&min_value, &max_value);
     estimated_size = std::min(std::max(estimated_size, min_value), max_value);
     _estimated_chunk_source_mem_bytes = estimated_size;
+    _estimated_chunk_source_mem_bytes += _estimated_scan_row_bytes * runtime_state()->chunk_size();
 }
 
 int ConnectorScanNode::_estimate_max_concurrent_chunks() const {
@@ -98,8 +99,8 @@ int ConnectorScanNode::_estimate_max_concurrent_chunks() const {
     size_t row_mem_bytes = _estimated_scan_row_bytes;
     size_t chunk_mem_bytes = row_mem_bytes * runtime_state()->chunk_size();
     DCHECK_GT(chunk_mem_bytes, 0);
-    int concurrency = std::max<int>(int(_scan_mem_limit * kChunkBufferMemRatio / chunk_mem_bytes), 1);
-    return concurrency;
+    int capacity = std::max<int>(int(_scan_mem_limit * kChunkBufferMemRatio / chunk_mem_bytes), 1);
+    return capacity;
 }
 
 pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
@@ -130,8 +131,7 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
                                 context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter),
                                 is_stream_pipeline);
 
-    scan_op->set_chunk_source_mem_bytes(_estimated_chunk_source_mem_bytes +
-                                        _estimated_scan_row_bytes * runtime_state()->chunk_size());
+    scan_op->set_chunk_source_mem_bytes(_estimated_chunk_source_mem_bytes);
     scan_op->set_scan_mem_limit(_scan_mem_limit);
     scan_op->set_mem_share_arb(_mem_share_arb);
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));

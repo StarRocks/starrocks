@@ -134,7 +134,7 @@ public:
 
     bool reach_limit() override { return _limit != -1 && _reach_limit.load(); }
 
-    uint64_t avg_chunk_mem_bytes() const;
+    uint64_t avg_row_mem_bytes() const;
 
 protected:
     virtual bool _reach_eof() const { return _limit != -1 && _chunk_rows_read >= _limit; }
@@ -165,6 +165,7 @@ private:
     uint64_t _chunk_rows_read = 0;
     uint64_t _chunk_mem_bytes = 0;
     int64_t _request_mem_tracker_bytes = 0;
+    int64_t _mem_alloc_failed_count = 0;
 };
 
 } // namespace pipeline
