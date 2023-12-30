@@ -612,11 +612,11 @@ INSERT INTO low_card_duplicate (c0,c1,c2,c3,c4,c5,c6) VALUES
 -- !result
 [UC] analyze full table common_duplicate;
 -- result:
-test_db_fba7a61e7f8211eea34600163e04d4c2.common_duplicate	analyze	status	OK
+test_db_d0bf876e9d5011eea8e700163e04d4c2.common_duplicate	analyze	status	OK
 -- !result
 [UC] analyze full table low_card_duplicate;
 -- result:
-test_db_fba7a61e7f8211eea34600163e04d4c2.low_card_duplicate	analyze	status	OK
+test_db_d0bf876e9d5011eea8e700163e04d4c2.low_card_duplicate	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('c3', 'low_card_duplicate')
 -- result:

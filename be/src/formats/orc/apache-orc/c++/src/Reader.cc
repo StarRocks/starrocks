@@ -1016,7 +1016,8 @@ void RowReaderImpl::buildIORanges(std::vector<InputStream::IORange>* io_ranges) 
     for (const proto::Stream& stream : currentStripeFooter.streams()) {
         uint32_t columnId = stream.column();
         uint64_t length = stream.length();
-        if (selectedColumns[columnId] || lazyLoadColumns[columnId]) {
+        // ColumnId = 0 is root column, we always need it
+        if (columnId == 0 || selectedColumns[columnId] || lazyLoadColumns[columnId]) {
             io_ranges->emplace_back(InputStream::IORange{.offset = offset, .size = length});
         }
         offset += length;

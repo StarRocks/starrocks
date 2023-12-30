@@ -145,6 +145,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_CACHE_TYPE = "query_cache_type";
     public static final String INTERACTIVE_TIMTOUT = "interactive_timeout";
     public static final String WAIT_TIMEOUT = "wait_timeout";
+    public static final String WAREHOUSE = "warehouse";
     public static final String NET_WRITE_TIMEOUT = "net_write_timeout";
     public static final String NET_READ_TIMEOUT = "net_read_timeout";
     public static final String TIME_ZONE = "time_zone";
@@ -285,6 +286,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_USE_CORRELATED_JOIN_ESTIMATE = "cbo_use_correlated_join_estimate";
     public static final String CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE = "cbo_enable_low_cardinality_optimize";
     public static final String LOW_CARDINALITY_OPTIMIZE_V2 = "low_cardinality_optimize_v2";
+    public static final String ARRAY_LOW_CARDINALITY_OPTIMIZE = "array_low_cardinality_optimize";
     public static final String CBO_USE_NTH_EXEC_PLAN = "cbo_use_nth_exec_plan";
     public static final String CBO_CTE_REUSE = "cbo_cte_reuse";
     public static final String CBO_CTE_REUSE_RATE = "cbo_cte_reuse_rate";
@@ -433,6 +435,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PIPELINE_LEVEL_SHUFFLE = "enable_pipeline_level_shuffle";
 
     public static final String ENABLE_PLAN_SERIALIZE_CONCURRENTLY = "enable_plan_serialize_concurrently";
+
+    public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
 
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
@@ -598,6 +602,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SHORT_CIRCUIT = "enable_short_circuit";
 
     public static final String ENABLE_HYPERSCAN_VEC = "enable_hyperscan_vec";
+
+    // whether rewrite bitmap_union(to_bitmap(x)) to bitmap_agg(x) directly.
+    public static final String ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG = "enable_rewrite_bitmap_union_to_bitamp_agg";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1037,6 +1044,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = LOW_CARDINALITY_OPTIMIZE_V2)
     private boolean useLowCardinalityOptimizeV2 = true;
 
+    @VarAttr(name = ARRAY_LOW_CARDINALITY_OPTIMIZE)
+    private boolean enableArrayLowCardinalityOptimize = true;
+
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL)
     private boolean enableRewriteGroupingSetsToUnionAll = false;
 
@@ -1225,6 +1235,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_HYPERSCAN_VEC)
     private boolean enableHyperscanVec = true;
+
+    public void setEnableArrayLowCardinalityOptimize(boolean enableArrayLowCardinalityOptimize) {
+        this.enableArrayLowCardinalityOptimize = enableArrayLowCardinalityOptimize;
+    }
+
+    public boolean isEnableArrayLowCardinalityOptimize() {
+        return enableArrayLowCardinalityOptimize;
+    }
+
+    @VarAttr(name = ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG)
+    private boolean enableRewriteBitmapUnionToBitmapAgg = true;
+
+    public boolean isEnableRewriteBitmapUnionToBitmapAgg() {
+        return enableRewriteBitmapUnionToBitmapAgg;
+    }
+
+    public void setEnableRewriteBitmapUnionToBitmapAgg(boolean enableRewriteBitmapUnionToBitmapAgg) {
+        this.enableRewriteBitmapUnionToBitmapAgg = enableRewriteBitmapUnionToBitmapAgg;
+    }
 
     public long getCboPushDownTopNLimit() {
         return cboPushDownTopNLimit;
@@ -1596,6 +1625,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = FOLLOWER_QUERY_FORWARD_MODE, flag = VariableMgr.INVISIBLE | VariableMgr.DISABLE_FORWARD_TO_LEADER)
     private String followerForwardMode = "";
+
+    @VarAttr(name = ENABLE_STRICT_ORDER_BY)
+    private boolean enableStrictOrderBy = true;
 
     public void setFollowerQueryForwardMode(String mode) {
         this.followerForwardMode = mode;
@@ -3004,6 +3036,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setSkewJoinRandRange(int skewJoinRandRange) {
         this.skewJoinRandRange = skewJoinRandRange;
+    }
+
+    public boolean isEnableStrictOrderBy() {
+        return enableStrictOrderBy;
+    }
+
+    public void setEnableStrictOrderBy(boolean enableStrictOrderBy) {
+        this.enableStrictOrderBy = enableStrictOrderBy;
     }
 
     // Serialize to thrift object

@@ -225,6 +225,18 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         return false;
     }
 
+    public static boolean supportedDynamicPartition(Expr expr) {
+        if (isTimestampFunction(expr)) {
+            return true;
+        }
+        if (expr instanceof FunctionCallExpr) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+            String functionName = functionCallExpr.getFnName().getFunction();
+            return FunctionSet.STR2DATE.equals(functionName);
+        }
+        return false;
+    }
+
     public List<Expr> getPartitionExprs() {
         return partitionExprs;
     }
