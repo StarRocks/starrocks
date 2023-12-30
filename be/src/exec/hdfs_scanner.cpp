@@ -162,7 +162,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     }
     _app_stats.rows_read += (*chunk)->num_rows();
     return status;
-}hi
+}
 
 Status HdfsScanner::open(RuntimeState* runtime_state) {
     SCOPED_RAW_TIMER(&_total_running_time);
