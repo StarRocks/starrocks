@@ -113,17 +113,13 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
     // so only here we can make more accurate decision.
     _estimate_chunk_source_mem_bytes();
 
-    if (_mem_share_arb != nullptr) {
-        _scan_mem_limit = _mem_share_arb->update_chunk_source_mem_bytes(0, _estimated_chunk_source_mem_bytes);
-    }
-
     // port from olap scan node. to control chunk buffer usage, we can control memory consumption to avoid OOM.
     size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
     size_t default_buffer_capacity = std::min<size_t>(max_buffer_capacity, _estimate_max_concurrent_chunks());
-
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
             max_buffer_capacity, default_buffer_capacity, int64_t(_scan_mem_limit * kChunkBufferMemRatio),
             runtime_state()->chunk_size());
+
     scan_op = !stream_data_source
                       ? std::make_shared<pipeline::ConnectorScanOperatorFactory>(
                                 context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter))
@@ -134,6 +130,7 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
     scan_op->set_chunk_source_mem_bytes(_estimated_chunk_source_mem_bytes);
     scan_op->set_scan_mem_limit(_scan_mem_limit);
     scan_op->set_mem_share_arb(_mem_share_arb);
+
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);
 

@@ -43,11 +43,7 @@ struct ConnectorScanOperatorMemShareArbitrator {
         return scan_mem_limit;
     }
 
-    int64_t update_chunk_source_mem_bytes(int64_t old_value, int64_t new_value) {
-        int64_t diff = new_value - old_value;
-        int64_t total = total_chunk_source_mem_bytes.fetch_add(diff) + diff;
-        return scan_mem_limit * (new_value * 1.0 / std::max(total, new_value));
-    }
+    int64_t update_chunk_source_mem_bytes(int64_t old_value, int64_t new_value);
 };
 
 class ConnectorScanOperatorFactory : public ScanOperatorFactory {
@@ -117,6 +113,7 @@ public:
     bool is_running_all_io_tasks() const override;
 
 public:
+    int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);
     mutable ConnectorScanOperatorAdaptiveProcessor* _adaptive_processor;
     bool _enable_adaptive_io_tasks = true;
 };
