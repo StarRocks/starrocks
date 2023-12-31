@@ -85,7 +85,7 @@ fi
 
 # check java version
 export JAVA=${JAVA_HOME}/bin/java
-JAVA_VER=$(${JAVA} -version 2>&1 | sed 's/.* version "\(.*\)\.\(.*\)\..*"/\1\2/; 1q' | cut -f1 -d " ")
+JAVA_VER=$(${JAVA} -version 2>&1 | sed 's/.* version "\([^.]*\)\.\([^.]*\)\..*"/\1\2/; 1q' | cut -f1 -d " ")
 if [[ $JAVA_VER -lt 18 ]]; then
     echo "Error: require JAVA with JDK version at least 1.8"
     exit 1
