@@ -15,10 +15,6 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-import com.starrocks.alter.AlterOpType;
-import com.starrocks.alter.AlterOperations;
-import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -27,16 +23,12 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddPartitionClause;
-import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -60,12 +52,10 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 public interface ConnectorMetadata {
     /**
@@ -101,8 +91,8 @@ public interface ConnectorMetadata {
     /**
      * Return partial partition names of the table using partitionValues to filter.
      *
-     * @param databaseName the name of the database
-     * @param tableName the name of the table
+     * @param databaseName    the name of the database
+     * @param tableName       the name of the table
      * @param partitionValues the partition value to filter
      * @return a list of partition names
      */
@@ -114,7 +104,7 @@ public interface ConnectorMetadata {
     /**
      * Get Table descriptor for the table specific by `dbName`.`tblName`
      *
-     * @param dbName - the string represents the database name
+     * @param dbName  - the string represents the database name
      * @param tblName - the string represents the table name
      * @return a Table instance
      */
@@ -129,7 +119,7 @@ public interface ConnectorMetadata {
     /**
      * Get Table descriptor and materialized index for the materialized view index specific by `dbName`.`tblName`
      *
-     * @param dbName - the string represents the database name
+     * @param dbName  - the string represents the database name
      * @param tblName - the string represents the table name
      * @return a Table instance
      */
@@ -145,11 +135,10 @@ public interface ConnectorMetadata {
      *
      * @param table
      * @param partitionKeys selected partition columns
-     * @param snapshotId selected snapshot id
-     * @param predicate used to filter metadata for iceberg, etc
-     * @param fieldNames all selected columns (including partition columns)
-     * @param limit scan limit nums if needed
-     *
+     * @param snapshotId    selected snapshot id
+     * @param predicate     used to filter metadata for iceberg, etc
+     * @param fieldNames    all selected columns (including partition columns)
+     * @param limit         scan limit nums if needed
      * @return the remote file information of the query to scan.
      */
     default List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys,
@@ -165,13 +154,12 @@ public interface ConnectorMetadata {
     /**
      * Get statistics for the table.
      *
-     * @param session optimizer context
+     * @param session       optimizer context
      * @param table
-     * @param columns selected columns
+     * @param columns       selected columns
      * @param partitionKeys selected partition keys
-     * @param predicate used to filter metadata for iceberg, etc
-     * @param limit scan limit if needed, default value is -1
-     *
+     * @param predicate     used to filter metadata for iceberg, etc
+     * @param limit         scan limit if needed, default value is -1
      * @return the table statistics for the table.
      */
     default Statistics getTableStatistics(OptimizerContext session,
@@ -237,29 +225,7 @@ public interface ConnectorMetadata {
     }
 
     default void alterTable(AlterTableStmt stmt) throws UserException {
-        TableName dbTableName = stmt.getTbl();
-        String dbName = dbTableName.getDb();
-        Database db = getDb(dbName);
-        if (db == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
-
-        List<AlterClause> alterClauses = stmt.getOps();
-        AlterOperations currentAlterOps = new AlterOperations();
-        currentAlterOps.checkConflict(alterClauses);
-
-        Set<AlterOpType> currentOps = new HashSet<>(currentAlterOps.getCurrentOps());
-        currentOps.retainAll(Sets.newHashSet(AlterOpType.APPLY_COLUMN_MASKING_POLICY,
-                AlterOpType.REVOKE_COLUMN_MASKING_POLICY,
-                AlterOpType.APPLY_ROW_ACCESS_POLICY,
-                AlterOpType.REVOKE_ROW_ACCESS_POLICY,
-                AlterOpType.REVOKE_ALL_ROW_ACCESS_POLICY));
-
-        if (!currentOps.isEmpty()) {
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processPolicy(dbTableName, alterClauses);
-        } else {
-            throw new DdlException("Do not support alter non-native table[" + dbTableName + "]");
-        }
+        throw new StarRocksConnectorException("This connector doesn't support alter table");
     }
 
     default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {

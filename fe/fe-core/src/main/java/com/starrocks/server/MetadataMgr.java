@@ -260,16 +260,25 @@ public class MetadataMgr {
         }
     }
 
-    public boolean alterTable(AlterTableStmt stmt) throws UserException {
-        String catalogName = stmt.getTbl().getCatalog();
+    public void alterTable(AlterTableStmt stmt) throws UserException {
+        String catalogName = stmt.getCatalogName();
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
 
         if (connectorMetadata.isPresent()) {
+            String dbName = stmt.getDbName();
+            String tableName = stmt.getTableName();
+            if (getDb(catalogName, dbName) == null) {
+                throw new DdlException("Database '" + dbName + "' does not exist in catalog '" + catalogName + "'");
+            }
+
+            if (!tableExists(catalogName, dbName, tableName)) {
+                throw new DdlException("Table '" + tableName + "' does not exist in database '" + dbName + "'");
+            }
+
             connectorMetadata.get().alterTable(stmt);
         } else {
             throw new  DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
         }
-        return true;
     }
 
     public void dropTable(String catalogName, String dbName, String tblName) {

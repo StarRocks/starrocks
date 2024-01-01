@@ -67,13 +67,16 @@ public class MetaUtils {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return;
         }
+        if (operation == null) {
+            throw new SemanticException("operation is null");
+        }
 
         Catalog catalog = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogByName(catalogName);
         if (catalog == null) {
             throw new SemanticException("Catalog %s is not found", catalogName);
         }
 
-        if (catalog.getType().equalsIgnoreCase("iceberg")) {
+        if (!operation.equals("ALTER") && catalog.getType().equalsIgnoreCase("iceberg")) {
             throw new SemanticException("Table of iceberg catalog doesn't support [%s]", operation);
         }
     }
