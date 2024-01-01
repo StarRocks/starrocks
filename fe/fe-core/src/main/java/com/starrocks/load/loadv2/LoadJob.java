@@ -179,6 +179,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     @SerializedName("mc")
     protected String mergeCondition;
+    @SerializedName("jo")
+    protected JSONOptions jsonOptions = new JSONOptions();
 
     public int getProgress() {
         return this.progress;
@@ -428,6 +430,18 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
                     throw new DdlException("Warehouse " + warehouseName + " not exists.");
                 }
                 warehouseId = warehouse.getId();
+            }
+
+            if (properties.containsKey(LoadStmt.STRIP_OUTER_ARRAY)) {
+                jsonOptions.stripOuterArray = Boolean.parseBoolean(properties.get(LoadStmt.STRIP_OUTER_ARRAY));
+            }
+
+            if (properties.containsKey(LoadStmt.JSONPATHS)) {
+                jsonOptions.jsonPaths = properties.get(LoadStmt.JSONPATHS);
+            }
+
+            if (properties.containsKey(LoadStmt.JSONROOT)) {
+                jsonOptions.jsonRoot = properties.get(LoadStmt.JSONROOT);
             }
         }
     }
@@ -1294,5 +1308,16 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             String json = Text.readString(in);
             return GsonUtils.GSON.fromJson(json, LoadJobStateUpdateInfo.class);
         }
+    }
+
+    public static class JSONOptions {
+        @SerializedName("s")
+        public boolean stripOuterArray;
+
+        @SerializedName("jp")
+        public String jsonPaths;
+
+        @SerializedName("jr")
+        public String jsonRoot;
     }
 }

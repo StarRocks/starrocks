@@ -307,6 +307,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .setFileNum(attachment.getFileNumByTable(aggKey))
                         .setLoadId(loadId)
                         .setWarehouseId(warehouseId)
+                        .setJSONOptions(jsonOptions)
                         .build();
 
                 task.prepare();
