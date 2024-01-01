@@ -211,7 +211,7 @@ public class UDFHelper {
         final long[] addrs = getAddrs(columnAddr);
         // memcpy to uint8_t array
         Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
-        // memcpy to int array
+        // memcpy to double array
         Platform.copyMemory(dataArr, Platform.DOUBLE_ARRAY_OFFSET, null, addrs[1], numRows * 8L);
     }
 
