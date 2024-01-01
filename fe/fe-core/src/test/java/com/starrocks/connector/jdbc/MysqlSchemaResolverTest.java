@@ -64,7 +64,8 @@ public class MysqlSchemaResolverTest {
         partitionsResult = new MockResultSet("partitions");
         partitionsResult.addColumn("NAME", Arrays.asList("'20230810'"));
         partitionsResult.addColumn("PARTITION_EXPRESSION", Arrays.asList("`d`"));
-        partitionsResult.addColumn("MODIFIED_TIME", Arrays.asList("2023-08-01"));
+        partitionsResult.addColumn("MODIFIED_TIME", Arrays.asList("2023-08-01 00:00:00"));
+
         properties = new HashMap<>();
         properties.put(DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
         properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
@@ -239,4 +240,29 @@ public class MysqlSchemaResolverTest {
         }
     }
 
+    @Test
+    public void testMysqlInvalidPartition() {
+        try {
+            MockResultSet invalidPartition = new MockResultSet("partitions");
+            invalidPartition.addColumn("NAME", Arrays.asList("'20230810'"));
+            invalidPartition.addColumn("PARTITION_EXPRESSION", Arrays.asList("`d`"));
+            invalidPartition.addColumn("MODIFIED_TIME", Arrays.asList("2023-08-01"));
+
+            new Expectations() {
+                {
+                    preparedStatement.executeQuery();
+                    result = invalidPartition;
+                    minTimes = 0;
+                }
+            };
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            List<Column> columns = Arrays.asList(new Column("d", Type.VARCHAR));
+            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", columns, Lists.newArrayList(),
+                    "test", "catalog", properties);
+            jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Timestamp format must be yyyy-mm-dd hh:mm:ss"));
+        }
+    }
 }
