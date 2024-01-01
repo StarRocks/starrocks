@@ -1407,6 +1407,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     // ------------------------------------------- Task Statement ------------------------------------------------------
 
+    private Map<String, String> buildProperties(StarRocksParser.PropertiesContext properties) {
+        Map<String, String> result = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        if (properties != null) {
+            List<Property> propertyList = visit(properties.property(), Property.class);
+            for (Property property : ListUtils.emptyIfNull(propertyList)) {
+                result.put(property.getKey(), property.getValue());
+            }
+        }
+        return result;
+    }
+
     @Override
     public ParseNode visitSubmitTaskStatement(StarRocksParser.SubmitTaskStatementContext context) {
         QualifiedName qualifiedName = null;
@@ -1414,7 +1425,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             qualifiedName = getQualifiedName(context.qualifiedName());
         }
 
-        Map<String, String> properties = extractVarHints(hintMap.get(context));
+        // properties
+        Map<String, String> properties = buildProperties(context.properties());
+        if (context.setVarHint() != null) {
+            properties.putAll(extractVarHints(hintMap.get(context)));
+        }
         CreateTableAsSelectStmt createTableAsSelectStmt = null;
         InsertStmt insertStmt = null;
         if (context.createTableAsSelectStatement() != null) {
@@ -2753,7 +2768,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitShowResourceGroupUsageStatement(StarRocksParser.ShowResourceGroupUsageStatementContext context) {
+    public ParseNode visitShowResourceGroupUsageStatement(
+            StarRocksParser.ShowResourceGroupUsageStatementContext context) {
         if (context.GROUPS() != null) {
             return new ShowResourceGroupUsageStmt(null, createPos(context));
         }
@@ -3480,7 +3496,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         return new CreateDictionaryStmt(dictionaryName, queryableObject, dictionaryKeys, dictionaryValues,
-                                        properties, createPos(context));
+                properties, createPos(context));
     }
 
     @Override
@@ -3509,7 +3525,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitCancelRefreshDictionaryStatement(StarRocksParser.CancelRefreshDictionaryStatementContext context) {
+    public ParseNode visitCancelRefreshDictionaryStatement(
+            StarRocksParser.CancelRefreshDictionaryStatementContext context) {
         String dictionaryName = getQualifiedName(context.qualifiedName()).toString();
         return new CancelRefreshDictionaryStmt(dictionaryName, createPos(context));
     }
@@ -4667,7 +4684,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new SemanticException("All arguments must be passed by name or all must be passed positionally");
         }
         FunctionCallExpr functionCallExpr =
-                new FunctionCallExpr(FunctionName.createFnName(functionName.toString()), parameters, createPos(context));
+                new FunctionCallExpr(FunctionName.createFnName(functionName.toString()), parameters,
+                        createPos(context));
         TableFunctionRelation relation = new TableFunctionRelation(functionCallExpr);
 
         if (context.alias != null) {
@@ -5616,7 +5634,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             case StarRocksLexer.BIT_SHIFT_RIGHT_LOGICAL:
                 return ArithmeticExpr.Operator.BIT_SHIFT_RIGHT_LOGICAL;
             default:
-                throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(operator.getText()), new NodePosition(operator));
+                throw new ParsingException(PARSER_ERROR_MSG.wrongTypeOfArgs(operator.getText()),
+                        new NodePosition(operator));
         }
     }
 

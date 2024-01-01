@@ -92,7 +92,6 @@ public class TaskManager {
     // This operation need to consider concurrency.
     // This scheduler can use notify/wait to optimize later.
     private final ScheduledExecutorService dispatchScheduler = Executors.newScheduledThreadPool(1);
-
     // Use to concurrency control
     private final QueryableReentrantLock taskLock;
 

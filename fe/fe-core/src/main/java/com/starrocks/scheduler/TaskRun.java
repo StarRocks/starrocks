@@ -32,7 +32,6 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
-import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -170,6 +169,13 @@ public class TaskRun implements Comparable<TaskRun> {
         return newProperties;
     }
 
+    private void handleWarehouseProperty() {
+        String warehouseId = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID);
+        if (warehouseId != null) {
+            runCtx.setCurrentWarehouseId(Long.parseLong(warehouseId));
+        }
+    }
+
     public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
         Preconditions.checkNotNull(status.getDefinition(), "The definition of task run should not null");
@@ -199,13 +205,8 @@ public class TaskRun implements Comparable<TaskRun> {
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
 
         runCtx.resetSessionVariable();
-        if (MapUtils.isNotEmpty(properties)) {
-            // handle warehouse alone, because warehouseId is saved in properties rather than warehouseName
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID)) {
-                runCtx.setCurrentWarehouseId(
-                        Long.valueOf(properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID)));
-            }
-
+        if (properties != null) {
+            handleWarehouseProperty();
             for (String key : properties.keySet()) {
                 try {
                     runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(properties.get(key))), true);
