@@ -309,11 +309,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-<<<<<<< HEAD
 import java.util.concurrent.TimeUnit;
-=======
 import java.util.concurrent.atomic.AtomicLong;
->>>>>>> f578ef5b33 ([BugFix] Fix automatic create partition stuck when exhausted FE thrift server thread (#36996))
 import java.util.stream.Collectors;
 
 import static com.starrocks.thrift.TStatusCode.NOT_IMPLEMENTED_ERROR;
