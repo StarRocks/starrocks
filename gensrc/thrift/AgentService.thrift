@@ -128,7 +128,7 @@ struct TCreateTableReq {
 }
 
 struct TAbortTxnReq {
-    1: required Types.TTransactionId txn_id;
+    1: optional Types.TTransactionId txn_id;
 }
 
 struct TReq {

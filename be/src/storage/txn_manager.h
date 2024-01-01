@@ -100,6 +100,7 @@ struct CreateTableTxn {
     int64_t txn_timeout;
     TxnState txn_state;
     std::vector<string> tablet_paths;
+    std::vector<int64_t> tablet_ids;
     DataDir* data_dir = nullptr;
 
     CreateTableTxn() : txn_id(0), txn_state(TXN_INITAL) {}
@@ -111,6 +112,16 @@ struct CreateTableTxn {
         binary += ";";
         binary += std::to_string(txn_timeout);
         binary += ";";
+        for (auto tablet_id : tablet_ids) {
+            binary += std::to_string(tablet_id);
+            binary += "_";
+        }
+        for (int i = 0; i < tablet_ids.size(); ++i) {
+            binary += std::to_string(tablet_ids[i]);
+            if (i < tablet_ids.size() - 1) {
+                binary += "_";
+            }
+        }
         for (auto path : tablet_paths) {
             binary += ";";
             binary += path;
@@ -134,7 +145,11 @@ struct CreateTableTxn {
         }
         txn_start_time = strtol(pieces[1].data(), nullptr, 10);
         txn_timeout = strtol(pieces[2].data(), nullptr, 10);
-        for (int i = 3; i < pieces.size(); ++i) {
+        std::vector<StringPiece> tablet_ids_str = strings::Split(pieces[3], "_", strings::SkipEmpty());
+        for (auto tablet_id_str : tablet_ids_str) {
+            tablet_ids.push_back(strtol(tablet_id_str.data(), nullptr, 10));
+        }
+        for (int i = 4; i < pieces.size(); ++i) {
             tablet_paths.emplace_back(pieces[i].data(), pieces[i].size());
         }
     }
@@ -195,10 +210,12 @@ public:
                                     TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid);
 
     [[nodiscard]] Status add_create_txn(TTransactionId txn_id, const CreateTableTxn& create_tablet_txn);
-    [[nodiscard]] Status delete_create_txn(TTransactionId txn_id);
-    [[nodiscard]] Status delete_create_txn(const std::vector<TTransactionId>& txn_ids);
+    [[nodiscard]] Status delete_create_txn(TTransactionId txn_id, const CreateTableTxn& create_table_txn);
+    [[nodiscard]] Status delete_create_txn(const std::vector<TTransactionId>& txn_ids,
+                                           const std::vector<CreateTableTxn>& create_table_txns);
     [[nodiscard]] StatusOr<CreateTableTxn*> get_create_txn(TTransactionId txn_id);
     [[nodiscard]] Status list_unused_create_txn(std::vector<CreateTableTxn>* create_table_txns);
+    [[nodiscard]] bool check_tablet_in_txn(int64_t tablet_id);
 
     void get_tablet_related_txns(TTabletId tablet_id, SchemaHash schema_hash, const TabletUid& tablet_uid,
                                  int64_t* partition_id, std::set<int64_t>* transaction_ids);
@@ -274,6 +291,7 @@ private:
     std::unique_ptr<std::shared_mutex[]> _txn_map_locks;
 
     std::unique_ptr<create_table_txn_map_t> _create_table_txn_map;
+    std::unique_ptr<std::set<int64_t>> _tablet_in_txn;
     std::shared_mutex _create_table_lock;
 
     // Dynamic thread pool used to concurrently flush WAL to disk

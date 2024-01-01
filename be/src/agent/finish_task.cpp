@@ -65,7 +65,7 @@ void finish_req(const TFinishRequest& finish_request) {
     int32_t sleep_seconds = 1;
     int32_t max_retry_times = TASK_FINISH_MAX_RETRY;
 
-    MasterServerClient client(&g_frontend_service_client_cache);
+    MasterServerClient client(ExecEnv::GetInstance()->frontend_client_cache());
 
     while (try_time < max_retry_times) {
         AgentStatus client_status = client.finish_req(finish_request, &result);

@@ -564,6 +564,10 @@ void DataDir::perform_path_gc_by_tablet() {
             LOG(WARNING) << "could not find data dir for tablet path " << path;
             continue;
         }
+
+        if (_txn_manager->check_tablet_in_txn(tablet_id)) {
+            continue;
+        }
         _tablet_manager->try_delete_unused_tablet_path(data_dir, tablet_id, schema_hash, tablet_id_path.string());
     }
     _all_tablet_schemahash_paths.clear();

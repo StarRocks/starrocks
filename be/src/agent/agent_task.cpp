@@ -264,9 +264,9 @@ void run_create_table_req(const TCreateTableReq& create_table_req, long txn_id, 
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
     if (!status.ok()) {
-        LOG(WARNING) << "create table failed. error_msg:" << status.get_error_msg() << ", txn_id: " << txn_id;
+        LOG(WARNING) << "create table failed. error_msg:" << status.to_string() << ", txn_id: " << txn_id;
         status_code = TStatusCode::RUNTIME_ERROR;
-        error_msgs.emplace_back("create table failed. error_msg: " + status.get_error_msg() +
+        error_msgs.emplace_back("create table failed. error_msg: " + status.to_string() +
                                 ", txn_id: " + std::to_string(txn_id));
     }
 

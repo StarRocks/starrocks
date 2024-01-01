@@ -673,14 +673,14 @@ void StorageEngine::clear_transaction_task(const TAbortTxnReq& abort_req, long t
     for (auto path : create_txn->tablet_paths) {
         Status st = fs::remove_all(path);
         if (!st.ok()) {
-            LOG(WARNING) << "fail to remove dir. path: " << path << ", error: " << st.get_error_msg();
+            LOG(WARNING) << "fail to remove dir. path: " << path << ", error: " << st.to_string();
         }
     }
     Status delete_st = delete_create_txn(*create_txn);
     if (!delete_st.ok()) {
         LOG(WARNING) << "delete txn failed. txn_id: " << txn_id;
     }
-    delete_st = StorageEngine::instance()->txn_manager()->delete_create_txn(txn_id);
+    delete_st = StorageEngine::instance()->txn_manager()->delete_create_txn(txn_id, *create_txn);
     if (!delete_st.ok()) {
         LOG(WARNING) << "delete txn failed. txn_id: " << txn_id;
     }
@@ -1235,14 +1235,14 @@ Status StorageEngine::delete_unused_create_txn() {
             for (auto path : create_txn.tablet_paths) {
                 Status st = fs::remove_all(path);
                 if (!st.ok()) {
-                    LOG(WARNING) << "fail to remove dir. path: " << path << ", error: " << st.get_error_msg();
+                    LOG(WARNING) << "fail to remove dir. path: " << path << ", error: " << st.to_string();
                 }
             }
         }
         RETURN_IF_ERROR(delete_create_txn(create_txn));
         txn_ids.push_back(create_txn.txn_id);
     }
-    return StorageEngine::instance()->txn_manager()->delete_create_txn(txn_ids);
+    return StorageEngine::instance()->txn_manager()->delete_create_txn(txn_ids, create_txns);
 }
 
 double StorageEngine::delete_unused_rowset() {
@@ -1340,6 +1340,7 @@ Status StorageEngine::create_table(const TCreateTableReq& request, long txn_id) 
 
     // get the whole tablet list
     std::vector<std::pair<int64_t, int64_t>> tablets;
+    std::vector<int64_t> tablet_ids;
 
     // generate dir
     for (auto& create_tablet_req : request.create_tablet_reqs) {
@@ -1350,6 +1351,7 @@ Status StorageEngine::create_table(const TCreateTableReq& request, long txn_id) 
         }
         data_dirs.push_back(stores[0]);
         tablets.push_back(std::make_pair(create_tablet_req.tablet_id, create_tablet_req.tablet_schema.schema_hash));
+        tablet_ids.push_back(create_tablet_req.tablet_id);
     }
     for (auto& pair : tablets) {
         LOG(INFO) << "begin to create tablet:" << pair.first << ", txn_id: " << txn_id;
@@ -1364,11 +1366,12 @@ Status StorageEngine::create_table(const TCreateTableReq& request, long txn_id) 
     create_txn.txn_start_time = UnixSeconds();
     create_txn.txn_timeout = request.timeout;
     create_txn.tablet_paths = paths;
+    create_txn.tablet_ids = tablet_ids;
     create_txn.data_dir = data_dirs[0];
 
     // save_create_txn
-    RETURN_IF_ERROR(_txn_manager->prepare_create_txn(txn_id, create_txn));
     RETURN_IF_ERROR(save_create_txn(create_txn));
+    RETURN_IF_ERROR(_txn_manager->prepare_create_txn(txn_id, create_txn));
 
     // create dir
     RETURN_IF_ERROR(create_dirs(paths));
@@ -1490,7 +1493,7 @@ Status StorageEngine::create_dirs(const std::vector<string>& tablet_paths) {
         st = fs::create_directories(path);
         LOG(WARNING) << "create path:" << path;
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to create " << path << ", error:" << st.get_error_msg();
+            LOG(WARNING) << "Fail to create " << path << ", error:" << st.to_string();
             continue;
         }
     }

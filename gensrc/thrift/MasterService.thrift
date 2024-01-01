@@ -97,8 +97,8 @@ struct TFinishTaskRequest {
 struct TFinishRequest {
     1: optional i64 txn_id
     2: optional Types.TBackend backend
-    3: required Types.TTaskType task_type
-    4: required Status.TStatus task_status
+    3: optional Types.TTaskType task_type
+    4: optional Status.TStatus task_status
 }
 
 struct TTablet {

@@ -133,6 +133,7 @@ TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, uint3
     _txn_tablet_maps = std::unique_ptr<txn_tablet_map_t[]>(new txn_tablet_map_t[_txn_map_shard_size]);
     _txn_partition_maps = std::unique_ptr<txn_partition_map_t[]>(new txn_partition_map_t[_txn_map_shard_size]);
     _create_table_txn_map = std::unique_ptr<create_table_txn_map_t>(new create_table_txn_map_t());
+    _tablet_in_txn = std::unique_ptr<std::set<int64_t>>(new std::set<int64_t>());
     // we will get "store_num = 0" if it acts as cn, just ignore flush pool
     if (store_num > 0) {
         auto st = ThreadPoolBuilder("meta-flush")
@@ -157,6 +158,9 @@ Status TxnManager::prepare_create_txn(TTransactionId txn_id, const CreateTableTx
     auto it = _create_table_txn_map->find(txn_id);
     if (it == _create_table_txn_map->end()) {
         _create_table_txn_map->emplace(txn_id, create_table_txn);
+        for (auto tablet_id : create_table_txn.tablet_ids) {
+            _tablet_in_txn->emplace(tablet_id);
+        }
         return Status::OK();
     }
     if (create_table_txn.txn_state == TxnState::TXN_PREPARED || create_table_txn.txn_state == TXN_COMMITTED) {
@@ -207,19 +211,31 @@ Status TxnManager::delete_txn(TPartitionId partition_id, const TabletSharedPtr& 
 Status TxnManager::add_create_txn(TTransactionId txn_id, const CreateTableTxn& create_table_txn) {
     std::unique_lock wr_lock(_create_table_lock);
     _create_table_txn_map->emplace(txn_id, create_table_txn);
+    for (auto tablet_id : create_table_txn.tablet_ids) {
+        _tablet_in_txn->emplace(tablet_id);
+    }
     return Status::OK();
 }
 
-Status TxnManager::delete_create_txn(TTransactionId txn_id) {
+Status TxnManager::delete_create_txn(TTransactionId txn_id, const CreateTableTxn& create_table_txn) {
     std::unique_lock wr_lock(_create_table_lock);
     _create_table_txn_map->erase(txn_id);
+    for (auto tablet_id : create_table_txn.tablet_ids) {
+        _tablet_in_txn->erase(tablet_id);
+    }
     return Status::OK();
 }
 
-Status TxnManager::delete_create_txn(const std::vector<TTransactionId>& txn_ids) {
+Status TxnManager::delete_create_txn(const std::vector<TTransactionId>& txn_ids,
+                                     const std::vector<CreateTableTxn>& create_table_txns) {
     std::unique_lock wr_lock(_create_table_lock);
-    for (auto txn_id : txn_ids) {
+    for (int i = 0; i < txn_ids.size(); ++i) {
+        const int64_t& txn_id = txn_ids[i];
         _create_table_txn_map->erase(txn_id);
+        const CreateTableTxn& create_table_txn = create_table_txns[i];
+        for (auto tablet_id : create_table_txn.tablet_ids) {
+            _tablet_in_txn->erase(tablet_id);
+        }
     }
     return Status::OK();
 }
@@ -245,6 +261,11 @@ Status TxnManager::list_unused_create_txn(std::vector<CreateTableTxn>* create_ta
         }
     }
     return Status::OK();
+}
+
+bool TxnManager::check_tablet_in_txn(int64_t tablet_id) {
+    std::unique_lock wr_lock(_create_table_lock);
+    return _tablet_in_txn->find(tablet_id) == _tablet_in_txn->end();
 }
 
 // prepare txn should always be allowed because ingest task will be retried

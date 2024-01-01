@@ -788,6 +788,11 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int tablet_create_timeout_second = 10;
 
+    // time config for create table
+    // create_table_timeout_second and tablet_create_timeout_second
+    // are all both used in the create table. There are for different
+    // mechanism. After new mechanism stable, tablet_create_timeout_second
+    // will be deprecated.
     @ConfField(mutable = true)
     public static int create_table_timeout_second = 60;
 
