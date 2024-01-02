@@ -43,6 +43,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Status;
@@ -224,7 +225,25 @@ public class OlapTableSinkTest {
 
     @Test
     public void testCreateLocationWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
-                                                  @Mocked SystemInfoService systemInfoService) throws Exception {
+                                                  @Mocked SystemInfoService systemInfoService,
+                                                  @Mocked TabletInvertedIndex invertedIndex) throws Exception {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                GlobalStateMgr.getCurrentSystemInfo();
+                result = systemInfoService;
+                systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
+                result = Status.OK;
+                globalStateMgr.getOrCreateSystemInfo(anyInt);
+                result = systemInfoService;
+                systemInfoService.checkBackendAlive(anyLong);
+                result = true;
+                GlobalStateMgr.getCurrentInvertedIndex();
+                result = invertedIndex;
+            }
+        };
+
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -245,8 +264,13 @@ public class OlapTableSinkTest {
         Replica replica2 = new Replica(replicaId + 1, backendId + 1, Replica.ReplicaState.NORMAL, 1, 0);
         Replica replica3 = new Replica(replicaId + 2, backendId + 2, Replica.ReplicaState.NORMAL, 1, 0);
 
+        // Index
+        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+
         // Tablet
         LocalTablet tablet = new LocalTablet(tabletId);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
+        index.addTablet(tablet, tabletMeta);
         tablet.addReplica(replica1);
         tablet.addReplica(replica2);
         tablet.addReplica(replica3);
@@ -259,11 +283,6 @@ public class OlapTableSinkTest {
         partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
         partitionInfo.setReplicationNum(partitionId, (short) 3);
 
-        // Index
-        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
-        index.addTablet(tablet, tabletMeta);
-
         // Partition
         Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
 
@@ -272,21 +291,6 @@ public class OlapTableSinkTest {
         Deencapsulation.setField(table, "baseIndexId", indexId);
         table.addPartition(partition);
         table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
-
-        new Expectations() {
-            {
-                GlobalStateMgr.getCurrentSystemInfo();
-                result = systemInfoService;
-                systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
-                result = Status.OK;
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-                globalStateMgr.getOrCreateSystemInfo(anyInt);
-                result = systemInfoService;
-                systemInfoService.checkBackendAlive(anyLong);
-                result = true;
-            }
-        };
 
         TOlapTableLocationParam param = OlapTableSink.createLocation(
                 table, table.getClusterId(), Lists.newArrayList(partitionId), false);
