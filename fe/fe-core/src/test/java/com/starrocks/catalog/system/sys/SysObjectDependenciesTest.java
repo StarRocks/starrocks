@@ -90,7 +90,7 @@ public class SysObjectDependenciesTest {
 
     @Test
     public void testUnknownCatalogObjectDependencies() throws Exception {
-        ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
         starRocksAssert = new StarRocksAssert(connectContext);
 
 

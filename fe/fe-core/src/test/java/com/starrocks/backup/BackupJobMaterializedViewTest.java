@@ -25,6 +25,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.metric.MetricRepo;
@@ -46,12 +47,15 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.io.File;
 import java.io.IOException;
@@ -63,6 +67,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class BackupJobMaterializedViewTest {
 
     private BackupJob job;
@@ -116,7 +121,7 @@ public class BackupJobMaterializedViewTest {
     private Repository repo = new Repository(repoId, "repo", false, "my_repo",
             new BlobStorage("broker", Maps.newHashMap()));
 
-    @BeforeClass
+    @BeforeAll
     public static void start() {
         Config.tmp_dir = "./";
         File backupDir = new File(BackupHandler.TEST_BACKUP_ROOT_DIR.toString());
@@ -125,7 +130,7 @@ public class BackupJobMaterializedViewTest {
         MetricRepo.init();
     }
 
-    @AfterClass
+    @AfterAll
     public static void end() throws IOException {
         Config.tmp_dir = "./";
         File backupDir = new File(BackupHandler.TEST_BACKUP_ROOT_DIR.toString());
@@ -136,7 +141,7 @@ public class BackupJobMaterializedViewTest {
         }
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
 
         repoMgr = new MockRepositoryMgr();
@@ -207,6 +212,7 @@ public class BackupJobMaterializedViewTest {
 
     @Ignore
     @Test
+    @Order(1)
     public void testRunNormal() {
         // 1.pending
         Assert.assertEquals(BackupJobState.PENDING, job.getState());
@@ -331,7 +337,7 @@ public class BackupJobMaterializedViewTest {
         BackupMeta restoreMetaInfo = null;
         BackupJobInfo restoreJobInfo = null;
         try {
-            restoreMetaInfo = BackupMeta.fromFile(job.getLocalMetaInfoFilePath(), -1);
+            restoreMetaInfo = BackupMeta.fromFile(job.getLocalMetaInfoFilePath(), FeConstants.STARROCKS_META_VERSION);
             Assert.assertEquals(2, restoreMetaInfo.getTables().size());
 
             {
@@ -370,6 +376,7 @@ public class BackupJobMaterializedViewTest {
     }
 
     @Test
+    @Order(2)
     public void testRunAbnormal() {
         // 1.pending
         AgentTaskQueue.clearAllTasks();
