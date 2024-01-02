@@ -17,6 +17,7 @@
 #include "column/datum.h"
 #include "exec/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
+#include "runtime/global_dict/parser.h"
 
 namespace starrocks {
 
@@ -30,13 +31,22 @@ public:
 
 private:
     Status get_materialized_views();
-    Status fill_chunk(ChunkPtr* chunk);
+    Status _fill_chunk_v1(ChunkPtr* chunk);
+    Status _fill_chunk_v2(ChunkPtr* chunk);
+    Status _change_to_v1_schema(RuntimeState* state);
 
     int _db_index{0};
     int _table_index{0};
     TGetDbsResult _db_result;
+
+    // v2 result
     TListMaterializedViewStatusResult _mv_results;
     static SchemaScanner::ColumnDesc _s_tbls_columns[];
+
+    // NOTE v1 result. it's kept for compatibility, and used for 2.5 version
+    static SchemaScanner::ColumnDesc _s_tbls_columns_v1[];
+    TListTableStatusResult _table_result;
+    bool _v1_schema = false;
 };
 
 } // namespace starrocks

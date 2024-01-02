@@ -54,6 +54,7 @@ using apache::thrift::transport::TTransport;
 using apache::thrift::transport::TBufferedTransport;
 
 ExecEnv* ThriftRpcHelper::_s_exec_env;
+const char* ThriftRpcHelper::KInvalidMethodName = "Invalid method name";
 
 void ThriftRpcHelper::setup(ExecEnv* exec_env) {
     _s_exec_env = exec_env;
