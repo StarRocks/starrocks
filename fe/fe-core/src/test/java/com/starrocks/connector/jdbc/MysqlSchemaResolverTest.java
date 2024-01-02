@@ -23,11 +23,16 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -44,6 +49,11 @@ import static com.starrocks.catalog.JDBCResource.DRIVER_CLASS;
 
 public class MysqlSchemaResolverTest {
 
+    private static ConnectContext connectContext;
+
+    @Rule
+    public ExpectedException expectedEx = ExpectedException.none();
+
     @Mocked
     DriverManager driverManager;
 
@@ -58,6 +68,14 @@ public class MysqlSchemaResolverTest {
     private MockResultSet tableResult;
     private MockResultSet partitionsResult;
     private Map<JDBCTableName, Integer> tableIdCache;
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+
+        // create connect context
+        connectContext = UtFrameUtils.createDefaultCtx();
+    }
 
     @Before
     public void setUp() throws SQLException {
@@ -134,7 +152,27 @@ public class MysqlSchemaResolverTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
             List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1");
-            Assert.assertTrue(partitionNames.size() > 0);
+            Assert.assertFalse(partitionNames.isEmpty());
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testListPartitionNamesWithCache() {
+        try {
+            JDBCCacheTestUtil.openCacheEnable(connectContext);
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1");
+            Assert.assertFalse(partitionNames.isEmpty());
+            List<String> partitionNamesWithCache = jdbcMetadata.listPartitionNames("test", "tbl1");
+            Assert.assertFalse(partitionNamesWithCache.isEmpty());
+            JDBCCacheTestUtil.closeCacheEnable(connectContext);
+            Map<String, String> properties = new HashMap<>();
+            jdbcMetadata.refreshCache(properties);
+            List<String> partitionNamesWithOutCache = jdbcMetadata.listPartitionNames("test", "tbl1");
+            Assert.assertTrue(partitionNamesWithOutCache.isEmpty());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
@@ -201,6 +239,28 @@ public class MysqlSchemaResolverTest {
                     Arrays.asList(new Column("d", Type.VARCHAR)), "test", "catalog", properties);
             Integer size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
             Assert.assertTrue(size > 0);
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testGetPartitionsWithCache() {
+        try {
+            JDBCCacheTestUtil.openCacheEnable(connectContext);
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", Type.VARCHAR)),
+                    Arrays.asList(new Column("d", Type.VARCHAR)), "test", "catalog", properties);
+            int size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
+            Assert.assertTrue(size > 0);
+            int sizeWithCache = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
+            Assert.assertTrue(sizeWithCache > 0);
+            JDBCCacheTestUtil.closeCacheEnable(connectContext);
+            Map<String, String> properties = new HashMap<>();
+            jdbcMetadata.refreshCache(properties);
+            int sizeWithOutCache = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
+            Assert.assertEquals(0, sizeWithOutCache);
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();

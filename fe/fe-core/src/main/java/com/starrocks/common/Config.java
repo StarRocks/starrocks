@@ -2727,7 +2727,7 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int refresh_dictionary_cache_thread_num = 2;
-    
+
     /*
      * replication transaction config
      */
@@ -2741,4 +2741,10 @@ public class Config extends ConfigBase {
     public static int replication_transaction_remote_snapshot_timeout_sec = 30 * 60; // 30minute
     @ConfField(mutable = true)
     public static int replication_transaction_replicate_snapshot_timeout_sec = 30 * 60; // 30minute
+
+    @ConfField(mutable = true)
+    public static boolean jdbc_meta_default_cache_enable = false;
+
+    @ConfField(mutable = true)
+    public static long jdbc_meta_default_cache_expire_sec = 600L;
 }
