@@ -4,6 +4,16 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.2
 
+## 3.2.2
+
+Release date: December 30, 2023
+
+### Bug Fixes
+
+Fixed the following issue:
+
+- When StarRocks is upgraded from v3.1.2 or earlier to v3.2, FEs may fail to restart. [#38172](https://github.com/StarRocks/starrocks/pull/38172)
+
 ## 3.2.1
 
 Release date: December 21, 2023

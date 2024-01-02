@@ -4,6 +4,16 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.2
 
+## 3.2.2
+
+发布日期：2023 年 12 月 30 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 从 v3.1.2 及之前版本升级至 v3.2 后，FE 可能启动失败。 [#38172](https://github.com/StarRocks/starrocks/pull/38172)
+
 ## 3.2.1
 
 发布日期：2023 年 12 月 21 日
