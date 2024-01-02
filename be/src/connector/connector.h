@@ -18,11 +18,7 @@
 #include <string>
 #include <unordered_map>
 
-<<<<<<< HEAD
-=======
-#include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/InternalService_types.h"
->>>>>>> eba33eb633 ([Enhancement] fair share scan memory between scan nodes in a query (#36526))
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
