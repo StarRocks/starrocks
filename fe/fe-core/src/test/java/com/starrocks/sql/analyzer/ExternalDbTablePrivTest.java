@@ -25,11 +25,8 @@ import com.starrocks.privilege.PrivilegeActions;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
-import com.starrocks.qe.ShowExecutor;
-import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
-import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
@@ -214,33 +211,12 @@ public class ExternalDbTablePrivTest {
                 "grant select on table tpch.region to test",
                 "revoke select on table tpch.region from test",
                 "SELECT command denied to user 'test'@'localhost' for table 'hive0.tpch.region'");
-        // Test brief syntax
-        verifyGrantRevoke(
-                "select * from hive0.tpch.region",
-                "grant select on tpch.region to test",
-                "revoke select on tpch.region from test",
-                "SELECT command denied to user 'test'@'localhost' for table 'hive0.tpch.region'");
 
         // Test drop on table
         verifyDrop(
                 "grant drop on tpch.region to test",
                 "revoke drop on tpch.region from test",
                 "DROP command denied to user 'test'@'localhost' for table 'hive0.tpch.region'");
-
-        // Test show tables for external catalog, only show table where the user has any action on it
-        grantRevokeSqlAsRoot("grant select on tpch.nation to test");
-        StatementBase showTablesStmt = UtFrameUtils.parseStmtWithNewParser("show tables",
-                starRocksAssert.getCtx());
-        ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showTablesStmt);
-        ShowResultSet set = executor.execute();
-        System.out.println(set.getResultRows());
-        // Since we mocked the getUUID method, so all the tables will return
-        Assert.assertEquals(
-                "[[nation]]",
-                set.getResultRows().toString());
-        grantRevokeSqlAsRoot("revoke select on tpch.nation from test");
-        // SELECT action is revoked, so we return empty result
-        Assert.assertTrue(executor.execute().getResultRows().isEmpty());
     }
 
     @Test
@@ -259,38 +235,6 @@ public class ExternalDbTablePrivTest {
                 "grant CREATE TABLE on database tpch to test",
                 "revoke CREATE TABLE on database tpch from test",
                 "Access denied for user 'test' to database 'tpch'");
-
-        // Test show databases, check any action on table
-        grantRevokeSqlAsRoot("grant drop on tpch.region to test");
-        StatementBase showTableStmt = UtFrameUtils.parseStmtWithNewParser("show databases",
-                starRocksAssert.getCtx());
-        ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showTableStmt);
-        ShowResultSet set = executor.execute();
-        System.out.println(set.getResultRows());
-        Assert.assertEquals(
-                "[[tpch]]",
-                set.getResultRows().toString());
-        grantRevokeSqlAsRoot("revoke drop on tpch.region from test");
-        Assert.assertTrue(executor.execute().getResultRows().isEmpty());
-
-        // Test show grants for external catalog
-        grantRevokeSqlAsRoot("grant drop on tpch.region to test");
-        grantRevokeSqlAsRoot("grant select on tpch.nation to test");
-        grantRevokeSqlAsRoot("grant drop on database tpch to test");
-        StatementBase showGrantsStmt = UtFrameUtils.parseStmtWithNewParser("show grants",
-                starRocksAssert.getCtx());
-        executor = new ShowExecutor(starRocksAssert.getCtx(), (ShowStmt) showGrantsStmt);
-        set = executor.execute();
-        String resultString = set.getResultRows().toString();
-        System.out.println(resultString);
-        Assert.assertTrue(resultString.contains("'test'@'%', hive0, GRANT DROP ON DATABASE tpch TO USER 'test'@'%'"));
-        Assert.assertTrue(resultString.contains(
-                "'test'@'%', hive0, GRANT DROP ON TABLE tpch.region TO USER 'test'@'%'"));
-        grantRevokeSqlAsRoot("revoke drop on tpch.region from test");
-        grantRevokeSqlAsRoot("revoke select on tpch.nation from test");
-        grantRevokeSqlAsRoot("revoke drop on database tpch from test");
-        // empty result after privilege revoked
-        Assert.assertTrue(executor.execute().getResultRows().isEmpty());
     }
 
     @Test

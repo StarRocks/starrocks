@@ -331,7 +331,7 @@ public class PrivilegeActions {
         }
 
         if (CatalogMgr.isInternalCatalog(catalogName)) {
-            Database database = GlobalStateMgr.getCurrentState().getDb(db);
+            Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, db);
             if (database == null) {
                 return true;
             }
