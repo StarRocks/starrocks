@@ -166,7 +166,7 @@ public class SubmitTaskStmtTest {
         new MockUp<WarehouseManager>() {
             @Mock
             Warehouse getWarehouse(String name) {
-                return new LocalWarehouse(123, name);
+                return new LocalWarehouse(123, name, 123, "");
             }
         };
 
