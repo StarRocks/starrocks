@@ -1578,7 +1578,7 @@ public class ExpressionTest extends PlanTestBase {
 
     @Test
     public void testDoubleCastToString() throws Exception {
-        String sql = "select concat(substr(DATE_SUB(CURDATE(), INTERVAL 1 DAY), 1, 4) -1, '-');";
+        String sql = "select concat(substr(DATE_SUB('2023-12-23', INTERVAL 1 DAY), 1, 4) -1, '-');";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "2022-");
 
