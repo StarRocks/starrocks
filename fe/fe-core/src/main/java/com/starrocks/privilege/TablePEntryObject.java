@@ -118,7 +118,7 @@ public class TablePEntryObject implements PEntryObject {
             } else {
                 Table table = null;
                 try {
-                    table = mgr.getMetadataMgr().getTable(catalogName, tokens.get(0), tokens.get(1));
+                    table = mgr.getMetadataMgr().getTableBasicInfo(catalogName, tokens.get(0), tokens.get(1));
                 } catch (StarRocksConnectorException e) {
                     throw new PrivObjNotFoundException("cannot find table " +
                             tokens.get(1) + " in db " + tokens.get(0) + ", msg: " + e.getMessage());

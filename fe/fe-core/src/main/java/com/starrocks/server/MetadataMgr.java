@@ -41,19 +41,14 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.CatalogConnector;
+import com.starrocks.connector.CatalogConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
-import com.starrocks.connector.delta.DeltaLakeMetadata;
-import com.starrocks.connector.elasticsearch.ElasticsearchMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.hudi.HudiMetadata;
-import com.starrocks.connector.iceberg.IcebergMetadata;
-import com.starrocks.connector.jdbc.JDBCMetadata;
-import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -75,6 +70,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import static com.google.common.base.Preconditions.checkState;
 
 public class MetadataMgr {
     private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
@@ -358,21 +355,9 @@ public class MetadataMgr {
             return null;
         }
 
-        Table.TableType tableType = Table.TableType.HIVE;
-        if (connectorMetadata.get() instanceof JDBCMetadata) {
-            tableType = Table.TableType.JDBC;
-        } else if (connectorMetadata.get() instanceof PaimonMetadata) {
-            tableType = Table.TableType.PAIMON;
-        } else if (connectorMetadata.get() instanceof ElasticsearchMetadata) {
-            tableType = Table.TableType.ELASTICSEARCH;
-        } else if (connectorMetadata.get() instanceof IcebergMetadata) {
-            tableType = Table.TableType.ICEBERG;
-        } else if (connectorMetadata.get() instanceof DeltaLakeMetadata) {
-            tableType = Table.TableType.DELTALAKE;
-        } else if (connectorMetadata.get() instanceof HudiMetadata) {
-            tableType = Table.TableType.HUDI;
-        }
-        return new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, tableType);
+        checkState(connectorMetadata.get() instanceof CatalogConnectorMetadata);
+        CatalogConnectorMetadata catalogConnectorMetadata = (CatalogConnectorMetadata) connectorMetadata.get();
+        return new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, catalogConnectorMetadata.getTableType());
     }
 
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {
