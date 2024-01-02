@@ -43,28 +43,28 @@ User properties are attached directly to a user, not to a user identity That is,
 
 StarRocks currently supports the following types of  privileges.
 
-* Node\_priv
+* NODE\_PRIV
 
   Privileges for Node changes. This allows you to add, delete, and disable FE, BE, and BROKER nodes. Currently, this privilege can only be granted to Root users.
-* Grant\_priv
+* GRANT\_PRIV
 
   Privileges for privilege changes. This allows you to grant, revoke, and modify users/roles.
-* Select\_priv
+* SELECT\_PRIV
 
   Read-only access to databases and tables.
-* Load\_priv
+* LOAD\_PRIV
 
   Write access to databases and tables. This allows you to  Load, Insert, and Delete databases or tables.
-* Alter\_priv
+* ALTER\_PRIV
 
   Privileges to change databases and tables. This allows you to  rename, add/remove/change columns, add/remove partitions.
-* Create\_priv
+* CREATE\_PRIV
 
   Privileges to create databases, tables, and views.
-* Drop\_priv
+* DROP\_PRIV
 
   Privileges to delete databases, tables, and views.
-* Usage\_priv
+* USAGE\_PRIV
 
   Privileges to use resources.
 
@@ -113,8 +113,8 @@ The `ADMIN_PRIV` and `GRANT_PRIV` privileges are special because they both have 
 
 * When StarRocks is initialized, the following users and roles are automatically created.
 
-* operator role: This role has `Node_priv` and `Admin_priv`, i.e. all privileges. In a later upgrade, this role may be restricted to `Node_priv` (privileges for node changes). This is to meet certain deployment requirements on the cloud.
-* admin role: This role has `Admin_priv`, i.e., all privileges except for the one for node changes.
+* operator role: This role has `NODE_PRIV` and `ADMIN_PRIV`, i.e. all privileges. In a later upgrade, this role may be restricted to `NODE_PRIV` (privileges for node changes). This is to meet certain deployment requirements on the cloud.
+* admin role: This role has `ADMIN_PRIV`, i.e., all privileges except for the one for node changes.
 * root@'%': Root user, allowed to log in from any node as `operator`.
 * admin@'%': Admin user, allowed to log in from any node as `admin`.
 

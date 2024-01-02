@@ -153,9 +153,9 @@ DROP USER 'user_identity';
 > * 拥有 GLOBAL 层级 GRANT_PRIV 实际等同于拥有 ADMIN_PRIV，因为该层级的 GRANT_PRIV 有授予任意权限的权限，请谨慎授予该权限。
 
 ```sql
--- 授予指定用户数据库级或表级权限。
+-- 授予指定用户或角色数据库级或表级权限。
 GRANT privilege_list ON db_name.tbl_name TO user_identity [ROLE role_name];
--- 授予指定用户指定资源权限。
+-- 授予指定用户或角色指定资源的权限。
 GRANT privilege_list ON RESOURCE resource_name TO user_identity [ROLE role_name];
 ```
 
@@ -175,8 +175,8 @@ GRANT privilege_list ON RESOURCE resource_name TO user_identity [ROLE role_name]
   * `*.*`：所有数据库及库中所有表，即全局权限。
   * `db.*`：指定数据库及库中所有表。
   * `db.tbl`：指定数据库下的指定表。
-* `user_identity`：用户标识，将角色赋予给指定用户。指定的用户必须存在。
-* `role_name`：将权限赋予给指定角色。指定的角色必须存在。
+* `user_identity`：用户标识，将权限赋予给指定用户。指定的用户必须存在。
+* `role_name`：角色名称，将权限赋予给指定角色。指定的角色必须存在。
 
 示例：
 
