@@ -825,12 +825,41 @@ public class ShowExecutor {
         Map<String, String> tableMap = Maps.newTreeMap();
         MetaUtils.checkDbNullAndReport(db, showTableStmt.getDb());
 
+<<<<<<< HEAD
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             db.readLock();
             try {
                 for (Table tbl : db.getTables()) {
                     if (matcher != null && !matcher.match(tbl.getName())) {
                         continue;
+=======
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
+        try {
+            List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
+
+            for (String tableName : tableNames) {
+                if (matcher != null && !matcher.match(tableName)) {
+                    continue;
+                }
+                Table table = metadataMgr.getTable(catalogName, dbName, tableName);
+                if (table == null) {
+                    LOG.warn("table {}.{}.{} does not exist", catalogName, dbName, tableName);
+                    continue;
+                }
+                try {
+                    if (table.isOlapView()) {
+                        Authorizer.checkAnyActionOnView(
+                                connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                                new TableName(db.getFullName(), table.getName()));
+                    } else if (table.isMaterializedView()) {
+                        Authorizer.checkAnyActionOnMaterializedView(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), table.getName()));
+                    } else {
+                        Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(),
+                                new TableName(catalogName, db.getFullName(), table.getName()));
+>>>>>>> febc30a9cd ([BugFix] Fix user show tables has result when no permission of external table bug (#38216))
                     }
                     // check tbl privs
                     if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
