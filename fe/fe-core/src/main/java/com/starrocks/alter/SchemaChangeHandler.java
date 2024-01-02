@@ -2564,7 +2564,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 currentIndexMeta.setSchemaVersion(newSchemaVersion);
                 // update the indexIdToMeta
                 olapTable.getIndexIdToMeta().put(idx, currentIndexMeta);
-                currentIndexMeta.setSchemaId(GlobalStateMgr.getCurrentState().getNextId());
                 // if FE upgrade from old version and replay journal, the indexToNewSchemaId maybe null
                 if (indexToNewSchemaId != null) {
                     currentIndexMeta.setSchemaId(indexToNewSchemaId.get(idx));
