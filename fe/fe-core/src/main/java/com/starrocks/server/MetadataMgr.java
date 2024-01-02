@@ -264,8 +264,6 @@ public class MetadataMgr {
         return connectorTable;
     }
 
-<<<<<<< HEAD
-=======
     public Table getTable(Long databaseId, Long tableId) {
         Database database = localMetastore.getDb(databaseId);
         if (database == null) {
@@ -274,12 +272,6 @@ public class MetadataMgr {
         return database.getTable(tableId);
     }
 
-    public boolean tableExists(String catalogName, String dbName, String tblName) {
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        return connectorMetadata.map(metadata -> metadata.tableExists(dbName, tblName)).orElse(false);
-    }
-
->>>>>>> de7cf01198 ([UT] Fix unstable UT by using RBAC Meta Mock (#37984))
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         return connectorMetadata.map(metadata -> metadata.getMaterializedViewIndex(dbName, tblName)).orElse(null);

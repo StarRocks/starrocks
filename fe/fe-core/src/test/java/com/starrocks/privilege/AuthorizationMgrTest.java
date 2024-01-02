@@ -30,11 +30,7 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
-<<<<<<< HEAD
 import com.starrocks.persist.UserPrivilegeCollectionInfoDeprecated;
-import com.starrocks.persist.gson.GsonUtils;
-=======
->>>>>>> de7cf01198 ([UT] Fix unstable UT by using RBAC Meta Mock (#37984))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -751,7 +747,7 @@ public class AuthorizationMgrTest {
         executor = new ShowExecutor(ctx, showTableStmt);
         resultSet = executor.execute();
         allTables = resultSet.getResultRows().stream().map(k -> k.get(0)).collect(Collectors.toSet());
-        Assert.assertEquals(new HashSet<>(List.of("tbl1")), allTables);
+        Assert.assertEquals(new HashSet<>(Lists.newArrayList("tbl1")), allTables);
 
         // show databases
         ShowDbStmt showDbStmt = new ShowDbStmt(null);
