@@ -18,10 +18,13 @@ import com.google.gson.Gson;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TGetPartitionsMetaRequest;
+import com.starrocks.thrift.TGetPartitionsMetaResponse;
 import com.starrocks.thrift.TGetTablesConfigRequest;
 import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
+import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TUserIdentity;
@@ -177,4 +180,43 @@ public class InformationSchemaDataSourceTest {
         Assert.assertTrue(checkTables);
     }
 
+    @Test
+    public void testGetPartitionsMeta() throws Exception {
+        starRocksAssert.withEnableMV().withDatabase("db3").useDatabase("db3");
+        String createTblStmtStr = "CREATE TABLE db3.`duplicate_table_with_null` (\n" +
+                "  `k1` date  COMMENT \"\",\n" +
+                "  `k2` int COMMENT \"\",\n" +
+                "  `k3` varchar(20)  COMMENT \"\",\n" +
+                "  `k4` varchar(20)  COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`k1`, `k2`)\n" +
+                "PARTITION BY RANGE(`k2`)\n" +
+                "(PARTITION p1 VALUES [(\"-2147483648\"), (\"19930101\")))\n" +
+                "DISTRIBUTED BY HASH(`k1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");";
+        starRocksAssert.withTable(createTblStmtStr);
+
+        String ddlStr = "ALTER TABLE db3.`duplicate_table_with_null`\n" +
+                "add TEMPORARY partition p2 VALUES [(\"19930101\"), (\"19940101\"))\n" +
+                "DISTRIBUTED BY HASH(`k1`);";
+        starRocksAssert.ddl(ddlStr);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetPartitionsMetaRequest req = new TGetPartitionsMetaRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("db3");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+        TGetPartitionsMetaResponse response = impl.getPartitionsMeta(req);
+        TPartitionMetaInfo partitionMeta = response.getPartitions_meta_infos().stream()
+                .filter(t -> t.getTable_name().equals("duplicate_table_with_null")).findFirst().orElseGet(null);
+        Assert.assertEquals("db3", partitionMeta.getDb_name());
+        Assert.assertEquals("duplicate_table_with_null", partitionMeta.getTable_name());
+    }
 }
