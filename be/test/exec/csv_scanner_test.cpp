@@ -782,13 +782,13 @@ TEST_P(CSVScannerTest, test_ENCLOSE) {
     EXPECT_EQ("bb|BB", chunk->get(1)[1].get_slice());
     EXPECT_EQ("cc\nadf,1,3455", chunk->get(2)[1].get_slice());
     EXPECT_EQ("dd", chunk->get(3)[1].get_slice());
-    EXPECT_EQ("\"ee", chunk->get(4)[1].get_slice());
+    EXPECT_EQ("\"ee\"", chunk->get(4)[1].get_slice());
     EXPECT_EQ("", chunk->get(5)[1].get_slice());
     EXPECT_EQ("\"cd\"", chunk->get(6)[1].get_slice());
 
     EXPECT_EQ("abc", chunk->get(0)[2].get_slice());
     EXPECT_EQ("", chunk->get(1)[2].get_slice());
-    EXPECT_EQ("\"e", chunk->get(2)[2].get_slice());
+    EXPECT_EQ("e", chunk->get(2)[2].get_slice());
     EXPECT_EQ("abc|ef\ngh", chunk->get(3)[2].get_slice());
     EXPECT_EQ("", chunk->get(4)[2].get_slice());
     EXPECT_EQ("ab", chunk->get(5)[2].get_slice());
@@ -984,6 +984,36 @@ TEST_P(CSVScannerTest, test_empty) {
     run_test(TYPE_INT);
     run_test(TYPE_DATE);
     run_test(TYPE_DATETIME);
+}
+
+// 21431,"Rowdy" Roddy Piper, Superstar,,,,1,-999
+TEST_P(CSVScannerTest, test_enclose_fanatics) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT),     TypeDescriptor(TYPE_VARCHAR),
+                                      TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT),
+                                      TypeDescriptor(TYPE_INT),     TypeDescriptor(TYPE_INT),
+                                      TypeDescriptor(TYPE_INT),     TypeDescriptor(TYPE_INT)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(types.size());
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file22");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", ",", 0, true, '"', '\\');
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(1, chunk->num_rows());
+    EXPECT_EQ(8, chunk->num_columns());
+    EXPECT_EQ(21431, chunk->get(0)[0].get_int32());
+    EXPECT_EQ("\"Rowdy\" Roddy Piper", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("Superstar", chunk->get(0)[2].get_slice());
+    EXPECT_TRUE(chunk->get(0)[3].is_null());
+    EXPECT_TRUE(chunk->get(0)[4].is_null());
+    EXPECT_TRUE(chunk->get(0)[5].is_null());
+    EXPECT_EQ(1, chunk->get(0)[6].get_int32());
+    EXPECT_EQ(-999, chunk->get(0)[7].get_int32());
 }
 
 TEST_P(CSVScannerTest, test_column_count_inconsistent) {
