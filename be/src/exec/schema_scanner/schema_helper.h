@@ -97,6 +97,10 @@ public:
     static Status get_grants_to(const std::string& ip, const int32_t port,
                                 const TGetGrantsToRolesOrUserRequest& request,
                                 TGetGrantsToRolesOrUserResponse* response, int timeout_ms);
+
+    static Status get_partitions_meta(const std::string& ip, const int32_t port,
+                                      const TGetPartitionsMetaRequest& var_params,
+                                      TGetPartitionsMetaResponse* var_result, int timeout_ms);
 };
 
 template <LogicalType SlotType>

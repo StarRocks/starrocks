@@ -1382,6 +1382,42 @@ struct TTableConfigInfo {
     12: optional i64 table_id
 }
 
+struct TGetPartitionsMetaRequest {
+    1: optional TAuthInfo auth_info
+}
+
+struct TGetPartitionsMetaResponse {
+    1: optional list<TPartitionMetaInfo> partitions_meta_infos
+}
+
+struct TPartitionMetaInfo {
+    1: optional string db_name
+    2: optional string table_name
+    3: optional string partition_name
+    4: optional i64 partition_id
+    5: optional i64 compact_version
+    6: optional i64 visible_version
+    7: optional i64 visible_version_time
+    8: optional i64 next_version
+    9: optional string partition_key
+    10: optional string partition_value
+    11: optional string distribution_key
+    12: optional i32 buckets
+    13: optional i32 replication_num
+    14: optional string storage_medium
+    15: optional i64 cooldown_time
+    16: optional i64 last_consistency_check_time
+    17: optional bool is_in_memory
+    18: optional bool is_temp
+    19: optional string data_size
+    20: optional i64 row_count
+    21: optional bool enable_datacache
+    22: optional double avg_cs
+    23: optional double p50_cs
+    24: optional double max_cs
+    25: optional string storage_path
+}
+
 struct TGetTablesInfoRequest {
     1: optional TAuthInfo auth_info
 }
@@ -1758,5 +1794,7 @@ service FrontendService {
     TGetDictQueryParamResponse getDictQueryParam(1: TGetDictQueryParamRequest request)
 
     TTableReplicationResponse startTableReplication(1: TTableReplicationRequest request)
+
+    TGetPartitionsMetaResponse getPartitionsMeta(1: TGetPartitionsMetaRequest request)
 }
 
