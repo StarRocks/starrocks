@@ -188,6 +188,7 @@ public class IcebergApiConverterTest {
         columns.add(new Column("c13", new ArrayType(Type.INT)));
         columns.add(new Column("c14", new MapType(Type.INT, Type.INT)));
         columns.add(new Column("c15", new StructType(ImmutableList.of(Type.INT))));
+        columns.add(new Column("c16", Type.TIME));
 
         Schema schema = IcebergApiConverter.toIcebergApiSchema(columns);
         Assert.assertEquals("table {\n" +
@@ -205,7 +206,8 @@ public class IcebergApiConverterTest {
                 "  12: c12: required decimal(-1, -1) ()\n" +
                 "  13: c13: required list<int> ()\n" +
                 "  14: c14: required map<int, int> ()\n" +
-                "  15: c15: required struct<19: col1: optional int> ()\n" +
+                "  15: c15: required struct<20: col1: optional int> ()\n" +
+                "  16: c16: required time ()\n" +
                 "}", schema.toString());
 
         PartitionSpec spec = IcebergApiConverter.parsePartitionFields(schema, Lists.newArrayList("c1"));
@@ -230,5 +232,13 @@ public class IcebergApiConverterTest {
         source = ImmutableMap.of("file_format", "avro", "compression_codec", "zstd");
         target = IcebergApiConverter.rebuildCreateTableProperties(source);
         Assert.assertEquals("zstd", target.get(AVRO_COMPRESSION));
+    }
+
+    @Test
+    public void testTime() {
+        Type timeType = ScalarType.createType(PrimitiveType.TIME);
+        org.apache.iceberg.types.Type icebergType = Types.TimeType.get();
+        Type resType = fromIcebergType(icebergType);
+        Assert.assertEquals(resType, timeType);
     }
 }
