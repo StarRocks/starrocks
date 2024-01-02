@@ -16,6 +16,7 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
@@ -633,6 +634,23 @@ class OrderByTest extends PlanTestBase {
         String sql2 = "select * from t0 where v1 is null order by v1 limit 10";
         String plan2 = getVerboseExplain(sql2);
         assertNotContains(plan2, " runtime filters");
+    }
+
+    @Test
+    public void testTopNRuntimeFilterWithNotPrunedPartitionFilter() throws Exception {
+        String sql = "select * from lineitem_partition where L_SHIPDATE >= '1990-01-01' order by L_SHIPDATE limit 100;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (<slot 11> 11: L_SHIPDATE)");
+    }
+
+    @Test
+    public void testTopNRuntimeFilterWithPrunedPartitionFilter() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select * from lineitem_partition where L_SHIPDATE >= '1993-01-01' order by L_SHIPDATE limit 100;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "     probe runtime filters:\n");
+        FeConstants.runningUnitTest = false;
     }
 
     @ParameterizedTest

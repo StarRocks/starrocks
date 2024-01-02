@@ -367,7 +367,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "  `L_TAX` double NOT NULL COMMENT \"\",\n" +
                 "  `L_RETURNFLAG` char(1) NOT NULL COMMENT \"\",\n" +
                 "  `L_LINESTATUS` char(1) NOT NULL COMMENT \"\",\n" +
-                "  `L_SHIPDATE` date NOT NULL COMMENT \"\",\n" +
+                "  `L_SHIPDATE` date NULL COMMENT \"\",\n" +
                 "  `L_COMMITDATE` date NOT NULL COMMENT \"\",\n" +
                 "  `L_RECEIPTDATE` date NOT NULL COMMENT \"\",\n" +
                 "  `L_SHIPINSTRUCT` char(25) NOT NULL COMMENT \"\",\n" +
