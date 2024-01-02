@@ -2787,8 +2787,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-<<<<<<< HEAD
-=======
     public void testCountDistinctToBitmapCount7() {
         String mv = "select user_id, time, bitmap_agg(tag_id) from user_tags group by user_id, time;";
         testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
@@ -2876,7 +2874,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
->>>>>>> b7636a3888 ([Enhancement] Convert bitmap_union(to_bitmap(int type) to bitmap_agg (#23656))
     public void testBitmapUnionCountToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, bitmap_union_count(to_bitmap(tag_id)) x from user_tags group by user_id;");
