@@ -985,8 +985,23 @@ public class ShowExecutor {
                     continue;
                 }
                 try {
+<<<<<<< HEAD
                     Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
                             connectContext.getCurrentRoleIds(), new TableName(catalogName, dbName, tableName));
+=======
+                    if (table.isOlapView()) {
+                        Authorizer.checkAnyActionOnView(
+                                connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                                new TableName(db.getFullName(), table.getName()));
+                    } else if (table.isMaterializedView()) {
+                        Authorizer.checkAnyActionOnMaterializedView(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), table.getName()));
+                    } else {
+                        Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(),
+                                new TableName(catalogName, db.getFullName(), table.getName()));
+                    }
+>>>>>>> febc30a9cd ([BugFix] Fix user show tables has result when no permission of external table bug (#38216))
                 } catch (AccessDeniedException e) {
                     continue;
                 }
