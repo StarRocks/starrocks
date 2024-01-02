@@ -137,7 +137,6 @@ public class MockedBase {
         doNothing().when(table).reload();
         when(table.getPartitions()).thenReturn(ImmutableList.of(partition));
         when(table.getPartition(any())).thenReturn(partition);
-
         when(table.getPartitionIterator(any())).thenReturn(partitionIterator);
         when(partitionIterator.hasNext()).thenReturn(true, false);
         when(partitionIterator.next()).thenReturn(partition);
