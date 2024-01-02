@@ -781,7 +781,7 @@ public class AuthorizationMgrTest {
         executor = new ShowExecutor(ctx, showTableStmt);
         resultSet = executor.execute();
         allTables = resultSet.getResultRows().stream().map(k -> k.get(0)).collect(Collectors.toSet());
-        Assert.assertEquals(new HashSet<>(List.of("tbl1")), allTables);
+        Assert.assertEquals(new HashSet<>(Lists.newArrayList("tbl1")), allTables);
 
         // show databases
         ShowDbStmt showDbStmt = new ShowDbStmt(null);
