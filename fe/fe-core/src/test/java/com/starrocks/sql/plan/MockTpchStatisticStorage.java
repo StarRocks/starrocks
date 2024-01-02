@@ -140,6 +140,7 @@ public class MockTpchStatisticStorage implements StatisticStorage {
         tableCustomer.put("c_mktsegment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 10, 5));
         // C_COMMENT VARCHAR(117)
         tableCustomer.put("c_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 117, 149968));
+        tableCustomer.put("pad", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 1, 1));
         tableStatistics.put("customer", tableCustomer);
 
         Map<String, ColumnStatistic> tableLineitem = new CaseInsensitiveMap<>();

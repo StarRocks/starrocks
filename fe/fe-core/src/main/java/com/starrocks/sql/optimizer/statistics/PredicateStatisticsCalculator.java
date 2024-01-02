@@ -341,6 +341,9 @@ public class PredicateStatisticsCalculator {
                 ColumnStatistic rightColumnStatistic = orItemStatistics.getColumnStatistic(columnRefOperator);
                 columnBuilder.setMinValue(Math.min(columnStatistic.getMinValue(), rightColumnStatistic.getMinValue()));
                 columnBuilder.setMaxValue(Math.max(columnStatistic.getMaxValue(), rightColumnStatistic.getMaxValue()));
+                double originalNdv = statistics.getColumnStatistic(columnRefOperator).getDistinctValuesCount();
+                double accumulatedNdv = columnStatistic.getDistinctValuesCount() + rightColumnStatistic.getDistinctValuesCount();
+                columnBuilder.setDistinctValuesCount(Math.min(originalNdv, accumulatedNdv));
                 builder.addColumnStatistic(columnRefOperator, columnBuilder.build());
             });
             return builder.build();
