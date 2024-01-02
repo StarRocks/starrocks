@@ -726,7 +726,8 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
     _update_state_cache.update_object_size(state_entry, state.memory_usage());
     // get latest metadata from cache, it is not matter if it isn't the real latest metadata.
     auto metadata_ptr = _tablet_mgr->get_latest_cached_tablet_metadata(tablet->id());
-    if (metadata_ptr != nullptr) {
+    // skip preload if memory limit exceed
+    if (metadata_ptr != nullptr && !_update_state_mem_tracker->any_limit_exceeded()) {
         auto st = state.load(txnlog.op_write(), *metadata_ptr, metadata_ptr->version(), tablet, nullptr, false, true);
         if (!st.ok()) {
             _update_state_cache.remove(state_entry);
@@ -759,9 +760,9 @@ void UpdateManager::preload_compaction_state(const TxnLog& txnlog, Tablet* table
     auto& compaction_state = compaction_entry->value();
     // preload compaction state, only load first output segment, to avoid too much memory cost
     auto st = Status::OK();
-    for (int i = 0; i < segments_size; i++) {
+    for (int i = 0; i < segments_size && !_compaction_state_mem_tracker->any_limit_exceeded(); i++) {
         st = compaction_state.load_segments(output_rowset.get(), this, tablet_schema, i);
-        if (!st.ok() || _compaction_state_mem_tracker->any_limit_exceeded()) {
+        if (!st.ok()) {
             break;
         }
     }
