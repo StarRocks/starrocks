@@ -405,12 +405,6 @@ public class InsertPlanner {
             // this could be created by user.
             if (targetColumn.isNameWithPrefix(CreateMaterializedViewStmt.MATERIALIZED_VIEW_NAME_PREFIX) &&
                     !baseSchema.contains(targetColumn)) {
-                String originName = targetColumn.getRefColumn().getColumnName();
-                Optional<Column> optOriginColumn = fullSchema.stream()
-                        .filter(c -> c.nameEquals(originName, false)).findFirst();
-                Preconditions.checkState(optOriginColumn.isPresent());
-                Column originColumn = optOriginColumn.get();
-                ColumnRefOperator originColRefOp = outputColumns.get(fullSchema.indexOf(originColumn));
                 if (targetColumn.getDefineExpr() == null) {
                     Table targetTable = insertStatement.getTargetTable();
                     // Only olap table can have the synchronized materialized view.
@@ -429,10 +423,27 @@ public class InsertPlanner {
                     }
                     String targetIndexMetaName = targetIndexMeta == null ? "" :
                             targetOlapTable.getIndexNameById(targetIndexMeta.getIndexId());
+                    // NOTE: In SR >= 3.1, synchronous-materialized view supports complex expressions and where expressions,
+                    // which will generate defined expr for each aggregate function. But when downgrades to < 3.1 version,
+                    // replay routine in the older version will generate null for defined expr.
+                    LOG.warn("The define expr of shadow column %s is null, " +
+                                    "please check the associated materialized view %s of target table:%s," +
+                                    "This materialized view may be created from >=3.1 version " +
+                                    "which is not compatible with lower version, please drop it and insert it again.",
+                            targetColumn.getName(), targetIndexMetaName, insertStatement.getTargetTable().getName());
                     throw new SemanticException("The define expr of shadow column " + targetColumn.getName() + " is null, " +
                             "please check the associated materialized view " + targetIndexMetaName
-                            + " of target table:" + insertStatement.getTargetTable().getName());
+                            + " of target table:" + insertStatement.getTargetTable().getName() +
+                            ". This materialized view may be created from >=3.1 version \n" +
+                            "which is not compatible with lower version, please drop it and insert it again.");
                 }
+
+                String originName = targetColumn.getRefColumn().getColumnName();
+                Optional<Column> optOriginColumn = fullSchema.stream()
+                        .filter(c -> c.nameEquals(originName, false)).findFirst();
+                Preconditions.checkState(optOriginColumn.isPresent());
+                Column originColumn = optOriginColumn.get();
+                ColumnRefOperator originColRefOp = outputColumns.get(fullSchema.indexOf(originColumn));
 
                 ExpressionAnalyzer.analyzeExpression(targetColumn.getDefineExpr(), new AnalyzeState(),
                         new Scope(RelationId.anonymous(),

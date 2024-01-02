@@ -258,7 +258,7 @@ Status TableFunctionNode::build_chunk(ChunkPtr* chunk, const std::vector<ColumnP
 Status TableFunctionNode::get_next_input_chunk(RuntimeState* state, bool* eos) {
     if (_input_chunk_ptr != nullptr && !_table_function_result_eos) {
         SCOPED_TIMER(_table_function_exec_timer);
-        _table_function_result = _table_function->process(_table_function_state, &_table_function_result_eos);
+        _table_function_result = _table_function->process(state, _table_function_state, &_table_function_result_eos);
         return Status::OK();
     }
 
@@ -280,7 +280,7 @@ Status TableFunctionNode::get_next_input_chunk(RuntimeState* state, bool* eos) {
     _table_function_state->set_params(table_function_params);
     {
         SCOPED_TIMER(_table_function_exec_timer);
-        _table_function_result = _table_function->process(_table_function_state, &_table_function_result_eos);
+        _table_function_result = _table_function->process(state, _table_function_state, &_table_function_result_eos);
     }
     return Status::OK();
 }

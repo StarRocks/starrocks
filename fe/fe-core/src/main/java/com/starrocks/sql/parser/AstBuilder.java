@@ -45,6 +45,7 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.FunctionParams;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.InformationFunction;
@@ -65,6 +66,7 @@ import com.starrocks.analysis.OutFileClause;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
+import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.SubfieldExpr;
@@ -97,7 +99,6 @@ import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.RelationId;
@@ -388,6 +389,7 @@ import org.antlr.v4.runtime.RuleContext;
 import org.antlr.v4.runtime.Token;
 import org.antlr.v4.runtime.tree.ParseTree;
 import org.antlr.v4.runtime.tree.TerminalNode;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -401,6 +403,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -412,8 +415,25 @@ import static java.util.stream.Collectors.toList;
 public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     private final long sqlMode;
 
+    private final IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap;
+
+
     public AstBuilder(long sqlMode) {
-        this.sqlMode = sqlMode;
+        this(sqlMode, new IdentityHashMap<>());
+    }
+
+    public AstBuilder(long sqlMode, IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
+        this.hintMap = hintMap;
+        long hintSqlMode = 0L;
+        for (Map.Entry<ParserRuleContext, List<HintNode>> entry : hintMap.entrySet()) {
+            for (HintNode hint : entry.getValue()) {
+                if (hint instanceof SetVarHint) {
+                    SetVarHint setVarHint = (SetVarHint) hint;
+                    hintSqlMode = setVarHint.getSqlModeHintValue();
+                }
+            }
+        }
+        this.sqlMode = sqlMode | hintSqlMode;
     }
 
     @Override
@@ -1334,15 +1354,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.qualifiedName() != null) {
             qualifiedName = getQualifiedName(context.qualifiedName());
         }
-        Map<String, String> properties = new HashMap<>();
-        if (context.setVarHint() != null) {
-            for (StarRocksParser.SetVarHintContext hintContext : context.setVarHint()) {
-                for (StarRocksParser.HintMapContext hintMapContext : hintContext.hintMap()) {
-                    properties.put(hintMapContext.k.getText(),
-                            ((LiteralExpr) visit(hintMapContext.v)).getStringValue());
-                }
-            }
-        }
+        Map<String, String> properties = extractVarHints(hintMap.get(context));
 
         CreateTableAsSelectStmt createTableAsSelectStmt = null;
         InsertStmt insertStmt = null;
@@ -3719,16 +3731,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         boolean isDistinct = context.setQuantifier() != null && context.setQuantifier().DISTINCT() != null;
         SelectList selectList = new SelectList(selectItems, isDistinct);
-        if (context.setVarHint() != null) {
-            Map<String, String> selectHints = new HashMap<>();
-            for (StarRocksParser.SetVarHintContext hintContext : context.setVarHint()) {
-                for (StarRocksParser.HintMapContext hintMapContext : hintContext.hintMap()) {
-                    selectHints.put(hintMapContext.k.getText(),
-                            ((LiteralExpr) visit(hintMapContext.v)).getStringValue());
-                }
-            }
-            selectList.setOptHints(selectHints);
-        }
+        selectList.setOptHints(extractVarHints(hintMap.get(context)));
 
         SelectRelation resultSelectRelation = new SelectRelation(
                 selectList,
@@ -5198,11 +5201,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else if (context.aggregationFunction().GROUP_CONCAT() != null) {
             functionName = FunctionSet.GROUP_CONCAT;
             isGroupConcat = true;
-            ConnectContext session = ConnectContext.get();
-            if (session != null && session.getSessionVariable() != null) {
-                long sqlMode = session.getSessionVariable().getSqlMode();
-                isLegacyGroupConcat = SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_GROUP_CONCAT_LEGACY);
-            }
+            isLegacyGroupConcat = SqlModeHelper.check(sqlMode, SqlModeHelper.MODE_GROUP_CONCAT_LEGACY);
         } else {
             throw new StarRocksPlannerException("Aggregate functions are not being parsed correctly",
                     ErrorType.INTERNAL_ERROR);
@@ -6377,6 +6376,20 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         } else {
             return null;
         }
+    }
+
+    private Map<String, String> extractVarHints(List<HintNode> hints) {
+        Map<String, String> selectHints = new HashMap<>();
+        if (CollectionUtils.isEmpty(hints)) {
+            return selectHints;
+        }
+
+        for (HintNode hintNode : hints) {
+            if (hintNode instanceof SetVarHint) {
+                selectHints.putAll(hintNode.getValue());
+            }
+        }
+        return selectHints;
     }
 }
 
