@@ -177,6 +177,10 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         latestPartitionOffsets.put(Integer.valueOf(partition), Long.valueOf(offset));
     }
 
+    public Long getPartitionOffset(int partition) {
+        return latestPartitionOffsets.get(Integer.valueOf(partition));
+    }
+
     @Override
     public void prepare() throws UserException {
         super.prepare();
