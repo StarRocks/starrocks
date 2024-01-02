@@ -491,4 +491,12 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         assertContains(plan, "ifnull(DictDecode(8: a1, [<place-holder>], 8: a1[1]), " +
                 "DictDecode(9: a2, [<place-holder>], 9: a2[1]))");
     }
+
+    @Test
+    public void testArrayCharOnScan() throws Exception {
+        String sql = "select array_slice(S_PHONE,-1,2) from supplier_nullable where S_SUPPKEY = 1";
+        String plan = getFragmentPlan(sql);
+        assertNotContains(plan, "DictDecode");
+        assertContains(plan, "<slot 9> : array_slice(5: S_PHONE, -1, 2)");
+    }
 }
