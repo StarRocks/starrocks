@@ -320,13 +320,9 @@ public:
             }
             auto& offsets = array_col->offsets_column()->get_data();
             offsets.push_back(offsets.back() + elem_size);
-#ifndef BE_TEST
             (*state_impl.data_columns)[i].reset();
-#endif
         }
-#ifndef BE_TEST
         state_impl.data_columns->clear();
-#endif
 
         // should check overflow after append, otherwise the result column with multi row will be overflow.
         if (UNLIKELY(state_impl.check_overflow(*to, ctx))) {
