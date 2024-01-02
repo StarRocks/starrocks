@@ -11,29 +11,24 @@ properties (
 "iceberg.catalog.warehouse"="oss://${oss_bucket}/test_external_catalog_information_schema/${uuid0}"
 );
 -- result:
-[]
 -- !result
 create database ice_hadoop${uuid0}.ice_hadoop_db1;
 -- result:
-[]
 -- !result
 create table ice_hadoop${uuid0}.ice_hadoop_db1.test (
     c0 int, 
     c1 string
 );
 -- result:
-[]
 -- !result
 create database ice_hadoop${uuid0}.ice_hadoop_db2;
 -- result:
-[]
 -- !result
 create table ice_hadoop${uuid0}.ice_hadoop_db2.test (
     c0 int, 
     c1 string
 );
 -- result:
-[]
 -- !result
 select SCHEMA_NAME from ice_hadoop${uuid0}.information_schema.schemata;
 -- result:
@@ -310,7 +305,6 @@ information_schema	column_privileges	IS_GRANTABLE	7
 -- !result
 drop catalog ice_hadoop${uuid0};
 -- result:
-[]
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_external_catalog_information_schema/${uuid0} >/dev/null || echo "exit 0" >/dev/null
 -- result:
