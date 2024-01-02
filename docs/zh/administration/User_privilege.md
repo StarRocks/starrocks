@@ -154,7 +154,7 @@ DROP USER 'user_identity';
 
 ```sql
 -- 授予指定用户数据库级或表级权限。
-GRANT privilege_list ON db_name[.tbl_name] TO user_identity [ROLE role_name];
+GRANT privilege_list ON db_name.tbl_name TO user_identity [ROLE role_name];
 -- 授予指定用户指定资源权限。
 GRANT privilege_list ON RESOURCE resource_name TO user_identity [ROLE role_name];
 ```
@@ -171,18 +171,21 @@ GRANT privilege_list ON RESOURCE resource_name TO user_identity [ROLE role_name]
   * DROP_PRIV：删除数据库、表、视图的权限。
   * USAGE_PRIV：资源的使用权限。
 * `db_name`：数据库名。
-* `tbl_name`：表名。
-* `user_identity`：用户标识。
-* `ROLE`：将权限赋予指定的 ROLE，如果指定的 ROLE 不存在，则会自动创建。
+* `tbl_name`：表名。`db_name.tbl_name` 支持以下格式：
+  * `*.*`：所有数据库及库中所有表，即全局权限。
+  * `db.*`：指定数据库及库中所有表。
+  * `db.tbl`：指定数据库下的指定表。
+* `user_identity`：用户标识，将权限赋予给指定用户。指定的用户必须存在。
+* `role_name`：角色名称，将权限赋予给指定角色。指定的角色必须存在。
 
 示例：
 
 ```sql
--- 授予所有库和表的权限给用户。
+-- 授予所有库和表的查询权限给用户。
 GRANT SELECT_PRIV ON *.* TO 'jack'@'%';
--- 授予指定库表的权限给用户。
+-- 授予指定库表的查询、修改、导入权限给用户。
 GRANT SELECT_PRIV,ALTER_PRIV,LOAD_PRIV ON db1.tbl1 TO 'jack'@'192.8.%';
--- 授予指定库表的权限给角色。
+-- 授予指定数据库下所有表的导入权限给角色。
 GRANT LOAD_PRIV ON db1.* TO ROLE 'my_role';
 -- 授予所有资源的使用权限给用户。
 GRANT USAGE_PRIV ON RESOURCE * TO 'jack'@'%';
@@ -204,7 +207,7 @@ GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO ROLE 'my_role';
 
 ```sql
 -- 撤销指定用户数据库级或表级权限。
-REVOKE privilege_list ON db_name[.tbl_name] FROM user_identity [ROLE role_name];
+REVOKE privilege_list ON db_name.tbl_name FROM user_identity [ROLE role_name];
 -- 撤销指定用户指定资源权限。
 REVOKE privilege_list ON RESOURCE resource_name FROM user_identity [ROLE role_name];
 ```
