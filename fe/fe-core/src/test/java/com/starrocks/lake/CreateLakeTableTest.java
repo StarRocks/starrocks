@@ -62,31 +62,6 @@ public class CreateLakeTableTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-
-        // create connect context
-        connectContext = UtFrameUtils.createDefaultCtx();
-        // create database
-        String createDbStmtStr = "create database lake_test;";
-        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
-
-        // partial mock RoutineLoadMgr, don't do the updateBeTaskSlot in shared-data mode testing
-        RoutineLoadMgr routineLoadMgr = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
-        new Expectations(routineLoadMgr) {
-            {
-                routineLoadMgr.updateBeTaskSlot();
-                minTimes = 0;
-            }
-        };
-
-        new MockUp<RunMode>() {
-            @Mock
-            public RunMode getCurrentRunMode() {
-                return RunMode.SHARED_DATA;
-            }
-        };
-
         new MockUp<SharedNothingStorageVolumeMgr>() {
             S3FileStoreInfo s3FileStoreInfo = S3FileStoreInfo.newBuilder().setBucket("default-bucket")
                     .setRegion(Config.aws_s3_region).setEndpoint(Config.aws_s3_endpoint)
@@ -109,6 +84,30 @@ public class CreateLakeTableTest {
             @Mock
             public StorageVolume getStorageVolume(String svId) {
                 return StorageVolume.fromFileStoreInfo(fsInfo);
+            }
+        };
+
+        // partial mock RoutineLoadMgr, don't do the updateBeTaskSlot in shared-data mode testing
+        RoutineLoadMgr routineLoadMgr = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
+        new Expectations(routineLoadMgr) {
+            {
+                routineLoadMgr.updateBeTaskSlot();
+                minTimes = 0;
+            }
+        };
+
+        UtFrameUtils.createMinStarRocksCluster();
+        // create connect context
+        connectContext = UtFrameUtils.createDefaultCtx();
+        // create database
+        String createDbStmtStr = "create database lake_test;";
+        CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
+        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
             }
         };
     }
