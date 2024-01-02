@@ -2336,16 +2336,16 @@ TEST_F(OrcChunkReaderTest, TestReadTimeColumn) {
         OrcChunkReader reader(_runtime_state->chunk_size(), src_slot_descriptors);
         auto input_stream = orc::readLocalFile(input_orc_file);
         Status st = reader.init(std::move(input_stream));
-        DCHECK(st.ok()) << st.get_error_msg();
+        EXPECT_TRUE(st.ok());
 
         st = reader.read_next();
-        DCHECK(st.ok()) << st.get_error_msg();
+        EXPECT_TRUE(st.ok());
         ChunkPtr ckptr = reader.create_chunk();
-        DCHECK(ckptr != nullptr);
+        EXPECT_TRUE(ckptr != nullptr);
         st = reader.fill_chunk(&ckptr);
-        DCHECK(st.ok()) << st.get_error_msg();
+        EXPECT_TRUE(st.ok());
         ChunkPtr result = reader.cast_chunk(&ckptr);
-        DCHECK(result != nullptr);
+        EXPECT_TRUE(result != nullptr);
 
         EXPECT_EQ(result->num_rows(), 4);
         EXPECT_EQ(result->num_columns(), 2);
