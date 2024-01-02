@@ -27,6 +27,7 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExternalCatalogTableBasicInfo;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -46,7 +47,13 @@ import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.delta.DeltaLakeMetadata;
+import com.starrocks.connector.elasticsearch.ElasticsearchMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hudi.HudiMetadata;
+import com.starrocks.connector.iceberg.IcebergMetadata;
+import com.starrocks.connector.jdbc.JDBCMetadata;
+import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -334,6 +341,38 @@ public class MetadataMgr {
     public boolean tableExists(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         return connectorMetadata.map(metadata -> metadata.tableExists(dbName, tblName)).orElse(false);
+    }
+        
+    /**
+     * avoid network interactions with external metadata service when using external catalog(e.g. hive catalog).
+     * only returns basic information of namespace and table type (derived from the type of its connector)
+     * use this method if you are absolutely sure, otherwise use MetadataMgr#getTable
+     */
+    public Table getTableBasicInfo(String catalogName, String dbName, String tblName) {
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            return getTable(catalogName, dbName, tblName);
+        }
+
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        if (connectorMetadata.isEmpty()) {
+            return null;
+        }
+
+        Table.TableType tableType = Table.TableType.HIVE;
+        if (connectorMetadata.get() instanceof JDBCMetadata) {
+            tableType = Table.TableType.JDBC;
+        } else if (connectorMetadata.get() instanceof PaimonMetadata) {
+            tableType = Table.TableType.PAIMON;
+        } else if (connectorMetadata.get() instanceof ElasticsearchMetadata) {
+            tableType = Table.TableType.ELASTICSEARCH;
+        } else if (connectorMetadata.get() instanceof IcebergMetadata) {
+            tableType = Table.TableType.ICEBERG;
+        } else if (connectorMetadata.get() instanceof DeltaLakeMetadata) {
+            tableType = Table.TableType.DELTALAKE;
+        } else if (connectorMetadata.get() instanceof HudiMetadata) {
+            tableType = Table.TableType.HUDI;
+        }
+        return new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, tableType);
     }
 
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {
