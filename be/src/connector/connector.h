@@ -19,6 +19,7 @@
 #include <unordered_map>
 
 #include "exprs/runtime_filter_bank.h"
+#include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
@@ -75,6 +76,11 @@ public:
 
     static const std::string PROFILE_NAME;
 
+    struct Profile {
+        int mem_alloc_failed_count;
+    };
+    void update_profile(const Profile& profile);
+
 protected:
     int64_t _read_limit = -1; // no limit
     bool _has_any_predicate = false;
@@ -102,6 +108,10 @@ using DataSourcePtr = std::unique_ptr<DataSource>;
 
 class DataSourceProvider {
 public:
+    static constexpr int64_t MIN_DATA_SOURCE_MEM_BYTES = 16 * 1024 * 1024;  // 16MB
+    static constexpr int64_t MAX_DATA_SOURCE_MEM_BYTES = 256 * 1024 * 1024; // 256MB
+    static constexpr int64_t PER_FIELD_MEM_BYTES = 4 * 1024 * 1024;         // 4MB
+
     virtual ~DataSourceProvider() = default;
 
     // First version we use TScanRange to define scan range
@@ -133,6 +143,13 @@ public:
     virtual const TupleDescriptor* tuple_descriptor(RuntimeState* state) const = 0;
 
     virtual bool always_shared_scan() const { return true; }
+
+    virtual void peek_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {}
+
+    virtual void default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) {
+        *min_value = MIN_DATA_SOURCE_MEM_BYTES;
+        *max_value = MAX_DATA_SOURCE_MEM_BYTES;
+    }
 
 protected:
     std::vector<ExprContext*> _partition_exprs;

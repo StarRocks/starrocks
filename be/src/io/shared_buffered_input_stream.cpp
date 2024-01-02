@@ -87,7 +87,7 @@ void SharedBufferedInputStream::_merge_small_ranges(const std::vector<IORange>& 
     }
 }
 
-Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& ranges) {
+Status SharedBufferedInputStream::_set_io_ranges_all_columns(const std::vector<IORange>& ranges) {
     if (ranges.size() == 0) {
         return Status::OK();
     }
@@ -111,7 +111,7 @@ Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& rang
     return Status::OK();
 }
 
-Status SharedBufferedInputStream::_set_io_ranges_separately(const std::vector<IORange>& ranges) {
+Status SharedBufferedInputStream::_set_io_ranges_active_and_lazy_columns(const std::vector<IORange>& ranges) {
     if (ranges.size() == 0) {
         return Status::OK();
     }
@@ -176,11 +176,11 @@ Status SharedBufferedInputStream::_set_io_ranges_separately(const std::vector<IO
     return Status::OK();
 }
 
-Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& ranges, bool coalesce_together) {
-    if (coalesce_together || !config::io_coalesce_adaptive_lazy_active) {
-        return set_io_ranges(ranges);
+Status SharedBufferedInputStream::set_io_ranges(const std::vector<IORange>& ranges, bool coalesce_lazy_column) {
+    if (coalesce_lazy_column || !config::io_coalesce_adaptive_lazy_active) {
+        return _set_io_ranges_all_columns(ranges);
     } else {
-        return _set_io_ranges_separately(ranges);
+        return _set_io_ranges_active_and_lazy_columns(ranges);
     }
 }
 
