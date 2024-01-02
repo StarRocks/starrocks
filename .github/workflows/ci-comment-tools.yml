@@ -25,8 +25,14 @@ jobs:
     runs-on: [self-hosted, sync-normal]
     if: >
       ${{ github.event.issue.pull_request }} &&
-      (contains(github.event.comment.body, '@Mergify rebase') || contains(github.event.comment.body, '@Mergifyio rebase') ||
-      contains(github.event.comment.body, '@Mergify backport') || contains(github.event.comment.body, '@Mergifyio backport'))
+      !contains(github.event.comment.body, 'BACKPORT to') &&
+      !contains(github.event.comment.body, 'BACKPORT ERROR') &&
+      (contains(github.event.comment.body, '@Mergify rebase') ||
+      contains(github.event.comment.body, '@Mergifyio rebase') ||
+      contains(github.event.comment.body, '@Mergify backport') ||
+      contains(github.event.comment.body, '@Mergifyio backport') ||
+      contains(github.event.comment.body, '@Mergify automerge') ||
+      contains(github.event.comment.body, '@Mergifyio automerge'))
 
     env:
       PR_NUMBER: ${{ github.event.issue.number }}
@@ -122,13 +128,15 @@ jobs:
     name: resolve conflict automerge
     runs-on: [ self-hosted, sync-normal ]
     if: >
-      contains(github.base_ref, '-sync-pr-') && contains(github.event.comment.body, 'automerge')
-
+      contains(github.event.comment.body, '@Mergify automerge') ||
+      contains(github.event.comment.body, '@Mergifyio automerge')
+    needs: info
     env:
       PR_NUMBER: ${{ github.event.issue.number }}
       GH_TOKEN: ${{ secrets.PAT }}
 
     steps:
       - name: merge directly
+        if: contains(needs.info.outputs.branch, '-sync-pr-')
         run: |
           gh pr merge ${PR_NUMBER} -R ${GITHUB_REPOSITORY} -s --admin
