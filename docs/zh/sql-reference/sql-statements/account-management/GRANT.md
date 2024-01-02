@@ -17,7 +17,7 @@ displayed_sidebar: "Chinese"
 - 将数据库和表的指定权限授予某用户或某角色。指定的用户或角色必须存在。
 
     ```SQL
-    GRANT privilege_list ON db_name.tbl_name TO {user_identity | ROLE 'role_name'}
+    GRANT privilege_list ON [db_name.]tbl_name TO {user_identity | ROLE 'role_name'}
     ```
 
 - 将资源的指定权限授予某用户或某角色。指定的用户或角色必须存在。
@@ -60,7 +60,7 @@ displayed_sidebar: "Chinese"
 - 库表权限：`SELECT_PRIV`、`LOAD_PRIV`、`ALTER_PRIV`、`CREATE_PRIV`、`DROP_PRIV`
 - 资源权限：`USAGE_PRIV`
 
-### db_name.tbl_name
+### [db_name.]tbl_name
 
 指定的数据库和表。支持以下格式：
 

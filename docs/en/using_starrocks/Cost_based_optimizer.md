@@ -2,18 +2,6 @@
 displayed_sidebar: "English"
 ---
 
-CREATE TABLE IF NOT EXISTS aggregate_tbl (
-    site_id LARGEINT NOT NULL COMMENT "id of site",
-    date DATE NOT NULL COMMENT "time of event",
-    city_code VARCHAR(20) COMMENT "city_code of user",
-    pv BIGINT SUM DEFAULT "0" COMMENT "total page views"
-)
-AGGREGATE KEY(site_id, date, city_code)
-DISTRIBUTED BY HASH(site_id) BUCKETS 8
-PROPERTIES (
-"replication_num" = "3"
-);
-
 # Gather statistics for CBO
 
 This topic describes the basic concept of StarRocks CBO and how to collect statistics for the CBO. StarRocks 2.4 introduces histograms to gather accurate data distribution statistics.

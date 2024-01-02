@@ -17,7 +17,7 @@ You can use the REVOKE statement to perform the following operations:
 - Revoke specific privileges on a database and a table from a user or a role. The role from which you want to revoke privileges must already exist.
 
     ```SQL
-    REVOKE privilege_list ON db_name.tbl_name FROM {user_identity | ROLE 'role_name'}
+    REVOKE privilege_list ON [db_name.]tbl_name FROM {user_identity | ROLE 'role_name'}
     ```
 
 - Revoke specific privileges on a resource from a user or a role. The role from which you want to revoke privileges must already exist.
@@ -54,7 +54,7 @@ The privileges that can be revoked from a user or a role. If you want to revoke 
 - `DROP_PRIV`: the privilege to delete databases and tables.
 - `USAGE_PRIV`: the privilege to use resources.
 
-### db_name.tbl_name
+### [db_name.]tbl_name
 
 The database and table. This parameter supports the following three formats:
 
