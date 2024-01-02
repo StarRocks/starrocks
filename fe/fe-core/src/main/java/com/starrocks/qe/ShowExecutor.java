@@ -974,7 +974,8 @@ public class ShowExecutor {
                                 connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), table.getName()));
                     } else {
                         Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
-                                connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), table.getName()));
+                                connectContext.getCurrentRoleIds(),
+                                new TableName(catalogName, db.getFullName(), table.getName()));
                     }
                 } catch (AccessDeniedException e) {
                     continue;

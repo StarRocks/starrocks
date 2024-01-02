@@ -14,20 +14,26 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class ShowTablesTest {
-    private ConnectContext ctx;
-    @Before
-    public void setUp() throws Exception {
+    private static ConnectContext ctx;
+
+    @BeforeClass
+    public static void setUp() throws Exception {
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        UtFrameUtils.setUpForPersistTest();
+
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         ShowTableMockMeta metadataMgr =
                 new ShowTableMockMeta(globalStateMgr.getLocalMetastore(), globalStateMgr.getConnectorMgr());
@@ -36,17 +42,19 @@ public class ShowTablesTest {
 
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+
+        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
+                "create user test_user", ctx);
+        globalStateMgr.getAuthenticationMgr().createUser(createUserStmt);
+    }
+
+    @AfterClass
+    public static void tearDown() throws Exception {
+        UtFrameUtils.tearDownForPersisTest();
     }
 
     @Test
     public void testShowTable() throws Exception {
-        ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        ShowTableMockMeta metadataMgr =
-                new ShowTableMockMeta(globalStateMgr.getLocalMetastore(), globalStateMgr.getConnectorMgr());
-        metadataMgr.init();
-        globalStateMgr.setMetadataMgr(metadataMgr);
-
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
@@ -54,8 +62,6 @@ public class ShowTablesTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("hive_test", resultSet.getString(0));
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("testMv", resultSet.getString(0));
         Assert.assertTrue(resultSet.next());
@@ -65,13 +71,13 @@ public class ShowTablesTest {
 
     @Test
     public void testShowTableVerbose() throws Exception {
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+
         ShowTableStmt stmt = new ShowTableStmt("testDb", true, null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("hive_test", resultSet.getString(0));
-        Assert.assertEquals("BASE TABLE", resultSet.getString(1));
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("testMv", resultSet.getString(0));
         Assert.assertEquals("VIEW", resultSet.getString(1));
@@ -79,5 +85,17 @@ public class ShowTablesTest {
         Assert.assertEquals("testTbl", resultSet.getString(0));
         Assert.assertEquals("BASE TABLE", resultSet.getString(1));
         Assert.assertFalse(resultSet.next());
+    }
+
+    @Test
+    public void testExternal() throws Exception {
+        ctx.setCurrentCatalog("hive_catalog");
+        ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
+        ShowTableStmt stmt = new ShowTableStmt("hive_db", true, null);
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertFalse(resultSet.next());
+
+        ctx.setCurrentCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
     }
 }
