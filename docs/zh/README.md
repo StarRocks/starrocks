@@ -20,6 +20,6 @@ StarRocks 文档维护在以下分支，对应官网文档的不同版本。
 | [3.2](https://github.com/StarRocks/docs.zh-cn/tree/3.2)   | 3.2，当前最新的文档版本|
 | [3.1](https://github.com/StarRocks/docs.zh-cn/tree/3.1)   | 3.1                |
 | [3.0](https://github.com/StarRocks/docs.zh-cn/tree/3.0)   | 3.0                 |
-| [2.5](https://github.com/StarRocks/docs.zh-cn/tree/2.5)   | 2.5，长期支持版本 (LTS) |
+| [2.5](https://github.com/StarRocks/docs.zh-cn/tree/2.5)   | 2.5，Stable 版本     |
 | [2.3](https://github.com/StarRocks/docs.zh-cn/tree/2.3)   | 2.3（停止维护）         |
 | [2.2](https://github.com/StarRocks/docs.zh-cn/tree/2.2)   | 2.2（停止维护）        |
