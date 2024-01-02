@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.odps;
 
+import com.aliyun.odps.PartitionSpec;
 import com.aliyun.odps.TableSchema;
 import com.aliyun.odps.type.ArrayTypeInfo;
 import com.aliyun.odps.type.CharTypeInfo;
@@ -31,6 +32,7 @@ import com.starrocks.catalog.Type;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class EntityConvertUtils {
@@ -98,5 +100,36 @@ public class EntityConvertUtils {
         columns.addAll(tableSchema.getPartitionColumns());
         return columns.stream().map(EntityConvertUtils::convertColumn).collect(
                 Collectors.toList());
+    }
+
+    /**
+     * Generates a partition filter string based on ordered column names and values.
+     * Stops adding to the filter upon encountering the first empty (missing) value.
+     *
+     * @param partitionColumnNames Ordered list of partition column names.
+     * @param partitionValues      Corresponding list of partition values, where an empty
+     *                             Optional indicates the end of the filter conditions.
+     * @return Filter string for selecting partitions.
+     * @throws IllegalArgumentException if the sizes of partitionColumnNames and
+     *                                  partitionValues do not match.
+     */
+    public static String getPartitionFilter(List<String> partitionColumnNames, List<Optional<String>> partitionValues) {
+        if (partitionColumnNames.size() != partitionValues.size()) {
+            throw new IllegalArgumentException("partitionColumnNames and partitionValues size not match");
+        }
+        if (partitionValues.stream().allMatch(Optional::isEmpty)) {
+            return OdpsPartitionName.ALL_PARTITION;
+        }
+        PartitionSpec partitionSpec = new PartitionSpec();
+        for (int i = 0; i < partitionColumnNames.size(); i++) {
+            String partitionKey = partitionColumnNames.get(i);
+            Optional<String> partitionValue = partitionValues.get(i);
+            if (partitionValue.isPresent()) {
+                partitionSpec.set(partitionKey, partitionValue.get());
+            } else {
+                break;
+            }
+        }
+        return partitionSpec.toString(false, true);
     }
 }
