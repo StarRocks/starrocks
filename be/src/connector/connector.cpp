@@ -98,4 +98,9 @@ Status DataSource::parse_runtime_filters(RuntimeState* state) {
     return Status::OK();
 }
 
+void DataSource::update_profile(const Profile& profile) {
+    RuntimeProfile::Counter* mem_alloc_failed_counter = ADD_COUNTER(_runtime_profile, "MemAllocFailed", TUnit::UNIT);
+    mem_alloc_failed_counter->update(profile.mem_alloc_failed_count);
+}
+
 } // namespace starrocks::connector
