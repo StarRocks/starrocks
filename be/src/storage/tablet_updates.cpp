@@ -2308,7 +2308,8 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         // Remove useless delta column group
         auto update_manager = StorageEngine::instance()->update_manager();
         size_t dcg_deleted = 0;
-        res = update_manager->clear_delta_column_group_before_version(meta_store, tablet_id, min_readable_version);
+        res = update_manager->clear_delta_column_group_before_version(meta_store, _tablet.schema_hash_path(), tablet_id,
+                                                                      min_readable_version);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to clear_delta_column_group_before_version tablet:" << tablet_id
                          << " min_readable_version:" << min_readable_version << " msg:" << res.status();

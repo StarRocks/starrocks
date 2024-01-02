@@ -719,22 +719,22 @@ TEST_P(RowsetColumnPartialUpdateTest, test_dcg_gc) {
     ASSERT_EQ(version_before_partial_update, 11);
     // clear dcg before version 13, expect clear 0 dcg
     StatusOr<size_t> clear_size = StorageEngine::instance()->update_manager()->clear_delta_column_group_before_version(
-            meta, tablet->tablet_id(), version_before_partial_update + 2);
+            meta, tablet->schema_hash_path(), tablet->tablet_id(), version_before_partial_update + 2);
     ASSERT_TRUE(clear_size.ok());
     ASSERT_EQ(*clear_size, 0);
     // clear dcg before version 14, expect clear 1 dcg
     clear_size = StorageEngine::instance()->update_manager()->clear_delta_column_group_before_version(
-            meta, tablet->tablet_id(), version_before_partial_update + 3);
+            meta, tablet->schema_hash_path(), tablet->tablet_id(), version_before_partial_update + 3);
     ASSERT_TRUE(clear_size.ok());
     ASSERT_EQ(*clear_size, 1);
     // clear dcg before version 15, expect clear 1 dcg
     clear_size = StorageEngine::instance()->update_manager()->clear_delta_column_group_before_version(
-            meta, tablet->tablet_id(), version_before_partial_update + 4);
+            meta, tablet->schema_hash_path(), tablet->tablet_id(), version_before_partial_update + 4);
     ASSERT_TRUE(clear_size.ok());
     ASSERT_EQ(*clear_size, 1);
     // clear dcg with newest version, expect clear 6 dcg
     clear_size = StorageEngine::instance()->update_manager()->clear_delta_column_group_before_version(
-            meta, tablet->tablet_id(), version + 1);
+            meta, tablet->schema_hash_path(), tablet->tablet_id(), version + 1);
     ASSERT_TRUE(clear_size.ok());
     ASSERT_EQ(*clear_size, 6);
     // check data
@@ -742,19 +742,9 @@ TEST_P(RowsetColumnPartialUpdateTest, test_dcg_gc) {
         return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
     }));
     // check delta column files gc
-    // 1. find out all .cols files
-    tablet->data_dir()->perform_path_scan();
-    ASSERT_EQ(tablet->data_dir()->get_all_check_dcg_files_cnt(), 10);
-    // 2. gc .cols files
-    tablet->data_dir()->perform_delta_column_files_gc();
-    tablet->data_dir()->perform_path_gc_by_rowsetid();
     tablet->data_dir()->perform_path_scan();
     ASSERT_EQ(tablet->data_dir()->get_all_check_dcg_files_cnt(), 2);
-    // 3. check data
-    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
-        return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
-    }));
-    // 4. gc and check again
+    // gc and check again
     tablet->data_dir()->perform_delta_column_files_gc();
     tablet->data_dir()->perform_path_gc_by_rowsetid();
     tablet->data_dir()->perform_path_scan();
