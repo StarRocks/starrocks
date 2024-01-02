@@ -1206,6 +1206,7 @@ public class GlobalStateMgr {
 
     // wait until FE is ready.
     public void waitForReady() throws InterruptedException {
+        long lastLoggingTimeMs = System.currentTimeMillis();
         while (true) {
             if (isReady()) {
                 LOG.info("globalStateMgr is ready. FE type: {}", feType);
@@ -1224,6 +1225,22 @@ public class GlobalStateMgr {
 
             Thread.sleep(2000);
             LOG.info("wait globalStateMgr to be ready. FE type: {}. is ready: {}", feType, isReady.get());
+
+            if (System.currentTimeMillis() - lastLoggingTimeMs > 60000L) {
+                lastLoggingTimeMs = System.currentTimeMillis();
+                LOG.warn("It took too much time for FE to transfer to a stable state(LEADER/FOLLOWER), " +
+                        "it maybe caused by one of the following reasons: " +
+                        "1. There are too many BDB logs to replay, because of previous failure of checkpoint" +
+                        "(you can check the create time of image file under meta/image dir). " +
+                        "2. Majority voting members(LEADER or FOLLOWER) of the FE cluster haven't started completely. " +
+                        "3. FE node has multiple IPs, you should configure the priority_networks in fe.conf " +
+                        "to match the ip record in meta/image/ROLE. And we don't support change the ip of FE node. " +
+                        "Ignore this reason if you are using FQDN. " +
+                        "4. The time deviation between FE nodes is greater than 5s, " +
+                        "please use ntp or other tools to keep clock synchronized. " +
+                        "5. The configuration of edit_log_port has changed, please reset to the original value. " +
+                        "6. The replayer thread may get stuck, please use jstack to find the details.");
+            }
         }
     }
 
