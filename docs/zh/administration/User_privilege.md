@@ -171,9 +171,12 @@ GRANT privilege_list ON RESOURCE resource_name TO user_identity [ROLE role_name]
   * DROP_PRIV：删除数据库、表、视图的权限。
   * USAGE_PRIV：资源的使用权限。
 * `db_name`：数据库名。
-* `tbl_name`：表名。
-* `user_identity`：用户标识。
-* `ROLE`：将权限赋予指定的 ROLE，如果指定的 ROLE 不存在，则会自动创建。
+* `tbl_name`：表名。`db_name.tbl_name` 支持以下格式：
+  * `*.*`：所有数据库及库中所有表，即全局权限。
+  * `db.*`：指定数据库及库中所有表。
+  * `db.tbl`：指定数据库下的指定表。
+* `user_identity`：用户标识，将角色赋予给指定用户。指定的用户必须存在。
+* `role_name`：将权限赋予给指定角色。指定的角色必须存在。
 
 示例：
 

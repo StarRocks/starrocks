@@ -44,20 +44,28 @@ User properties are attached directly to a user, not to a user identity That is,
 StarRocks currently supports the following types of  privileges.
 
 * Node\_priv
+
   Privileges for Node changes. This allows you to add, delete, and disable FE, BE, and BROKER nodes. Currently, this privilege can only be granted to Root users.
-* Grant\_priv  
+* Grant\_priv
+
   Privileges for privilege changes. This allows you to grant, revoke, and modify users/roles.
-* Select\_priv  
+* Select\_priv
+
   Read-only access to databases and tables.
-* Load\_priv  
+* Load\_priv
+
   Write access to databases and tables. This allows you to  Load, Insert, and Delete databases or tables.
-* Alter\_priv  
+* Alter\_priv
+
   Privileges to change databases and tables. This allows you to  rename, add/remove/change columns, add/remove partitions.
-* Create\_priv  
+* Create\_priv
+
   Privileges to create databases, tables, and views.
-* Drop\_priv  
+* Drop\_priv
+
   Privileges to delete databases, tables, and views.
-* Usage\_priv  
+* Usage\_priv
+
   Privileges to use resources.
 
 ## Privilege Hierarchy
@@ -151,13 +159,13 @@ All privileges are granted to `current_user`, and the real user has all the priv
 
 Here are some scenarios for using the StarRocks permission management system.
 
-### Scenario 1 Permissions Assignment
+### Scenario 1: Permissions Assignment
 
 StarRocks users are divided into Administrator (Admin), Development Engineer (RD), and User (Client). The administrators have all the privileges and are mainly responsible for cluster construction, and node management. The development engineers are responsible for business modeling, including building databases and tables, importing and modifying data, and so on. Users access databases and tables to get data.
 
 In this scenario, Admins are granted ADMIN privileges or GRANT privileges. RDs are granted privileges to CREATE, DROP, ALTER, LOAD, and SELECT any or specific database tables. Clients are granted privileges to SELECT any or specific database tables. When there are multiple users, it is also possible to simplify the authorization by creating different roles.
 
-### Scenario 2 Multiple lines of business
+### Scenario 2: Multiple lines of business
 
 There may be multiple use cases within a cluster, each of which may use one or more databases. Each use case needs to manage its own users. In this scenario, an ADMIN can grant one user with DATABASE level GRANT privilege for each database. This user can only authorize users for this specific database.
 
