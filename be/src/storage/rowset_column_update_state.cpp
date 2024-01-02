@@ -731,7 +731,11 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             uint64_t segment_file_size = 0;
             uint64_t index_size = 0;
             uint64_t footer_position = 0;
+<<<<<<< HEAD
             padding_char_columns(partial_schema, *partial_tschema, source_chunk_ptr.get());
+=======
+            padding_char_columns(partial_schema, partial_tschema, source_chunk_ptr.get());
+>>>>>>> a95bfd450a ([Enhancement] remove garbage delta column files when expired version (#38110))
             ASSIGN_OR_RETURN(auto delta_column_group_writer, build_writer_fn(each.first, partial_tschema, idx));
             RETURN_IF_ERROR(delta_column_group_writer->append_chunk(*source_chunk_ptr));
             RETURN_IF_ERROR(delta_column_group_writer->finalize(&segment_file_size, &index_size, &footer_position));
