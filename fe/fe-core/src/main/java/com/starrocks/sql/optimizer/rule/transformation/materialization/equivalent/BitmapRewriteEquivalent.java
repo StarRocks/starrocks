@@ -103,6 +103,7 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
         CallOperator aggFunc = (CallOperator) newInput;
         String aggFuncName = aggFunc.getFnName();
         boolean isRollup = shuttleContext.isRollup();
+
         if (aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct() ||
                 aggFuncName.equals(MULTI_DISTINCT_COUNT)) {
             ScalarOperator arg0 = aggFunc.getChild(0);

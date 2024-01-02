@@ -67,7 +67,7 @@ public class StatementPlanner {
         boolean needWholePhaseLock = true;
 
         // 1. For all queries, we need db lock when analyze phase
-        try {
+        try (ConnectContext.ScopeGuard guard = session.bindScope()) {
             lock(dbs);
             try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Analyzer")) {
                 Analyzer.analyze(stmt, session);

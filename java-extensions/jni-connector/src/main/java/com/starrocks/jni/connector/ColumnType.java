@@ -168,9 +168,20 @@ public class ColumnType {
     }
 
     private void parse(StringScanner scanner) {
-        int p = scanner.indexOf('<', ',', '>');
+        int p = scanner.indexOf('<', ',', '>', '(', ')');
+        int end = scanner.indexOf(')') + 1;
         String t = scanner.substr(p);
-        scanner.moveTo(p);
+        if (t.startsWith("decimal")) {
+            t = scanner.substr(end);
+            scanner.moveTo(end);
+        } else if (t.startsWith("char") || t.startsWith("varchar")) {
+            // right now this only used in hive scanner
+            // for char(xx) and varchar(xx), we only need t to be char or varchar and skip (xx)
+            // otherwise struct<c_char:char(30),c_varchar:varchar(200)> will get wrong result
+            scanner.moveTo(end);
+        } else {
+            scanner.moveTo(p);
+        }
         // assume there is no blank char in `type`.
         typeValue = null;
         switch (t) {

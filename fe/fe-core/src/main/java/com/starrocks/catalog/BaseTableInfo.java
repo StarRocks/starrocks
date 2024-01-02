@@ -46,15 +46,16 @@ public class BaseTableInfo {
     @SerializedName(value = "tableName")
     private String tableName;
 
-    public BaseTableInfo(long dbId, String dbName, long tableId) {
+    public BaseTableInfo(long dbId, String dbName, long tableId, String tableName) {
         this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         this.dbId = dbId;
         this.dbName = dbName;
         this.tableId = tableId;
+        this.tableName = tableName;
     }
 
     public BaseTableInfo(long dbId, long tableId) {
-        this(dbId, null, tableId);
+        this(dbId, null, tableId, null);
     }
 
     // used for external table
@@ -68,7 +69,7 @@ public class BaseTableInfo {
     public static BaseTableInfo fromTableName(TableName name, Table table) {
         Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(name.getCatalog(), name.getDb());
         if (isInternalCatalog(name.getCatalog())) {
-            return new BaseTableInfo(database.getId(), database.getFullName(), table.getId());
+            return new BaseTableInfo(database.getId(), database.getFullName(), table.getId(), table.getName());
         } else {
             return new BaseTableInfo(name.getCatalog(), name.getDb(), table.getName(), table.getTableIdentifier());
         }
