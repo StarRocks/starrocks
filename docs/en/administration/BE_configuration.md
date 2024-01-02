@@ -749,7 +749,7 @@ BE static parameters are as follows.
 
 - **Default**: 90%
 - **Unit**: N/A
-- **Description**: BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100GB").
+- **Description**: BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100G").
 
 #### flush_thread_num_per_store
 
