@@ -760,16 +760,9 @@ void UpdateManager::preload_compaction_state(const TxnLog& txnlog, Tablet* table
     auto& compaction_state = compaction_entry->value();
     // preload compaction state, only load first output segment, to avoid too much memory cost
     auto st = Status::OK();
-<<<<<<< HEAD
-    for (int i = 0; i < segments_size; i++) {
-        st = compaction_state.load_segments(output_rowset.get(), this, tablet_schema, i);
-        if (!st.ok() || _compaction_state_mem_tracker->any_limit_exceeded()) {
-=======
-    // skip preload if memory limit exceed
     for (int i = 0; i < segments_size && !_compaction_state_mem_tracker->any_limit_exceeded(); i++) {
-        st = compaction_state.load_segments(&output_rowset, this, tablet_schema, i);
+        st = compaction_state.load_segments(output_rowset.get(), this, tablet_schema, i);
         if (!st.ok()) {
->>>>>>> 932d8598e3 ([Enhancement] skip preload if memory exceed (#38234))
             break;
         }
     }
