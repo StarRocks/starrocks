@@ -119,6 +119,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         PAIMON,
         @SerializedName("HIVE_VIEW")
         HIVE_VIEW,
+        @SerializedName("ODPS")
+        ODPS,
         @SerializedName("BLACKHOLE")
         BLACKHOLE;
 
@@ -356,6 +358,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.PAIMON;
     }
 
+    public boolean isOdpsTable() {
+        return type == TableType.ODPS;
+    }
+
     public boolean isJDBCTable() {
         return type == TableType.JDBC;
     }
@@ -467,6 +473,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             table = LakeMaterializedView.read(in);
             table.setTypeRead(true);
             return table;
+        } else if (type == TableType.ODPS) {
+            table = new OdpsTable();
         } else {
             throw new IOException("Unknown table type: " + type.name());
         }
