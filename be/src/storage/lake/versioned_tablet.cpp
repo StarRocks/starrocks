@@ -44,21 +44,19 @@ StatusOr<std::unique_ptr<TabletWriter>> VersionedTablet::new_writer(WriterType t
             tablet_writer = std::make_unique<HorizontalPkTabletWriter>(id(), tablet_schema, txn_id);
         } else {
             DCHECK(type == kVertical);
-            tablet_writer = std::make_unique<VerticalPkTabletWriter>(id(), tablet_schema, txn_id,
-                                                            max_rows_per_segment);
+            tablet_writer = std::make_unique<VerticalPkTabletWriter>(id(), tablet_schema, txn_id, max_rows_per_segment);
         }
     } else {
         if (type == kHorizontal) {
             tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(id(), tablet_schema, txn_id);
         } else {
             DCHECK(type == kVertical);
-            tablet_writer = std::make_unique<VerticalGeneralTabletWriter>(id(), tablet_schema, txn_id,
-                                                                 max_rows_per_segment);
+            tablet_writer =
+                    std::make_unique<VerticalGeneralTabletWriter>(id(), tablet_schema, txn_id, max_rows_per_segment);
         }
     }
     tablet_writer->set_location_provider(_tablet_mgr->location_provider());
     return tablet_writer;
-
 }
 
 StatusOr<std::unique_ptr<TabletReader>> VersionedTablet::new_reader(Schema schema) {
