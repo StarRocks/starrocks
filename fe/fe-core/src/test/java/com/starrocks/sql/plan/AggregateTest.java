@@ -1882,6 +1882,7 @@ public class AggregateTest extends PlanTestBase {
     @Test
     public void testBitmapUnionAggRewrite() throws Exception {
         connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
+        connectContext.getSessionVariable().setEnableRewriteBitmapUnionToBitmapAgg(true);
         // normal case
         String sql = "select " +
                 "bitmap_union(to_bitmap(t1a))," + // varchar

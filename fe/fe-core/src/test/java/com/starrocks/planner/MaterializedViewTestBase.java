@@ -78,6 +78,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
+        connectContext.getSessionVariable().setEnableRewriteBitmapUnionToBitmapAgg(true);
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         FeConstants.runningUnitTest = true;
