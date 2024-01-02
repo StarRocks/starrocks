@@ -45,6 +45,8 @@ using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 
+class ConnectorScanOperatorMemShareArbitrator;
+
 // The context for all fragment of one query in one BE
 class QueryContext : public std::enable_shared_from_this<QueryContext> {
 public:
@@ -132,8 +134,10 @@ public:
     /// Positive `big_query_mem_limit` and non-null `wg` indicate
     /// that there is a big query memory limit of this resource group.
     void init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit = -1,
-                          int64_t spill_mem_limit = -1, workgroup::WorkGroup* wg = nullptr);
+                          int64_t spill_mem_limit = -1, workgroup::WorkGroup* wg = nullptr,
+                          RuntimeState* state = nullptr);
     std::shared_ptr<MemTracker> mem_tracker() { return _mem_tracker; }
+    MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
 
     Status init_query_once(workgroup::WorkGroup* wg, bool enable_group_level_query_queue);
     /// Release the workgroup token only once to avoid double-free.
@@ -197,6 +201,9 @@ public:
     bool is_prepared() { return _is_prepared; }
 
     int64_t get_static_query_mem_limit() const { return _static_query_mem_limit; }
+    ConnectorScanOperatorMemShareArbitrator* connector_scan_operator_mem_share_arbitrator() const {
+        return _connector_scan_operator_mem_share_arbitrator;
+    }
 
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
@@ -222,6 +229,7 @@ private:
     int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
     TPipelineProfileLevel::type _profile_level;
     std::shared_ptr<MemTracker> _mem_tracker;
+    std::shared_ptr<MemTracker> _connector_scan_mem_tracker;
     ObjectPool _object_pool;
     DescriptorTbl* _desc_tbl = nullptr;
     std::once_flag _query_trace_init_flag;
@@ -264,6 +272,7 @@ private:
     std::unique_ptr<spill::QuerySpillManager> _spill_manager;
 
     int64_t _static_query_mem_limit = 0;
+    ConnectorScanOperatorMemShareArbitrator* _connector_scan_operator_mem_share_arbitrator = nullptr;
 };
 
 class QueryContextManager {
