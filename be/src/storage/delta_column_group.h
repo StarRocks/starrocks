@@ -119,8 +119,9 @@ public:
 class DeltaColumnGroupListHelper {
 public:
     static void garbage_collection(DeltaColumnGroupList& dcg_list, const TabletSegmentId& tsid,
-                                   int64_t min_readable_version,
-                                   std::vector<std::pair<TabletSegmentId, int64_t>>& garbage_dcgs);
+                                   int64_t min_readable_version, const std::string& tablet_path,
+                                   std::vector<std::pair<TabletSegmentId, int64_t>>* garbage_dcgs,
+                                   std::vector<std::string>* garbage_files);
 
     // used for non-Primary Key tablet only
     static Status save_snapshot(const std::string& file_path, DeltaColumnGroupSnapshotPB& dcg_snapshot_pb);
