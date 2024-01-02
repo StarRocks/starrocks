@@ -1648,10 +1648,11 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                 "distributed by hash(b) " +
                 "REFRESH DEFERRED MANUAL " +
                 "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
                 "'replication_num' = '1'" +
                 ") " +
                 "as select  t1.d, t2.b, t3.c, bitmap_union(bitmap_hash(t1.a)) " +
-                " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                " from iceberg0.partitioned_db.part_tbl1 as t1 " +
                 " left join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
                 " left join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
                 " group by t1.d, t2.b, t3.c;");
@@ -1665,6 +1666,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                 materializedView.getPartitions().stream().map(Partition::getName).sorted()
                         .collect(Collectors.toList());
         Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
 
         {
             String query = "select  t1.d, t2.b, t3.c, bitmap_union(bitmap_hash(t1.a)) " +
@@ -1696,7 +1698,6 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     "     partitions=1/1");
         }
 
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         {
             String query = "select t1.d, t2.b, t3.c, count(distinct t1.a) " +
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
@@ -1754,6 +1755,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                 "distributed by hash(b) " +
                 "REFRESH DEFERRED MANUAL " +
                 "PROPERTIES (\n" +
+                "\"force_external_table_query_rewrite\" = \"true\",\n" +
                 "'replication_num' = '1'" +
                 ") " +
                 "as select  t1.d, t2.b, t3.c, bitmap_union(bitmap_hash(t1.a)) " +
@@ -1851,6 +1853,5 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
         }
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
         starRocksAssert.dropMaterializedView(mvName);
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
     }
 }
