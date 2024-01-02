@@ -123,6 +123,29 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    protected String getSourceProgressString() {
+        // To be compatible with progress format, we convert the Map<Integer, Long> to Map<String, String>
+        Map<String, String> partitionOffsets = Maps.newHashMap();
+        for (Map.Entry<Integer, Long> entry : latestPartitionOffsets.entrySet()) {
+            partitionOffsets.put(entry.getKey().toString(), entry.getValue().toString());
+        }
+
+        Gson gson = new Gson();
+        return gson.toJson(partitionOffsets);
+    }
+
+    public void setPartitionOffset(int partition, long offset) {
+        latestPartitionOffsets.put(Integer.valueOf(partition), Long.valueOf(offset));
+    }
+
+    public Long getPartitionOffset(int partition) {
+        return latestPartitionOffsets.get(Integer.valueOf(partition));
+    }
+
+    @Override
+>>>>>>> d64580571d ([Enhancement] Routine load task schduling (#37638))
     public void prepare() throws UserException {
         super.prepare();
         checkCustomPartition(customKafkaPartitions);
