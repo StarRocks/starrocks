@@ -172,7 +172,6 @@ public class MockedBase {
         Mockito.when(context.getType()).thenReturn("odps");
 
         when(odpsMetadata.getCloudConfiguration()).thenReturn(new AliyunCloudConfiguration(aliyunCloudCredential));
-
         when(odpsConnector.getMetadata()).thenReturn(odpsMetadata);
         mockedStatic.when(GlobalStateMgr::getCurrentState).thenReturn(globalStateMgr);
         when(globalStateMgr.getCatalogMgr()).thenReturn(catalogMgr);
