@@ -67,11 +67,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.analyzer.UnsupportedMVException;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnBitmapAggPattern;
->>>>>>> b7636a3888 ([Enhancement] Convert bitmap_union(to_bitmap(int type) to bitmap_agg (#23656))
 import com.starrocks.sql.analyzer.mvpattern.MVColumnBitmapUnionPattern;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnHLLUnionPattern;
 import com.starrocks.sql.analyzer.mvpattern.MVColumnOneChildPattern;
