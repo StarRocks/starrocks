@@ -160,14 +160,14 @@ size_t PersistentIndexMemtable::memory_usage() {
     return mem_usage;
 }
 
-Status PersistentIndexMemtable::flush(SstableInfo* sstable, int64_t txn_id) {
+Status PersistentIndexMemtable::flush(int64_t txn_id, SstablePB *sstable) {
     auto name = gen_sst_filename(txn_id);
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(_tablet_mgr->sst_location(_tablet_id, name)));
     uint64_t filesz;
     RETURN_IF_ERROR(LakePersistentIndexSstable::build_sstable(_map, wf.get(), &filesz));
     RETURN_IF_ERROR(wf->close());
-    sstable->filename = std::string(name);
-    sstable->filesz = filesz;
+    sstable->set_filename(name);
+    sstable->set_filesz(filesz);
     return Status::OK();
 }
 

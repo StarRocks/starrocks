@@ -167,6 +167,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     int64_t version = -1;
     if (use_cloud_native_pindex) {
         dynamic_cast<LakePersistentIndex*>(index.get_persistent_index())->set_txn_id(txn_id);
+        dynamic_cast<LakePersistentIndex*>(index.get_persistent_index())->set_version(new_version);
         version = new_version;
     }
     // 1. load rowset update data to cache, get upsert and delete list
@@ -613,6 +614,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     int64_t version = -1;
     if (use_cloud_native_pindex) {
         dynamic_cast<LakePersistentIndex*>(index.get_persistent_index())->set_txn_id(txn_id);
+        dynamic_cast<LakePersistentIndex*>(index.get_persistent_index())->set_version(new_version);
         version = new_version;
     }
     // 1. iterate output rowset, update primary index and generate delvec

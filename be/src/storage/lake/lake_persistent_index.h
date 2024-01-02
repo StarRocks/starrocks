@@ -21,15 +21,15 @@ namespace starrocks::lake {
 
 class MetaFileBuilder;
 class PersistentIndexMemtable;
-class PersistentIndexSStablePB;
+class PersistentIndexSstableMetaPB;
+class PersistentIndexSstablePB;
 class TabletManager;
-struct SstableInfo;
 
 class LakePersistentIndex : public PersistentIndex {
 public:
     explicit LakePersistentIndex(std::string path);
 
-    LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id);
+    LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id, PersistentIndexSstableMetaPB sstable_meta);
 
     ~LakePersistentIndex() override;
 
@@ -80,6 +80,8 @@ public:
 
     void set_txn_id(int64_t txn_id) { _txn_id = txn_id; }
 
+    void set_version(int64_t version) { _sstable->set_version(version); }
+
     Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                                  const MetaFileBuilder* builder);
 
@@ -91,7 +93,8 @@ private:
 private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;
     std::unique_ptr<PersistentIndexMemtable> _immutable_memtable{nullptr};
-    std::vector<SstableInfo> _sstables;
+    std::shared_ptr<PersistentIndexSstableMetaPB> _sstable_meta;
+    PersistentIndexSstablePB* _sstable{nullptr};
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
     int64_t _txn_id{0};

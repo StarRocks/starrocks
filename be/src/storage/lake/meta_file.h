@@ -56,7 +56,7 @@ public:
     // update num dels in rowset meta, `segment_id_to_add_dels` record each segment's incremental del count
     Status update_num_del_stat(const std::map<uint32_t, size_t>& segment_id_to_add_dels);
 
-    void append_sstables(const std::vector<SstableInfo>& sstables);
+    void set_sstable_meta(std::shared_ptr<PersistentIndexSstableMetaPB> sstable_meta) { _sstable_meta = sstable_meta; }
 
     void set_recover_flag(RecoverFlag flag) { _recover_flag = flag; }
     RecoverFlag recover_flag() const { return _recover_flag; }
@@ -67,7 +67,7 @@ private:
     // fill delvec cache, for better reading latency
     void _fill_delvec_cache();
 
-    void _finalize_sstable(int64_t version);
+    void _finalize_sstable();
 
 private:
     Tablet _tablet;
@@ -81,7 +81,7 @@ private:
     std::unordered_map<std::string, uint32_t> _cache_key_to_segment_id;
     // When recover flag isn't ok, need recover later
     RecoverFlag _recover_flag = RecoverFlag::OK;
-    std::vector<std::unique_ptr<SstablePB>> _sstables;
+    std::shared_ptr<PersistentIndexSstableMetaPB> _sstable_meta;
 };
 
 Status get_del_vec(TabletManager* tablet_mgr, const TabletMetadata& metadata, uint32_t segment_id, DelVector* delvec);

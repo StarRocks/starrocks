@@ -27,9 +27,13 @@ LakePersistentIndex::LakePersistentIndex(std::string path) : PersistentIndex(std
     _memtable = std::make_unique<PersistentIndexMemtable>();
 }
 
-LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id) : PersistentIndex("") {
-    _tablet_mgr = tablet_mgr;
-    _tablet_id = tablet_id;
+LakePersistentIndex::LakePersistentIndex(TabletManager* tablet_mgr, int64_t tablet_id,
+                                         PersistentIndexSstableMetaPB sstable_meta)
+        : PersistentIndex(""),
+          _sstable_meta(std::make_unique<PersistentIndexSstableMetaPB>(sstable_meta)),
+          _tablet_mgr(tablet_mgr),
+          _tablet_id(tablet_id) {
+    _sstable = _sstable_meta->add_sstables();
     _memtable = std::make_unique<PersistentIndexMemtable>(tablet_mgr, tablet_id);
 }
 
@@ -96,9 +100,9 @@ void LakePersistentIndex::flush_to_immutable_memtable() {
 
 Status LakePersistentIndex::minor_compact() {
     if (_immutable_memtable != nullptr) {
-        SstableInfo sstable;
-        RETURN_IF_ERROR(_immutable_memtable->flush(&sstable, _txn_id));
-        _sstables.emplace_back(sstable);
+        SstablePB sstable;
+        RETURN_IF_ERROR(_immutable_memtable->flush(_txn_id, &sstable));
+        _sstable->mutable_sstables()->Add(std::move(sstable));
         _immutable_memtable = nullptr;
     }
     return Status::OK();
@@ -109,8 +113,11 @@ Status LakePersistentIndex::major_compact(int64_t min_retain_version) {
 }
 
 void LakePersistentIndex::commit(MetaFileBuilder* builder) {
-    builder->append_sstables(_sstables);
-    _sstables.clear();
+    if (_sstable->sstables_size() > 0) {
+        auto sstable_meta = std::make_shared<PersistentIndexSstableMetaPB>(*_sstable_meta);
+        builder->set_sstable_meta(std::move(sstable_meta));
+        _sstable = _sstable_meta->add_sstables();
+    }
 }
 
 bool LakePersistentIndex::is_memtable_full() {
@@ -156,7 +163,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     auto chunk = chunk_shared_ptr.get();
     auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
     for (auto& rowset : rowsets) {
-        int64_t rowset_version = rowset->version();
+        int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;
         if (rowset->version() > max_sstable_version && rowset->version() <= base_version) {
             auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, rowset_version, builder, &stats);
             if (!res.ok()) {
