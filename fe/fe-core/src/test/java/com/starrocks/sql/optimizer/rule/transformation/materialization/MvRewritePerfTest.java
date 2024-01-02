@@ -67,8 +67,8 @@ public class MvRewritePerfTest extends MvRewriteTestBase {
     @Before
     public void before() {
         starRocksAssert.getCtx().getSessionVariable().setEnableQueryDump(false);
-        starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteLimit(
-                SessionVariable.DEFAULT_SESSION_VARIABLE.getCboMaterializedViewRewriteLimit());
+        starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteRuleOutputLimit(
+                SessionVariable.DEFAULT_SESSION_VARIABLE.getCboMaterializedViewRewriteRuleOutputLimit());
         starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(
                 SessionVariable.DEFAULT_SESSION_VARIABLE.getCboMaterializedViewRewriteCandidateLimit());
     }
@@ -79,7 +79,7 @@ public class MvRewritePerfTest extends MvRewriteTestBase {
     @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = 20)
     public void testManyCandidateMv_Join_WithRewriteLimit() throws Exception {
         final String sql = " select t0.v1, t0.v2, t0.v3, t1.k1 from t0 left join t1 on t0.v1 = t1.v1";
-        starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteLimit(3);
+        starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteRuleOutputLimit(3);
         starRocksAssert.query(sql).explainContains("mv_candidate_join");
     }
 
@@ -89,7 +89,7 @@ public class MvRewritePerfTest extends MvRewriteTestBase {
     @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = 20)
     public void testManyCandidateMv_Join_WithoutRewriteLimit() throws Exception {
         final String sql = " select t0.v1, t0.v2, t0.v3, t1.k1 from t0 left join t1 on t0.v1 = t1.v1";
-        starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteLimit(1000);
+        starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteRuleOutputLimit(1000);
         starRocksAssert.query(sql).explainContains("mv_candidate_join");
     }
 
@@ -100,7 +100,7 @@ public class MvRewritePerfTest extends MvRewriteTestBase {
     public void testManyCandidateMV_WithCandidateLimit() throws Exception {
         final String sql = " select t0.v1, t0.v2, t0.v3, t1.k1 from t0 left join t1 on t0.v1 = t1.v1";
         starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(3);
-        starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteLimit(0);
+        starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteRuleOutputLimit(0);
         starRocksAssert.query(sql).explainContains("mv_candidate_join");
     }
 
@@ -111,7 +111,7 @@ public class MvRewritePerfTest extends MvRewriteTestBase {
     public void testManyCandidateMV_WithoutCandidateLimit() throws Exception {
         final String sql = " select t0.v1, t0.v2, t0.v3, t1.k1 from t0 left join t1 on t0.v1 = t1.v1";
         starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(0);
-        starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteLimit(0);
+        starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteRuleOutputLimit(0);
         starRocksAssert.query(sql).explainContains("mv_candidate_join");
     }
 
@@ -122,7 +122,7 @@ public class MvRewritePerfTest extends MvRewriteTestBase {
     public void testManyCandidateMv_Agg_WithRewriteLimit() throws Exception {
         final String sql =
                 " select t0.v1, sum(t1.v1), count(t1.v2) from t0 left join t1 on t0.v1 = t1.v1 group by t0.v1";
-        starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteLimit(3);
+        starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteRuleOutputLimit(3);
         starRocksAssert.query(sql).explainContains("mv_candidate_agg");
     }
 
@@ -133,7 +133,7 @@ public class MvRewritePerfTest extends MvRewriteTestBase {
     public void testManyCandidateMv_Agg_WithoutRewriteLimit() throws Exception {
         final String sql =
                 " select t0.v1, sum(t1.v1), count(t1.v2) from t0 left join t1 on t0.v1 = t1.v1 group by t0.v1";
-        starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteLimit(1000);
+        starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteRuleOutputLimit(1000);
         starRocksAssert.query(sql).explainContains("mv_candidate_agg");
     }
 }

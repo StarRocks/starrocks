@@ -159,7 +159,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             }
 
             // Do not try to enumerate all plans, it would take a lot of time
-            int limit = context.getSessionVariable().getCboMaterializedViewRewriteLimit();
+            int limit = context.getSessionVariable().getCboMaterializedViewRewriteRuleOutputLimit();
             if (limit > 0 && results.size() >= limit) {
                 logMVRewrite(context, this, "generated too many MV result {}, abort rewrite", limit);
                 break;
