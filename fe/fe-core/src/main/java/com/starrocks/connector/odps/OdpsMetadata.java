@@ -93,7 +93,7 @@ public class OdpsMetadata implements ConnectorMetadata {
     private String catalogOwner;
     private LoadingCache<String, Set<String>> tableNameCache;
     private LoadingCache<OdpsTableName, OdpsTable> tableCache;
-    private LoadingCache<OdpsTableName, List<Partition>> partitionCache;
+    private LoadingCache<OdpsPartitionName, List<Partition>> partitionCache;
 
     public OdpsMetadata(Odps odps, String catalogName, AliyunCloudCredential aliyunCloudCredential,
                         OdpsProperties properties) {
@@ -222,7 +222,8 @@ public class OdpsMetadata implements ConnectorMetadata {
     public List<String> listPartitionNames(String databaseName, String tableName) {
         OdpsTableName odpsTableName = OdpsTableName.of(databaseName, tableName);
         // TODO: perhaps not good to support users to fetch whole tables?
-        List<Partition> partitions = get(partitionCache, odpsTableName);
+        List<Partition> partitions =
+                get(partitionCache, OdpsPartitionName.of(odpsTableName, OdpsPartitionName.ALL_PARTITION));
         if (partitions == null || partitions.isEmpty()) {
             return Collections.emptyList();
         }
@@ -234,29 +235,22 @@ public class OdpsMetadata implements ConnectorMetadata {
     @Override
     public List<String> listPartitionNamesByValue(String databaseName, String tableName,
                                                   List<Optional<String>> partitionValues) {
-        List<Partition> partitions = get(partitionCache, OdpsTableName.of(databaseName, tableName));
         ImmutableList.Builder<String> builder = ImmutableList.builder();
+        OdpsTable odpsTable = get(tableCache, OdpsTableName.of(databaseName, tableName));
+        if (odpsTable == null) {
+            return builder.build();
+        }
+        List<String> partitionColumnNames = odpsTable.getPartitionColumnNames();
+        if (partitionColumnNames.isEmpty()) {
+            return builder.build();
+        }
+        String partitionName = EntityConvertUtils.getPartitionFilter(partitionColumnNames, partitionValues);
+        List<Partition> partitions =
+                get(partitionCache, OdpsPartitionName.of(OdpsTableName.of(databaseName, tableName), partitionName));
         if (partitions == null || partitions.isEmpty()) {
             return builder.build();
         }
-        List<PartitionSpec> partitionSpecs =
-                partitions.stream().map(Partition::getPartitionSpec).collect(Collectors.toList());
-        List<String> keys = new ArrayList<>(partitionSpecs.get(0).keys());
-        for (PartitionSpec partitionSpec : partitionSpecs) {
-            boolean present = true;
-            for (int index = 0; index < keys.size(); index++) {
-                String value = keys.get(index);
-                if (partitionValues.get(index).isPresent() && partitionSpec.get(value) != null) {
-                    if (!partitionSpec.get(value).equals(partitionValues.get(index).get())) {
-                        present = false;
-                        break;
-                    }
-                }
-            }
-            if (present) {
-                builder.add(partitionSpec.toString(false, true));
-            }
-        }
+        partitions.stream().map(p -> p.getPartitionSpec().toString(false, true)).forEach(builder::add);
         return builder.build();
     }
 
@@ -276,10 +270,20 @@ public class OdpsMetadata implements ConnectorMetadata {
         return builder.build();
     }
 
-    private List<Partition> loadPartitions(OdpsTableName odpsTableName) {
+    private List<Partition> loadPartitions(OdpsPartitionName odpsPartitionName) {
         com.aliyun.odps.Table odpsTable =
-                odps.tables().get(odpsTableName.getDatabaseName(), odpsTableName.getTableName());
-        return odpsTable.getPartitions();
+                odps.tables().get(odpsPartitionName.getOdpsTableName().getDatabaseName(),
+                        odpsPartitionName.getOdpsTableName().getTableName());
+        if (OdpsPartitionName.ALL_PARTITION.equals(odpsPartitionName.getPartitionName())) {
+            return odpsTable.getPartitions();
+        }
+        ImmutableList.Builder<Partition> builder = ImmutableList.builder();
+        Iterator<Partition> partitionIterator =
+                odpsTable.getPartitionIterator(new PartitionSpec(odpsPartitionName.getPartitionName()));
+        while (partitionIterator.hasNext()) {
+            builder.add(partitionIterator.next());
+        }
+        return builder.build();
     }
 
     @Override
@@ -288,15 +292,9 @@ public class OdpsMetadata implements ConnectorMetadata {
             return Collections.emptyList();
         }
         OdpsTable odpsTable = (OdpsTable) table;
-        List<Partition> partitions = get(partitionCache,
-                OdpsTableName.of(odpsTable.getDbName(), odpsTable.getTableName()));
-        if (partitions == null || partitions.isEmpty()) {
-            return Collections.emptyList();
-        }
-        Set<String> filter = new HashSet<>(partitionNames);
-        return partitions.stream()
-                .filter(partition -> filter.contains(partition.getPartitionSpec().toString(false, true)))
-                .map(OdpsPartition::new).collect(Collectors.toList());
+        com.aliyun.odps.Table tableIns = odps.tables().get(odpsTable.getDbName(), odpsTable.getTableName());
+        return partitionNames.stream().map(p -> new OdpsPartition(tableIns.getPartition(new PartitionSpec(p)))).collect(
+                Collectors.toList());
     }
 
     @Override
@@ -305,8 +303,10 @@ public class OdpsMetadata implements ConnectorMetadata {
         tableCache.invalidate(odpsTableName);
         get(tableCache, odpsTableName);
         if (!table.isUnPartitioned()) {
-            partitionCache.invalidate(odpsTableName);
-            get(partitionCache, odpsTableName);
+            List<OdpsPartitionName> shouldInvalidate =
+                    partitionCache.asMap().keySet().stream().filter(p -> p.getOdpsTableName().equals(odpsTableName))
+                            .collect(Collectors.toList());
+            partitionCache.invalidateAll(shouldInvalidate);
         }
     }
 
