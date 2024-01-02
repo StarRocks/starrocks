@@ -92,18 +92,18 @@ public class IcebergApiConverterTest {
         Assert.assertTrue(resType.isUnknown());
 
         org.apache.iceberg.types.Type keyUnknownMapType = Types.MapType.ofRequired(1, 2,
-                Types.TimeType.get(), Types.StringType.get());
+                Types.FixedType.ofLength(1), Types.StringType.get());
         Type resKeyUnknowType = fromIcebergType(keyUnknownMapType);
         Assert.assertTrue(resKeyUnknowType.isUnknown());
 
         org.apache.iceberg.types.Type valueUnknownMapType = Types.MapType.ofRequired(1, 2,
-                Types.StringType.get(), Types.TimeType.get());
+                Types.StringType.get(), Types.FixedType.ofLength(1));
         Type resValueUnknowType = fromIcebergType(valueUnknownMapType);
         Assert.assertTrue(resValueUnknowType.isUnknown());
 
         List<Types.NestedField> fields = new ArrayList<>();
         fields.add(Types.NestedField.optional(1, "a", Types.IntegerType.get()));
-        fields.add(Types.NestedField.required(1, "b", Types.TimeType.get()));
+        fields.add(Types.NestedField.required(1, "b", Types.FixedType.ofLength(1)));
         org.apache.iceberg.types.Type unknownSubfieldStructType = Types.StructType.of(fields);
         Type unknownStructType = fromIcebergType(unknownSubfieldStructType);
         Assert.assertTrue(unknownStructType.isUnknown());

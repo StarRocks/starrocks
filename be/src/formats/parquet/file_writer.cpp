@@ -307,8 +307,7 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
     }
     case TYPE_TIME: {
         return ::parquet::schema::PrimitiveNode::Make(
-                name, rep_type,
-                ::parquet::LogicalType::Time(false, ::parquet::LogicalType::TimeUnit::MICROS),
+                name, rep_type, ::parquet::LogicalType::Time(false, ::parquet::LogicalType::TimeUnit::MICROS),
                 ::parquet::Type::INT64, -1, file_column_id.field_id);
     }
     default: {
