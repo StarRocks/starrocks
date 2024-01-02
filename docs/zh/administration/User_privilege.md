@@ -154,7 +154,7 @@ DROP USER 'user_identity';
 
 ```sql
 -- 授予指定用户数据库级或表级权限。
-GRANT privilege_list ON [db_name.]tbl_name TO user_identity [ROLE role_name];
+GRANT privilege_list ON db_name.tbl_name TO user_identity [ROLE role_name];
 -- 授予指定用户指定资源权限。
 GRANT privilege_list ON RESOURCE resource_name TO user_identity [ROLE role_name];
 ```
@@ -204,7 +204,7 @@ GRANT USAGE_PRIV ON RESOURCE 'spark_resource' TO ROLE 'my_role';
 
 ```sql
 -- 撤销指定用户数据库级或表级权限。
-REVOKE privilege_list ON [db_name.]tbl_name FROM user_identity [ROLE role_name];
+REVOKE privilege_list ON db_name.tbl_name FROM user_identity [ROLE role_name];
 -- 撤销指定用户指定资源权限。
 REVOKE privilege_list ON RESOURCE resource_name FROM user_identity [ROLE role_name];
 ```

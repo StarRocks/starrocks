@@ -17,7 +17,7 @@ You can use the GRANT statement to perform the following operations:
 - Grant specific privileges on a database and a table to a user or a role. The role or user must exist.
 
     ```SQL
-    GRANT privilege_list ON [db_name.]tbl_name TO {user_identity | ROLE 'role_name'}
+    GRANT privilege_list ON db_name.tbl_name TO {user_identity | ROLE 'role_name'}
     ```
 
 - Grant specific privileges on a resource to a user or a role.  The role or user must exist.
@@ -60,7 +60,7 @@ The preceding privileges can be classified into the following three categories:
 - Database and table privilege: `SELECT_PRIV`, `LOAD_PRIV`, `ALTER_PRIV`, `CREATE_PRIV`, and `DROP_PRIV`
 - Resource privilege: `USAGE_PRIV`
 
-### [db_name.]tbl_name
+### db_name.tbl_name
 
 The database and table. This parameter supports the following three formats:
 
