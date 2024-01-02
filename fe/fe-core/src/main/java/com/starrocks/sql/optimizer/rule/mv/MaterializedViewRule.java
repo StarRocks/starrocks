@@ -799,6 +799,10 @@ public class MaterializedViewRule extends Rule {
         builder.put(FunctionSet.MAX, FunctionSet.MAX);
         builder.put(FunctionSet.MIN, FunctionSet.MIN);
         builder.put(FunctionSet.SUM, FunctionSet.COUNT);
+        builder.put(FunctionSet.BITMAP_AGG, FunctionSet.BITMAP_UNION);
+        builder.put(FunctionSet.BITMAP_AGG, FunctionSet.BITMAP_UNION_COUNT);
+        builder.put(FunctionSet.BITMAP_AGG, FunctionSet.MULTI_DISTINCT_COUNT);
+        builder.put(FunctionSet.BITMAP_UNION, FunctionSet.BITMAP_AGG);
         builder.put(FunctionSet.BITMAP_UNION, FunctionSet.BITMAP_UNION);
         builder.put(FunctionSet.BITMAP_UNION, FunctionSet.BITMAP_UNION_COUNT);
         builder.put(FunctionSet.BITMAP_UNION, FunctionSet.MULTI_DISTINCT_COUNT);

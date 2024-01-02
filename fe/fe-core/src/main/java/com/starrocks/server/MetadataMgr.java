@@ -220,6 +220,10 @@ public class MetadataMgr {
         return db;
     }
 
+    public Database getDb(Long databaseId) {
+        return localMetastore.getDb(databaseId);
+    }
+
     public List<String> listTableNames(String catalogName, String dbName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> tableNames = ImmutableSet.builder();
@@ -317,6 +321,14 @@ public class MetadataMgr {
             connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
         }
         return connectorTable;
+    }
+
+    public Table getTable(Long databaseId, Long tableId) {
+        Database database = localMetastore.getDb(databaseId);
+        if (database == null) {
+            return null;
+        }
+        return database.getTable(tableId);
     }
 
     public boolean tableExists(String catalogName, String dbName, String tblName) {

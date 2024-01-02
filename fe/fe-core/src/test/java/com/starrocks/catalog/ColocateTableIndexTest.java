@@ -24,6 +24,7 @@ import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -89,7 +90,7 @@ public class ColocateTableIndexTest {
                 "BUCKETS 4\n" +
                 "PROPERTIES(\"colocate_with\"=\"group1\", \"replication_num\" = \"1\");\n";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         List<List<String>> infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
         // group1->table1To1
         Assert.assertEquals(1, infos.size());
@@ -105,7 +106,7 @@ public class ColocateTableIndexTest {
                 "BUCKETS 4\n" +
                 "PROPERTIES(\"colocate_with\"=\"group1\", \"replication_num\" = \"1\");\n";
         createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         // group1 -> table1To1, table1To2
         infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
         Assert.assertEquals(1, infos.size());
@@ -125,7 +126,7 @@ public class ColocateTableIndexTest {
                 "BUCKETS 4\n" +
                 "PROPERTIES(\"colocate_with\"=\"group2\", \"replication_num\" = \"1\");\n";
         createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         // group1 -> table1_1, table1_2
         // group2 -> table2_l
         infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
@@ -192,7 +193,7 @@ public class ColocateTableIndexTest {
                 "BUCKETS 4\n" +
                 "PROPERTIES(\"colocate_with\"=\"group3\", \"replication_num\" = \"1\");\n";
         createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Table table2To3 = GlobalStateMgr.getCurrentState().getDb("db2").getTable("table2_3");
         sql = "DROP DATABASE db2;";
         dropDbStmt = (DropDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
@@ -228,7 +229,7 @@ public class ColocateTableIndexTest {
                 "BUCKETS 4\n" +
                 "PROPERTIES(\"colocate_with\"=\"goodGroup\", \"replication_num\" = \"1\");\n";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         OlapTable table = (OlapTable) goodDb.getTable("goodTable");
         ColocateTableIndex.GroupId goodGroup = GlobalStateMgr.getCurrentColocateIndex().getGroup(table.getId());
 
@@ -328,7 +329,7 @@ public class ColocateTableIndexTest {
                 "BUCKETS 4\n" +
                 "PROPERTIES(\"colocate_with\"=\"goodGroup\", \"replication_num\" = \"1\");\n";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         OlapTable table = (OlapTable) db.getTable("tbl1");
 
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
