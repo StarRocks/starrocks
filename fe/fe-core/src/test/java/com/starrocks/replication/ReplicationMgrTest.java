@@ -77,7 +77,8 @@ public class ReplicationMgrTest {
                 "properties('replication_num' = '1'); ";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
                 AnalyzeTestUtil.getConnectContext());
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+
         table = (OlapTable) db.getTable("single_partition_duplicate_key");
 
         srcTable = DeepCopy.copyWithGson(table, OlapTable.class);

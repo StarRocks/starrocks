@@ -191,7 +191,7 @@ public abstract class TestWithFeService {
     public void createTables(String... sqls) throws Exception {
         for (String sql : sqls) {
             CreateTableStmt stmt = (CreateTableStmt) parseAndAnalyzeStmt(sql);
-            GlobalStateMgr.getCurrentState().createTable(stmt);
+            StarRocksAssert.utCreateTableWithRetry(stmt);
         }
         updateReplicaPathHash();
     }
