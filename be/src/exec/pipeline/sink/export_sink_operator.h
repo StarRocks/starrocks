@@ -64,6 +64,7 @@ public:
 private:
     std::shared_ptr<ExportSinkIOBuffer> _export_sink_buffer;
     std::atomic<int32_t>& _num_sinkers;
+    bool _is_audit_report_done = true;
 };
 
 class ExportSinkOperatorFactory final : public OperatorFactory {

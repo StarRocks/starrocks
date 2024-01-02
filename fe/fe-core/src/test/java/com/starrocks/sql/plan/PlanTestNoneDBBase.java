@@ -47,6 +47,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.rules.ErrorCollector;
 import org.junit.rules.ExpectedException;
 
@@ -734,13 +735,13 @@ public class PlanTestNoneDBBase {
         return (OlapTable) getTable(t);
     }
 
-    public static List<Pair<String, String>> zipSqlAndPlan(List<String> sqls, List<String> plans) {
+    public static List<Arguments> zipSqlAndPlan(List<String> sqls, List<String> plans) {
         Preconditions.checkState(sqls.size() == plans.size(), "sqls and plans should have same size");
-        List<Pair<String, String>> zips = Lists.newArrayList();
+        List<Arguments> arguments = Lists.newArrayList();
         for (int i = 0; i < sqls.size(); i++) {
-            zips.add(Pair.create(sqls.get(i), plans.get(i)));
+            arguments.add(Arguments.of(sqls.get(i), plans.get(i)));
         }
-        return zips;
+        return arguments;
     }
 
     protected static void createTables(String dirName, List<String> fileNames) {

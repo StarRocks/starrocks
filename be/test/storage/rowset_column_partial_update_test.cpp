@@ -1054,6 +1054,61 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_multi_column_batch) {
     ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
 }
 
+TEST_P(RowsetColumnPartialUpdateTest, partial_update_multi_segment_and_column_batch) {
+    const int N = 10;
+    // generate M upt files in each partial rowset
+    const int M = 100;
+    auto tablet = create_tablet(rand(), rand(), true);
+    ASSERT_EQ(1, tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(N);
+    std::vector<int64_t> partial_keys1;
+    std::vector<int64_t> partial_keys2;
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+        if (i % 2 == 0) {
+            partial_keys1.push_back(i);
+        } else {
+            partial_keys2.push_back(i);
+        }
+    }
+    auto v1_func = [](int64_t k1) { return (int16_t)(k1 % 100 + 3); };
+    auto v2_func = [](int64_t k1) { return (int32_t)(k1 % 1000 + 4); };
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.reserve(20);
+    // write full rowset first
+    for (int i = 0; i < 5; i++) {
+        rowsets.emplace_back(create_rowset(tablet, partial_keys1, true));
+    }
+    for (int i = 0; i < 5; i++) {
+        rowsets.emplace_back(create_rowset(tablet, partial_keys2, true));
+    }
+    std::vector<std::shared_ptr<TabletSchema>> partial_schemas;
+    // partial update v1 and v2 at once
+    for (int i = 0; i < 10; i++) {
+        std::vector<int32_t> column_indexes = {0, 1, 2};
+        partial_schemas.push_back(TabletSchema::create(tablet->tablet_schema(), column_indexes));
+        rowsets.emplace_back(
+                create_partial_rowset(tablet, keys, column_indexes, v1_func, v2_func, partial_schemas[i], M));
+        ASSERT_EQ(rowsets.back()->num_update_files(), M);
+    }
+
+    int32_t old_val = config::vertical_compaction_max_columns_per_group;
+    config::vertical_compaction_max_columns_per_group = 1;
+    int64_t version = 1;
+    commit_rowsets(tablet, rowsets, version);
+    // check data
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
+        return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 4) == v2;
+    }));
+    config::vertical_compaction_max_columns_per_group = old_val;
+    // check refcnt
+    for (const auto& rs_ptr : rowsets) {
+        ASSERT_FALSE(StorageEngine::instance()->update_manager()->TEST_update_state_exist(tablet.get(), rs_ptr.get()));
+    }
+    ASSERT_TRUE(StorageEngine::instance()->update_manager()->TEST_primary_index_refcnt(tablet->tablet_id(), 1));
+}
+
 INSTANTIATE_TEST_SUITE_P(RowsetColumnPartialUpdateTest, RowsetColumnPartialUpdateTest,
                          ::testing::Values(1, 1024, 104857600));
 

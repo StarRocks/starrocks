@@ -118,8 +118,8 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
 
 void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     DeferOp op([&]() {
-        --_num_pending_chunks;
-        DCHECK(_num_pending_chunks >= 0);
+        auto nc = _num_pending_chunks.fetch_sub(1);
+        DCHECK_GE(nc, 1L);
     });
 
     // close is already done, just skip
@@ -149,7 +149,8 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
-        DCHECK_EQ(_num_pending_chunks, 1);
+        auto nc = _num_pending_chunks.load();
+        DCHECK_EQ(nc, 1L);
         close(_state);
         return;
     }

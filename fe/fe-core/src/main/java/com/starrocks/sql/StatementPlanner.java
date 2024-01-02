@@ -103,7 +103,7 @@ public class StatementPlanner {
 
         // 1. For all queries, we need db lock when analyze phase
         Locker locker = new Locker();
-        try {
+        try (var guard = session.bindScope()) {
             lock(locker, dbs);
             try (Timer ignored = Tracers.watchScope("Analyzer")) {
                 Analyzer.analyze(stmt, session);
@@ -347,11 +347,11 @@ public class StatementPlanner {
     private static void beginTransaction(DmlStmt stmt, ConnectContext session)
             throws BeginTransactionException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
         // not need begin transaction here
-        // 1. explain
+        // 1. explain (exclude explain analyze)
         // 2. insert into files
         // 3. old delete
         // 4. insert overwrite
-        if (stmt.isExplain()) {
+        if (stmt.isExplain() && !StatementBase.ExplainLevel.ANALYZE.equals(stmt.getExplainLevel())) {
             return;
         }
         if (stmt instanceof InsertStmt) {
