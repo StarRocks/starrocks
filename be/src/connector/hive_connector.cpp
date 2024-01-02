@@ -882,4 +882,20 @@ int64_t HiveDataSource::estimated_mem_usage() const {
     return _scanner->estimated_mem_usage();
 }
 
+void HiveDataSourceProvider::peek_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
+    for (const auto& sc : scan_ranges) {
+        const TScanRange& x = sc.scan_range;
+        if (!x.__isset.hdfs_scan_range) continue;
+        const THdfsScanRange& y = x.hdfs_scan_range;
+        _max_file_length = std::max(_max_file_length, y.file_length);
+    }
+}
+
+void HiveDataSourceProvider::default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) {
+    DataSourceProvider::default_data_source_mem_bytes(min_value, max_value);
+    // here we compute as default mem bytes = max(MIN_SIZE, min(max_file_length, MAX_SIZE))
+    int64_t size = std::max(*min_value, std::min(_max_file_length * 3 / 2, *max_value));
+    *min_value = *max_value = size;
+}
+
 } // namespace starrocks::connector
