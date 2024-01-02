@@ -31,9 +31,9 @@ displayed_sidebar: "Chinese"
   - 优化 `bitmap_xor` 函数性能。[#34069](https://github.com/StarRocks/starrocks/pull/34069)
   - 支持 Copy on Write（简称 COW），优化性能，并减少内存使用。[#34047](https://github.com/StarRocks/starrocks/pull/34047)
 
-## **兼容性****变更**
+## 兼容性变更
 
-### **行为变更**
+### 行为变更
 
 - 调整 Trash 文件的默认过期时间为 1 天（原来是 3 天）。[#37113](https://github.com/StarRocks/starrocks/pull/37113)
 
@@ -45,7 +45,7 @@ displayed_sidebar: "Chinese"
 - 新增 Session 变量 `enable_materialized_view_for_insert`，默认值为 `FALSE`，即物化视图默认不改写 INSERT INTO SELECT 语句中的查询。[#37505](https://github.com/StarRocks/starrocks/pull/37505)
 - 新增 Session 变量 `transaction_read_only`和`tx_read_only` ，设置事务的访问模式并且兼容 MySQL 5.7.20 以上的版本。[#37249](https://github.com/StarRocks/starrocks/pull/37249)
 
-####  FE 配置项
+#### FE 配置项
 
 - 将 FE 配置项 `enable_new_publish_mechanism` 改为静态参数，修改后必须重启 FE 才可以生效（3.2以后做成动态加载事务依赖关系了）。 [#35338](https://github.com/StarRocks/starrocks/pull/35338)
 - 新增 FE 配置项 `routine_load_unstable_threshold_second`。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
