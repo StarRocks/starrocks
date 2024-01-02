@@ -21,7 +21,7 @@ SHOW [ALL] ROUTINE LOAD FOR [<db_name>.]<job_name>
 [ LIMIT { [offset, ] limit | limit OFFSET offset } ]
 ```
 
-:::NOTE
+:::tip
 
 You can add the `\G` option to the statement (such as `SHOW ROUTINE LOAD FOR <job_name>\G`) to vertically display the return result rather than in the usual horizontal table format.
 

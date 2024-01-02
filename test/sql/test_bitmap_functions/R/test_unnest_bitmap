@@ -1,0 +1,45 @@
+-- name: test_unnest_bitmap
+CREATE TABLE `t1` (
+  `c1` int(11) NULL COMMENT "",
+  `c2` bitmap BITMAP_UNION NULL COMMENT ""
+) ENGINE=OLAP
+AGGREGATE KEY(`c1`)
+DISTRIBUTED BY HASH(`c1`) BUCKETS 1
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into t1 select 1, bitmap_empty();
+-- result:
+-- !result
+insert into t1 select 2, to_bitmap(2);
+-- result:
+-- !result
+insert into t1 select 3, bitmap_agg(generate_series) from table(generate_series(3, 12280));
+-- result:
+-- !result
+insert into t1 select 4, bitmap_agg(generate_series) from table(generate_series(4, 20));
+-- result:
+-- !result
+insert into t1 select 5, null;
+-- result:
+-- !result
+select sum(c1), sum(unnest_bitmap) from t1, unnest_bitmap(c2);
+-- result:
+36904	75405543
+-- !result
+select c1, unnest_bitmap as c3 from t1, unnest_bitmap(c2) order by c1 asc, c3 asc limit 5;
+-- result:
+2	2
+3	3
+3	4
+3	5
+3	6
+-- !result
+select c1, unnest_bitmap as c3 from t1, unnest_bitmap(c2) order by c1 desc, c3 desc limit 5;
+-- result:
+4	20
+4	19
+4	18
+4	17
+4	16
+-- !result

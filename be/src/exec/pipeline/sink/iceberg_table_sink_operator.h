@@ -93,6 +93,8 @@ private:
     std::atomic<bool> _is_finished = false;
     bool _is_static_partition_insert = false;
     std::atomic<int32_t>& _num_sinkers;
+
+    bool _is_audit_report_done = true;
 };
 
 class IcebergTableSinkOperatorFactory final : public OperatorFactory {

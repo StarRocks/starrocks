@@ -66,8 +66,7 @@ struct HdfsScanStats {
     // page skip
     int64_t page_skip = 0;
 
-    // ORC only!
-    std::vector<int64_t> stripe_sizes;
+    std::vector<int64_t> orc_stripe_sizes;
 
     // Iceberg v2 only!
     int64_t iceberg_delete_file_build_ns = 0;

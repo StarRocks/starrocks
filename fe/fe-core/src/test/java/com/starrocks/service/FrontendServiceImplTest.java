@@ -239,6 +239,28 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testCreatePartitionExceedLimit() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_day");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+
+        Config.thrift_server_max_worker_threads = 4;
+        TCreatePartitionResult partition = impl.createPartition(request);
+        Config.thrift_server_max_worker_threads = 4096;
+
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.SERVICE_UNAVAILABLE);
+    }
+
+    @Test
     public void testLoadTxnBegin() throws Exception {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
