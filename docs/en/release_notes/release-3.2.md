@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## 3.2.2
 
-Release date: January 2, 2024
+Release date: December 30, 2023
 
 ### Bug Fixes
 
