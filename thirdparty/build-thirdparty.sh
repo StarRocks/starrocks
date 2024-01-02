@@ -431,6 +431,7 @@ build_lzo2() {
 build_bzip() {
     check_if_source_exist $BZIP_SOURCE
     cd $TP_SOURCE_DIR/$BZIP_SOURCE
+
     make -j$PARALLEL install PREFIX=$TP_INSTALL_DIR
 }
 
