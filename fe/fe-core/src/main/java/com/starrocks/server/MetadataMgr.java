@@ -38,6 +38,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.UserException;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
@@ -47,6 +48,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -218,6 +220,10 @@ public class MetadataMgr {
         return db;
     }
 
+    public Database getDb(Long databaseId) {
+        return localMetastore.getDb(databaseId);
+    }
+
     public List<String> listTableNames(String catalogName, String dbName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> tableNames = ImmutableSet.builder();
@@ -259,6 +265,27 @@ public class MetadataMgr {
         }
     }
 
+    public void alterTable(AlterTableStmt stmt) throws UserException {
+        String catalogName = stmt.getCatalogName();
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+
+        if (connectorMetadata.isPresent()) {
+            String dbName = stmt.getDbName();
+            String tableName = stmt.getTableName();
+            if (getDb(catalogName, dbName) == null) {
+                throw new DdlException("Database '" + dbName + "' does not exist in catalog '" + catalogName + "'");
+            }
+
+            if (!tableExists(catalogName, dbName, tableName)) {
+                throw new DdlException("Table '" + tableName + "' does not exist in database '" + dbName + "'");
+            }
+
+            connectorMetadata.get().alterTable(stmt);
+        } else {
+            throw new  DdlException("Invalid catalog " + catalogName + " , ConnectorMetadata doesn't exist");
+        }
+    }
+
     public void dropTable(String catalogName, String dbName, String tblName) {
         TableName tableName = new TableName(catalogName, dbName, tblName);
         DropTableStmt dropTableStmt = new DropTableStmt(false, tableName, false);
@@ -294,6 +321,14 @@ public class MetadataMgr {
             connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
         }
         return connectorTable;
+    }
+
+    public Table getTable(Long databaseId, Long tableId) {
+        Database database = localMetastore.getDb(databaseId);
+        if (database == null) {
+            return null;
+        }
+        return database.getTable(tableId);
     }
 
     public boolean tableExists(String catalogName, String dbName, String tblName) {

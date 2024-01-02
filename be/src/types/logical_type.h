@@ -265,7 +265,6 @@ constexpr bool support_column_expr_predicate(LogicalType ltype) {
     case TYPE_DECIMAL64:  /* 25 */
     case TYPE_DECIMAL128: /* 26 */
     case TYPE_JSON:
-    case TYPE_ARRAY:
     case TYPE_MAP:
     case TYPE_STRUCT:
         return true;

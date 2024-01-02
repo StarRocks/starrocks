@@ -583,6 +583,7 @@ HdfsScanner* HiveDataSource::_create_paimon_jni_scanner(const FSOptions& options
 
 HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) {
     const auto& scan_range = _scan_range;
+    static const char* serde_property_prefix = "SerDe.";
 
     std::string required_fields;
     for (auto const& slot : _materialize_slots) {
@@ -607,6 +608,7 @@ HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) 
     std::string hive_column_types;
     std::string serde;
     std::string input_format;
+    std::map<std::string, std::string> serde_properties;
 
     if (dynamic_cast<const FileTableDescriptor*>(_hive_table)) {
         const auto* file_table = dynamic_cast<const FileTableDescriptor*>(_hive_table);
@@ -628,6 +630,7 @@ HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) 
         hive_column_types = hdfs_table->get_hive_column_types();
         serde = hdfs_table->get_serde_lib();
         input_format = hdfs_table->get_input_format();
+        serde_properties = hdfs_table->get_serde_properties();
     }
 
     std::map<std::string, std::string> jni_scanner_params;
@@ -643,9 +646,50 @@ HdfsScanner* HiveDataSource::_create_hive_jni_scanner(const FSOptions& options) 
     jni_scanner_params["input_format"] = input_format;
     jni_scanner_params["fs_options_props"] = build_fs_options_properties(options);
 
+    for (const auto& pair : serde_properties) {
+        jni_scanner_params[serde_property_prefix + pair.first] = pair.second;
+    }
+
     std::string scanner_factory_class = "com/starrocks/hive/reader/HiveScannerFactory";
 
     HdfsScanner* scanner = _pool.add(new HiveJniScanner(scanner_factory_class, jni_scanner_params));
+    return scanner;
+}
+
+HdfsScanner* HiveDataSource::_create_odps_jni_scanner(const FSOptions& options) {
+    const auto* odps_table = dynamic_cast<const OdpsTableDescriptor*>(_hive_table);
+    std::string required_fields;
+    for (auto slot : _tuple_desc->slots()) {
+        required_fields.append(slot->col_name());
+        required_fields.append(",");
+    }
+    required_fields = required_fields.substr(0, required_fields.size() - 1);
+    std::string nested_fields;
+    for (auto slot : _tuple_desc->slots()) {
+        const TypeDescriptor& type = slot->type();
+        if (type.is_complex_type()) {
+            build_nested_fields(type, slot->col_name(), &nested_fields);
+        }
+    }
+    if (!nested_fields.empty()) {
+        nested_fields = nested_fields.substr(0, nested_fields.size() - 1);
+    }
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["project_name"] = odps_table->get_database_name();
+    jni_scanner_params["table_name"] = odps_table->get_table_name();
+    jni_scanner_params["required_fields"] = required_fields;
+    jni_scanner_params.insert(_scan_range.odps_split_infos.begin(), _scan_range.odps_split_infos.end());
+    jni_scanner_params["nested_fields"] = nested_fields;
+
+    const AliyunCloudConfiguration aliyun_cloud_configuration =
+            CloudConfigurationFactory::create_aliyun(*options.cloud_configuration);
+    AliyunCloudCredential aliyun_cloud_credential = aliyun_cloud_configuration.aliyun_cloud_credential;
+    jni_scanner_params["endpoint"] = aliyun_cloud_credential.endpoint;
+    jni_scanner_params["access_id"] = aliyun_cloud_credential.access_key;
+    jni_scanner_params["access_key"] = aliyun_cloud_credential.secret_key;
+
+    std::string scanner_factory_class = "com/starrocks/odps/reader/OdpsSplitScannerFactory";
+    HdfsScanner* scanner = _pool.add(new JniScanner(scanner_factory_class, jni_scanner_params));
     return scanner;
 }
 
@@ -726,6 +770,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     if (scan_range.__isset.use_paimon_jni_reader) {
         use_paimon_jni_reader = scan_range.use_paimon_jni_reader;
     }
+    bool use_odps_jni_reader = false;
+    if (scan_range.__isset.use_odps_jni_reader) {
+        use_odps_jni_reader = scan_range.use_odps_jni_reader;
+    }
 
     if (_use_partition_column_value_only) {
         DCHECK(_can_use_any_column);
@@ -734,6 +782,8 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         scanner = _create_paimon_jni_scanner(fsOptions);
     } else if (use_hudi_jni_reader) {
         scanner = _create_hudi_jni_scanner(fsOptions);
+    } else if (use_odps_jni_reader) {
+        scanner = _create_odps_jni_scanner(fsOptions);
     } else if (format == THdfsFileFormat::PARQUET) {
         scanner = _pool.add(new HdfsParquetScanner());
     } else if (format == THdfsFileFormat::ORC) {
@@ -830,6 +880,22 @@ int64_t HiveDataSource::io_time_spent() const {
 int64_t HiveDataSource::estimated_mem_usage() const {
     if (_scanner == nullptr) return 0;
     return _scanner->estimated_mem_usage();
+}
+
+void HiveDataSourceProvider::peek_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
+    for (const auto& sc : scan_ranges) {
+        const TScanRange& x = sc.scan_range;
+        if (!x.__isset.hdfs_scan_range) continue;
+        const THdfsScanRange& y = x.hdfs_scan_range;
+        _max_file_length = std::max(_max_file_length, y.file_length);
+    }
+}
+
+void HiveDataSourceProvider::default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) {
+    DataSourceProvider::default_data_source_mem_bytes(min_value, max_value);
+    // here we compute as default mem bytes = max(MIN_SIZE, min(max_file_length, MAX_SIZE))
+    int64_t size = std::max(*min_value, std::min(_max_file_length * 3 / 2, *max_value));
+    *min_value = *max_value = size;
 }
 
 } // namespace starrocks::connector

@@ -4,6 +4,16 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.2
 
+## 3.2.2
+
+发布日期：2023 年 12 月 30 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 从 v3.1.2 及之前版本升级至 v3.2 后，FE 可能启动失败。 [#38172](https://github.com/StarRocks/starrocks/pull/38172)
+
 ## 3.2.1
 
 发布日期：2023 年 12 月 21 日
@@ -12,7 +22,7 @@ displayed_sidebar: "Chinese"
 
 #### 数据湖分析 
 
-- 支持通过 Java Native Interface（JNI）读取 Avro、SequenceFile 以及 RCFile 格式的 [Hive Catalog](https://docs.starrocks.io/zh/docs/3.2/data_source/catalog/hive_catalog/) 表和文件外部表。
+- 支持通过 Java Native Interface（JNI）读取 Avro、SequenceFile 以及 RCFile 格式的 [Hive Catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/hive_catalog/) 表和文件外部表。
 
 #### 物化视图
 
@@ -25,7 +35,7 @@ displayed_sidebar: "Chinese"
 
 - 支持预处理语句（Prepared Statement）。预处理语句可以提高处理高并发点查查询的性能，同时有效地防止 SQL 注入。
 - 新增如下 Bitmap 函数：[subdivide_bitmap](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/subdivide_bitmap/)、[bitmap_from_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/bitmap_from_binary/)、[bitmap_to_binary](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/bitmap-functions/bitmap_to_binary/)。
-- 新增如下 Array 函数：[array_unique_agg](https://docs.starrocks.io/docs/3.2/sql-reference/sql-functions/array-functions/array_unique_agg/)。
+- 新增如下 Array 函数：[array_unique_agg](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_unique_agg/)。
 
 #### 监控指标
 
@@ -39,7 +49,7 @@ displayed_sidebar: "Chinese"
 
 - 使用 JDK8 时，默认 GC 算法采用 G1。 [#37268](https://github.com/StarRocks/starrocks/pull/37268)
 - 系统变量 [sql_mode](https://docs.starrocks.io/zh/docs/reference/System_variable/#sql_mode) 增加 `GROUP_CONCAT_LEGACY` 选项，用以兼容 [group_concat](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/string-functions/group_concat/) 函数在 2.5（不含）版本之前的实现逻辑。[#36150](https://github.com/StarRocks/starrocks/pull/36150)
-- 隐藏了审计日志（Audit Log）中 [Broker Load 作业里 AWS S3](https://docs.starrocks.io/zh/docs/3.2/loading/s3/) 的鉴权信息 `aws.s3.access_key` 和 `aws.s3.access_secret`。[#36571](https://github.com/StarRocks/starrocks/pull/36571)
+- 隐藏了审计日志（Audit Log）中 [Broker Load 作业里 AWS S3](https://docs.starrocks.io/zh/docs/loading/s3/) 的鉴权信息 `aws.s3.access_key` 和 `aws.s3.access_secret`。[#36571](https://github.com/StarRocks/starrocks/pull/36571)
 - 在 `be_tablets` 表中增加 `INDEX_DISK` 记录持久化索引的磁盘使用量，单位是 Bytes。[#35615](https://github.com/StarRocks/starrocks/pull/35615)
 - [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加 `OtherMsg`，展示最后一个失败的任务的相关信息。[#35806](https://github.com/StarRocks/starrocks/pull/35806)
 
@@ -72,8 +82,8 @@ displayed_sidebar: "Chinese"
 
 #### 数据湖分析 
 
-- 支持在 [Hive Catalog](https://docs.starrocks.io/zh/docs/3.2/data_source/catalog/hive_catalog/) 中创建、删除数据库以及 Managed Table，支持使用 INSERT 或 INSERT OVERWRITE 导出数据到 Hive 的 Managed Table。
-- 支持 [Unified Catalog](https://docs.starrocks.io/zh/docs/3.2/data_source/catalog/unified_catalog/)。如果同一个 Hive Metastore 或 AWS Glue 元数据服务包含多种表格式（Hive、Iceberg、Hudi、Delta Lake 等），则可以通过 Unified Catalog 进行统一访问。
+- 支持在 [Hive Catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/hive_catalog/) 中创建、删除数据库以及 Managed Table，支持使用 INSERT 或 INSERT OVERWRITE 导出数据到 Hive 的 Managed Table。
+- 支持 [Unified Catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/unified_catalog/)。如果同一个 Hive Metastore 或 AWS Glue 元数据服务包含多种表格式（Hive、Iceberg、Hudi、Delta Lake 等），则可以通过 Unified Catalog 进行统一访问。
 - 支持通过 ANALYZE TABLE 收集 Hive 和 Iceberg 表的统计信息，并存储在 StaRocks 内部，方便优化加速后续查询。
 - 支持外表的 Information Schema，为外部系统（如BI）与 StarRocks 的交互提供更多便利。
 
@@ -85,7 +95,7 @@ displayed_sidebar: "Chinese"
   - 支持导入复杂类型（JSON、ARRAY、MAP 及 STRUCT）的数据。
 - 支持使用 INSERT INTO FILES() 语句将数据导出至 AWS S3 或 HDFS 中的 Parquet 格式的文件。有关详细说明，请参见[使用 INSERT INTO FILES 导出数据](../unloading/unload_using_insert_into_files.md)。
 - 通过增强 ALTER TABLE 命令提供了 [optimize table 功能](../table_design/Data_distribution.md#建表后优化数据分布自-32)，可以调整表结构并重组数据，以优化查询和导入的性能。支持的调整项包括：分桶方式和分桶数、排序键，以及可以只调整部分分区的分桶数。
-- 支持使用 PIPE 导入方式从[云存储 S3](https://docs.starrocks.io/zh/docs/3.2/loading/s3/#通过-pipe-导入) 或 [HDFS](https://docs.starrocks.io/zh/docs/3.2/loading/hdfs_load/#通过-pipe-导入) 中导入大规模数据和持续导入数据。在导入大规模数据时，PIPE 命令会自动根据导入数据大小和导入文件数量将一个大导入任务拆分成很多个小导入任务穿行运行，降低任务出错重试的代价、减少导入中对系统资源的占用，提升数据导入的稳定性。同时，PIPE 也能不断监听云存储目录中的新增文件或文件内容修改，并自动将变化的数据文件数据拆分成一个个小的导入任务，持续地将新数据导入到目标表中。
+- 支持使用 PIPE 导入方式从[云存储 S3](https://docs.starrocks.io/zh/docs/loading/s3/#通过-pipe-导入) 或 [HDFS](https://docs.starrocks.io/zh/docs/loading/hdfs_load/#通过-pipe-导入) 中导入大规模数据和持续导入数据。在导入大规模数据时，PIPE 命令会自动根据导入数据大小和导入文件数量将一个大导入任务拆分成很多个小导入任务穿行运行，降低任务出错重试的代价、减少导入中对系统资源的占用，提升数据导入的稳定性。同时，PIPE 也能不断监听云存储目录中的新增文件或文件内容修改，并自动将变化的数据文件数据拆分成一个个小的导入任务，持续地将新数据导入到目标表中。
 
 #### 查询
 
@@ -203,8 +213,6 @@ displayed_sidebar: "Chinese"
   - `enable_persistent_index_by_default` 默认值从 `false` 变为 `true`。
 
 ##### BE
-
-> 具体内容从 [行为变更 Release notes](https://starrocks.feishu.cn/docx/MxZSd6aHdoxin3xNWuHcZ3iznEc#Dob8dlgkkoXlAsxatgAcTEO8nBf) 拷贝过来  [3.2版本datacache相关配置项变更](https://starrocks.feishu.cn/docx/Pd1Zd0v2ooU9iZx4YmtcVxw2nfe) 
 
 - Data Cache 相关配置项变更。 
   - 新增 `datacache_enable` 以取代 `block_cache_enable`。

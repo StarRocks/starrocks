@@ -593,6 +593,17 @@ public class Config extends ConfigBase {
     public static int http_port = 8030;
 
     /**
+     * Number of worker threads for http server to deal with http requests which may do
+     * some I/O operations. If set with a non-positive value, it will use netty's default
+     * value <code>DEFAULT_EVENT_LOOP_THREADS</code> which is availableProcessors * 2. The
+     * default value is 0 which is same as the previous behaviour.
+     * See <a href="https://github.com/netty/netty/blob/netty-4.1.16.Final/transport/src/main/java/io/netty/channel/MultithreadEventLoopGroup.java#L40">DEFAULT_EVENT_LOOP_THREADS</a>
+     * for details.
+     */
+    @ConfField
+    public static int http_worker_threads_num = 0;
+
+    /**
      * The backlog_num for netty http server
      * When you enlarge this backlog_num, you should ensure its value larger than
      * the linux /proc/sys/net/core/somaxconn config
@@ -767,7 +778,7 @@ public class Config extends ConfigBase {
     public static int publish_version_interval_ms = 10;
 
     @ConfField(mutable = true)
-    public static boolean lake_enable_batch_publish_version  = false;
+    public static boolean lake_enable_batch_publish_version = false;
 
     @ConfField(mutable = true)
     public static int lake_batch_publish_max_version_num = 10;
@@ -2598,7 +2609,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_fast_schema_evolution = true;
-  
+
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;
     @ConfField(mutable = false)
@@ -2647,6 +2658,30 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String access_control = "native";
 
+    /**
+     *  Kerberos principal used for mutual authentication with ranger
+     */
+    @ConfField(mutable = true)
+    public static String ranger_spnego_kerberos_principal = "";
+
+    /**
+     *  Kerberos keytab file used for mutual authentication with ranger
+     */
+    @ConfField(mutable = true)
+    public static String ranger_spnego_kerberos_keytab = "";
+
+    /**
+     *  Kerberos krb5.conf configure path, default /etc/krb5.conf
+     */
+    @ConfField(mutable = true)
+    public static String ranger_kerberos_krb5_conf = "";
+
+    /**
+     * Whether to use the unix group as the ranger authentication group
+     */
+    @ConfField(mutable = true)
+    public static boolean ranger_user_ugi = false;
+
     @ConfField(mutable = true)
     public static int catalog_metadata_cache_size = 500;
 
@@ -2692,4 +2727,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int refresh_dictionary_cache_thread_num = 2;
+    
+    /*
+     * replication transaction config
+     */
+    @ConfField(mutable = true)
+    public static int replication_transaction_max_parallel_job_count = 100; // 100
+    @ConfField(mutable = true)
+    public static int replication_transaction_max_parallel_replication_data_size_mb = 10240; // 10g
+    @ConfField(mutable = true)
+    public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
+    @ConfField(mutable = true)
+    public static int replication_transaction_remote_snapshot_timeout_sec = 30 * 60; // 30minute
+    @ConfField(mutable = true)
+    public static int replication_transaction_replicate_snapshot_timeout_sec = 30 * 60; // 30minute
 }

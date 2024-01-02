@@ -238,6 +238,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
+import com.starrocks.replication.ReplicationMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
@@ -557,6 +558,8 @@ public class GlobalStateMgr {
     private PipeScheduler pipeScheduler;
     private MVActiveChecker mvActiveChecker;
 
+    private ReplicationMgr replicationMgr;
+
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
     private final SlotProvider slotProvider = new SlotProvider();
@@ -819,6 +822,7 @@ public class GlobalStateMgr {
             }
         });
 
+        this.replicationMgr = new ReplicationMgr();
         nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
     }
 
@@ -1065,6 +1069,10 @@ public class GlobalStateMgr {
         return connectorTableMetadataProcessor;
     }
 
+    public ReplicationMgr getReplicationMgr() {
+        return replicationMgr;
+    }
+
     // Use tryLock to avoid potential deadlock
     public boolean tryLock(boolean mustLock) {
         while (true) {
@@ -1198,6 +1206,7 @@ public class GlobalStateMgr {
 
     // wait until FE is ready.
     public void waitForReady() throws InterruptedException {
+        long lastLoggingTimeMs = System.currentTimeMillis();
         while (true) {
             if (isReady()) {
                 LOG.info("globalStateMgr is ready. FE type: {}", feType);
@@ -1216,6 +1225,22 @@ public class GlobalStateMgr {
 
             Thread.sleep(2000);
             LOG.info("wait globalStateMgr to be ready. FE type: {}. is ready: {}", feType, isReady.get());
+
+            if (System.currentTimeMillis() - lastLoggingTimeMs > 60000L) {
+                lastLoggingTimeMs = System.currentTimeMillis();
+                LOG.warn("It took too much time for FE to transfer to a stable state(LEADER/FOLLOWER), " +
+                        "it maybe caused by one of the following reasons: " +
+                        "1. There are too many BDB logs to replay, because of previous failure of checkpoint" +
+                        "(you can check the create time of image file under meta/image dir). " +
+                        "2. Majority voting members(LEADER or FOLLOWER) of the FE cluster haven't started completely. " +
+                        "3. FE node has multiple IPs, you should configure the priority_networks in fe.conf " +
+                        "to match the ip record in meta/image/ROLE. And we don't support change the ip of FE node. " +
+                        "Ignore this reason if you are using FQDN. " +
+                        "4. The time deviation between FE nodes is greater than 5s, " +
+                        "please use ntp or other tools to keep clock synchronized. " +
+                        "5. The configuration of edit_log_port has changed, please reset to the original value. " +
+                        "6. The replayer thread may get stuck, please use jstack to find the details.");
+            }
         }
     }
 
@@ -1438,6 +1463,8 @@ public class GlobalStateMgr {
             LOG.info("Start safe mode checker!");
             safeModeChecker.start();
         }
+
+        replicationMgr.start();
     }
 
     // start threads that should run on all FE
@@ -1544,6 +1571,7 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
                 .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
                 .put(SRMetaBlockID.DICTIONARY_MGR, dictionaryMgr::load)
+                .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1686,13 +1714,14 @@ public class GlobalStateMgr {
         int flag = dis.readInt();
         int starrocksMetaVersion;
         if (flag < 0) {
+            dis.readInt();
             starrocksMetaVersion = dis.readInt();
         } else {
             // when flag is positive, this is new version format
             starrocksMetaVersion = flag;
         }
 
-        if (!MetaVersion.isCompatible(starrocksMetaVersion, FeConstants.STARROCKS_META_VERSION)) {
+        if (starrocksMetaVersion != FeConstants.STARROCKS_META_VERSION) {
             LOG.error("Not compatible with meta version {}, current version is {}",
                     starrocksMetaVersion, FeConstants.STARROCKS_META_VERSION);
             System.exit(-1);
@@ -1767,6 +1796,7 @@ public class GlobalStateMgr {
                 globalFunctionMgr.save(dos);
                 storageVolumeMgr.save(dos);
                 dictionaryMgr.save(dos);
+                replicationMgr.save(dos);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
@@ -3501,7 +3531,7 @@ public class GlobalStateMgr {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
             if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView) && !(table instanceof IcebergTable)) {
                 throw new StarRocksConnectorException(
-                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg external table/view");
+                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg/odps external table/view");
             }
         } finally {
             locker.unLockDatabase(db, LockType.READ);

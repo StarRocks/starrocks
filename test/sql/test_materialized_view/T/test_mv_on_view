@@ -7,10 +7,10 @@ CREATE TABLE jj( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED
 insert into ss values('2020-01-14', 2);
 insert into ss values('2020-01-14', 3);
 insert into ss values('2020-01-15', 2);
+insert into jj values('2020-01-16', 1);
 
 CREATE VIEW view1 AS SELECT event_day, sum(pv) as sum_pv FROM ss GROUP BY event_day;
-CREATE MATERIALIZED VIEW mv_on_view_1 REFRESH ASYNC 
-AS select * from view1;
+CREATE MATERIALIZED VIEW mv_on_view_1 REFRESH ASYNC AS select * from view1;
 [UC]REFRESH MATERIALIZED VIEW mv_on_view_1 with sync mode ;
 SELECT * FROM mv_on_view_1 ORDER BY event_day;
 
@@ -19,19 +19,50 @@ insert into ss values('2020-01-15', 3);
 [UC]REFRESH MATERIALIZED VIEW mv_on_view_1 with sync mode;
 SELECT * FROM mv_on_view_1 ORDER BY event_day;
 
--- alter view will inactive the MV
-ALTER VIEW view1 AS SELECT event_day, sum(pv) as sum_pv FROM jj GROUP BY event_day;
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views 
-    WHERE table_name = 'mv_on_view_1';
-
--- active the MV
+--------------- ALTER VIEW ---------------------------
+-- alter view but not changed
+ALTER VIEW view1 AS SELECT event_day, sum(pv) as sum_pv FROM ss GROUP BY event_day;
 ALTER MATERIALIZED VIEW mv_on_view_1 ACTIVE;
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views 
-    WHERE table_name = 'mv_on_view_1';
+[UC]REFRESH MATERIALIZED VIEW mv_on_view_1 with sync mode;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_view_1';
+
+-- alter view
+ALTER VIEW view1 AS SELECT event_day, sum(pv) as sum_pv FROM jj GROUP BY event_day;
+ALTER MATERIALIZED VIEW mv_on_view_1 ACTIVE;
+[UC]REFRESH MATERIALIZED VIEW mv_on_view_1 with sync mode;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_view_1';
+
+-- alter base table of view: not invalidate
+ALTER TABLE jj ADD COLUMN extra int;
+function: wait_alter_table_finish()
+ALTER MATERIALIZED VIEW mv_on_view_1 ACTIVE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_view_1';
+
+-- alter base table of view: inactive the MV
+ALTER TABLE jj DROP COLUMN pv;
+function: wait_alter_table_finish()
+[UC] ALTER MATERIALIZED VIEW mv_on_view_1 ACTIVE;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_view_1';
+
+-- alter base table of view: restoe the column
+ALTER TABLE jj ADD COLUMN pv int;
+function: wait_alter_table_finish()
+ALTER MATERIALIZED VIEW mv_on_view_1 ACTIVE;
+[UC]REFRESH MATERIALIZED VIEW mv_on_view_1 with sync mode;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_view_1';
+
+-- alter irrelavant table of mv
+ALTER TABLE ss DROP COLUMN pv;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_view_1';
+
 [UC]REFRESH MATERIALIZED VIEW mv_on_view_1 with sync mode;
 SELECT * FROM mv_on_view_1 ORDER BY event_day;
 
--- update the base table
-insert into jj values('2020-01-14', 2);
+--------------------- DROP AND CREATE view ----------------------------
+DROP VIEW view1;
+CREATE VIEW view1 AS SELECT event_day, sum(pv) as sum_pv FROM jj GROUP BY event_day;
+ALTER MATERIALIZED VIEW mv_on_view_1 ACTIVE;
 [UC]REFRESH MATERIALIZED VIEW mv_on_view_1 with sync mode;
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_view_1';
+
 SELECT * FROM mv_on_view_1 ORDER BY event_day;

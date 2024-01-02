@@ -19,6 +19,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.After;
 import org.junit.Assert;
@@ -41,6 +42,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         starRocksAssert.withTable(cluster, "table_with_day_partition");
         starRocksAssert.withTable(cluster, "table_with_datetime_partition");
 
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
         mockedHiveMetadata =
                 (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                         getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();

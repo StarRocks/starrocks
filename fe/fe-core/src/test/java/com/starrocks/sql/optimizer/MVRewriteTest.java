@@ -973,6 +973,56 @@ public class MVRewriteTest {
     }
 
     @Test
+    public void testAggQueryOnAggMV11() throws Exception {
+        String createMVSQL =
+                "create materialized view " + EMPS_MV_NAME + " as select deptno, bitmap_agg(salary) "
+                        + "from " + EMPS_TABLE_NAME + " group by deptno;";
+        String query = "select deptno, count(distinct salary) from " + EMPS_TABLE_NAME + " group by deptno UNION ALL " +
+                "select deptno, count(distinct salary) from " + EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.withMaterializedView(createMVSQL);
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+        starRocksAssert.assertMVWithoutComplexExpression(HR_DB_NAME, EMPS_TABLE_NAME);
+    }
+
+    @Test
+    public void testAggQueryOnAggMV12() throws Exception {
+        String createMVSQL =
+                "create materialized view " + EMPS_MV_NAME + " as select deptno, bitmap_agg(salary % 10) "
+                        + "from " + EMPS_TABLE_NAME + " group by deptno;";
+        String query = "select deptno, count(distinct salary % 10) from " + EMPS_TABLE_NAME + " group by deptno UNION ALL " +
+                "select deptno, count(distinct salary % 10) from " + EMPS_TABLE_NAME + " group by deptno";
+        try {
+            starRocksAssert.withMaterializedView(createMVSQL);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Create materialized view non-slot ref expression should have an alias:"));
+        }
+    }
+
+    @Test
+    public void testAggQueryOnAggMV13() throws Exception {
+        String createMVSQL =
+                "create materialized view " + EMPS_MV_NAME + " as select deptno, bitmap_agg(salary % 10) as bitmap1 "
+                        + "from " + EMPS_TABLE_NAME + " group by deptno;";
+        String query = "select deptno, count(distinct salary % 10) from " + EMPS_TABLE_NAME + " group by deptno UNION ALL " +
+                "select deptno, count(distinct salary % 10) from " + EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.withMaterializedView(createMVSQL);
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+    }
+
+    @Test
+    public void testAggQueryOnAggMV14() throws Exception {
+        String createMVSQL =
+                "create materialized view " + EMPS_MV_NAME + " as select deptno, bitmap_agg(salary) "
+                        + "from " + EMPS_TABLE_NAME + " group by deptno;";
+        String query = "select deptno, bitmap_agg(salary) from " + EMPS_TABLE_NAME + " group by deptno UNION ALL " +
+                "select deptno, bitmap_agg(salary) from " + EMPS_TABLE_NAME + " group by deptno";
+        starRocksAssert.withMaterializedView(createMVSQL);
+        starRocksAssert.query(query).explainContains(QUERY_USE_EMPS_MV);
+        starRocksAssert.assertMVWithoutComplexExpression(HR_DB_NAME, EMPS_TABLE_NAME);
+    }
+
+    @Test
     public void testUnionQueryOnProjectionMV() throws Exception {
         String createMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid from " +
                 EMPS_TABLE_NAME + " order by deptno;";

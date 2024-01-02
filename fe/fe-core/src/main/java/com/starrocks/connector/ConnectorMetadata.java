@@ -227,6 +227,7 @@ public interface ConnectorMetadata {
     }
 
     default void alterTable(AlterTableStmt stmt) throws UserException {
+        throw new StarRocksConnectorException("This connector doesn't support alter table");
     }
 
     default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {
@@ -282,6 +283,10 @@ public interface ConnectorMetadata {
 
     default CloudConfiguration getCloudConfiguration() {
         throw new StarRocksConnectorException("This connector doesn't support getting cloud configuration");
+    }
+
+    default List<PartitionInfo> getChangedPartitionInfo(Table table, long mvSnapShotID) {
+        return Lists.newArrayList();
     }
 }
 

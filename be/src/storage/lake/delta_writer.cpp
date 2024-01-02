@@ -344,7 +344,11 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     RETURN_IF_ERROR(check_partial_update_with_sort_key(chunk));
     _last_write_ts = butil::gettimeofday_s();
     Status st;
-    bool full = _mem_table->insert(chunk, indexes, 0, indexes_size);
+    auto res = _mem_table->insert(chunk, indexes, 0, indexes_size);
+    if (!res.ok()) {
+        return res.status();
+    }
+    auto full = res.value();
     if (_mem_tracker->limit_exceeded()) {
         VLOG(2) << "Flushing memory table due to memory limit exceeded";
         st = flush();
@@ -523,7 +527,7 @@ Status DeltaWriterImpl::fill_auto_increment_id(const Chunk& chunk) {
     auto metadata = _tablet_manager->get_latest_cached_tablet_metadata(_tablet_id);
     Status st;
     if (metadata != nullptr) {
-        st = tablet.update_mgr()->get_rowids_from_pkindex(&tablet, metadata->version(), upserts, &rss_rowids);
+        st = tablet.update_mgr()->get_rowids_from_pkindex(&tablet, metadata->version(), upserts, &rss_rowids, true);
     }
 
     std::vector<uint8_t> filter;
