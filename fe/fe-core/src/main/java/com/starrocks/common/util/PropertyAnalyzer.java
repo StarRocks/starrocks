@@ -612,7 +612,8 @@ public class PropertyAnalyzer {
 
     public static Boolean analyzeUseFastSchemaEvolution(Map<String, String> properties) throws AnalysisException {
         if (properties == null || properties.isEmpty()) {
-            return Config.enable_fast_schema_evolution;
+            return RunMode.isSharedNothingMode() ? Config.enable_fast_schema_evolution
+                    : Config.experimental_enable_fast_schema_evolution_in_shared_data;
         }
         String value = properties.get(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION);
         if (null == value) {
