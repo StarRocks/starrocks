@@ -247,6 +247,8 @@ struct TQueryOptions {
 
   112: optional bool enable_pipeline_level_shuffle;
   113: optional bool enable_hyperscan_vec;
+
+  114: optional bool enable_jit = false;
 }
 
 
