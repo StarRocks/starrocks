@@ -145,7 +145,7 @@ INTO TABLE <table_name>
 
 - `FORMAT AS`
 
-  用于指定源数据文件的格式。取值包括 `CSV`、`Parquet` 和 `ORC`。如果不指定该参数，则默认通过 `file_path` 参数中指定的文件扩展名（**.csv**、**.parquet**、和 **.orc**）来判断文件格式。
+  用于指定源数据文件的格式。取值包括 `CSV`、`Parquet`、`ORC` 和 `JSON`。如果不指定该参数，则默认通过 `file_path` 参数中指定的文件扩展名（**.csv**、**.parquet**、和 **.orc**）来判断文件格式。
 
 - `format_type_options`
 

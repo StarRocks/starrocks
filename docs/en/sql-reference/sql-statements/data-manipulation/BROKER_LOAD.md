@@ -146,7 +146,7 @@ INTO TABLE <table_name>
 
 - `FORMAT AS`
 
-  Specifies the format of the data file. Valid values: `CSV`, `Parquet`, and `ORC`. By default, if you do not specify this parameter, StarRocks determines the data file format based on the filename extension **.csv**, **.parquet**, or **.orc** specified in the `file_path` parameter.
+  Specifies the format of the data file. Valid values: `CSV`, `Parquet`, `ORC`, and `JSON`. By default, if you do not specify this parameter, StarRocks determines the data file format based on the filename extension **.csv**, **.parquet**, or **.orc** specified in the `file_path` parameter.
 
 - `format_type_options`
 
