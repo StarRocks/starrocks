@@ -31,6 +31,7 @@
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
 #include "formats/parquet/parquet_test_util/util.h"
+#include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptor_helper.h"
@@ -666,44 +667,8 @@ HdfsScannerContext* FileReaderTest::_create_file_struct_in_struct_prune_and_no_o
 
 void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, int value,
                                                std::vector<ExprContext*>* conjunct_ctxs) {
-    std::vector<TExprNode> nodes;
-
-    TExprNode node0;
-    node0.node_type = TExprNodeType::BINARY_PRED;
-    node0.opcode = opcode;
-    node0.child_type = TPrimitiveType::INT;
-    node0.num_children = 2;
-    node0.__isset.opcode = true;
-    node0.__isset.child_type = true;
-    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    nodes.emplace_back(node0);
-
-    TExprNode node1;
-    node1.node_type = TExprNodeType::SLOT_REF;
-    node1.type = gen_type_desc(TPrimitiveType::INT);
-    node1.num_children = 0;
-    TSlotRef t_slot_ref = TSlotRef();
-    t_slot_ref.slot_id = slot_id;
-    t_slot_ref.tuple_id = 0;
-    node1.__set_slot_ref(t_slot_ref);
-    node1.is_nullable = true;
-    nodes.emplace_back(node1);
-
-    TExprNode node2;
-    node2.node_type = TExprNodeType::INT_LITERAL;
-    node2.type = gen_type_desc(TPrimitiveType::INT);
-    node2.num_children = 0;
-    TIntLiteral int_literal;
-    int_literal.value = value;
-    node2.__set_int_literal(int_literal);
-    node2.is_nullable = false;
-    nodes.emplace_back(node2);
-
-    TExpr t_expr;
-    t_expr.nodes = nodes;
-
     std::vector<TExpr> t_conjuncts;
-    t_conjuncts.emplace_back(t_expr);
+    ParquetUTBase::append_int_conjunct(opcode, slot_id, value, &t_conjuncts);
 
     ASSERT_OK(Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
     ASSERT_OK(Expr::prepare(*conjunct_ctxs, _runtime_state));
@@ -2779,9 +2744,9 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
     TypeDescriptor type_int = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
 
     Utils::SlotDesc slot_descs[] = {
-            {"data", type_data},
-            {"struct", type_struct},
-            {"int", type_int},
+            {"data", type_data, 0},
+            {"struct", type_struct, 1},
+            {"int", type_int, 2},
             {""},
     };
 
@@ -2790,12 +2755,15 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
     ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
 
     Utils::SlotDesc min_max_slots[] = {
-            {"int", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {"int", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 2},
             {""},
     };
     ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
-    _create_int_conjunct_ctxs(TExprOpcode::GE, 0, 5, &ctx->min_max_conjunct_ctxs);
-    _create_int_conjunct_ctxs(TExprOpcode::LE, 0, 5, &ctx->min_max_conjunct_ctxs);
+    std::vector<TExpr> t_conjuncts;
+    ParquetUTBase::append_int_conjunct(TExprOpcode::GE, 2, 5, &t_conjuncts);
+    ParquetUTBase::append_int_conjunct(TExprOpcode::LE, 2, 5, &t_conjuncts);
+
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);

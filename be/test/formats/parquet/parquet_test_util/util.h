@@ -20,6 +20,7 @@
 
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
+#include "common/global_types.h"
 #include "common/logging.h"
 #include "exec/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
@@ -39,6 +40,7 @@ public:
     struct SlotDesc {
         std::string name;
         TypeDescriptor type;
+        SlotId id = -1;
     };
 
     static TupleDescriptor* create_tuple_descriptor(RuntimeState* state, ObjectPool* pool, const SlotDesc* slot_descs) {
@@ -49,7 +51,7 @@ public:
                 break;
             }
             TSlotDescriptorBuilder b2;
-            b2.column_name(slot_descs[i].name).type(slot_descs[i].type).id(i).nullable(true);
+            b2.column_name(slot_descs[i].name).type(slot_descs[i].type).id(slot_descs[i].id).nullable(true);
             tuple_desc_builder.add_slot(b2.build());
         }
         tuple_desc_builder.build(&table_desc_builder);
