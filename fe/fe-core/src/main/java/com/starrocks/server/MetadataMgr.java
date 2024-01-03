@@ -341,7 +341,7 @@ public class MetadataMgr {
     }
         
     /**
-     * MetadataMgr#getTableLocally avoids network interactions with external metadata service when using external catalog(e.g. hive catalog).
+     * getTableLocally avoids network interactions with external metadata service when using external catalog(e.g. hive catalog).
      * In this case, only basic information of namespace and table type (derived from the type of its connector) is returned.
      * For default/internal catalog, this method is equivalent to {@link MetadataMgr#getTable(String, String, String)}.
      * Use this method if you are absolutely sure, otherwise use MetadataMgr#getTable.
