@@ -48,9 +48,9 @@ import org.apache.iceberg.Schema;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.Transaction;
-import org.apache.iceberg.UpdateLocation;
 import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.UpdateSchema;
+import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.relocated.com.google.common.collect.ImmutableMap;
 import org.apache.iceberg.types.TypeUtil;
 import org.apache.iceberg.types.Types;
@@ -415,69 +415,22 @@ public class IcebergApiConverter {
                                          String dbName,
                                          String tableName,
                                          List<AlterClause> tableChanges) {
-        if (transaction == null || transaction.table() == null) {
-            throw new StarRocksConnectorException("Transaction or table cannot be null");
-        }
+        Preconditions.checkArgument(transaction != null && transaction.table() != null,
+                new StarRocksConnectorException("Transaction or table cannot be null"));
 
         for (AlterClause clause : tableChanges) {
             if (clause instanceof TableRenameClause) {
                 TableRenameClause tableRenameClause = (TableRenameClause) clause;
-                if (icebergCatalog == null) {
-                    throw new StarRocksConnectorException("iceberg catalog cannot be null");
-                }
+                Preconditions.checkNotNull(icebergCatalog, new StarRocksConnectorException("iceberg catalog cannot be null"));
+
                 icebergCatalog.renameTable(dbName, tableName, tableRenameClause.getNewTableName());
             } else if (clause instanceof ModifyTablePropertiesClause) {
                 ModifyTablePropertiesClause propertiesClause = (ModifyTablePropertiesClause) clause;
                 Map<String, String> modifiedProperties = propertiesClause.getProperties();
-                if (modifiedProperties.isEmpty()) {
-                    throw new StarRocksConnectorException(
-                            "Modified property is empty");
-                }
+                Preconditions.checkArgument(modifiedProperties.size() > 0,
+                        new StarRocksConnectorException("Modified property is empty"));
 
-                UpdateProperties updateProperties = transaction.updateProperties();
-                String fileFormat = modifiedProperties.get(FILE_FORMAT);
-                if (fileFormat != null) {
-                    updateProperties
-                            .set(TableProperties.DEFAULT_FILE_FORMAT, modifiedProperties.remove(FILE_FORMAT));
-                }
-
-                if (modifiedProperties.get(COMPRESSION_CODEC) != null) {
-                    // check compression type
-                    String compressionCodec = modifiedProperties.get(COMPRESSION_CODEC);
-                    if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionCodec.toLowerCase(Locale.ROOT))) {
-                        throw new StarRocksConnectorException(
-                                "Unsupported compression codec in USING: " + compressionCodec);
-                    }
-
-                    // only modify compression_codec or modify both file_format and compression_codec.
-                    String currentFileFormat = fileFormat != null ? fileFormat : transaction.table().properties()
-                            .getOrDefault(TableProperties.DEFAULT_FILE_FORMAT,
-                                    TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
-
-                    if ("parquet".equalsIgnoreCase(currentFileFormat)) {
-                        updateProperties.set(TableProperties.PARQUET_COMPRESSION,
-                                modifiedProperties.remove(COMPRESSION_CODEC));
-                    } else if ("orc".equalsIgnoreCase(fileFormat)) {
-                        updateProperties.set(TableProperties.ORC_COMPRESSION,
-                                modifiedProperties.remove(COMPRESSION_CODEC));
-                    } else if ("avro".equalsIgnoreCase(fileFormat)) {
-                        updateProperties.set(TableProperties.AVRO_COMPRESSION,
-                                modifiedProperties.remove(COMPRESSION_CODEC));
-                    } else {
-                        throw new StarRocksConnectorException(
-                                "Unsupported file format for iceberg connector");
-                    }
-                }
-
-                // set the remaining iceberg properties
-                modifiedProperties.forEach(updateProperties::set);
-                updateProperties.commit();
-
-                // update location
-                if (modifiedProperties.get(LOCATION_PROPERTY) != null) {
-                    UpdateLocation updateLocation = transaction.updateLocation();
-                    updateLocation.setLocation(modifiedProperties.remove(LOCATION_PROPERTY)).commit();
-                }
+                modifyProperties(transaction, modifiedProperties);
             } else if (clause instanceof AlterTableCommentClause) {
                 AlterTableCommentClause alterTableCommentClause = (AlterTableCommentClause) clause;
                 transaction.updateProperties().set(COMMENT, alterTableCommentClause.getNewComment()).commit();
@@ -485,6 +438,52 @@ public class IcebergApiConverter {
                 throw new StarRocksConnectorException(
                         "Unsupported alter operation for iceberg connector");
             }
+        }
+    }
+
+    private static void modifyProperties(Transaction transaction, Map<String, String> pendingUpdate) {
+        UpdateProperties updateProperties = transaction.updateProperties();
+        for (Map.Entry<String, String> entry : pendingUpdate.entrySet()) {
+            Preconditions.checkNotNull(entry.getValue(), new StarRocksConnectorException("property value cannot be null"));
+            switch (entry.getKey().toLowerCase()) {
+                case FILE_FORMAT:
+                    updateProperties.defaultFormat(FileFormat.fromString(entry.getValue()));
+                    break;
+                case LOCATION_PROPERTY:
+                    updateProperties.commit();
+                    transaction.updateLocation().setLocation(entry.getValue()).commit();
+                    break;
+                case COMPRESSION_CODEC:
+                    String fileFormat = pendingUpdate.get(FILE_FORMAT);
+                    // only modify compression_codec or modify both file_format and compression_codec.
+                    String currentFileFormat = fileFormat != null ? fileFormat : transaction.table().properties()
+                            .getOrDefault(TableProperties.DEFAULT_FILE_FORMAT,
+                                    TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
+
+                    updateCodeCompr(updateProperties, FileFormat.fromString(currentFileFormat), entry.getValue());
+                    break;
+                default:
+                    updateProperties.set(entry.getKey(), entry.getValue());
+            }
+        }
+
+        updateProperties.commit();
+    }
+
+    private static void updateCodeCompr(UpdateProperties updateProperties, FileFormat fileFormat, String codeCompression) {
+        switch (fileFormat) {
+            case PARQUET:
+                updateProperties.set(TableProperties.PARQUET_COMPRESSION, codeCompression);
+                break;
+            case ORC:
+                updateProperties.set(TableProperties.ORC_COMPRESSION, codeCompression);
+                break;
+            case AVRO:
+                updateProperties.set(TableProperties.AVRO_COMPRESSION, codeCompression);
+                break;
+            default:
+                throw new StarRocksConnectorException(
+                        "Unsupported file format for iceberg connector");
         }
     }
 }

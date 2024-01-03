@@ -1127,7 +1127,7 @@ public class ShowExecutor {
 
         // Comment
         if (!Strings.isNullOrEmpty(table.getComment())) {
-            createTableSql.append("\nCOMMENT (\"").append(table.getComment()).append("\");");
+            createTableSql.append("\nCOMMENT (\"").append(table.getComment()).append("\")");
         }
 
         if (!Strings.isNullOrEmpty(location)) {
