@@ -49,6 +49,7 @@
 #include "exec/spill/dir_manager.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
+#include "exprs/jit/jit_engine.h"
 #include "fs/fs_s3.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
@@ -524,6 +525,12 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
+
+    auto jit_engine = JITEngine::get_instance();
+    status = jit_engine->init();
+    if (!status.ok()) {
+        LOG(WARNING) << "Failed to init JIT engine: " << status.message();
+    }
 
     return Status::OK();
 }
