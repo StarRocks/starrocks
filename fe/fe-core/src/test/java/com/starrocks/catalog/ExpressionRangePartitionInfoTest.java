@@ -469,7 +469,7 @@ public class ExpressionRangePartitionInfoTest {
                 "\"compression\" = \"LZ4\"\n" +
                 ");";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("table_hitcount");
         // serialize
@@ -570,7 +570,7 @@ public class ExpressionRangePartitionInfoTest {
                 "\"replication_num\" = \"1\"\n" +
                 ");";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
 
         starRocksAssert.withMaterializedView("create materialized view test_mv1 " +
                 " DISTRIBUTED BY HASH(dt, queryId) BUCKETS 4\n" +
