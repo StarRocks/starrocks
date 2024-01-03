@@ -745,7 +745,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (baseTableIds != null) {
                 // for compatibility
                 for (long tableId : baseTableIds) {
-                    baseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), tableId));
+                    baseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), tableId, null));
                 }
             } else {
                 active = false;
@@ -776,6 +776,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                                     Sets.newHashSet(mvId)).build()
                     );
                 }
+            } else {
+                res = false;
+                setActive(false);
             }
         }
         analyzePartitionInfo();

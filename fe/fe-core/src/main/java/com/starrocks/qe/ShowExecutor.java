@@ -824,14 +824,17 @@ public class ShowExecutor {
 
         Map<String, String> tableMap = Maps.newTreeMap();
         MetaUtils.checkDbNullAndReport(db, showTableStmt.getDb());
-
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             db.readLock();
             try {
-                for (Table tbl : db.getTables()) {
+                List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
+
+                for (String tableName : tableNames) {
+                    Table tbl = metadataMgr.getTable(catalogName, dbName, tableName);
                     if (matcher != null && !matcher.match(tbl.getName())) {
                         continue;
                     }
+
                     // check tbl privs
                     if (connectContext.getGlobalStateMgr().isUsingNewPrivilege()) {
                         if (tbl.isView()) {

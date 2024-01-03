@@ -160,7 +160,7 @@ public class MaterializedViewAnalyzer {
                     tableNameInfo.getDb());
             if (isInternalCatalog(tableNameInfo.getCatalog())) {
                 baseTableInfos.add(new BaseTableInfo(database.getId(), database.getFullName(),
-                        table.getId()));
+                        table.getId(), table.getName()));
             } else {
                 baseTableInfos.add(new BaseTableInfo(tableNameInfo.getCatalog(),
                         tableNameInfo.getDb(), table.getTableIdentifier()));
@@ -355,7 +355,7 @@ public class MaterializedViewAnalyzer {
                         tableNameInfo.getDb());
                 if (isInternalCatalog(tableNameInfo.getCatalog())) {
                     baseTableInfos.add(new BaseTableInfo(database.getId(), database.getFullName(),
-                            table.getId()));
+                            table.getId(), table.getName()));
                 } else {
                     baseTableInfos.add(new BaseTableInfo(tableNameInfo.getCatalog(),
                             tableNameInfo.getDb(), table.getTableIdentifier()));
