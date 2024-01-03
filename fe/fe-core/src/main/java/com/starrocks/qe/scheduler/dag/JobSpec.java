@@ -464,7 +464,7 @@ public class JobSpec {
             this.enablePipeline(isEnablePipeline(context, instance.fragments));
             instance.connectContext = context;
 
-            instance.enableQueue = isEnableQueue();
+            instance.enableQueue = isEnableQueue(context);
             instance.needQueued = needCheckQueue();
             instance.enableGroupLevelQueue = instance.enableQueue && GlobalVariable.isEnableGroupLevelQueryQueue();
 
@@ -553,7 +553,11 @@ public class JobSpec {
                     fragments.stream().allMatch(PlanFragment::canUsePipeline);
         }
 
-        private boolean isEnableQueue() {
+        private boolean isEnableQueue(ConnectContext connectContext) {
+            if (connectContext != null && connectContext.getSessionVariable() != null &&
+                    !connectContext.getSessionVariable().isEnableQueryQueue()) {
+                return false;
+            }
             if (instance.isStatisticsJob()) {
                 return GlobalVariable.isEnableQueryQueueStatistic();
             }
