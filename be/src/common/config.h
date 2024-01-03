@@ -817,7 +817,7 @@ CONF_Int32(hdfs_client_io_read_retry, "0");
 CONF_mBool(aws_sdk_logging_trace_enabled, "false");
 CONF_String(aws_sdk_logging_trace_level, "trace");
 
-CONF_mBool(cos_use_aws_sdk, "false");
+CONF_mBool(cos_use_aws_sdk, "true");
 
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
