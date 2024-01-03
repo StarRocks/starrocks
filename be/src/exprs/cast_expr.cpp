@@ -1145,11 +1145,7 @@ public:
 
         if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
             return Status::NotSupported("JIT casting does not support JSON");
-        } else if constexpr (lt_is_decimal<FromType> && lt_is_decimal<ToType>) {
-            return Status::NotSupported("JIT casting does not support decimal");
-        } else if constexpr (lt_is_decimal<FromType>) {
-            return Status::NotSupported("JIT casting does not support decimal");
-        } else if constexpr (lt_is_decimal<ToType>) {
+        } else if constexpr (lt_is_decimal<FromType> || lt_is_decimal<ToType>) {
             return Status::NotSupported("JIT casting does not support decimal");
         } else {
             LLVMDatum datum(b);
