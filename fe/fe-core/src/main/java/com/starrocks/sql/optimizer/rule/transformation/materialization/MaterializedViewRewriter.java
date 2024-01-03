@@ -120,7 +120,7 @@ public class MaterializedViewRewriter {
                             JoinOperator.LEFT_OUTER_JOIN, JoinOperator.RIGHT_OUTER_JOIN))
                     .build();
 
-    protected enum MatchMode {
+    public enum MatchMode {
         // all tables and join types match
         COMPLETE,
         // all tables match but join types do not
@@ -148,28 +148,12 @@ public class MaterializedViewRewriter {
         return MvUtils.isLogicalSPJ(expression);
     }
 
-    private boolean isMVApplicable(OptExpression mvExpression,
-                                   List<Table> queryTables,
-                                   List<Table> mvTables,
-                                   MatchMode matchMode,
-                                   OptExpression queryExpression) {
+    private boolean isMVApplicable(OptExpression mvExpression, List<Table> queryTables, List<Table> mvTables,
+                                   MatchMode matchMode, OptExpression queryExpression) {
         // Only care MatchMode.COMPLETE and VIEW_DELTA here, QUERY_DELTA also can be supported
         // because optimizer will match MV's pattern which is subset of query opt tree
         // from top-down iteration.
         if (matchMode == MatchMode.COMPLETE) {
-            // Q  : A JOIN B JOIN C JOIN D
-            // MV : A JOIN B JOIN C
-            // To fast rewrite, only need to check `A JOIN B JOIN C` pattern rather than
-            // `A JOIN B JOIN C JOIN D`.
-            if (!optimizerContext.getSessionVariable().isEnableMaterializedViewRewriteGreedyMode()) {
-                for (OptExpression child : queryExpression.getInputs()) {
-                    final List<Table> childTables = MvUtils.getAllTables(child);
-                    if (Sets.newHashSet(childTables).contains(mvTables)) {
-                        return false;
-                    }
-                }
-            }
-
             // If all join types are inner/cross, no need check join orders: eg a inner join b or b inner join a.
             boolean isQueryAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(queryExpression);
             boolean isMVAllEqualInnerJoin = MvUtils.isAllEqualInnerOrCrossJoin(mvExpression);
@@ -185,45 +169,8 @@ public class MaterializedViewRewriter {
                 // NOTE: Only support all MV's join tables' order exactly match with the query's join tables'
                 // order for now.
                 // Use traverse order to check whether all joins' order and operator are exactly matched.
-                if (!computeCompatibility(queryExpression, mvExpression)) {
-                    return false;
-                }
+                return computeCompatibility(queryExpression, mvExpression);
             }
-        } else if (matchMode == MatchMode.VIEW_DELTA) {
-            if (!optimizerContext.getSessionVariable().isEnableMaterializedViewViewDeltaRewrite()) {
-                return false;
-            }
-            // only consider query with most common tables to optimize performance
-            // To avoid join reorder producing plan bomb, record query's max tables to be only matched.
-            // But if query contains non inner/left outer joins which cannot be used to view delta join,
-            // not use `intersectingTables` anymore.
-            if (!optimizerContext.getSessionVariable().isEnableMaterializedViewRewriteGreedyMode() &&
-                    !queryTables.containsAll(materializationContext.getIntersectingTables())) {
-                return false;
-            }
-
-            if (!MvUtils.isSupportViewDelta(queryExpression)) {
-                logMVRewrite(mvRewriteContext, "MV is not applicable in view delta mode: " +
-                        "only support inner/left outer join type for now");
-                return false;
-            }
-
-            List<TableScanDesc> queryTableScanDescs = MvUtils.getTableScanDescs(queryExpression);
-            List<TableScanDesc> mvTableScanDescs = MvUtils.getTableScanDescs(mvExpression);
-            // there should be at least one same join type in mv scan descs for every query scan desc.
-            // to forbid rewrite for:
-            // query: a left outer join b
-            // mv: a inner join b inner join c
-            for (TableScanDesc queryScanDesc : queryTableScanDescs) {
-                if (queryScanDesc.getJoinOptExpression() != null
-                        && !mvTableScanDescs.stream().anyMatch(scanDesc -> scanDesc.isMatch(queryScanDesc))) {
-                    logMVRewrite(mvRewriteContext, "MV is not applicable in view delta mode: " +
-                            "at least one same join type should be existed");
-                    return false;
-                }
-            }
-        } else {
-            return false;
         }
 
         if (!isValidPlan(mvExpression)) {
@@ -231,11 +178,6 @@ public class MaterializedViewRewriter {
             return false;
         }
 
-        // If table lists do not intersect, can not be rewritten
-        if (Collections.disjoint(queryTables, mvTables)) {
-            logMVRewrite(mvRewriteContext, "MV is not applicable: query tables are disjoint with mvs' tables");
-            return false;
-        }
         return true;
     }
 
@@ -337,7 +279,7 @@ public class MaterializedViewRewriter {
     }
 
     // Post-order traversal
-    boolean computeCompatibility(OptExpression queryExpr, OptExpression mvExpr) {
+    public boolean computeCompatibility(OptExpression queryExpr, OptExpression mvExpr) {
         LogicalOperator queryOp = (LogicalOperator) queryExpr.getOp();
         LogicalOperator mvOp = (LogicalOperator) mvExpr.getOp();
         if (!queryOp.getOpType().equals(mvOp.getOpType())) {
@@ -2322,7 +2264,7 @@ public class MaterializedViewRewriter {
         return true;
     }
 
-    private MatchMode getMatchMode(List<Table> queryTables, List<Table> mvTables) {
+    public static MatchMode getMatchMode(List<Table> queryTables, List<Table> mvTables) {
         MatchMode matchMode = MatchMode.NOT_MATCH;
         if (queryTables.size() == mvTables.size() && Sets.newHashSet(queryTables).containsAll(mvTables)) {
             matchMode = MatchMode.COMPLETE;
