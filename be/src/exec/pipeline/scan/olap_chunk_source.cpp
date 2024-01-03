@@ -727,6 +727,14 @@ void OlapChunkSource::_update_counter() {
     _table_metrics->scan_read_bytes.increment(_scan_bytes);
     _table_metrics->scan_read_rows.increment(_scan_rows_num);
 
+    if (config::timer_metrics_interval > 0 && _runtime_state->query_options().enable_tablet_scan_stat) {
+        int64_t sb = _scan_bytes;
+        StarRocksMetrics::instance()->tablet_scan_bytes.try_emplace_l(
+                std::move(_tablet->tablet_id()), [sb](int64_t& v) { v += sb; }, std::move(sb));
+        StarRocksMetrics::instance()->tablet_scan_nums.try_emplace_l(
+                std::move(_tablet->tablet_id()), [](int64_t& v) { v += 1; }, 1);
+    }
+
     if (_reader->stats().decode_dict_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "DictDecode", IO_TASK_EXEC_TIMER_NAME);
         COUNTER_UPDATE(c, _reader->stats().decode_dict_ns);

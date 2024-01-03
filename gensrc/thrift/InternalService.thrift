@@ -201,6 +201,7 @@ struct TQueryOptions {
   // whether enable spill to disk
   31: optional bool enable_spill = false;
 
+  40: optional bool enable_tablet_scan_stat = false;
   50: optional Types.TCompressionType transmission_compression_type;
 
   51: optional i64 runtime_join_filter_pushdown_limit;

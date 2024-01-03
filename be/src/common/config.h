@@ -267,6 +267,8 @@ CONF_mInt32(memory_limitation_per_thread_for_schema_change, "2");
 CONF_mDouble(memory_ratio_for_sorting_schema_change, "0.8");
 
 CONF_Bool(enable_health_checker, "false");
+// Timer metrics interval seconds, zero indicates not opening
+CONF_mInt32(timer_metrics_interval, "0");
 CONF_mInt32(update_cache_expire_sec, "360");
 CONF_mInt32(file_descriptor_cache_clean_interval, "3600");
 CONF_mInt32(disk_stat_monitor_interval, "5");

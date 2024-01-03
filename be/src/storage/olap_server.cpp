@@ -61,6 +61,7 @@
 #include "util/gc_helper.h"
 #include "util/thread.h"
 #include "util/time.h"
+#include "util/timer_metrics.h"
 
 using std::string;
 
@@ -103,6 +104,9 @@ Status StorageEngine::start_bg_threads() {
 
     _pk_dump_thread = std::thread([this] { _pk_dump_thread_callback(nullptr); });
     Thread::set_thread_name(_pk_dump_thread, "pk_dump");
+
+    _timer_metrics = std::thread([this] { _timer_metrics_thread_callback(nullptr); });
+    Thread::set_thread_name(_timer_metrics, "timer_metrics");
 
 #ifdef USE_STAROS
     _local_pk_index_shared_data_gc_evict_thread =
@@ -679,6 +683,15 @@ void* StorageEngine::_disk_stat_monitor_thread_callback(void* arg) {
         SLEEP_IN_BG_WORKER(interval);
     }
 
+    return nullptr;
+}
+
+void* StorageEngine::_timer_metrics_thread_callback(void* arg) {
+    int32_t interval = config::timer_metrics_interval;
+    while (interval > 0) {
+        TimerMetrics::instance()->timer_result = TimerMetrics::instance()->doTimerMetrics();
+        SLEEP_IN_BG_WORKER(interval);
+    }
     return nullptr;
 }
 

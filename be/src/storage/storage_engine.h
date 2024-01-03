@@ -395,6 +395,8 @@ private:
     // finish publish version process function
     void* _finish_publish_version_thread_callback(void* arg);
 
+    void* _timer_metrics_thread_callback(void* arg);
+
     // clean file descriptors cache
     void* _fd_cache_clean_callback(void* arg);
 
@@ -440,6 +442,8 @@ private:
     std::thread _garbage_sweeper_thread;
     // thread to monitor disk stat
     std::thread _disk_stat_monitor_thread;
+    // thread to monitor timer metrics
+    std::thread _timer_metrics;
     // thread to check finish publish version task
     std::thread _finish_publish_version_thread;
     // threads to run base compaction
