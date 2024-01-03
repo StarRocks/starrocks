@@ -12,7 +12,6 @@ displayed_sidebar: "Chinese"
 
 - 新增聚合函数 [percentile_disc](../sql-reference/sql-functions/aggregate-functions/percentile_disc.md)。[#36352](https://github.com/StarRocks/starrocks/pull/36352)
 - 新增监控指标 `max_tablet_rowset_num`（用于设置 Rowset 的最大数量），可以协助提前发现 Compaction 是否会出问题并及时干预，减少报错信息“too many versions”的出现。[#36539](https://github.com/StarRocks/starrocks/pull/36539)
-- 提供了IO profiler工具用于定位IO高的tablet或者操作类型。 https://github.com/StarRocks/starrocks/pull/36320  [问题排查常用脚本](https://starrocks.feishu.cn/docx/FbOvdZjeJoedzmxMFUQcugFRnXb) 
 
 ## 功能优化
 
@@ -23,7 +22,7 @@ displayed_sidebar: "Chinese"
 - 如果是自动分区表，也支持指定分区名进行更新，如果分区不存在则报错。[#34777](https://github.com/StarRocks/starrocks/pull/34777)
 - 主键模型表 [SHOW DATA](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_DATA/) 的结果中新增包括 **.cols** 文件（部分列更新和生成列相关的文件）和持久化索引文件的文件大小信息。[#34898](https://github.com/StarRocks/starrocks/pull/34898)
 - 优化主键模型表全部 Rowset 进行 Compaction 时的持久化索引更新性能，降低 I/O 负载。 [#36819](https://github.com/StarRocks/starrocks/pull/36819)
-- WHERE 子句中 LIKE 运算符右侧字符串中不包括 `%` 或者 `_` 时，LIKE 运算符会转换成 = 运算符。[#37515](https://github.com/StarRocks/starrocks/pull/37515)
+- WHERE 子句中 LIKE 运算符右侧字符串中不包括 `%` 或者 `_` 时，LIKE 运算符会转换成 `=` 运算符。[#37515](https://github.com/StarRocks/starrocks/pull/37515)
 - 优化主键模型表 Compaction Score 的取值逻辑，使其和其他模型的表的取值范围看起来更一致。[#36534](https://github.com/StarRocks/starrocks/pull/36534)
 - [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加时间戳进度信息，展示各个分区当前消费消息的时间戳。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
 - 优化 Bitmap 相关的某些操作的性能，主要包括：
@@ -57,8 +56,8 @@ displayed_sidebar: "Chinese"
 - 新增 BE 配置项 `enable_stream_load_verbose_log`，默认取值是 `false`，打开后日志中可以记录 Stream Load 的 HTTP 请求和响应信息，方便出现问题后的定位调试。[#36113](https://github.com/StarRocks/starrocks/pull/36113)
 - 新增 BE 配置项 `pindex_major_compaction_limit_per_disk`，配置每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题，默认取值为 2。[#36681](https://github.com/StarRocks/starrocks/pull/36681)
 - 新增 BE 配置项，配置对象存储连接超时时间。
-  - `object_storage_connect_timeout_ms`，对象存储 socket 连接的超时时间，默认取值 -1，表示使用 SDK 中的默认时间。
-  - `object_storage_request_timeout_ms`，对象存储 http 连接的超时时间，默认取值 -1，表示使用 SDK 中的默认时间。
+  - `object_storage_connect_timeout_ms`，对象存储 socket 连接的超时时间，默认取值 `-1`，表示使用 SDK 中的默认时间。
+  - `object_storage_request_timeout_ms`，对象存储 http 连接的超时时间，默认取值 `-1`，表示使用 SDK 中的默认时间。
 
 ## 问题修复
 
@@ -84,7 +83,7 @@ displayed_sidebar: "Chinese"
 - ARRAY_DISTINCT 函数偶发 BE Crash。[#36377](https://github.com/StarRocks/starrocks/pull/36377)
 - 某些情况下，物化视图刷新可能会出现死锁问题。[#35736](https://github.com/StarRocks/starrocks/pull/35736)
 - 特定场景下 Global Runtime Filter 可能会引发 BE crash。[#35776](https://github.com/StarRocks/starrocks/pull/35776)
-- 某些情况下 `bitmap_to_string` 会因为内存溢出导致查询结果错误。[#37405](https://github.com/StarRocks/starrocks/pull/37405)
+- 某些情况下 bitmap_to_string 会因为转换时数据类型溢出导致查询结果错误。[#37405](https://github.com/StarRocks/starrocks/pull/37405)
 
 ## 3.0.8
 
