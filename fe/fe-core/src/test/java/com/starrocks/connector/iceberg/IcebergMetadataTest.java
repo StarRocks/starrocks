@@ -1172,6 +1172,6 @@ public class IcebergMetadataTest extends TableTestBase {
         invalidProperties.put(COMPRESSION_CODEC, "zzz");
         ModifyTablePropertiesClause invalidCompressionClause = new ModifyTablePropertiesClause(invalidProperties);
         clauses.add(invalidCompressionClause);
-        Assert.assertThrows(StarRocksConnectorException.class, () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
+        Assert.assertThrows(IllegalArgumentException.class, () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
     }
 }

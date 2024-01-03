@@ -416,19 +416,18 @@ public class IcebergApiConverter {
                                          String tableName,
                                          List<AlterClause> tableChanges) {
         Preconditions.checkArgument(transaction != null && transaction.table() != null,
-                new StarRocksConnectorException("Transaction or table cannot be null"));
+                "Transaction or table cannot be null");
 
         for (AlterClause clause : tableChanges) {
             if (clause instanceof TableRenameClause) {
                 TableRenameClause tableRenameClause = (TableRenameClause) clause;
-                Preconditions.checkNotNull(icebergCatalog, new StarRocksConnectorException("iceberg catalog cannot be null"));
+                Preconditions.checkNotNull(icebergCatalog, "iceberg catalog cannot be null");
 
                 icebergCatalog.renameTable(dbName, tableName, tableRenameClause.getNewTableName());
             } else if (clause instanceof ModifyTablePropertiesClause) {
                 ModifyTablePropertiesClause propertiesClause = (ModifyTablePropertiesClause) clause;
                 Map<String, String> modifiedProperties = propertiesClause.getProperties();
-                Preconditions.checkArgument(modifiedProperties.size() > 0,
-                        new StarRocksConnectorException("Modified property is empty"));
+                Preconditions.checkArgument(modifiedProperties.size() > 0, "Modified property is empty");
 
                 modifyProperties(transaction, modifiedProperties);
             } else if (clause instanceof AlterTableCommentClause) {
@@ -454,6 +453,10 @@ public class IcebergApiConverter {
                     transaction.updateLocation().setLocation(entry.getValue()).commit();
                     break;
                 case COMPRESSION_CODEC:
+                    Preconditions.checkArgument(
+                            PARQUET_COMPRESSION_TYPE_MAP.containsKey(entry.getValue().toLowerCase(Locale.ROOT)),
+                            "Unsupported compression codec for iceberg connector: " + entry.getValue());
+
                     String fileFormat = pendingUpdate.get(FILE_FORMAT);
                     // only modify compression_codec or modify both file_format and compression_codec.
                     String currentFileFormat = fileFormat != null ? fileFormat : transaction.table().properties()
