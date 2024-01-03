@@ -71,30 +71,31 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
                 .addHeader("Authorization", rootAuth)
                 .url(URI + PATH_URI)
                 .build();
-        Response response = networkClient.newCall(request).execute();
-        String respStr = Objects.requireNonNull(response.body()).string();
-        JSONObject jsonObject = new JSONObject(respStr);
-        System.out.println(respStr);
-        Assert.assertEquals(200, jsonObject.getInt("status"));
+        try (Response response = networkClient.newCall(request).execute()) {
+            String respStr = Objects.requireNonNull(response.body()).string();
+            JSONObject jsonObject = new JSONObject(respStr);
+            System.out.println(respStr);
+            Assert.assertEquals(200, jsonObject.getInt("status"));
 
-        JSONObject partitionsObject = jsonObject.getJSONObject("partitions");
-        Assert.assertNotNull(partitionsObject);
-        for (String tabletKey : partitionsObject.keySet()) {
-            JSONObject tabletObject = partitionsObject.getJSONObject(tabletKey);
-            Assert.assertNotNull(tabletObject.getJSONArray("routings"));
-            Assert.assertEquals(3, tabletObject.getJSONArray("routings").length());
-            Assert.assertEquals(testStartVersion, tabletObject.getLong("version"));
-            Assert.assertEquals(testSchemaHash, tabletObject.getLong("schemaHash"));
+            JSONObject partitionsObject = jsonObject.getJSONObject("partitions");
+            Assert.assertNotNull(partitionsObject);
+            for (String tabletKey : partitionsObject.keySet()) {
+                JSONObject tabletObject = partitionsObject.getJSONObject(tabletKey);
+                Assert.assertNotNull(tabletObject.getJSONArray("routings"));
+                Assert.assertEquals(3, tabletObject.getJSONArray("routings").length());
+                Assert.assertEquals(testStartVersion, tabletObject.getLong("version"));
+                Assert.assertEquals(testSchemaHash, tabletObject.getLong("schemaHash"));
 
+            }
+            String queryPlan = jsonObject.getString("opaqued_query_plan");
+            Assert.assertNotNull(queryPlan);
+            byte[] binaryPlanInfo = Base64.getDecoder().decode(queryPlan);
+            TDeserializer deserializer = new TDeserializer();
+            TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
+            deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo);
+            expectThrowsNoException(() -> deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo));
+            System.out.println(tQueryPlanInfo);
         }
-        String queryPlan = jsonObject.getString("opaqued_query_plan");
-        Assert.assertNotNull(queryPlan);
-        byte[] binaryPlanInfo = Base64.getDecoder().decode(queryPlan);
-        TDeserializer deserializer = new TDeserializer();
-        TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
-        deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo);
-        expectThrowsNoException(() -> deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo));
-        System.out.println(tQueryPlanInfo);
     }
 
     @Test
@@ -106,16 +107,17 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
                 .addHeader("Authorization", rootAuth)
                 .url(URI + PATH_URI)
                 .build();
-        Response response = networkClient.newCall(request).execute();
-        String respStr = Objects.requireNonNull(response.body()).string();
-        System.out.println(respStr);
-        Assert.assertNotNull(respStr);
-        expectThrowsNoException(() -> new JSONObject(respStr));
-        JSONObject jsonObject = new JSONObject(respStr);
-        Assert.assertEquals(400, jsonObject.getInt("status"));
-        String exception = jsonObject.getString("exception");
-        Assert.assertNotNull(exception);
-        Assert.assertEquals("POST body must contains [sql] root object", exception);
+        try (Response response = networkClient.newCall(request).execute()) {
+            String respStr = Objects.requireNonNull(response.body()).string();
+            System.out.println(respStr);
+            Assert.assertNotNull(respStr);
+            expectThrowsNoException(() -> new JSONObject(respStr));
+            JSONObject jsonObject = new JSONObject(respStr);
+            Assert.assertEquals(400, jsonObject.getInt("status"));
+            String exception = jsonObject.getString("exception");
+            Assert.assertNotNull(exception);
+            Assert.assertEquals("POST body must contains [sql] root object", exception);
+        }
     }
 
     @Test
@@ -127,15 +129,16 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
                 .addHeader("Authorization", rootAuth)
                 .url(ES_TABLE_URL + PATH_URI)
                 .build();
-        Response response = networkClient.newCall(request).execute();
-        String respStr = Objects.requireNonNull(response.body()).string();
-        Assert.assertNotNull(respStr);
-        expectThrowsNoException(() -> new JSONObject(respStr));
-        JSONObject jsonObject = new JSONObject(respStr);
-        Assert.assertEquals(400, jsonObject.getInt("status"));
-        String exception = jsonObject.getString("exception");
-        Assert.assertNotNull(exception);
-        Assert.assertTrue(exception.startsWith("malformed json"));
+        try (Response response = networkClient.newCall(request).execute()) {
+            String respStr = Objects.requireNonNull(response.body()).string();
+            Assert.assertNotNull(respStr);
+            expectThrowsNoException(() -> new JSONObject(respStr));
+            JSONObject jsonObject = new JSONObject(respStr);
+            Assert.assertEquals(400, jsonObject.getInt("status"));
+            String exception = jsonObject.getString("exception");
+            Assert.assertNotNull(exception);
+            Assert.assertTrue(exception.startsWith("malformed json"));
+        }
     }
 
     @Test
@@ -147,15 +150,39 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
                 .addHeader("Authorization", rootAuth)
                 .url(ES_TABLE_URL + PATH_URI)
                 .build();
-        Response response = networkClient.newCall(request).execute();
-        String respStr = Objects.requireNonNull(response.body()).string();
-        Assert.assertNotNull(respStr);
-        expectThrowsNoException(() -> new JSONObject(respStr));
-        JSONObject jsonObject = new JSONObject(respStr);
-        Assert.assertEquals(403, jsonObject.getInt("status"));
-        String exception = jsonObject.getString("exception");
-        Assert.assertNotNull(exception);
-        Assert.assertTrue(
-                exception.startsWith("Only support OlapTable, CloudNativeTable and MaterializedView currently"));
+        try (Response response = networkClient.newCall(request).execute()) {
+            String respStr = Objects.requireNonNull(response.body()).string();
+            Assert.assertNotNull(respStr);
+            expectThrowsNoException(() -> new JSONObject(respStr));
+            JSONObject jsonObject = new JSONObject(respStr);
+            Assert.assertEquals(403, jsonObject.getInt("status"));
+            String exception = jsonObject.getString("exception");
+            Assert.assertNotNull(exception);
+            Assert.assertTrue(
+                    exception.startsWith("Only support OlapTable, CloudNativeTable and MaterializedView currently"));
+        }
+    }
+
+    @Test
+    public void testQueryPlanActionPruneEmpty() throws IOException {
+        super.setUpWithCatalog();
+
+
+        String tableName = "test_empty_table";
+
+        RequestBody body =
+                RequestBody.create(JSON, "{ \"sql\" :  \" select k1,k2,k3 from " + DB_NAME + "." + tableName +
+                        " where k3  > '2023-10-01 11:11:11' and k3 < '2023-10-02 11:11:11'" + " \" }");
+        String uri = "http://localhost:" + HTTP_PORT + "/api/" + DB_NAME + "/test_empty_table";
+
+        Request request = new Request.Builder()
+                .post(body)
+                .addHeader("Authorization", rootAuth)
+                .url(uri + PATH_URI)
+                .build();
+        try (Response response = networkClient.newCall(request).execute()) {
+            String respStr = Objects.requireNonNull(response.body()).string();
+            Assert.assertEquals("{\"partitions\":{},\"opaqued_query_plan\":\"\",\"status\":200}", respStr);
+        }
     }
 }
