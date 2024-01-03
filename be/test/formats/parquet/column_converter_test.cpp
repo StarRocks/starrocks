@@ -364,7 +364,7 @@ TEST_F(ColumnConverterTest, Int64Test) {
         const std::string col_name = "time_nanos";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
-            check(file_path, col_type, col_name, "[360000000]", expected_rows);
+            check(file_path, col_type, col_name, "[3.6e+06]", expected_rows);
         }
     }
     {
