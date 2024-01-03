@@ -113,6 +113,7 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool_move_dir;
     std::unique_ptr<ThreadPool> _thread_pool_update_tablet_meta_info;
     std::unique_ptr<ThreadPool> _thread_pool_drop_auto_increment_map;
+    std::unique_ptr<ThreadPool> _thread_pool_replication;
 
     std::unique_ptr<PushTaskWorkerPool> _push_workers;
     std::unique_ptr<PublishVersionTaskWorkerPool> _publish_version_workers;
@@ -229,6 +230,9 @@ void AgentServer::Impl::init_or_die() {
                                                 MIN_CLONE_TASK_THREADS_IN_POOL),
                                        DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
 
+        BUILD_DYNAMIC_TASK_THREAD_POOL("replication", 0, config::replication_threads,
+                                       config::replication_thread_pool_queue_size, _thread_pool_replication);
+
         // It is the same code to create workers of each type, so we use a macro
         // to make code to be more readable.
 #ifndef BE_TEST
@@ -275,6 +279,7 @@ void AgentServer::Impl::stop() {
 
 #ifndef BE_TEST
         _thread_pool_clone->shutdown();
+        _thread_pool_replication->shutdown();
 #define STOP_POOL(type, pool_name) pool_name->stop();
 #else
 #define STOP_POOL(type, pool_name)
@@ -340,6 +345,8 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TYPE(TTaskType::MOVE, move_dir_req);
             HANDLE_TYPE(TTaskType::UPDATE_TABLET_META_INFO, update_tablet_meta_info_req);
             HANDLE_TYPE(TTaskType::DROP_AUTO_INCREMENT_MAP, drop_auto_increment_map_req);
+            HANDLE_TYPE(TTaskType::REMOTE_SNAPSHOT, remote_snapshot_req);
+            HANDLE_TYPE(TTaskType::REPLICATE_SNAPSHOT, replicate_snapshot_req);
 
         case TTaskType::REALTIME_PUSH:
             if (!task.__isset.push_req) {
@@ -466,6 +473,14 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TASK(TTaskType::DROP_AUTO_INCREMENT_MAP, all_tasks, run_drop_auto_increment_map_task,
                         DropAutoIncrementMapAgentTaskRequest, drop_auto_increment_map_req, _exec_env);
             break;
+        case TTaskType::REMOTE_SNAPSHOT:
+            HANDLE_TASK(TTaskType::REMOTE_SNAPSHOT, all_tasks, run_remote_snapshot_task, RemoteSnapshotAgentTaskRequest,
+                        remote_snapshot_req, _exec_env);
+            break;
+        case TTaskType::REPLICATE_SNAPSHOT:
+            HANDLE_TASK(TTaskType::REPLICATE_SNAPSHOT, all_tasks, run_replicate_snapshot_task,
+                        ReplicateSnapshotAgentTaskRequest, replicate_snapshot_req, _exec_env);
+            break;
         case TTaskType::REALTIME_PUSH:
         case TTaskType::PUSH: {
             // should not run here
@@ -542,6 +557,10 @@ void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
     case TTaskType::CLONE:
         st = _thread_pool_clone->update_max_threads(new_val);
         break;
+    case TTaskType::REMOTE_SNAPSHOT:
+    case TTaskType::REPLICATE_SNAPSHOT:
+        st = _thread_pool_replication->update_max_threads(new_val);
+        break;
     default:
         break;
     }
@@ -599,6 +618,10 @@ ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
         break;
     case TTaskType::DROP_AUTO_INCREMENT_MAP:
         ret = _thread_pool_drop_auto_increment_map.get();
+        break;
+    case TTaskType::REMOTE_SNAPSHOT:
+    case TTaskType::REPLICATE_SNAPSHOT:
+        ret = _thread_pool_replication.get();
         break;
     case TTaskType::PUSH:
     case TTaskType::REALTIME_PUSH:

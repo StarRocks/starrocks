@@ -234,6 +234,7 @@ import com.starrocks.qe.VariableMgr;
 import com.starrocks.qe.scheduler.slot.ResourceUsageMonitor;
 import com.starrocks.qe.scheduler.slot.SlotManager;
 import com.starrocks.qe.scheduler.slot.SlotProvider;
+import com.starrocks.replication.ReplicationMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
@@ -553,6 +554,8 @@ public class GlobalStateMgr {
     private PipeScheduler pipeScheduler;
     private MVActiveChecker mvActiveChecker;
 
+    private ReplicationMgr replicationMgr;
+
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
     private final SlotProvider slotProvider = new SlotProvider();
@@ -807,6 +810,7 @@ public class GlobalStateMgr {
             }
         });
 
+        this.replicationMgr = new ReplicationMgr();
         nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
     }
 
@@ -1053,7 +1057,11 @@ public class GlobalStateMgr {
         return connectorTableMetadataProcessor;
     }
 
-    // Use tryLock to avoid potential dead lock
+    public ReplicationMgr getReplicationMgr() {
+        return replicationMgr;
+    }
+
+    // Use tryLock to avoid potential deadlock
     public boolean tryLock(boolean mustLock) {
         while (true) {
             try {
@@ -1443,6 +1451,8 @@ public class GlobalStateMgr {
             LOG.info("Start safe mode checker!");
             safeModeChecker.start();
         }
+
+        replicationMgr.start();
     }
 
     // start threads that should run on all FE
@@ -1568,6 +1578,7 @@ public class GlobalStateMgr {
                         .put(SRMetaBlockID.MATERIALIZED_VIEW_MGR, MaterializedViewMgr.getInstance()::load)
                         .put(SRMetaBlockID.GLOBAL_FUNCTION_MGR, globalFunctionMgr::load)
                         .put(SRMetaBlockID.STORAGE_VOLUME_MGR, storageVolumeMgr::load)
+                        .put(SRMetaBlockID.REPLICATION_MGR, replicationMgr::load)
                         .build();
                 try {
                     loadHeaderV2(dis);
@@ -1991,6 +2002,7 @@ public class GlobalStateMgr {
                     MaterializedViewMgr.getInstance().save(dos);
                     globalFunctionMgr.save(dos);
                     storageVolumeMgr.save(dos);
+                    replicationMgr.save(dos);
                 } catch (SRMetaBlockException e) {
                     LOG.error("Save meta block failed ", e);
                     throw new IOException("Save meta block failed ", e);
