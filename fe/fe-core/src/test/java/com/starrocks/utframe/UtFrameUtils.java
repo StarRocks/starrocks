@@ -416,15 +416,17 @@ public class UtFrameUtils {
                                    GetPlanHook<R> returnedSupplier) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
         connectContext.setThreadLocalInfo();
+        if (connectContext.getSessionVariable().getEnableQueryDump()) {
+            connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+            connectContext.getDumpInfo().setOriginStmt(originStmt);
+        }
         originStmt = LogUtil.removeLineSeparator(originStmt);
 
         List<StatementBase> statements;
         try (Timer ignored = Tracers.watchScope("Parser")) {
             statements = SqlParser.parse(originStmt, connectContext.getSessionVariable());
         }
-        connectContext.getDumpInfo().setOriginStmt(originStmt);
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
         StatementBase statementBase = statements.get(0);
 
@@ -767,6 +769,37 @@ public class UtFrameUtils {
         ExecPlan execPlan = new InsertPlanner().plan(statement, connectContext);
         t.close();
         return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
+    }
+
+    public static String setUpTestDump(ConnectContext connectContext, QueryDumpInfo replayDumpInfo) throws Exception {
+        String replaySql = initMockEnv(connectContext, replayDumpInfo);
+        replaySql = LogUtil.removeLineSeparator(replaySql);
+        return replaySql;
+    }
+
+    public static Pair<String, ExecPlan> replaySql(ConnectContext connectContext, String sql) throws Exception {
+        StatementBase statementBase;
+        try (Timer st = Tracers.watchScope("Parse")) {
+            statementBase = com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+            if (statementBase instanceof QueryStatement) {
+                replaceTableCatalogName(statementBase);
+            }
+        }
+
+        com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
+
+        if (statementBase instanceof QueryStatement) {
+            return getQueryExecPlan((QueryStatement) statementBase, connectContext);
+        } else if (statementBase instanceof InsertStmt) {
+            return getInsertExecPlan((InsertStmt) statementBase, connectContext);
+        } else {
+            Preconditions.checkState(false, "Do not support the statement");
+            return null;
+        }
+    }
+
+    public static void tearDownTestDump() {
+        tearMockEnv();
     }
 
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
