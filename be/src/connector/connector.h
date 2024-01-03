@@ -88,7 +88,7 @@ protected:
     RuntimeFilterProbeCollector* _runtime_filters = nullptr;
     RuntimeBloomFilterEvalContext runtime_bloom_filter_eval_context;
     RuntimeProfile* _runtime_profile = nullptr;
-    const TupleDescriptor* _tuple_desc = nullptr;
+    TupleDescriptor* _tuple_desc = nullptr;
     void _init_chunk(ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
 };
 

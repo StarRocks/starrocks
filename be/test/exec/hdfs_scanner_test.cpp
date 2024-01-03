@@ -50,7 +50,7 @@ protected:
     void _create_runtime_state(const std::string& timezone);
     void _create_runtime_profile();
     Status _init_datacache(size_t mem_size, const std::string& engine);
-    HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, const TupleDescriptor* tuple_desc);
+    HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, TupleDescriptor* tuple_desc);
     void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc,
                                  bool diff_case_sensitive = false);
 
@@ -106,7 +106,7 @@ THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uin
 }
 
 HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfsScanRange* range,
-                                                  const TupleDescriptor* tuple_desc) {
+                                                  TupleDescriptor* tuple_desc) {
     auto* param = _pool.add(new HdfsScannerParams());
     auto* lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
     param->fs = FileSystem::Default();
