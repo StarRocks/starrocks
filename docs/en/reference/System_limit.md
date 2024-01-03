@@ -15,7 +15,7 @@ This topic describes the rules and limits that apply when you use StarRocks.
   - The name cannot exceed 64 characters in length, **among which:**
     - Database name cannot exceed 256 characters.
     - Table name and column name cannot exceed 1024 characters.
-    - Username cannot exceed 128 characters in length.
+    - Username cannot exceed 128 characters.
   - Catalog, database, table, view, username, and role names are case-sensitive. Column and partition names are **not** case-sensitive.
 
 - Naming conventions for labels:
