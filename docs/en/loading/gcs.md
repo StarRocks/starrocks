@@ -29,7 +29,7 @@ Loading data from GCS requires having the:
 - GCS bucket
 - GCS object keys (object names) if accessing a specific object in the bucket. Note that the object key can include a prefix if your GCS objects are stored in sub-folders. The full syntax is linked in **more information**.
 - GCS region
-- Service account Access key and secret
+- The `private_key_id`, `private_key` and `client_email` of your Google Cloud service account 
 
 ## Using Broker Load
 
@@ -99,9 +99,11 @@ This job has four main sections:
 - `BROKER`: The connection details for the source.
 - `PROPERTIES`: Timeout value and any other properties to apply to this job.
 
-> **NOTE**
->
-> The dataset used in these examples is hosted in a GCS bucket in a StarRocks account. Any valid service account email, key, and secret can be used, as the object is readable by any GCP authenticated user. Substitute your credentials for the placeholders in the commands below.
+:::note
+
+The dataset used in these examples is hosted in a GCS bucket in a StarRocks account. Any valid service account email, key, and secret can be used, as the object is readable by any GCP authenticated user. Substitute your credentials for the highlighted placeholders in the commands below.
+
+:::
 
 ```SQL
 LOAD LABEL user_behavior
@@ -112,10 +114,11 @@ LOAD LABEL user_behavior
  )
  WITH BROKER
  (
- 
+-- highlight-start
     "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
     "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+-- highlight-end
  )
 PROPERTIES
 (
