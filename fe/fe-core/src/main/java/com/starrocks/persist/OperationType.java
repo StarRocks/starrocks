@@ -487,6 +487,9 @@ public class OperationType {
     // alter catalog
     public static final short OP_ALTER_CATALOG = 13300;
 
+    // Replication job
+    public static final short OP_REPLICATION_JOB = 13500;
+
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, and an error will be reported if it exceeds
      */

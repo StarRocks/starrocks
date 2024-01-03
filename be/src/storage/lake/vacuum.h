@@ -49,4 +49,7 @@ void delete_files_async(std::vector<std::string> files_to_delete);
 // it can be executed in parallel to other requests
 std::future<Status> delete_files_callable(std::vector<std::string> files_to_delete);
 
+// Run a clear task async
+void run_clear_task_async(std::function<void()> task);
+
 } // namespace starrocks::lake
