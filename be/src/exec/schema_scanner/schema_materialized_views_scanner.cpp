@@ -156,7 +156,6 @@ Status SchemaMaterializedViewsScanner::_fill_chunk_v2(ChunkPtr* chunk) {
     _table_index++;
     return {};
 }
-
 Status SchemaMaterializedViewsScanner::get_materialized_views() {
     TGetTablesParams table_params;
     table_params.__set_db(_db_result.dbs[_db_index++]);
@@ -178,14 +177,16 @@ Status SchemaMaterializedViewsScanner::get_materialized_views() {
     if (nullptr != _param->ip && 0 != _param->port) {
         Status st =
                 SchemaHelper::list_materialized_view_status(*(_param->ip), _param->port, table_params, &_mv_results);
-        if (st.message().find(ThriftRpcHelper::KInvalidMethodName) == std::string::npos) {
-            return st;
+        if (!st.ok()) {
+            if (st.message().find(ThriftRpcHelper::KInvalidMethodName) == std::string::npos) {
+                return st;
+            }
+            LOG(WARNING) << "Frontend running in old version, needs to fallback to V1 interface";
+            _mv_results.materialized_views.clear();
+            RETURN_IF_ERROR(SchemaHelper::list_table_status(*(_param->ip), _param->port, table_params, &_table_result,
+                                                            config::thrift_rpc_timeout_ms));
+            RETURN_IF_ERROR(_change_to_v1_schema(_runtime_state));
         }
-        LOG(WARNING) << "Frontend running in old version, needs to fallback to V1 interface";
-        _mv_results.materialized_views.clear();
-        RETURN_IF_ERROR(SchemaHelper::list_table_status(*(_param->ip), _param->port, table_params, &_table_result,
-                                                        config::thrift_rpc_timeout_ms));
-        RETURN_IF_ERROR(_change_to_v1_schema(_runtime_state));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
