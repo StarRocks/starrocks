@@ -16,7 +16,7 @@ Release date: January 2, 2024
 ## Improvements
 
 - A new value option `GROUP_CONCAT_LEGACY` is added to the session variable [sql_mode](../reference/System_variable.md#sql_mode) to provide compatibility with the implementation logic of the [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) function in versions earlier than v2.5. [#36150](https://github.com/StarRocks/starrocks/pull/36150)
-- When using JDK, the default GC algorithm is G1GC. [#37386](https://github.com/StarRocks/starrocks/pull/37386)
+- When using JDK, the default GC algorithm is G1. [#37386](https://github.com/StarRocks/starrocks/pull/37386)
 - The `be_tablets` view in the `information_schema` database provides a new field `INDEX_DISK`, which records the disk usage (measured in bytes) of persistent indexes [#35615](https://github.com/StarRocks/starrocks/pull/35615)
 - Queries on MySQL external tables and the external tables within JDBC catalogs support including keywords in the WHERE clause. [#35917](https://github.com/StarRocks/starrocks/pull/35917)
 - Supports updates onto the specified partitions of an automatically partitioned table. If the specified partitions do not exist, an error is returned. [#34777](https://github.com/StarRocks/starrocks/pull/34777)
