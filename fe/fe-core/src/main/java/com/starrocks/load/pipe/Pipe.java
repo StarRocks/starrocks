@@ -17,7 +17,6 @@ package com.starrocks.load.pipe;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
@@ -503,22 +502,14 @@ public class Pipe implements GsonPostProcessable {
             if (this.state == State.RUNNING) {
                 this.state = State.SUSPEND;
 
-                List<PipeFileRecord> loadingFiles = Lists.newArrayList();
                 for (PipeTaskDesc task : runningTasks.values()) {
                     if (task.isTaskRunning()) {
                         task.interrupt();
-                        loadingFiles.addAll(task.getPiece().getFiles());
                     }
                 }
                 LOG.info("suspend pipe {}", this);
 
                 loadStatus.loadingFiles = 0;
-
-                // Change LOADING files to UNLOADED
-                if (CollectionUtils.isNotEmpty(loadingFiles)) {
-                    FileListRepo repo = getPipeSource().getFileListRepo();
-                    repo.updateFileState(loadingFiles, FileListRepo.PipeFileState.UNLOADED, null);
-                }
             }
         }
     }
