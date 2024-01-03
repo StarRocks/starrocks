@@ -469,7 +469,7 @@ public class ExpressionRangePartitionInfoTest {
                 "\"compression\" = \"LZ4\"\n" +
                 ");";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("table_hitcount");
         // serialize
@@ -549,4 +549,52 @@ public class ExpressionRangePartitionInfoTest {
         OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testExpressionRangePartitionInfoSerialized_SlotRef() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE test_table (\n" +
+                "databaseName varchar(200) NULL COMMENT \"\",\n" +
+                "tableName varchar(200) NULL COMMENT \"\",\n" +
+                "queryTime varchar(50) NULL COMMENT \"\",\n" +
+                "queryId varchar(50) NULL COMMENT \"\",\n" +
+                "dt date NULL COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(databaseName, tableName)\n" +
+                "PARTITION BY RANGE (`dt`)\n" +
+                "(\n" +
+                "    PARTITION p1 values less than('2021-02-01'),\n" +
+                "    PARTITION p2 values less than('2021-03-01')\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(databaseName) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+
+        starRocksAssert.withMaterializedView("create materialized view test_mv1 " +
+                " DISTRIBUTED BY HASH(dt, queryId) BUCKETS 4\n" +
+                " PARTITION BY dt\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") as select dt, queryId, count(1) from test_table group by dt, queryId"
+        );
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("test_mv1");
+        // serialize
+        String json = GsonUtils.GSON.toJson(table);
+        // deserialize
+        OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) readTable.getPartitionInfo();
+        List<Expr> readPartitionExprs = expressionRangePartitionInfo.getPartitionExprs();
+        Assert.assertTrue(readPartitionExprs.get(0) instanceof SlotRef);
+        SlotRef slotRef = (SlotRef)  readPartitionExprs.get(0);
+        Assert.assertTrue(!slotRef.getType().isInvalid());
+        Assert.assertTrue(slotRef.getType().isDateType());
+        starRocksAssert.dropMaterializedView("test_mv1");
+        starRocksAssert.dropTable("test_table");
+    }
+>>>>>>> 4fecd93b72 ([UT] Retry 3 times when creating table in ut (backport #37973) (#38261))
 }
