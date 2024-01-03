@@ -389,6 +389,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
     public static final String ENABLE_PARALLEL_MERGE = "enable_parallel_merge";
 
+    public static final String ENABLE_QUERY_QUEUE = "enable_query_queue";
+
     public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
 
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
@@ -1468,6 +1470,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private String cboEqBaseType = SessionVariableConstants.VARCHAR;
 
 
+
+
+    @VarAttr(name = ENABLE_QUERY_QUEUE, flag = VariableMgr.INVISIBLE)
+    private boolean enableQueryQueue = true;
+
+    public boolean isEnableQueryQueue() {
+        return enableQueryQueue;
+    }
 
     public boolean isCboDecimalCastStringStrict() {
         return cboDecimalCastStringStrict;
