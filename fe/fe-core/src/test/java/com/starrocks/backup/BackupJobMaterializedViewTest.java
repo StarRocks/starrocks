@@ -47,15 +47,11 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Ignore;
+import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.MethodOrderer;
-import org.junit.jupiter.api.Order;
-import org.junit.jupiter.api.TestMethodOrder;
 
 import java.io.File;
 import java.io.IOException;
@@ -67,7 +63,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
-@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class BackupJobMaterializedViewTest {
 
     private BackupJob job;
@@ -121,7 +116,7 @@ public class BackupJobMaterializedViewTest {
     private Repository repo = new Repository(repoId, "repo", false, "my_repo",
             new BlobStorage("broker", Maps.newHashMap()));
 
-    @BeforeAll
+    @BeforeClass
     public static void start() {
         Config.tmp_dir = "./";
         File backupDir = new File(BackupHandler.TEST_BACKUP_ROOT_DIR.toString());
@@ -130,7 +125,7 @@ public class BackupJobMaterializedViewTest {
         MetricRepo.init();
     }
 
-    @AfterAll
+    @AfterClass
     public static void end() throws IOException {
         Config.tmp_dir = "./";
         File backupDir = new File(BackupHandler.TEST_BACKUP_ROOT_DIR.toString());
@@ -141,7 +136,7 @@ public class BackupJobMaterializedViewTest {
         }
     }
 
-    @BeforeEach
+    @Before
     public void setUp() {
 
         repoMgr = new MockRepositoryMgr();
@@ -206,13 +201,10 @@ public class BackupJobMaterializedViewTest {
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.MATERIALIZED_VIEW_NAME), null));
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
 
-        job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
-        job.setTestPrimaryKey();
+        job = new BackupJob("label_mv", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
     }
 
-    @Ignore
     @Test
-    @Order(1)
     public void testRunNormal() {
         // 1.pending
         Assert.assertEquals(BackupJobState.PENDING, job.getState());
@@ -376,7 +368,6 @@ public class BackupJobMaterializedViewTest {
     }
 
     @Test
-    @Order(2)
     public void testRunAbnormal() {
         // 1.pending
         AgentTaskQueue.clearAllTasks();
