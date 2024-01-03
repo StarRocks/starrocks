@@ -19,6 +19,7 @@
 
 namespace starrocks::lake {
 
+struct KeyIndexesInfo;
 class MetaFileBuilder;
 class PersistentIndexMemtable;
 class PersistentIndexSstableMetaPB;
@@ -89,6 +90,12 @@ private:
     void flush_to_immutable_memtable();
 
     bool is_memtable_full();
+
+    Status get_from_immutable_memtable(size_t n, const Slice* keys, IndexValue* values,
+                                       KeyIndexesInfo* key_indexes_info, int64_t version);
+
+    Status get_from_sstables(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* key_indexes_info,
+                             int64_t version);
 
 private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;

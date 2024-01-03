@@ -538,6 +538,7 @@ TEST_P(LakePartialUpdateTest, test_write_with_index_reload) {
 
     auto version = 1;
     auto tablet_id = _tablet_metadata->id();
+    config::l0_max_mem_usage = 1;
     // normal write
     for (int i = 0; i < 3; i++) {
         auto txn_id = next_id();

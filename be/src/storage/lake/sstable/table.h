@@ -9,6 +9,7 @@ namespace starrocks {
 class Slice;
 class RandomAccessFile;
 namespace lake {
+struct KeyIndexesInfo;
 namespace sstable {
 class Block;
 class BlockHandle;
@@ -53,6 +54,12 @@ public:
     // E.g., the approximate offset of the last key in the table will
     // be close to the file length.
     uint64_t ApproximateOffsetOf(const Slice& key) const;
+
+    // Calls (*handle_result)(arg, ...) with the entry found after a call
+    // to Seek(key).  May not make such a call if filter policy says
+    // that key is not present.
+    Status MultiGet(const ReadOptions&, size_t n, const Slice* keys, KeyIndexesInfo* keys_info,
+                    std::vector<std::string>& values);
 
 private:
     struct Rep;

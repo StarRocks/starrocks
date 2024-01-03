@@ -17,6 +17,7 @@
 #include <string>
 
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/lake/key_index.h"
 #include "storage/lake/sstable/table.h"
 #include "storage/persistent_index.h"
 #include "storage/storage_engine.h"
@@ -30,7 +31,7 @@ namespace lake {
 
 class LakePersistentIndexSstable {
 public:
-    LakePersistentIndexSstable() {}
+    LakePersistentIndexSstable(RandomAccessFile* rf, const int64_t filesz);
     ~LakePersistentIndexSstable() {}
 
     static Status build_sstable(
@@ -40,8 +41,12 @@ public:
     static void to_protobuf(const std::list<std::pair<int64_t, IndexValue>>& index_value_infos,
                             IndexValueInfoPB* index_value_info_pb);
 
+    Status get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* key_indexes_info,
+               KeyIndexesInfo* found_keys_info, int64_t version);
+
 private:
-    std::unique_ptr<sstable::Table> _sst;
+    std::unique_ptr<sstable::Table> _sst{nullptr};
+    sstable::Table* _table;
 };
 
 } // namespace lake

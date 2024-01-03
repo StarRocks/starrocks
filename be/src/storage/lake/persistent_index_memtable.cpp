@@ -122,28 +122,59 @@ Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* val
             auto& index_value_infos = it->second;
             if (version < 0) {
                 auto old_index_value = index_value_infos.front().second;
-                values[i] = old_index_value;
+                values[i] = old_index_value.get_value();
                 nfound += old_index_value.get_value() != NullIndexValue;
             } else {
                 auto index_it = index_value_infos.begin();
                 auto found = false;
                 while (index_it != index_value_infos.end()) {
                     auto index_value_info = *index_it;
-                    if (index_value_info.second.get_value() == version) {
-                        auto old_index_value = index_value_infos.front().second;
-                        values[i] = old_index_value;
-                        nfound += old_index_value.get_value() != NullIndexValue;
+                    if (index_value_info.first == version) {
+                        auto old_index_value_info = index_value_info.second;
+                        values[i] = old_index_value_info.get_value();
+                        nfound += old_index_value_info.get_value() != NullIndexValue;
                         found = true;
+                        break;
                     }
+                    ++index_it;
                 }
                 if (!found) {
-                    values[i] = NullIndexValue;
                     not_found->key_index_infos.emplace_back(i);
                 }
             }
         }
     }
     *num_found = nfound;
+    return Status::OK();
+}
+
+Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* keys_info,
+               KeyIndexesInfo* found_keys_info, int64_t version) {
+    const auto& key_index_infos = keys_info->key_index_infos;
+    for (size_t i = 0; i < key_index_infos.size(); ++i) {
+        auto key = std::string_view(keys[key_index_infos[i]]);
+        auto it = _map.find(key);
+        if (it != _map.end()) {
+            auto& index_value_infos = it->second;
+            if (version < 0) {
+                auto old_index_value = index_value_infos.front().second;
+                values[key_index_infos[i]] = old_index_value.get_value();
+                found_keys_info->key_index_infos.emplace_back(key_index_infos[i]);
+            } else {
+                auto index_it = index_value_infos.begin();
+                while (index_it != index_value_infos.end()) {
+                    auto index_value_info = *index_it;
+                    if (index_value_info.first == version) {
+                        found_keys_info->key_index_infos.emplace_back(key_index_infos[i]);
+                        auto old_index_value_info = index_value_info.second;
+                        values[key_index_infos[i]] = old_index_value_info.get_value();
+                        break;
+                    }
+                    index_it++;
+                }
+            }
+        }
+    }
     return Status::OK();
 }
 

@@ -14,11 +14,13 @@
 
 #include "storage/lake/lake_persistent_index.h"
 
+#include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/meta_file.h"
 #include "storage/lake/persistent_index_memtable.h"
 #include "storage/lake/rowset.h"
+#include "storage/lake/sstable/lake_persistent_index_sst.h"
 #include "storage/primary_key_encoder.h"
 
 namespace starrocks::lake {
@@ -41,10 +43,71 @@ LakePersistentIndex::~LakePersistentIndex() {
     _memtable->clear();
 }
 
+Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, IndexValue* values,
+                                              KeyIndexesInfo* key_indexes_info, int64_t version) {
+    if (key_indexes_info->size() == 0) {
+        return Status::OK();
+    }
+    auto sstable_size = _sstable_meta->sstables_size();
+    if (sstable_size == 0) {
+        return Status::OK();
+    }
+    std::sort(key_indexes_info->key_index_infos.begin(), key_indexes_info->key_index_infos.end());
+    for (size_t i = sstable_size; i > 0; --i) {
+        if (key_indexes_info->size() == 0) {
+            break;
+        }
+        auto sstable_pb_size = _sstable_meta->sstables(i - 1).sstables_size();
+        if (sstable_pb_size == 0) {
+            continue;
+        }
+        for (size_t j = sstable_pb_size; j > 0; --j) {
+            if (key_indexes_info->size() == 0) {
+                break;
+            }
+            RandomAccessFileOptions opts{.skip_fill_local_cache = true};
+            ASSIGN_OR_RETURN(
+                    auto rf,
+                    fs::new_random_access_file(
+                            opts, _tablet_mgr->sst_location(
+                                          _tablet_id, _sstable_meta->sstables(i - 1).sstables(j - 1).filename())));
+            auto pindex_sst = std::make_unique<LakePersistentIndexSstable>(
+                    rf.get(), _sstable_meta->sstables(i - 1).sstables(j - 1).filesz());
+            KeyIndexesInfo found_key_indexes_info;
+            pindex_sst->get(n, keys, values, key_indexes_info, &found_key_indexes_info, version);
+            if (found_key_indexes_info.size() != 0) {
+                std::sort(found_key_indexes_info.key_index_infos.begin(), found_key_indexes_info.key_index_infos.end());
+                // modify key_indexess_info
+                key_indexes_info->set_difference(found_key_indexes_info);
+            }
+        }
+    }
+    return Status::OK();
+}
+
+Status LakePersistentIndex::get_from_immutable_memtable(size_t n, const Slice* keys, IndexValue* values,
+                                                        KeyIndexesInfo* key_indexes_info, int64_t version) {
+    if (_immutable_memtable == nullptr || key_indexes_info->size() == 0) {
+        return Status::OK();
+    }
+    std::sort(key_indexes_info->key_index_infos.begin(), key_indexes_info->key_index_infos.end());
+    KeyIndexesInfo found_key_indexes_info;
+    _immutable_memtable->get(n, keys, values, key_indexes_info, &found_key_indexes_info, version);
+    if (found_key_indexes_info.size() != 0) {
+        std::sort(found_key_indexes_info.key_index_infos.begin(), found_key_indexes_info.key_index_infos.end());
+        // modify key_indexess_info
+        key_indexes_info->set_difference(found_key_indexes_info);
+    }
+    return Status::OK();
+}
+
 Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values, int64_t version) {
     KeyIndexesInfo not_founds;
     size_t num_found;
-    return _memtable->get(n, keys, values, &not_founds, &num_found, version);
+    RETURN_IF_ERROR(_memtable->get(n, keys, values, &not_founds, &num_found, version));
+    RETURN_IF_ERROR(get_from_immutable_memtable(n, keys, values, &not_founds, version));
+    RETURN_IF_ERROR(get_from_sstables(n, keys, values, &not_founds, version));
+    return Status::OK();
 }
 
 Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
@@ -52,6 +115,8 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
     KeyIndexesInfo not_founds;
     size_t num_found;
     RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, version));
+    RETURN_IF_ERROR(get_from_immutable_memtable(n, keys, old_values, &not_founds, -1));
+    RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &not_founds, -1));
     if (is_memtable_full()) {
         RETURN_IF_ERROR(minor_compact());
         flush_to_immutable_memtable();
@@ -72,7 +137,10 @@ Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue
 Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values, int64_t version) {
     KeyIndexesInfo not_founds;
     size_t num_found;
-    return _memtable->erase(n, keys, old_values, &not_founds, &num_found, version);
+    RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, version));
+    RETURN_IF_ERROR(get_from_immutable_memtable(n, keys, old_values, &not_founds, -1));
+    RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &not_founds, -1));
+    return Status::OK();
 }
 
 Status LakePersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values,
@@ -145,7 +213,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     if (sstables_size > 0) {
         max_sstable_version = sstables[sstables_size - 1].version();
     }
-    if (max_sstable_version >= base_version) {
+    if (max_sstable_version > base_version) {
         return Status::OK();
     }
 
@@ -164,7 +232,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     auto rowsets = Rowset::get_rowsets(tablet_mgr, metadata);
     for (auto& rowset : rowsets) {
         int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;
-        if (rowset->version() > max_sstable_version && rowset->version() <= base_version) {
+        if (rowset->version() >= max_sstable_version && rowset->version() <= base_version) {
             auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, rowset_version, builder, &stats);
             if (!res.ok()) {
                 return res.status();

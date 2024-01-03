@@ -6,6 +6,7 @@
 
 #include "common/status.h"
 #include "fs/fs.h"
+#include "storage/lake/key_index.h"
 #include "storage/lake/sstable/block.h"
 #include "storage/lake/sstable/comparator.h"
 #include "storage/lake/sstable/filter_block.h"
@@ -184,6 +185,39 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options, const Slice&
 Iterator* Table::NewIterator(const ReadOptions& options) const {
     return NewTwoLevelIterator(rep_->index_block->NewIterator(rep_->options.comparator), &Table::BlockReader,
                                const_cast<Table*>(this), options);
+}
+
+Status Table::MultiGet(const ReadOptions& options, size_t n, const Slice* keys, KeyIndexesInfo* key_indexes_info,
+                       std::vector<std::string>& values) {
+    Status s;
+    Iterator* iiter = rep_->index_block->NewIterator(rep_->options.comparator);
+    const auto& key_index_infos = key_indexes_info->key_index_infos;
+    for (size_t i = 0; i < key_index_infos.size(); ++i) {
+        auto& k = keys[key_index_infos[i]];
+        iiter->Seek(k);
+        if (iiter->Valid()) {
+            Slice handle_value = iiter->value();
+            FilterBlockReader* filter = rep_->filter;
+            BlockHandle handle;
+            if (filter != nullptr && handle.DecodeFrom(&handle_value).ok() &&
+                !filter->KeyMayMatch(handle.offset(), k)) {
+                // Not found
+            } else {
+                Iterator* block_iter = BlockReader(this, options, iiter->value());
+                block_iter->Seek(k);
+                if (block_iter->Valid() && k == block_iter->key()) {
+                    values[key_index_infos[i]] = block_iter->value().to_string();
+                }
+                s = block_iter->status();
+                delete block_iter;
+            }
+        }
+    }
+    if (s.ok()) {
+        s = iiter->status();
+    }
+    delete iiter;
+    return s;
 }
 
 Status Table::InternalGet(const ReadOptions& options, const Slice& k, void* arg,

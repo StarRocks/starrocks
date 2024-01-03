@@ -57,6 +57,9 @@ public:
     Status get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* not_found, size_t* num_found,
                int64_t version);
 
+    Status get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* keys_info,
+               KeyIndexesInfo* found_keys_info, int64_t version);
+
     void clear();
 
     size_t memory_usage();
