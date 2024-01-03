@@ -675,10 +675,10 @@ public class SelectAnalyzer {
                                              boolean isDistinct) {
 
         List<Field> allFields = Lists.newArrayList();
-        // order by can only "see" fields from distinct output
         if (isDistinct) {
             allFields = removeDuplicateField(outputScope.getRelationFields().getAllFields());
             Scope orderScope = new Scope(outputScope.getRelationId(), new RelationFields(allFields));
+            orderScope.setParent(sourceScope);
             analyzeState.setOrderScope(orderScope);
             return orderScope;
         }
