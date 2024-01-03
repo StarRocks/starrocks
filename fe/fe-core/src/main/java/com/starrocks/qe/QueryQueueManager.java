@@ -115,6 +115,11 @@ public class QueryQueueManager {
     }
 
     public boolean isEnableQueue(Coordinator coord) {
+        ConnectContext context = coord.getConnectContext();
+        if (context != null && context.getSessionVariable() != null && !context.getSessionVariable().isEnableQueryQueue()) {
+            return false;
+        }
+
         if (coord.isStatisticsJob()) {
             return GlobalVariable.isEnableQueryQueueStatistic();
         }
