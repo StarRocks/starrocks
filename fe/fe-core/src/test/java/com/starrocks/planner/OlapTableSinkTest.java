@@ -224,23 +224,14 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testCreateLocationWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
-                                                  @Mocked SystemInfoService systemInfoService,
-                                                  @Mocked TabletInvertedIndex invertedIndex) throws Exception {
-        new Expectations() {
+    public void testCreateLocationWithLocalTablet() throws Exception {
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        new Expectations(systemInfoService) {
             {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-                GlobalStateMgr.getCurrentSystemInfo();
-                result = systemInfoService;
-                systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
-                result = Status.OK;
-                globalStateMgr.getOrCreateSystemInfo(anyInt);
-                result = systemInfoService;
-                systemInfoService.checkBackendAlive(anyLong);
-                result = true;
-                GlobalStateMgr.getCurrentInvertedIndex();
-                result = invertedIndex;
+               systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
+               result = Status.OK;
+               systemInfoService.checkBackendAlive(anyLong);
+               result = true;
             }
         };
 
