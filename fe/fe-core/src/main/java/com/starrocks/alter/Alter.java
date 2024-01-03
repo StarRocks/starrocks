@@ -263,6 +263,7 @@ public class Alter {
             final Table table = db.getTable(oldMvName);
             if (table instanceof MaterializedView) {
                 materializedView = (MaterializedView) table;
+
             }
 
             if (materializedView == null) {
@@ -345,9 +346,9 @@ public class Alter {
             try {
                 Analyzer.analyze(queryStatement, context);
             } catch (SemanticException e) {
-                throw new SemanticException("Can not active materialized view [" + materializedView.getName() +
-                        "] because analyze materialized view define sql: \n\n" + viewDefineSql +
-                        "\n\nCause an error: " + e.getMessage());
+                throw new SemanticException("Can not active materialized view [%s]" +
+                        " because analyze materialized view define sql: \n\n%s" +
+                        "\n\nCause an error: %s", materializedView.getName(), viewDefineSql, e.getMessage());
             }
 
             Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);

@@ -45,15 +45,16 @@ public class BaseTableInfo {
     @SerializedName(value = "tableName")
     private String tableName;
 
-    public BaseTableInfo(long dbId, String dbName, long tableId) {
+    public BaseTableInfo(long dbId, String dbName, long tableId, String tableName) {
         this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         this.dbId = dbId;
         this.dbName = dbName;
         this.tableId = tableId;
+        this.tableName = tableName;
     }
 
     public BaseTableInfo(long dbId, long tableId) {
-        this(dbId, null, tableId);
+        this(dbId, null, tableId, null);
     }
 
     public BaseTableInfo(String catalogName, String dbName, String tableIdentifier) {
