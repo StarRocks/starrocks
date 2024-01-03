@@ -409,6 +409,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |brpc_num_threads|-1|bRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。|
 |priority_networks|空字符串|以 CIDR 形式 10.10.10.0/24 指定 BE IP 地址，适用于机器有多个 IP，需要指定优先使用的网络。|
 |heartbeat_service_port|9050|心跳服务端口（thrift），用户接收来自 FE 的心跳。|
+|mem_limit|90%|BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100G"）。默认硬上限为 BE 所在机器内存的 90%，软上限为 BE 所在机器内存的 80%。如果 BE 为独立部署，则无需配置，如果 BE 与其它占用内存较多的服务混合部署，则需要合理配置。|
 |heartbeat_service_thread_count|1|心跳线程数。|
 |create_tablet_worker_count|3|创建 tablet 的线程数。|
 |drop_tablet_worker_count|3|删除 tablet 的线程数。|
