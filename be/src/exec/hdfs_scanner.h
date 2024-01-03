@@ -16,9 +16,8 @@
 
 #include <atomic>
 #include <boost/algorithm/string.hpp>
-#include <utility>
 
-#include "column/chunk.h"
+#include "exec/mor_processor.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
@@ -157,7 +156,7 @@ struct HdfsScannerParams {
     // The file last modification time
     int64_t modification_time = 0;
 
-    const TupleDescriptor* tuple_desc = nullptr;
+    TupleDescriptor* tuple_desc = nullptr;
 
     // columns read from file
     std::vector<SlotDescriptor*> materialize_slots;
@@ -199,6 +198,7 @@ struct HdfsScannerParams {
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
     bool use_file_metacache = false;
+    MORParams mor_params;
 };
 
 struct HdfsScannerContext {
@@ -354,6 +354,7 @@ private:
     Status _build_scanner_context();
     MonotonicStopWatch _pending_queue_sw;
     void update_hdfs_counter(HdfsScanProfile* profile);
+    Status _init_mor_processor(RuntimeState* runtime_state, const MORParams& params);
 
 protected:
     std::atomic_bool _pending_token = false;
@@ -369,6 +370,8 @@ protected:
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
     std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
     int64_t _total_running_time = 0;
+
+    std::shared_ptr<DefaultMORProcessor> _mor_processor;
 };
 
 } // namespace starrocks

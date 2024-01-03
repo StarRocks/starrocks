@@ -73,13 +73,30 @@ public class TableTestBase {
     protected static final PartitionSpec SPEC_F =
             PartitionSpec.builderFor(SCHEMA_F).day("dt").build();
 
-
     public static final DataFile FILE_A =
             DataFiles.builder(SPEC_A)
                     .withPath("/path/to/data-a.parquet")
                     .withFileSizeInBytes(10)
                     .withPartitionPath("data_bucket=0") // easy way to set partition data for now
                     .withRecordCount(2)
+                    .build();
+
+    public static DeleteFile FILE_A_DELETES =
+            FileMetadata.deleteFileBuilder(SPEC_A)
+                    .ofPositionDeletes()
+                    .withPath("/path/to/data-a-deletes.parquet")
+                    .withFileSizeInBytes(10)
+                    .withPartitionPath("data_bucket=0") // easy way to set partition data for now
+                    .withRecordCount(1)
+                    .build();
+    // Equality delete files.
+    public static DeleteFile FILE_A2_DELETES =
+            FileMetadata.deleteFileBuilder(SPEC_A)
+                    .ofEqualityDeletes(1)
+                    .withPath("/path/to/data-a2-deletes.parquet")
+                    .withFileSizeInBytes(10)
+                    .withPartitionPath("data_bucket=0")
+                    .withRecordCount(1)
                     .build();
 
     public static final DataFile FILE_A_1 =
@@ -181,7 +198,7 @@ public class TableTestBase {
         tableDir.delete(); // created by table create
 
         this.metadataDir = new File(tableDir, "metadata");
-        this.mockedNativeTableA = create(SCHEMA_A, SPEC_A, "ta", 1);
+        this.mockedNativeTableA = create(SCHEMA_A, SPEC_A, "ta", 2);
         this.mockedNativeTableB = create(SCHEMA_B, SPEC_B, "tb", 1);
         this.mockedNativeTableC = create(SCHEMA_B, SPEC_B, "tc", 2);
         this.mockedNativeTableD = create(SCHEMA_D, SPEC_D, "td", 1);
