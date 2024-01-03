@@ -43,6 +43,10 @@ DECLARE_int32(cachemgr_evict_interval);
 DECLARE_double(cachemgr_evict_low_water);
 // cache will stop evict cache files if free space is above this value(percentage)
 DECLARE_double(cachemgr_evict_high_water);
+// cache will evict file cache at this percent if star cache is turned on
+DECLARE_double(cachemgr_evict_percent);
+// cache will evict file cache at this speed if star cache is turned on
+DECLARE_int32(cachemgr_evict_throughput_mb);
 // type:Integer. CacheManager cache directory allocation policy. (0:default, 1:random, 2:round-robin)
 DECLARE_int32(cachemgr_dir_allocate_policy);
 // buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
