@@ -54,7 +54,7 @@ Status LakeLocalPersistentIndexTabletLoader::rowset_iterator(
         const std::function<Status(const std::vector<ChunkIteratorPtr>&, uint32_t)>& handler) {
     OlapReaderStatistics stats;
     // scan all rowsets and segments to build primary index
-    auto rowsets = Rowset::get_rowsets(_tablet_mgr, _metadata);
+    auto rowsets = _tablet->get_rowsets(*_metadata);
     _rowset_num = rowsets.size();
 
     // NOTICE: primary index will be builded by segment files in metadata, and delvecs.

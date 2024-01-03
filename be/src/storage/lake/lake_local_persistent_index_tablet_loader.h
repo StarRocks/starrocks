@@ -33,9 +33,9 @@ class MetaFileBuilder;
 
 class LakeLocalPersistentIndexTabletLoader : public TabletLoader {
 public:
-    LakeLocalPersistentIndexTabletLoader(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
+    LakeLocalPersistentIndexTabletLoader(Tablet* tablet, const TabletMetadataPtr& metadata,
                                          int64_t base_version, const MetaFileBuilder* builder)
-            : _tablet_mgr(tablet_mgr), _metadata(metadata), _base_version(base_version), _builder(builder) {}
+            : _tablet(tablet), _metadata(metadata), _base_version(base_version), _builder(builder) {}
     ~LakeLocalPersistentIndexTabletLoader() = default;
     starrocks::Schema generate_pkey_schema() override;
     DataDir* data_dir() override;
@@ -50,7 +50,7 @@ public:
             const std::function<Status(const std::vector<ChunkIteratorPtr>&, uint32_t)>& handler) override;
 
 private:
-    TabletManager* _tablet_mgr;
+    Tablet* _tablet;
     const TabletMetadataPtr _metadata;
     int64_t _base_version;
     const MetaFileBuilder* _builder;

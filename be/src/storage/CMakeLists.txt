@@ -202,13 +202,6 @@ add_library(Storage STATIC
     lake/txn_log_applier.cpp
     lake/lake_local_persistent_index.cpp
     persistent_index_compaction_manager.cpp
-<<<<<<< HEAD
-    lake/local_pk_index_manager.cpp)
-=======
-    persistent_index_tablet_loader.cpp
-    lake/lake_local_persistent_index_tablet_loader.cpp
-    lake/lake_persistent_index.cpp
-    lake/persistent_index_memtable.cpp
     lake/local_pk_index_manager.cpp
-    dictionary_cache_manager.cpp)
->>>>>>> 89cf3f0dd2 ([Refactor] Add PersistentIndex tablet loader for both shared data and shared nothing (#37472))
+    persistent_index_tablet_loader.cpp
+    lake/lake_local_persistent_index_tablet_loader.cpp)
