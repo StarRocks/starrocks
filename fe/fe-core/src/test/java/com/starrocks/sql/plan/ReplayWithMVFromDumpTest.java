@@ -55,7 +55,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Before
-    public void before() {
+    public void before() throws Exception {
         super.before();
     }
 

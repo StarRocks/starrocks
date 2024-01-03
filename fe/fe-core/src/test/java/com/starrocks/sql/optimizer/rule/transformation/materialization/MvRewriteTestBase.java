@@ -73,7 +73,7 @@ import java.util.List;
 import java.util.Set;
 
 public class MvRewriteTestBase {
-    private static final Logger LOG = LogManager.getLogger(MvRewriteTestBase.class);
+    protected static final Logger LOG = LogManager.getLogger(MvRewriteTestBase.class);
     protected static ConnectContext connectContext;
     protected static PseudoCluster cluster;
     protected static StarRocksAssert starRocksAssert;
