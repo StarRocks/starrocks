@@ -55,6 +55,11 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.ProfileManager;
+<<<<<<< HEAD
+=======
+import com.starrocks.http.HttpMetricRegistry;
+import com.starrocks.http.rest.MetricsAction;
+>>>>>>> e9ec5b1657 ([Enhancement] Add some FE http metrics (#38280))
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.load.loadv2.LoadMgr;
@@ -887,6 +892,15 @@ public final class MetricRepo {
             collectRoutineLoadProcessMetrics(visitor);
         }
 
+<<<<<<< HEAD
+=======
+        // collect http metrics
+        HttpMetricRegistry.getInstance().visit(visitor);
+
+        // collect starmgr related metrics as well
+        StarMgrServer.getCurrentState().visitMetrics(visitor);
+
+>>>>>>> e9ec5b1657 ([Enhancement] Add some FE http metrics (#38280))
         // node info
         visitor.getNodeInfo();
         return visitor.build();
