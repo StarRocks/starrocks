@@ -1575,4 +1575,12 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  equal join conjunct: 3: C_ADDRESS = 11: P_NAME");
 
     }
+
+    @Test
+    public void testNdvInOrPredicate() throws Exception {
+        String sql = "select count(*) from customer where C_NAME = 'b' or C_NATIONKEY = 1";
+        String plan = getCostExplain(sql);
+        assertCContains(plan, "C_NAME-->[-Infinity, Infinity, 0.0, 25.0, 600000.0] ESTIMATE",
+                "C_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE");
+    }
 }

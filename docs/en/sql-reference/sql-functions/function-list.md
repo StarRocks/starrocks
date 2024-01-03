@@ -146,6 +146,7 @@ You can find a function based on the following categories:
 - [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)
 - [sub_bitmap](./bitmap-functions/sub_bitmap.md)
 - [to_bitmap](./bitmap-functions/to_bitmap.md)
+- [unnest_bitmap](./bitmap-functions/unnest_bitmap.md)
 
 ## Conditional functions
 
@@ -428,6 +429,7 @@ You can find a function based on the following categories:
 - [json_each](./json-functions/json-query-and-processing-functions/json_each.md)
 - [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)
 - [unnest](./array-functions/unnest.md)
+- [unnest_bitmap](./bitmap-functions/unnest_bitmap.md)
 
 ## Utility functions
 

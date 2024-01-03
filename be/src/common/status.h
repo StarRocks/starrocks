@@ -147,6 +147,8 @@ public:
 
     static Status Yield() { return {TStatusCode::YIELD, ""}; }
 
+    static Status JitCompileError(std::string_view msg) { return Status(TStatusCode::JIT_COMPILE_ERROR, msg); }
+
     bool ok() const { return _state == nullptr; }
 
     bool is_cancelled() const { return code() == TStatusCode::CANCELLED; }

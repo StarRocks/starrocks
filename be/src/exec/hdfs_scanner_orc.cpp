@@ -534,13 +534,17 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
     _should_skip_file = false;
     _use_orc_sargs = true;
     // todo: build predicate hook and ranges hook.
+
     if (!scanner_params.deletes.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
-        IcebergDeleteBuilder iceberg_delete_builder(scanner_params.fs, scanner_params.path,
-                                                    scanner_params.conjunct_ctxs, scanner_params.materialize_slots,
-                                                    &_need_skip_rowids);
+        const IcebergDeleteBuilder iceberg_delete_builder(scanner_params.fs, scanner_params.path,
+                                                          scanner_params.conjunct_ctxs,
+                                                          scanner_params.materialize_slots, &_need_skip_rowids);
+
         for (const auto& tdelete_file : scanner_params.deletes) {
-            RETURN_IF_ERROR(iceberg_delete_builder.build_orc(runtime_state->timezone(), *tdelete_file));
+            RETURN_IF_ERROR(iceberg_delete_builder.build_orc(runtime_state->timezone(), *tdelete_file,
+                                                             scanner_params.mor_params.equality_slots, runtime_state,
+                                                             _mor_processor));
         }
         _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
     }

@@ -1243,8 +1243,9 @@ public class PlanFragmentBuilder {
             // set slot
             prepareContextSlots(node, context, tupleDescriptor);
 
+            TupleDescriptor equalityDeleteTupleDesc = context.getDescTbl().createTupleDescriptor();
             IcebergScanNode icebergScanNode =
-                    new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode");
+                    new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode", equalityDeleteTupleDesc);
             icebergScanNode.computeStatistics(optExpression.getStatistics());
             icebergScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             try {

@@ -334,7 +334,7 @@ build_simdjson() {
     #ref: https://github.com/simdjson/simdjson/blob/master/HACKING.md
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
-    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_CXX_FLAGS="-O3" -DCMAKE_C_FLAGS="-O3" -DSIMDJSON_AVX512_ALLOWED=OFF ..
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_CXX_FLAGS="-O3" -DCMAKE_C_FLAGS="-O3" -DCMAKE_POSITION_INDEPENDENT_CODE=True -DSIMDJSON_AVX512_ALLOWED=OFF ..
     $CMAKE_CMD --build .
     mkdir -p $TP_INSTALL_DIR/lib
 
@@ -515,7 +515,7 @@ build_rocksdb() {
 build_kerberos() {
     check_if_source_exist $KRB5_SOURCE
     cd $TP_SOURCE_DIR/$KRB5_SOURCE/src
-    CFLAGS="-fcommon" LDFLAGS="-L$TP_INSTALL_DIR/lib -pthread -ldl" \
+    CFLAGS="-fcommon -fPIC" LDFLAGS="-L$TP_INSTALL_DIR/lib -pthread -ldl" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-shared --with-spake-openssl=$TP_INSTALL_DIR
     make -j$PARALLEL
     make install
@@ -525,7 +525,7 @@ build_kerberos() {
 build_sasl() {
     check_if_source_exist $SASL_SOURCE
     cd $TP_SOURCE_DIR/$SASL_SOURCE
-    CFLAGS= LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit
+    CFLAGS="-fPIC" LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit
     make -j$PARALLEL
     make install
 }
