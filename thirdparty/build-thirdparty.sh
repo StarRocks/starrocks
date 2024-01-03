@@ -923,7 +923,6 @@ build_aws_cpp_sdk
 build_vpack
 build_opentelemetry
 build_async_profiler
-build_benchmark
 build_fast_float
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
