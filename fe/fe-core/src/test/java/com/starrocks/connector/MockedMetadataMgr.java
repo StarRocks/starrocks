@@ -16,7 +16,6 @@
 package com.starrocks.connector;
 
 import com.google.common.base.Strings;
-import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
