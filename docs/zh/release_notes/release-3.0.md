@@ -83,7 +83,7 @@ displayed_sidebar: "Chinese"
 - ARRAY_DISTINCT 函数偶发 BE Crash。[#36377](https://github.com/StarRocks/starrocks/pull/36377)
 - 某些情况下，物化视图刷新可能会出现死锁问题。[#35736](https://github.com/StarRocks/starrocks/pull/35736)
 - 特定场景下 Global Runtime Filter 可能会引发 BE crash。[#35776](https://github.com/StarRocks/starrocks/pull/35776)
-- 某些情况下 bitmap_to_string 会因为转换时数据类型溢出导致查询结果错误。[#37405](https://github.com/StarRocks/starrocks/pull/37405)
+- 某些情况下 `bitmap_to_string` 会因为转换时数据类型溢出导致查询结果错误。[#37405](https://github.com/StarRocks/starrocks/pull/37405)
 
 ## 3.0.8
 
