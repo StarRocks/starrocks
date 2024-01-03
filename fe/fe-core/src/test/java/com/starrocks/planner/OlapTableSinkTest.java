@@ -63,7 +63,6 @@ import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -76,11 +75,6 @@ public class OlapTableSinkTest {
 
     @Injectable
     public OlapTable dstTable;
-
-    @Before
-    public void setUp() {
-
-    }
 
     private TupleDescriptor getTuple() {
         DescriptorTable descTable = new DescriptorTable();
