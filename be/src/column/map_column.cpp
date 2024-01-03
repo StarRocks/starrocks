@@ -18,6 +18,7 @@
 #include <set>
 
 #include "column/column_helper.h"
+#include "column/datum.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -589,13 +590,9 @@ Datum MapColumn::get(size_t idx) const {
     size_t offset = _offsets->get_data()[idx];
     size_t map_size = _offsets->get_data()[idx + 1] - offset;
 
-    auto* nullable_keys = down_cast<NullableColumn*>(_keys.get());
-    auto nulls = nullable_keys->null_column_data().data();
     DatumMap res;
     for (size_t i = 0; i < map_size; ++i) {
-        if (!nulls[offset + i]) {
-            res[_keys->get(offset + i).convert2DatumKey()] = _values->get(offset + i);
-        }
+        res[_keys->get(offset + i).convert2DatumKey()] = _values->get(offset + i);
     }
     return {res};
 }
