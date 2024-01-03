@@ -749,7 +749,7 @@ BE static parameters are as follows.
 
 - **Default**: 90%
 - **Unit**: N/A
-- **Description**: BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100GB").
+- **Description**: BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100G"). The default hard limit is 90% of the server's memory size, and the soft limit is 80%. You need to configure this parameter if you want to deploy StarRocks with other memory-intensive services on a same server.
 
 #### flush_thread_num_per_store
 

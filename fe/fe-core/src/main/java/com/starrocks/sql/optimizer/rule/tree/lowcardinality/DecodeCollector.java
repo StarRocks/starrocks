@@ -389,11 +389,13 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         DecodeInfo info = new DecodeInfo();
         for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
             // Condition 1:
-            if (!column.getType().isVarchar() && !(ArrayType.ARRAY_VARCHAR.matchesType(column.getType()) &&
-                    sessionVariable.isEnableArrayLowCardinalityOptimize())) {
+            if (!supportLowCardinality(column.getType())) {
                 continue;
             }
 
+            if (!sessionVariable.isEnableArrayLowCardinalityOptimize() && column.getType().isArrayType()) {
+                continue;
+            }
 
             ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentStatisticStorage()
                     .getColumnStatistic(table, column.getName());

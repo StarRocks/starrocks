@@ -224,23 +224,14 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testCreateLocationWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
-                                                  @Mocked SystemInfoService systemInfoService,
-                                                  @Mocked TabletInvertedIndex invertedIndex) throws Exception {
-        new Expectations() {
+    public void testCreateLocationWithLocalTablet() throws Exception {
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        new Expectations(systemInfoService) {
             {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-                GlobalStateMgr.getCurrentSystemInfo();
-                result = systemInfoService;
-                systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
-                result = Status.OK;
-                globalStateMgr.getOrCreateSystemInfo(anyInt);
-                result = systemInfoService;
-                systemInfoService.checkBackendAlive(anyLong);
-                result = true;
-                GlobalStateMgr.getCurrentInvertedIndex();
-                result = invertedIndex;
+               systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
+               result = Status.OK;
+               systemInfoService.checkBackendAlive(anyLong);
+               result = true;
             }
         };
 
@@ -402,41 +393,6 @@ public class OlapTableSinkTest {
         ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
                 Lists.newArrayList(new Column("province",Type.STRING)));
         listPartitionInfo.setValues(1,Lists.newArrayList("beijing","shanghai"));
-        listPartitionInfo.setReplicationNum(1, (short) 3);
-        MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
-        HashDistributionInfo distInfo = new HashDistributionInfo(
-                3, Lists.newArrayList(new Column("id", Type.BIGINT)));
-        Partition partition = new Partition(1, "p1", index, distInfo);
-
-        new Expectations() {{
-            dstTable.getId();
-            result = 1;
-            dstTable.getPartitions();
-            result = Lists.newArrayList(partition);
-            dstTable.getPartition(1L);
-            result = partition;
-            dstTable.getPartitionInfo();
-            result = listPartitionInfo;
-        }};
-
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(1L),
-                TWriteQuorumType.MAJORITY, false, false, false);
-        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
-        sink.complete();
-
-        Assert.assertTrue(sink.toThrift() instanceof TDataSink);
-    }
-
-    @Test
-    public void testMultiListPartition() throws UserException{
-        TupleDescriptor tuple = getTuple();
-        ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
-                Lists.newArrayList(new Column("dt",Type.STRING), new Column("province",Type.STRING)));
-        List<String> multiItems = Lists.newArrayList("dt","shanghai");
-        List<List<String>> multiValues = new ArrayList<>();
-        multiValues.add(multiItems);
-
-        listPartitionInfo.setMultiValues(1,multiValues);
         listPartitionInfo.setReplicationNum(1, (short) 3);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
         HashDistributionInfo distInfo = new HashDistributionInfo(

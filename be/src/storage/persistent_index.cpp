@@ -24,6 +24,7 @@
 #include "io/io_profiler.h"
 #include "storage/chunk_helper.h"
 #include "storage/chunk_iterator.h"
+#include "storage/persistent_index_tablet_loader.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
@@ -3109,7 +3110,7 @@ void PersistentIndex::_get_stat_from_immutable_index(ImmutableIndex* immu_index,
     }
 }
 
-Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& index_meta) {
+Status PersistentIndex::_build_commit(TabletLoader* loader, PersistentIndexMetaPB& index_meta) {
     // commit: flush _l0 and build _l1
     // write PersistentIndexMetaPB in RocksDB
     Status status = commit(&index_meta);
@@ -3118,7 +3119,7 @@ Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& ind
         return status;
     }
     // write pesistent index meta
-    status = TabletMetaManager::write_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), index_meta);
+    status = TabletMetaManager::write_persistent_index_meta(loader->data_dir(), loader->tablet_id(), index_meta);
     if (!status.ok()) {
         LOG(WARNING) << "build persistent index failed because write persistent index meta failed: "
                      << status.to_string();
@@ -3133,23 +3134,14 @@ Status PersistentIndex::_build_commit(Tablet* tablet, PersistentIndexMetaPB& ind
     return status;
 }
 
-Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets,
-                                        const Schema& pkey_schema, int64_t apply_version,
+Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey_schema,
                                         std::unique_ptr<Column> pk_column) {
-    OlapReaderStatistics stats;
     std::vector<uint32_t> rowids;
     rowids.reserve(4096);
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
     auto chunk = chunk_shared_ptr.get();
-    for (auto& rowset : rowsets) {
-        RowsetReleaseGuard guard(rowset);
-        auto res = rowset->get_segment_iterators2(pkey_schema, tablet->tablet_schema(), tablet->data_dir()->get_meta(),
-                                                  apply_version, &stats);
-        if (!res.ok()) {
-            return res.status();
-        }
-        auto& itrs = res.value();
-        CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
+    RETURN_IF_ERROR(loader->rowset_iterator(pkey_schema, [&](const std::vector<ChunkIteratorPtr>& itrs,
+                                                             uint32_t rowset_id) {
         for (size_t i = 0; i < itrs.size(); i++) {
             auto itr = itrs[i].get();
             if (itr == nullptr) {
@@ -3172,7 +3164,7 @@ Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetShared
                     } else {
                         pkc = chunk->columns()[0].get();
                     }
-                    uint32_t rssid = rowset->rowset_meta()->get_rowset_seg_id() + i;
+                    uint32_t rssid = rowset_id + i;
                     uint64_t base = ((uint64_t)rssid) << 32;
                     std::vector<IndexValue> values;
                     values.reserve(pkc->size());
@@ -3194,18 +3186,16 @@ Status PersistentIndex::_insert_rowsets(Tablet* tablet, std::vector<RowsetShared
                         st = insert(pkc->size(), reinterpret_cast<const Slice*>(keys.data()), values.data(), false);
                     }
                     if (!st.ok()) {
-                        LOG(ERROR) << "load index failed: tablet=" << tablet->tablet_id()
-                                   << " rowsets num:" << rowsets.size()
-                                   << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id() << " segment:" << i
-                                   << " reason: " << st.to_string() << " current_size:" << size()
-                                   << " updates: " << tablet->updates()->debug_string();
+                        LOG(ERROR) << "load index failed: tablet=" << loader->tablet_id() << " rowset:" << rowset_id
+                                   << " segment:" << i << " reason: " << st.to_string() << " current_size:" << size();
                         return st;
                     }
                 }
             }
             itr->close();
         }
-    }
+        return Status::OK();
+    }));
     return Status::OK();
 }
 
@@ -3223,205 +3213,13 @@ bool PersistentIndex::_need_rebuild_index(const PersistentIndexMetaPB& index_met
 }
 
 Status PersistentIndex::load_from_tablet(Tablet* tablet) {
-    MonotonicStopWatch timer;
-    timer.start();
     if (tablet->keys_type() != PRIMARY_KEYS) {
         LOG(WARNING) << "tablet: " << tablet->tablet_id() << " is not primary key tablet";
         return Status::NotSupported("Only PrimaryKey table is supported to use persistent index");
     }
 
-    PersistentIndexMetaPB index_meta;
-    Status status = TabletMetaManager::get_persistent_index_meta(tablet->data_dir(), tablet->tablet_id(), &index_meta);
-    if (!status.ok() && !status.is_not_found()) {
-        return Status::InternalError("get tablet persistent index meta failed");
-    }
-
-    // There are three conditions
-    // First is we do not find PersistentIndexMetaPB in TabletMeta, it maybe the first time to
-    // enable persistent index
-    // Second is we find PersistentIndexMetaPB in TabletMeta, but it's version is behind applied_version
-    // in TabletMeta. It could be happened as below:
-    //    1. Enable persistent index and apply rowset, applied_version is 1-0
-    //    2. Restart be and disable persistent index, applied_version is update to 2-0
-    //    3. Restart be and enable persistent index
-    // In this case, we don't have all rowset data in persistent index files, so we also need to rebuild it
-    // The last is we find PersistentIndexMetaPB and it's version is equal to latest applied version. In this case,
-    // we can load from index file directly
-    EditVersion lastest_applied_version;
-    RETURN_IF_ERROR(tablet->updates()->get_latest_applied_version(&lastest_applied_version));
-    if (status.ok()) {
-        // all applied rowsets has save in existing persistent index meta
-        // so we can load persistent index according to PersistentIndexMetaPB
-        EditVersion version = index_meta.version();
-        if (version == lastest_applied_version) {
-            if (_need_rebuild_index(index_meta)) {
-                LOG(WARNING) << "different format version, we need to rebuild persistent index";
-                status = Status::InternalError("different format version");
-            } else {
-                status = load(index_meta);
-            }
-            if (status.ok()) {
-                LOG(INFO) << "load persistent index tablet:" << tablet->tablet_id()
-                          << " version:" << version.to_string() << " size: " << _size
-                          << " l0_size: " << (_l0 ? _l0->size() : 0) << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
-                          << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
-                          << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
-                          << " memory: " << memory_usage() << " status: " << status.to_string()
-                          << " time:" << timer.elapsed_time() / 1000000 << "ms";
-                return status;
-            } else {
-                LOG(WARNING) << "load persistent index failed, tablet: " << tablet->tablet_id()
-                             << ", status: " << status;
-                if (index_meta.has_l0_meta()) {
-                    EditVersion l0_version = index_meta.l0_meta().snapshot().version();
-                    std::string l0_file_name =
-                            strings::Substitute("index.l0.$0.$1", l0_version.major_number(), l0_version.minor_number());
-                    Status st = FileSystem::Default()->delete_file(l0_file_name);
-                    LOG(WARNING) << "delete error l0 index file: " << l0_file_name << ", status: " << st;
-                }
-                if (index_meta.has_l1_version()) {
-                    EditVersion l1_version = index_meta.l1_version();
-                    std::string l1_file_name =
-                            strings::Substitute("index.l1.$0.$1", l1_version.major_number(), l1_version.minor_number());
-                    Status st = FileSystem::Default()->delete_file(l1_file_name);
-                    LOG(WARNING) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
-                }
-                if (index_meta.l2_versions_size() > 0) {
-                    DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
-                    for (int i = 0; i < index_meta.l2_versions_size(); i++) {
-                        EditVersion l2_version = index_meta.l2_versions(i);
-                        std::string l2_file_name = strings::Substitute(
-                                "index.l2.$0.$1$2", l2_version.major_number(), l2_version.minor_number(),
-                                index_meta.l2_version_merged(i) ? MergeSuffix : "");
-                        Status st = FileSystem::Default()->delete_file(l2_file_name);
-                        LOG(WARNING) << "delete error l2 index file: " << l2_file_name << ", status: " << st;
-                    }
-                }
-            }
-        }
-    }
-
-    auto tablet_schema_ptr = tablet->tablet_schema();
-    vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
-    for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
-        pk_columns[i] = (ColumnId)i;
-    }
-    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
-    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
-
-    // Init PersistentIndex
-    _key_size = fix_size;
-    _size = 0;
-    _version = lastest_applied_version;
-    auto st = ShardByLengthMutableIndex::create(_key_size, _path);
-    if (!st.ok()) {
-        LOG(WARNING) << "Build persistent index failed because initialization failed: " << st.status().to_string();
-        return st.status();
-    }
-    _l0 = std::move(st).value();
-    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
-    // set _dump_snapshot to true
-    // In this case, only do flush or dump snapshot, set _dump_snapshot to avoid append wal
-    _dump_snapshot = true;
-
-    // clear l1
-    {
-        std::unique_lock wrlock(_lock);
-        _l1_vec.clear();
-        _usage_and_size_by_key_length.clear();
-        _l1_merged_num.clear();
-    }
-    _has_l1 = false;
-    for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
-        auto [l0_shard_offset, l0_shard_size] = shard_info;
-        const auto l0_kv_pairs_size = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
-                                                      std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
-                                                      0LL, [](size_t s, const auto& e) { return s + e->size(); });
-        const auto l0_kv_pairs_usage = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
-                                                       std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
-                                                       0LL, [](size_t s, const auto& e) { return s + e->usage(); });
-        if (auto [_, inserted] =
-                    _usage_and_size_by_key_length.insert({key_size, {l0_kv_pairs_usage, l0_kv_pairs_size}});
-            !inserted) {
-            std::string msg = strings::Substitute(
-                    "load persistent index from tablet failed, insert usage and size by key size failed, key_size: $0",
-                    key_size);
-            LOG(WARNING) << msg;
-            return Status::InternalError(msg);
-        }
-    }
-    // clear l2
-    {
-        std::unique_lock wrlock(_lock);
-        _l2_vec.clear();
-        _l2_versions.clear();
-    }
-
-    // Init PersistentIndexMetaPB
-    //   1. reset |version| |key_size|
-    //   2. delete WALs because maybe PersistentIndexMetaPB has expired wals
-    //   3. reset SnapshotMeta
-    //   4. write all data into new tmp _l0 index file (tmp file will be delete in _build_commit())
-    index_meta.clear_l0_meta();
-    index_meta.clear_l1_version();
-    index_meta.clear_l2_versions();
-    index_meta.clear_l2_version_merged();
-    index_meta.set_key_size(_key_size);
-    index_meta.set_size(0);
-    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_4);
-    lastest_applied_version.to_pb(index_meta.mutable_version());
-    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
-    l0_meta->clear_wals();
-    IndexSnapshotMetaPB* snapshot = l0_meta->mutable_snapshot();
-    lastest_applied_version.to_pb(snapshot->mutable_version());
-    PagePointerPB* data = snapshot->mutable_data();
-    data->set_offset(0);
-    data->set_size(0);
-
-    int64_t apply_version = 0;
-    std::vector<RowsetSharedPtr> rowsets;
-    std::vector<uint32_t> rowset_ids;
-    RETURN_IF_ERROR(tablet->updates()->get_apply_version_and_rowsets(&apply_version, &rowsets, &rowset_ids));
-
-    size_t total_data_size = 0;
-    size_t total_segments = 0;
-    size_t total_rows = 0;
-    for (auto& rowset : rowsets) {
-        total_data_size += rowset->data_disk_size();
-        total_segments += rowset->num_segments();
-        total_rows += rowset->num_rows();
-    }
-    size_t total_rows2 = 0;
-    size_t total_dels = 0;
-    status = tablet->updates()->get_rowsets_total_stats(rowset_ids, &total_rows2, &total_dels);
-    if (!status.ok() || total_rows2 != total_rows) {
-        LOG(WARNING) << "load primary index get_rowsets_total_stats error: " << status;
-    }
-    DCHECK(total_rows2 == total_rows);
-    if (total_data_size > 4000000000 || total_rows > 10000000 || total_segments > 400) {
-        LOG(INFO) << "load large primary index start tablet:" << tablet->tablet_id() << " version:" << apply_version
-                  << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " #row:" << total_rows << " -"
-                  << total_dels << "=" << total_rows - total_dels << " bytes:" << total_data_size;
-    }
-    std::unique_ptr<Column> pk_column;
-    if (pk_columns.size() > 1) {
-        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
-            CHECK(false) << "create column for primary key encoder failed";
-        }
-    }
-    RETURN_IF_ERROR(_insert_rowsets(tablet, rowsets, pkey_schema, apply_version, std::move(pk_column)));
-    if (size() != total_rows - total_dels) {
-        LOG(WARNING) << strings::Substitute("load primary index row count not match tablet:$0 index:$1 != stats:$2",
-                                            tablet->tablet_id(), size(), total_rows - total_dels);
-    }
-    RETURN_IF_ERROR(_build_commit(tablet, index_meta));
-    LOG(INFO) << "build persistent index finish tablet: " << tablet->tablet_id() << " version:" << apply_version
-              << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " data_size:" << total_data_size
-              << " size: " << _size << " l0_size: " << _l0->size() << " l0_capacity:" << _l0->capacity()
-              << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
-              << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
-              << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
-    return Status::OK();
+    std::unique_ptr<TabletLoader> loader = std::make_unique<PersistentIndexTabletLoader>(tablet);
+    return _load_by_loader(loader.get());
 }
 
 Status PersistentIndex::prepare(const EditVersion& version, size_t n) {
@@ -5093,6 +4891,172 @@ void PersistentIndex::reset_cancel_major_compaction() {
     if (!_major_compaction_running.load(std::memory_order_relaxed)) {
         _cancel_major_compaction = false;
     }
+}
+
+Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
+    starrocks::Schema pkey_schema = loader->generate_pkey_schema();
+    DataDir* data_dir = loader->data_dir();
+    TTabletId tablet_id = loader->tablet_id();
+    ASSIGN_OR_RETURN(EditVersion applied_version, loader->applied_version());
+    loader->setting();
+
+    MonotonicStopWatch timer;
+    timer.start();
+
+    PersistentIndexMetaPB index_meta;
+    Status status = TabletMetaManager::get_persistent_index_meta(data_dir, tablet_id, &index_meta);
+    if (!status.ok() && !status.is_not_found()) {
+        return Status::InternalError("get tablet persistent index meta failed");
+    }
+
+    // There are three conditions
+    // First is we do not find PersistentIndexMetaPB in TabletMeta, it maybe the first time to
+    // enable persistent index
+    // Second is we find PersistentIndexMetaPB in TabletMeta, but it's version is behind applied_version
+    // in TabletMeta. It could be happened as below:
+    //    1. Enable persistent index and apply rowset, applied_version is 1-0
+    //    2. Restart be and disable persistent index, applied_version is update to 2-0
+    //    3. Restart be and enable persistent index
+    // In this case, we don't have all rowset data in persistent index files, so we also need to rebuild it
+    // The last is we find PersistentIndexMetaPB and it's version is equal to latest applied version. In this case,
+    // we can load from index file directly
+    if (status.ok()) {
+        // all applied rowsets has save in existing persistent index meta
+        // so we can load persistent index according to PersistentIndexMetaPB
+        EditVersion version = index_meta.version();
+        if (version == applied_version) {
+            if (_need_rebuild_index(index_meta)) {
+                LOG(WARNING) << "we need to rebuild persistent index, tablet id: " << tablet_id;
+                status = Status::InternalError("rebuild persistent index");
+            } else {
+                status = load(index_meta);
+            }
+            if (status.ok()) {
+                LOG(INFO) << "load persistent index tablet:" << tablet_id << " version:" << version.to_string()
+                          << " size: " << _size << " l0_size: " << (_l0 ? _l0->size() : 0)
+                          << " l0_capacity:" << (_l0 ? _l0->capacity() : 0)
+                          << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
+                          << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
+                          << " memory: " << memory_usage() << " status: " << status.to_string()
+                          << " time:" << timer.elapsed_time() / 1000000 << "ms";
+                return status;
+            } else {
+                LOG(WARNING) << "load persistent index failed, tablet: " << tablet_id << ", status: " << status;
+                if (index_meta.has_l0_meta()) {
+                    EditVersion l0_version = index_meta.l0_meta().snapshot().version();
+                    std::string l0_file_name =
+                            strings::Substitute("index.l0.$0.$1", l0_version.major_number(), l0_version.minor_number());
+                    Status st = FileSystem::Default()->delete_file(l0_file_name);
+                    LOG(WARNING) << "delete error l0 index file: " << l0_file_name << ", status: " << st;
+                }
+                if (index_meta.has_l1_version()) {
+                    EditVersion l1_version = index_meta.l1_version();
+                    std::string l1_file_name =
+                            strings::Substitute("index.l1.$0.$1", l1_version.major_number(), l1_version.minor_number());
+                    Status st = FileSystem::Default()->delete_file(l1_file_name);
+                    LOG(WARNING) << "delete error l1 index file: " << l1_file_name << ", status: " << st;
+                }
+                if (index_meta.l2_versions_size() > 0) {
+                    DCHECK(index_meta.l2_versions_size() == index_meta.l2_version_merged_size());
+                    for (int i = 0; i < index_meta.l2_versions_size(); i++) {
+                        EditVersion l2_version = index_meta.l2_versions(i);
+                        std::string l2_file_name = strings::Substitute(
+                                "index.l2.$0.$1$2", l2_version.major_number(), l2_version.minor_number(),
+                                index_meta.l2_version_merged(i) ? MergeSuffix : "");
+                        Status st = FileSystem::Default()->delete_file(l2_file_name);
+                        LOG(WARNING) << "delete error l2 index file: " << l2_file_name << ", status: " << st;
+                    }
+                }
+            }
+        }
+    }
+
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
+
+    // Init PersistentIndex
+    _key_size = fix_size;
+    _size = 0;
+    _version = applied_version;
+    auto st = ShardByLengthMutableIndex::create(_key_size, _path);
+    if (!st.ok()) {
+        LOG(WARNING) << "Build persistent index failed because initialization failed: " << st.status().to_string();
+        return st.status();
+    }
+    _l0 = std::move(st).value();
+    ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
+    // set _dump_snapshot to true
+    // In this case, only do flush or dump snapshot, set _dump_snapshot to avoid append wal
+    _dump_snapshot = true;
+
+    // clear l1
+    {
+        std::unique_lock wrlock(_lock);
+        _l1_vec.clear();
+        _usage_and_size_by_key_length.clear();
+        _l1_merged_num.clear();
+    }
+    _has_l1 = false;
+    for (const auto& [key_size, shard_info] : _l0->_shard_info_by_key_size) {
+        auto [l0_shard_offset, l0_shard_size] = shard_info;
+        const auto l0_kv_pairs_size = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
+                                                      std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
+                                                      0LL, [](size_t s, const auto& e) { return s + e->size(); });
+        const auto l0_kv_pairs_usage = std::accumulate(std::next(_l0->_shards.begin(), l0_shard_offset),
+                                                       std::next(_l0->_shards.begin(), l0_shard_offset + l0_shard_size),
+                                                       0LL, [](size_t s, const auto& e) { return s + e->usage(); });
+        if (auto [_, inserted] =
+                    _usage_and_size_by_key_length.insert({key_size, {l0_kv_pairs_usage, l0_kv_pairs_size}});
+            !inserted) {
+            std::string msg = strings::Substitute(
+                    "load persistent index from tablet failed, insert usage and size by key size failed, key_size: $0",
+                    key_size);
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
+    }
+    // clear l2
+    {
+        std::unique_lock wrlock(_lock);
+        _l2_vec.clear();
+        _l2_versions.clear();
+    }
+
+    // Init PersistentIndexMetaPB
+    //   1. reset |version| |key_size|
+    //   2. delete WALs because maybe PersistentIndexMetaPB has expired wals
+    //   3. reset SnapshotMeta
+    //   4. write all data into new tmp _l0 index file (tmp file will be delete in _build_commit())
+    index_meta.clear_l0_meta();
+    index_meta.clear_l1_version();
+    index_meta.clear_l2_versions();
+    index_meta.clear_l2_version_merged();
+    index_meta.set_key_size(_key_size);
+    index_meta.set_size(0);
+    index_meta.set_format_version(PERSISTENT_INDEX_VERSION_4);
+    applied_version.to_pb(index_meta.mutable_version());
+    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+    l0_meta->clear_wals();
+    IndexSnapshotMetaPB* snapshot = l0_meta->mutable_snapshot();
+    applied_version.to_pb(snapshot->mutable_version());
+    PagePointerPB* data = snapshot->mutable_data();
+    data->set_offset(0);
+    data->set_size(0);
+
+    std::unique_ptr<Column> pk_column;
+    if (pkey_schema.num_fields() > 1) {
+        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+            CHECK(false) << "create column for primary key encoder failed";
+        }
+    }
+    RETURN_IF_ERROR(_insert_rowsets(loader, pkey_schema, std::move(pk_column)));
+    RETURN_IF_ERROR(_build_commit(loader, index_meta));
+    LOG(INFO) << "build persistent index finish tablet: " << loader->tablet_id() << " version:" << applied_version
+              << " #rowset:" << loader->rowset_num() << " #segment:" << loader->total_segments()
+              << " data_size:" << loader->total_data_size() << " size: " << _size << " l0_size: " << _l0->size()
+              << " l0_capacity:" << _l0->capacity() << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
+              << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
+              << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
+    return Status::OK();
 }
 
 } // namespace starrocks

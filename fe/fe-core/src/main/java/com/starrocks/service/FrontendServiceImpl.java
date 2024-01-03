@@ -2227,8 +2227,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             result = createPartitionProcess(request);
-        } catch (Throwable t) {
-            LOG.warn(t);
+        } catch (Exception t) {
+            LOG.warn(DebugUtil.getStackTrace(t));
             result = new TCreatePartitionResult();
             TStatus errorStatus = new TStatus(RUNTIME_ERROR);
             errorStatus.setError_msgs(Lists.newArrayList(String.format("txn_id=%d failed. %s",
@@ -2321,13 +2321,28 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
 
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
+        try {
+            return buildCreatePartitionResponse(olapTable, partitions, tablets, partitionColNames);
+        } finally {
+            locker.unLockDatabase(db, LockType.READ);
+        }
+    }
+
+    private static TCreatePartitionResult buildCreatePartitionResponse(OlapTable olapTable,
+                                                                       List<TOlapTablePartition> partitions,
+                                                                       List<TTabletLocation> tablets,
+                                                                       List<String> partitionColNames) {
+        TCreatePartitionResult result = new TCreatePartitionResult();
+        TStatus errorStatus = new TStatus(RUNTIME_ERROR);
         for (String partitionName : partitionColNames) {
-            Partition partition = table.getPartition(partitionName);
+            Partition partition = olapTable.getPartition(partitionName);
             TOlapTablePartition tPartition = new TOlapTablePartition();
             tPartition.setId(partition.getId());
             buildPartitionInfo(olapTable, partitions, partition, tPartition);
             // tablet
-            int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), ((OlapTable) table).writeQuorum());
+            int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), olapTable.writeQuorum());
             for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 if (olapTable.isCloudNativeTable()) {
                     for (Tablet tablet : index.getTablets()) {

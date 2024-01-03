@@ -23,7 +23,6 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.jmockit.Deencapsulation;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -49,9 +48,6 @@ public class JDBCMetadataTest {
 
     @Mocked
     Connection connection;
-
-    @Mocked
-    JDBCTableIdCache jdbcTableIdCache;
 
     private Map<String, String> properties;
     private MockResultSet dbResult;
@@ -114,16 +110,6 @@ public class JDBCMetadataTest {
 
                 connection.getMetaData().getColumns("test", null, "tbl1", "%");
                 result = columnResult;
-                minTimes = 0;
-
-                JDBCTableName jdbcTablekey = JDBCTableName.of("catalog", "test", "tbl1");
-
-                Deencapsulation.invoke(jdbcTableIdCache, "containsTableId", jdbcTablekey);
-                result = true;
-                minTimes = 0;
-
-                Deencapsulation.invoke(jdbcTableIdCache, "getTableId", jdbcTablekey);
-                result = 100000;
                 minTimes = 0;
 
             }
@@ -248,7 +234,9 @@ public class JDBCMetadataTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
             Table table1 = jdbcMetadata.getTable("test", "tbl1");
-            Assert.assertTrue(table1.getId() == 100000);
+            columnResult.beforeFirst();
+            Table table2 = jdbcMetadata.getTable("test", "tbl1");
+            Assert.assertTrue(table1.getId() == table2.getId());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
