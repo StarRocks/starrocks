@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.google.common.collect.Lists;
@@ -125,15 +124,18 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         for (MaterializationContext mvContext : mvCandidateContexts) {
             // 1. check whether to need compensate or not
             // 2. `queryPredicateSplit` is different for each materialized view, so we can not cache it anymore.
-            boolean isCompensatePartitionPredicate = MvUtils.isNeedCompensatePartitionPredicate(queryExpression, mvContext);
-            PredicateSplit queryPredicateSplit = getQuerySplitPredicate(mvContext, queryExpression, queryColumnRefFactory,
-                    queryColumnRefRewriter, isCompensatePartitionPredicate);
+            boolean isCompensatePartitionPredicate =
+                    MvUtils.isNeedCompensatePartitionPredicate(queryExpression, mvContext);
+            PredicateSplit queryPredicateSplit =
+                    getQuerySplitPredicate(mvContext, queryExpression, queryColumnRefFactory,
+                            queryColumnRefRewriter, isCompensatePartitionPredicate);
             if (queryPredicateSplit == null) {
                 continue;
             }
             MvRewriteContext mvRewriteContext =
                     new MvRewriteContext(mvContext, queryTables, queryExpression,
-                        queryColumnRefRewriter, queryPredicateSplit, onPredicates, this, isCompensatePartitionPredicate);
+                            queryColumnRefRewriter, queryPredicateSplit, onPredicates, this,
+                            isCompensatePartitionPredicate);
 
             // rewrite query
             MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
@@ -161,7 +163,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             // Do not try to enumerate all plans, it would take a lot of time
             int limit = context.getSessionVariable().getCboMaterializedViewRewriteRuleOutputLimit();
             if (limit > 0 && results.size() >= limit) {
-                logMVRewrite(context, this, "generated too many MV result {}, abort rewrite", limit);
+                logMVRewrite(context, this, "too many MV rewrite results generated, but limit to {}", limit);
                 break;
             }
 

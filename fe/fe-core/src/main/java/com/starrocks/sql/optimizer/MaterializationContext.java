@@ -189,9 +189,6 @@ public class MaterializationContext {
         if (query == OperatorType.LOGICAL_AGGR) {
             return MvUtils.isLogicalSPJG(mvExpression);
         }
-        if (query == OperatorType.LOGICAL_JOIN) {
-            return MvUtils.isLogicalSPJ(mvExpression);
-        }
         return MvUtils.isLogicalSPJ(mvExpression);
     }
 
@@ -276,8 +273,8 @@ public class MaterializationContext {
 
     public static class RewriteOrdering implements Comparator<MaterializationContext> {
 
-        private OptExpression query;
-        private LogicalAggregationOperator queryAgg;
+        private static final int LOWEST_ORDERING = 100;
+        private final OptExpression query;
         private Set<String> queryDimensionNames;
 
         public RewriteOrdering(OptExpression query, ColumnRefFactory factory) {
@@ -287,8 +284,8 @@ public class MaterializationContext {
 
         private void resolveAggregation(OptExpression query) {
             if (query.getOp().getOpType() == OperatorType.LOGICAL_AGGR) {
-                this.queryAgg = (LogicalAggregationOperator) query.getOp();
-                List<ColumnRefOperator> quDimensions = Lists.newArrayList(this.queryAgg.getGroupingKeys());
+                LogicalAggregationOperator queryAgg = (LogicalAggregationOperator) query.getOp();
+                List<ColumnRefOperator> quDimensions = Lists.newArrayList(queryAgg.getGroupingKeys());
                 quDimensions.addAll(MvUtils.getPredicateColumns(this.query));
                 this.queryDimensionNames =
                         quDimensions.stream().map(ColumnRefOperator::getName).collect(Collectors.toSet());
@@ -312,7 +309,7 @@ public class MaterializationContext {
          */
         private int orderingAggregation(MaterializationContext mv) {
             if (mv.getMvExpression().getOp().getOpType() == OperatorType.LOGICAL_AGGR) {
-                // TODO: consider move the dimension extraction to MV prepare
+                // TODO: consider moving the dimension extraction to MV prepare
                 LogicalAggregationOperator aggregation = (LogicalAggregationOperator) mv.getMvExpression().getOp();
                 List<ColumnRefOperator> mvDimensions = aggregation.getGroupingKeys();
                 Set<String> mvDimensionNames =
@@ -331,7 +328,7 @@ public class MaterializationContext {
                     return mvDimensionNames.size() + queryDimensionNames.size();
                 }
             }
-            return 100;
+            return LOWEST_ORDERING;
         }
 
         /**
