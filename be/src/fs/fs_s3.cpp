@@ -112,8 +112,10 @@ private:
         AWSCloudConfigurationPtr aws_cloud_configuration;
 
         bool operator==(const ClientCacheKey& rhs) const {
-            return !config && !(rhs.config) && *config == *(rhs.config) && !aws_cloud_configuration &&
-                   !(rhs.aws_cloud_configuration) && *aws_cloud_configuration == *(rhs.aws_cloud_configuration);
+            if (config && rhs.config && aws_cloud_configuration && rhs.aws_cloud_configuration) {
+                return *config == *(rhs.config) && *aws_cloud_configuration == *(rhs.aws_cloud_configuration);
+            }
+            return !config && !rhs.config && !aws_cloud_configuration && !rhs.aws_cloud_configuration;
         }
     };
 
