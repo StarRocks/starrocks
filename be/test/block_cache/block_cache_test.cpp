@@ -206,6 +206,7 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
 
     CacheOptions options;
     options.mem_space_size = 20 * 1024 * 1024;
+    options.disk_spaces.push_back({.path = "./ut_dir/final_entry_not_exist", .size = 100 * 1024 * 1024});
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
     options.engine = "starcache";
@@ -220,6 +221,7 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
     ASSERT_TRUE(st.ok());
 
     WriteCacheOptions write_options;
+    write_options.overwrite = true;
     std::string value2(cache_size, 'b');
     st = cache->write_buffer(cache_key, 0, cache_size, value2.c_str(), &write_options);
     ASSERT_TRUE(st.ok());

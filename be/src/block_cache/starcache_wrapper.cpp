@@ -68,7 +68,7 @@ Status StarCacheWrapper::write_object(const std::string& key, const void* ptr, s
     starcache::WriteOptions opts;
     opts.ttl_seconds = options->ttl_seconds;
     opts.overwrite = options->overwrite;
-	opts.write_probability = options->write_probability;
+    //opts.write_probability = options->write_probability;
     auto st = to_status(_cache->set_object(key, ptr, size, deleter, handle, &opts));
     if (st.ok()) {
         options->stats.write_mem_bytes = size;

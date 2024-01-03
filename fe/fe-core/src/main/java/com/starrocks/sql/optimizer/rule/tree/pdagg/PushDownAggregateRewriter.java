@@ -292,16 +292,6 @@ public class PushDownAggregateRewriter extends OptExpressionVisitor<OptExpressio
         return processChild(optExpression, childContext);
     }
 
-    private String getSplitAggFunctionName(Function fn) {
-        String fnName = fn.getFunctionName().getFunction();
-        if (fnName.equalsIgnoreCase(FunctionSet.ARRAY_AGG)) {
-            fnName = FunctionSet.ARRAY_FLATTEN;
-        } else if (fnName.equalsIgnoreCase(FunctionSet.ARRAY_AGG_DISTINCT)) {
-            fnName = FunctionSet.ARRAY_FLATTEN_DISTINCT;
-        }
-        return fnName;
-    }
-
     private CallOperator genAggregation(CallOperator origin, ScalarOperator args) {
         Function fn = Expr.getBuiltinFunction(origin.getFunction().getFunctionName().getFunction(),
                 new Type[] {args.getType()}, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);

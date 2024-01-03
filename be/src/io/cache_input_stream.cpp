@@ -112,10 +112,10 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
         SCOPED_RAW_TIMER(&read_cache_ns);
         BlockBuffer block;
         if (_enable_block_buffer) {
-            res = cache->read_buffer(_cache_key, block_offset, load_size, &block.buffer, &options);
+            res = _cache->read_buffer(_cache_key, block_offset, load_size, &block.buffer, &options);
             read_size = load_size;
         } else {
-            StatusOr<size_t> r = cache->read_buffer(_cache_key, offset, size, out, &options);
+            StatusOr<size_t> r = _cache->read_buffer(_cache_key, offset, size, out, &options);
             res = r.status();
             read_size = size;
         }
