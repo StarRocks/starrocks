@@ -56,7 +56,7 @@ public class OdpsProperties {
         newProperty(SPLIT_POLICY).withDefaultValue(SIZE);
         newProperty(SPLIT_ROW_COUNT).withDefaultValue(String.valueOf(DEFAULT_SPLIT_ROW_COUNT));
         newProperty(TUNNEL_ENDPOINT).noDefaultValue();
-        newProperty(TUNNEL_QUOTA).noDefaultValue();
+        newProperty(TUNNEL_QUOTA).isRequired();
 
         newProperty(ENABLE_TABLE_CACHE).withDefaultValue(true);
         newProperty(TABLE_CACHE_EXPIRE_TIME).withDefaultValue(86400);
