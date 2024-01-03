@@ -16,18 +16,28 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.NotImplementedException;
+import com.starrocks.common.UserException;
+import com.starrocks.planner.OlapTableSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
+import mockit.Injectable;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -42,6 +52,7 @@ import java.io.IOException;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -154,6 +165,60 @@ public class ListPartitionInfoTest {
         }
     }
 
+    @Test
+    public void testMultiListPartition(@Injectable OlapTable dstTable) throws UserException {
+
+        DescriptorTable descTable = new DescriptorTable();
+        TupleDescriptor tuple = descTable.createTupleDescriptor("DstTable");
+        // k1
+        SlotDescriptor k1 = descTable.addSlotDescriptor(tuple);
+        k1.setColumn(new Column("k1", Type.BIGINT));
+        k1.setIsMaterialized(true);
+
+        // k2
+        SlotDescriptor k2 = descTable.addSlotDescriptor(tuple);
+        k2.setColumn(new Column("k2", ScalarType.createVarchar(25)));
+        k2.setIsMaterialized(true);
+        // v1
+        SlotDescriptor v1 = descTable.addSlotDescriptor(tuple);
+        v1.setColumn(new Column("v1", ScalarType.createVarchar(25)));
+        v1.setIsMaterialized(true);
+        // v2
+        SlotDescriptor v2 = descTable.addSlotDescriptor(tuple);
+        v2.setColumn(new Column("v2", Type.BIGINT));
+        v2.setIsMaterialized(true);
+
+        ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
+                Lists.newArrayList(new Column("dt", Type.STRING), new Column("province", Type.STRING)));
+        List<String> multiItems = Lists.newArrayList("dt", "shanghai");
+        List<List<String>> multiValues = new ArrayList<>();
+        multiValues.add(multiItems);
+
+        listPartitionInfo.setMultiValues(1, multiValues);
+        listPartitionInfo.setReplicationNum(1, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
+        HashDistributionInfo distInfo = new HashDistributionInfo(
+                3, Lists.newArrayList(new Column("id", Type.BIGINT)));
+        Partition partition = new Partition(1, "p1", index, distInfo);
+
+        new Expectations() {{
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(1L);
+                result = partition;
+                dstTable.getPartitionInfo();
+                result = listPartitionInfo;
+            }};
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(1L),
+                TWriteQuorumType.MAJORITY, false, false, false);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+
+        Assert.assertTrue(sink.toThrift() instanceof TDataSink);
+    }
 
     @Test
     public void testToSqlForSingle() {
