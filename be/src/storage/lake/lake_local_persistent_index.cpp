@@ -16,6 +16,7 @@
 
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/lake_local_persistent_index_tablet_loader.h"
 #include "storage/lake/lake_primary_index.h"
 #include "storage/lake/meta_file.h"
 #include "storage/primary_key_encoder.h"
@@ -30,11 +31,8 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
         LOG(WARNING) << "tablet: " << tablet->id() << " is not primary key tablet";
         return Status::NotSupported("Only PrimaryKey table is supported to use persistent index");
     }
-    // persistent index' minor compaction is a new strategy to decrease the IO amplification.
-    // More detail: https://github.com/StarRocks/starrocks/issues/27581.
-    // disable minor_compaction in cloud native table for now, will enable it later
-    config::enable_pindex_minor_compaction = false;
 
+<<<<<<< HEAD
     MonotonicStopWatch timer;
     timer.start();
 
@@ -308,6 +306,11 @@ Status LakeLocalPersistentIndex::load_from_lake_tablet(starrocks::lake::Tablet* 
               << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
               << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
     return Status::OK();
+=======
+    std::unique_ptr<TabletLoader> loader =
+            std::make_unique<LakeLocalPersistentIndexTabletLoader>(tablet_mgr, metadata, base_version, builder);
+    return _load_by_loader(loader.get());
+>>>>>>> 89cf3f0dd2 ([Refactor] Add PersistentIndex tablet loader for both shared data and shared nothing (#37472))
 }
 
 } // namespace starrocks::lake
