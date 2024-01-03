@@ -4,6 +4,16 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.2
 
+## 3.2.2
+
+Release date: December 30, 2023
+
+### Bug Fixes
+
+Fixed the following issue:
+
+- When StarRocks is upgraded from v3.1.2 or earlier to v3.2, FEs may fail to restart. [#38172](https://github.com/StarRocks/starrocks/pull/38172)
+
 ## 3.2.1
 
 Release date: December 21, 2023
@@ -146,9 +156,9 @@ For more information, see [Manage permissions with Apache Ranger](../administrat
 - Data consistency:
   - Added the property `query_rewrite_consistency` for asynchronous materialized view creation. This property defines the query rewrite rules based on the consistency check.
   - Add the property `force_external_table_query_rewrite` for external catalog-based asynchronous materialized view creation. This property defines whether to allow force query rewrite for asynchronous materialized views created upon external catalogs.
-  -  For detailed information, see [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md).
+  - For detailed information, see [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md).
 - Added a consistency check for materialized views' partitioning key.
-  -  When users create an asynchronous materialized view with window functions that include a PARTITION BY expression, the partitioning column of the window function must match that of the materialized view.
+  - When users create an asynchronous materialized view with window functions that include a PARTITION BY expression, the partitioning column of the window function must match that of the materialized view.
 
 #### Storage engine, data ingestion, and export
 

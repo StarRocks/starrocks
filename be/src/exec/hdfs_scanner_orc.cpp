@@ -446,10 +446,10 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         }
 
         size_t chunk_size = 0;
-        size_t chunk_size_ori = 0;
+        size_t init_chunk_size = 0;
         if (_orc_reader->get_cvb_size() != 0) {
             chunk_size = _orc_reader->get_cvb_size();
-            chunk_size_ori = chunk_size;
+            init_chunk_size = chunk_size;
             {
                 StatusOr<ChunkPtr> ret;
                 SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
@@ -505,7 +505,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
         // if has lazy load fields, skip it if chunk_size == 0
         if (chunk_size == 0) {
-            _app_stats.late_materialize_skip_rows += chunk_size_ori;
+            _app_stats.late_materialize_skip_rows += init_chunk_size;
             continue;
         }
         {

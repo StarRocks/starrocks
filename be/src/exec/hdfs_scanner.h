@@ -304,7 +304,7 @@ public:
     int64_t num_rows_read() const { return _app_stats.rows_read; }
     int64_t cpu_time_spent() const { return _total_running_time - _app_stats.io_ns; }
     int64_t io_time_spent() const { return _app_stats.io_ns; }
-    int64_t estimated_mem_usage() const;
+    virtual int64_t estimated_mem_usage() const;
     void set_keep_priority(bool v) { _keep_priority = v; }
     bool keep_priority() const { return _keep_priority; }
     void update_counter();

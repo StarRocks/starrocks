@@ -49,6 +49,7 @@
 #include "exec/spill/dir_manager.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
+#include "exprs/jit/jit_engine.h"
 #include "fs/fs_s3.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
@@ -196,6 +197,9 @@ Status GlobalEnv::_init_mem_tracker() {
             calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
     _query_pool_mem_tracker =
             regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit, "query_pool", this->process_mem_tracker());
+    _connector_scan_pool_mem_tracker =
+            regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit * config::connector_scan_use_query_mem_ratio,
+                           "query_pool/connector_scan", nullptr);
 
     int64_t load_mem_limit = calc_max_load_memory(_process_mem_tracker->limit());
     _load_mem_tracker = regist_tracker(MemTracker::LOAD, load_mem_limit, "load", process_mem_tracker());
@@ -521,6 +525,12 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
+
+    auto jit_engine = JITEngine::get_instance();
+    status = jit_engine->init();
+    if (!status.ok()) {
+        LOG(WARNING) << "Failed to init JIT engine: " << status.message();
+    }
 
     return Status::OK();
 }

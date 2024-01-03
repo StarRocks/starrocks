@@ -72,6 +72,10 @@ Status SchemaScanner::start(RuntimeState* state) {
     return Status::OK();
 }
 
+void SchemaScanner::set_runtime_state(RuntimeState* state) {
+    _runtime_state = state;
+}
+
 Status SchemaScanner::get_next(ChunkPtr* chunk, bool* eos) {
     if (!_is_init) {
         return Status::InternalError("used before initialized.");
@@ -199,6 +203,7 @@ Status SchemaScanner::_create_slot_descs(ObjectPool* pool) {
     int null_byte = 0;
     int null_bit = 0;
 
+    _slot_descs.clear();
     for (int i = 0; i < _column_num; ++i) {
         TSlotDescriptor t_slot_desc;
         auto type_desc = TypeDescriptor(_columns[i].type);

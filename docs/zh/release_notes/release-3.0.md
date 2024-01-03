@@ -4,6 +4,87 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.0
 
+# 3.0.9
+
+发布日期：2024 年 1 月 2 日
+
+## 新增特性
+
+- 新增聚合函数 [percentile_disc](../sql-reference/sql-functions/aggregate-functions/percentile_disc.md)。[#36352](https://github.com/StarRocks/starrocks/pull/36352)
+- 新增监控指标 `max_tablet_rowset_num`（用于设置 Rowset 的最大数量），可以协助提前发现 Compaction 是否会出问题并及时干预，减少报错信息“too many versions”的出现。[#36539](https://github.com/StarRocks/starrocks/pull/36539)
+
+## 功能优化
+
+- 系统变量 [sql_mode](../reference/System_variable.md#sql_mode) 增加 `GROUP_CONCAT_LEGACY` 选项，用以兼容 [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) 函数在 2.5（不含）版本之前的实现逻辑。[#36150](https://github.com/StarRocks/starrocks/pull/36150)
+- 使用 JDK 时 GC 算法默认采用 G1GC。[#37386](https://github.com/StarRocks/starrocks/pull/37386)
+- 在 `be_tablets` 表中增加 `INDEX_DISK` 记录持久化索引的磁盘使用量，单位是 Bytes。[#35615](https://github.com/StarRocks/starrocks/pull/35615)
+- 支持 MySQL 外部表和 JDBC Catalog 外部表的 WHERE 子句中包含关键字。[#35917](https://github.com/StarRocks/starrocks/pull/35917)
+- 如果是自动分区表，也支持指定分区名进行更新，如果分区不存在则报错。[#34777](https://github.com/StarRocks/starrocks/pull/34777)
+- 主键模型表 [SHOW DATA](../sql-reference/sql-statements/data-manipulation/SHOW_DATA.md) 的结果中新增包括 **.cols** 文件（部分列更新和生成列相关的文件）和持久化索引文件的文件大小信息。[#34898](https://github.com/StarRocks/starrocks/pull/34898)
+- 优化主键模型表全部 Rowset 进行 Compaction 时的持久化索引更新性能，降低 I/O 负载。 [#36819](https://github.com/StarRocks/starrocks/pull/36819)
+- WHERE 子句中 LIKE 运算符右侧字符串中不包括 `%` 或者 `_` 时，LIKE 运算符会转换成 `=` 运算符。[#37515](https://github.com/StarRocks/starrocks/pull/37515)
+- 优化主键模型表 Compaction Score 的取值逻辑，使其和其他模型的表的取值范围看起来更一致。[#36534](https://github.com/StarRocks/starrocks/pull/36534)
+- [SHOW ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD.md) 返回结果中增加时间戳进度信息，展示各个分区当前消费消息的时间戳。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- 优化 Bitmap 相关的某些操作的性能，主要包括：
+  - 优化 Nested Loop Join 性能。[#340804](https://github.com/StarRocks/starrocks/pull/34804)  [#35003](https://github.com/StarRocks/starrocks/pull/35003)
+  - 优化 `bitmap_xor` 函数性能。[#34069](https://github.com/StarRocks/starrocks/pull/34069)
+  - 支持 Copy on Write（简称 COW），优化性能，并减少内存使用。[#34047](https://github.com/StarRocks/starrocks/pull/34047)
+
+## 兼容性变更
+
+### 行为变更
+
+- 调整 Trash 文件的默认过期时间为 1 天（原来是 3 天）。[#37113](https://github.com/StarRocks/starrocks/pull/37113)
+
+### 参数变更
+
+#### 会话变量
+
+- 新增 Session 变量 `cbo_decimal_cast_string_strict`，用于优化器控制 DECIMAL 类型转为 STRING 类型的行为。当取值为 `true` 时，使用 v2.5.x 及之后版本的处理逻辑，执行严格转换（即，按 Scale 截断补 `0`）；当取值为 `false` 时，保留 v2.5.x 之前版本的处理逻辑（即，按有效数字处理）。默认值是 `true`。[#34208](https://github.com/StarRocks/starrocks/pull/34208)
+- 新增 Session 变量 `enable_materialized_view_for_insert`，默认值为 `FALSE`，即物化视图默认不改写 INSERT INTO SELECT 语句中的查询。[#37505](https://github.com/StarRocks/starrocks/pull/37505)
+- 新增 Session 变量 `transaction_read_only`和`tx_read_only` ，设置事务的访问模式并且兼容 MySQL 5.7.20 以上的版本。[#37249](https://github.com/StarRocks/starrocks/pull/37249)
+
+#### FE 配置项
+
+- 将 FE 配置项 `enable_new_publish_mechanism` 改为静态参数，修改后必须重启 FE 才可以生效（3.2以后做成动态加载事务依赖关系了）。 [#35338](https://github.com/StarRocks/starrocks/pull/35338)
+- 新增 FE 配置项 `routine_load_unstable_threshold_second`。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- 新增 FE 配置项  `http_worker_threads_num`，HTTP Server 用于处理 HTTP 请求的线程数。默认取值为 0。如果配置为负数或 0 ，线程数将设置为 CPU 核数的 2 倍**。**[#37530](https://github.com/StarRocks/starrocks/pull/37530)
+- 新增 FE 配置项 `default_mv_refresh_immediate`，用于控制物化视图创建完成后是否立刻进行刷新，默认值为 `true`。[#37093](https://github.com/StarRocks/starrocks/pull/37093)
+
+#### BE 配置项
+
+- 新增 BE 配置项 `enable_stream_load_verbose_log`，默认取值是 `false`，打开后日志中可以记录 Stream Load 的 HTTP 请求和响应信息，方便出现问题后的定位调试。[#36113](https://github.com/StarRocks/starrocks/pull/36113)
+- 新增 BE 配置项 `pindex_major_compaction_limit_per_disk`，配置每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题，默认取值为 2。[#36681](https://github.com/StarRocks/starrocks/pull/36681)
+- 新增 BE 配置项，配置对象存储连接超时时间。
+  - `object_storage_connect_timeout_ms`，对象存储 socket 连接的超时时间，默认取值 `-1`，表示使用 SDK 中的默认时间。
+  - `object_storage_request_timeout_ms`，对象存储 http 连接的超时时间，默认取值 `-1`，表示使用 SDK 中的默认时间。
+
+## 问题修复
+
+修复了如下问题：
+
+- 某些情况下，通过 Catalog 读取 ORC 外表时会出现 BE Crash。[#27971](https://github.com/StarRocks/starrocks/pull/27971)
+- 数据损坏情况下，建立持久化索引会引起 BE Crash。[#30841](https://github.com/StarRocks/starrocks/pull/30841)
+- 添加 Bitmap 索引后，偶尔会出现 BE crash。[#26463](https://github.com/StarRocks/starrocks/pull/26463)
+- 副本操作重放失败可能会引起 FE 启动失败。[#32295](https://github.com/StarRocks/starrocks/pull/32295)
+- 当 `recover_with_empty_tablet` 设置为 `true` 时可能会引起 FE 启动失败。[#33071](https://github.com/StarRocks/starrocks/pull/33071)
+- 查询在 Hash Join 时失败了，会引起 BE Crash。[#32219](https://github.com/StarRocks/starrocks/pull/32219)
+- 存算一体模式下，单独查询 Iceberg 或者 Hive 外表容易出现 BE crash。[#34682](https://github.com/StarRocks/starrocks/pull/34682)
+- 查询时报错 `"get_applied_rowsets failed, tablet updates is in error state: tablet:18849 actual row size changed after compaction"`。[#33246](https://github.com/StarRocks/starrocks/pull/33246)
+- 执行 `show proc '/statistic'` 有概率出现卡住的情况。 [#34237](https://github.com/StarRocks/starrocks/pull/34237/files)
+- 开启 FE 配置项 `enable_collect_query_detail_info` 后，FE 性能下降严重。[#35945](https://github.com/StarRocks/starrocks/pull/35945)
+- 向打开持久化索引的主键模型表中导入大量数据，有时会报错。[#34352](https://github.com/StarRocks/starrocks/pull/34352)
+- 2.4 及以下的版本升级到高版本，可能会出现 Compaction Score 很高的问题。[#34618](https://github.com/StarRocks/starrocks/pull/34618)
+- 使用 MariaDB ODBC Driver 查询 `INFORMATION_SCHEMA` 中的信息时，`schemata` 视图中 `CATALOG_NAME` 列中取值都显示的是 `null`。[#34627](https://github.com/StarRocks/starrocks/pull/34627)
+- 导入数据异常导致 FE Crash 后无法重启。[#34590](https://github.com/StarRocks/starrocks/pull/34590)
+- Stream Load 导入作业在 **PREPARD** 状态下，同时有 Schema Change 在执行，会导致数据丢失。[#34381](https://github.com/StarRocks/starrocks/pull/34381)
+- 如果 HDFS 路径以两个或以上斜杠（`/`）结尾，HDFS 备份恢复会失败。[#34601](https://github.com/StarRocks/starrocks/pull/34601)
+- 使用 ALTER TABLE 增加 `partition_live_number` 属性没有生效。[#34842](https://github.com/StarRocks/starrocks/pull/34842)
+- ARRAY_DISTINCT 函数偶发 BE Crash。[#36377](https://github.com/StarRocks/starrocks/pull/36377)
+- 某些情况下，物化视图刷新可能会出现死锁问题。[#35736](https://github.com/StarRocks/starrocks/pull/35736)
+- 特定场景下 Global Runtime Filter 可能会引发 BE crash。[#35776](https://github.com/StarRocks/starrocks/pull/35776)
+- 某些情况下 `bitmap_to_string` 会因为转换时数据类型溢出导致查询结果错误。[#37405](https://github.com/StarRocks/starrocks/pull/37405)
+
 ## 3.0.8
 
 发布日期：2023 年 11 月 17 日
