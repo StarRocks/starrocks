@@ -46,7 +46,7 @@ public class UDFBitmapCount extends GenericUDF {
 
     @Override
     public Object evaluate(DeferredObject[] args) throws HiveException {
-        if (args[0] == null) {
+        if (args[0].get() == null) {
             return null;
         }
 
