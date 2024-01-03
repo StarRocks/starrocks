@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ForeignKeyConstraint;
@@ -26,6 +27,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -39,6 +41,7 @@ import org.junit.runners.MethodSorters;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
@@ -115,10 +118,11 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 "(\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2),\n" +
                 "(\"2020-02-11\",1,1),(\"2020-02-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2);");
 
-        cluster.runSql("test", "insert into test_partition_tbl_for_view values (\"2019-01-01\",1,1),(\"2019-01-01\",1,2)," +
-                "(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
-                "(\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2),\n" +
-                "(\"2020-03-11\",1,1),(\"2020-04-11\",1,2),(\"2020-05-11\",2,1),(\"2020-05-11\",2,2);");
+        cluster.runSql("test",
+                "insert into test_partition_tbl_for_view values (\"2019-01-01\",1,1),(\"2019-01-01\",1,2)," +
+                        "(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
+                        "(\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-02-11\",2,1),(\"2020-02-11\",2,2),\n" +
+                        "(\"2020-03-11\",1,1),(\"2020-04-11\",1,2),(\"2020-05-11\",2,1),(\"2020-05-11\",2,2);");
     }
 
     @Test
@@ -896,8 +900,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 });
     }
 
-
-
     @Test
     public void testCardinality() throws Exception {
         try {
@@ -1090,19 +1092,19 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         // With null-rejecting predicate
         createAndRefreshMv("CREATE MATERIALIZED VIEW `_pushdown_predicate_join_mv1`  \n" +
-                        "DISTRIBUTED BY HASH(c12) BUCKETS 18 \n" +
-                        "REFRESH MANUAL \n" +
-                        "PROPERTIES ( \"replication_num\" = \"1\", \"storage_medium\" = \"HDD\") \n" +
-                        "AS\n" +
-                        "SELECT t1.c0, t1.c1, t2.c7, t2.c12\n" +
-                        "FROM\n" +
-                        "    ( SELECT `c0`, `c7`, `c12` FROM `pushdown_t2`) t2\n" +
-                        "    LEFT OUTER JOIN \n" +
-                        "    ( SELECT c0, c1, c7 FROM pushdown_t1 ) t1\n" +
-                        "    ON `t2`.`c0` = `t1`.`c0`\n" +
-                        "    AND t2.c0 IS NOT NULL " +
-                        "    AND date(t2.`c12`) = `t1`.`c7`\n" +
-                        "   ;");
+                "DISTRIBUTED BY HASH(c12) BUCKETS 18 \n" +
+                "REFRESH MANUAL \n" +
+                "PROPERTIES ( \"replication_num\" = \"1\", \"storage_medium\" = \"HDD\") \n" +
+                "AS\n" +
+                "SELECT t1.c0, t1.c1, t2.c7, t2.c12\n" +
+                "FROM\n" +
+                "    ( SELECT `c0`, `c7`, `c12` FROM `pushdown_t2`) t2\n" +
+                "    LEFT OUTER JOIN \n" +
+                "    ( SELECT c0, c1, c7 FROM pushdown_t1 ) t1\n" +
+                "    ON `t2`.`c0` = `t1`.`c0`\n" +
+                "    AND t2.c0 IS NOT NULL " +
+                "    AND date(t2.`c12`) = `t1`.`c7`\n" +
+                "   ;");
 
         String query = "SELECT t1.c0, t1.c1, t2.c7, t2.c12\n" +
                 "FROM\n" +
@@ -1155,18 +1157,18 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         // Without null-rejecting predicate
         createAndRefreshMv("CREATE MATERIALIZED VIEW `_pushdown_predicate_join_mv2`  \n" +
-                        "DISTRIBUTED BY HASH(c12) BUCKETS 18 \n" +
-                        "REFRESH MANUAL \n" +
-                        "PROPERTIES ( \"replication_num\" = \"1\", \"storage_medium\" = \"HDD\") \n" +
-                        "AS\n" +
-                        "SELECT t1.c0, t1.c1, t2.c7, t2.c12\n" +
-                        "FROM\n" +
-                        "    ( SELECT `c0`, `c7`, `c12` FROM `pushdown_t2`) t2\n" +
-                        "    LEFT OUTER JOIN \n" +
-                        "    ( SELECT c0, c1, c7 FROM pushdown_t1 ) t1\n" +
-                        "    ON `t2`.`c0` = `t1`.`c0`\n" +
-                        "    AND date(t2.`c12`) = `t1`.`c7`\n" +
-                        "   ;");
+                "DISTRIBUTED BY HASH(c12) BUCKETS 18 \n" +
+                "REFRESH MANUAL \n" +
+                "PROPERTIES ( \"replication_num\" = \"1\", \"storage_medium\" = \"HDD\") \n" +
+                "AS\n" +
+                "SELECT t1.c0, t1.c1, t2.c7, t2.c12\n" +
+                "FROM\n" +
+                "    ( SELECT `c0`, `c7`, `c12` FROM `pushdown_t2`) t2\n" +
+                "    LEFT OUTER JOIN \n" +
+                "    ( SELECT c0, c1, c7 FROM pushdown_t1 ) t1\n" +
+                "    ON `t2`.`c0` = `t1`.`c0`\n" +
+                "    AND date(t2.`c12`) = `t1`.`c7`\n" +
+                "   ;");
 
         String query = "SELECT t1.c0, t1.c1, t2.c7, t2.c12\n" +
                 "FROM\n" +
@@ -1185,7 +1187,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
     @Test
     public void testNonpartitionedMvWithPartitionPredicate() throws Exception {
         createAndRefreshMv("create materialized view mv_with_partition_predicate_1 distributed by hash(`k1`)" +
-                        " as select k1, v1 from t1 where k1 = 3;");
+                " as select k1, v1 from t1 where k1 = 3;");
         String query = "select k1, v1 from t1 where k1 = 3;";
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "mv_with_partition_predicate_1");
@@ -1223,12 +1225,13 @@ public class MvRewriteTest extends MvRewriteTestBase {
         starRocksAssert.withTable(sql1);
         starRocksAssert.withTable(sql2);
         starRocksAssert.withMaterializedView(mv);
-        String sql = "select t1.fdate, t2.col1_name,  count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
-                "    FROM test.fact_tbl1 t1 \n" +
-                "    LEFT JOIN test.dim_tbl1 t2\n" +
-                "    ON t1.`col1` = t2.`col1`\n" +
-                "    WHERE t1.`fdate` >= 20230702 and t1.fdate <= 20230705\n" +
-                "    GROUP BY  fdate, `col1_name`;";
+        String sql =
+                "select t1.fdate, t2.col1_name,  count(DISTINCT t1.fqqid) AS index_0_8228, sum(t1.flcnt)as index_xxx\n" +
+                        "    FROM test.fact_tbl1 t1 \n" +
+                        "    LEFT JOIN test.dim_tbl1 t2\n" +
+                        "    ON t1.`col1` = t2.`col1`\n" +
+                        "    WHERE t1.`fdate` >= 20230702 and t1.fdate <= 20230705\n" +
+                        "    GROUP BY  fdate, `col1_name`;";
         String plan = getFragmentPlan(sql);
         PlanTestBase.assertContains(plan, "test_mv1");
 
@@ -1263,14 +1266,14 @@ public class MvRewriteTest extends MvRewriteTestBase {
     @Test
     public void testPartitionPrune1() throws Exception {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
-                        "               PARTITION BY k1\n" +
-                        "               DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                        "               REFRESH ASYNC\n" +
-                        "               PROPERTIES(\n" +
-                        "               \"partition_ttl_number\"=\"4\",\n" +
-                        "               \"auto_refresh_partitions_limit\"=\"4\"\n" +
-                        "               )\n" +
-                        "               AS SELECT k1, sum(v1) as sum_v1 FROM test_partition_tbl1 group by k1;");
+                "               PARTITION BY k1\n" +
+                "               DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                "               REFRESH ASYNC\n" +
+                "               PROPERTIES(\n" +
+                "               \"partition_ttl_number\"=\"4\",\n" +
+                "               \"auto_refresh_partitions_limit\"=\"4\"\n" +
+                "               )\n" +
+                "               AS SELECT k1, sum(v1) as sum_v1 FROM test_partition_tbl1 group by k1;");
         {
             String query = "select k1, sum(v1) FROM test_partition_tbl1 where k1>='2020-02-11' group by k1;";
             String plan = getFragmentPlan(query);
@@ -1302,11 +1305,11 @@ public class MvRewriteTest extends MvRewriteTestBase {
         {
             String mvName = "mv_test_map_element";
             createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
-                            "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                            "REFRESH ASYNC \n" +
-                            "AS SELECT k1, element_at(v1, 'k1') as col1, sum(v3) as sum_v3 \n" +
-                            "FROM test_map_array\n" +
-                            "GROUP BY k1, element_at(v1, 'k1') ");
+                    "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                    "REFRESH ASYNC \n" +
+                    "AS SELECT k1, element_at(v1, 'k1') as col1, sum(v3) as sum_v3 \n" +
+                    "FROM test_map_array\n" +
+                    "GROUP BY k1, element_at(v1, 'k1') ");
 
             // query1: exactly-same aggregation
             {
@@ -1329,11 +1332,11 @@ public class MvRewriteTest extends MvRewriteTestBase {
         {
             String mvName = "mv_test_array_element";
             createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
-                            "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                            "REFRESH ASYNC \n" +
-                            "AS SELECT k1, element_at(v2, 1) as col1, sum(v3) as sum_v3 \n" +
-                            "FROM test_map_array\n" +
-                            "GROUP BY k1, element_at(v2, 1) ");
+                    "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                    "REFRESH ASYNC \n" +
+                    "AS SELECT k1, element_at(v2, 1) as col1, sum(v3) as sum_v3 \n" +
+                    "FROM test_map_array\n" +
+                    "GROUP BY k1, element_at(v2, 1) ");
 
             // query1: exactly-same aggregation
             {
@@ -1355,11 +1358,11 @@ public class MvRewriteTest extends MvRewriteTestBase {
         {
             String mvName = "mv_test_array_slice";
             createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
-                            "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                            "REFRESH ASYNC \n" +
-                            "AS SELECT k1, array_slice(v2, 1, 1) as col1, sum(v3) as sum_v3 \n" +
-                            "FROM test_map_array\n" +
-                            "GROUP BY k1, array_slice(v2, 1, 1) ");
+                    "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                    "REFRESH ASYNC \n" +
+                    "AS SELECT k1, array_slice(v2, 1, 1) as col1, sum(v3) as sum_v3 \n" +
+                    "FROM test_map_array\n" +
+                    "GROUP BY k1, array_slice(v2, 1, 1) ");
 
             // query1: exactly-same aggregation
             {
@@ -1385,10 +1388,10 @@ public class MvRewriteTest extends MvRewriteTestBase {
         {
             String mvName = "mv_projection_const";
             createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
-                            "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                            "REFRESH ASYNC \n" +
-                            "AS SELECT k1, k2, v3 " +
-                            "FROM " + tableName);
+                    "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                    "REFRESH ASYNC \n" +
+                    "AS SELECT k1, k2, v3 " +
+                    "FROM " + tableName);
             {
                 String query = "SELECT 'hehe', k1, k2" +
                         " FROM " + tableName;
@@ -1400,11 +1403,11 @@ public class MvRewriteTest extends MvRewriteTestBase {
         {
             String mvName = "mv_aggregation_projection_const";
             createAndRefreshMv("CREATE MATERIALIZED VIEW \n" + mvName +
-                            "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
-                            "REFRESH ASYNC \n" +
-                            "AS SELECT k1, sum(v3) as sum_v3 \n" +
-                            "FROM " + tableName + "\n" +
-                            "GROUP BY k1");
+                    "\nDISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                    "REFRESH ASYNC \n" +
+                    "AS SELECT k1, sum(v3) as sum_v3 \n" +
+                    "FROM " + tableName + "\n" +
+                    "GROUP BY k1");
 
             {
                 String query = String.format("SELECT 'hehe', k1, sum(v3) as sum_v1 " +
@@ -1468,14 +1471,14 @@ public class MvRewriteTest extends MvRewriteTestBase {
     public void testJoinWithConstExprs1() throws Exception {
         // a.k1/b.k1 are both output
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
-                        "PARTITION BY k1\n" +
-                        "DISTRIBUTED BY HASH(v1) BUCKETS 10\n" +
-                        "REFRESH ASYNC\n" +
-                        "AS SELECT a.k1, a.v1,sum(a.v1) as sum_v1 \n" +
-                        "FROM test_partition_tbl1 as a \n" +
-                        "join test_partition_tbl2 as b " +
-                        "on a.k1=b.k1 and a.v1=b.v1\n" +
-                        "group by a.k1, a.v1;");
+                "PARTITION BY k1\n" +
+                "DISTRIBUTED BY HASH(v1) BUCKETS 10\n" +
+                "REFRESH ASYNC\n" +
+                "AS SELECT a.k1, a.v1,sum(a.v1) as sum_v1 \n" +
+                "FROM test_partition_tbl1 as a \n" +
+                "join test_partition_tbl2 as b " +
+                "on a.k1=b.k1 and a.v1=b.v1\n" +
+                "group by a.k1, a.v1;");
         // should not be rollup
         {
             // if a.k1=b.k1
@@ -1526,15 +1529,15 @@ public class MvRewriteTest extends MvRewriteTestBase {
     public void testJoinWithConstExprs2() throws Exception {
         // a.k1/b.k1 are both output
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
-                        "PARTITION BY a_k1\n" +
-                        "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
-                        "REFRESH ASYNC\n" +
-                        "AS SELECT a.k1 as a_k1, b.k1 as b_k1, " +
-                        "a.v1 as a_v1, b.v1 as b_v1,sum(a.v1) as sum_v1 \n" +
-                        "FROM test_partition_tbl1 as a \n" +
-                        "left join test_partition_tbl2 as b " +
-                        "on a.k1=b.k1 and a.v1=b.v1\n" +
-                        "group by a.k1, b.k1, a.v1, b.v1;");
+                "PARTITION BY a_k1\n" +
+                "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
+                "REFRESH ASYNC\n" +
+                "AS SELECT a.k1 as a_k1, b.k1 as b_k1, " +
+                "a.v1 as a_v1, b.v1 as b_v1,sum(a.v1) as sum_v1 \n" +
+                "FROM test_partition_tbl1 as a \n" +
+                "left join test_partition_tbl2 as b " +
+                "on a.k1=b.k1 and a.v1=b.v1\n" +
+                "group by a.k1, b.k1, a.v1, b.v1;");
         {
             String query = "SELECT a.k1 as a_k1, b.k1 as b_k1, " +
                     "a.v1 as a_v1, b.v1 as b_v1,sum(a.v1) as sum_v1 \n" +
@@ -1610,14 +1613,14 @@ public class MvRewriteTest extends MvRewriteTestBase {
     public void testJoinWithConstExprs3() throws Exception {
         // a.k1/b.k1 are both output
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
-                        "PARTITION BY a_k1\n" +
-                        "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
-                        "REFRESH ASYNC\n" +
-                        "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
-                        "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
-                        "FROM test_partition_tbl1 as a \n" +
-                        "join test_partition_tbl2 as b " +
-                        "on a.v1=b.v1 and a.v2=b.v2 \n");
+                "PARTITION BY a_k1\n" +
+                "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
+                "REFRESH ASYNC\n" +
+                "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
+                "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
+                "FROM test_partition_tbl1 as a \n" +
+                "join test_partition_tbl2 as b " +
+                "on a.v1=b.v1 and a.v2=b.v2 \n");
         // should not be rollup
         {
             // if a.k1=b.k1
@@ -1648,14 +1651,14 @@ public class MvRewriteTest extends MvRewriteTestBase {
     public void testJoinWithConstExprs4() throws Exception {
         // a.k1/b.k1 are both output
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
-                        "PARTITION BY a_k1\n" +
-                        "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
-                        "REFRESH ASYNC\n" +
-                        "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
-                        "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
-                        "FROM test_partition_tbl1 as a \n" +
-                        "join test_partition_tbl2 as b " +
-                        "on a.v1=b.v1 \n");
+                "PARTITION BY a_k1\n" +
+                "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
+                "REFRESH ASYNC\n" +
+                "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
+                "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
+                "FROM test_partition_tbl1 as a \n" +
+                "join test_partition_tbl2 as b " +
+                "on a.v1=b.v1 \n");
         // should not be rollup
         {
             // if a.k1=b.k1
@@ -1678,14 +1681,14 @@ public class MvRewriteTest extends MvRewriteTestBase {
     public void testJoinWithConstExprs5() throws Exception {
         // a.k1/b.k1 are both output
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv3\n" +
-                        "PARTITION BY a_k1\n" +
-                        "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
-                        "REFRESH ASYNC\n" +
-                        "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
-                        "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
-                        "FROM test_partition_tbl1 as a \n" +
-                        "join test_partition_tbl2 as b " +
-                        "on a.v1=b.v1 and a.v1=b.v2 \n");
+                "PARTITION BY a_k1\n" +
+                "DISTRIBUTED BY HASH(a_v1) BUCKETS 10\n" +
+                "REFRESH ASYNC\n" +
+                "AS SELECT a.k1 as a_k1, a.v1 as a_v1, a.v2 as a_v2, " +
+                "b.k1 as b_k1, b.v1 as b_v1, b.v2 as b_v2 \n" +
+                "FROM test_partition_tbl1 as a \n" +
+                "join test_partition_tbl2 as b " +
+                "on a.v1=b.v1 and a.v1=b.v2 \n");
         // should not be rollup
         {
             // if a.k1=b.k1
@@ -1865,4 +1868,94 @@ public class MvRewriteTest extends MvRewriteTestBase {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(
                 SessionVariable.DEFAULT_SESSION_VARIABLE.isEnableMaterializedViewRewriteForInsert());
     }
+
+    /**
+     * With many Agg MV candidates, the rewrite should prefer the one with fewer data rows
+     */
+    @Test
+    public void testCandidateOrdering_HierarchyAgg() throws Exception {
+        starRocksAssert.withTable(cluster, MSchema.T_METRICS.getTableName());
+
+        List<String> dimensions = Lists.newArrayList(
+                " c2",
+                " c2, c3",
+                " c2, c3, c4",
+                " c2, c3, c4, c5",
+                " c2, c3, c4, c5, c6"
+        );
+
+        Function<Integer, String> mvNameBuilder = (i) -> ("mv_agg_metric_" + i);
+        for (int i = 0; i < dimensions.size(); i++) {
+            String name = mvNameBuilder.apply(i);
+            starRocksAssert.withRefreshedMaterializedView("create materialized view " + name +
+                    " refresh async as " +
+                    " select sum(c1) from t_metrics group by " +
+                    dimensions.get(i));
+            MaterializedView mv = starRocksAssert.getMv("test", name);
+
+            int mockRows = i + 1;
+            mv.getPartitions().forEach(p -> p.getBaseIndex().setRowCount(mockRows));
+        }
+
+        for (int i = 0; i < dimensions.size(); i++) {
+            String query = "select sum(c1) from t_metrics group by " + dimensions.get(i);
+            String target = mvNameBuilder.apply(i);
+
+            // With candidate limit
+            starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(10);
+            starRocksAssert.query(query).explainContains(target);
+
+            // Without candidate limit
+            starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(0);
+            starRocksAssert.query(query).explainContains(target);
+        }
+    }
+
+    /**
+     * Many dimensions on a table, create many MVs on it
+     */
+    @Test
+    public void testCandidateOrdering_ManyDimensions() throws Exception {
+        final int numDimensions = 50;
+        StringBuilder createTableBuilder = new StringBuilder("create table t_many_dimensions ( ");
+        Function<Integer, String> columnNameGen = (i) -> "c" + i;
+        for (int i = 0; i < numDimensions; i++) {
+            if (i != 0) {
+                createTableBuilder.append("\n,");
+            }
+            createTableBuilder.append(columnNameGen.apply(i)).append(" int");
+        }
+        createTableBuilder.append(") distributed by hash(c0) ");
+        starRocksAssert.withTable(createTableBuilder.toString());
+
+        Function<Integer, String> mvNameGen = (i) -> "mv_dimension_" + i;
+        for (int i = 1; i < numDimensions; i++) {
+            String dimension = columnNameGen.apply(i);
+            String mvName = mvNameGen.apply(i);
+            starRocksAssert.withMaterializedView("create materialized view " + mvName + "\n" +
+                    "refresh async " +
+                    "properties('query_rewrite_consistency'='loose') " +
+                    "as select " + dimension + ", sum(c0) from t_many_dimensions group by " + dimension);
+        }
+
+        for (int i = 1; i < numDimensions; i++) {
+            String target = mvNameGen.apply(i);
+            String dimension = columnNameGen.apply(i);
+
+            // 1 candidate
+            starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(1);
+            starRocksAssert.query("select " + dimension + ", sum(c0) from t_many_dimensions group by " + dimension)
+                    .explainContains(target);
+            starRocksAssert.query("select sum(c0) from t_many_dimensions where " + dimension + "=123")
+                    .explainContains(target);
+
+            // all candidates
+            starRocksAssert.getCtx().getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(0);
+            starRocksAssert.query("select " + dimension + ", sum(c0) from t_many_dimensions group by " + dimension)
+                    .explainContains(target);
+            starRocksAssert.query("select sum(c0) from t_many_dimensions where " + dimension + "=123")
+                    .explainContains(target);
+        }
+    }
+
 }
