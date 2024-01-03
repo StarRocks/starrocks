@@ -1226,7 +1226,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private String hdfsBackendSelectorHashAlgorithm = "consistent";
 
     @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
-    private int consistentHashVirtualNodeNum = 128;
+    private int consistentHashVirtualNodeNum = 256;
 
     // binary, json, compact,
     @VarAttr(name = THRIFT_PLAN_PROTOCOL)
