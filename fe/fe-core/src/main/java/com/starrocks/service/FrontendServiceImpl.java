@@ -1755,8 +1755,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TCreatePartitionResult result;
         try {
             result = createPartitionProcess(request);
-        } catch (Throwable t) {
-            LOG.warn(t);
+        } catch (Exception t) {
+            LOG.warn(DebugUtil.getStackTrace(t));
             result = new TCreatePartitionResult();
             TStatus errorStatus = new TStatus(RUNTIME_ERROR);
             errorStatus.setError_msgs(Lists.newArrayList(String.format("txn_id=%d failed. %s",
@@ -1842,47 +1842,52 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-
         // build partition & tablets
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
-        for (String partitionName : partitionColNames) {
-            Partition partition = table.getPartition(partitionName);
-            TOlapTablePartition tPartition = new TOlapTablePartition();
-            tPartition.setId(partition.getId());
-            buildPartitionInfo(olapTable, partitions, partition, tPartition);
-            // tablet
-            int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), ((OlapTable) table).writeQuorum());
-            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                for (Tablet tablet : index.getTablets()) {
-                    // we should ensure the replica backend is alive
-                    // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
-                    LocalTablet localTablet = (LocalTablet) tablet;
-                    Multimap<Replica, Long> bePathsMap =
-                            localTablet.getNormalReplicaBackendPathMap(olapTable.getClusterId());
-                    if (bePathsMap.keySet().size() < quorum) {
-                        errorStatus.setError_msgs(Lists.newArrayList(
-                                "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                        + tablet.getId() + ", replicas: " + localTablet.getReplicaInfos()));
-                        result.setStatus(errorStatus);
-                        return result;
+
+        db.readLock();
+        try {
+            for (String partitionName : partitionColNames) {
+                Partition partition = olapTable.getPartition(partitionName);
+                TOlapTablePartition tPartition = new TOlapTablePartition();
+                tPartition.setId(partition.getId());
+                buildPartitionInfo(olapTable, partitions, partition, tPartition);
+                // tablet
+                int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), ((OlapTable) table).writeQuorum());
+                for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+                    for (Tablet tablet : index.getTablets()) {
+                        // we should ensure the replica backend is alive
+                        // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
+                        LocalTablet localTablet = (LocalTablet) tablet;
+                        Multimap<Replica, Long> bePathsMap =
+                                localTablet.getNormalReplicaBackendPathMap(olapTable.getClusterId());
+                        if (bePathsMap.keySet().size() < quorum) {
+                            errorStatus.setError_msgs(Lists.newArrayList(
+                                    "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
+                                            + tablet.getId() + ", replicas: " + localTablet.getReplicaInfos()));
+                            result.setStatus(errorStatus);
+                            return result;
+                        }
+                        // replicas[0] will be the primary replica
+                        // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable
+                        List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
+                        tablets.add(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
+                                .collect(Collectors.toList())));
                     }
-                    // replicas[0] will be the primary replica
-                    // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable
-                    List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
-                    tablets.add(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
-                            .collect(Collectors.toList())));
                 }
             }
-        }
-        result.setPartitions(partitions);
-        result.setTablets(tablets);
+            result.setPartitions(partitions);
+            result.setTablets(tablets);
 
-        // build nodes
-        TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(olapTable.getClusterId());
-        result.setNodes(nodesInfo.nodes);
-        result.setStatus(new TStatus(OK));
-        return result;
+            // build nodes
+            TNodesInfo nodesInfo = GlobalStateMgr.getCurrentState().createNodesInfo(olapTable.getClusterId());
+            result.setNodes(nodesInfo.nodes);
+            result.setStatus(new TStatus(OK));
+            return result;
+        } finally {
+            db.readUnlock();
+        }
     }
 
     private static List<TExprNode> literalExprsToTExprNodes(List<LiteralExpr> values) {
