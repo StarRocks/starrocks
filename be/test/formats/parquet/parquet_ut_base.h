@@ -14,15 +14,24 @@
 
 #pragma once
 
-#include "gen_cpp/parquet_types.h"
-#include "gen_cpp/types.pb.h"
+#include <vector>
+
+#include "common/global_types.h"
+#include "common/object_pool.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "gen_cpp/Exprs_types.h"
+#include "gen_cpp/Opcodes_types.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::parquet {
 
-CompressionTypePB convert_compression_codec(tparquet::CompressionCodec::type parquet_codec);
+class ParquetUTBase {
+public:
+    static void create_conjunct_ctxs(ObjectPool* pool, RuntimeState* runtime_state, std::vector<TExpr>* tExprs,
+                                     std::vector<ExprContext*>* conjunct_ctxs);
 
-enum ColumnContentType { VALUE, DICT_CODE };
-
-enum ColumnIOType { PAGE_INDEX, PAGES };
+    static void append_int_conjunct(TExprOpcode::type opcode, SlotId slot_id, int value, std::vector<TExpr>* tExprs);
+};
 
 } // namespace starrocks::parquet

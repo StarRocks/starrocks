@@ -263,7 +263,7 @@ Status ColumnChunkReader::_parse_dict_page() {
     return Status::OK();
 }
 
-Status ColumnChunkReader::_try_load_dictionary() {
+Status ColumnChunkReader::try_load_dictionary() {
     if (_dict_page_parsed) {
         return Status::OK();
     }
