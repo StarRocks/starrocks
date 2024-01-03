@@ -109,11 +109,21 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select distinct v1, v2 as v from t0 order by v");
         analyzeSuccess("select distinct abs(v1) as v from t0 order by v");
         analyzeFail("select distinct v1 from t0 order by v2",
-                "Column 'v2' cannot be resolved");
+                "must be an aggregate expression or appear in GROUP BY clause");
         analyzeFail("select distinct v1 as v from t0 order by v2",
-                "Column 'v2' cannot be resolved");
+                " must be an aggregate expression or appear in GROUP BY clause");
         analyzeFail("select * from t0 order by max(v2)",
+<<<<<<< HEAD
                 "column must appear in the GROUP BY clause or be used in an aggregate function");
+=======
+                "column must appear in the GROUP BY clause or be used in an aggregate function.");
+        analyzeFail("select distinct max(v1) from t0",
+                "cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
+        analyzeFail("select distinct abs(v1) from t0 order by max(v1)",
+                "for SELECT DISTINCT, ORDER BY expressions must appear in select list");
+        analyzeFail("select distinct abs(v1) from t0 order by max(v2)",
+                "for SELECT DISTINCT, ORDER BY expressions must appear in select list");
+>>>>>>> d0b029e3f1 ([BugFix] fix wrong order by scope for distinct query (#38358))
 
         analyzeSuccess("select distinct v1 as v from t0 having v = 1");
         analyzeFail("select distinct v1 as v from t0 having v2 = 2",
