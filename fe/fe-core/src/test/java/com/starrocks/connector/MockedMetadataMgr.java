@@ -16,6 +16,7 @@
 package com.starrocks.connector;
 
 import com.google.common.base.Strings;
+import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.MetadataMgr;
@@ -41,8 +42,17 @@ public class MockedMetadataMgr extends MetadataMgr {
     public Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
         if (Strings.isNullOrEmpty(catalogName) || CatalogMgr.isInternalCatalog(catalogName)) {
             return Optional.of(localMetastore);
-        } else {
-            return Optional.ofNullable(metadatas.get(catalogName));
         }
+
+        if (!metadatas.containsKey(catalogName)) {
+            return Optional.empty();
+        }
+
+        return Optional.of(
+                new CatalogConnectorMetadata(
+                        metadatas.get(catalogName),
+                        new InformationSchemaMetadata(catalogName)
+                )
+        );
     }
 }
