@@ -894,10 +894,14 @@ CONF_mDouble(starlet_cache_evict_low_water, "0.1");
 CONF_mDouble(starlet_cache_evict_high_water, "0.2");
 // type:Integer. cache directory allocation policy. (0:default, 1:random, 2:round-robin)
 CONF_Int32(starlet_cache_dir_allocate_policy, "0");
+// Cache will evict file cache at this percent if star cache is turned on
+CONF_mDouble(starlet_cache_evict_percent, "0.1");
+// Cache will evict file cache at this speed if star cache is turned on
+CONF_mInt32(starlet_cache_evict_throughput_mb, "200");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 // Only support in S3/HDFS currently.
 CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "131072");
-CONF_mBool(starlet_use_star_cache, "false");
+CONF_mBool(starlet_use_star_cache, "true");
 // TODO: support runtime change
 CONF_Int32(starlet_star_cache_mem_size_percent, "0");
 CONF_Int32(starlet_star_cache_disk_size_percent, "80");

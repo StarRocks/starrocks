@@ -210,6 +210,16 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 LOG(WARNING) << "Failed to update cachemgr_evict_low_water";
             }
         });
+        _config_callback.emplace("starlet_cache_evict_percent", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_percent", value).empty()) {
+                LOG(WARNING) << "Failed to update cachemgr_evict_percent";
+            }
+        });
+        _config_callback.emplace("starlet_cache_evict_throughput_mb", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_throughput_mb", value).empty()) {
+                LOG(WARNING) << "Failed to update cachemgr_evict_throughput_mb";
+            }
+        });
         _config_callback.emplace("starlet_cache_evict_high_water", [&]() {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_high_water", value).empty()) {
                 LOG(WARNING) << "Failed to update cachemgr_evict_high_water";
