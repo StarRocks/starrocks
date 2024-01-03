@@ -89,9 +89,9 @@ select t.s2, s.s2 from struct_test t join struct_test s where s.s2 = t.s2 order 
 select t.s3, s.s3 from struct_test t join struct_test s where s.s3 = t.s3 order by t.pk;
 -- result:
 {"c0":"1","c1":{1:"abc"}}	{"c0":"1","c1":{1:"abc"}}
-{"c0":"11","c1":{1:"abc",null:null}}	{"c0":"11","c1":{1:"abc",null:null}}
+{"c0":"11","c1":{null:null,1:"abc"}}	{"c0":"11","c1":{null:null,1:"abc"}}
 {"c0":null,"c1":{null:null}}	{"c0":null,"c1":{null:null}}
-{"c0":"3","c1":{3:"a33c",null:null}}	{"c0":"3","c1":{3:"a33c",null:null}}
+{"c0":"3","c1":{null:null,3:"a33c"}}	{"c0":"3","c1":{null:null,3:"a33c"}}
 -- !result
 select t.s2, s.s3 from struct_test t join struct_test s where s.s2 = t.s3 order by t.pk;
 -- result:
@@ -150,9 +150,9 @@ None	None
 select t.s3, s.s3 from struct_test t join struct_test s where s.s3 <=> t.s3 order by t.pk;
 -- result:
 {"c0":"1","c1":{1:"abc"}}	{"c0":"1","c1":{1:"abc"}}
-{"c0":"11","c1":{1:"abc",null:null}}	{"c0":"11","c1":{1:"abc",null:null}}
+{"c0":"11","c1":{null:null,1:"abc"}}	{"c0":"11","c1":{null:null,1:"abc"}}
 {"c0":null,"c1":{null:null}}	{"c0":null,"c1":{null:null}}
-{"c0":"3","c1":{3:"a33c",null:null}}	{"c0":"3","c1":{3:"a33c",null:null}}
+{"c0":"3","c1":{null:null,3:"a33c"}}	{"c0":"3","c1":{null:null,3:"a33c"}}
 None	None
 -- !result
 select t.s4, s.s5 from struct_test t join struct_test s where s.s4 <=> t.s5 order by t.pk;
