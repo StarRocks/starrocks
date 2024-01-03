@@ -351,6 +351,9 @@ struct THdfsScanRange {
 
     // identity partition column slots
     18: optional list<Types.TSlotId> identity_partition_slot_ids;
+
+    // delete columns slots like iceberg equality delete column slots
+    21: optional list<Types.TSlotId> delete_column_slot_ids;
 }
 
 struct TBinlogScanRange {
@@ -1042,6 +1045,8 @@ struct THdfsScanNode {
     15: optional bool can_use_min_max_count_opt;
 
     16: optional bool use_partition_column_value_only;
+
+    17: optional Types.TTupleId mor_tuple_id;
 }
 
 struct TProjectNode {
