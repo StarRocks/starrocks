@@ -148,6 +148,11 @@ public class Column implements Writable, GsonPreProcessable, GsonPostProcessable
         Preconditions.checkArgument(dataType.isValid());
     }
 
+    public Column(String name, Type dataType, boolean isAllowNull, String comment) {
+        this(name, dataType, false, null, isAllowNull, null, comment, COLUMN_UNIQUE_ID_INIT_VALUE);
+        Preconditions.checkArgument(dataType.isValid());
+    }
+
     public Column(String name, Type type, boolean isKey, AggregateType aggregateType, String defaultValue,
                   String comment) {
         this(name, type, isKey, aggregateType, false,

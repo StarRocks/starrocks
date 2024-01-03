@@ -379,13 +379,15 @@ public class HiveMetastoreApiConverter {
         List<Column> fullSchema = Lists.newArrayList();
         for (FieldSchema fieldSchema : fieldSchemas) {
             Type type;
+            String comment = "";
             try {
+                comment = fieldSchema.getComment();
                 type = ColumnTypeConverter.fromHiveType(fieldSchema.getType());
             } catch (InternalError | Exception e) {
                 LOG.error("Failed to convert hive type {} on {}", fieldSchema.getType(), table.getTableName(), e);
                 type = Type.UNKNOWN_TYPE;
             }
-            Column column = new Column(fieldSchema.getName(), type, true);
+            Column column = new Column(fieldSchema.getName(), type, true, comment);
             fullSchema.add(column);
         }
         return fullSchema;
