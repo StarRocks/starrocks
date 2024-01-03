@@ -30,6 +30,8 @@ Broker Load supports the following data file formats:
 
 - ORC
 
+- JSON (supported from v3.2 onwards)
+
 > **NOTE**
 >
 > For CSV data, take note of the following points:
