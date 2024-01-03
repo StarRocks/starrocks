@@ -403,6 +403,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_FILE_METACACHE = "enable_file_metacache";
     public static final String ENABLE_HDFS_FILE_METACACHE = "enable_hdfs_file_metacache";
+    public static final String DATACACHE_POPULATE_PROBABILITY = "datacache_populate_probability";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
     public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
@@ -1285,6 +1286,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_FILE_METACACHE, alias = ENABLE_HDFS_FILE_METACACHE)
     private boolean enableFileMetaCache = true;
+
+    @VariableMgr.VarAttr(name = DATACACHE_POPULATE_PROBABILITY)
+    private int datacachePopulateProbability = 1;
 
     @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
     private boolean hudiMORForceJNIReader = false;
@@ -2977,6 +2981,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_scan_datacache(enableScanDataCache);
         tResult.setEnable_populate_datacache(enablePopulateDataCache);
         tResult.setEnable_file_metacache(enableFileMetaCache);
+        tResult.setDatacache_populate_probability(datacachePopulateProbability);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);

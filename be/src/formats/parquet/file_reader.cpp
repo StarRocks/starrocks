@@ -75,6 +75,7 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     if (ctx->use_file_metacache && config::datacache_enable) {
         _build_metacache_key();
         _cache = BlockCache::instance();
+        _write_options.write_probability = ctx->datacache_populate_probability;
     }
     RETURN_IF_ERROR(_get_footer());
 
@@ -174,7 +175,8 @@ Status FileReader::_get_footer() {
     RETURN_IF_ERROR(_parse_footer(&file_metadata, &file_metadata_size));
     if (file_metadata_size > 0) {
         auto deleter = [file_metadata]() { delete file_metadata; };
-        Status st = _cache->write_object(_metacache_key, file_metadata, file_metadata_size, deleter, &_cache_handle);
+        Status st = _cache->write_object(_metacache_key, file_metadata, file_metadata_size, deleter, &_cache_handle,
+                                         &_write_options);
         if (st.ok()) {
             _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
             _scanner_ctx->stats->footer_cache_write_count += 1;

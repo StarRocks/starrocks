@@ -283,7 +283,6 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
     auto f = [&](const char* buf, size_t offset, size_t size) {
         SCOPED_RAW_TIMER(&_stats.write_cache_ns);
         WriteCacheOptions options;
-        options.overwrite = false;
         Status r = cache->write_buffer(_cache_key, offset, size, buf, &options);
         if (r.ok()) {
             _stats.write_cache_count += 1;

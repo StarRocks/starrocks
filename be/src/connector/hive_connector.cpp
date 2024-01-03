@@ -92,14 +92,18 @@ Status HiveDataSource::open(RuntimeState* state) {
     RETURN_IF_ERROR(_check_all_slots_nullable());
 
     _use_datacache = config::datacache_enable;
+    _use_file_metacache = config::datacache_enable;
     if (state->query_options().__isset.enable_scan_datacache) {
         _use_datacache &= state->query_options().enable_scan_datacache;
     }
     if (state->query_options().__isset.enable_populate_datacache) {
         _enable_populate_datacache = state->query_options().enable_populate_datacache;
     }
+    if (state->query_options().__isset.datacache_populate_probability) {
+        _datacache_populate_probability = state->query_options().datacache_populate_probability;
+    }
     if (state->query_options().__isset.enable_file_metacache) {
-        _use_file_metacache = state->query_options().enable_hdfs_file_metacache;
+        _use_file_metacache &= state->query_options().enable_file_metacache;
     }
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));

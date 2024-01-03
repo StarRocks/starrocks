@@ -42,10 +42,22 @@ struct CacheOptions {
 };
 
 struct WriteCacheOptions {
+    enum class WriteMode {
+        // Write according the starcache promotion policy.
+        WRITE_BACK,
+        // Write to disk directly.
+        WRITE_THROUGH
+    };
+    WriteMode mode = WriteMode::WRITE_BACK;
+
     // If ttl_seconds=0 (default), no ttl restriction will be set. If an old one exists, remove it.
     uint64_t ttl_seconds = 0;
     // If overwrite=true, the cache value will be replaced if it already exists.
-    bool overwrite = true;
+    bool overwrite = false;
+
+    // The probability to evict other items if the cache space is full.
+    // It is expressed as a percentage. If write_probability is 10, it means the probability to evict is 10%.
+    int32_t write_probability = 100;
 
     struct Stats {
         int64_t write_mem_bytes = 0;
@@ -54,6 +66,14 @@ struct WriteCacheOptions {
 };
 
 struct ReadCacheOptions {
+    enum class ReadMode {
+        // Read according the starcache promotion policy.
+        READ_BACK,
+        // Skip promoting the data read from disk.
+        READ_THROUGH
+    };
+    ReadMode mode = ReadMode::READ_BACK;
+
     struct Stats {
         int64_t read_mem_bytes = 0;
         int64_t read_disk_bytes = 0;

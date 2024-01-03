@@ -192,6 +192,7 @@ struct HdfsScannerParams {
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
     bool use_file_metacache = false;
+    int32_t datacache_populate_probability = 0;
 };
 
 struct HdfsScannerContext {
@@ -241,6 +242,8 @@ struct HdfsScannerContext {
     bool can_use_min_max_count_opt = false;
 
     bool use_file_metacache = false;
+
+    int32_t datacache_populate_probability = 0;
 
     std::string timezone;
 
