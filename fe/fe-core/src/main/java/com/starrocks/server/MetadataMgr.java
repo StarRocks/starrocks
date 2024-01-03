@@ -41,7 +41,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.CatalogConnector;
-import com.starrocks.connector.CatalogConnectorMetadata;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTableColumnStats;
@@ -70,8 +69,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-
-import static com.google.common.base.Preconditions.checkState;
 
 public class MetadataMgr {
     private static final Logger LOG = LogManager.getLogger(MetadataMgr.class);
@@ -351,15 +348,11 @@ public class MetadataMgr {
             return getTable(catalogName, dbName, tblName);
         }
 
-        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        if (connectorMetadata.isEmpty()) {
-            return null;
-        }
-
         // for external catalog, do not reach external metadata service
-        checkState(connectorMetadata.get() instanceof CatalogConnectorMetadata);
-        CatalogConnectorMetadata catalogConnectorMetadata = (CatalogConnectorMetadata) connectorMetadata.get();
-        return new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, catalogConnectorMetadata.getTableType());
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        return connectorMetadata.map(
+                        metadata -> new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, metadata.getTableType()))
+                .orElse(null);
     }
 
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {

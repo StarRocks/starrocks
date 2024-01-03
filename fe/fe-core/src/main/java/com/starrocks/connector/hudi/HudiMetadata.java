@@ -76,6 +76,11 @@ public class HudiMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public Table.TableType getTableType() {
+        return Table.TableType.HUDI;
+    }
+
+    @Override
     public List<String> listDbNames() {
         return hmsOps.getAllDatabaseNames();
     }

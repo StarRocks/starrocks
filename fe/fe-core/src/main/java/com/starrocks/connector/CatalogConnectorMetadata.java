@@ -26,13 +26,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.connector.delta.DeltaLakeMetadata;
-import com.starrocks.connector.elasticsearch.ElasticsearchMetadata;
-import com.starrocks.connector.hudi.HudiMetadata;
-import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
-import com.starrocks.connector.jdbc.JDBCMetadata;
-import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -79,31 +73,16 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
         this.informationSchema = informationSchema;
     }
 
-    // Use connector type as a hint of table type.
-    // Warrant: there are exceptions that hive connector may have non-hive(e.g. iceberg) tables.
-    public Table.TableType getTableType() {
-        Table.TableType tableType = Table.TableType.HIVE;
-        if (normal instanceof JDBCMetadata) {
-            tableType = Table.TableType.JDBC;
-        } else if (normal instanceof PaimonMetadata) {
-            tableType = Table.TableType.PAIMON;
-        } else if (normal instanceof ElasticsearchMetadata) {
-            tableType = Table.TableType.ELASTICSEARCH;
-        } else if (normal instanceof IcebergMetadata) {
-            tableType = Table.TableType.ICEBERG;
-        } else if (normal instanceof DeltaLakeMetadata) {
-            tableType = Table.TableType.DELTALAKE;
-        } else if (normal instanceof HudiMetadata) {
-            tableType = Table.TableType.HUDI;
-        }
-        return tableType;
-    }
-
     private ConnectorMetadata metadataOfDb(String dBName) {
         if (isInfoSchemaDb(dBName)) {
             return informationSchema;
         }
         return normal;
+    }
+
+    @Override
+    public Table.TableType getTableType() {
+        return normal.getTableType();
     }
 
     @Override

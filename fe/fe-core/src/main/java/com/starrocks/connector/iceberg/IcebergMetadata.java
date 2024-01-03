@@ -119,6 +119,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableList.toImmutableList;
+import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.PartitionUtil.createPartitionKeyWithType;
@@ -156,6 +157,11 @@ public class IcebergMetadata implements ConnectorMetadata {
         new IcebergMetricsReporter().setThreadLocalReporter();
         this.jobPlanningExecutor = jobPlanningExecutor;
         this.refreshOtherFeExecutor = refreshOtherFeExecutor;
+    }
+
+    @Override
+    public Table.TableType getTableType() {
+        return ICEBERG;
     }
 
     @Override
