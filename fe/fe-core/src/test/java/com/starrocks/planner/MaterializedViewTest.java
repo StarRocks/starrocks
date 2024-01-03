@@ -2787,6 +2787,93 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+    public void testCountDistinctToBitmapCount7() {
+        String mv = "select user_id, time, bitmap_agg(tag_id) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id))) x from user_tags group by user_id;");
+        // rewrite count distinct to bitmap_count(bitmap_union(to_bitmap(x)));
+        testRewriteOK(mv, "select user_id, count(distinct tag_id) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_agg(tag_id)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_agg(tag_id) x from user_tags group by user_id, time;");
+    }
+
+    @Test
+    public void testCountDistinctToBitmapCount8() {
+        String mv = "select user_id, time, bitmap_agg(tag_id % 10) from user_tags group by user_id, time;";
+        testRewriteOK(mv, "select user_id, bitmap_union(to_bitmap(tag_id % 10)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(to_bitmap(tag_id % 10))) x from user_tags group by user_id;");
+        // rewrite count distinct to bitmap_count(bitmap_union(to_bitmap(x)));
+        testRewriteOK(mv, "select user_id, count(distinct tag_id % 10) x from user_tags group by user_id;");
+        // bitmap_agg
+        testRewriteOK(mv, "select user_id, bitmap_agg(tag_id % 10) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_agg(tag_id % 10) x from user_tags group by user_id;");
+    }
+
+    @Test
+    public void testStrColumnCountDistinctToBitmapCount1() {
+        {
+            String mv = "select user_id, bitmap_union(bitmap_hash(user_name)) from user_tags group by user_id;";
+            testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags group by user_id;");
+            testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x from user_tags group by user_id;");
+            testRewriteOK(mv, "select user_id, count(distinct user_name) x from user_tags group by user_id;");
+        }
+
+        {
+            String mv = "select user_id, time, bitmap_union(bitmap_hash(user_name)) from user_tags group by user_id, time;";
+            testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x from user_tags group by user_id;");
+            testRewriteOK(mv, "select user_id, count(distinct user_name) x from user_tags group by user_id;");
+        }
+        {
+            String mv = "select user_id, time, bitmap_union(bitmap_hash(concat(user_name, \"|\"))) from user_tags group by user_id, time;";
+            testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(concat(user_name, \"|\"))) x from user_tags group by user_id;");
+            testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(concat(user_name, \"|\")))) x from user_tags group by user_id;");
+            // rewrite count distinct to bitmap_count(bitmap_union(bitmap_hash(x)));
+            testRewriteOK(mv, "select user_id, count(distinct concat(user_name, \"|\")) x from user_tags group by user_id;");
+        }
+        {
+            String mv = "select user_id, tag_id, user_name from user_tags where user_id > 10;";
+            testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags where user_id > 10 group by user_id ;");
+            testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x from user_tags where user_id > 10 group by user_id;");
+            testRewriteOK(mv, "select user_id, count(distinct user_name) x from user_tags  where user_id > 10 group by user_id;");
+        }
+        {
+            String mv = "select user_id, tag_id, user_name from user_tags;";
+            testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags where user_id > 10 group by user_id ;");
+            testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x from user_tags where user_id > 10 group by user_id;");
+            testRewriteOK(mv, "select user_id, count(distinct user_name) x from user_tags group by user_id;");
+        }
+        {
+            String mv = "select user_id, count(user_name) from user_tags group by user_id;";
+            testRewriteFail(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags where user_id > 10 group by user_id ;");
+            testRewriteFail(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x from user_tags where user_id > 10 group by user_id;");
+            testRewriteFail(mv, "select user_id, count(distinct user_name) x from user_tags group by user_id;");
+        }
+    }
+
+    @Test
+    public void testStrColumnCountDistinctToBitmapCount2() {
+        String mv = "select user_id, time, bitmap_union(bitmap_hash(user_name)), " +
+                "bitmap_union(bitmap_hash(concat(user_name, \"a\"))), " +
+                "bitmap_union(bitmap_hash(concat(user_name, \"b\"))), " +
+                "bitmap_union(bitmap_hash(concat(user_name, \"c\"))) from user_tags group by user_id, time;";
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        testRewriteOK(mv, "select user_id, bitmap_union(bitmap_hash(user_name)) x from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, bitmap_count(bitmap_union(bitmap_hash(user_name))) x " +
+                "from user_tags group by user_id;");
+        // FIXME: MV Rewrite should take care cte reuse node later.
+        connectContext.getSessionVariable().setCboCteReuse(false);
+        testRewriteOK(mv, "select user_id, count(distinct user_name), " +
+                " count(distinct concat(user_name, \"a\")), count(distinct concat(user_name, \"b\"))," +
+                " count(distinct concat(user_name, \"c\"))  from user_tags group by user_id;");
+        testRewriteOK(mv, "select user_id, count(distinct user_name), " +
+                " count(distinct concat(user_name, \"a\")), count(distinct concat(user_name, \"b\"))," +
+                " count(distinct concat(user_name, \"c\"))  from user_tags group by user_id, time;");
+        testRewriteOK(mv, "select user_id, time, count(distinct user_name), " +
+                " count(distinct concat(user_name, \"a\")), count(distinct concat(user_name, \"b\"))," +
+                " count(distinct concat(user_name, \"c\"))  from user_tags group by user_id, time;");
+        connectContext.getSessionVariable().setCboCteReuse(true);
+    }
+
+    @Test
     public void testBitmapUnionCountToBitmapCount1() {
         String mv = "select user_id, bitmap_union(to_bitmap(tag_id)) from user_tags group by user_id;";
         testRewriteOK(mv, "select user_id, bitmap_union_count(to_bitmap(tag_id)) x from user_tags group by user_id;");
@@ -2969,7 +3056,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         }
 
         {
-            this.setTracLogModule("MV");
             String mv = "SELECT count(lo_linenumber)\n" +
                     "FROM lineorder inner join customer on lo_custkey = c_custkey\n" +
                     "WHERE `c_name` != 'name'; ";
@@ -5182,7 +5268,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         connectContext.getSessionVariable()
                 .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
         {
-            this.setTracLogModule("MV");
             MVRewriteChecker checker = testRewriteOK(mv, query);
             checker.contains("UNION");
         }

@@ -78,6 +78,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
         // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
+        connectContext.getSessionVariable().setEnableRewriteBitmapUnionToBitmapAgg(true);
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         FeConstants.runningUnitTest = true;
@@ -303,9 +304,13 @@ public class MaterializedViewTestBase extends PlanTestBase {
         return testRewriteOK(mv, query, null);
     }
 
-    protected MVRewriteChecker testRewriteOK(String mv, String query, String properties) {
+    protected MVRewriteChecker testRewriteOK(String mv, String query, String properties) throws RuntimeException {
         MVRewriteChecker fixture = new MVRewriteChecker(mv, query, properties);
-        return fixture.rewrite().ok();
+        MVRewriteChecker checker = fixture.rewrite();
+        if (checker.getException() != null) {
+            throw new RuntimeException(checker.getException());
+        }
+        return checker.ok();
     }
 
     protected MVRewriteChecker testRewriteFail(String mv, String query, String properties) {
