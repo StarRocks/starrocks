@@ -35,6 +35,7 @@
 package com.starrocks.http;
 
 import com.starrocks.common.Config;
+import com.starrocks.common.Log4jConfig;
 import com.starrocks.http.action.BackendAction;
 import com.starrocks.http.action.HaAction;
 import com.starrocks.http.action.HelpAction;
@@ -92,12 +93,16 @@ import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
 import com.starrocks.http.rest.TriggerAction;
 import com.starrocks.leader.MetaHelper;
+import com.starrocks.metric.GaugeMetric;
+import com.starrocks.metric.GaugeMetricImpl;
+import com.starrocks.metric.Metric;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoop;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
@@ -106,6 +111,7 @@ import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.stream.ChunkedWriteHandler;
+import io.netty.util.concurrent.EventExecutor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -114,6 +120,9 @@ import java.util.List;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+
+import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKERS_NUM;
+import static com.starrocks.http.HttpMetricRegistry.HTTP_WORKER_PENDING_TASKS_NUM;
 
 public class HttpServer {
     private static final Logger LOG = LogManager.getLogger(HttpServer.class);
@@ -260,7 +269,7 @@ public class HttpServer {
             // Configure the server.
             EventLoopGroup bossGroup = new NioEventLoopGroup();
             int numWorkerThreads = Math.max(0, Config.http_worker_threads_num);
-            EventLoopGroup workerGroup = new NioEventLoopGroup(numWorkerThreads);
+            NioEventLoopGroup workerGroup = new NioEventLoopGroup(numWorkerThreads);
             try {
                 serverBootstrap = new ServerBootstrap();
                 serverBootstrap.option(ChannelOption.SO_BACKLOG, Config.http_backlog_num);
@@ -273,6 +282,7 @@ public class HttpServer {
                 Channel ch = serverBootstrap.bind(port).sync().channel();
 
                 isStarted.set(true);
+                registerMetrics(workerGroup);
                 LOG.info("HttpServer started with port {}", port);
                 // block until server is closed
                 ch.closeFuture().sync();
@@ -284,6 +294,33 @@ public class HttpServer {
                 workerGroup.shutdownGracefully();
             }
         }
+    }
+
+    private void registerMetrics(NioEventLoopGroup workerGroup) {
+        HttpMetricRegistry httpMetricRegistry = HttpMetricRegistry.getInstance();
+
+        GaugeMetricImpl<Long> httpWorkersNum = new GaugeMetricImpl<>(
+                HTTP_WORKERS_NUM, Metric.MetricUnit.NOUNIT, "the number of http workers");
+        httpWorkersNum.setValue(0L);
+        httpMetricRegistry.registerGauge(httpWorkersNum);
+
+        GaugeMetric<Long> pendingTasks = new GaugeMetric<>(HTTP_WORKER_PENDING_TASKS_NUM, Metric.MetricUnit.NOUNIT,
+                "the number of tasks that are pending for processing in the queues of http workers") {
+            @Override
+            public Long getValue() {
+                if (!Config.enable_http_detail_metrics) {
+                    return 0L;
+                }
+                long pendingTasks = 0;
+                for (EventExecutor executor : workerGroup) {
+                    if (executor instanceof NioEventLoop) {
+                        pendingTasks += ((NioEventLoop) executor).pendingTasks();
+                    }
+                }
+                return pendingTasks;
+            }
+        };
+        httpMetricRegistry.registerGauge(pendingTasks);
     }
 
     // used for test, release bound port
@@ -307,6 +344,7 @@ public class HttpServer {
     }
 
     public static void main(String[] args) throws Exception {
+        Log4jConfig.initLogging();
         HttpServer httpServer = new HttpServer(8080);
         httpServer.setup();
         System.out.println("before start http server.");
