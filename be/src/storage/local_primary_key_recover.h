@@ -28,9 +28,9 @@ public:
     // Primary key schema
     starrocks::Schema generate_pkey_schema() override;
 
-    // get segment iterator list and its rssid
-    StatusOr<RssIDToSegmentIters> get_segment_iterators(const starrocks::Schema& pkey_schema,
-                                                        OlapReaderStatistics& stats) override;
+    Status rowset_iterator(
+            const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
+            const std::function<Status(const std::vector<ChunkIteratorPtr>&, uint32_t)>& handler) override;
 
     // generate delvec and save
     Status finalize_delvec(const PrimaryIndex::DeletesMap& new_deletes) override;

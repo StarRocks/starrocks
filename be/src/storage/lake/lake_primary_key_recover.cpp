@@ -54,28 +54,20 @@ starrocks::Schema LakePrimaryKeyRecover::generate_pkey_schema() {
     return ChunkHelper::convert_schema(tablet_schema, pk_columns);
 }
 
-// get next segment iterator and its rssid, return EOF when finish
-StatusOr<RssIDToSegmentIters> LakePrimaryKeyRecover::get_segment_iterators(const starrocks::Schema& pkey_schema,
-                                                                           OlapReaderStatistics& stats) {
-    auto rowsets = _tablet->get_rowsets(*_metadata);
-    if (!rowsets.ok()) {
-        return rowsets.status();
-    }
-    // iter and rssid list
-    RssIDToSegmentIters rssid_iters;
-    for (auto& rowset : *rowsets) {
+Status LakePrimaryKeyRecover::rowset_iterator(
+        const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
+        const std::function<Status(const std::vector<ChunkIteratorPtr>&, uint32_t)>& handler) {
+    auto rowsets = _tablet->get_rowsets(_metadata);
+
+    for (auto& rowset : rowsets) {
         auto res = rowset->get_each_segment_iterator(pkey_schema, &stats);
         if (!res.ok()) {
             return res.status();
         }
         auto& itrs = res.value();
-        for (int i = 0; i < itrs.size(); i++) {
-            const auto& itr = itrs[i];
-            if (itr == nullptr) continue;
-            rssid_iters.push_back(std::make_pair(rowset->id() + i, itr));
-        }
+        RETURN_IF_ERROR(handler(itrs, rowset->id()));
     }
-    return rssid_iters;
+    return Status::OK();
 }
 
 // generate delvec and save

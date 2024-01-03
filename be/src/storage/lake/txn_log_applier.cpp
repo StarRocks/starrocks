@@ -119,7 +119,7 @@ private:
                 _tablet.update_mgr()->release_primary_index_cache(_index_entry);
                 _index_entry = nullptr;
                 // rebuild delvec and pk index
-                LakePrimaryKeyRecover recover(&_builder, &_tablet, _metadata.get());
+                LakePrimaryKeyRecover recover(&_builder, &_tablet, _metadata);
                 RETURN_IF_ERROR(recover.recover());
                 LOG(INFO) << "Primary Key recover finish, tablet_id: " << _tablet.id()
                           << " base_ver: " << _base_version;

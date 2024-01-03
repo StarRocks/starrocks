@@ -4999,8 +4999,12 @@ Status TabletUpdates::recover() {
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
-    LocalPrimaryKeyRecover recover(&_tablet, StorageEngine::instance()->update_manager());
-    RETURN_IF_ERROR(recover.recover());
+    {
+        // fetch index lock, so we can clean current pk index safe.
+        std::lock_guard l1(_index_lock);
+        LocalPrimaryKeyRecover recover(&_tablet, StorageEngine::instance()->update_manager());
+        RETURN_IF_ERROR(recover.recover());
+    }
     LOG(INFO) << "Primary tablet recover finish. tablet_id: " << _tablet.tablet_id();
 
     // rebuild rowset stats

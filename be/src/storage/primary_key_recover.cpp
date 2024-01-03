@@ -45,39 +45,42 @@ Status PrimaryKeyRecover::recover() {
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE);
     auto chunk = chunk_shared_ptr.get();
     // 3. scan all rowsets and segments to build primary index
-    auto res = get_segment_iterators(pkey_schema, stats);
-    if (!res.ok()) {
-        return res.status();
-    }
-    for (const auto& rssid_to_itr : res.value()) {
-        uint32_t rssid = rssid_to_itr.first;
-        auto itr = rssid_to_itr.second;
-        uint32_t row_id_start = 0;
-        new_deletes[rssid] = {};
-        while (true) {
-            chunk->reset();
-            rowids.clear();
-            auto st = itr->get_next(chunk, &rowids);
-            if (st.is_end_of_file()) {
-                break;
-            } else if (!st.ok()) {
-                return st;
-            } else {
-                Column* pkc = nullptr;
-                if (pk_column) {
-                    pk_column->reset_column();
-                    PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
-                    pkc = pk_column.get();
-                } else {
-                    pkc = chunk->columns()[0].get();
+    RETURN_IF_ERROR(
+            rowset_iterator(pkey_schema, stats, [&](const std::vector<ChunkIteratorPtr>& itrs, uint32_t rowset_id) {
+                for (size_t i = 0; i < itrs.size(); i++) {
+                    auto itr = itrs[i].get();
+                    if (itr == nullptr) {
+                        continue;
+                    }
+                    uint32_t rssid = rowset_id + i;
+                    uint32_t row_id_start = 0;
+                    new_deletes[rssid] = {};
+                    while (true) {
+                        chunk->reset();
+                        rowids.clear();
+                        auto st = itr->get_next(chunk, &rowids);
+                        if (st.is_end_of_file()) {
+                            break;
+                        } else if (!st.ok()) {
+                            return st;
+                        } else {
+                            Column* pkc = nullptr;
+                            if (pk_column) {
+                                pk_column->reset_column();
+                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                                pkc = pk_column.get();
+                            } else {
+                                pkc = chunk->columns()[0].get();
+                            }
+                            // upsert and generate new deletes
+                            RETURN_IF_ERROR(index.upsert(rssid, row_id_start, *pkc, &new_deletes));
+                            row_id_start += pkc->size();
+                        }
+                    }
+                    itr->close();
                 }
-                // upsert and generate new deletes
-                RETURN_IF_ERROR(index.upsert(rssid, row_id_start, *pkc, &new_deletes));
-                row_id_start += pkc->size();
-            }
-        }
-        itr->close();
-    }
+                return Status::OK();
+            }));
     LOG(INFO) << "PrimaryKeyRecover rebuild index finish. tablet_id: " << tablet_id();
 
     // 4. sync delete vector

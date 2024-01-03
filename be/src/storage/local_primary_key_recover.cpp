@@ -43,11 +43,9 @@ starrocks::Schema LocalPrimaryKeyRecover::generate_pkey_schema() {
     return ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
 }
 
-// get segment iterator list and its rssid
-StatusOr<RssIDToSegmentIters> LocalPrimaryKeyRecover::get_segment_iterators(const starrocks::Schema& pkey_schema,
-                                                                            OlapReaderStatistics& stats) {
-    // iter and rssid list
-    RssIDToSegmentIters rssid_iters;
+Status LocalPrimaryKeyRecover::rowset_iterator(
+        const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
+        const std::function<Status(const std::vector<ChunkIteratorPtr>&, uint32_t)>& handler) {
     std::vector<RowsetSharedPtr> rowsets;
     std::vector<uint32_t> rowset_ids;
     int64_t latest_applied_major_version;
@@ -66,12 +64,9 @@ StatusOr<RssIDToSegmentIters> LocalPrimaryKeyRecover::get_segment_iterators(cons
         auto& itrs = res.value();
         // TODO(cbl): auto close iterators on failure
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
-        for (size_t i = 0; i < itrs.size(); i++) {
-            if (itrs[i].get() == nullptr) continue;
-            rssid_iters.emplace_back(rowset->rowset_meta()->get_rowset_seg_id() + (uint32_t)i, itrs[i]);
-        }
+        RETURN_IF_ERROR(handler(itrs, rowset->rowset_meta()->get_rowset_seg_id()));
     }
-    return rssid_iters;
+    return Status::OK();
 }
 
 // generate delvec and save
@@ -79,7 +74,6 @@ Status LocalPrimaryKeyRecover::finalize_delvec(const PrimaryIndex::DeletesMap& n
     size_t ndelvec = new_deletes.size();
     vector<std::pair<uint32_t, DelVectorPtr>> new_del_vecs(ndelvec);
     size_t idx = 0;
-    size_t total_del = 0;
     // generate delvec
     for (auto& new_delete : new_deletes) {
         uint32_t rssid = new_delete.first;
@@ -88,7 +82,6 @@ Status LocalPrimaryKeyRecover::finalize_delvec(const PrimaryIndex::DeletesMap& n
         new_del_vecs[idx].second = std::make_shared<DelVector>();
         auto& del_ids = new_delete.second;
         new_del_vecs[idx].second->init(_latest_applied_version.major_number(), del_ids.data(), del_ids.size());
-        total_del += del_ids.size();
         idx++;
         LOG(INFO) << "LocalPrimaryKeyRecover finalize delvec, rssid: " << rssid << " del cnt: " << del_ids.size();
     }

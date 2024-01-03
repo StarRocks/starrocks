@@ -25,8 +25,6 @@
 namespace starrocks {
 
 class OlapReaderStatistics;
-using RssIDToSegmentIter = std::pair<uint32_t, ChunkIteratorPtr>;
-using RssIDToSegmentIters = std::vector<RssIDToSegmentIter>;
 
 /**
  * PrimaryKeyRecover is used for error recover when tablet is in inconsistent state.
@@ -51,9 +49,10 @@ public:
     // Primary key schema
     virtual starrocks::Schema generate_pkey_schema() = 0;
 
-    // get segment iterator list and its rssid
-    virtual StatusOr<RssIDToSegmentIters> get_segment_iterators(const starrocks::Schema& pkey_schema,
-                                                                OlapReaderStatistics& stats) = 0;
+    // iterator all rowset and get their iterator and basic stat
+    virtual Status rowset_iterator(
+            const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
+            const std::function<Status(const std::vector<ChunkIteratorPtr>&, uint32_t)>& handler) = 0;
 
     // generate delvec and save
     virtual Status finalize_delvec(const PrimaryIndex::DeletesMap& new_deletes) = 0;

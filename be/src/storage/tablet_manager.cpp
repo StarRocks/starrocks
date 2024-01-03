@@ -702,6 +702,7 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
 }
 
 void TabletManager::primary_key_tablets_recover() {
+    std::vector<TabletSharedPtr> tablet_ptr_list;
     for (const auto& tablets_shard : _tablets_shards) {
         std::shared_lock rlock(tablets_shard.lock);
         for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
@@ -713,10 +714,13 @@ void TabletManager::primary_key_tablets_recover() {
                 continue;
             }
 
-            Status st = tablet_ptr->updates()->recover();
-            if (!st.ok()) {
-                LOG(ERROR) << "tablet " << tablet_ptr->tablet_id() << " recover error, st: " << st.message();
-            }
+            tablet_ptr_list.push_back(tablet_ptr);
+        }
+    }
+    for (const auto& tablet_ptr : tablet_ptr_list) {
+        Status st = tablet_ptr->updates()->recover();
+        if (!st.ok()) {
+            LOG(ERROR) << "tablet " << tablet_ptr->tablet_id() << " recover error, st: " << st.message();
         }
     }
 }

@@ -34,7 +34,7 @@ class MetaFileBuilder;
 
 class LakePrimaryKeyRecover : public PrimaryKeyRecover {
 public:
-    explicit LakePrimaryKeyRecover(MetaFileBuilder* builder, Tablet* tablet, TabletMetadata* metadata)
+    explicit LakePrimaryKeyRecover(MetaFileBuilder* builder, Tablet* tablet, MutableTabletMetadataPtr metadata)
             : _builder(builder), _tablet(tablet), _metadata(metadata) {}
     ~LakePrimaryKeyRecover() {}
 
@@ -44,9 +44,9 @@ public:
     // Primary key schema
     starrocks::Schema generate_pkey_schema() override;
 
-    // get next segment iterator and its rssid, return EOF when finish
-    StatusOr<RssIDToSegmentIters> get_segment_iterators(const starrocks::Schema& pkey_schema,
-                                                        OlapReaderStatistics& stats) override;
+    Status rowset_iterator(
+            const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
+            const std::function<Status(const std::vector<ChunkIteratorPtr>&, uint32_t)>& handler) override;
 
     // generate delvec and save
     Status finalize_delvec(const PrimaryIndex::DeletesMap& new_deletes) override;
@@ -56,7 +56,7 @@ public:
 private:
     MetaFileBuilder* _builder;
     Tablet* _tablet;
-    TabletMetadata* _metadata;
+    MutableTabletMetadataPtr _metadata;
     std::unique_ptr<Column> _pk_column;
 };
 
