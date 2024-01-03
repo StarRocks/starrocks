@@ -2019,7 +2019,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### mem_limit
 
-- 含义：BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100GB"）。
+- 含义：BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100G"）。默认硬上限为 BE 所在机器内存的 90%，软上限为 BE 所在机器内存的 80%。如果 BE 为独立部署，则无需配置，如果 BE 与其它占用内存较多的服务混合部署，则需要合理配置。
 - 默认值：90%
 
 #### flush_thread_num_per_store
