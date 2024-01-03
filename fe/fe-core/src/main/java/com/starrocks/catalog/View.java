@@ -132,6 +132,10 @@ public class View extends Table {
         return inlineViewDef;
     }
 
+    public void setName(String name) {
+        this.name = name;
+    }
+
     /**
      * Initializes the originalViewDef, inlineViewDef, and queryStmt members
      * by parsing the expanded view definition SQL-string.

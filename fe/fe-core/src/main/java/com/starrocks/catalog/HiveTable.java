@@ -161,6 +161,10 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return hiveTableName;
     }
 
+    public void setName(String name) {
+        this.name = name;
+    }
+
     @Override
     public String getUUID() {
         if (CatalogMgr.isExternalCatalog(catalogName)) {

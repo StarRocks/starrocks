@@ -56,6 +56,7 @@ import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
@@ -900,6 +901,7 @@ public class UtFrameUtils {
         ctx.setCurrentUserIdentity(userIdentity);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         ctx.setQualifiedUser(userIdentity.getQualifiedUser());
+        ctx.setQueryId(UUIDUtil.genUUID());
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         globalStateMgr.initAuth(true);
         ctx.setGlobalStateMgr(globalStateMgr);
