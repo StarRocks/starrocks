@@ -626,6 +626,50 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover) {
     config::enable_primary_key_recover = false;
 }
 
+TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
+    if (!GetParam().enable_persistent_index) {
+        // only test persistent index
+        return;
+    }
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true);
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        version++;
+        // clear persistent index path
+        EXPECT_TRUE(_update_mgr->try_remove_primary_index_cache(tablet_id));
+        std::string path = strings::Substitute(
+                "$0/$1/", StorageEngine::instance()->get_persistent_index_store(tablet_id)->get_persistent_index_path(),
+                tablet_id);
+        ASSERT_OK(fs::remove_all(path));
+    }
+    ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
+    EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), kChunkSize);
+    EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
+    if (GetParam().enable_persistent_index) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
+}
+
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
                          ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false}));
 
