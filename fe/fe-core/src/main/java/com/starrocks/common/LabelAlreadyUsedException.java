@@ -25,7 +25,7 @@ import org.apache.commons.lang3.StringUtils;
 public class LabelAlreadyUsedException extends DdlException {
 
     private static final long serialVersionUID = -6798925248765094813L;
-    private static final Pattern ERROR_PATTERN = Pattern.compile("Label \\[.*\\] has already been used.");
+    private static final Pattern ERROR_PATTERN = Pattern.compile(".*Label \\[.*\\] has already been used.*");
 
     // status of existing load job
     // RUNNING or FINISHED
