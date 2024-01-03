@@ -145,6 +145,16 @@ const config = {
             position: 'right',
           },
           {
+            href: 'https://forum.starrocks.io/',
+            label: 'Forum',
+            position: 'right',
+          },
+          {
+            href: 'https://join.slack.com/t/starrocks/shared_invite/zt-z5zxqr0k-U5lrTVlgypRIV8RbnCIAzg',
+            label: 'Slack',
+            position: 'right',
+          },          
+          {
             type: 'localeDropdown',
             position: 'left',
           },
