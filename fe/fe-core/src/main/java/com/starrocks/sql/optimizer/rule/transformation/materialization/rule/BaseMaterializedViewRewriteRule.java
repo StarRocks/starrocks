@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.google.common.collect.Lists;
@@ -40,6 +39,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MVPartiti
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -96,7 +96,19 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                 }
             }
         } else {
-            mvCandidateContexts = context.getCandidateMvs();
+            mvCandidateContexts.addAll(context.getCandidateMvs());
+        }
+        mvCandidateContexts.removeIf(x -> !x.prune(context, queryExpression));
+        MaterializationContext.RewriteOrdering ordering =
+                new MaterializationContext.RewriteOrdering(queryExpression, context.getColumnRefFactory());
+        mvCandidateContexts.sort(ordering);
+        int numCandidates = context.getSessionVariable().getCboMaterializedViewRewriteCandidateLimit();
+        if (numCandidates > 0 && mvCandidateContexts.size() > numCandidates) {
+            logMVRewrite(context, this, "too many MV candidates, truncate them to " + numCandidates);
+            mvCandidateContexts = mvCandidateContexts.subList(0, numCandidates);
+        }
+        if (CollectionUtils.isEmpty(mvCandidateContexts)) {
+            return Lists.newArrayList();
         }
 
         List<OptExpression> results = Lists.newArrayList();
@@ -164,6 +176,16 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                         MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mvContext.getMv().getMvId());
                 mvEntity.increaseQueryMatchedCount(1L);
             }
+
+            // Do not try to enumerate all plans, it would take a lot of time
+            int limit = context.getSessionVariable().getCboMaterializedViewRewriteRuleOutputLimit();
+            if (limit > 0 && results.size() >= limit) {
+                logMVRewrite(context, this, "too many MV rewrite results generated, but limit to {}", limit);
+                break;
+            }
+
+            // Give up rewrite if it exceeds the optimizer timeout
+            context.checkTimeout();
         }
 
         return results;
