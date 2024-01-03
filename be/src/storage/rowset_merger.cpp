@@ -433,6 +433,8 @@ private:
             Schema schema = tablet_schema->sort_key_idxes().empty()
                                     ? ChunkHelper::convert_schema(tablet_schema, column_groups[0])
                                     : ChunkHelper::get_sort_key_schema(tablet_schema);
+            // NOTE: although we switch to horizontal merge, the writer used is still VerticalRowsetWriter
+            // so it's important to make sure VerticalRowsetWriter can function properly when used in horizontal way
             RETURN_IF_ERROR(_do_merge_horizontally(tablet, tablet_schema, version, schema, rowsets, writer, cfg,
                                                    total_input_size, total_rows, total_chunk, stats, mask_buffer.get(),
                                                    &rowsets_mask_buffer));
