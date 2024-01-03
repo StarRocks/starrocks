@@ -341,11 +341,12 @@ public class MetadataMgr {
     }
         
     /**
-     * avoid network interactions with external metadata service when using external catalog(e.g. hive catalog).
-     * only returns basic information of namespace and table type (derived from the type of its connector)
-     * use this method if you are absolutely sure, otherwise use MetadataMgr#getTable
+     * MetadataMgr#getTableLocally avoids network interactions with external metadata service when using external catalog(e.g. hive catalog).
+     * In this case, only basic information of namespace and table type (derived from the type of its connector) is returned.
+     * For default/internal catalog, this method is equivalent to {@link MetadataMgr#getTable(String, String, String)}.
+     * Use this method if you are absolutely sure, otherwise use MetadataMgr#getTable.
      */
-    public Table getTableBasicInfo(String catalogName, String dbName, String tblName) {
+    public Table getTableLocally(String catalogName, String dbName, String tblName) {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return getTable(catalogName, dbName, tblName);
         }
@@ -355,6 +356,7 @@ public class MetadataMgr {
             return null;
         }
 
+        // for external catalog, do not reach external metadata service
         checkState(connectorMetadata.get() instanceof CatalogConnectorMetadata);
         CatalogConnectorMetadata catalogConnectorMetadata = (CatalogConnectorMetadata) connectorMetadata.get();
         return new ExternalCatalogTableBasicInfo(catalogName, dbName, tblName, catalogConnectorMetadata.getTableType());

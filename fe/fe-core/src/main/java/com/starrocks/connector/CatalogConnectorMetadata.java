@@ -80,7 +80,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     // Use connector type as a hint of table type.
-    // There could be exceptions that hive connector can have non-hive tables (e.g. iceberg table).
+    // Warrant: there are exceptions that hive connector may have non-hive(e.g. iceberg) tables.
     public Table.TableType getTableType() {
         Table.TableType tableType = Table.TableType.HIVE;
         if (normal instanceof JDBCMetadata) {

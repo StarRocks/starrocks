@@ -331,7 +331,7 @@ public class InformationSchemaDataSource {
                     for (String tableName : tableNames) {
                         Table table = null;
                         try {
-                            table = metadataMgr.getTableBasicInfo(catalogName, dbName, tableName);
+                            table = metadataMgr.getTableLocally(catalogName, dbName, tableName);
                         } catch (Exception e) {
                             LOG.warn(e.getMessage());
                         }
