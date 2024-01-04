@@ -87,6 +87,7 @@ struct SequentialFileOptions {
     bool skip_fill_local_cache = false;
     // Specify different buffer size for different read scenarios
     int64_t buffer_size = -1;
+    bool skip_disk_cache = false;
 };
 
 struct RandomAccessFileOptions {
@@ -95,6 +96,7 @@ struct RandomAccessFileOptions {
     bool skip_fill_local_cache = false;
     // Specify different buffer size for different read scenarios
     int64_t buffer_size = -1;
+    bool skip_disk_cache = false;
 };
 
 struct DirEntry {
