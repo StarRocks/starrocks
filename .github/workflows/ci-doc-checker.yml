@@ -35,6 +35,18 @@ jobs:
         run: |
           echo "doc=${{ steps.changes.outputs.doc }}" >> $GITHUB_OUTPUT
 
+  remove-doc-label:
+    needs: doc-checker
+    runs-on: ubuntu-latest
+    name: REMOVE DOC LABEL
+    if: ${{ needs.doc-checker.outputs.output1 != 'true' }}
+    steps:
+      - name: remove document label
+        uses: actions-ecosystem/action-remove-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: documentation
+
   add-doc-label:
     needs: doc-checker
     runs-on: ubuntu-latest
