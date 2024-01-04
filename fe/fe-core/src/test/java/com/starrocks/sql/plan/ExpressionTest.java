@@ -70,6 +70,22 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select t1a, t1b from test_all_type where id_datetime > 2000";
         plan = getFragmentPlan(sql);
         assertContains(plan, "PREDICATES: 8: id_datetime > CAST(2000 AS DATETIME)");
+
+        sql = "select t1a, t1b from test_all_type where id_date > (datetime '2000-01-01 12:00:00')";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 9: id_date >= '2000-01-02'");
+
+        sql = "select t1a, t1b from test_all_type where (datetime '2000-01-01 12:00:00') > id_date";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "9: id_date <= '2000-01-01'");
+
+        sql = "select t1a, t1b from test_all_type where (date '2000-01-01') > id_datetime";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 8: id_datetime < '2000-01-01 00:00:00'");
+
+        sql = "select t1a, t1b from test_all_type where id_datetime > (date '2000-01-01')";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 8: id_datetime > '2000-01-01 00:00:00'");
     }
 
     @Test
