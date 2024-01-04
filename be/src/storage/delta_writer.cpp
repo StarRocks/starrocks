@@ -205,8 +205,8 @@ Status DeltaWriter::_init() {
     RETURN_IF_ERROR(_build_current_tablet_schema(_opt.index_id, _opt.ptable_schema_param, tablet_schema_ptr));
     size_t real_num_columns = _tablet_schema->num_columns();
     if (_tablet->is_column_with_row_store()) {
-        if (_tablet_schema->columns().back().name() != "__row") {
-            return Status::InternalError("bad column_with_row schema, not __row column");
+        if (_tablet_schema->columns().back().name() != Schema::FULL_ROW_COLUMN) {
+            return Status::InternalError("bad column_with_row schema, no __row column");
         }
         real_num_columns -= 1;
     }
