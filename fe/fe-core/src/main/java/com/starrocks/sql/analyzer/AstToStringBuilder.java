@@ -697,12 +697,13 @@ public class AstToStringBuilder {
             StringBuilder sqlBuilder = new StringBuilder();
 
             sqlBuilder.append(node.getFunctionName());
-            sqlBuilder.append("(");
-
-            List<String> childSql = node.getChildExpressions().stream().map(this::visit).collect(toList());
-            sqlBuilder.append(Joiner.on(",").join(childSql));
-
-            sqlBuilder.append(")");
+            
+            if (node.getChildExpressions() != null) {
+                sqlBuilder.append("(");
+                List<String> childSql = node.getChildExpressions().stream().map(this::visit).collect(toList());
+                sqlBuilder.append(Joiner.on(",").join(childSql));
+                sqlBuilder.append(")");
+            }
             if (node.getAlias() != null) {
                 sqlBuilder.append(" ").append(node.getAlias().getTbl());
 
