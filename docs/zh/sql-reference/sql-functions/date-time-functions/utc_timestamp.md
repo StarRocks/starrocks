@@ -10,8 +10,6 @@ displayed_sidebar: "Chinese"
 
 如果该函数用在字符串上下文时，返回值的格式为 `YYYY-MM-DD hh:mm:ss`。如果用在数字上下文中，返回值的格式为 `YYYYMMDDhhmmss`。
 
-从 3.1 版本开始，该函数的返回结果会到微秒级别。
-
 ## 语法
 
 ```Haskell
@@ -22,18 +20,10 @@ DATETIME UTC_TIMESTAMP()
 
 ```Plain Text
 -- UTC_TIMESTAMP() + N 表示在当前时间加上 N 秒。
-select utc_timestamp(),utc_timestamp() + 1;
+mysql > select utc_timestamp(),utc_timestamp() + 1;
 +---------------------+---------------------+
 | utc_timestamp()     | utc_timestamp() + 1 |
 +---------------------+---------------------+
 | 2019-07-10 12:31:18 |      20190710123119 |
 +---------------------+---------------------+
-
--- 3.1 版本后的返回结果到微秒级别。
-select utc_timestamp();
-+----------------------------+
-| utc_timestamp()            |
-+----------------------------+
-| 2023-11-18 04:59:14.561000 |
-+----------------------------+
 ```

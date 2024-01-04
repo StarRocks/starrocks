@@ -641,9 +641,15 @@ Used to display the time zone of the current system. Cannot be changed.
 
 Used to set the time zone of the current session. The time zone can affect the results of certain time functions.
 
+### transaction_read_only
+
+* Description: Used for MySQL 5.8 or later compatibility. The alias is `tx_read_only`.
+* Default: OFF
+* Introduced in: v2.5.18, v3.0.9, v3.1.7
+
 ### tx_isolation
 
-Used for MySQL client compatibility. No practical usage.
+Used for MySQL client compatibility. No practical usage. The alias is `transaction_isolation`.
 
 ### use_compute_nodes
 
