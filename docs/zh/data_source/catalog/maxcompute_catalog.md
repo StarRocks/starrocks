@@ -60,14 +60,14 @@ StarRocks 访问 MaxCompute(ODPS) 集群的相关参数配置。
 
 `CatalogParams` 包含如下参数。
 
-| 参数                   | 是否必须 | 说明                                                                                                                                                               |
-|----------------------|------|------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| odps.endpoint        | 是    | MaxCompute服务的连接地址。您需要根据创建MaxCompute项目时选择的地域以及网络连接方式配置Endpoint。各地域及网络对应的Endpoint值，请参见[Endpoint](https://help.aliyun.com/zh/maxcompute/user-guide/endpoints)。      |
-| odps.project         | 是    | 访问的目标MaxCompute项目名称。如果您创建了标准模式的工作空间，在配置此参数时，请注意区分生产环境与开发环境（_dev）的项目名称。您可以登录[MaxCompute控制台](https://maxcompute.console.aliyun.com/)，在工作区> 项目管理页面获取MaxCompute项目名称。 |
-| odps.access.id       | 是    | 阿里云账号或RAM用户的AccessKey ID。您可以进入[AccessKey管理页面](https://ram.console.aliyun.com/manage/ak)获取AccessKey ID。                                                           |
-| odps.access.key      | 是    | AccessKey ID对应的AccessKey Secret。您可以进入[AccessKey管理页面](https://ram.console.aliyun.com/manage/ak)获取AccessKey Secret。                                                |
-| odps.tunnel.endpoint | 否    | Tunnel服务的外网访问链接。如果您未配置Tunnel Endpoint，Tunnel会自动路由到MaxCompute服务所在网络对应的Tunnel Endpoint。如果您配置了Tunnel Endpoint，则以配置为准，不进行自动路由。                                       |
-| odps.tunnel.quota    | 是    | 数据传输使用的资源组名称。StarRocks需要[使用Maxcompute独享资源组](https://help.aliyun.com/zh/maxcompute/user-guide/purchase-and-use-exclusive-resource-groups-for-dts)，对数据进行拉取。        |
+| 参数                   | 是否必须 | 说明                                                                                                                                                                                          |
+|----------------------|------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| odps.endpoint        | 是    | MaxCompute服务的连接地址。您需要根据创建MaxCompute项目时选择的地域以及网络连接方式配置Endpoint。各地域及网络对应的Endpoint值，请参见[Endpoint](https://help.aliyun.com/zh/maxcompute/user-guide/endpoints)。注意，当前仅支持使用阿里云VPC网络/经典网络，以提供最佳体验。 |
+| odps.project         | 是    | 访问的目标MaxCompute项目名称。如果您创建了标准模式的工作空间，在配置此参数时，请注意区分生产环境与开发环境（_dev）的项目名称。您可以登录[MaxCompute控制台](https://maxcompute.console.aliyun.com/)，在工作区> 项目管理页面获取MaxCompute项目名称。                            |
+| odps.access.id       | 是    | 阿里云账号或RAM用户的AccessKey ID。您可以进入[AccessKey管理页面](https://ram.console.aliyun.com/manage/ak)获取AccessKey ID。                                                                                      |
+| odps.access.key      | 是    | AccessKey ID对应的AccessKey Secret。您可以进入[AccessKey管理页面](https://ram.console.aliyun.com/manage/ak)获取AccessKey Secret。                                                                           |
+| odps.tunnel.endpoint | 否    | Tunnel服务的外网访问链接。如果您未配置Tunnel Endpoint，Tunnel会自动路由到MaxCompute服务所在网络对应的Tunnel Endpoint。如果您配置了Tunnel Endpoint，则以配置为准，不进行自动路由。                                                                  |
+| odps.tunnel.quota    | 是    | 数据传输使用的资源组名称。StarRocks需要[使用Maxcompute独享资源组](https://help.aliyun.com/zh/maxcompute/user-guide/purchase-and-use-exclusive-resource-groups-for-dts)，对数据进行拉取。                                   |
 
 #### ScanParams
 
