@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/pipeline_driver.h"
 
+#include <random>
 #include <sstream>
 
 #include "column/chunk.h"
@@ -28,6 +29,7 @@
 #include "exec/query_cache/multilane_operator.h"
 #include "exec/query_cache/ticket_checker.h"
 #include "exec/workgroup/work_group.h"
+#include "gen_cpp/InternalService_types.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -554,6 +556,15 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
     auto& mem_resource_mgr = op->mem_resource_manager();
 
     if (!state->enable_spill() || !mem_resource_mgr.releaseable()) return;
+
+    if (UNLIKELY(state->spill_mode() == TSpillMode::RANDOM)) {
+        static thread_local std::mt19937_64 generator{std::random_device{}()};
+        static std::uniform_real_distribution<double> distribution(0.0, 1.0);
+        if (distribution(generator) < state->spill_rand_ratio()) {
+            mem_resource_mgr.to_low_memory_mode();
+        }
+        return;
+    }
 
     // try to release buffer if memusage > mid level threhold
     _try_to_release_buffer(state, op);
