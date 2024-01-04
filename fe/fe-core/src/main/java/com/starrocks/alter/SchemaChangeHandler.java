@@ -2528,7 +2528,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 // upgrade from old version and replay task, addColumnsName maybe null
                 if (addColumnsName != null) {
                     for (String columnName : addColumnsName) {
-                        Optional<Column> col = indexSchema.stream().filter(c -> c.getName() == columnName).findFirst();
+                        Optional<Column> col = indexSchema.stream().filter(c -> c.nameEquals(columnName, true)).findFirst();
                         if (!col.isPresent()) {
                             continue;
                         }

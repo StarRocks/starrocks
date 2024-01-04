@@ -182,6 +182,8 @@ set(EXEC_FILES_PART1
         ./formats/parquet/parquet_footer_test.cpp
         ./formats/parquet/parquet_cli_reader.h
         ./formats/parquet/parquet_cli_reader_test.cpp
+        ./formats/parquet/parquet_ut_base.cpp
+        ./formats/parquet/page_index_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_client_test.cpp
@@ -413,6 +415,7 @@ set(EXEC_FILES_PART2
         ./storage/rowset_merger_test.cpp
         ./storage/schema_change_test.cpp
         ./storage/row_store_encoder_test.cpp
+        ./storage/segment_flush_executor_test.cpp
         ./storage/storage_engine_test.cpp
         ./storage/binlog_test_base.cpp
         ./storage/binlog_file_test.cpp
