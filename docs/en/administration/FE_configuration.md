@@ -918,7 +918,8 @@ Data loading tasks consist of two phases: data writing and data committing (COMM
 
 - **Unit**: -
 - **Default**: TRUE
-- **Description**: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refresh immediately. This item is supported from v3.2.3 onwards.
+- **Description**: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
+- **Introduced in**: v3.2.3
 
 ## Configure FE static parameters
 
