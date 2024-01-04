@@ -497,4 +497,16 @@ public class MetadataMgr {
             }
         });
     }
+
+    public void abortSink(String catalogName, String dbName, String tableName, List<TSinkCommitInfo> sinkCommitInfos) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> {
+            try {
+                metadata.abortSink(dbName, tableName, sinkCommitInfos);
+            } catch (StarRocksConnectorException e) {
+                LOG.error("table sink abort failed", e);
+                throw new StarRocksConnectorException(e.getMessage());
+            }
+        });
+    }
 }
