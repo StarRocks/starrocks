@@ -23,6 +23,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/txn_log_applier.h"
+#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
 #include "util/lru_cache.h"
 
@@ -273,6 +274,8 @@ void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_
         files_to_delete.emplace_back(log_path);
 
         tablet_mgr->metacache()->erase(log_path);
+
+        tablet_mgr->update_mgr()->try_remove_cache(tablet_id, txn_id);
     }
 
     delete_files_async(std::move(files_to_delete));
