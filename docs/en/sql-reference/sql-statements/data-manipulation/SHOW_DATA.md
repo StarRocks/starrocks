@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-This statement is used to display the amount of data, the number of copies, and the number of statistical rows.
+This statement is used to display the amount of data, the number of copies, and the number of statistical rows in a database or a database table.
 
 Syntax:
 
@@ -23,35 +23,31 @@ Note:
 
 ## Examples
 
-1. Displays the data volume, copy quantity, summary data volume and summary copy quantity of each table in the default db.
+Example 1: Display the data volume, copy quantity, summary data volume and summary copy quantity of each table in the current database.
 
-    ```sql
-    SHOW DATA;
-    ```
+```plain text
+SHOW DATA;
++-----------+-------------+--------------+
+| TableName | Size        | ReplicaCount |
++-----------+-------------+--------------+
+| tbl1      | 900.000 B   | 6            |
+| tbl2      | 500.000 B   | 3            |
+| Total     | 1.400 KB    | 9            |
+| Quota     | 1024.000 GB | 1073741824   |
+| Left      | 1021.921 GB | 1073741815   |
++-----------+-------------+--------------+
+```
 
-    ```plain text
-    +-----------+-------------+--------------+
-    | TableName | Size        | ReplicaCount |
-    +-----------+-------------+--------------+
-    | tbl1      | 900.000 B   | 6            |
-    | tbl2      | 500.000 B   | 3            |
-    | Total     | 1.400 KB    | 9            |
-    | Quota     | 1024.000 GB | 1073741824   |
-    | Left      | 1021.921 GB | 1073741815   |
-    +-----------+-------------+--------------+
-    ```
+Example 2: Display the amount of breakdown data, the number of copies, and the number of statistical rows in the specified table.
 
-2. Displays the amount of breakdown data, the number of copies, and the number of statistical rows in the specified db table
-
-    ```plain text
-    SHOW DATA FROM example_db.test;
-    
-    +-----------+-----------+-----------+--------------+----------+
-    | TableName | IndexName | Size      | ReplicaCount | RowCount |
-    +-----------+-----------+-----------+--------------+----------+
-    | test      | r1        | 10.000MB  | 30           | 10000    |
-    |           | r2        | 20.000MB  | 30           | 20000    |
-    |           | test2     | 50.000MB  | 30           | 50000    |
-    |           | Total     | 80.000    | 90           |          |
-    +-----------+-----------+-----------+--------------+----------+
-    ```
+```plain text
+SHOW DATA FROM example_db.test;
++-----------+-----------+-----------+--------------+----------+
+| TableName | IndexName | Size      | ReplicaCount | RowCount |
++-----------+-----------+-----------+--------------+----------+
+| test      | r1        | 10.000MB  | 30           | 10000    |
+|           | r2        | 20.000MB  | 30           | 20000    |
+|           | test2     | 50.000MB  | 30           | 50000    |
+|           | Total     | 80.000    | 90           |          |
++-----------+-----------+-----------+--------------+----------+
+```
