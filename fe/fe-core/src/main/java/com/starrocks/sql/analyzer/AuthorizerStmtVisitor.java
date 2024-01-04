@@ -206,6 +206,7 @@ import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -237,16 +238,18 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitInsertStatement(InsertStmt statement, ConnectContext context) {
         // For table just created by CTAS statement, we ignore the check of 'INSERT' privilege on it.
         if (!statement.isForCTAS()) {
+            List<String> columnNames = statement.getTargetColumnNames();
             try {
                 Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        statement.getTableName(), new HashSet<>(statement.getTargetColumnNames()),
+                        statement.getTableName(),
+                        columnNames == null ? Collections.singleton("*") : new HashSet<>(columnNames),
                         PrivilegeType.INSERT);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         PrivilegeType.INSERT.name(), ObjectType.TABLE_COLUMN.name(),
                         String.join(".", statement.getTableName().getNoClusterString(),
-                                String.join(",", statement.getTargetColumnNames())));
+                                columnNames == null ? "*" : String.join(",", columnNames)));
             }
         }
 
