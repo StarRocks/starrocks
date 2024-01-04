@@ -3,6 +3,7 @@
 
 #include <fmt/format.h>
 
+#include <atomic>
 #include <memory>
 #include <utility>
 
@@ -17,75 +18,166 @@
 
 namespace starrocks {
 
-SegmentFlushToken::SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token,
-                                     std::shared_ptr<starrocks::vectorized::DeltaWriter> delta_writer)
-        : _flush_token(std::move(flush_pool_token)), _writer(std::move(delta_writer)) {}
+// A task responsible for flushing the segment received the primary tablet. It will also
+// respond to the brpc BackendInternalServiceImpl<T>::tablet_writer_add_segment if release()
+// is not called.
+class SegmentFlushTask final : public Runnable {
+public:
+    SegmentFlushTask(SegmentFlushToken* flush_token, vectorized::DeltaWriter* writer, brpc::Controller* cntl,
+                     const PTabletWriterAddSegmentRequest* request, PTabletWriterAddSegmentResult* response,
+                     google::protobuf::Closure* done)
+            : _flush_token(flush_token),
+              _writer(writer),
+              _cntl(cntl),
+              _request(request),
+              _response(response),
+              _done(done) {}
 
-Status SegmentFlushToken::submit(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
-                                 PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
-    ClosureGuard closure_guard(done);
-
-    auto submit_st = _flush_token->submit_func([this, cntl, request, response, done] {
-        auto& writer = this->_writer;
-        auto st = Status::OK();
-        if (request->has_segment() && cntl->request_attachment().size() > 0) {
-            auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _writer->tablet()->tablet_id());
-            auto& segment_pb = request->segment();
-            st = writer->write_segment(segment_pb, cntl->request_attachment());
-        } else if (!request->eos()) {
-            st = Status::InternalError(fmt::format("request {} has no segment", request->DebugString()));
+    // Destructor which will respond to the brpc if run() or release() is not called.
+    ~SegmentFlushTask() override {
+        if (_run_or_released.load()) {
+            return;
         }
-        if (st.ok()) {
-            if (request->eos()) {
-                st = writer->close();
-                if (st.ok()) {
-                    st = writer->commit();
-                }
-                if (st.ok()) {
-                    auto* tablet_info = response->add_tablet_vec();
-                    tablet_info->set_tablet_id(writer->tablet()->tablet_id());
-                    tablet_info->set_schema_hash(writer->tablet()->schema_hash());
-                    tablet_info->set_node_id(writer->node_id());
-                    const auto& rowset_global_dict_columns_valid_info =
-                            writer->committed_rowset_writer()->global_dict_columns_valid_info();
-                    const auto* rowset_global_dicts = writer->committed_rowset_writer()->rowset_global_dicts();
-                    for (const auto& item : rowset_global_dict_columns_valid_info) {
-                        if (item.second && rowset_global_dicts != nullptr &&
-                            rowset_global_dicts->find(item.first) != rowset_global_dicts->end()) {
-                            tablet_info->add_valid_dict_cache_columns(item.first);
-                            tablet_info->add_valid_dict_collected_version(rowset_global_dicts->at(item.first).version);
-                        } else {
-                            tablet_info->add_invalid_dict_cache_columns(item.first);
-                        }
-                    }
+        Status status = Status::Cancelled(
+                fmt::format("Segment flush task does not run, and it may be cancelled,"
+                            " txn_id: {}, tablet id: {}, flush token status: {}",
+                            _request->txn_id(), _request->tablet_id(), _flush_token->status().to_string()));
+        _send_fail_response(status);
+        VLOG(1) << "Segment flush task is destructed with failure response"
+                << ", txn_id: " << _request->txn_id() << ", tablet id: " << _request->tablet_id()
+                << ", flush token status: " << _flush_token->status();
+    }
+
+    // Run the task if release() is not called which will flush the segment, and respond the brpc
+    // BackendInternalServiceImpl<T>::tablet_writer_add_segment.
+    void run() override {
+        bool expect = false;
+        if (!_run_or_released.compare_exchange_strong(expect, true)) {
+            return;
+        }
+
+        // if token status is not ok, respond with failure
+        auto token_st = _flush_token->status();
+        if (!token_st.ok()) {
+            _send_fail_response(token_st);
+            return;
+        }
+
+        auto st = Status::OK();
+        if (_request->has_segment() && _cntl->request_attachment().size() > 0) {
+            auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _writer->tablet()->tablet_id());
+            auto& segment_pb = _request->segment();
+            st = _writer->write_segment(segment_pb, _cntl->request_attachment());
+        } else if (!_request->eos()) {
+            st = Status::InternalError(fmt::format("request {} has no segment", _request->DebugString()));
+        }
+
+        bool eos = _request->eos();
+        if (st.ok() && eos) {
+            st = _writer->close();
+            if (st.ok()) {
+                st = _writer->commit();
+            }
+        }
+
+        if (!st.ok()) {
+            _writer->abort(true);
+            _send_fail_response(st);
+        } else {
+            _send_success_response(eos, st);
+        }
+    }
+
+    // Release the task which means it should not be run and respond to the brpc.
+    void release() {
+        bool expect = false;
+        _run_or_released.compare_exchange_strong(expect, true);
+        VLOG(1) << "Segment flush task is released"
+                << ", txn_id: " << _request->txn_id() << ", tablet id: " << _request->tablet_id()
+                << ", flush token status: " << _flush_token->status();
+    }
+
+private:
+    void _send_success_response(bool eos, Status& st) {
+        if (eos) {
+            auto* tablet_info = _response->add_tablet_vec();
+            tablet_info->set_tablet_id(_writer->tablet()->tablet_id());
+            tablet_info->set_schema_hash(_writer->tablet()->schema_hash());
+            tablet_info->set_node_id(_writer->node_id());
+            const auto& rowset_global_dict_columns_valid_info =
+                    _writer->committed_rowset_writer()->global_dict_columns_valid_info();
+            const auto* rowset_global_dicts = _writer->committed_rowset_writer()->rowset_global_dicts();
+            for (const auto& item : rowset_global_dict_columns_valid_info) {
+                if (item.second && rowset_global_dicts != nullptr &&
+                    rowset_global_dicts->find(item.first) != rowset_global_dicts->end()) {
+                    tablet_info->add_valid_dict_cache_columns(item.first);
+                    tablet_info->add_valid_dict_collected_version(rowset_global_dicts->at(item.first).version);
+                } else {
+                    tablet_info->add_invalid_dict_cache_columns(item.first);
                 }
             }
         }
-        if (!st.ok()) {
-            writer->abort(true);
-            auto* tablet_info = response->add_failed_tablet_vec();
-            tablet_info->set_tablet_id(writer->tablet()->tablet_id());
-            tablet_info->set_node_id(writer->node_id());
-            tablet_info->set_schema_hash(0);
-        }
+
+        st.to_protobuf(_response->mutable_status());
+        _done->Run();
+    }
+
+    void _send_fail_response(Status& st) {
+        auto* tablet_info = _response->add_failed_tablet_vec();
+        tablet_info->set_tablet_id(_writer->tablet()->tablet_id());
+        tablet_info->set_node_id(_writer->node_id());
+        tablet_info->set_schema_hash(0);
+        st.to_protobuf(_response->mutable_status());
+        _done->Run();
+    }
+
+    SegmentFlushToken* _flush_token;
+    vectorized::DeltaWriter* _writer;
+    brpc::Controller* _cntl;
+    const PTabletWriterAddSegmentRequest* _request;
+    PTabletWriterAddSegmentResult* _response;
+    google::protobuf::Closure* _done;
+    // whether run() or release() has been called
+    std::atomic<bool> _run_or_released = false;
+};
+
+SegmentFlushToken::SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token)
+        : _flush_token(std::move(flush_pool_token)) {}
+
+Status SegmentFlushToken::submit(vectorized::DeltaWriter* writer, brpc::Controller* cntl,
+                                 const PTabletWriterAddSegmentRequest* request, PTabletWriterAddSegmentResult* response,
+                                 google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    Status token_st = status();
+    if (!token_st.ok()) {
+        Status st = Status::InternalError("Segment flush token is not ok. The status: " + token_st.to_string());
         st.to_protobuf(response->mutable_status());
-        done->Run();
-    });
+        return st;
+    }
+
+    auto task = std::make_shared<SegmentFlushTask>(this, writer, cntl, request, response, done);
+    auto submit_st = _flush_token->submit(std::move(task));
     if (submit_st.ok()) {
         closure_guard.release();
     } else {
+        task->release();
         submit_st.to_protobuf(response->mutable_status());
     }
 
     return submit_st;
 }
 
-void SegmentFlushToken::cancel() {
+void SegmentFlushToken::cancel(const Status& st) {
+    set_status(st);
+}
+
+void SegmentFlushToken::shutdown() {
     _flush_token->shutdown();
 }
 
-void SegmentFlushToken::wait() {
+Status SegmentFlushToken::wait() {
     _flush_token->wait();
+    return status();
 }
 
 Status SegmentFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {
@@ -106,10 +198,8 @@ Status SegmentFlushExecutor::update_max_threads(int max_threads) {
     }
 }
 
-std::unique_ptr<SegmentFlushToken> SegmentFlushExecutor::create_flush_token(
-        const std::shared_ptr<starrocks::vectorized::DeltaWriter>& delta_writer,
-        ThreadPool::ExecutionMode execution_mode) {
-    return std::make_unique<SegmentFlushToken>(_flush_pool->new_token(execution_mode), delta_writer);
+std::unique_ptr<SegmentFlushToken> SegmentFlushExecutor::create_flush_token(ThreadPool::ExecutionMode execution_mode) {
+    return std::make_unique<SegmentFlushToken>(_flush_pool->new_token(execution_mode));
 }
 
 } // namespace starrocks
