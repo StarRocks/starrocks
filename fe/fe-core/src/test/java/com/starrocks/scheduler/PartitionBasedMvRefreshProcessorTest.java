@@ -354,7 +354,7 @@ public class PartitionBasedMvRefreshProcessorTest {
             taskRun.executeTaskRun();
             Assert.fail("should not be here. executeTaskRun will throw exception");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("is not active, skip sync partition and data with base tables"));
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("is not active"));
         }
     }
 

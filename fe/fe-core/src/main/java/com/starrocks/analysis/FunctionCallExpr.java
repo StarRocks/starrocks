@@ -44,6 +44,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
+import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
+
 public class FunctionCallExpr extends Expr {
     private FunctionName fnName;
     // private BuiltinAggregateFunction.Operator aggOp;
@@ -312,10 +314,7 @@ public class FunctionCallExpr extends Expr {
         }
 
         // For BE code simply, handle the following window functions with nullable
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.LEAD) ||
-                fnName.getFunction().equalsIgnoreCase(FunctionSet.LAG) ||
-                fnName.getFunction().equalsIgnoreCase(FunctionSet.FIRST_VALUE) ||
-                fnName.getFunction().equalsIgnoreCase(FunctionSet.LAST_VALUE)) {
+        if (IGNORE_NULL_WINDOW_FUNCTION.contains(fnName)) {
             return true;
         }
 
