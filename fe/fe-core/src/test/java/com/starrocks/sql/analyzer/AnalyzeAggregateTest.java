@@ -122,9 +122,9 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select distinct v1, v2 as v from t0 order by v");
         analyzeSuccess("select distinct abs(v1) as v from t0 order by v");
         analyzeFail("select distinct v1 from t0 order by v2",
-                "Column 'v2' cannot be resolved");
+                "'`test`.`t0`.`v2`' must be an aggregate expression or appear in GROUP BY clause");
         analyzeFail("select distinct v1 as v from t0 order by v2",
-                "Column 'v2' cannot be resolved");
+                "'`test`.`t0`.`v2`' must be an aggregate expression or appear in GROUP BY clause");
         analyzeFail("select * from t0 order by max(v2)",
                 "column must appear in the GROUP BY clause or be used in an aggregate function");
 
