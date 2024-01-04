@@ -63,6 +63,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -451,7 +452,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
                 Table table = tableInfo.getTable();
                 GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, true);
                 nameToTableInfo.remove(dbId, table.getName());
-                runnable = table.delete(true);
+                runnable = table.delete(true, WarehouseManager.DEFAULT_WAREHOUSE_ID);
                 if (!isCheckpointThread() && runnable != null) {
                     runnable.run();
                 }
@@ -857,7 +858,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
     private void postProcessEraseTable(List<RecycleTableInfo> tableToRemove) {
         for (RecycleTableInfo tableInfo : tableToRemove) {
             Table table = tableInfo.getTable();
-            Runnable runnable = table.delete(false);
+            Runnable runnable = table.delete(false, WarehouseManager.DEFAULT_WAREHOUSE_ID);
             if (runnable != null) {
                 runnable.run();
             }

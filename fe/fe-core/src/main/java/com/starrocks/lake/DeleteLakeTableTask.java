@@ -38,8 +38,11 @@ class DeleteLakeTableTask implements Runnable {
     // lake table or lake materialized view
     private final OlapTable table;
 
-    DeleteLakeTableTask(OlapTable table) {
+    private final long warehouseId;
+
+    DeleteLakeTableTask(OlapTable table, long warehouseId) {
         this.table = table;
+        this.warehouseId = warehouseId;
     }
 
     // Delete all data on remote storage. Successful deletion is *NOT* guaranteed.
@@ -92,9 +95,9 @@ class DeleteLakeTableTask implements Runnable {
     private void removePartitionDirectory(String path, Tablet tablet) {
         DropTableRequest request = new DropTableRequest();
         request.tabletId = tablet.getId();
-        ComputeNode node = Utils.chooseNode((LakeTablet) tablet, StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+        ComputeNode node = Utils.chooseNode((LakeTablet) tablet, warehouseId);
         if (node == null) {
-            LOG.warn("Fail to remove {}: no alive node", path);
+            LOG.warn("Fail to remove {}: no alive nodes in warehouse {}", path, warehouseId);
             return;
         }
         TNetworkAddress address = new TNetworkAddress(node.getHost(), node.getBrpcPort());

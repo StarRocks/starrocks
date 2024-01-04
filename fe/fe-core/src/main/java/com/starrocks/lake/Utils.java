@@ -57,12 +57,15 @@ public class Utils {
             try {
                 // randomly choose one node from this workerGroup
                 List<Long> nodeIds = GlobalStateMgr.getCurrentStarOSAgent().getWorkersByWorkerGroup(workerGroupId);
-                int randomIndex = new Random().nextInt(nodeIds.size());
-                return nodeIds.get(randomIndex);
+                if (!nodeIds.isEmpty()) {
+                    int randomIndex = new Random().nextInt(nodeIds.size());
+                    return nodeIds.get(randomIndex);
+                }
             } catch (UserException e) {
                 return null;
             }
         }
+        return null;
     }
 
     public static Long chooseBackend(LakeTablet tablet) {

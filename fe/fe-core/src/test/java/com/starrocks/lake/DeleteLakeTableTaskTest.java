@@ -23,6 +23,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import mockit.Expectations;
@@ -46,7 +47,7 @@ public class DeleteLakeTableTaskTest {
                      @Mocked MaterializedIndex index,
                      @Mocked LakeTablet tablet,
                      @Mocked LakeService lakeService) throws StarClientException {
-        DeleteLakeTableTask task = new DeleteLakeTableTask(table);
+        DeleteLakeTableTask task = new DeleteLakeTableTask(table, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         new MockUp<Utils>() {
             @Mock
@@ -101,7 +102,7 @@ public class DeleteLakeTableTaskTest {
                      @Mocked MaterializedIndex index,
                      @Mocked LakeTablet tablet,
                      @Mocked LakeService lakeService) {
-        DeleteLakeTableTask task = new DeleteLakeTableTask(table);
+        DeleteLakeTableTask task = new DeleteLakeTableTask(table, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         new Expectations() {
             {
@@ -132,7 +133,7 @@ public class DeleteLakeTableTaskTest {
                                @Mocked MaterializedIndex index,
                                @Mocked LakeTablet tablet,
                                @Mocked LakeService lakeService) throws StarClientException {
-        DeleteLakeTableTask task = new DeleteLakeTableTask(table);
+        DeleteLakeTableTask task = new DeleteLakeTableTask(table, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         new MockUp<Utils>() {
             @Mock
@@ -175,7 +176,7 @@ public class DeleteLakeTableTaskTest {
                      @Mocked MaterializedIndex index,
                      @Mocked LakeTablet tablet,
                      @Mocked LakeService lakeService) throws StarClientException {
-        DeleteLakeTableTask task = new DeleteLakeTableTask(table);
+        DeleteLakeTableTask task = new DeleteLakeTableTask(table, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         new Expectations() {
             {
@@ -211,7 +212,7 @@ public class DeleteLakeTableTaskTest {
                      @Mocked MaterializedIndex index,
                      @Mocked LakeTablet tablet,
                      @Mocked LakeService lakeService) throws StarClientException {
-        DeleteLakeTableTask task = new DeleteLakeTableTask(table);
+        DeleteLakeTableTask task = new DeleteLakeTableTask(table, WarehouseManager.DEFAULT_WAREHOUSE_ID);
 
         new MockUp<Utils>() {
             @Mock

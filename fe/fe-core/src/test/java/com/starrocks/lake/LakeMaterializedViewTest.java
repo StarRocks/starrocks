@@ -62,6 +62,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.SharedDataStorageVolumeMgr;
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TStorageMedium;
@@ -307,8 +308,8 @@ public class LakeMaterializedViewTest {
         Assert.assertTrue(baseProperties.contains("\"datacache.enable\" = \"true\""));
         Assert.assertTrue(baseProperties.contains("\"enable_async_write_back\" = \"true\""));
 
-        Assert.assertNull(mv.delete(true));
-        Assert.assertNotNull(mv.delete(false));
+        Assert.assertNull(mv.delete(true, WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertNotNull(mv.delete(false, WarehouseManager.DEFAULT_WAREHOUSE_ID));
     }
 
     @Test

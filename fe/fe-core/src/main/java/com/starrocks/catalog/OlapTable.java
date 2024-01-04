@@ -2854,7 +2854,7 @@ public class OlapTable extends Table {
     }
 
     @Override
-    public Runnable delete(boolean replay) {
+    public Runnable delete(boolean replay, long warehouseId) {
         onErase(replay);
         return replay ? null : new DeleteOlapTableTask(this);
     }

@@ -56,8 +56,11 @@ import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.persist.DropInfo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -455,12 +458,17 @@ public class Database extends MetaObject implements Writable {
 
         dropTable(table.getName());
 
+        // pass warehouse
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        if (ConnectContext.get() != null && RunMode.isSharedDataMode()) {
+            warehouseId = ConnectContext.get().getCurrentWarehouseId();
+        }
         if (!isForceDrop) {
             Table oldTable = GlobalStateMgr.getCurrentState().getRecycleBin().recycleTable(id, table);
-            runnable = (oldTable != null) ? oldTable.delete(isReplay) : null;
+            runnable = (oldTable != null) ? oldTable.delete(isReplay, warehouseId) : null;
         } else {
             GlobalStateMgr.getCurrentState().removeAutoIncrementIdByTableId(tableId, isReplay);
-            runnable = table.delete(isReplay);
+            runnable = table.delete(isReplay, warehouseId);
         }
 
         LOG.info("finished dropping table[{}] in db[{}], tableId: {}", table.getName(), getOriginName(), tableId);

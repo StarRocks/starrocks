@@ -118,9 +118,9 @@ public class LakeTable extends OlapTable {
     }
 
     @Override
-    public Runnable delete(boolean replay) {
+    public Runnable delete(boolean replay, long warehouseId) {
         onErase(replay);
-        return replay ? null : new DeleteLakeTableTask(this);
+        return replay ? null : new DeleteLakeTableTask(this, warehouseId);
     }
 
     @Override

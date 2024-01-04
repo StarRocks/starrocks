@@ -731,7 +731,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
      * catalog, or null if no action need to be performed.
      */
     @Nullable
-    public Runnable delete(boolean replay) {
+    public Runnable delete(boolean replay, long warehouseId) {
         return null;
     }
 
