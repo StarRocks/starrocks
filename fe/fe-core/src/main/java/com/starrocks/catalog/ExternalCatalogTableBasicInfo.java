@@ -40,20 +40,14 @@ public class ExternalCatalogTableBasicInfo implements TableBasicInfo {
         this.tableType = tableType;
     }
 
+    @Override
     public String getCatalogName() {
         return catalogName;
     }
 
-    public String getDbName() {
-        return dbName;
-    }
-
+    @Override
     public String getName() {
         return tableName;
-    }
-
-    public Table.TableType getTable() {
-        return tableType;
     }
 
     @Override
@@ -76,28 +70,34 @@ public class ExternalCatalogTableBasicInfo implements TableBasicInfo {
         return tableType;
     }
 
+    // a uniform way to generate uuid for external table
     @Override
     public String getUUID() {
         checkState(CatalogMgr.isExternalCatalog(catalogName));
         return String.join(".", catalogName, dbName, tableName);
     }
 
+    @Override
     public boolean isOlapView() {
         return false;
     }
 
+    @Override
     public boolean isMaterializedView() {
         return false;
     }
 
+    @Override
     public boolean isNativeTableOrMaterializedView() {
         return false;
     }
 
+    @Override
     public long getCreateTime() {
         return DEFAULT_EMPTY_NUM;
     }
 
+    @Override
     public long getLastCheckTime() {
         return DEFAULT_EMPTY_NUM;
     }
