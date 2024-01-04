@@ -197,6 +197,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
+        normal.abortSink(dbName, table, commitInfos);
+    }
+
+    @Override
     public void alterTable(AlterTableStmt stmt) throws UserException {
         normal.alterTable(stmt);
     }
