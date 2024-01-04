@@ -673,7 +673,7 @@ public class OlapTableSink extends DataSink {
                             if (bePathsMap.keySet().size() < quorum) {
                                 throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
                                         String.format("Tablet lost replicas. Check if any backend is down or not. " +
-                                                        "tablet_id: %s, replicas: %s. C：heck quorum number failed" +
+                                                        "tablet_id: %s, replicas: %s. Check quorum number failed" +
                                                         "(OlapTableSink): BeReplicaSize:%s, quorum:%s",
                                                 tablet.getId(), localTablet.getReplicaInfos(), bePathsMap.size(), quorum));
                             }
