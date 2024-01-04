@@ -33,24 +33,79 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     opt.enable_disk_checksum = options.enable_checksum;
     opt.max_concurrent_writes = options.max_concurrent_inserts;
     opt.enable_os_page_cache = !options.enable_direct_io;
-
+    opt.evict_touch_disk_probalility = 0;
+    if (options.enable_cache_adaptor) {
+        _cache_adaptor.reset(starcache::create_default_adaptor(options.skip_read_factor));
+        opt.cache_adaptor = _cache_adaptor.get();
+    }
     _cache = std::make_unique<starcache::StarCache>();
     return to_status(_cache->init(opt));
 }
 
-Status StarCacheWrapper::write_cache(const std::string& key, const IOBuffer& buffer, size_t ttl_seconds,
-                                     bool overwrite) {
-    starcache::WriteOptions options;
-    options.ttl_seconds = ttl_seconds;
-    options.overwrite = overwrite;
-    return to_status(_cache->set(key, buffer.const_raw_buf(), &options));
+Status StarCacheWrapper::write_buffer(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) {
+    if (!options) {
+        return to_status(_cache->set(key, buffer.const_raw_buf(), nullptr));
+    }
+    starcache::WriteOptions opts;
+    opts.ttl_seconds = options->ttl_seconds;
+    opts.overwrite = options->overwrite;
+    // Temporarily write all data directly to disk
+    // opts.mode = to_write_mode(options->mode);
+    opts.mode = starcache::WriteOptions::WriteMode::WRITE_THROUGH;
+    auto st = to_status(_cache->set(key, buffer.const_raw_buf(), &opts));
+    if (st.ok()) {
+        options->stats.write_mem_bytes = opts.stats.write_mem_bytes;
+        options->stats.write_disk_bytes = opts.stats.write_disk_bytes;
+    }
+    return st;
 }
 
-Status StarCacheWrapper::read_cache(const std::string& key, size_t off, size_t size, IOBuffer* buffer) {
-    return to_status(_cache->read(key, off, size, &buffer->raw_buf()));
+Status StarCacheWrapper::write_object(const std::string& key, const void* ptr, size_t size,
+                                      std::function<void()> deleter, CacheHandle* handle, WriteCacheOptions* options) {
+    if (!options) {
+        return to_status(_cache->set_object(key, ptr, size, deleter, handle, nullptr));
+    }
+    starcache::WriteOptions opts;
+    opts.ttl_seconds = options->ttl_seconds;
+    opts.overwrite = options->overwrite;
+    //opts.write_probability = options->write_probability;
+    auto st = to_status(_cache->set_object(key, ptr, size, deleter, handle, &opts));
+    if (st.ok()) {
+        options->stats.write_mem_bytes = size;
+    }
+    return st;
 }
 
-Status StarCacheWrapper::remove_cache(const std::string& key) {
+Status StarCacheWrapper::read_buffer(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
+                                     ReadCacheOptions* options) {
+    if (!options) {
+        return to_status(_cache->read(key, off, size, &buffer->raw_buf(), nullptr));
+    }
+    starcache::ReadOptions opts;
+    // Temporarily read all data directly from disk
+    // opts.mode = to_read_mode(options->mode);
+    opts.mode = starcache::ReadOptions::ReadMode::READ_THROUGH;
+    auto st = to_status(_cache->read(key, off, size, &buffer->raw_buf(), &opts));
+    if (st.ok()) {
+        options->stats.read_mem_bytes = opts.stats.read_mem_bytes;
+        options->stats.read_disk_bytes = opts.stats.read_disk_bytes;
+    }
+    return st;
+}
+
+Status StarCacheWrapper::read_object(const std::string& key, CacheHandle* handle, ReadCacheOptions* options) {
+    if (!options) {
+        return to_status(_cache->get_object(key, handle, nullptr));
+    }
+    starcache::ReadOptions opts;
+    auto st = to_status(_cache->get_object(key, handle, &opts));
+    if (st.ok()) {
+        options->stats.read_mem_bytes = opts.stats.read_mem_bytes;
+    }
+    return st;
+}
+
+Status StarCacheWrapper::remove(const std::string& key) {
     _cache->remove(key);
     return Status::OK();
 }
@@ -59,6 +114,18 @@ std::unordered_map<std::string, double> StarCacheWrapper::cache_stats() {
     // TODO: fill some statistics information
     std::unordered_map<std::string, double> stats;
     return stats;
+}
+
+void StarCacheWrapper::record_read_remote(size_t size, int64_t lateny_us) {
+    if (_cache_adaptor) {
+        return _cache_adaptor->record_read_remote(size, lateny_us);
+    }
+}
+
+void StarCacheWrapper::record_read_cache(size_t size, int64_t lateny_us) {
+    if (_cache_adaptor) {
+        return _cache_adaptor->record_read_cache(size, lateny_us);
+    }
 }
 
 Status StarCacheWrapper::shutdown() {

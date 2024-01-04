@@ -2,6 +2,17 @@
 -- for issue: https://github.com/StarRocks/starrocks/issues/23491
 set enable_spill=true;
 set spill_mode="auto";
+--
+-- aggregation group by struct is not supported on spill mode
+CREATE TABLE t_struct(
+    k1 INT,
+    k2 STRUCT<k3 INT, k4 INT>)
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1');
+insert into t_struct values (1, named_struct('k3', 1, 'k4', 1));
+select min(k1), k2 from t_struct group by k2;
+select k1, k2 from t_struct group by k1, k2;
+--
 -- 
 CREATE TABLE t1 (
     k1 INT,

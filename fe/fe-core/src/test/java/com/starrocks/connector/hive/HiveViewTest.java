@@ -39,6 +39,12 @@ public class HiveViewTest extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
+        starRocksAssert.withTable("create table test(c0 INT, " +
+                "c1 struct<a int, b array<struct<a int, b int>>>," +
+                "c2 struct<a int, b int>," +
+                "c3 struct<a int, b int, c struct<a int, b int>, d array<int>>) " +
+                "duplicate key(c0) distributed by hash(c0) buckets 1 " +
+                "properties('replication_num'='1');");
     }
 
     @Test
@@ -139,5 +145,44 @@ public class HiveViewTest extends PlanTestBase {
         } catch (Exception e) {
             Assert.fail();
         }
+    }
+
+    //    @Test
+    public void test() throws Exception {
+        connectContext.getSessionVariable().setCboPruneShuffleColumnRate(1.0);
+        //        String sql = "select  unnest, generate_series from (select 1) as a, " +
+        //                "unnest(['direct', 'Brand.DTI', 'SEO.U.google.com', 'SEO.B.google.com', " +
+        //                "'SEM.US.UB.GOOGLE.DT-m-EN.HOTEL']), generate_series(0, 1000)";
+
+        String sql = "select test.c0, test.c2.a, t3.c2 from default_catalog.test.test join[skew|test.test.c1.a(1,2)] " +
+                    "hive0.partitioned_db.t3 on c1.a = t3.c1 ";
+
+        //                String sql = "with a as (select 1), \n" +
+        //                        "salt_table as (\n" +
+        //                        "  select unnest, generate_series as generate_series from a, unnest([1, 2]), generate_series(0, 3000000)\n" +
+        //                        "),\n" +
+        //                        "left_table as (\n" +
+        //                        "\tselect *,\n" +
+        //                        "\tcase when c1.a in ('1', '2') then round(\n" +
+        //                        "      rand() * 3000000\n" +
+        //                        "    ) else 1 end as rand_col \n" +
+        //                        "    from default_catalog.test.test\n" +
+        //                        "),\n" +
+        //                        "right_table as (\n" +
+        //                        "\tselect *, \n" +
+        //                        "\t  case when generate_series is not null then generate_series else 1 end as rand_col \n" +
+        //                        "\t  from hive0.partitioned_db.t3\n" +
+        //                        "\t  left join salt_table\n" +
+        //                        "\t  on t3.c1 = salt_table.unnest\n" +
+        //                        ")\n" +
+        //                        "select x.c0, x.c2.a, y.c2 from left_table x left join[shuffle] right_table y on x.c1.a=y.c1 and x.rand_col = y.rand_col";
+
+
+        //        String sql = "select *, unnest, generate_series from (select 1) as a, " +
+        //                "unnest(['direct', 'Brand.DTI', 'SEO.U.google.com', 'SEO.B.google.com', 'SEM.US.UB.GOOGLE.DT-m-EN.HOTEL']), " +
+        //                "generate_series(0, 1000);";
+        //        String sql = "select case when c0 is not null then c0 else 1 end as rand_col from test";
+        String sqlPlan = getFragmentPlan(sql);
+        System.out.println(sqlPlan);
     }
 }

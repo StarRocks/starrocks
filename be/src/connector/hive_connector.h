@@ -86,8 +86,10 @@ private:
     ObjectPool _pool;
     RuntimeState* _runtime_state = nullptr;
     HdfsScanner* _scanner = nullptr;
-    bool _use_block_cache = false;
-    bool _enable_populate_block_cache = false;
+    bool _use_datacache = false;
+    bool _enable_populate_datacache = false;
+    bool _use_file_metacache = false;
+    int32_t _datacache_populate_probability = 0;
 
     // ============ conjuncts =================
     std::vector<ExprContext*> _min_max_conjunct_ctxs;

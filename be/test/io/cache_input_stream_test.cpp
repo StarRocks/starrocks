@@ -51,9 +51,12 @@ private:
 class CacheInputStreamTest : public ::testing::Test {
 public:
     static void SetUpTestCase() {
+        ASSERT_TRUE(fs::create_directories("./ut_dir/block_disk_cache").ok());
+
         auto cache = BlockCache::instance();
         CacheOptions options;
         options.mem_space_size = 100 * 1024 * 1024;
+        options.disk_spaces.push_back({.path = "./ut_dir/block_disk_cache", .size = 200 * 1024 * 1024});
 #ifdef WITH_STARCACHE
         options.engine = "starcache";
 #else
@@ -65,7 +68,10 @@ public:
         ASSERT_OK(cache->init(options));
     }
 
-    static void TearDownTestCase() { BlockCache::instance()->shutdown(); }
+    static void TearDownTestCase() {
+        BlockCache::instance()->shutdown();
+        ASSERT_TRUE(fs::remove_all("./ut_dir").ok());
+    }
 
     void SetUp() override {}
     void TearDown() override {}

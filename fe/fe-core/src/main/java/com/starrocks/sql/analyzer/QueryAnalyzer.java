@@ -614,6 +614,22 @@ public class QueryAnalyzer {
                 if (join.getJoinOp() == JoinOperator.CROSS_JOIN) {
                     throw new SemanticException("CROSS JOIN does not support " + join.getJoinHint() + ".");
                 }
+            } else if (JoinOperator.HINT_SKEW.equals(join.getJoinHint())) {
+                if (join.getJoinOp() == JoinOperator.CROSS_JOIN ||
+                        (join.getJoinOp() == JoinOperator.INNER_JOIN && join.getOnPredicate() == null)) {
+                    throw new SemanticException("CROSS JOIN does not support SKEW JOIN optimize");
+                }
+                if (join.getSkewColumn() != null) {
+                    if (!(join.getSkewColumn() instanceof SlotRef)) {
+                        throw new SemanticException("Skew join column must be a column reference");
+                    }
+                    analyzeExpression(join.getSkewColumn(), new AnalyzeState(), join.getLeft().getScope());
+                }
+                if (join.getSkewValues() != null) {
+                    if (join.getSkewValues().stream().anyMatch(expr -> !expr.isConstant())) {
+                        throw new SemanticException("skew join values must be constant");
+                    }
+                }
             } else if (!JoinOperator.HINT_UNREORDER.equals(join.getJoinHint())) {
                 throw new SemanticException("JOIN hint not recognized: " + join.getJoinHint());
             }

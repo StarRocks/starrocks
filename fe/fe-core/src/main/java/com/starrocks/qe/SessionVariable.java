@@ -318,6 +318,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_DERIVE_RANGE_JOIN_PREDICATE = "cbo_derive_range_join_predicate";
 
+    public static final String SKEW_JOIN_RAND_RANGE = "skew_join_rand_range";
+
     // --------  New planner session variables end --------
 
     // Type of compression of transmitted data
@@ -391,8 +393,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
 
+    public static final String ENABLE_SCAN_DATACACHE = "enable_scan_datacache";
+    public static final String ENABLE_POPULATE_DATACACHE = "enable_populate_datacache";
+    // The following configurations will be deprecated, and we use the `datacache` suffix instead.
+    // But it is temporarily necessary to keep them for a period of time to be compatible with
+    // the old session variable names.
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
     public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
+
+    public static final String ENABLE_FILE_METACACHE = "enable_file_metacache";
+    public static final String ENABLE_HDFS_FILE_METACACHE = "enable_hdfs_file_metacache";
+    public static final String DATACACHE_POPULATE_PROBABILITY = "datacache_populate_probability";
     public static final String HUDI_MOR_FORCE_JNI_READER = "hudi_mor_force_jni_reader";
     public static final String IO_TASKS_PER_SCAN_OPERATOR = "io_tasks_per_scan_operator";
     public static final String CONNECTOR_IO_TASKS_PER_SCAN_OPERATOR = "connector_io_tasks_per_scan_operator";
@@ -432,6 +443,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         LEADER      // proxy queries to leader no matter the follower's replay progress
     }
     public static final String FOLLOWER_QUERY_FORWARD_MODE = "follower_query_forward_mode";
+
+    public static final String ENABLE_ARRAY_DISTINCT_AFTER_AGG_OPT = "enable_array_distinct_after_agg_opt";
 
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
@@ -491,6 +504,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_REWRITE_SIMPLE_AGG_TO_META_SCAN = "enable_rewrite_simple_agg_to_meta_scan";
 
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
+
+    public static final String ENABLE_SUBFIELD_NO_COPY = "enable_subfield_no_copy";
 
     public static final String RANGE_PRUNER_PREDICATES_MAX_LEN = "range_pruner_max_predicate";
 
@@ -575,6 +590,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // whether rewrite bitmap_union(to_bitmap(x)) to bitmap_agg(x) directly.
     public static final String ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG = "enable_rewrite_bitmap_union_to_bitamp_agg";
+
+    public static final String ENABLE_HYPERSCAN_VEC = "enable_hyperscan_vec";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1121,7 +1139,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean interpolatePassthrough = true;
 
     @VariableMgr.VarAttr(name = HASH_JOIN_INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
-    private boolean hashJoinInterpolatePassthrough = false;
+    private boolean hashJoinInterpolatePassthrough = true;
 
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL)
     private int statisticCollectParallelism = 1;
@@ -1181,6 +1199,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableRewriteBitmapUnionToBitmapAgg = enableRewriteBitmapUnionToBitmapAgg;
     }
 
+    @VarAttr(name = ENABLE_HYPERSCAN_VEC)
+    private boolean enableHyperscanVec = true;
+
     public void setPartialUpdateMode(String mode) {
         this.partialUpdateMode = mode;
     }
@@ -1239,8 +1260,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboPushDownTopNLimit = cboPushDownTopNLimit;
     }
 
-    @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
-    private boolean useScanBlockCache = false;
+    @VariableMgr.VarAttr(name = ENABLE_SCAN_DATACACHE, alias = ENABLE_SCAN_BLOCK_CACHE)
+    private boolean enableScanDataCache = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_POPULATE_DATACACHE, alias = ENABLE_POPULATE_BLOCK_CACHE)
+    private boolean enablePopulateDataCache = true;
 
     @VariableMgr.VarAttr(name = IO_TASKS_PER_SCAN_OPERATOR)
     private int ioTasksPerScanOperator = 4;
@@ -1249,7 +1273,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int connectorIoTasksPerScanOperator = 16;
 
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_ADAPTIVE_IO_TASKS)
-    private boolean enableConnectorAdaptiveIoTasks = true;
+    private boolean enableConnectorAdaptiveIoTasks = false;
 
     @VariableMgr.VarAttr(name = CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS, flag = VariableMgr.INVISIBLE)
     private int connectorIoTasksSlowIoLatency = 50;
@@ -1260,8 +1284,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CONNECTOR_SCAN_USE_QUERY_MEM_RATIO)
     private double connectorScanUseQueryMemRatio = 0.3;
 
-    @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
-    private boolean enablePopulateBlockCache = true;
+    @VariableMgr.VarAttr(name = ENABLE_FILE_METACACHE, alias = ENABLE_HDFS_FILE_METACACHE)
+    private boolean enableFileMetaCache = true;
+
+    @VariableMgr.VarAttr(name = DATACACHE_POPULATE_PROBABILITY)
+    private int datacachePopulateProbability = 1;
 
     @VariableMgr.VarAttr(name = HUDI_MOR_FORCE_JNI_READER)
     private boolean hudiMORForceJNIReader = false;
@@ -1375,6 +1402,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
     private boolean enablePruneComplexTypes = true;
 
+
+    @VarAttr(name = ENABLE_SUBFIELD_NO_COPY)
+    private boolean enableSubfieldNoCopy = true;
+
     @VarAttr(name = RANGE_PRUNER_PREDICATES_MAX_LEN)
     public int rangePrunerPredicateMaxLen = 100;
 
@@ -1442,6 +1473,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     private int exprChildrenLimit = -1;
 
+    @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
+    private int skewJoinRandRange = 3000000;
+
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
 
@@ -1454,6 +1488,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CROSS_JOIN_COST_PENALTY, flag = VariableMgr.INVISIBLE)
     private long crossJoinCostPenalty = 1000000;
+
+    @VarAttr(name = ENABLE_ARRAY_DISTINCT_AFTER_AGG_OPT)
+    private boolean enableArrayDistinctAfterAggOpt = true;
 
     public SessionVariableConstants.ChooseInstancesMode getChooseExecuteInstancesMode() {
         return Enums.getIfPresent(SessionVariableConstants.ChooseInstancesMode.class,
@@ -2454,6 +2491,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return hashJoinInterpolatePassthrough;
     }
 
+    public void setHashJoinInterpolatePassthrough(boolean value) {
+        this.hashJoinInterpolatePassthrough = value;
+    }
+
     public int getParseTokensLimit() {
         return parseTokensLimit;
     }
@@ -2687,6 +2728,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enablePruneComplexTypes = enablePruneComplexTypes;
     }
 
+    public boolean getEnableSubfieldNoCopy() {
+        return this.enableSubfieldNoCopy;
+    }
+
+    public void setEnableSubfieldNoCopy(boolean enableSubfieldNoCopy) {
+        this.enableSubfieldNoCopy = enableSubfieldNoCopy;
+    }
+
     public int getRangePrunerPredicateMaxLen() {
         return rangePrunerPredicateMaxLen;
     }
@@ -2838,6 +2887,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableStrictOrderBy = enableStrictOrderBy;
     }
 
+    public boolean getEnableArrayDistinctAfterAggOpt() {
+        return  enableArrayDistinctAfterAggOpt;
+    }
+
+    public int getSkewJoinRandRange() {
+        return skewJoinRandRange;
+    }
+
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -2917,8 +2974,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
         tResult.setAllow_throw_exception((sqlMode & SqlModeHelper.MODE_ALLOW_THROW_EXCEPTION) != 0);
 
-        tResult.setUse_scan_block_cache(useScanBlockCache);
-        tResult.setEnable_populate_block_cache(enablePopulateBlockCache);
+        tResult.setEnable_scan_datacache(enableScanDataCache);
+        tResult.setEnable_populate_datacache(enablePopulateDataCache);
+        tResult.setEnable_file_metacache(enableFileMetaCache);
+        tResult.setDatacache_populate_probability(datacachePopulateProbability);
         tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
@@ -2930,6 +2989,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
+        tResult.setEnable_hyperscan_vec(enableHyperscanVec);
         return tResult;
     }
 

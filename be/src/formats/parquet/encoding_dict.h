@@ -90,7 +90,6 @@ public:
     // initialize dictionary
     Status set_dict(int chunk_size, size_t num_values, Decoder* decoder) override {
         _dict.resize(num_values);
-        _indexes.resize(chunk_size);
         RETURN_IF_ERROR(decoder->next_batch(num_values, (uint8_t*)&_dict[0]));
         return Status::OK();
     }

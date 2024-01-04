@@ -180,14 +180,39 @@ public class SplitAggregateRule extends TransformationRule {
                 && aggOutputRow > aggOp.getLimit();
     }
 
-
-    private boolean isThreeStageMoreEfficient(OptExpression input, List<ColumnRefOperator> groupKeys) {
+    private boolean isThreeStageMoreEfficient(OptExpression input, List<ColumnRefOperator> groupKeys,
+                                              List<ColumnRefOperator> partitionByColumns) {
         if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == FOUR_STAGE) {
             return false;
+        }
+        if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == THREE_STAGE) {
+            return true;
         }
 
         Statistics inputStatistics = input.getGroupExpression().inputAt(0).getStatistics();
         Collection<ColumnStatistic> inputsColumnStatistics = inputStatistics.getColumnStatistics().values();
+
+        // Estimate the NDV when use partitionBy columns to shuffle, if the NDV is small,
+        // this may result in only a few nodes participating in subsequent calculations.
+        // To take full advantage of all compute nodes, should select the four stages
+        List<ColumnStatistic> partitionByColumnStatistics = partitionByColumns.stream().
+                map(inputStatistics::getColumnStatistic).collect(Collectors.toList());
+        if (partitionByColumnStatistics.stream().noneMatch(ColumnStatistic::isUnknown)) {
+            Statistics statistics = inputStatistics;
+            if (inputStatistics.getOutputRowCount() <= 1) {
+                double rowCount = 1.0;
+                for (ColumnStatistic columnStatistic : partitionByColumnStatistics) {
+                    rowCount *= columnStatistic.getDistinctValuesCount();
+                }
+                statistics = Statistics.buildFrom(inputStatistics).setOutputRowCount(rowCount).build();
+            }
+            double aggOutputRow = StatisticsCalculator.computeGroupByStatistics(partitionByColumns, statistics,
+                    Maps.newHashMap());
+            if (aggOutputRow <= LOW_AGGREGATE_EFFECT_COEFFICIENT) {
+                return false;
+            }
+        }
+
         if (inputsColumnStatistics.stream().anyMatch(ColumnStatistic::isUnknown)) {
             return true;
         }
@@ -389,7 +414,7 @@ public class SplitAggregateRule extends TransformationRule {
         List<ColumnRefOperator> partitionByCols;
 
         boolean shouldFurtherSplit = false;
-        if (isThreeStageMoreEfficient(input, distinctGlobal.getGroupingKeys())
+        if (isThreeStageMoreEfficient(input, distinctGlobal.getGroupingKeys(), local.getPartitionByColumns())
                 || oldAgg.getGroupingKeys().containsAll(distinctGlobal.getGroupingKeys())) {
             partitionByCols = oldAgg.getGroupingKeys();
         } else {

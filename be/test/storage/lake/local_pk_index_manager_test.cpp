@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifdef USE_STAROS
+
 #include "storage/lake/local_pk_index_manager.h"
 
 #include <gtest/gtest.h>
@@ -258,3 +260,5 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
 }
 
 } // namespace starrocks::lake
+
+#endif

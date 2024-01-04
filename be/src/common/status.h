@@ -164,6 +164,8 @@ public:
     bool is_not_supported() const { return code() == TStatusCode::NOT_IMPLEMENTED_ERROR; }
     bool is_corruption() const { return code() == TStatusCode::CORRUPTION; }
 
+    bool is_resource_busy() const { return code() == TStatusCode::RESOURCE_BUSY; }
+
     /// @return @c true if the status indicates Uninitialized.
     bool is_uninitialized() const { return code() == TStatusCode::UNINITIALIZED; }
 
@@ -185,8 +187,6 @@ public:
     bool is_time_out() const { return code() == TStatusCode::TIMEOUT; }
 
     bool is_eagain() const { return code() == TStatusCode::SR_EAGAIN; }
-
-    bool is_resource_busy() const { return code() == TStatusCode::RESOURCE_BUSY; }
 
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.

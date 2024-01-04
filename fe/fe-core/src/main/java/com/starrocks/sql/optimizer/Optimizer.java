@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
+import com.starrocks.sql.optimizer.rule.transformation.ArrayDistinctAfterAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
@@ -55,6 +56,7 @@ import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggT
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.SeparateProjectRule;
+import com.starrocks.sql.optimizer.rule.transformation.SkewJoinOptimizeRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
@@ -77,6 +79,7 @@ import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
+import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExprNoCopyRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -328,6 +331,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new SkewJoinOptimizeRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         deriveLogicalProperty(tree);
@@ -336,6 +340,7 @@ public class Optimizer {
         // @todo: resolve recursive optimization question:
         //  MergeAgg -> PruneColumn -> PruneEmptyWindow -> MergeAgg/Project -> PruneColumn...
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoAggRule());
+
         rootTaskContext.setRequiredColumns(requiredColumns.clone());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
 
@@ -354,6 +359,10 @@ public class Optimizer {
         }
 
         tree = pruneSubfield(tree, rootTaskContext, requiredColumns);
+        // after pruneSubfield which will push down subfield expr
+        if (sessionVariable.getEnableSubfieldNoCopy()) {
+            ruleRewriteOnlyOnce(tree, rootTaskContext, new SubfieldExprNoCopyRule());
+        }
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_PROJECT);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_SET_OPERATOR);
@@ -395,6 +404,12 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, LimitPruneTabletsRule.getInstance());
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_PROJECT);
 
+        // ArrayDistinctAfterAggRule must run before pushDownAggregation,
+        // because push down agg won't have array_distinct project
+        if (sessionVariable.getEnableArrayDistinctAfterAggOpt()) {
+            ruleRewriteOnlyOnce(tree, rootTaskContext, new ArrayDistinctAfterAggRule());
+        }
+
         tree = pushDownAggregation(tree, rootTaskContext, requiredColumns);
 
         CTEUtils.collectCteOperators(tree, context);
@@ -430,6 +445,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
+
         return tree.getInputs().get(0);
     }
 

@@ -180,13 +180,13 @@ struct TQueryOptions {
 
   64: optional TLoadJobType load_job_type
 
-  66: optional bool use_scan_block_cache;
+  66: optional bool enable_scan_datacache;
 
   67: optional bool enable_pipeline_query_statistic = false;
 
   68: optional i32 transmission_encode_level;
   
-  69: optional bool enable_populate_block_cache;
+  69: optional bool enable_populate_datacache;
 
   70: optional bool allow_throw_exception = 0;
 
@@ -233,7 +233,10 @@ struct TQueryOptions {
   109: optional i64 big_query_profile_second_threshold;
 
   110: optional TQueryQueueOptions query_queue_options;
+  111: optional bool enable_file_metacache;
   112: optional bool enable_pipeline_level_shuffle;
+  113: optional bool enable_hyperscan_vec;
+  114: optional i32 datacache_populate_probability;
 }
 
 
@@ -283,7 +286,7 @@ struct TPlanFragmentExecParams {
   // To enable pass through chunks between sink/exchange if they are in the same process.
   52: optional bool enable_exchange_pass_through
 
-  53: optional map<Types.TPlanNodeId, map<i32, list<TScanRangeParams>>> node_to_per_driver_seq_scan_ranges
+  53: optional map<Types.TPlanNodeId, map<i32, list<TScanRangeParams>>> node_to_per_driver_seq_scan_ranges 
 
   54: optional bool enable_exchange_perf
 

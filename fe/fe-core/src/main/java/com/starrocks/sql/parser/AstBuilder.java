@@ -4183,7 +4183,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.LATERAL() != null, createPos(context));
         joinRelation.setUsingColNames(usingColNames);
         if (context.bracketHint() != null) {
-            joinRelation.setJoinHint(((Identifier) visit(context.bracketHint().identifier().get(0))).getValue());
+            joinRelation.setJoinHint(((Identifier) visit(context.bracketHint().identifier(0))).getValue());
+            if (context.bracketHint().primaryExpression() != null) {
+                joinRelation.setSkewColumn((Expr) visit(context.bracketHint().primaryExpression()));
+            }
+            if (context.bracketHint().literalExpressionList() != null) {
+                joinRelation.setSkewValues(visit(context.bracketHint().literalExpressionList().literalExpression(),
+                        Expr.class));
+            }
         }
 
         return joinRelation;

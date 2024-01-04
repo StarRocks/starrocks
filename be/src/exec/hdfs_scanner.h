@@ -53,8 +53,24 @@ struct HdfsScanStats {
     int64_t level_decode_ns = 0;
     int64_t value_decode_ns = 0;
     int64_t page_read_ns = 0;
+    int64_t page_read_bytes = 0;
+    int64_t page_read_bytes_uncompressed = 0;
+    int64_t page_decompress_ns = 0;
+    int64_t page_read_count = 0;
+
     // reader init
     int64_t footer_read_ns = 0;
+    int64_t footer_get_ns = 0;
+    int64_t column_names_set_ns = 0;
+    int64_t read_columns_prepare_ns = 0;
+    int64_t group_reader_init_ns = 0;
+
+    int64_t footer_cache_read_ns = 0;
+    int64_t footer_cache_read_count = 0;
+    int64_t footer_cache_write_ns = 0;
+    int64_t footer_cache_write_count = 0;
+    int64_t footer_cache_write_fail_count = 0;
+    int64_t footer_cache_write_bytes = 0;
     int64_t column_reader_init_ns = 0;
     // dict filter
     int64_t group_chunk_read_ns = 0;
@@ -89,16 +105,20 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* column_read_timer = nullptr;
     RuntimeProfile::Counter* column_convert_timer = nullptr;
 
-    RuntimeProfile::Counter* block_cache_read_counter = nullptr;
-    RuntimeProfile::Counter* block_cache_read_bytes = nullptr;
-    RuntimeProfile::Counter* block_cache_read_timer = nullptr;
-    RuntimeProfile::Counter* block_cache_write_counter = nullptr;
-    RuntimeProfile::Counter* block_cache_write_bytes = nullptr;
-    RuntimeProfile::Counter* block_cache_write_timer = nullptr;
-    RuntimeProfile::Counter* block_cache_write_fail_counter = nullptr;
-    RuntimeProfile::Counter* block_cache_write_fail_bytes = nullptr;
-    RuntimeProfile::Counter* block_cache_read_block_buffer_counter = nullptr;
-    RuntimeProfile::Counter* block_cache_read_block_buffer_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_counter = nullptr;
+    RuntimeProfile::Counter* datacache_read_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_mem_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_disk_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_timer = nullptr;
+    RuntimeProfile::Counter* datacache_skip_read_counter = nullptr;
+    RuntimeProfile::Counter* datacache_skip_read_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_write_counter = nullptr;
+    RuntimeProfile::Counter* datacache_write_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_write_timer = nullptr;
+    RuntimeProfile::Counter* datacache_write_fail_counter = nullptr;
+    RuntimeProfile::Counter* datacache_write_fail_bytes = nullptr;
+    RuntimeProfile::Counter* datacache_read_block_buffer_counter = nullptr;
+    RuntimeProfile::Counter* datacache_read_block_buffer_bytes = nullptr;
 
     RuntimeProfile::Counter* shared_buffered_shared_io_count = nullptr;
     RuntimeProfile::Counter* shared_buffered_shared_io_bytes = nullptr;
@@ -139,6 +159,7 @@ struct HdfsScannerParams {
     // The file size. -1 means unknown.
     int64_t file_size = -1;
 
+    // The file last modification time
     int64_t modification_time = 0;
 
     const TupleDescriptor* tuple_desc = nullptr;
@@ -176,12 +197,14 @@ struct HdfsScannerParams {
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
 
-    bool use_block_cache = false;
-    bool enable_populate_block_cache = false;
+    bool use_datacache = false;
+    bool enable_populate_datacache = false;
 
     std::atomic<int32_t>* lazy_column_coalesce_counter;
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
+    bool use_file_metacache = false;
+    int32_t datacache_populate_probability = 0;
 };
 
 struct HdfsScannerContext {
@@ -229,6 +252,10 @@ struct HdfsScannerContext {
     bool can_use_any_column = false;
 
     bool can_use_min_max_count_opt = false;
+
+    bool use_file_metacache = false;
+
+    int32_t datacache_populate_probability = 0;
 
     std::string timezone;
 

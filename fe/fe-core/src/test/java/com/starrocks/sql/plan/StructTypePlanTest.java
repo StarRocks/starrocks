@@ -148,7 +148,7 @@ public class StructTypePlanTest extends PlanTestBase {
     public void testStructWithWindow() throws Exception {
         String sql = "select sum(c2.b) over(partition by c2.a order by c0) from test";
         assertPlanContains(sql, " 3:ANALYTIC\n" +
-                "  |  functions: [, sum(7: c2.b), ]\n" +
+                "  |  functions: [, sum(7: c2.b[true]), ]\n" +
                 "  |  partition by: 9: c2.a\n" +
                 "  |  order by: 1: c0 ASC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
@@ -162,7 +162,7 @@ public class StructTypePlanTest extends PlanTestBase {
 
         sql = "select sum(c1.b[10].b) over(partition by c2.a order by c2.b) from test";
         assertPlanContains(sql, "3:ANALYTIC\n" +
-                "  |  functions: [, sum(6: c1.b[10].b), ]\n" +
+                "  |  functions: [, sum(6: c1.b[true][10].b[true]), ]\n" +
                 "  |  partition by: 9: c2.a\n" +
                 "  |  order by: 10: c2.b ASC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
@@ -211,7 +211,7 @@ public class StructTypePlanTest extends PlanTestBase {
         String plan = getVerboseExplain(sql);
         assertCContains(plan, "1:Project\n" +
                 "  |  output columns:\n" +
-                "  |  5 <-> 2: c1.b[111]",
+                "  |  5 <-> 2: c1.b[true][111]",
                 "Pruned type: 2 <-> [struct<a int(11), b array<struct<a int(11), b int(11)>>>]");
     }
 
@@ -289,9 +289,22 @@ public class StructTypePlanTest extends PlanTestBase {
         FeConstants.runningUnitTest = false;
     }
 
-    //@Test
-    //public void testUnnestJoin() throws Exception {
-    //    FeConstants.runningUnitTest = true;
-    //    String sql = "select c2_struct.c2_sub1 from array_struct_nest, unnest(c2) as t(c2_struct), "
-    //}
+    @Test
+    public void testSubfieldNoCopy() throws Exception {
+        String sql = "select c3.c.a, c3.c.b, c3.a, c3.b, c3.d, c2.a, c1.a, c1.b[1].a from test";
+        assertVerbosePlanContains(sql, "c3.c.a[false]", "c3.c.b[false]", "c3.a[false]", "c3.b[false]",
+                "c3.d[false]", "c2.a[false]", "c1.a[false]");
+        // we don't support non-copy for this expr now
+        assertVerbosePlanContains(sql, "c1.b[true][1].a[true]");
+    }
+
+    @Test
+    public void testSubfieldNeedCopyForOverlap() throws Exception {
+        String sql = "select c3.c.a, c3.c from test";
+        assertVerbosePlanContains(sql, "c3.c.a[true]", "c3.c[true]");
+        sql = "select c1.b, c1.b[1] from test";
+        assertVerbosePlanContains(sql, "c1.b[true]", "c1.b[true][1]");
+        sql = "select c1.b[1].a, c1.b from test";
+        assertVerbosePlanContains(sql, "c1.b[true][1].a[true]", "c1.b[true]");
+    }
 }

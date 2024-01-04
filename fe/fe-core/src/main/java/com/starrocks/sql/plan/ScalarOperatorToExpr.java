@@ -169,6 +169,7 @@ public class ScalarOperatorToExpr {
         public Expr visitSubfield(SubfieldOperator node, FormatterContext context) {
             SubfieldExpr expr = new SubfieldExpr(buildExpr.build(node.getChild(0), context), node.getType(),
                     node.getFieldNames());
+            expr.setCopyFlag(node.getCopyFlag());
             hackTypeNull(expr);
             return expr;
         }

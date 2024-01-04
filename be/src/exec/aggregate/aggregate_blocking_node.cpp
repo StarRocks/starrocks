@@ -270,7 +270,8 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
                 _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
                                        SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context);
     } else {
-        if (runtime_state()->enable_spill() && runtime_state()->enable_agg_spill() && has_group_by_keys) {
+        if (runtime_state()->enable_spill() && runtime_state()->enable_agg_spill() && has_group_by_keys &&
+            _grouping_exprs_spillable()) {
             ops_with_source =
                     _decompose_to_pipeline<AggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,
                                            SpillableAggregateBlockingSinkOperatorFactory>(ops_with_sink, context);
