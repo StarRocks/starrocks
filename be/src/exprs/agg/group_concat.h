@@ -321,12 +321,6 @@ struct GroupConcatAggregateStateV2 {
         data_columns->resize(output_col_num + 1);
     }
 
-    ~GroupConcatAggregateStateV2() {
-        if (data_columns != nullptr) {
-            data_columns->clear();
-            data_columns.reset(nullptr);
-        }
-    }
     // using pointer rather than vector to avoid variadic size
     // group_concat(a, b order by c, d), the a,b,',',c,d are put into data_columns in order, and reject null for
     // output columns a and b.

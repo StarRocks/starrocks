@@ -223,11 +223,6 @@ struct ArrayAggAggregateStateV2 {
         data_columns.resize(1);
     }
 
-    ~ArrayAggAggregateStateV2() {
-        if (!data_columns.empty()) {
-            data_columns.clear();
-        }
-    }
     // using pointer rather than vector to avoid variadic size
     // array_agg(a order by b, c, d), the a,b,c,d are put into data_columns in order.
     Columns data_columns;
