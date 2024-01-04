@@ -946,6 +946,12 @@
     },
     {
       "type": "category",
+      "label": " 项目协助",
+      "link": {"type": "doc", "id": "project_help/project_help"},
+      "items": ["project_help/slack"]
+    },
+    {
+      "type": "category",
       "label": "部署 StarRocks",
       "link": {"type": "doc", "id": "deployment/deployment_overview"},
       "items": [
