@@ -39,6 +39,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -118,6 +119,7 @@ import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import javax.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -130,7 +132,6 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.function.IntSupplier;
 import java.util.stream.Collectors;
-import javax.annotation.Nullable;
 
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.inactiveRelatedMaterializedViews;
 
@@ -1520,7 +1521,7 @@ public class SchemaChangeHandler extends AlterHandler {
             } else if (alterClause instanceof DropColumnClause) {
                 DropColumnClause dropColumnClause = (DropColumnClause) alterClause;
                 // check relative mvs with the modified column
-                Set<String> modifiedColumns = Set.of(dropColumnClause.getColName());
+                Set<String> modifiedColumns = ImmutableSet.of(dropColumnClause.getColName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
 
                 // drop column and drop indexes on this column
@@ -1531,7 +1532,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 ModifyColumnClause modifyColumnClause = (ModifyColumnClause) alterClause;
 
                 // check relative mvs with the modified column
-                Set<String> modifiedColumns = Set.of(modifyColumnClause.getColumn().getName());
+                Set<String> modifiedColumns = ImmutableSet.of(modifyColumnClause.getColumn().getName());
                 checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
 
                 // modify column
