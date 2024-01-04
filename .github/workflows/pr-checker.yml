@@ -4,15 +4,8 @@ on:
   pull_request_target:
     branches:
       - main
-<<<<<<< HEAD
-      - branch-2.3
-      - branch-2.4
-      - branch-2.5
-      - branch-3.0
-=======
       - 'branch-[0-9].[0-9]*'
 
->>>>>>> 6eddbb69cd ([Tool] Modify conditions in `Sync` and `PR Checker` pipeline (#38413))
     types:
       - opened
       - reopened
