@@ -56,7 +56,7 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
         String createDupTbl2StmtStr = "CREATE TABLE IF NOT EXISTS sc_dup3 (\n" + "timestamp DATETIME,\n"
                 + "type INT,\n" + "error_code INT,\n" + "error_msg VARCHAR(1024),\n" + "op_id BIGINT,\n"
                 + "op_time DATETIME)\n" + "DUPLICATE  KEY(timestamp, type)\n" + "DISTRIBUTED BY HASH(type) BUCKETS 1\n"
-                + "PROPERTIES ('replication_num' = '1', 'fast_schema_evolution' = 'true');";
+                + "PROPERTIES ('replication_num' = '1');";
         starRocksAssert.withTable(createDupTbl2StmtStr);
     }
 

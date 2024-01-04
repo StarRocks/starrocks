@@ -22,9 +22,13 @@ public class MvPlanContextBuilder {
     public static MvPlanContext getPlanContext(MaterializedView mv) {
         // build mv query logical plan
         MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-        ConnectContext connectContext = new ConnectContext();
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(
-                ConnectContext.get().getSessionVariable().getOptimizerExecuteTimeout());
+        ConnectContext connectContext = ConnectContext.get();
+        // If the caller is not from query (eg. background schema change thread), set thread local info to avoid
+        // NPE in the planning.
+        if (connectContext == null) {
+            connectContext = new ConnectContext();
+            connectContext.setThreadLocalInfo();
+        }
         return mvOptimizer.optimize(mv, connectContext);
     }
 }
