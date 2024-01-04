@@ -629,7 +629,7 @@ GRF 成功下推跨过 Exchange 算子后，是否在 Exchange Node 上放置 GR
 
 ### transaction_read_only
 
-* 含义：用于兼容 MySQL 5.8 以上客户端，无实际作用。别名 `tx_read_only`。
+* 含义：用于兼容 MySQL 5.8 以上客户端，无实际作用。别名 `tx_read_only`。该变量用于指定事务访问模式。取值 `ON` 表示只读。取值 `OFF` 表示可读可写。
 * 默认值：OFF
 * 引入版本：v2.5.18, v3.0.9, v3.1.7
 
