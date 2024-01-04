@@ -2112,28 +2112,28 @@ std::unique_ptr<ColumnReader> buildReader(const Type& type, std::shared_ptr<Stri
 
     case FLOAT:
     case DOUBLE:
-        return std::unique_ptr<ColumnReader>(new DoubleColumnReader(type, *stripePtr.get()));
+        return std::unique_ptr<ColumnReader>(new DoubleColumnReader(type, *stripe.get()));
 
     case TIMESTAMP:
-        return std::unique_ptr<ColumnReader>(new TimestampColumnReader(type, *stripePtr.get(), false));
+        return std::unique_ptr<ColumnReader>(new TimestampColumnReader(type, *stripe.get(), false));
 
     case TIMESTAMP_INSTANT:
-        return std::unique_ptr<ColumnReader>(new TimestampColumnReader(type, *stripePtr.get(), true));
+        return std::unique_ptr<ColumnReader>(new TimestampColumnReader(type, *stripe.get(), true));
 
     case DECIMAL:
         // is this a Hive 0.11 or 0.12 file?
         if (type.getPrecision() == 0) {
-            return std::unique_ptr<ColumnReader>(new DecimalHive11ColumnReader(type, *stripePtr.get()));
+            return std::unique_ptr<ColumnReader>(new DecimalHive11ColumnReader(type, *stripe.get()));
         }
         // can we represent the values using int64_t?
         if (type.getPrecision() <= Decimal64ColumnReader::MAX_PRECISION_64) {
-            if (stripePtr->isDecimalAsLong()) {
-                return std::unique_ptr<ColumnReader>(new Decimal64ColumnReaderV2(type, *stripePtr.get()));
+            if (stripe->isDecimalAsLong()) {
+                return std::unique_ptr<ColumnReader>(new Decimal64ColumnReaderV2(type, *stripe.get()));
             }
-            return std::unique_ptr<ColumnReader>(new Decimal64ColumnReader(type, *stripePtr.get()));
+            return std::unique_ptr<ColumnReader>(new Decimal64ColumnReader(type, *stripe.get()));
         }
         // otherwise we use the Int128 implementation
-        return std::unique_ptr<ColumnReader>(new Decimal128ColumnReader(type, *stripePtr.get()));
+        return std::unique_ptr<ColumnReader>(new Decimal128ColumnReader(type, *stripe.get()));
 
     default:
         throw NotImplementedYet("buildReader unhandled type");
