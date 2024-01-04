@@ -27,8 +27,13 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class CachingMvPlanContextBuilder {
+<<<<<<< HEAD
 
     private static final Logger LOG = LogManager.getLogger(CachingMvPlanContextBuilder.class);
+=======
+    private static final Logger LOG = LogManager.getLogger(CachingMvPlanContextBuilder.class);
+
+>>>>>>> 7ef0d354e3 (fix bugs)
     private static final CachingMvPlanContextBuilder INSTANCE = new CachingMvPlanContextBuilder();
 
     private Cache<MaterializedView, List<MvPlanContext>> mvPlanContextCache = buildCache();
@@ -64,8 +69,12 @@ public class CachingMvPlanContextBuilder {
     }
 
     private List<MvPlanContext> loadMvPlanContext(MaterializedView mv) {
-        MvPlanContextBuilder builder = new MvPlanContextBuilder();
-        return builder.getPlanContext(mv);
+        try {
+            return MvPlanContextBuilder.getPlanContext(mv);
+        } catch (Throwable e) {
+            LOG.warn("load mv plan cache failed: {}", mv.getName(), e);
+            return null;
+        }
     }
 
     @VisibleForTesting
