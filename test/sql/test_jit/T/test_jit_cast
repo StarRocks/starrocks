@@ -95,14 +95,14 @@ SELECT v6 / v10 / v9 / v1 / v8 as result FROM jit_cast ORDER BY result;
 SELECT v5 / v7 / v2 as result FROM jit_cast ORDER BY result;
 SELECT v10 DIV v6 / v3 as result FROM jit_cast ORDER BY result;
 -- %
-SELECT k1 % k2 % v1 as result FROM jit_cast ORDER BY result;
-SELECT v6 % v4 % v3 % v10 as result FROM jit_cast ORDER BY result;
-SELECT v4 % v4 % v9 % v3 % v1 % v2 % v8 % v10 % v5 as result FROM jit_cast ORDER BY result;
+SELECT k1 * k2 % v1 as result FROM jit_cast ORDER BY result;
+SELECT (v6 * v4 % v3 - 727899017) % v10 as result FROM jit_cast ORDER BY result;
+SELECT ((v4 % v9 + 729) % v3 + 113) % v1 % v2 % v8 % v10 % v5 as result FROM jit_cast ORDER BY result;
 SELECT v10 % v4 % -1 % v6 % 0 as result FROM jit_cast ORDER BY result;
-SELECT v2 % v8 % v4 % -1.0 % v9 as result FROM jit_cast ORDER BY result;
-SELECT v6 % v10 % v9 % v1 % v8 as result FROM jit_cast ORDER BY result;
-SELECT v5 % v7 % v2 as result FROM jit_cast ORDER BY result;
-SELECT v10 % v6 % v3 as result FROM jit_cast ORDER BY result;
+SELECT v2 % v8 * v4 % -1.0 * v9 as result FROM jit_cast ORDER BY result;
+SELECT (v6 % v10 + 729) % (v9 % v1 + 192.13) % v8 as result FROM jit_cast ORDER BY result;
+SELECT v5 * v7 % v2 as result FROM jit_cast ORDER BY result;
+SELECT v10 * v6 % v3 as result FROM jit_cast ORDER BY result;
 -- mix
 SELECT v1 + v2 + v3 * 124 - 854 as result FROM jit_cast ORDER BY result;
 SELECT v1 + v2 + v3 / 124 - 854 as result FROM jit_cast ORDER BY result;
