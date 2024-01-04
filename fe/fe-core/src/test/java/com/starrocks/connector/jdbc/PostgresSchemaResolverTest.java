@@ -182,4 +182,13 @@ public class PostgresSchemaResolverTest {
             Assert.fail();
         }
     }
+
+    @Test
+    public void testGetPartitions() {
+        PostgresSchemaResolver postgresSchemaResolver = new PostgresSchemaResolver();
+        List<Partition> partitions = postgresSchemaResolver.getPartitions(null, new Table(1L, "tbl1",
+                Table.TableType.JDBC, Lists.newArrayList()));
+        Assert.assertEquals(partitions.size(), 1);
+        Assert.assertEquals(partitions.get(0).getPartitionName(), "tbl1");
+    }
 }

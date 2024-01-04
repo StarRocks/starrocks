@@ -103,20 +103,31 @@ public:
     const tparquet::ColumnMetaData& metadata() const { return _chunk_metadata->meta_data; }
 
     Status get_dict_values(Column* column) {
-        RETURN_IF_ERROR(_try_load_dictionary());
+        RETURN_IF_ERROR(try_load_dictionary());
         return _cur_decoder->get_dict_values(column);
     }
 
     Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) {
-        RETURN_IF_ERROR(_try_load_dictionary());
+        RETURN_IF_ERROR(try_load_dictionary());
         return _cur_decoder->get_dict_values(dict_codes, nulls, column);
     }
+
+    Status seek_to_offset(const uint64_t off) {
+        RETURN_IF_ERROR(_page_reader->seek_to_offset(off));
+        _page_parse_state = INITIALIZED;
+        return Status::OK();
+    }
+
+    void set_page_num(size_t page_num) { _page_reader->set_page_num(page_num); }
+
+    void set_next_read_page_idx(size_t cur_page_idx) { _page_reader->set_next_read_page_idx(cur_page_idx); }
+
+    Status try_load_dictionary();
 
 private:
     Status _parse_page_header();
     Status _parse_page_data();
 
-    Status _try_load_dictionary();
     Status _read_and_decompress_page_data();
     Status _parse_data_page();
     Status _parse_dict_page();
