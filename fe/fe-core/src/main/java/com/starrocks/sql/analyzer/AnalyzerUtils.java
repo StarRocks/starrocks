@@ -521,9 +521,9 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitSelect(SelectRelation node, Void context) {
-            List<Expr> outputExpression = node.getOutputExpression();
             Relation relation = node.getRelation();
             if (relation instanceof TableRelation || relation instanceof ViewRelation) {
+                List<Expr> outputExpression = node.getOutputExpression();
                 if (outputExpression.stream().allMatch(expr -> expr instanceof FieldReference)) {
                     put(relation.getResolveTableName(), "*");
                 }
@@ -546,7 +546,10 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitSlot(SlotRef slotRef, Void context) {
-            put(slotRef.getTblNameWithoutAnalyzed(), slotRef.getColumnName());
+            // filter _LAMBDA_TABLE && alias SlotRef
+            if (!slotRef.isFromLambda() && slotRef.getTblNameWithoutAnalyzed() != null) {
+                put(slotRef.getTblNameWithoutAnalyzed(), slotRef.getColumnName());
+            }
             return null;
         }
 
