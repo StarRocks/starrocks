@@ -542,6 +542,7 @@ void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const st
     for (auto tablet_id : tablet_ids) {
         auto it = _delta_writers.find(tablet_id);
         if (it != _delta_writers.end()) {
+            it->second->cancel(Status::Cancelled(reason));
             it->second->abort(abort_with_exception);
         }
     }

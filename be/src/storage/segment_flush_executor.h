@@ -8,6 +8,7 @@
 
 #include "common/status.h"
 #include "storage/olap_define.h"
+#include "util/spinlock.h"
 #include "util/threadpool.h"
 
 namespace brpc {
@@ -32,19 +33,43 @@ class DeltaWriter;
 
 class SegmentFlushToken {
 public:
+<<<<<<< HEAD
     SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token,
                       std::shared_ptr<starrocks::vectorized::DeltaWriter> delta_writer);
+=======
+    SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token);
+>>>>>>> 4898499bba ([BugFix] Fix secondary tablet writer does not abort properly (#36746))
 
-    Status submit(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
+    Status submit(DeltaWriter* writer, brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                   PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
 
-    void cancel();
+    Status status() const {
+        std::lock_guard l(_status_lock);
+        return _status;
+    }
 
-    void wait();
+    void set_status(const Status& status) {
+        if (status.ok()) return;
+        std::lock_guard l(_status_lock);
+        if (_status.ok()) _status = status;
+    }
+
+    void cancel(const Status& st);
+
+    void shutdown();
+
+    Status wait();
 
 private:
     std::unique_ptr<ThreadPoolToken> _flush_token;
+<<<<<<< HEAD
     std::shared_ptr<vectorized::DeltaWriter> _writer;
+=======
+
+    mutable SpinLock _status_lock;
+    // Records the current flush status of the tablet.
+    Status _status;
+>>>>>>> 4898499bba ([BugFix] Fix secondary tablet writer does not abort properly (#36746))
 };
 
 class SegmentFlushExecutor {
@@ -59,7 +84,10 @@ public:
     Status update_max_threads(int max_threads);
 
     std::unique_ptr<SegmentFlushToken> create_flush_token(
+<<<<<<< HEAD
             const std::shared_ptr<starrocks::vectorized::DeltaWriter>& delta_writer,
+=======
+>>>>>>> 4898499bba ([BugFix] Fix secondary tablet writer does not abort properly (#36746))
             ThreadPool::ExecutionMode execution_mode = ThreadPool::ExecutionMode::CONCURRENT);
 
     ThreadPool* get_thread_pool() { return _flush_pool.get(); }

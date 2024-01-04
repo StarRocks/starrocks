@@ -239,6 +239,18 @@ set(EXEC_FILES
         ./storage/base_compaction_test.cpp
         ./storage/rowset_merger_test.cpp
         ./storage/schema_change_test.cpp
+<<<<<<< HEAD
+=======
+        ./storage/row_store_encoder_test.cpp
+        ./storage/segment_flush_executor_test.cpp
+        ./storage/storage_engine_test.cpp
+        ./storage/binlog_test_base.cpp
+        ./storage/binlog_file_test.cpp
+        ./storage/binlog_builder_test.cpp
+        ./storage/binlog_manager_test.cpp
+        ./storage/binlog_reader_test.cpp
+        ./storage/tablet_binlog_test.cpp
+>>>>>>> 4898499bba ([BugFix] Fix secondary tablet writer does not abort properly (#36746))
         ./storage/publish_version_task_test.cpp
         ./storage/publish_version_manager_test.cpp
         ./storage/get_use_pk_index_test.cpp
