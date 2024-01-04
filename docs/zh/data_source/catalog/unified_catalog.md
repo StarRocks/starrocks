@@ -2,49 +2,50 @@
 displayed_sidebar: "Chinese"
 ---
 
-# Hudi catalog
+# Unified catalog
 
-Hudi Catalog 是一种 External Catalog。通过 Hudi Catalog，您不需要执行数据导入就可以直接查询 Apache Hudi 里的数据。
+Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Unified Catalog，您可以把 Apache Hive™、Apache Iceberg、Apache Hudi 和 Delta Lake 等多个数据源作为一个融合的数据源，不需要执行导入就可以直接操作其中的表数据，包括：
 
-此外，您还可以基于 Hudi Catalog ，结合 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 能力来实现数据转换和导入。StarRocks 从 2.4 版本开始支持 Hudi Catalog。
+- 无需手动建表，通过 Unified Catalog 直接查询 Hive、Iceberg、Hudi 和 Delta Lake 等数据源里的数据。
+- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Hive、Iceberg、Hudi 和 Delta Lake 等数据源里的数据进行加工建模，并导入至 StarRocks。
+- 在 StarRocks 侧创建或删除 Hive、Iceberg 库表。
 
-为保证正常访问 Hudi 内的数据，StarRocks 集群必须集成以下两个关键组件：
+为保证正常访问融合数据源内的数据，StarRocks 集群必须集成以下两个关键组件：
 
-- 对象存储或分布式文件系统，如 AWS S3、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、Google GCS、或 HDFS
+- 分布式文件系统 (HDFS) 或对象存储。当前支持的对象存储包括：AWS S3、Microsoft Azure Storage、Google GCS、其他兼容 S3 协议的对象存储（如阿里云 OSS、MinIO）。
 
-- 元数据服务，如 Hive Metastore（以下简称 HMS）或 AWS Glue
+- 元数据服务。当前支持的元数据服务包括：Hive Metastore（以下简称 HMS）、AWS Glue。
 
   > **说明**
   >
   > 如果选择 AWS S3 作为存储系统，您可以选择 HMS 或 AWS Glue 作为元数据服务。如果选择其他存储系统，则只能选择 HMS 作为元数据服务。
 
+## 使用限制
+
+一个 Unified Catalog 当前只支持对接一个存储系统和一个元数据服务。因此，您需要确保您通过 Unified Catalog 访问的所有数据源使用同一个存储系统和同一个元数据服务。
+
 ## 使用说明
 
-- StarRocks 查询 Hudi 数据时，支持 Parquet 文件格式。Parquet 文件支持 SNAPPY、LZ4、ZSTD、GZIP 和 NO_COMPRESSION 压缩格式。
-- StarRocks 完整支持了 Hudi 的 Copy On Write（COW）表和 Merge On Read（MOR）表。
+- 有关 Unified Catalog 支持的文件格式和数据类型，请参见 [Hive catalog](../catalog/hive_catalog.md)、[Iceberg catalog](../catalog/iceberg_catalog.md)、[Hudi catalog](../catalog/hudi_catalog.md) 和 [Delta Lake catalog](../catalog/deltalake_catalog.md) 文档中“使用说明”部分。
+
+- 部分操作只能用于特定的表格式。例如，[CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 和 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 当前只支持 Hive 和 Iceberg 表，[REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) 只支持 Hive 和 Hudi 表。
+
+  当您通过 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 在 Unified Catalog 中创建表时，必须通过 `ENGINE` 参数来指定表格式（Hive 或 Iceberg）。
 
 ## 准备工作
 
-在创建 Hudi Catalog 之前，请确保 StarRocks 集群能够正常访问 Hudi 的文件存储及元数据服务。
+在创建 Unified Catalog 之前，请确保 StarRocks 集群能够正常访问您所使用的文件存储及元数据服务。
 
 ### AWS IAM
 
-如果 Hudi 使用 AWS S3 作为文件存储或使用 AWS Glue 作为元数据服务，您需要选择一种合适的认证鉴权方案，确保 StarRocks 集群可以访问相关的 AWS 云资源。
-
-您可以选择如下认证鉴权方案：
-
-- Instance Profile（推荐）
-- Assumed Role
-- IAM User
-
-有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[配置 AWS 认证方式 - 准备工作](../../integrations/authenticate_to_aws_resources.md#准备工作)。
+如果您使用 AWS S3 作为文件存储或使用 AWS Glue 作为元数据服务，您需要选择一种合适的认证鉴权方案，确保 StarRocks 集群可以访问相关的 AWS 云资源。有关 StarRocks 访问 AWS 认证鉴权的详细内容，参见[配置 AWS 认证方式 - 准备工作](../../integrations/authenticate_to_aws_resources.md#准备工作)。
 
 ### HDFS
 
 如果使用 HDFS 作为文件存储，则需要在 StarRocks 集群中做如下配置：
 
 - （可选）设置用于访问 HDFS 集群和 HMS 的用户名。 您可以在每个 FE 的 **fe/conf/hadoop_env.sh** 文件、以及每个 BE 的 **be/conf/hadoop_env.sh** 文件最开头增加 `export HADOOP_USER_NAME="<user_name>"` 来设置该用户名。配置完成后，需重启各个 FE 和 BE 使配置生效。如果不设置该用户名，则默认使用 FE 和 BE 进程的用户名进行访问。每个 StarRocks 集群仅支持配置一个用户名。
-- 查询 Hudi 数据时，StarRocks 集群的 FE 和 BE 会通过 HDFS 客户端访问 HDFS 集群。一般情况下，StarRocks 会按照默认配置来启动 HDFS 客户端，无需手动配置。但在以下场景中，需要进行手动配置：
+- 查询数据时，StarRocks 集群的 FE 和 BE 会通过 HDFS 客户端访问 HDFS 集群。一般情况下，StarRocks 会按照默认配置来启动 HDFS 客户端，无需手动配置。但在以下场景中，需要进行手动配置：
   - 如果 HDFS 集群开启了高可用（High Availability，简称为“HA”）模式，则需要将 HDFS 集群中的 **hdfs-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径下。
   - 如果 HDFS 集群配置了 ViewFs，则需要将 HDFS 集群中的 **core-site.xml** 文件放到每个 FE 的 **$FE_HOME/conf** 路径下、以及每个 BE 的 **$BE_HOME/conf** 路径下。
 
@@ -57,9 +58,9 @@ Hudi Catalog 是一种 External Catalog。通过 Hudi Catalog，您不需要执�
 如果 HDFS 集群或 HMS 开启了 Kerberos 认证，则需要在 StarRocks 集群中做如下配置：
 
 - 在每个 FE 和 每个 BE 上执行 `kinit -kt keytab_path principal` 命令，从 Key Distribution Center (KDC) 获取到 Ticket Granting Ticket (TGT)。执行命令的用户必须拥有访问 HMS 和 HDFS 的权限。注意，使用该命令访问 KDC 具有时效性，因此需要使用 cron 定期执行该命令。
-- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 的 **$BE_HOME/conf/be.conf** 文件中添加 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中，`/etc/krb5.conf` 是 **krb5.conf** 文件的路径，可以根据文件的实际路径进行修改。
+- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 文件和每个 BE 的 **$BE_HOME/conf/be.conf** 文件中添加 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中，`/etc/krb5.conf` 是 krb5.conf 文件的路径，可以根据文件的实际路径进行修改。
 
-## 创建 Hudi Catalog
+## 创建 Unified Catalog
 
 ### 语法
 
@@ -68,7 +69,7 @@ CREATE EXTERNAL CATALOG <catalog_name>
 [COMMENT <comment>]
 PROPERTIES
 (
-    "type" = "hudi",
+    "type" = "unified",
     MetastoreParams,
     StorageCredentialParams,
     MetadataUpdateParams
@@ -79,7 +80,7 @@ PROPERTIES
 
 #### catalog_name
 
-Hudi Catalog 的名称。命名要求如下：
+Unified Catalog 的名称。命名要求如下：
 
 - 必须由字母 (a-z 或 A-Z)、数字 (0-9) 或下划线 (_) 组成，且只能以字母开头。
 - 总长度不能超过 1023 个字符。
@@ -87,44 +88,44 @@ Hudi Catalog 的名称。命名要求如下：
 
 #### comment
 
-Hudi Catalog 的描述。此参数为可选。
+Unified  Catalog 的描述。此参数为可选。
 
 #### type
 
-数据源的类型。设置为 `hudi`。
+数据源的类型。设置为 `unified` 。
 
 #### MetastoreParams
 
-StarRocks 访问 Hudi 集群元数据服务的相关参数配置。
+StarRocks 访问元数据服务的相关参数配置。
 
-##### HMS
+##### Hive metastore
 
-如果选择 HMS 作为 Hudi 集群的元数据服务，请按如下配置 `MetastoreParams`：
+如果选择 HMS 作为元数据服务，请按如下配置 `MetastoreParams`：
 
 ```SQL
-"hive.metastore.type" = "hive",
+"unified.metastore.type" = "hive",
 "hive.metastore.uris" = "<hive_metastore_uri>"
 ```
 
 > **说明**
 >
-> 在查询 Hudi 数据之前，必须将所有 HMS 节点的主机名及 IP 地址之间的映射关系添加到 **/etc/hosts** 路径。否则，发起查询时，StarRocks 可能无法访问 HMS。
+> 在查询数据之前，必须将所有 HMS 节点的主机名及 IP 地址之间的映射关系添加到 **/etc/hosts** 路径。否则，发起查询时，StarRocks 可能无法访问 HMS。
 
 `MetastoreParams` 包含如下参数。
 
-| 参数                | 是否必须 | 说明                                                         |
-| ------------------- | -------- | ------------------------------------------------------------ |
-| hive.metastore.type | 是       | Hudi 集群所使用的元数据服务的类型。设置为 `hive`。           |
-| hive.metastore.uris | 是       | HMS 的 URI。格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。<br />如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>,thrift://<HMS IP 地址 2>:<HMS 端口号 2>,thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
+| 参数                   | 是否必须 | 说明                                                         |
+| ---------------------- | -------- | ------------------------------------------------------------ |
+| unified.metastore.type | 是       | 元数据服务的类型。设置为 `hive`。                            |
+| hive.metastore.uris    | 是       | HMS 的 URI。格式：`thrift://<HMS IP 地址>:<HMS 端口号>`。 如果您的 HMS 开启了高可用模式，此处可以填写多个 HMS 地址并用逗号 (`,`) 分隔，例如：`"thrift://<HMS IP 地址 1>:<HMS 端口号 1>,thrift://<HMS IP 地址 2>:<HMS 端口号 2>,thrift://<HMS IP 地址 3>:<HMS 端口号 3>"`。 |
 
 ##### AWS Glue
 
-如果选择 AWS Glue 作为 Hudi 集群的元数据服务（只有使用 AWS S3 作为存储系统时支持），请按如下配置 `MetastoreParams`：
+如果选择 AWS Glue 作为元数据服务（只有使用 AWS S3 作为存储系统时支持），请按如下配置 `MetastoreParams`：
 
 - 基于 Instance Profile 进行认证和鉴权
 
   ```SQL
-  "hive.metastore.type" = "glue",
+  "unified.metastore.type" = "glue",
   "aws.glue.use_instance_profile" = "true",
   "aws.glue.region" = "<aws_glue_region>"
   ```
@@ -132,7 +133,7 @@ StarRocks 访问 Hudi 集群元数据服务的相关参数配置。
 - 基于 Assumed Role 进行认证和鉴权
 
   ```SQL
-  "hive.metastore.type" = "glue",
+  "unified.metastore.type" = "glue",
   "aws.glue.use_instance_profile" = "true",
   "aws.glue.iam_role_arn" = "<iam_role_arn>",
   "aws.glue.region" = "<aws_glue_region>"
@@ -141,7 +142,7 @@ StarRocks 访问 Hudi 集群元数据服务的相关参数配置。
 - 基于 IAM User 进行认证和鉴权
 
   ```SQL
-  "hive.metastore.type" = "glue",
+  "unified.metastore.type" = "glue",
   "aws.glue.use_instance_profile" = "false",
   "aws.glue.access_key" = "<iam_user_access_key>",
   "aws.glue.secret_key" = "<iam_user_secret_key>",
@@ -152,7 +153,7 @@ StarRocks 访问 Hudi 集群元数据服务的相关参数配置。
 
 | 参数                          | 是否必须 | 说明                                                         |
 | ----------------------------- | -------- | ------------------------------------------------------------ |
-| hive.metastore.type           | 是       | Hudi 集群所使用的元数据服务的类型。设置为 `glue`。           |
+| unified.metastore.type        | 是       | 元数据服务的类型。设置为 `glue`。                            |
 | aws.glue.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
 | aws.glue.iam_role_arn         | 否       | 有权限访问 AWS Glue Data Catalog 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS Glue 时，必须指定此参数。 |
 | aws.glue.region               | 是       | AWS Glue Data Catalog 所在的地域。示例：`us-west-1`。        |
@@ -163,15 +164,15 @@ StarRocks 访问 Hudi 集群元数据服务的相关参数配置。
 
 #### StorageCredentialParams
 
-StarRocks 访问 Hudi 集群文件存储的相关参数配置。
+StarRocks 访问文件存储的相关参数配置。
 
 如果您使用 HDFS 作为存储系统，则不需要配置 `StorageCredentialParams`。
 
-如果您使用 AWS S3、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、 或 GCS，则必须配置 `StorageCredentialParams`。
+如果您使用 AWS S3、阿里云 OSS、其他兼容 S3 协议的对象存储、Microsoft Azure Storage、 或 GCS，则必须配置 `StorageCredentialParams`。
 
 ##### AWS S3
 
-如果选择 AWS S3 作为 Hudi 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 AWS S3 作为文件存储，请按如下配置 `StorageCredentialParams`：
 
 - 基于 Instance Profile 进行认证和鉴权
 
@@ -199,7 +200,7 @@ StarRocks 访问 Hudi 集群文件存储的相关参数配置。
 
 `StorageCredentialParams` 包含如下参数。
 
-| 参数                        | 是否必须 | 说明                                                         |
+| 参数                        | 是否必须   | 说明                                                         |
 | --------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.use_instance_profile | 是       | 指定是否开启 Instance Profile 和 Assumed Role 两种鉴权方式。取值范围：`true` 和 `false`。默认值：`false`。 |
 | aws.s3.iam_role_arn         | 否       | 有权限访问 AWS S3 Bucket 的 IAM Role 的 ARN。采用 Assumed Role 鉴权方式访问 AWS S3 时，必须指定此参数。 |
@@ -209,15 +210,29 @@ StarRocks 访问 Hudi 集群文件存储的相关参数配置。
 
 有关如何选择用于访问 AWS S3 的鉴权方式、以及如何在 AWS IAM 控制台配置访问控制策略，参见[访问 AWS S3 的认证参数](../../integrations/authenticate_to_aws_resources.md#访问-aws-s3-的认证参数)。
 
-##### 兼容 S3 协议的对象存储
+##### 阿里云 OSS
 
-Hudi Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
-
-如果选择兼容 S3 协议的对象存储（如 MinIO）作为 Hudi 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择阿里云 OSS 作为文件存储，需要在 `StorageCredentialParams` 中配置如下认证参数：
 
 ```SQL
-"aws.s3.enable_ssl" = "{true | false}",
-"aws.s3.enable_path_style_access" = "{true | false}",
+"aliyun.oss.access_key" = "<user_access_key>",
+"aliyun.oss.secret_key" = "<user_secret_key>",
+"aliyun.oss.endpoint" = "<oss_endpoint>" 
+```
+
+| 参数                            | 是否必须 | 说明                                                         |
+| ------------------------------- | -------- | ------------------------------------------------------------ |
+| aliyun.oss.endpoint             | 是      | 阿里云 OSS Endpoint, 如 `oss-cn-beijing.aliyuncs.com`，您可根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/document_detail/31837.html)。    |
+| aliyun.oss.access_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey ID，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。                                     |
+| aliyun.oss.secret_key           | 是      | 指定阿里云账号或 RAM 用户的 AccessKey Secret，获取方式，请参见 [获取 AccessKey](https://help.aliyun.com/document_detail/53045.html)。      |
+
+##### 兼容 S3 协议的对象存储
+
+如果选择兼容 S3 协议的对象存储（如 MinIO）作为文件存储，请按如下配置 `StorageCredentialParams`：
+
+```SQL
+"aws.s3.enable_ssl" = "false",
+"aws.s3.enable_path_style_access" = "true",
 "aws.s3.endpoint" = "<s3_endpoint>",
 "aws.s3.access_key" = "<iam_user_access_key>",
 "aws.s3.secret_key" = "<iam_user_secret_key>"
@@ -235,11 +250,9 @@ Hudi Catalog 从 2.5 版本起支持兼容 S3 协议的对象存储。
 
 ##### Microsoft Azure Storage
 
-Hudi Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
-
 ###### Azure Blob Storage
 
-如果选择 Blob Storage 作为 Hudi 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 Blob Storage 作为文件存储，请按如下配置 `StorageCredentialParams`：
 
 - 基于 Shared Key 进行认证和鉴权
 
@@ -273,7 +286,7 @@ Hudi Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
 
 ###### Azure Data Lake Storage Gen2
 
-如果选择 Data Lake Storage Gen2 作为 Hudi 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 Data Lake Storage Gen2 作为文件存储，请按如下配置 `StorageCredentialParams`：
 
 - 基于 Managed Identity 进行认证和鉴权
 
@@ -323,7 +336,7 @@ Hudi Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
 
 ###### Azure Data Lake Storage Gen1
 
-如果选择 Data Lake Storage Gen1 作为 Hudi 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 Data Lake Storage Gen1 作为文件存储，请按如下配置 `StorageCredentialParams`：
 
 - 基于 Managed Service Identity 进行认证和鉴权
 
@@ -355,9 +368,7 @@ Hudi Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
 
 ##### Google GCS
 
-Hudi Catalog 从 3.0 版本起支持 Google GCS。
-
-如果选择 Google GCS 作为 Hudi 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+如果选择 Google GCS 作为文件存储，请按如下配置 `StorageCredentialParams`：
 
 - 基于 VM 进行认证和鉴权
 
@@ -423,35 +434,35 @@ Hudi Catalog 从 3.0 版本起支持 Google GCS。
 
 #### MetadataUpdateParams
 
-指定缓存元数据更新策略的一组参数。StarRocks 根据该策略更新缓存的 Hudi 元数据。此组参数为可选。
+指定缓存元数据更新策略的一组参数。此组参数为可选。StarRocks 根据该策略更新缓存的 Hive、Hudi 和 Delta Lake 元数据。有关 Hive、Hudi、和 Delta Lake 元数据缓存更新的详细介绍，参见 [Hive catalog](../../data_source/catalog/hive_catalog.md)、[Hudi catalog](../../data_source/catalog/hudi_catalog.md) 和 [Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md)。
 
-StarRocks 默认采用[自动异步更新策略](#附录理解元数据自动异步更新策略)，开箱即用。因此，一般情况下，您可以忽略 `MetadataUpdateParams`，无需对其中的策略参数进行调优。
+StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般情况下，您可以忽略 `MetadataUpdateParams`，无需对其中的策略参数进行调优。
 
-如果 Hudi 数据更新频率较高，那么您可以对这些参数进行调优，从而优化自动异步更新策略的性能。
+如果 Hive、Hudi、或 Delta Lake 数据更新频率较高，那么您可以对这些参数进行调优，从而优化自动异步更新策略的性能。
 
 | 参数                                   | 是否必须 | 说明                                                         |
 | -------------------------------------- | -------- | ------------------------------------------------------------ |
-| enable_metastore_cache            | 否       | 指定 StarRocks 是否缓存 Hudi 表的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
-| enable_remote_file_cache               | 否       | 指定 StarRocks 是否缓存 Hudi 表或分区的数据文件的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
-| metastore_cache_refresh_interval_sec   | 否       | StarRocks 异步更新缓存的 Hudi 表或分区的元数据的时间间隔。单位：秒。默认值：`7200`，即 2 小时。 |
-| remote_file_cache_refresh_interval_sec | 否       | StarRocks 异步更新缓存的 Hudi 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`60`。 |
-| metastore_cache_ttl_sec                | 否       | StarRocks 自动淘汰缓存的 Hudi 表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。 |
-| remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Hudi 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`129600`，即 36 小时。 |
+| enable_metastore_cache                 | 否       | 指定 StarRocks 是否缓存 Hive、Hudi、或 Delta Lake 表的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
+| enable_remote_file_cache               | 否       | 指定 StarRocks 是否缓存 Hive、Hudi、或 Delta Lake 表或分区的数据文件的元数据。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 表示开启缓存，取值为 `false` 表示关闭缓存。 |
+| metastore_cache_refresh_interval_sec   | 否       | StarRocks 异步更新缓存的 Hive、Hudi、或 Delta Lake 表或分区的元数据的时间间隔。单位：秒。默认值：`7200`，即 2 小时。 |
+| remote_file_cache_refresh_interval_sec | 否       | StarRocks 异步更新缓存的 Hive、Hudi、或 Delta Lake 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`60`。 |
+| metastore_cache_ttl_sec                | 否       | StarRocks 自动淘汰缓存的 Hive、Hudi、或 Delta Lake 表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。 |
+| remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Hive、Hudi、或 Delta Lake 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`129600`，即 36 小时。 |
 
 ### 示例
 
-以下示例创建了一个名为 `hudi_catalog_hms` 或 `hudi_catalog_glue` 的 Hudi Catalog，用于查询 Hudi 集群里的数据。
+以下示例创建了一个名为 `unified_catalog_hms` 或 `unified_catalog_glue` 的 Unified Catalog，用于查询融合数据源里的数据。
 
 #### HDFS
 
-使用 HDFS 作为存储时，可以按如下创建 Hudi Catalog：
+使用 HDFS 作为存储时，可以按如下创建 Unified Catalog：
 
 ```SQL
-CREATE EXTERNAL CATALOG hudi_catalog_hms
+CREATE EXTERNAL CATALOG unified_catalog_hms
 PROPERTIES
 (
-    "type" = "hudi",
-    "hive.metastore.type" = "hive",
+    "type" = "unified",
+    "unified.metastore.type" = "hive",
     "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ```
@@ -460,28 +471,28 @@ PROPERTIES
 
 ##### 如果基于 Instance Profile 进行鉴权和认证
 
-- 如果 Hudi 集群使用 HMS 作为元数据服务，可以按如下创建 Hudi Catalog：
+- 如果使用 HMS 作为元数据服务，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hudi_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2"
   );
   ```
 
-- 如果 Amazon EMR Hudi 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Hudi Catalog：
+- 如果 Amazon EMR 使用 AWS Glue 作为元数据服务，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hudi_catalog_glue
+  CREATE EXTERNAL CATALOG unified_catalog_glue
   PROPERTIES
   (
-      "type" = "hudi",
-      "hive.metastore.type" = "glue",
+      "type" = "unified",
+      "unified.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
       "aws.glue.region" = "us-west-2",
       "aws.s3.use_instance_profile" = "true",
@@ -491,14 +502,14 @@ PROPERTIES
 
 ##### 如果基于 Assumed Role 进行鉴权和认证
 
-- 如果 Hudi 集群使用 HMS 作为元数据服务，可以按如下创建 Hudi Catalog：
+- 如果使用 HMS 作为元数据服务，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hudi_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
@@ -506,14 +517,14 @@ PROPERTIES
   );
   ```
 
-- 如果 Amazon EMR Hudi 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Hudi Catalog：
+- 如果 Amazon EMR 使用 AWS Glue 作为元数据服务，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hudi_catalog_glue
+  CREATE EXTERNAL CATALOG unified_catalog_glue
   PROPERTIES
   (
-      "type" = "hudi",
-      "hive.metastore.type" = "glue",
+      "type" = "unified",
+      "unified.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "true",
       "aws.glue.iam_role_arn" = "arn:aws:iam::081976408565:role/test_glue_role",
       "aws.glue.region" = "us-west-2",
@@ -525,14 +536,14 @@ PROPERTIES
 
 ##### 如果基于 IAM User 进行鉴权和认证
 
-- 如果 Hudi 集群使用 HMS 作为元数据服务，可以按如下创建 Hudi Catalog：
+- 如果使用 HMS 作为元数据服务，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hudi_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
@@ -541,14 +552,14 @@ PROPERTIES
   );
   ```
 
-- 如果 Amazon EMR Hudi 集群使用 AWS Glue 作为元数据服务，可以按如下创建 Hudi Catalog：
+- 如果 Amazon EMR 使用 AWS Glue 作为元数据服务，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hudi_catalog_glue
+  CREATE EXTERNAL CATALOG unified_catalog_glue
   PROPERTIES
   (
-      "type" = "hudi",
-      "hive.metastore.type" = "glue",
+      "type" = "unified",
+      "unified.metastore.type" = "glue",
       "aws.glue.use_instance_profile" = "false",
       "aws.glue.access_key" = "<iam_user_access_key>",
       "aws.glue.secret_key" = "<iam_user_secret_key>",
@@ -562,14 +573,14 @@ PROPERTIES
 
 #### 兼容 S3 协议的对象存储
 
-以 MinIO 为例，可以按如下创建 Hudi Catalog：
+以 MinIO 为例，可以按如下创建 Unified Catalog：
 
 ```SQL
-CREATE EXTERNAL CATALOG hudi_catalog_hms
+CREATE EXTERNAL CATALOG unified_catalog_hms
 PROPERTIES
 (
-    "type" = "hudi",
-    "hive.metastore.type" = "hive",
+    "type" = "unified",
+    "unified.metastore.type" = "hive",
     "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
@@ -583,28 +594,31 @@ PROPERTIES
 
 ##### Azure Blob Storage
 
-- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Hudi Catalog：
+- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hudi_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-      "azure.blob.storage_account" = "<blob_storage_account_name>",
-      "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+      "aws.s3.enable_ssl" = "true",
+      "aws.s3.enable_path_style_access" = "true",
+      "aws.s3.endpoint" = "<s3_endpoint>",
+      "aws.s3.access_key" = "<iam_user_access_key>",
+      "aws.s3.secret_key" = "<iam_user_secret_key>"
   );
   ```
 
-- 如果基于 SAS Token 进行认证和鉴权，可以按如下创建 Hudi Catalog：
+- 如果基于 SAS Token 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hudi_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.container" = "<blob_container_name>",
@@ -614,27 +628,27 @@ PROPERTIES
 
 ##### Azure Data Lake Storage Gen1
 
-- 如果基于 Managed Service Identity 进行认证和鉴权，可以按如下创建 Hudi Catalog：
+- 如果基于 Managed Service Identity 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hudi_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls1.use_managed_service_identity" = "true"    
   );
   ```
 
-- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Hudi Catalog：
+- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hudi_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls1.oauth2_client_id" = "<application_client_id>",
       "azure.adls1.oauth2_credential" = "<application_client_credential>",
@@ -644,14 +658,14 @@ PROPERTIES
 
 ##### Azure Data Lake Storage Gen2
 
-- 如果基于 Managed Identity 进行认证和鉴权，可以按如下创建 Hudi Catalog：
+- 如果基于 Managed Identity 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hudi_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.oauth2_use_managed_identity" = "true",
       "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
@@ -659,28 +673,28 @@ PROPERTIES
   );
   ```
 
-- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Hudi Catalog：
+- 如果基于 Shared Key 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hudi_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.storage_account" = "<storage_account_name>",
       "azure.adls2.shared_key" = "<shared_key>"     
   );
   ```
 
-- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Hudi Catalog：
+- 如果基于 Service Principal 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hudi_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
@@ -690,27 +704,27 @@ PROPERTIES
 
 #### Google GCS
 
-- 如果基于 VM 进行认证和鉴权，可以按如下创建 Hudi Catalog：
+- 如果基于 VM 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hudi_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "gcp.gcs.use_compute_engine_service_account" = "true"    
   );
   ```
 
-- 如果基于 Service Account 进行认证和鉴权，可以按如下创建 Hudi Catalog：
+- 如果基于 Service Account 进行认证和鉴权，可以按如下创建 Unified Catalog：
 
   ```SQL
-  CREATE EXTERNAL CATALOG hudi_catalog_hms
+  CREATE EXTERNAL CATALOG unified_catalog_hms
   PROPERTIES
   (
-      "type" = "hudi",
-      "hive.metastore.type" = "hive",
+      "type" = "unified",
+      "unified.metastore.type" = "hive",
       "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "gcp.gcs.service_account_email" = "<google_service_account_email>",
       "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
@@ -720,28 +734,28 @@ PROPERTIES
 
 - 如果基于 Impersonation 进行认证和鉴权
 
-  - 使用 VM 实例模拟 Service Account，可以按如下创建 Hudi Catalog：
+  - 使用 VM 实例模拟 Service Account，可以按如下创建 Unified Catalog：
 
     ```SQL
-    CREATE EXTERNAL CATALOG hudi_catalog_hms
+    CREATE EXTERNAL CATALOG unified_catalog_hms
     PROPERTIES
     (
-        "type" = "hudi",
-        "hive.metastore.type" = "hive",
+        "type" = "unified",
+        "unified.metastore.type" = "hive",
         "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
         "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
     );
     ```
 
-  - 使用一个 Service Account 模拟另一个 Service Account，可以按如下创建 Hudi Catalog：
+  - 使用一个 Service Account 模拟另一个 Service Account，可以按如下创建 Unified Catalog：
 
     ```SQL
-    CREATE EXTERNAL CATALOG hudi_catalog_hms
+    CREATE EXTERNAL CATALOG unified_catalog_hms
     PROPERTIES
     (
-        "type" = "hudi",
-        "hive.metastore.type" = "hive",
+        "type" = "unified",
+        "unified.metastore.type" = "hive",
         "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
@@ -750,7 +764,7 @@ PROPERTIES
     );
     ```
 
-## 查看 Hudi Catalog
+## 查看 Unified Catalog
 
 您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
@@ -758,17 +772,17 @@ PROPERTIES
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Hudi Catalog `hudi_catalog_glue` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Unified Catalog `unified_catalog_glue` 的创建语句：
 
 ```SQL
-SHOW CREATE CATALOG hudi_catalog_glue;
+SHOW CREATE CATALOG unified_catalog_glue;
 ```
 
-## 切换 Hudi Catalog 和数据库
+## 切换 Unified Catalog 和数据库
 
-您可以通过如下方法切换至目标 Hudi Catalog 和数据库：
+您可以通过如下方法切换至目标 Unified Catalog 和数据库：
 
-- 先通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 指定当前会话生效的 Hudi Catalog，然后再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定数据库：
+- 先通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 指定当前会话生效的 Unified Catalog，然后再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定数据库：
 
   ```SQL
   -- 切换当前会话生效的 Catalog：
@@ -777,25 +791,25 @@ SHOW CREATE CATALOG hudi_catalog_glue;
   USE <db_name>
   ```
 
-- 通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Hudi Catalog 下的指定数据库：
+- 通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Unified Catalog 下的指定数据库：
 
   ```SQL
   USE <catalog_name>.<db_name>
   ```
 
-## 删除 Hudi Catalog
+## 删除 Unified Catalog
 
 您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
 
-例如，通过如下命令删除 Hudi Catalog `hudi_catalog_glue`：
+例如，通过如下命令删除 Unified Catalog `unified_catalog_glue`：
 
 ```SQL
-DROP Catalog hudi_catalog_glue;
+DROP CATALOG unified_catalog_glue;
 ```
 
-## 查看 Hudi 表结构
+## 查看 Unified Catalog 内的表结构
 
-您可以通过如下方法查看 Hudi 表的表结构：
+您可以通过如下方法查看 Hive 表的表结构：
 
 - 查看表结构
 
@@ -809,15 +823,17 @@ DROP Catalog hudi_catalog_glue;
   SHOW CREATE TABLE <catalog_name>.<database_name>.<table_name>
   ```
 
-## 查询 Hudi 表数据
+## 查询 Unified Catalog 内的表数据
 
-1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Catalog 所属的 Hudi 集群中的数据库：
+ 您可以通过如下操作查询 Unified Catalog 内的数据：
+
+1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Unified Catalog 所属的数据源中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
    ```
 
-2. [切换至目标 Hudi Catalog 和数据库](#切换-hudi-catalog-和数据库)。
+2. [切换至目标 Unified Catalog 和数据库](#切换-unified-catalog-和数据库)。
 
 3. 通过 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
 
@@ -825,117 +841,159 @@ DROP Catalog hudi_catalog_glue;
    SELECT count(*) FROM <table_name> LIMIT 10
    ```
 
-## 导入 Hudi 数据
+## 从 Hive、Iceberg、Hudi 或 Delta Lake 导入数据
 
-假设有一个 OLAP 表，表名为 `olap_tbl`。您可以这样来转换该表中的数据，并把数据导入到 StarRocks 中：
+您可以通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 Hive、Iceberg、Hudi 或 Delta Lake 表中的数据导入 StarRocks 中 Unified Catalog 下的表。
 
-```SQL
-INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM hudi_table
-```
-
-## 手动或自动更新元数据缓存
-
-### 手动更新
-
-默认情况下，StarRocks 会缓存 Hudi 的元数据、并以异步模式自动更新缓存的元数据，从而提高查询性能。此外，在对 Hudi 表做了表结构变更或其他表更新后，您也可以使用 [REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) 手动更新该表的元数据，从而确保 StarRocks 第一时间生成合理的查询计划：
+例如，通过如下命令将 Hive 表 `hive_table` 的数据导入到 StarRocks 中 Unified Catalog `unified_catalog` 下数据库`test_database` 里的表 `test_table`：
 
 ```SQL
-REFRESH EXTERNAL TABLE <table_name>
+INSERT INTO unified_catalog.test_database.test_table SELECT * FROM hive_table
 ```
 
-### 自动增量更新
+## 在 Unified Catalog 内创建数据库
 
-与自动异步更新策略不同，在自动增量更新策略下，FE 可以定时从 HMS 读取各种事件，进而感知 Hudi 表元数据的变更情况，如增减列、增减分区和更新分区数据等，无需手动更新 Hudi 表的元数据。
+同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Unified Catalog 的 [CREATE DATABASE](../../administration/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) 在该 Unified Catalog 内创建数据库。
 
-开启自动增量更新策略的步骤如下：
+> **说明**
+>
+> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
-#### 步骤 1：在 HMS 上配置事件侦听器
+注意当前仅支持创建 Hive 数据库和 Iceberg 数据库。
 
-HMS 2.x 和 3.x 版本均支持配置事件侦听器。这里以配套 HMS 3.1.2 版本的事件侦听器配置为例。将以下配置项添加到 **$HiveMetastore/conf/hive-site.xml** 文件中，然后重启 HMS：
+[切换至目标 Unified Catalog](#切换-unified-catalog-和数据库)，然后通过如下语句创建数据库：
 
-```XML
-<property>
-    <name>hive.metastore.event.db.notification.api.auth</name>
-    <value>false</value>
-</property>
-<property>
-    <name>hive.metastore.notifications.add.thrift.objects</name>
-    <value>true</value>
-</property>
-<property>
-    <name>hive.metastore.alter.notifications.basic</name>
-    <value>false</value>
-</property>
-<property>
-    <name>hive.metastore.dml.events</name>
-    <value>true</value>
-</property>
-<property>
-    <name>hive.metastore.transactional.event.listeners</name>
-    <value>org.apache.hive.hcatalog.listener.DbNotificationListener</value>
-</property>
-<property>
-    <name>hive.metastore.event.db.listener.timetolive</name>
-    <value>172800s</value>
-</property>
-<property>
-    <name>hive.metastore.server.max.message.size</name>
-    <value>858993459</value>
-</property>
+```SQL
+CREATE DATABASE <database_name>
+[properties ("location" = "<prefix>://<path_to_database>/<database_name.db>")]
 ```
 
-配置完成后，可以在 FE 日志文件中搜索 `event id`，然后通过查看事件 ID 来检查事件监听器是否配置成功。如果配置失败，则所有 `event id` 均为 `0`。
+`location` 参数用于指定数据库所在的文件路径，支持 HDFS 和对象存储：
 
-#### 步骤 2：在 StarRocks 上开启自动增量更新策略
+- 选择 HMS 作为元数据服务时，如果您在创建数据库时不指定 `location`，那么系统会使用 HMS 默认的 `<warehouse_location>/<database_name.db>` 作为文件路径。
+- 选择 AWS Glue 作为元数据服务时，`location` 参数没有默认值，因此您在创建数据库时必须指定该参数。
 
-您可以给 StarRocks 集群中某一个 Hudi Catalog 开启自动增量更新策略，也可以给 StarRocks 集群中所有 Hudi Catalog 开启自动增量更新策略。
+`prefix` 根据存储系统的不同而不同：
 
-- 如果要给单个 Hudi Catalog 开启自动增量更新策略，则需要在创建该 Hudi Catalog 时把 `PROPERTIES` 中的 `enable_hms_events_incremental_sync` 参数设置为 `true`，如下所示：
+| **存储系统**                           | **`Prefix`** **取值**                                        |
+| -------------------------------------- | ------------------------------------------------------------ |
+| HDFS                                   | `hdfs`                                                       |
+| Google GCS                             | `gs`                                                         |
+| Azure Blob Storage                     | <ul><li>如果您的存储账号支持通过 HTTP 协议进行访问，`prefix` 为 `wasb`。</li><li>如果您的存储账号支持通过 HTTPS 协议进行访问，`prefix` 为 `wasbs`。</li></ul> |
+| Azure Data Lake Storage Gen1           | `adl`                                                        |
+| Azure Data Lake Storage Gen2           | <ul><li>如果您的存储账号支持通过 HTTP 协议进行访问，`prefix` 为 `abfs`。</li><li>如果您的存储账号支持通过 HTTPS 协议进行访问，`prefix` 为 `abfss`。</li></ul> |
+| 阿里云 OSS                             | `oss`                                                        |
+| 腾讯云 COS                             | `cosn`                                                       |
+| 华为云 OBS                             | `obs`                                                        |
+| AWS S3 及其他兼容 S3 的存储（如 MinIO)   | `s3`                                                         |
 
-  ```SQL
-  CREATE EXTERNAL CATALOG <catalog_name>
-  [COMMENT <comment>]
-  PROPERTIES
-  (
-      "type" = "hudi",
-      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
-       ....
-      "enable_hms_events_incremental_sync" = "true"
-  );
-  ```
-  
-- 如果要给所有 Hudi Catalog 开启自动增量更新策略，则需要把 `enable_hms_events_incremental_sync` 参数添加到每个 FE 的 **$FE_HOME/conf/fe.conf** 文件中，并设置为 `true`，然后重启 FE，使参数配置生效。
+## 从 Unified Catalog 内删除数据库
 
-您还可以根据业务需求在每个 FE 的 **$FE_HOME/conf/fe.conf** 文件中对以下参数进行调优，然后重启 FE，使参数配置生效。
+同 StarRocks 内部数据库一致，如果您拥有 Unified Catalog 内数据库的 [DROP](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) 来删除该数据库。仅支持删除空数据库。
 
-| Parameter                         | Description                                                  |
-| --------------------------------- | ------------------------------------------------------------ |
-| hms_events_polling_interval_ms    | StarRocks 从 HMS 中读取事件的时间间隔。默认值：`5000`。单位：毫秒。 |
-| hms_events_batch_size_per_rpc     | StarRocks 每次读取事件的最大数量。默认值：`500`。            |
-| enable_hms_parallel_process_evens | 指定 StarRocks 在读取事件时是否并行处理读取的事件。取值范围：`true` 和 `false`。默认值：`true`。取值为 `true` 则开启并行机制，取值为 `false` 则关闭并行机制。 |
-| hms_process_events_parallel_num   | StarRocks 每次处理事件的最大并发数。默认值：`4`。            |
+> **说明**
+>
+> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
-## 附录：理解元数据自动异步更新策略
+注意当前仅支持删除 Hive 数据库和 Iceberg 数据库。
 
-自动异步更新策略是 StarRocks 用于更新 Hudi Catalog 中元数据的默认策略。
+删除数据库操作并不会将 HDFS 或对象存储上的对应文件路径删除。
 
-默认情况下（即当 `enable_metastore_cache` 参数和 `enable_remote_file_cache` 参数均设置为 `true` 时），如果一个查询命中 Hudi 表的某个分区，则 StarRocks 会自动缓存该分区的元数据、以及该分区下数据文件的元数据。缓存的元数据采用懒更新 (Lazy Update) 策略。
+[切换至目标 Unified Catalog](#切换-unified-catalog-和数据库)，然后通过如下语句删除数据库：
 
-例如，有一张名为 `table2` 的 Hudi 表，该表的数据分布在四个分区：`p1`、`p2`、`p3` 和 `p4`。当一个查询命中 `p1` 时，StarRocks 会自动缓存 `p1` 的元数据、以及 `p1` 下数据文件的元数据。假设当前缓存元数据的更新和淘汰策略设置如下：
+```SQL
+DROP DATABASE <database_name>
+```
 
-- 异步更新 `p1` 的缓存元数据的时间间隔（通过 `metastore_cache_refresh_interval_sec` 参数指定）为 2 小时。
-- 异步更新 `p1` 下数据文件的缓存元数据的时间间隔（通过 `remote_file_cache_refresh_interval_sec` 参数指定）为 60 秒。
-- 自动淘汰 `p1` 的缓存元数据的时间间隔（通过 `metastore_cache_ttl_sec` 参数指定）为 24 小时。
-- 自动淘汰 `p1` 下数据文件的缓存元数据的时间间隔（通过 `remote_file_cache_ttl_sec` 参数指定）为 36 小时。
+## 在 Unified Catalog 内创建表
 
-如下图所示。
+同 StarRocks 内部数据库一致，如果您拥有 Unified Catalog 内数据库的 [CREATE TABLE](../../administration/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 在该数据库下创建表。
 
-![Update policy on timeline](../../assets/catalog_timeline_zh.png)
+> **说明**
+>
+> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
 
-StarRocks 采用如下策略更新和淘汰缓存的元数据：
+注意当前仅支持创建 Hive 表和 Iceberg 表。
 
-- 如果另有查询再次命中 `p1`，并且当前时间距离上次更新的时间间隔不超过 60 秒，则 StarRocks 既不会更新 `p1` 的缓存元数据，也不会更新 `p1` 下数据文件的缓存元数据。
-- 如果另有查询再次命中 `p1`，并且当前时间距离上次更新的时间间隔超过 60 秒，则 StarRocks 会更新 `p1` 下数据文件的缓存元数据。
-- 如果另有查询再次命中 `p1`，并且当前时间距离上次更新的时间间隔超过 2 小时，则 StarRocks 会更新 `p1` 的缓存元数据。
-- 如果继上次更新结束后，`p1` 在 24 小时内未被访问，则 StarRocks 会淘汰 `p1` 的缓存元数据。后续有查询再次命中 `p1` 时，会重新缓存 `p1` 的元数据。
-- 如果继上次更新结束后，`p1` 在 36 小时内未被访问，则 StarRocks 会淘汰 `p1` 下数据文件的缓存元数据。后续有查询再次命中 `p1` 时，会重新缓存 `p1` 下数据文件的元数据。
+[切换至目标 Unified Catalog 和数据库](#切换-unified-catalog-和数据库)，然后通过 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 创建 Hive 表或 Iceberg 表：
+
+```SQL
+CREATE TABLE <table_name>
+(column_definition1[, column_definition2, ...]
+ENGINE = {|hive|iceberg}
+[partition_desc]
+```
+
+有关创建 Hive 表和 Iceberg 表的详细信息，请参见[创建 Hive 表](../catalog/hive_catalog.md#创建-hive-表)和[创建 Iceberg 表](../catalog/iceberg_catalog.md#创建-iceberg-表)。
+
+例如，通过如下语句，创建一张 Hive 表 `hive_table`：
+
+```SQL
+CREATE TABLE hive_table
+(
+    action varchar(65533),
+    id int,
+    dt date
+)
+ENGINE = hive
+PARTITION BY (id,dt);
+```
+
+## 向 Unified Catalog 内的表中插入数据
+
+同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [INSERT](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 StarRocks 表数据写入到该表（当前仅支持写入到 Parquet 格式的 Unified Catalog 表）。
+
+> **说明**
+>
+> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+注意当前仅支持向 Hive 表和 Iceberg 表中插入数据。
+
+[切换至目标 Unified Catalog 和数据库](#切换-unified-catalog-和数据库)，然后通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 向 Hive 表或 Iceberg 表中插入数据：
+
+```SQL
+INSERT {INTO | OVERWRITE} <table_name>
+[ (column_name [, ...]) ]
+{ VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
+
+-- 向指定分区写入数据。
+INSERT {INTO | OVERWRITE} <table_name>
+PARTITION (par_col1=<value> [, par_col2=<value>...])
+{ VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
+```
+
+有关向 Hive 表和 Iceberg 表中插入数据的详细信息，请参见[向 Hive 表中插入数据](../catalog/hive_catalog.md#向-hive-表中插入数据)和[向 Iceberg 表中插入数据](../catalog/iceberg_catalog.md#向-iceberg-表中插入数据)。
+
+例如，通过如下语句，向 Hive 表 `hive_table` 中写入如下数据：
+
+```SQL
+INSERT INTO hive_table
+VALUES
+    ("buy", 1, "2023-09-01"),
+    ("sell", 2, "2023-09-02"),
+    ("buy", 3, "2023-09-03");
+```
+
+## 从 Unified Catalog 内删除表
+
+同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [DROP](../../administration/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 来删除该表。
+
+> **说明**
+>
+> 您可以通过 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 和 [REVOKE](../../sql-reference/sql-statements/account-management/REVOKE.md) 操作对用户和角色进行权限的赋予和收回。
+
+注意当前仅支持删除 Hive 表和 Iceberg 表。
+
+[切换至目标 Unified Catalog 和数据库](#切换-unified-catalog-和数据库)，然后通过 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 删除 Hive 表或 Iceberg 表。
+
+```SQL
+DROP TABLE <table_name>
+```
+
+有关删除 Hive 表和 Iceberg 表的详细信息，请参见[删除 Hive 表](../catalog/hive_catalog.md#删除-hive-表)和[删除 Iceberg 表](../catalog/iceberg_catalog.md#删除-iceberg-表)。
+
+例如，通过如下语句，删除 Hive 表 `hive_table`：
+
+```SQL
+DROP TABLE hive_table FORCE
+```
