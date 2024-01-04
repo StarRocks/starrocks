@@ -504,10 +504,6 @@ public class Optimizer {
         } catch (Exception e) {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE",
                     "single table view based mv rule rewrite failed.", e);
-        } finally {
-            // reset logical tree with view
-            // no need to try view base rewrite in cost phase again
-            context.setLogicalTreeWithView(null);
         }
     }
 
