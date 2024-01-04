@@ -25,6 +25,7 @@ import com.google.common.collect.SetMultimap;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.proto.PExecShortCircuitResult;
@@ -79,6 +80,8 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
         AtomicLong affectedRows = new AtomicLong();
 
         AtomicInteger i = new AtomicInteger();
+        MetricRepo.COUNTER_SHORTCIRCUIT_QUERY.increase(1L);
+        MetricRepo.COUNTER_SHORTCIRCUIT_RPC.increase((long) be2ShortCircuitRequests.size());
         be2ShortCircuitRequests.forEach((beAddress, tRequest) -> {
             PBackendService service = BrpcProxy.getBackendService(beAddress);
             try {
@@ -89,8 +92,10 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
                 PExecShortCircuitResult shortCircuitResult = future.get(
                         context.getSessionVariable().getQueryTimeoutS(), TimeUnit.SECONDS);
                 watch.stop();
+                long t = watch.elapsed().toMillis();
+                MetricRepo.HISTO_SHORTCIRCUIT_RPC_LATENCY.update(t);
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("exec short circuit time: " + watch.elapsed().toMillis() + "ms.");
+                    LOG.debug("exec short circuit time: " + t + "ms.");
                 }
 
                 TStatusCode code = TStatusCode.findByValue(shortCircuitResult.status.statusCode);
@@ -170,6 +175,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
 
     /**
      * compute all tablets per be
+     *
      * @return
      */
     private SetMultimap<TNetworkAddress, TabletWithVersion> assignTablet2Backends() {
