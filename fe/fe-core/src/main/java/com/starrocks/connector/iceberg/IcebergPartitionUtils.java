@@ -156,13 +156,14 @@ public class IcebergPartitionUtils {
                                                     Type type) {
         DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
         boolean parseFromDate = true;
-        if (partitionField.transform().toString().equalsIgnoreCase("year")) {
+        IcebergPartitionTransform transform = IcebergPartitionTransform.fromString(partitionField.transform().toString());
+        if (transform == IcebergPartitionTransform.YEAR) {
             partitionName += "-01-01";
-        } else if (partitionField.transform().toString().equalsIgnoreCase("month")) {
+        } else if (transform == IcebergPartitionTransform.MONTH) {
             partitionName += "-01";
-        } else if (partitionField.transform().toString().equalsIgnoreCase("day")) {
+        } else if (transform == IcebergPartitionTransform.DAY) {
             dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd");
-        } else if (partitionField.transform().toString().equalsIgnoreCase("hour")) {
+        } else if (transform == IcebergPartitionTransform.HOUR) {
             dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd-HH");
             parseFromDate = false;
         } else {
