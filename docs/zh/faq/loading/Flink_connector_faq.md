@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# Flink Connector常见问题
+# Flink Connector 导入常见问题
 
 ## 使用事务接口的 exactly-once 时，导入失败
 

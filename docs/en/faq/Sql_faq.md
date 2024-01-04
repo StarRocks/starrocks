@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# SQL
+# SQL query
 
 This topic provides answers to some frequently asked questions about SQL.
 
