@@ -60,11 +60,11 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     @SerializedName(value = "indexId")
     private long indexId;
     @SerializedName(value = "schema")
-    private List<Column> schema = Lists.newArrayList();
+    private List<Column> schema;
     @SerializedName(value = "sortKeyIdxes")
-    public List<Integer> sortKeyIdxes = Lists.newArrayList();
+    public List<Integer> sortKeyIdxes;
     @SerializedName(value = "sortKeyUniqueIds")
-    public List<Integer> sortKeyUniqueIds = Lists.newArrayList();
+    public List<Integer> sortKeyUniqueIds;
     @SerializedName(value = "schemaVersion")
     private int schemaVersion;
     @SerializedName(value = "schemaHash")
@@ -85,6 +85,10 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
     private boolean isColocateMVIndex = false;
 
     private Expr whereClause;
+
+    private MaterializedIndexMeta() {
+
+    }
 
     public MaterializedIndexMeta(long indexId, List<Column> schema, int schemaVersion, int schemaHash,
                                  short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
@@ -243,6 +247,25 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
 
     public void setSchemaVersion(int newSchemaVersion) {
         this.schemaVersion = newSchemaVersion;
+    }
+
+    public MaterializedIndexMeta shallowCopy() {
+        MaterializedIndexMeta indexMeta = new MaterializedIndexMeta();
+        indexMeta.indexId = this.indexId;
+        indexMeta.schema = schema == null ? null : Lists.newArrayList(schema);
+        indexMeta.sortKeyIdxes = sortKeyIdxes == null ? null : Lists.newArrayList(sortKeyIdxes);
+        indexMeta.sortKeyUniqueIds = sortKeyUniqueIds == null ? null : Lists.newArrayList(sortKeyUniqueIds);
+        indexMeta.schemaVersion = this.schemaVersion;
+        indexMeta.schemaHash = this.schemaHash;
+        indexMeta.shortKeyColumnCount = this.shortKeyColumnCount;
+        indexMeta.storageType = this.storageType;
+        indexMeta.keysType = this.keysType;
+        indexMeta.defineStmt = this.defineStmt;
+        indexMeta.dbId = this.dbId;
+        indexMeta.viewDefineSql = this.viewDefineSql;
+        indexMeta.isColocateMVIndex = this.isColocateMVIndex;
+        indexMeta.whereClause = this.whereClause;
+        return indexMeta;
     }
 
     @Override
