@@ -21,6 +21,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableBasicInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -116,9 +117,9 @@ public class TablePEntryObject implements PEntryObject {
             if (Objects.equals(tokens.get(1), "*")) {
                 tblUUID = PrivilegeBuiltinConstants.ALL_TABLES_UUID;
             } else {
-                Table table = null;
+                TableBasicInfo table = null;
                 try {
-                    table = mgr.getMetadataMgr().getTableLocally(catalogName, tokens.get(0), tokens.get(1));
+                    table = mgr.getMetadataMgr().getTableBasicInfo(catalogName, tokens.get(0), tokens.get(1));
                 } catch (StarRocksConnectorException e) {
                     throw new PrivObjNotFoundException("cannot find table " +
                             tokens.get(1) + " in db " + tokens.get(0) + ", msg: " + e.getMessage());
@@ -158,7 +159,8 @@ public class TablePEntryObject implements PEntryObject {
         }
         return this.catalogId == other.catalogId &&
                 Objects.equals(other.databaseUUID, this.databaseUUID) &&
-                Objects.equals(other.tableUUID, this.tableUUID);
+                Objects.equals(ExternalCatalog.getCompatibleTableUUID(other.tableUUID),
+                        ExternalCatalog.getCompatibleTableUUID(this.tableUUID));
     }
 
     @Override

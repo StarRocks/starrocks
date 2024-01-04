@@ -23,6 +23,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableBasicInfo;
 import com.starrocks.common.Config;
 import com.starrocks.privilege.AccessControlProvider;
 import com.starrocks.privilege.AccessController;
@@ -175,12 +176,12 @@ public class Authorizer {
     }
 
     public static void checkAnyActionOnTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
-                                                       Table tbl) throws AccessDeniedException {
-        doCheckTableLikeObject(currentUser, roleIds, dbName, tbl, null);
+                                                       TableBasicInfo tableBasicInfo) throws AccessDeniedException {
+        doCheckTableLikeObject(currentUser, roleIds, dbName, tableBasicInfo, null);
     }
 
     private static void doCheckTableLikeObject(UserIdentity currentUser, Set<Long> roleIds, String dbName,
-                                               Table tbl, PrivilegeType privilegeType) throws AccessDeniedException {
+                                               TableBasicInfo tbl, PrivilegeType privilegeType) throws AccessDeniedException {
         Table.TableType type = tbl.getType();
         switch (type) {
             case OLAP:

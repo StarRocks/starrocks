@@ -29,6 +29,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.TableBasicInfo;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.NotImplementedException;
@@ -68,7 +69,7 @@ public class InformationSchemaDataSource {
 
     private static final String DEF = "def";
     private static final String DEFAULT_EMPTY_STRING = "";
-    private static final long DEFAULT_EMPTY_NUM = -1L;
+    public static final long DEFAULT_EMPTY_NUM = -1L;
     public static final String UTF8_GENERAL_CI = "utf8_general_ci";
 
     @NotNull
@@ -329,9 +330,9 @@ public class InformationSchemaDataSource {
                 try {
                     List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
                     for (String tableName : tableNames) {
-                        Table table = null;
+                        TableBasicInfo table = null;
                         try {
-                            table = metadataMgr.getTableLocally(catalogName, dbName, tableName);
+                            table = metadataMgr.getTableBasicInfo(catalogName, dbName, tableName);
                         } catch (Exception e) {
                             LOG.warn(e.getMessage());
                         }
@@ -382,9 +383,9 @@ public class InformationSchemaDataSource {
                             // INLINE_VIEW (use default)
                             // VIEW (use default)
                             // BROKER (use default)
+                            // EXTERNAL TABLE (use default)
                             genDefaultConfigInfo(info);
                         }
-                        // TODO(cjs): other table type (HIVE, MYSQL, ICEBERG, HUDI, JDBC, ELASTICSEARCH)
                         infos.add(info);
                     }
                 } finally {
@@ -396,7 +397,7 @@ public class InformationSchemaDataSource {
         return response;
     }
 
-    public static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
+    public static TTableInfo genNormalTableInfo(TableBasicInfo table, TTableInfo info) {
 
         OlapTable olapTable = (OlapTable) table;
         Collection<PhysicalPartition> partitions = olapTable.getPhysicalPartitions();

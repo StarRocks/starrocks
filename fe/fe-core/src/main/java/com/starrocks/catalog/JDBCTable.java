@@ -165,7 +165,6 @@ public class JDBCTable extends Table {
         }
     }
 
-    // TODO, identify the remote table that created after deleted
     @Override
     public String getUUID() {
         if (!Strings.isNullOrEmpty(catalogName)) {

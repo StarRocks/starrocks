@@ -19,6 +19,8 @@ import com.google.common.base.Preconditions;
 
 import java.util.Map;
 
+import static com.google.common.base.Preconditions.checkArgument;
+
 public class ExternalCatalog extends Catalog {
 
     public ExternalCatalog(long id, String name, String comment, Map<String, String> config) {
@@ -32,9 +34,26 @@ public class ExternalCatalog extends Catalog {
         return uuid.contains(".") ? uuid.split("\\.")[1] : uuid;
     }
 
-    // table uuid format: external_catalog_name.db_name.table_name.creation_time
+    // old table uuid format: external_catalog_name.db_name.table_name.creation_time
+    // new table uuid format: external_catalog_name.db_name.table_name
     public static String getTableNameFromUUID(String uuid) {
         // To be in compatible with code before external table privilege is supported
         return uuid.contains(".") ? uuid.split("\\.")[2] : uuid;
+    }
+
+    // old table uuid format: external_catalog_name.db_name.table_name.creation_time
+    // new table uuid format: external_catalog_name.db_name.table_name
+    // truncates the creation_time(4th part of uuid, if exists) to get a compatible table uuid
+    public static String getCompatibleTableUUID(String uuid) {
+        if (!uuid.contains(".")) {
+            return uuid;
+        }
+
+        String[] parts = uuid.split("\\.");
+        if (parts.length == 3) {
+            return uuid;
+        }
+        checkArgument(parts.length == 4, "got unexpected external table uuid format");
+        return String.join(".", parts[0], parts[1], parts[2]);
     }
 }

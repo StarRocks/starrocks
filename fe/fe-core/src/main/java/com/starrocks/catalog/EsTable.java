@@ -341,7 +341,6 @@ public class EsTable extends Table implements GsonPostProcessable {
         return tTableDescriptor;
     }
 
-    // TODO, identify the remote table that created after deleted
     @Override
     public String getUUID() {
         if (!Strings.isNullOrEmpty(catalogName)) {

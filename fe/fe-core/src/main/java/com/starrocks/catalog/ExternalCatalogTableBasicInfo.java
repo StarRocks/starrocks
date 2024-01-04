@@ -18,30 +18,87 @@ import com.starrocks.server.CatalogMgr;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
+import static com.starrocks.service.InformationSchemaDataSource.DEFAULT_EMPTY_NUM;
 
-public class ExternalCatalogTableBasicInfo extends Table {
+public class ExternalCatalogTableBasicInfo implements TableBasicInfo {
     private final String catalogName;
-
     private final String dbName;
+    private final String tableName;
+    private final Table.TableType tableType;
 
-    public ExternalCatalogTableBasicInfo(String catalogName, String dbName, String tableName, TableType type) {
-        super(type);
+    public ExternalCatalogTableBasicInfo(String catalogName, String dbName, String tableName, Table.TableType tableType) {
+        checkNotNull(catalogName);
+        checkNotNull(dbName);
+        checkNotNull(tableName);
+        checkNotNull(tableType);
         checkArgument(!CatalogMgr.isInternalCatalog(catalogName));
-        checkNotNull(catalogName);
-        checkNotNull(catalogName);
-        checkNotNull(catalogName);
-        checkArgument(type != TableType.OLAP);
+        checkArgument(tableType != Table.TableType.OLAP);
         this.catalogName = catalogName;
         this.dbName = dbName;
-        this.name = tableName;
+        this.tableName = tableName;
+        this.tableType = tableType;
     }
 
-    @Override
     public String getCatalogName() {
         return catalogName;
     }
 
     public String getDbName() {
         return dbName;
+    }
+
+    public String getName() {
+        return tableName;
+    }
+
+    public Table.TableType getTable() {
+        return tableType;
+    }
+
+    @Override
+    public String getComment() {
+        return "";
+    }
+
+    @Override
+    public String getMysqlType() {
+        return "BASE TABLE";
+    }
+
+    @Override
+    public String getEngine() {
+        return Table.TableType.serialize(this.tableType);
+    }
+
+    @Override
+    public Table.TableType getType() {
+        return tableType;
+    }
+
+    @Override
+    public String getUUID() {
+        checkState(CatalogMgr.isExternalCatalog(catalogName));
+        return String.join(".", catalogName, dbName, tableName);
+    }
+
+    public boolean isOlapView() {
+        return false;
+    }
+
+    public boolean isMaterializedView() {
+        return false;
+    }
+
+    public boolean isNativeTableOrMaterializedView() {
+        return false;
+    }
+
+    public long getCreateTime() {
+        return DEFAULT_EMPTY_NUM;
+    }
+
+    public long getLastCheckTime() {
+        return DEFAULT_EMPTY_NUM;
     }
 }
