@@ -62,12 +62,7 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.optimizer.ExpressionContext;
-import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvPlanContextBuilder;
->>>>>>> 07417435c5 ([BugFix] Add more checks when schema changing has referred materialized views (backport #37388) (#37435))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -1338,75 +1333,6 @@ public class MvUtils {
     public static boolean isSupportViewDelta(JoinOperator joinOperator) {
         return  joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin();
     }
-<<<<<<< HEAD
-=======
-
-    public static void collectViewScanOperator(OptExpression tree, Collection<Operator> viewScanOperators) {
-        if (tree.getOp() instanceof LogicalViewScanOperator) {
-            viewScanOperators.add(tree.getOp());
-        } else {
-            for (OptExpression input : tree.getInputs()) {
-                collectViewScanOperator(input, viewScanOperators);
-            }
-        }
-    }
-
-    public static OptExpression replaceLogicalViewScanOperator(
-            OptExpression queryExpression, List<LogicalViewScanOperator> viewScans) {
-        if (viewScans == null) {
-            return queryExpression;
-        }
-        // add a LogicalTreeAnchorOperator to replace the tree easier
-        OptExpression anchorExpr = OptExpression.create(new LogicalTreeAnchorOperator(), queryExpression);
-        doReplaceLogicalViewScanOperator(anchorExpr, 0, queryExpression, viewScans);
-        List<Operator> viewScanOperators = Lists.newArrayList();
-        MvUtils.collectViewScanOperator(anchorExpr, viewScanOperators);
-        if (!viewScanOperators.isEmpty()) {
-            return null;
-        }
-        OptExpression newQuery = anchorExpr.inputAt(0);
-        deriveLogicalProperty(newQuery);
-        return newQuery;
-    }
-
-    private static void doReplaceLogicalViewScanOperator(
-            OptExpression parent,
-            int index,
-            OptExpression queryExpression,
-            List<LogicalViewScanOperator> viewScans) {
-        LogicalOperator op = queryExpression.getOp().cast();
-        if (op instanceof LogicalViewScanOperator) {
-            LogicalViewScanOperator viewScanOperator = op.cast();
-            OptExpression viewPlan = viewScanOperator.getOriginalPlan();
-            parent.setChild(index, viewPlan);
-            return;
-        }
-        for (int i = 0; i < queryExpression.getInputs().size(); i++) {
-            doReplaceLogicalViewScanOperator(queryExpression, i, queryExpression.inputAt(i), viewScans);
-        }
-    }
-
-    public static void deriveLogicalProperty(OptExpression root) {
-        for (OptExpression child : root.getInputs()) {
-            deriveLogicalProperty(child);
-        }
-
-        ExpressionContext context = new ExpressionContext(root);
-        context.deriveLogicalProperty();
-        root.setLogicalProperty(context.getRootProperty());
-    }
-
-    public static OptExpression cloneExpression(OptExpression logicalTree) {
-        List<OptExpression> inputs = Lists.newArrayList();
-        for (OptExpression input : logicalTree.getInputs()) {
-            OptExpression clone = cloneExpression(input);
-            inputs.add(clone);
-        }
-        Operator.Builder builder = OperatorBuilderFactory.build(logicalTree.getOp());
-        builder.withOperator(logicalTree.getOp());
-        Operator newOp = builder.build();
-        return OptExpression.create(newOp, inputs);
-    }
 
     /**
      * Inactive related mvs after modified columns have been done. Only inactive mvs after
@@ -1429,28 +1355,26 @@ public class MvUtils {
             }
             // TODO: support more types for base table's schema change.
             try {
-                List<MvPlanContext> mvPlanContexts = MvPlanContextBuilder.getPlanContext(mv);
-                for (MvPlanContext mvPlanContext : mvPlanContexts) {
-                    if (mvPlanContext != null) {
-                        OptExpression mvPlan = mvPlanContext.getLogicalPlan();
-                        List<ColumnRefOperator> usedColRefs = MvUtils.collectScanColumn(mvPlan, scan -> {
-                            if (scan == null) {
-                                return false;
-                            }
-                            Table table = scan.getTable();
-                            return table.getId() == olapTable.getId();
-                        });
-                        Set<String> usedColNames = usedColRefs.stream()
-                                .map(x -> x.getName())
-                                .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
-                        for (String modifiedColumn : modifiedColumns) {
-                            if (usedColNames.contains(modifiedColumn)) {
-                                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                                "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
-                                        modifiedColumn, olapTable.getName());
-                                mv.setInactiveAndReason(
-                                        "base table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
-                            }
+                MvPlanContext mvPlanContext = MvPlanContextBuilder.getPlanContext(mv);
+                if (mvPlanContext != null) {
+                    OptExpression mvPlan = mvPlanContext.getLogicalPlan();
+                    List<ColumnRefOperator> usedColRefs = MvUtils.collectScanColumn(mvPlan, scan -> {
+                        if (scan == null) {
+                            return false;
+                        }
+                        Table table = scan.getTable();
+                        return table.getId() == olapTable.getId();
+                    });
+                    Set<String> usedColNames = usedColRefs.stream()
+                            .map(x -> x.getName())
+                            .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
+                    for (String modifiedColumn : modifiedColumns) {
+                        if (usedColNames.contains(modifiedColumn)) {
+                            LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                                            "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
+                                    modifiedColumn, olapTable.getName());
+                            mv.setInactiveAndReason(
+                                    "base table schema changed for columns: " + Joiner.on(",").join(modifiedColumns));
                         }
                     }
                 }
@@ -1477,5 +1401,4 @@ public class MvUtils {
             }
         }
     }
->>>>>>> 07417435c5 ([BugFix] Add more checks when schema changing has referred materialized views (backport #37388) (#37435))
 }
