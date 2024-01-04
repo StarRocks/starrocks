@@ -152,7 +152,7 @@ Used to specify the number of rows of a single packet transmitted by each node d
 
 When the session variable `enable_profile` is set to `false` and the amount of time taken by a query exceeds the threshold specified by the variable `big_query_profile_second_threshold`, a profile is generated for that query.
 
-### cbo_decimal_cast_string_strict  (2.5.14 and later)
+### cbo_decimal_cast_string_strict (2.5.14 and later)
 
 Controls how the CBO converts data from the DECIMAL type to the STRING type. If this variable is set to `true`, the logic built in v2.5.x and later versions prevails and the system implements strict conversion (namely, the system truncates the generated string and fills 0s based on the scale length). If this variable is set to `false`, the logic built in versions earlier than v2.5.x prevails and the system processes all valid digits to generate a string. The default value is `true`.
 
@@ -641,9 +641,15 @@ Used to display the time zone of the current system. Cannot be changed.
 
 Used to set the time zone of the current session. The time zone can affect the results of certain time functions.
 
+### transaction_read_only
+
+* Description: Used for MySQL 5.8 compatibility. The alias is `tx_read_only`. This variable specifies the transaction access mode. `ON` indicates read only and `OFF` indicates readable and writable.
+* Default: OFF
+* Introduced in: v2.5.18, v3.0.9, v3.1.7
+
 ### tx_isolation
 
-Used for MySQL client compatibility. No practical usage.
+Used for MySQL client compatibility. No practical usage. The alias is `transaction_isolation`.
 
 ### use_compute_nodes
 
