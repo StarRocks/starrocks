@@ -1,0 +1,15 @@
+-- name: test_hive_sink
+
+create external catalog hive_sink_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+set catalog hive_sink_test_${uuid0};
+create database hive_db_${uuid0};
+use hive_db_${uuid0};
+create table t1 (k1 int, k2 int, k3 date, k4 smallint) partition by (k3, k4);
+insert into t1 select 999,888,'9999-12-03', 3;
+select * from t1;
+insert into t1 values( 999,888,'9999-12-03', 3),( 999,888,'9999-12-33', 3);
+select * from t1;
+drop table t1 force;
+drop database hive_db_${uuid0};
+drop catalog hive_sink_test_${uuid0};
+set catalog default_catalog;

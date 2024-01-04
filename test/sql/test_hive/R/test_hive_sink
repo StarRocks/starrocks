@@ -1,0 +1,53 @@
+-- name: test_hive_sink
+create external catalog hive_sink_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+-- result:
+[]
+-- !result
+set catalog hive_sink_test_${uuid0};
+-- result:
+[]
+-- !result
+create database hive_db_${uuid0};
+-- result:
+[]
+-- !result
+use hive_db_${uuid0};
+-- result:
+[]
+-- !result
+create table t1 (k1 int, k2 int, k3 date, k4 smallint) partition by (k3, k4);
+-- result:
+[]
+-- !result
+insert into t1 select 999,888,'9999-12-03', 3;
+-- result:
+[]
+-- !result
+select * from t1;
+-- result:
+999	888	9999-12-03	3
+-- !result
+insert into t1 values( 999,888,'9999-12-03', 3),( 999,888,'9999-12-33', 3);
+-- result:
+E: (1064, "Partition value can't be null.")
+-- !result
+select * from t1;
+-- result:
+999	888	9999-12-03	3
+-- !result
+drop table t1 force;
+-- result:
+[]
+-- !result
+drop database hive_db_${uuid0};
+-- result:
+[]
+-- !result
+drop catalog hive_sink_test_${uuid0};
+-- result:
+[]
+-- !result
+set catalog default_catalog;
+-- result:
+[]
+-- !result

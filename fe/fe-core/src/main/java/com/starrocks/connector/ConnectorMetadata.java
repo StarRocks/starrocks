@@ -234,6 +234,9 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support sink");
     }
 
+    default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
+    }
+
     default void alterTable(AlterTableStmt stmt) throws UserException {
         TableName dbTableName = stmt.getTbl();
         String dbName = dbTableName.getDb();
