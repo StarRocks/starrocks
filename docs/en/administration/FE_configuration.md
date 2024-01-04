@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# FE configuration items
+# FE configuration
 
 FE parameters are classified into dynamic parameters and static parameters.
 
@@ -913,6 +913,13 @@ Data loading tasks consist of two phases: data writing and data committing (COMM
 - **Unit**: Second
 - **Default**: 600
 - **Description**: The default expiration time for the JDBC Catalog metadata cache. When jdbc_meta_default_cache_enable is set to true, newly created JDBC Catalogs will default to setting the expiration time of the metadata cache.
+
+##### default_mv_refresh_immediate
+
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
+- **Introduced in**: v3.2.3
 
 ## Configure FE static parameters
 
