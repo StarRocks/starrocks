@@ -135,7 +135,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
         }
 
         writer->close();
@@ -274,7 +274,7 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
         }
 
         writer->close();
@@ -301,7 +301,7 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         rowset->set_id(2);
         auto* segs = rowset->mutable_segments();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
         }
 
         writer->close();
@@ -436,7 +436,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
         }
 
         writer->close();
@@ -583,7 +583,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
         }
 
         writer->close();

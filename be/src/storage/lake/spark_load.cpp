@@ -112,10 +112,10 @@ Status SparkLoadHandler::_load_convert(Tablet& cur_tablet) {
     txn_log->set_txn_id(_request.transaction_id);
     auto op_write = txn_log->mutable_op_write();
     for (auto& f : writer->files()) {
-        if (is_segment(f)) {
-            op_write->mutable_rowset()->add_segments(std::move(f));
+        if (is_segment(f.path)) {
+            op_write->mutable_rowset()->add_segments(std::move(f.path));
         } else {
-            return Status::InternalError(fmt::format("unknown file {}", f));
+            return Status::InternalError(fmt::format("unknown file {}", f.path));
         }
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());

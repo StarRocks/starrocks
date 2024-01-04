@@ -208,7 +208,7 @@ TEST_F(LakeMetacacheTest, test_segment_cache) {
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
         }
 
         writer->close();

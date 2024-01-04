@@ -35,7 +35,6 @@ HorizontalPkTabletWriter::~HorizontalPkTabletWriter() = default;
 Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
     auto name = gen_del_filename(_txn_id);
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet_mgr->del_location(_tablet_id, name)));
-    _files.emplace_back(std::move(name));
     size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
     std::vector<uint8_t> content(sz);
     if (serde::ColumnArraySerde::serialize(deletes, content.data()) == nullptr) {
@@ -43,6 +42,7 @@ Status HorizontalPkTabletWriter::flush_del_file(const Column& deletes) {
     }
     RETURN_IF_ERROR(of->append(Slice(content.data(), content.size())));
     RETURN_IF_ERROR(of->close());
+    _files.emplace_back(FileInfo{std::move(name), content.size()});
     return Status::OK();
 }
 
@@ -56,11 +56,14 @@ Status HorizontalPkTabletWriter::flush_segment_writer(SegmentPB* segment) {
         auto* partial_rowset_footer = _rowset_txn_meta->add_partial_rowset_footers();
         partial_rowset_footer->set_position(footer_position);
         partial_rowset_footer->set_size(segment_size - footer_position);
+        const std::string& segment_path = _seg_writer->segment_path();
+        std::string segment_name = std::string(basename(segment_path));
+        _files.emplace_back(FileInfo{segment_name, segment_size});
         _data_size += segment_size;
         if (segment) {
             segment->set_data_size(segment_size);
             segment->set_index_size(index_size);
-            segment->set_path(_seg_writer->segment_path());
+            segment->set_path(segment_path);
         }
         _seg_writer.reset();
     }

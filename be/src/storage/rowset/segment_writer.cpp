@@ -71,7 +71,7 @@ SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segme
 
 SegmentWriter::~SegmentWriter() = default;
 
-std::string SegmentWriter::segment_path() const {
+const std::string& SegmentWriter::segment_path() const {
     return _wfile->filename();
 }
 
