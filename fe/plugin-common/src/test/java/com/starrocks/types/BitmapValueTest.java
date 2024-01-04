@@ -53,7 +53,7 @@ public class BitmapValueTest {
         }
     }
 
-    private void check_bitmap(BitmapValue bitmap, int bitmapType, long start, long end) {
+    private void checkBitmap(BitmapValue bitmap, int bitmapType, long start, long end) {
         Assert.assertEquals(bitmap.getBitmapType(), bitmapType);
         Assert.assertEquals(bitmap.cardinality(), end - start);
         for (long i = start; i < end; i++) {
@@ -61,7 +61,7 @@ public class BitmapValueTest {
         }
     }
 
-    private void check_bitmap(BitmapValue bitmap, int bitmapType, long start1, long end1, long start2, long end2) {
+    private void checkBitmap(BitmapValue bitmap, int bitmapType, long start1, long end1, long start2, long end2) {
         Assert.assertEquals(bitmap.getBitmapType(), bitmapType);
         Assert.assertEquals(bitmap.cardinality(), (end1 - start1) + (end2 - start2));
         for (long i = start1; i < end1; i++) {
@@ -75,16 +75,16 @@ public class BitmapValueTest {
     @Test
     public void testBitmapToBytesAndBitmapFromBytes() throws IOException {
         BitmapValue bitmap = BitmapValue.bitmapFromBytes(BitmapValue.bitmapToBytes(emptyBitmap));
-        check_bitmap(bitmap, BitmapValue.EMPTY, 0, 0);
+        checkBitmap(bitmap, BitmapValue.EMPTY, 0, 0);
 
         bitmap = BitmapValue.bitmapFromBytes(BitmapValue.bitmapToBytes(singleBitmap));
-        check_bitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
+        checkBitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
 
         bitmap = BitmapValue.bitmapFromBytes(BitmapValue.bitmapToBytes(mediumBitmap));
-        check_bitmap(bitmap, BitmapValue.SET_VALUE, 0, 10);
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 0, 10);
 
         bitmap = BitmapValue.bitmapFromBytes(BitmapValue.bitmapToBytes(largeBitmap));
-        check_bitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 40);
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 40);
     }
 
     @Test
@@ -128,26 +128,26 @@ public class BitmapValueTest {
         for (int i = 0; i < 10; i++) {
             bitmapValue1.add(i);
         }
-        check_bitmap(bitmapValue1, BitmapValue.SET_VALUE, 0, 10);
+        checkBitmap(bitmapValue1, BitmapValue.SET_VALUE, 0, 10);
 
         // test add long
         BitmapValue bitmapValue2 = new BitmapValue();
         for (long i = Long.MAX_VALUE - 1; i > Long.MAX_VALUE - 11; i--) {
             bitmapValue2.add(i);
         }
-        check_bitmap(bitmapValue2, BitmapValue.SET_VALUE, Long.MAX_VALUE - 10, Long.MAX_VALUE);
+        checkBitmap(bitmapValue2, BitmapValue.SET_VALUE, Long.MAX_VALUE - 10, Long.MAX_VALUE);
 
         // test add int and long
         for (int i = 0; i < 10; i++) {
             bitmapValue2.add(i);
         }
-        check_bitmap(bitmapValue2, BitmapValue.SET_VALUE, 0, 10, Long.MAX_VALUE - 10, Long.MAX_VALUE);
+        checkBitmap(bitmapValue2, BitmapValue.SET_VALUE, 0, 10, Long.MAX_VALUE - 10, Long.MAX_VALUE);
 
         // test distinct
         BitmapValue bitmapValue = new BitmapValue();
         bitmapValue.add(1);
         bitmapValue.add(1);
-        check_bitmap(bitmapValue, BitmapValue.SINGLE_VALUE, 1, 2);
+        checkBitmap(bitmapValue, BitmapValue.SINGLE_VALUE, 1, 2);
     }
 
     @Test
@@ -155,122 +155,122 @@ public class BitmapValueTest {
         // empty and empty
         BitmapValue bitmap = new BitmapValue(emptyBitmap);
         bitmap.and(emptyBitmap);
-        check_bitmap(bitmap, BitmapValue.EMPTY, 0, 0);
+        checkBitmap(bitmap, BitmapValue.EMPTY, 0, 0);
 
         // empty and single
         bitmap = new BitmapValue(emptyBitmap);
         bitmap.and(singleBitmap);
-        check_bitmap(bitmap, BitmapValue.EMPTY, 0, 0);
+        checkBitmap(bitmap, BitmapValue.EMPTY, 0, 0);
 
         // empty and set
         bitmap = new BitmapValue(emptyBitmap);
         bitmap.and(mediumBitmap);
-        check_bitmap(bitmap, BitmapValue.EMPTY, 0, 0);
+        checkBitmap(bitmap, BitmapValue.EMPTY, 0, 0);
 
         // empty and bitmap
         bitmap = new BitmapValue(emptyBitmap);
         bitmap.and(largeBitmap);
-        check_bitmap(bitmap, BitmapValue.EMPTY, 0, 0);
+        checkBitmap(bitmap, BitmapValue.EMPTY, 0, 0);
 
         // single and empty
         bitmap = new BitmapValue(singleBitmap);
         bitmap.and(emptyBitmap);
-        check_bitmap(bitmap, BitmapValue.EMPTY, 0, 0);
+        checkBitmap(bitmap, BitmapValue.EMPTY, 0, 0);
 
         // single and single (equal)
         bitmap = new BitmapValue(singleBitmap);
         bitmap.and(new BitmapValue(2));
-        check_bitmap(bitmap, BitmapValue.EMPTY, 0, 0);
+        checkBitmap(bitmap, BitmapValue.EMPTY, 0, 0);
 
         // single and single (not equal)
         bitmap = new BitmapValue(singleBitmap);
         bitmap.and(new BitmapValue(1));
-        check_bitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
+        checkBitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
 
         // single and bitmap (not contains)
         bitmap = new BitmapValue(singleBitmap);
         bitmap.and(new BitmapValue(2, 4));
-        check_bitmap(bitmap, BitmapValue.EMPTY, 0, 0);
+        checkBitmap(bitmap, BitmapValue.EMPTY, 0, 0);
 
         // single and bitmap (contains)
         bitmap = new BitmapValue(singleBitmap);
         bitmap.and(largeBitmap);
-        check_bitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
+        checkBitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
 
         // single and set (not contains)
         bitmap = new BitmapValue(singleBitmap);
         bitmap.and(new BitmapValue(100, 101));
-        check_bitmap(bitmap, BitmapValue.EMPTY, 0, 0);
+        checkBitmap(bitmap, BitmapValue.EMPTY, 0, 0);
 
         // single and set (contains)
         bitmap = new BitmapValue(singleBitmap);
         bitmap.and(mediumBitmap);
-        check_bitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
+        checkBitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
 
         // bitmap and empty
         bitmap = new BitmapValue(largeBitmap);
         bitmap.and(emptyBitmap);
-        check_bitmap(bitmap, BitmapValue.EMPTY, 0, 0);
+        checkBitmap(bitmap, BitmapValue.EMPTY, 0, 0);
 
         // bitmap and single (contains)
         bitmap = new BitmapValue(largeBitmap);
         bitmap.and(singleBitmap);
-        check_bitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
+        checkBitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
 
         // bitmap and single (not contains)
         bitmap = new BitmapValue(largeBitmap);
         bitmap.and(new BitmapValue(1000));
-        check_bitmap(bitmap, BitmapValue.EMPTY, 0, 0);
+        checkBitmap(bitmap, BitmapValue.EMPTY, 0, 0);
 
         // bitmap and bitmap (-> bitmap)
         bitmap = new BitmapValue(largeBitmap);
         bitmap.and(new BitmapValue(20, 60));
-        check_bitmap(bitmap, BitmapValue.BITMAP_VALUE, 20, 40);
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 20, 40);
 
         // bitmap and bitmap (-> empty)
         bitmap = new BitmapValue(largeBitmap);
         bitmap.and(new BitmapValue(100, 180));
-        check_bitmap(bitmap, BitmapValue.EMPTY, 0, 0);
+        checkBitmap(bitmap, BitmapValue.EMPTY, 0, 0);
 
         // bitmap and bitmap (-> single)
         bitmap = new BitmapValue(largeBitmap);
         bitmap.and(new BitmapValue(39, 100));
-        check_bitmap(bitmap, BitmapValue.SINGLE_VALUE, 39, 40);
+        checkBitmap(bitmap, BitmapValue.SINGLE_VALUE, 39, 40);
 
         // bitmap and set (->set)
         bitmap = new BitmapValue(largeBitmap);
         bitmap.and(mediumBitmap);
-        check_bitmap(bitmap, BitmapValue.SET_VALUE, 0, 10);
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 0, 10);
 
         // bitmap and set (->empty)
         bitmap = new BitmapValue(largeBitmap);
         bitmap.and(new BitmapValue(100, 120));
-        check_bitmap(bitmap, BitmapValue.SET_VALUE, 0, 0);
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 0, 0);
 
         // bitmap and set (->single)
         bitmap = new BitmapValue(largeBitmap);
         bitmap.and(new BitmapValue(30, 50));
-        check_bitmap(bitmap, BitmapValue.SET_VALUE, 30, 40);
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 30, 40);
 
         // set and empty
         bitmap = new BitmapValue(mediumBitmap);
         bitmap.and(emptyBitmap);
-        check_bitmap(bitmap, BitmapValue.EMPTY, 0, 0);
+        checkBitmap(bitmap, BitmapValue.EMPTY, 0, 0);
 
         // set and single (contains)
         bitmap = new BitmapValue(mediumBitmap);
         bitmap.and(singleBitmap);
-        check_bitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
+        checkBitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
 
         // set and single (not contains)
         bitmap = new BitmapValue(mediumBitmap);
         bitmap.and(new BitmapValue(100));
-        check_bitmap(bitmap, BitmapValue.EMPTY, 0, 0);
+        checkBitmap(bitmap, BitmapValue.EMPTY, 0, 0);
 
         // set and set
         bitmap = new BitmapValue(mediumBitmap);
         bitmap.and(new BitmapValue(5, 20));
-        check_bitmap(bitmap, BitmapValue.SET_VALUE, 5, 10);
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 5, 10);
     }
 
     @Test
@@ -278,102 +278,210 @@ public class BitmapValueTest {
         // empty or empty
         BitmapValue bitmap = new BitmapValue(emptyBitmap);
         bitmap.or(emptyBitmap);
-        check_bitmap(bitmap, BitmapValue.EMPTY, 0, 0);
+        checkBitmap(bitmap, BitmapValue.EMPTY, 0, 0);
 
         // empty or single
         bitmap = new BitmapValue(emptyBitmap);
         bitmap.or(singleBitmap);
-        check_bitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
+        checkBitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
 
         // empty or set
         bitmap = new BitmapValue(emptyBitmap);
         bitmap.or(mediumBitmap);
-        check_bitmap(bitmap, BitmapValue.SET_VALUE, 0, 10);
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 0, 10);
 
         // empty or bitmap
         bitmap = new BitmapValue(emptyBitmap);
         bitmap.or(largeBitmap);
-        check_bitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 40);
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 40);
 
         // single or empty
         bitmap = new BitmapValue(singleBitmap);
         bitmap.or(emptyBitmap);
-        check_bitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
+        checkBitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
 
         // single or single (equal)
         bitmap = new BitmapValue(singleBitmap);
         bitmap.or(singleBitmap);
-        check_bitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
+        checkBitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
 
         // single or single (not equal)
         bitmap = new BitmapValue(singleBitmap);
         bitmap.or(new BitmapValue(2));
-        check_bitmap(bitmap, BitmapValue.SET_VALUE, 1, 3);
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 1, 3);
 
         // single or bitmap
         bitmap = new BitmapValue(singleBitmap);
         bitmap.or(new BitmapValue(10, 70));
-        check_bitmap(bitmap, BitmapValue.BITMAP_VALUE, 1, 2, 10, 70);
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 1, 2, 10, 70);
 
         // single or set (->set)
         bitmap = new BitmapValue(singleBitmap);
         bitmap.or(new BitmapValue(10, 20));
-        check_bitmap(bitmap, BitmapValue.SET_VALUE, 1, 2, 10, 20);
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 1, 2, 10, 20);
 
         // single or set (->bitmap)
         bitmap = new BitmapValue(singleBitmap);
         bitmap.or(new BitmapValue(10, 42));
-        check_bitmap(bitmap, BitmapValue.BITMAP_VALUE, 1, 2, 10, 42);
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 1, 2, 10, 42);
 
         // single or set (->set)
         bitmap = new BitmapValue(singleBitmap);
         bitmap.or(new BitmapValue(5, 10));
-        check_bitmap(bitmap, BitmapValue.SET_VALUE, 1, 2, 5, 10);
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 1, 2, 5, 10);
 
         // bitmap or empty
         bitmap = new BitmapValue(largeBitmap);
         bitmap.or(emptyBitmap);
-        check_bitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 40);
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 40);
 
         // bitmap or single
         bitmap = new BitmapValue(largeBitmap);
         bitmap.or(new BitmapValue(100));
-        check_bitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 40, 100, 101);
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 40, 100, 101);
 
         // bitmap or bitmap
         bitmap = new BitmapValue(largeBitmap);
         bitmap.or(new BitmapValue(30, 80));
-        check_bitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 80);
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 80);
 
         // bitmap or set
         bitmap = new BitmapValue(largeBitmap);
         bitmap.or(new BitmapValue(30, 50));
-        check_bitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 50);
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 50);
 
         // set or empty
         bitmap = new BitmapValue(mediumBitmap);
         bitmap.or(emptyBitmap);
-        check_bitmap(bitmap, BitmapValue.SET_VALUE, 0, 10);
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 0, 10);
 
         // set or single (->map)
         bitmap = new BitmapValue(0, 32);
         bitmap.or(new BitmapValue(32));
-        check_bitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 33);
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 33);
 
         // set or single (->set)
         bitmap = new BitmapValue(mediumBitmap);
         bitmap.or(new BitmapValue(10));
-        check_bitmap(bitmap, BitmapValue.SET_VALUE, 0, 11);
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 0, 11);
 
         // set or bitmap
         bitmap = new BitmapValue(mediumBitmap);
         bitmap.or(new BitmapValue(8, 100));
-        check_bitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 100);
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 100);
 
         // set or set
         bitmap = new BitmapValue(mediumBitmap);
         bitmap.or(new BitmapValue(3, 15));
-        check_bitmap(bitmap, BitmapValue.SET_VALUE, 0, 15);
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 0, 15);
+    }
+
+    @Test
+    public void testBitmapValueXor() throws IOException {
+        // empty xor empty
+        BitmapValue bitmap = new BitmapValue(emptyBitmap);
+        bitmap.xor(emptyBitmap);
+        checkBitmap(bitmap, BitmapValue.EMPTY, 0, 0);
+
+        // empty xor single
+        bitmap = new BitmapValue(emptyBitmap);
+        bitmap.xor(singleBitmap);
+        checkBitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
+
+        // empty xor set
+        bitmap = new BitmapValue(emptyBitmap);
+        bitmap.xor(mediumBitmap);
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 0, 10);
+
+        // empty xor bitmap
+        bitmap = new BitmapValue(emptyBitmap);
+        bitmap.xor(largeBitmap);
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 40);
+
+        // single xor empty
+        bitmap = new BitmapValue(singleBitmap);
+        bitmap.xor(emptyBitmap);
+        checkBitmap(bitmap, BitmapValue.SINGLE_VALUE, 1, 2);
+
+        // single xor single (equal)
+        bitmap = new BitmapValue(singleBitmap);
+        bitmap.xor(singleBitmap);
+        checkBitmap(bitmap, BitmapValue.EMPTY, 0, 0);
+
+        // single xor single (not equal)
+        bitmap = new BitmapValue(singleBitmap);
+        bitmap.xor(new BitmapValue(2, 3));
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 1, 3);
+
+        // single xor set (contains)
+        bitmap = new BitmapValue(singleBitmap);
+        bitmap.xor(new BitmapValue(1, 8));
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 2, 8);
+
+        // single xor set (not contains)
+        bitmap = new BitmapValue(singleBitmap);
+        bitmap.xor(new BitmapValue(2, 8));
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 1, 8);
+
+        // single xor bitmap (contains)
+        bitmap = new BitmapValue(singleBitmap);
+        bitmap.xor(largeBitmap);
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 1, 2, 40);
+
+        // single xor bitmap (not contains)
+        bitmap = new BitmapValue(singleBitmap);
+        bitmap.xor(new BitmapValue(2, 40));
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 1, 40);
+
+        // set xor empty
+        bitmap = new BitmapValue(mediumBitmap);
+        bitmap.xor(emptyBitmap);
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 0, 10);
+
+        // set xor single (contains)
+        bitmap = new BitmapValue(mediumBitmap);
+        bitmap.xor(singleBitmap);
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 0, 1, 2, 10);
+
+        // set xor single (not contains)
+        bitmap = new BitmapValue(mediumBitmap);
+        bitmap.xor(new BitmapValue(10));
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 0, 11);
+
+        // set xor set
+        bitmap = new BitmapValue(mediumBitmap);
+        bitmap.xor(new BitmapValue(8, 20));
+        checkBitmap(bitmap, BitmapValue.SET_VALUE, 0, 8, 10, 20);
+
+        // set xor bitmap
+        bitmap = new BitmapValue(mediumBitmap);
+        bitmap.xor(new BitmapValue(8, 100));
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 8, 10, 100);
+
+        // bitmap xor empty
+        bitmap = new BitmapValue(largeBitmap);
+        bitmap.xor(emptyBitmap);
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 40);
+
+        // bitmap xor single (contains)
+        bitmap = new BitmapValue(largeBitmap);
+        bitmap.xor(singleBitmap);
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 1, 2, 40);
+
+        // bitmap xor single (not contains)
+        bitmap = new BitmapValue(largeBitmap);
+        bitmap.xor(new BitmapValue(40));
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 41);
+
+        // bitmap xor set
+        bitmap = new BitmapValue(largeBitmap);
+        bitmap.xor(new BitmapValue(35, 45));
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 35, 40, 45);
+
+        // bitmap xor bitmap
+        bitmap = new BitmapValue(largeBitmap);
+        bitmap.xor(new BitmapValue(35, 95));
+        checkBitmap(bitmap, BitmapValue.BITMAP_VALUE, 0, 35, 40, 95);
     }
 
     @Test
@@ -575,5 +683,14 @@ public class BitmapValueTest {
         Assert.assertEquals(mediumBitmap.serializeToString(), "0,1,2,3,4,5,6,7,8,9");
         Assert.assertEquals(largeBitmap.serializeToString(), "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20," +
                 "21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39");
+
+        BitmapValue bitmap = new BitmapValue();
+        bitmap.add(1);
+        bitmap.add(2);
+        bitmap.add(3);
+        bitmap.add(100);
+        bitmap.add(5);
+        bitmap.add(102);
+        Assert.assertEquals(bitmap.setToString(), "1,2,3,5,100,102");
     }
 }
