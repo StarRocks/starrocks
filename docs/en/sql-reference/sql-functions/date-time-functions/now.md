@@ -8,7 +8,7 @@ displayed_sidebar: "English"
 
 Returns the current date and time.
 
-From 3.1.6 onwards, this function can accept a precision input (`p`), which represents the number of digits to retain after seconds. A maximum of 6 digits can be retained (accurate to the microsecond). The digits after `p` are padded with 0. If `p` is not specified, a DATETIIME value accurate to the second is returned.
+From 3.1.6 onwards, this function can accept a precision input (`p`), which represents the number of digits to retain after seconds. A maximum of 6 digits can be retained (accurate to the microsecond). The digits after `p` are padded with 0. If `p` is not specified, a DATETIME value accurate to the second is returned.
 
 The following example returns date and time values when different precision is specified.
 
@@ -35,7 +35,7 @@ DATETIME NOW(INT p)
 
 ## Parameters
 
-`p`: optional, the specified precision, that is, the number of digits to retain after seconds. It must be an INT value within the range of [1,6]. `0` is equivalent to `select now()`.
+`p`: optional, the specified precision, that is, the number of digits to retain after seconds. It must be an INT value within the range of [1,6]. `select now(0)` is equivalent to `select now()`.
 
 ## Return value
 
