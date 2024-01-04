@@ -1214,7 +1214,7 @@ public class CreateTableTest {
         ));
 
         // column types do not match
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "processing constraint failed when creating table",
                 () -> createTable(
                         "CREATE TABLE test.base_table2(\n" +
@@ -1239,7 +1239,7 @@ public class CreateTableTest {
                 ));
 
         // key size does not match
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "processing constraint failed when creating table",
                 () -> createTable(
                         "CREATE TABLE test.base_table2(\n" +
@@ -1261,7 +1261,7 @@ public class CreateTableTest {
                                 ");"
                 ));
 
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "processing constraint failed when creating table",
                 () -> createTable(
                         "CREATE TABLE test.base_table2(\n" +
@@ -1286,7 +1286,7 @@ public class CreateTableTest {
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
                 "Not support MAXVALUE in multi partition range values.",
                 () -> createTable(
-                        "create table test_multi_partition_max_value (\n" +
+                        "create table test.test_multi_partition_max_value (\n" +
                                 "f1 bigint, f2 date, f3 string, f4 bigint\n" +
                                 ")\n" +
                                 "partition by range(f1, f2, f4) (\n" +
