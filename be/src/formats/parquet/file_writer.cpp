@@ -305,6 +305,11 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
         return ::parquet::schema::GroupNode::Make(name, rep_type, {key_value}, ::parquet::LogicalType::Map(),
                                                   file_column_id.field_id);
     }
+    case TYPE_TIME: {
+        return ::parquet::schema::PrimitiveNode::Make(
+                name, rep_type, ::parquet::LogicalType::Time(false, ::parquet::LogicalType::TimeUnit::MICROS),
+                ::parquet::Type::INT64, -1, file_column_id.field_id);
+    }
     default: {
         return arrow::Status::TypeError(fmt::format("Doesn't support to write {} type data", type_desc.debug_string()));
     }
@@ -497,7 +502,6 @@ Status AsyncFileWriter::close(RuntimeState* state,
             // set closed to true anyway
             _closed.store(true);
         });
-
         try {
             _writer->Close();
         } catch (const ::parquet::ParquetStatusException& e) {
@@ -505,7 +509,6 @@ Status AsyncFileWriter::close(RuntimeState* state,
             set_io_status(Status::IOError(fmt::format("{}: {}", "close writer error", e.what())));
         }
         _chunk_writer = nullptr;
-
         _file_metadata = _writer->metadata();
         auto st = _outstream->Close();
         if (!st.ok()) {

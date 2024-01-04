@@ -364,6 +364,13 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
         result->len = len;
         result->precision = precision;
         result->scale = scale;
+        // To support iceberg table time type
+        // When orc type is bigint and orc attribute iceberg.long-type is TIME, then convert result type to TYPE_TIME
+        if (result->type == TYPE_BIGINT && orc_type->hasAttributeKey("iceberg.long-type")) {
+            if ("TIME" == orc_type->getAttributeValue("iceberg.long-type")) {
+                result->type = TYPE_TIME;
+            }
+        }
     }
     return Status::OK();
 }
