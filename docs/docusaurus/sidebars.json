@@ -106,6 +106,12 @@
     },
     {
       "type": "category",
+      "label": "Project Help",
+      "link": {"type": "doc", "id": "project_help/project_help"},
+      "items": ["project_help/slack"]
+    },
+    {
+      "type": "category",
       "label": "Deployment",
       "link": {"type": "doc", "id": "deployment/deployment_overview"},
       "items": [
