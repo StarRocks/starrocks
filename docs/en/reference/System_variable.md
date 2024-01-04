@@ -152,13 +152,10 @@ Used to specify the number of rows of a single packet transmitted by each node d
 
 When the session variable `enable_profile` is set to `false` and the amount of time taken by a query exceeds the threshold specified by the variable `big_query_profile_second_threshold`, a profile is generated for that query.
 
-<<<<<<< HEAD
-=======
 ### cbo_decimal_cast_string_strict (2.5.14 and later)
 
 Controls how the CBO converts data from the DECIMAL type to the STRING type. If this variable is set to `true`, the logic built in v2.5.x and later versions prevails and the system implements strict conversion (namely, the system truncates the generated string and fills 0s based on the scale length). If this variable is set to `false`, the logic built in versions earlier than v2.5.x prevails and the system processes all valid digits to generate a string. The default value is `true`.
 
->>>>>>> 7ae3855941 ([Doc] Update now(p) and add variable transaction_read_only (#38472))
 ### cbo_enable_low_cardinality_optimize
 
 Whether to enable low cardinality optimization. After this feature is enabled, the performance of querying STRING columns improves by about three times. Default value: true.
