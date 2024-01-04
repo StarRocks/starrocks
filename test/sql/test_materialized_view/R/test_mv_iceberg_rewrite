@@ -44,7 +44,7 @@ create database db_${uuid0};
 use db_${uuid0};
 -- result:
 -- !result
-CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt 
+CREATE MATERIALIZED VIEW test_mv1 PARTITION BY dt  PROPERTIES("force_external_table_query_rewrite" = "true")
 REFRESH DEFERRED MANUAL AS SELECT dt,sum(col_int) 
 FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
 -- result:
@@ -179,7 +179,7 @@ true
   
 REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 WITH SYNC MODE;
 -- result:
-0910c516-a54e-11ee-a82f-5e4f71f202d3
+ec3c4ed9-aae2-11ee-9e4a-00163e2193b7
 -- !result
 select * from default_catalog.db_${uuid0}.test_mv1 order by 1, 2;
 -- result:
