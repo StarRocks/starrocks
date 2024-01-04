@@ -72,7 +72,7 @@ public:
 private:
     std::string _new_file_location();
 
-    Status _new_file_writer();
+    Status _new_file_writer(RuntimeState* state);
     Status close_current_writer(RuntimeState* state);
 
 private:
