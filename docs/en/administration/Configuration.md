@@ -186,6 +186,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |max_upload_task_per_be                    |  -  | 0       | In each BACKUP operation, the maximum number of upload tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number. This item is supported from v2.5.7 onwards.     |
 |max_download_task_per_be                  |  -  | 0       | In each RESTORE operation, the maximum number of download tasks StarRocks assigned to a BE node. When this item is set to less than or equal to 0, no limit is imposed on the task number. This item is supported from v2.5.7 onwards.     |
 |allow_system_reserved_names               | FALSE | Whether to allow users to create columns whose names are initiated with `__op` and `__row`. To enable this feature, set this parameter to `TRUE`. Please note that these name formats are reserved for special purposes in StarRocks and creating such columns may result in undefined behavior. Therefore this feature is disabled by default. This item is supported from v2.5.15 onwards.|
+|default_mv_refresh_immediate              | TRUE  | Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately. This item is supported from v2.5.18 onwards.|
 
 ### Configure FE static parameters
 
