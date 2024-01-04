@@ -2194,9 +2194,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     Multimap<Replica, Long> bePathsMap =
                             localTablet.getNormalReplicaBackendPathMap(olapTable.getClusterId());
                     if (bePathsMap.keySet().size() < quorum) {
-                        throw new UserException(
-                                "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                        + tablet.getId() + ", replicas: " + localTablet.getReplicaInfos());
+                        throw new UserException(String.format("Tablet lost replicas. Check if any backend is down or not. " +
+                                        "tablet_id: %s, replicas: %s. Check quorum number failed(buildTablets): " +
+                                        "BeReplicaSize:%s, quorum:%s", tablet.getId(), localTablet.getReplicaInfos(),
+                                bePathsMap.size(), quorum));
                     }
                     // replicas[0] will be the primary replica
                     // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable
@@ -2367,9 +2368,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         Multimap<Replica, Long> bePathsMap =
                                 localTablet.getNormalReplicaBackendPathMap(olapTable.getClusterId());
                         if (bePathsMap.keySet().size() < quorum) {
-                            errorStatus.setError_msgs(Lists.newArrayList(
-                                    "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                            + tablet.getId() + ", replicas: " + localTablet.getReplicaInfos()));
+                            String errorMsg = String.format("Tablet lost replicas. Check if any backend is down or not. " +
+                                            "tablet_id: %s, replicas: %s. Check quorum number failed" +
+                                            "(buildCreatePartitionResponse): BeReplicaSize:%s, quorum:%s",
+                                    tablet.getId(), localTablet.getReplicaInfos(), bePathsMap.size(), quorum);
+                            errorStatus.setError_msgs(Lists.newArrayList(errorMsg));
                             result.setStatus(errorStatus);
                             return result;
                         }
