@@ -40,14 +40,15 @@ public:
         NgramHash* get_or_create_driver_hashmap() {
             int32_t driver_id = CurrentThread::current().get_driver_id();
             NgramHash* res = nullptr;
-            driver_maps.lazy_emplace_l(
-                    driver_id, [&](auto& value) { res = value.get(); },
-                    [&](auto build) {
-                        auto per_driver_map = std::make_unique<NgramHash[]>(map_size);
-                        std::memcpy(per_driver_map.get(), publicHashMap.get(), map_size * sizeof(NgramHash));
-                        res = per_driver_map.get();
-                        build(driver_id, std::move(per_driver_map));
-                    });
+            if (LIKELY(driver_maps.contains(driver_id))) {
+                res = driver_maps[driver_id].get();
+            } else {
+                auto per_driver_map = std::make_unique<NgramHash[]>(map_size);
+                std::memcpy(per_driver_map.get(), publicHashMap.get(), map_size * sizeof(NgramHash));
+                res = per_driver_map.get();
+                driver_maps.lazy_emplace(driver_id, [&](auto build) { build(driver_id, std::move(per_driver_map)); });
+            }
+
             DCHECK(!!res);
             return res;
         }
