@@ -2124,7 +2124,8 @@ public class StmtExecutor {
                             externalTable.getSourceTablePort(),
                             errMsg);
                 } else if (targetTable.isExternalTableWithFileSystem()) {
-                    // ignored
+                    GlobalStateMgr.getCurrentState().getMetadataMgr().abortSink(
+                            catalogName, dbName, tableName, coord.getSinkCommitInfos());
                 } else {
                     transactionMgr.abortTransaction(
                             database.getId(), transactionId,
