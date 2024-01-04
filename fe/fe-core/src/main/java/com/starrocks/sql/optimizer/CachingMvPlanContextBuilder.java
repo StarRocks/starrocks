@@ -27,13 +27,9 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class CachingMvPlanContextBuilder {
-<<<<<<< HEAD
 
     private static final Logger LOG = LogManager.getLogger(CachingMvPlanContextBuilder.class);
-=======
-    private static final Logger LOG = LogManager.getLogger(CachingMvPlanContextBuilder.class);
 
->>>>>>> 7ef0d354e3 (fix bugs)
     private static final CachingMvPlanContextBuilder INSTANCE = new CachingMvPlanContextBuilder();
 
     private Cache<MaterializedView, List<MvPlanContext>> mvPlanContextCache = buildCache();
