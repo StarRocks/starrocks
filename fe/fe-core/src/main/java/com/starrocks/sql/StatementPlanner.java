@@ -265,15 +265,23 @@ public class StatementPlanner {
                         resultSinkType,
                         !session.getSessionVariable().isSingleNodeExecPlan());
                 isSchemaValid = olapTables.stream().noneMatch(t -> t.lastSchemaUpdateTime.get() > planStartTime);
+
                 isSchemaValid = isSchemaValid && olapTables.stream().allMatch(t ->
                         t.lastVersionUpdateEndTime.get() < buildFragmentStartTime &&
                                 t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());
                 if (isSchemaValid) {
                     return plan;
                 }
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
-                throw new StarRocksPlannerException("query had been interrupted", INTERNAL_ERROR);
+
+                // if exists table is applying visible log, we wait 10 ms to retry
+                if (olapTables.stream().anyMatch(t -> t.lastVersionUpdateStartTime.get() > t.lastVersionUpdateEndTime.get())) {
+                    try(Timer timer = Tracers.watchScope("PlanRetrySleepTime")) {
+                        Thread.sleep(10);
+                    } catch (InterruptedException e) {
+                        throw new StarRocksPlannerException("query had been interrupted", INTERNAL_ERROR);
+                    }
+                }
+
             }
         }
         Preconditions.checkState(false, "The tablet write operation update metadata " +
