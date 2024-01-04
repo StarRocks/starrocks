@@ -1474,7 +1474,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int exprChildrenLimit = -1;
 
     @VarAttr(name = SKEW_JOIN_RAND_RANGE, flag = VariableMgr.INVISIBLE)
-    private int skewJoinRandRange = 3000000;
+    private int skewJoinRandRange = 1000;
 
     @VarAttr(name = LARGE_DECIMAL_UNDERLYING_TYPE)
     private String largeDecimalUnderlyingType = SessionVariableConstants.PANIC;
