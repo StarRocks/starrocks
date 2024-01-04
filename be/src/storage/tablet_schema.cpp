@@ -520,7 +520,7 @@ Status TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t versi
             _cols.emplace_back(std::move(column));
             _num_columns++;
         }
-        if (ori_tablet_schema->columns().back().name() == "__row") {
+        if (ori_tablet_schema->columns().back().name() == Schema::FULL_ROW_COLUMN) {
             _cols.emplace_back(ori_tablet_schema->columns().back());
         }
     }

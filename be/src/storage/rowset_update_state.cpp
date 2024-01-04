@@ -371,7 +371,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     std::vector<uint32_t> read_column_ids;
     for (uint32_t i = 0; i < tablet_schema->num_columns(); i++) {
         const auto& tablet_column = tablet_schema->column(i);
-        if (tablet_column.name() == "__row") {
+        if (tablet_column.name() == Schema::FULL_ROW_COLUMN) {
             continue;
         }
         if (update_columns_set.find(tablet_column.unique_id()) == update_columns_set.end()) {
@@ -719,7 +719,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
             const auto& tablet_column = _tablet_schema->column(i);
             if (update_columns_set.find(tablet_column.unique_id()) == update_columns_set.end()) {
                 read_column_ids.emplace_back(i);
-                if (tablet_column.name() != "__row") {
+                if (tablet_column.name() != Schema::FULL_ROW_COLUMN) {
                     read_column_ids_without_full_row.push_back(i);
                 }
             }

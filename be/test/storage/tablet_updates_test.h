@@ -294,7 +294,7 @@ public:
         const auto nkeys = keys.size();
         const auto& column = tablet->thread_safe_get_tablet_schema()->columns().back();
         std::vector<ColumnId> cids(tablet->thread_safe_get_tablet_schema()->num_columns() - 1);
-        if (column.name() == "__row") {
+        if (column.name() == Schema::FULL_ROW_COLUMN) {
             for (int i = 0; i < tablet->thread_safe_get_tablet_schema()->num_columns() - 1; i++) {
                 cids[i] = i;
             }
@@ -538,7 +538,7 @@ public:
         request.tablet_schema.columns.push_back(k3);
 
         TColumn row;
-        row.column_name = "__row";
+        row.column_name = Schema::FULL_ROW_COLUMN;
         TColumnType ctype;
         ctype.__set_type(TPrimitiveType::VARCHAR);
         ctype.__set_len(65535);

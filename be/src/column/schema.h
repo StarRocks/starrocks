@@ -31,6 +31,8 @@ public:
     Schema(Schema&&) = default;
     Schema& operator=(Schema&&) = default;
 
+    inline static const std::string FULL_ROW_COLUMN = "__row";
+
 #ifdef BE_TEST
     explicit Schema(Fields fields);
 #endif
