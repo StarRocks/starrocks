@@ -2,12 +2,9 @@
 
 #include "storage/chunk_helper.h"
 
-#include "column/binary_column.h"
 #include "column/chunk.h"
 #include "column/column.h"
-#include "column/field.h"
 #include "column/nullable_column.h"
-#include "column/schema.h"
 #include "common/object_pool.h"
 #include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"
@@ -15,10 +12,15 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
+<<<<<<< HEAD
 #include "util/logging.h"
+=======
+#include "types/logical_type.h"
+>>>>>>> 23f21c09f2 ([Enhancement] Optimize the performance of calc mem usage for bitmap column (#38411))
 
 namespace starrocks::vectorized {
 
+<<<<<<< HEAD
 class ChunkHelperTest : public testing::Test {
 public:
     void add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key, const std::string& type,
@@ -37,6 +39,13 @@ private:
             PrimitiveType::TYPE_TINYINT, PrimitiveType::TYPE_SMALLINT, PrimitiveType::TYPE_INT,
             PrimitiveType::TYPE_BIGINT,  PrimitiveType::TYPE_LARGEINT, PrimitiveType::TYPE_FLOAT,
             PrimitiveType::TYPE_DOUBLE,  PrimitiveType::TYPE_VARCHAR,  PrimitiveType::TYPE_CHAR};
+=======
+class ChunkHelperTest : public ::testing::Test {
+protected:
+    LogicalType _primitive_type[9] = {LogicalType::TYPE_TINYINT, LogicalType::TYPE_SMALLINT, LogicalType::TYPE_INT,
+                                      LogicalType::TYPE_BIGINT,  LogicalType::TYPE_LARGEINT, LogicalType::TYPE_FLOAT,
+                                      LogicalType::TYPE_DOUBLE,  LogicalType::TYPE_VARCHAR,  LogicalType::TYPE_CHAR};
+>>>>>>> 23f21c09f2 ([Enhancement] Optimize the performance of calc mem usage for bitmap column (#38411))
 
     TSlotDescriptor _create_slot_desc(PrimitiveType type, const std::string& col_name, int col_pos);
     TupleDescriptor* _create_tuple_desc();
@@ -95,6 +104,7 @@ TupleDescriptor* ChunkHelperTest::_create_tuple_desc() {
     return tuple_desc;
 }
 
+<<<<<<< HEAD
 void ChunkHelperTest::add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key,
                                         const std::string& type, int32_t length, bool is_nullable) {
     ColumnPB* column = tablet_schema_pb.add_column();
@@ -214,6 +224,9 @@ void ChunkHelperTest::check_column(Column* column, FieldType type, size_t row_si
 }
 
 TEST_F(ChunkHelperTest, NewChunkWithTuple) {
+=======
+TEST_F(ChunkHelperTest, new_chunk_with_tuple) {
+>>>>>>> 23f21c09f2 ([Enhancement] Optimize the performance of calc mem usage for bitmap column (#38411))
     auto* tuple_desc = _create_tuple_desc();
 
     auto chunk = ChunkHelper::new_chunk(*tuple_desc, 1024);
@@ -308,4 +321,83 @@ TEST_F(ChunkHelperTest, Accumulator) {
     EXPECT_TRUE(accumulator.reach_limit());
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::vectorized
+=======
+class ChunkPipelineAccumulatorTest : public ::testing::Test {
+protected:
+    ChunkPtr _generate_chunk(size_t rows, size_t cols);
+};
+
+ChunkPtr ChunkPipelineAccumulatorTest::_generate_chunk(size_t rows, size_t cols) {
+    auto chunk = std::make_shared<Chunk>();
+    for (size_t i = 0; i < cols; i++) {
+        auto col = Int8Column::create(rows, 0);
+        chunk->append_column(col, i);
+    }
+    return chunk;
+}
+
+TEST_F(ChunkPipelineAccumulatorTest, test_push) {
+    ChunkPipelineAccumulator accumulator;
+
+    // rows reach limit
+    accumulator.push(_generate_chunk(4093, 1));
+    ASSERT_TRUE(accumulator.has_output());
+    auto result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 4093);
+    accumulator.finalize();
+    ASSERT_FALSE(accumulator.has_output());
+
+    // mem reach limit
+    accumulator.reset_state();
+    accumulator.push(_generate_chunk(2048, 64));
+    ASSERT_TRUE(accumulator.has_output());
+    result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 2048);
+    accumulator.finalize();
+    ASSERT_FALSE(accumulator.has_output());
+
+    // merge chunk and reach rows limit
+    accumulator.reset_state();
+    for (size_t i = 0; i < 3; i++) {
+        accumulator.push(_generate_chunk(1000, 1));
+        ASSERT_FALSE(accumulator.has_output());
+    }
+    accumulator.push(_generate_chunk(1000, 1));
+    ASSERT_TRUE(accumulator.has_output());
+    result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 4000);
+    accumulator.finalize();
+    ASSERT_FALSE(accumulator.has_output());
+
+    // merge chunk and read mem limit
+    accumulator.reset_state();
+    for (size_t i = 0; i < 2; i++) {
+        accumulator.push(_generate_chunk(1000, 30));
+        ASSERT_FALSE(accumulator.has_output());
+    }
+    accumulator.push(_generate_chunk(1000, 30));
+    ASSERT_TRUE(accumulator.has_output());
+    result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 3000);
+    accumulator.finalize();
+    ASSERT_FALSE(accumulator.has_output());
+
+    // merge chunk and rows overflow
+    accumulator.reset_state();
+    accumulator.push(_generate_chunk(3000, 1));
+    ASSERT_FALSE(accumulator.has_output());
+    accumulator.push(_generate_chunk(3000, 1));
+    ASSERT_TRUE(accumulator.has_output());
+    result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 3000);
+    accumulator.finalize();
+    ASSERT_TRUE(accumulator.has_output());
+    result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 3000);
+    ASSERT_FALSE(accumulator.has_output());
+}
+
+} // namespace starrocks
+>>>>>>> 23f21c09f2 ([Enhancement] Optimize the performance of calc mem usage for bitmap column (#38411))
