@@ -410,18 +410,22 @@ public class TransactionState implements Writable {
     public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId, ReplicaState state) {
         TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
         if (this.tabletCommitInfos == null) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-            // if tabletCommitInfos is null, skip this check and return true
-            LOG.debug("tabletCommitInfos is null in TransactionState, tablet {} backend {} txn {}",
-                    tabletId, backend != null ? backend.toString() : "", transactionId);
+            if (LOG.isDebugEnabled()) {
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                // if tabletCommitInfos is null, skip this check and return true
+                LOG.debug("tabletCommitInfos is null in TransactionState, tablet {} backend {} txn {}",
+                        tabletId, backend != null ? backend.toString() : "", transactionId);
+            }
             return true;
         }
         if (state != ReplicaState.NORMAL) {
             // Skip check when replica is CLONE, ALTER or SCHEMA CHANGE
             // We handle version missing in finishTask when change state to NORMAL
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-            LOG.debug("skip tabletCommitInfos check because tablet {} backend {} is in state {}",
-                    tabletId, backend != null ? backend.toString() : "", state);
+            if (LOG.isDebugEnabled()) {
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                LOG.debug("skip tabletCommitInfos check because tablet {} backend {} is in state {}",
+                        tabletId, backend != null ? backend.toString() : "", state);
+            }
             return true;
         }
         return this.tabletCommitInfos.contains(info);
