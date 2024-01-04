@@ -505,6 +505,65 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private Set<String> collectModifiedColumnsForRelatedMVs(@NotNull LakeTable tbl) {
+        if (tbl.getRelatedMaterializedViews().isEmpty()) {
+            return Sets.newHashSet();
+        }
+        Set<String> modifiedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+
+        for (Map.Entry<Long, List<Column>> entry : indexSchemaMap.entrySet()) {
+            Long shadowIdxId = entry.getKey();
+            long originIndexId = indexIdMap.get(shadowIdxId);
+            List<Column> shadowSchema = entry.getValue();
+            List<Column> originSchema = tbl.getSchemaByIndexId(originIndexId);
+            if (shadowSchema.size() == originSchema.size()) {
+                // modify column
+                for (Column col : shadowSchema) {
+                    if (col.isNameWithPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX)) {
+                        modifiedColumns.add(col.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX));
+                    }
+                }
+            } else if (shadowSchema.size() < originSchema.size()) {
+                // drop column
+                List<Column> differences = originSchema.stream().filter(element ->
+                        !shadowSchema.contains(element)).collect(Collectors.toList());
+                // can just drop one column one time, so just one element in differences
+                Integer dropIdx = new Integer(originSchema.indexOf(differences.get(0)));
+                modifiedColumns.add(originSchema.get(dropIdx).getName());
+            } else {
+                // add column should not affect old mv, just ignore.
+            }
+        }
+        return modifiedColumns;
+    }
+
+    private void inactiveRelatedMv(Set<String> modifiedColumns, @NotNull LakeTable tbl) {
+        if (modifiedColumns.isEmpty()) {
+            return;
+        }
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        for (MvId mvId : tbl.getRelatedMaterializedViews()) {
+            MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
+            if (mv == null) {
+                LOG.warn("Ignore materialized view {} does not exists", mvId);
+                continue;
+            }
+            for (Column mvColumn : mv.getColumns()) {
+                if (modifiedColumns.contains(mvColumn.getName())) {
+                    LOG.warn("Setting the materialized view {}({}) to invalid because " +
+                                    "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
+                            mvColumn.getName(), tbl.getName());
+                    mv.setInactiveAndReason(
+                            "base table schema changed for columns: " + StringUtils.join(modifiedColumns, ","));
+                    return;
+                }
+            }
+        }
+    }
+
+>>>>>>> 8fd6a085bf ([BugFix] Add more checks when schema changing has referred materialized views (backport #37388) (#38436))
     boolean tableHasBeenDropped() {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             return db == null || db.getTable(tableId) == null;

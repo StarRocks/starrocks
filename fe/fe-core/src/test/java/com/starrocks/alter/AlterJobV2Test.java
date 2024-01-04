@@ -181,6 +181,133 @@ public class AlterJobV2Test {
         }
     }
 
+<<<<<<< HEAD
+=======
+    // Test modify mv with star select by modifying column name.
+    @Test
+    public void testModifyWithSelectStarMV1() throws Exception {
+        try {
+            starRocksAssert.withTable("CREATE TABLE modify_column_test3(k1 int, k2 int, k3 int) ENGINE = OLAP " +
+                    "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
+            String sql = "CREATE MATERIALIZED VIEW test.mv3 DISTRIBUTED BY HASH(k1) " +
+                    " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') " +
+                    "AS SELECT * FROM modify_column_test3";
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+
+            String alterStmtStr = "alter table test.modify_column_test3 modify column k2 varchar(20)";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+
+            waitForSchemaChangeAlterJobFinish();
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getDb("test").getTable("mv3");
+            Assert.assertTrue(!mv.isActive());
+        } finally {
+            starRocksAssert.dropTable("modify_column_test3");
+        }
+    }
+
+    @Test
+    // Test modify mv with star select by adding column name.
+    public void testModifyWithSelectStarMV2() throws Exception {
+        try {
+            starRocksAssert.withTable("CREATE TABLE testModifyWithSelectStarMV2(k1 int, k2 int, k3 int) ENGINE = OLAP " +
+                    "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
+            String sql = "CREATE MATERIALIZED VIEW test.mv6 DISTRIBUTED BY HASH(k1) " +
+                    " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') " +
+                    "AS SELECT * FROM testModifyWithSelectStarMV2";
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+
+            String alterStmtStr = "alter table test.testModifyWithSelectStarMV2 add column k4 bigint";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+
+            waitForSchemaChangeAlterJobFinish();
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getDb("test").getTable("mv6");
+            Assert.assertTrue(mv.isActive());
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail();
+        } finally {
+            starRocksAssert.dropTable("testModifyWithSelectStarMV2");
+        }
+    }
+
+    @Test
+    // Test modify mv with star select by dropping column name.
+    public void testModifyWithSelectStarMV3() throws Exception {
+        try {
+            starRocksAssert.withTable("CREATE TABLE modify_column_test5(k1 int, k2 int, k3 int) ENGINE = OLAP " +
+                    "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
+            String sql = "CREATE MATERIALIZED VIEW test.mv5 DISTRIBUTED BY HASH(k1) " +
+                    " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') " +
+                    "AS SELECT * FROM modify_column_test5";
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+
+            String alterStmtStr = "alter table test.modify_column_test5 drop column k2";
+            AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr, connectContext);
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+
+            waitForSchemaChangeAlterJobFinish();
+            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState()
+                    .getDb("test").getTable("mv5");
+            Assert.assertTrue(!mv.isActive());
+        } catch (Exception e) {
+            Assert.fail();
+        } finally {
+            starRocksAssert.dropTable("modify_column_test5");
+        }
+    }
+
+    @Test
+    public void testModifyWithExpr() throws Exception {
+        try {
+            starRocksAssert.withTable("CREATE TABLE modify_column_test4(k1 int, k2 int, k3 int) ENGINE = OLAP " +
+                    "DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k1) properties('replication_num' = '1');");
+            String sql = "CREATE MATERIALIZED VIEW test.mv4 DISTRIBUTED BY HASH(k1) " +
+                    " BUCKETS 10 REFRESH ASYNC properties('replication_num' = '1') AS SELECT k1, k2 + 1 FROM modify_column_test4";
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+            GlobalStateMgr.getCurrentState().createMaterializedView((CreateMaterializedViewStatement) statementBase);
+
+            {
+                // modify column which not define in mv
+                String alterStmtStr = "alter table test.modify_column_test4 modify column k3 varchar(10)";
+                AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr,
+                        connectContext);
+                GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+
+                waitForSchemaChangeAlterJobFinish();
+                MaterializedView mv = (MaterializedView) GlobalStateMgr
+                        .getCurrentState().getDb("test").getTable("mv4");
+                Assert.assertTrue(mv.isActive());
+            }
+
+            {
+                // modify column which define in mv
+                String alterStmtStr = "alter table test.modify_column_test4 modify column k2 varchar(30) ";
+                AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(alterStmtStr,
+                        connectContext);
+                GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+
+                waitForSchemaChangeAlterJobFinish();
+                MaterializedView mv = (MaterializedView) GlobalStateMgr
+                        .getCurrentState().getDb("test").getTable("mv4");
+                Assert.assertFalse(mv.isActive());
+                System.out.println(mv.getInactiveReason());
+                Assert.assertTrue(mv.getInactiveReason().contains("base table schema changed for columns: k2"));
+            }
+        } catch (Exception e) {
+            Assert.fail();
+        } finally {
+            starRocksAssert.dropTable("modify_column_test4");
+        }
+    }
+
+>>>>>>> 8fd6a085bf ([BugFix] Add more checks when schema changing has referred materialized views (backport #37388) (#38436))
     @Test
     public void testModifyUnRelatedColumnWithMv() {
         try {

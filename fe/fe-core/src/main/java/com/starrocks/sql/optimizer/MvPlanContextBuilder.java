@@ -21,9 +21,10 @@ import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 public class MvPlanContextBuilder {
-    public MvPlanContext getPlanContext(MaterializedView mv) {
+    public static MvPlanContext getPlanContext(MaterializedView mv) {
         // build mv query logical plan
         MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
+<<<<<<< HEAD
         // optimize the sql by rule and disable rule based materialized view rewrite
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
         optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
@@ -31,5 +32,15 @@ public class MvPlanContextBuilder {
         optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
         optimizerConfig.setMVRewritePlan(true);
         return mvOptimizer.optimize(mv, new ConnectContext(), optimizerConfig);
+=======
+        ConnectContext connectContext = ConnectContext.get();
+        // If the caller is not from query (eg. background schema change thread), set thread local info to avoid
+        // NPE in the planning.
+        if (connectContext == null) {
+            connectContext = new ConnectContext();
+            connectContext.setThreadLocalInfo();
+        }
+        return mvOptimizer.optimize(mv, connectContext);
+>>>>>>> 8fd6a085bf ([BugFix] Add more checks when schema changing has referred materialized views (backport #37388) (#38436))
     }
 }

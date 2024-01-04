@@ -26,6 +26,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -370,6 +371,17 @@ public class SchemaChangeHandler extends AlterHandler {
         // retain old column name
         modColumn.setName(oriColumn.getName());
 
+<<<<<<< HEAD
+=======
+        if (!oriColumn.isGeneratedColumn() && modColumn.isGeneratedColumn()) {
+            throw new DdlException("Can not modify a non-generated column to a generated column");
+        }
+
+        if (oriColumn.isGeneratedColumn() && !modColumn.isGeneratedColumn()) {
+            throw new DdlException("Can not modify a generated column to a non-generated column");
+        }
+
+>>>>>>> 8fd6a085bf ([BugFix] Add more checks when schema changing has referred materialized views (backport #37388) (#38436))
         // handle the move operation in 'indexForFindingColumn' if has
         if (hasColPos) {
             // move col
@@ -1248,11 +1260,22 @@ public class SchemaChangeHandler extends AlterHandler {
                 // add columns
                 processAddColumns((AddColumnsClause) alterClause, olapTable, indexSchemaMap);
             } else if (alterClause instanceof DropColumnClause) {
+                DropColumnClause dropColumnClause = (DropColumnClause) alterClause;
+                // check relative mvs with the modified column
+                Set<String> modifiedColumns = ImmutableSet.of(dropColumnClause.getColName());
+                checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
+
                 // drop column and drop indexes on this column
                 processDropColumn((DropColumnClause) alterClause, olapTable, indexSchemaMap, newIndexes);
             } else if (alterClause instanceof ModifyColumnClause) {
+                ModifyColumnClause modifyColumnClause = (ModifyColumnClause) alterClause;
+
+                // check relative mvs with the modified column
+                Set<String> modifiedColumns = ImmutableSet.of(modifyColumnClause.getColumn().getName());
+                checkModifiedColumWithMaterializedViews(olapTable, modifiedColumns);
+
                 // modify column
-                processModifyColumn((ModifyColumnClause) alterClause, olapTable, indexSchemaMap);
+                processModifyColumn(modifyColumnClause, olapTable, indexSchemaMap);
             } else if (alterClause instanceof ReorderColumnsClause) {
                 // reorder column
                 if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
@@ -1276,6 +1299,54 @@ public class SchemaChangeHandler extends AlterHandler {
         } // end for alter clauses
 
         return createJob(db.getId(), olapTable, indexSchemaMap, propertyMap, newIndexes);
+    }
+
+    /**
+     * Check related synchronous materialized views before modified columns, throw exceptions
+     * if modified columns affect the related rollup/synchronous mvs.
+     */
+    private void checkModifiedColumWithMaterializedViews(OlapTable olapTable,
+                                                         Set<String> modifiedColumns) throws DdlException {
+        if (modifiedColumns == null || modifiedColumns.isEmpty()) {
+            return;
+        }
+
+        // If there is synchronized materialized view referring the column, throw exception.
+        if (olapTable.getIndexNameToId().size() > 1) {
+            Map<Long, MaterializedIndexMeta> metaMap = olapTable.getIndexIdToMeta();
+            for (Map.Entry<Long, MaterializedIndexMeta> entry : metaMap.entrySet()) {
+                Long id = entry.getKey();
+                if (id == olapTable.getBaseIndexId()) {
+                    continue;
+                }
+                MaterializedIndexMeta meta = entry.getValue();
+                List<Column> schema = meta.getSchema();
+                // ignore agg_keys type because it's like duplicated without agg functions
+                boolean hasAggregateFunction = olapTable.getKeysType() != KeysType.AGG_KEYS &&
+                        schema.stream().anyMatch(x -> x.isAggregated());
+                if (hasAggregateFunction) {
+                    for (Column rollupCol : schema) {
+                        if (modifiedColumns.contains(rollupCol.getName())) {
+                            throw new DdlException(String.format("Can not drop/modify the column %s, " +
+                                            "because the column is used in the related rollup %s, " +
+                                            "please drop the rollup index first.",
+                                    rollupCol.getName(), olapTable.getIndexNameById(meta.getIndexId())));
+                        }
+                        if (rollupCol.getRefColumns() != null) {
+                            for (SlotRef refColumn : rollupCol.getRefColumns()) {
+                                if (modifiedColumns.contains(refColumn.getColumnName())) {
+                                    throw new DdlException(String.format("Can not drop/modify the column %s, " +
+                                                    "because the column is used in the related rollup %s " +
+                                                    "with the define expr:%s, please drop the rollup index first.",
+                                            rollupCol.getName(), olapTable.getIndexNameById(meta.getIndexId()),
+                                            rollupCol.getDefineExpr().toSql()));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     @Override

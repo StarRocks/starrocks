@@ -38,8 +38,6 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -86,6 +84,8 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.inactiveRelatedMaterializedViews;
 
 /*
  * Version 2 of SchemaChangeJob.
@@ -612,7 +612,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             onFinished(tbl);
 
             // If schema changes include fields which defined in related mv, set those mv state to inactive.
-            inactiveRelatedMv(modifiedColumns, tbl);
+            inactiveRelatedMaterializedViews(db, tbl, modifiedColumns);
 
             pruneMeta();
             this.jobState = JobState.FINISHED;
@@ -645,6 +645,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         return modifiedColumns;
     }
 
+<<<<<<< HEAD
     private void inactiveRelatedMv(Set<String> modifiedColumns, OlapTable tbl) {
         if (modifiedColumns.isEmpty()) {
             return;
@@ -667,6 +668,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
     }
 
+=======
+>>>>>>> 8fd6a085bf ([BugFix] Add more checks when schema changing has referred materialized views (backport #37388) (#38436))
     @Override
     protected void runFinishedRewritingJob() {
         // nothing to do

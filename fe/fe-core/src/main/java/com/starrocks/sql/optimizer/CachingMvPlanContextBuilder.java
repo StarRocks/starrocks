@@ -28,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 public class CachingMvPlanContextBuilder {
 
     private static final Logger LOG = LogManager.getLogger(CachingMvPlanContextBuilder.class);
+
     private static final CachingMvPlanContextBuilder INSTANCE = new CachingMvPlanContextBuilder();
 
     private Cache<MaterializedView, MvPlanContext> mvPlanContextCache = buildCache();
@@ -60,9 +61,8 @@ public class CachingMvPlanContextBuilder {
     }
 
     private MvPlanContext loadMvPlanContext(MaterializedView mv) {
-        MvPlanContextBuilder builder = new MvPlanContextBuilder();
         try {
-            return builder.getPlanContext(mv);
+            return MvPlanContextBuilder.getPlanContext(mv);
         } catch (Throwable e) {
             LOG.warn("load mv plan cache failed: {}", mv.getName(), e);
             return null;
