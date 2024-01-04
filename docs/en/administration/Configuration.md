@@ -769,7 +769,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - **Unit**: -
 - **Default**: TRUE
 - **Description**: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
-- **Introduced in**: v3.1.7
+- **Introduced in**: v3.0.9
 
 ### Configure FE static parameters
 
