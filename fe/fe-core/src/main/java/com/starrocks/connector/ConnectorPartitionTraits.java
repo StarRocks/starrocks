@@ -112,7 +112,8 @@ public abstract class ConnectorPartitionTraits {
 
     abstract PartitionKey createPartitionKeyWithType(List<String> values, List<Type> types) throws AnalysisException;
 
-    abstract PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException;
+    abstract PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
+            throws AnalysisException;
     /**
      * Get all partitions' name
      */
@@ -183,9 +184,10 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
-        public PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
-            return createPartitionKeyWithType(values,
-                    columns.stream().map(Column::getType).collect(Collectors.toList()));
+        public PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
+                throws AnalysisException {
+            return createPartitionKeyWithType(partitionValues,
+                    partitionColumns.stream().map(Column::getType).collect(Collectors.toList()));
         }
 
         protected String getTableName() {
@@ -447,13 +449,15 @@ public abstract class ConnectorPartitionTraits {
         }
 
         @Override
-        public PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
-            Preconditions.checkState(values.size() == columns.size(),
-                    "columns size is %s, but values size is %s", columns.size(), values.size());
+        public PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns)
+                throws AnalysisException {
+            Preconditions.checkState(partitionValues.size() == partitionColumns.size(),
+                    "columns size is %s, but values size is %s", partitionColumns.size(),
+                    partitionValues.size());
 
             IcebergTable icebergTable = (IcebergTable) table;
             List<PartitionField> partitionFields = Lists.newArrayList();
-            for (Column column : columns) {
+            for (Column column : partitionColumns) {
                 for (PartitionField field : icebergTable.getNativeTable().spec().fields()) {
                     String partitionFieldName = icebergTable.getNativeTable().schema().findColumnName(field.sourceId());
                     if (partitionFieldName.equalsIgnoreCase(column.getName())) {
@@ -461,15 +465,15 @@ public abstract class ConnectorPartitionTraits {
                     }
                 }
             }
-            Preconditions.checkState(partitionFields.size() == columns.size(),
-                    "columns size is %s, but partitionFields size is %s", columns.size(), partitionFields.size());
+            Preconditions.checkState(partitionFields.size() == partitionColumns.size(),
+                    "columns size is %s, but partitionFields size is %s", partitionColumns.size(), partitionFields.size());
 
             PartitionKey partitionKey = createEmptyKey();
 
             // change string value to LiteralExpr,
-            for (int i = 0; i < values.size(); i++) {
-                String rawValue = values.get(i);
-                Column column = columns.get(i);
+            for (int i = 0; i < partitionValues.size(); i++) {
+                String rawValue = partitionValues.get(i);
+                Column column = partitionColumns.get(i);
                 PartitionField field = partitionFields.get(i);
                 LiteralExpr exprValue;
                 // rawValue could be null for delta table
@@ -480,6 +484,7 @@ public abstract class ConnectorPartitionTraits {
                     partitionKey.setNullPartitionValue(rawValue);
                     exprValue = NullLiteral.create(column.getType());
                 } else {
+                    // transform year/month/day/hour dedup name is time
                     if (field.transform().dedupName().equalsIgnoreCase("time")) {
                         rawValue = IcebergPartitionUtils.normalizeTimePartitionName(rawValue, field,
                                 icebergTable.getNativeTable().schema(), column.getType());

@@ -84,7 +84,7 @@ import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
 public class PartitionUtil {
     // used for compute date/datetime literal
-    public enum DateInterval {
+    public enum DateTimeInterval {
         NONE,
         YEAR,
         MONTH,
@@ -114,12 +114,13 @@ public class PartitionUtil {
         return createPartitionKeyWithType(values, columns.stream().map(Column::getType).collect(Collectors.toList()), tableType);
     }
 
-    public static PartitionKey createPartitionKey(List<String> values, List<Column> columns, Table table)
-            throws AnalysisException {
-        Preconditions.checkState(values.size() == columns.size(),
-                "columns size is %s, but values size is %s", columns.size(), values.size());
+    public static PartitionKey createPartitionKey(List<String> partitionValues, List<Column> partitionColumns,
+                                                  Table table) throws AnalysisException {
+        Preconditions.checkState(partitionValues.size() == partitionColumns.size(),
+                "partition columns size is %s, but partition values size is %s",
+                partitionColumns.size(), partitionValues.size());
 
-        return ConnectorPartitionTraits.build(table).createPartitionKey(values, columns);
+        return ConnectorPartitionTraits.build(table).createPartitionKey(partitionValues, partitionColumns);
     }
 
 
@@ -382,15 +383,15 @@ public class PartitionUtil {
     // Iceberg Table has partition transforms like this:
     // partition column is (ts timestamp), table could partition by year(ts), month(ts), day(ts), hour(ts)
     // this function could get the dateInterval from partition transform
-    public static DateInterval getDateInterval(Table table, Column partitionColumn) {
+    public static DateTimeInterval getDateTimeInterval(Table table, Column partitionColumn) {
         if (partitionColumn.getType() != Type.DATE && partitionColumn.getType() != Type.DATETIME) {
-            return DateInterval.NONE;
+            return DateTimeInterval.NONE;
         }
         if (table.isIcebergTable()) {
-            return IcebergPartitionUtils.getDateIntervalFromIceberg((IcebergTable) table, partitionColumn);
+            return IcebergPartitionUtils.getDateTimeIntervalFromIceberg((IcebergTable) table, partitionColumn);
         } else {
             // add 1 day as default interval
-            return DateInterval.DAY;
+            return DateTimeInterval.DAY;
         }
     }
 
@@ -469,13 +470,13 @@ public class PartitionUtil {
             PartitionKey endKey = new PartitionKey();
             if (!isConvertToDate) {
                 endKey.pushColumn(addOffsetForLiteral(lastPartitionKey.getKeys().get(0), 1,
-                                getDateInterval(table, partitionColumn)), partitionColumn.getPrimitiveType());
+                                getDateTimeInterval(table, partitionColumn)), partitionColumn.getPrimitiveType());
             } else {
                 PartitionKey lastDate = convertToDate(lastPartitionKey);
                 String lastDateFormat = lastPartitionKey.getKeys().get(0).getStringValue();
                 DateTimeFormatter formatter = DateUtils.probeFormat(lastDateFormat);
                 DateLiteral nextDate = (DateLiteral) addOffsetForLiteral(lastDate.getKeys().get(0), 1,
-                        getDateInterval(table, partitionColumn));
+                        getDateTimeInterval(table, partitionColumn));
                 LiteralExpr nextStringDate = new StringLiteral(nextDate.toLocalDateTime().format(formatter));
                 endKey.pushColumn(nextStringDate, partitionColumn.getPrimitiveType());
             }
@@ -650,10 +651,10 @@ public class PartitionUtil {
     }
 
     private static void putMvPartitionKeyIntoMap(Table table, Column partitionColumn, List<PartitionKey> partitionKeys,
-                                                 Map<String, PartitionKey> mvPartitionKeyMap, String partitionName)
+                                                 Map<String, PartitionKey> mvPartitionKeyMap, String partitionValue)
             throws AnalysisException {
         PartitionKey partitionKey = createPartitionKey(
-                ImmutableList.of(partitionName),
+                ImmutableList.of(partitionValue),
                 ImmutableList.of(partitionColumn),
                 table);
         partitionKeys.add(partitionKey);
@@ -754,16 +755,16 @@ public class PartitionUtil {
         return partition.get(position, (Class<T>) javaClass);
     }
 
-    public static LiteralExpr addOffsetForLiteral(LiteralExpr expr, int offset, DateInterval dateInterval)
+    public static LiteralExpr addOffsetForLiteral(LiteralExpr expr, int offset, DateTimeInterval dateTimeInterval)
             throws AnalysisException {
         if (expr instanceof DateLiteral) {
             // If expr is date literal, add offset should consider the date interval
             DateLiteral lowerDate = (DateLiteral) expr;
-            if (dateInterval == DateInterval.YEAR) {
+            if (dateTimeInterval == DateTimeInterval.YEAR) {
                 return new DateLiteral(lowerDate.toLocalDateTime().plusYears(offset), expr.getType());
-            } else if (dateInterval == DateInterval.MONTH) {
+            } else if (dateTimeInterval == DateTimeInterval.MONTH) {
                 return new DateLiteral(lowerDate.toLocalDateTime().plusMonths(offset), expr.getType());
-            } else if (dateInterval == DateInterval.HOUR) {
+            } else if (dateTimeInterval == DateTimeInterval.HOUR) {
                 return new DateLiteral(lowerDate.toLocalDateTime().plusHours(offset), expr.getType());
             } else {
                 return new DateLiteral(lowerDate.toLocalDateTime().plusDays(offset), expr.getType());

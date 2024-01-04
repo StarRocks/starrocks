@@ -726,7 +726,6 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
     public void testCreateNonPartitionedMVForIceberg() throws Exception {
         starRocksAssert.useDatabase("test")
                 .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_mv1` " +
-                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                         "REFRESH DEFERRED MANUAL\n" +
                         "PROPERTIES (\n" +
@@ -735,7 +734,6 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                         ")\n" +
                         "AS SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;")
                 .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_mv2` " +
-                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                         "REFRESH DEFERRED MANUAL\n" +
                         "PROPERTIES (\n" +
@@ -780,7 +778,6 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         String mvName = "iceberg_parttbl_mv1";
         starRocksAssert.useDatabase("test")
                 .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_parttbl_mv1`\n" +
-                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY str2date(`date`, '%Y-%m-%d')\n" +
                         "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                         "REFRESH DEFERRED MANUAL\n" +
@@ -849,7 +846,6 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
             String mvName = "iceberg_year_mv1";
             starRocksAssert.useDatabase("test")
                     .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_year_mv1`\n" +
-                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
                             "PARTITION BY ts\n" +
                             "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                             "REFRESH DEFERRED MANUAL\n" +
@@ -895,7 +891,6 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
             String mvName = "iceberg_month_mv1";
             starRocksAssert.useDatabase("test")
                     .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_month_mv1`\n" +
-                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
                             "PARTITION BY ts\n" +
                             "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                             "REFRESH DEFERRED MANUAL\n" +
@@ -924,7 +919,6 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
             String mvName = "iceberg_day_mv1";
             starRocksAssert.useDatabase("test")
                     .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_day_mv1`\n" +
-                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
                             "PARTITION BY ts\n" +
                             "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                             "REFRESH DEFERRED MANUAL\n" +
@@ -953,7 +947,6 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
             String mvName = "iceberg_hour_mv1";
             starRocksAssert.useDatabase("test")
                     .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_hour_mv1`\n" +
-                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
                             "PARTITION BY ts\n" +
                             "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                             "REFRESH DEFERRED MANUAL\n" +

@@ -165,6 +165,9 @@ public class IcebergPartitionUtils {
         } else if (partitionField.transform().toString().equalsIgnoreCase("hour")) {
             dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd-HH");
             parseFromDate = false;
+        } else {
+            throw new StarRocksConnectorException("Unsupported partition transform to normalize: %s",
+                    partitionField.transform().toString());
         }
 
         // partition name formatter
@@ -202,29 +205,32 @@ public class IcebergPartitionUtils {
         } catch (Exception e) {
             LOG.warn("parse partition name failed, partitionName: {}, partitionField: {}, type: {}",
                     partitionName, partitionField, type);
-            result = partitionName;
+            throw new StarRocksConnectorException("parse/format partition name failed", e);
         }
         return result;
     }
 
     // Get the date interval from iceberg partition transform
-    public static PartitionUtil.DateInterval getDateIntervalFromIceberg(IcebergTable table, Column partitionColumn) {
+    public static PartitionUtil.DateTimeInterval getDateTimeIntervalFromIceberg(IcebergTable table,
+                                                                                Column partitionColumn) {
         PartitionField partitionField = table.getPartitionFiled(partitionColumn.getName());
         if (partitionField == null) {
             throw new StarRocksConnectorException("Partition column %s not found in table %s.%s.%s",
                     partitionColumn.getName(), table.getCatalogName(), table.getRemoteDbName(), table.getRemoteTableName());
         }
         String transform = partitionField.transform().toString();
-        if (transform.equals("year")) {
-            return PartitionUtil.DateInterval.YEAR;
-        } else if (transform.equals("month")) {
-            return PartitionUtil.DateInterval.MONTH;
-        } else if (transform.equals("day")) {
-            return PartitionUtil.DateInterval.DAY;
-        } else if (transform.equals("hour")) {
-            return PartitionUtil.DateInterval.HOUR;
-        } else {
-            return PartitionUtil.DateInterval.NONE;
+        IcebergPartitionTransform icebergPartitionTransform = IcebergPartitionTransform.fromString(transform);
+        switch (icebergPartitionTransform) {
+            case YEAR:
+                return PartitionUtil.DateTimeInterval.YEAR;
+            case MONTH:
+                return PartitionUtil.DateTimeInterval.MONTH;
+            case DAY:
+                return PartitionUtil.DateTimeInterval.DAY;
+            case HOUR:
+                return PartitionUtil.DateTimeInterval.HOUR;
+            default:
+                return PartitionUtil.DateTimeInterval.NONE;
         }
     }
 }
