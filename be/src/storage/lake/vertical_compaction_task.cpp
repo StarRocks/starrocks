@@ -93,7 +93,7 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
         op_compaction->add_input_rowsets(rowset->id());
     }
     for (auto& file : writer->files()) {
-        op_compaction->mutable_output_rowset()->add_segments(file);
+        op_compaction->mutable_output_rowset()->add_segments(file.path);
     }
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
