@@ -122,6 +122,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [char_length，character_length](./string-functions/char_length.md) | 返回字符串的长度。  |
 | [concat](./string-functions/concat.md) |  将多个字符串连接起来。 |
 | [concat_ws](./string-functions/concat_ws.md) | 使用分隔符将两个或以上的字符串拼接成一个新的字符串。  |
+| [crc32](./string-functions/crc32.md) | 返回字符串的 32 位循环冗余校验值。 |
 | [ends_with](./string-functions/ends_with.md) | 如果字符串以指定后缀结尾，返回 true，否则返回 false。  |
 | [find_in_set](./string-functions/find_in_set.md) | 返回指定的字符串在一系列字符串列表中第一次出现的位置。  |
 | [group_concat](./string-functions/group_concat.md) | 将结果集中的多行结果连接成一个字符串。  |
