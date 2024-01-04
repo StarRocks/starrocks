@@ -323,9 +323,6 @@ struct GroupConcatAggregateStateV2 {
 
     ~GroupConcatAggregateStateV2() {
         if (data_columns != nullptr) {
-            for (auto& col : *data_columns) {
-                col.reset();
-            }
             data_columns->clear();
             data_columns.reset(nullptr);
         }

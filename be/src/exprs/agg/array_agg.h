@@ -225,9 +225,6 @@ struct ArrayAggAggregateStateV2 {
 
     ~ArrayAggAggregateStateV2() {
         if (!data_columns.empty()) {
-            for (auto& col : data_columns) {
-                col.reset();
-            }
             data_columns.clear();
         }
     }
@@ -269,7 +266,7 @@ public:
                 this->data(state).update_nulls(i, 1);
                 continue;
             }
-            auto*& data_col = columns[i];
+            auto* data_col = columns[i];
             auto tmp_row_num = row_num;
             if (columns[i]->is_constant()) {
                 // just copy the first const value.
