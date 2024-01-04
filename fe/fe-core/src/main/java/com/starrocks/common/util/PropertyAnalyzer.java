@@ -543,12 +543,17 @@ public class PropertyAnalyzer {
                 tStorageType = TStorageType.ROW;
             } else if (olapTable.supportsUpdate() && storageType.equalsIgnoreCase(TStorageType.COLUMN_WITH_ROW.name())) {
                 tStorageType = TStorageType.COLUMN_WITH_ROW;
-                if (!olapTable.supportColumnWithRow()) {
-                    throw new AnalysisException("Column With Row Table must have more value columns exclude key columns "
-                            + "or column's type not supported");
+                if (olapTable.getColumns().stream().filter(column -> !column.isKey()).count() == 0) {
+                    throw new AnalysisException("column_with_row storage type must have some non-key columns");
+                }
+                for (Column column : olapTable.getColumns()) {
+                    if (!column.isKey() && column.getType().isComplexType()) {
+                        throw new AnalysisException(
+                                "column_with_row storage type does not support complex type. column: " + column.getName());
+                    }
                 }
             } else {
-                throw new AnalysisException("Invalid storage type: " + storageType + ", maybe row store need primary key");
+                throw new AnalysisException(storageType + " for " + olapTable.getKeysType() + " table not supported");
             }
 
             properties.remove(PROPERTIES_STORAGE_TYPE);
@@ -624,9 +629,8 @@ public class PropertyAnalyzer {
             return false;
         }
         throw new AnalysisException(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION
-            + " must be `true` or `false`");
+                + " must be `true` or `false`");
     }
-
 
     public static Set<String> analyzeBloomFilterColumns(Map<String, String> properties, List<Column> columns,
                                                         boolean isPrimaryKey) throws AnalysisException {
@@ -949,7 +953,7 @@ public class PropertyAnalyzer {
         List<UniqueConstraint> mvUniqueConstraints = Lists.newArrayList();
         if (analyzedTable.isMaterializedView() && analyzedTable.hasUniqueConstraints()) {
             mvUniqueConstraints = analyzedTable.getUniqueConstraints().stream().filter(
-                    uniqueConstraint -> StringUtils.areTableNamesEqual(parentTable, uniqueConstraint.getTableName()))
+                            uniqueConstraint -> StringUtils.areTableNamesEqual(parentTable, uniqueConstraint.getTableName()))
                     .collect(Collectors.toList());
         }
 
