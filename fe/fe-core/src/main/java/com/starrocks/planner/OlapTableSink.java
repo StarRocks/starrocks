@@ -80,7 +80,11 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.*;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.analyzer.RelationFields;
+import com.starrocks.sql.analyzer.RelationId;
+import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.analyzer.SelectAnalyzer;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TColumn;
@@ -102,18 +106,17 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.Warehouse;
-import java.util.Collection;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
-
 import java.util.stream.Collectors;
 
 public class OlapTableSink extends DataSink {
@@ -669,8 +672,10 @@ public class OlapTableSink extends DataSink {
                                     localTablet.getNormalReplicaBackendPathMap(table.getClusterId());
                             if (bePathsMap.keySet().size() < quorum) {
                                 throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
-                                        "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                                + tablet.getId() + ", replicas: " + localTablet.getReplicaInfos());
+                                        String.format("Tablet lost replicas. Check if any backend is down or not. " +
+                                                        "tablet_id: %s, replicas: %s. Check quorum number failed" +
+                                                        "(OlapTableSink): BeReplicaSize:%s, quorum:%s",
+                                                tablet.getId(), localTablet.getReplicaInfos(), bePathsMap.size(), quorum));
                             }
 
                             List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
