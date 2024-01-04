@@ -45,7 +45,7 @@ Schema MemTable::convert_schema(const TabletSchemaCSPtr& tablet_schema,
         const auto& last_column = tablet_schema->columns().back();
         // remove last __row column if exists, because it's not used in memtable
         int ncolumn = tablet_schema->num_columns();
-        if (last_column.name() == "__row") {
+        if (last_column.name() == Schema::FULL_ROW_COLUMN) {
             ncolumn--;
         }
         vector<ColumnId> column_idxes;
@@ -157,7 +157,7 @@ bool MemTable::is_full() const {
 }
 
 bool MemTable::check_supported_column_partial_update(const Chunk& chunk) {
-    return _vectorized_schema->field_names().back() != "__row" ||
+    return _vectorized_schema->field_names().back() != Schema::FULL_ROW_COLUMN ||
            chunk.num_columns() == _vectorized_schema->num_fields() - 1;
 }
 
@@ -170,7 +170,7 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
     auto full_row_col = std::make_unique<BinaryColumn>();
     if (_keys_type == PRIMARY_KEYS) {
         std::unique_ptr<Schema> schema_without_full_row_column;
-        if (_vectorized_schema->field_names().back() == "__row") {
+        if (_vectorized_schema->field_names().back() == Schema::FULL_ROW_COLUMN) {
             DCHECK_GE(chunk.num_columns(), _vectorized_schema->num_fields() - 1);
             std::vector<ColumnId> cids(_vectorized_schema->num_fields() - 1);
             for (int i = 0; i < _vectorized_schema->num_fields() - 1; i++) {
@@ -201,7 +201,7 @@ bool MemTable::insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from
             dest->append_selective(*src, indexes, from, size);
         }
         if (is_column_with_row) {
-            ColumnPtr& dest = _chunk->get_column_by_name("__row");
+            ColumnPtr& dest = _chunk->get_column_by_name(Schema::FULL_ROW_COLUMN);
             dest->append(*full_row_col.get());
         }
     } else {
