@@ -2136,6 +2136,9 @@ public class Coordinator {
         return this.thriftServerHighLoad;
     }
 
+    public ConnectContext getConnectContext() {
+        return connectContext;
+    }
     // record backend execute state
     // TODO(zhaochun): add profile information and others
     public class BackendExecState {

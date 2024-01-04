@@ -703,7 +703,8 @@
         "data_source/datalake_faq",
         "faq/Sql_faq",
         "faq/Dump_query",
-        "faq/Others"
+        "faq/Others",
+        "faq/FAQ_On_Github"
       ]
     },
     {
@@ -1416,7 +1417,8 @@
         "data_source/datalake_faq",
         "faq/Sql_faq",
         "faq/Dump_query",
-        "faq/Others"
+        "faq/Others",
+        "faq/FAQ_On_Github"
       ]
     },
     {
