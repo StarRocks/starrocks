@@ -121,7 +121,7 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f));
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -161,7 +161,7 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     txn_log->set_txn_id(txn_id);
     op_write = txn_log->mutable_op_write();
     for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f));
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -204,7 +204,7 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f));
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -246,7 +246,7 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     txn_log->set_txn_id(txn_id);
     op_write = txn_log->mutable_op_write();
     for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f));
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
