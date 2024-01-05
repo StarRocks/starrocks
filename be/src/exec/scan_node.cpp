@@ -183,10 +183,10 @@ StatusOr<pipeline::MorselQueuePtr> ScanNode::convert_scan_range_to_morsel_queue(
     pipeline::Morsels morsels;
     // If this scan node does not accept non-empty scan ranges, create a placeholder one.
     if (!accept_empty_scan_ranges() && scan_ranges.empty()) {
-        morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, TScanRangeParams(), nullptr));
+        morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, TScanRangeParams()));
     } else {
         for (const auto& scan_range : scan_ranges) {
-            morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range, nullptr));
+            morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
         }
     }
 
