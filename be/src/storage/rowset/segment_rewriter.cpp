@@ -161,8 +161,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 // This function is used when the auto-increment column is not specified in partial update.
 // In this function, we use the segment iterator to read the old data, replace the old auto
 // increment column, and rewrite the full segment file through SegmentWriter.
-Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo& dest_path,
-                                const TabletSchemaCSPtr& tschema,
+Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo& dest_path, const TabletSchemaCSPtr& tschema,
                                 starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
                                 std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>* columns,
                                 const starrocks::lake::TxnLogPB_OpWrite& op_write, starrocks::lake::Tablet* tablet) {
