@@ -104,6 +104,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -3039,7 +3040,11 @@ public class OlapTable extends Table {
         }
 
         PeriodDuration cacheDuration = tableProperty.getDataCachePartitionDuration();
-        if (cacheDuration != null && getPartitionInfo().isRangePartition()) {
+        if (cacheDuration == null) {
+            return true;
+        }
+
+        if (getPartitionInfo().isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) getPartitionInfo();
             Range<PartitionKey> partitionRange = rangePartitionInfo.getRange(partition.getId());
             Range<PartitionKey> dataCacheRange;
@@ -3051,16 +3056,52 @@ public class OlapTable extends Table {
                     dataCacheRange = Range.openClosed(PartitionKey.ofDateTime(lower), PartitionKey.ofDateTime(upper));
                     return partitionRange.isConnected(dataCacheRange);
                 } catch (Exception e) {
-                    LOG.warn("Table name: {}, datacache.partiton_duration: {}, Failed to compare with partition range. " +
-                            "Error: {}.", super.name, cacheDuration.toString(), e.getMessage());
+                    LOG.warn("Table name: {}, Partition name: {}, Datacache.partiton_duration: {}, Failed to check the " +
+                            " validaity of range partition. Error: {}.", super.name, partition.getName(),
+                            cacheDuration.toString(), e.getMessage());
                     return false;
                 }
-            } else {
-                // If the table was not partitioned by DATE/DATETIME, ignore the property "datacache.partition_duration" and
-                // enable data cache by default.
+            }
+        } else if (getPartitionInfo().isListPartition()) {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) getPartitionInfo();
+            List<Column> columns = listPartitionInfo.getPartitionColumns();
+            int dateTypeColumnIdx = ListUtils.indexOf(columns, column -> column.getPrimitiveType().isDateType());
+
+            if (dateTypeColumnIdx == -1) {
+                // List partition has no date type column.
                 return true;
             }
+
+            LocalDateTime upper = LocalDateTime.now();
+            LocalDateTime lower = upper.minus(cacheDuration);
+            List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partition.getId());
+            List<String> values = listPartitionInfo.getIdToValues().get(partition.getId());
+            try {
+                if (multiValues != null) {
+                    for (List<String> multivalue : multiValues) {
+                        LocalDateTime partitionTime = DateUtils.parseDatTimeString(multivalue.get(dateTypeColumnIdx));
+                        if (lower.isBefore(partitionTime) && (partitionTime.isBefore(upper) || partitionTime.isEqual(upper))) {
+                            return true;
+                        }
+                    }
+                }
+                if (values != null) {
+                    for (String value : values) {
+                        LocalDateTime partitionTime = DateUtils.parseDatTimeString(value);
+                        if (lower.isBefore(partitionTime) && (partitionTime.isBefore(upper) || partitionTime.isEqual(upper))) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            } catch (Exception e) {
+                LOG.warn("Table name: {}, Partition name: {}, Datacache.partiton_duration: {}, Failed to check the " +
+                        "validaity of list partition. Error: {}.", super.name, partition.getName(),
+                        cacheDuration.toString(), e.getMessage());
+                return false;
+            }
         }
+
         return true;
     }
     // ------ for lake table and lake materialized view end ------
