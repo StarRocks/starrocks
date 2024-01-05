@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -96,7 +97,8 @@ public class MVActiveChecker extends LeaderDaemon {
             return;
         }
 
-        String mvFullName = new TableName(dbName.get(), mv.getName()).toString();
+        String mvFullName = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName.get(),
+                mv.getName()).toString();
         String sql = String.format("ALTER MATERIALIZED VIEW %s active", mvFullName);
         try {
             ConnectContext connect = StatisticUtils.buildConnectContext();

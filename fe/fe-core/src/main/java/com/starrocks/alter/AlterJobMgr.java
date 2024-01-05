@@ -408,6 +408,7 @@ public class AlterJobMgr {
             materializedView.setActive(true);
         } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason(MANUAL_INACTIVE_MV_REASON);
+        }
     }
 
     private void processModifyTableProperties(ModifyTablePropertiesClause modifyTablePropertiesClause,
