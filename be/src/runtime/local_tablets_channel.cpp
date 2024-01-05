@@ -625,6 +625,11 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         options.partial_update_mode = params.partial_update_mode();
         options.immutable_tablet_size = params.immutable_tablet_size();
 
+        options.is_ignore = params.is_ignore();
+        if (params.has_update_exprs_desc()) {
+            options.update_exprs_desc = params.update_exprs_desc();
+        }
+
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
         if (res.status().ok()) {
             auto writer = std::move(res).value();

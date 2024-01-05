@@ -279,6 +279,7 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
     context.version = org_rowset_meta->version();
     // keep segments_overlap same as origin rowset
     context.segments_overlap = rowset_meta->segments_overlap();
+    context.is_ignore = rowset_meta->is_ignore();
 
     std::unique_ptr<RowsetWriter> rs_writer;
     if (!RowsetFactory::create_rowset_writer(context, &rs_writer).ok()) {

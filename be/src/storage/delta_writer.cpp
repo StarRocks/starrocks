@@ -208,7 +208,8 @@ Status DeltaWriter::_init() {
     }
 
     // maybe partial update, change to partial tablet schema
-    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && partial_cols_num < real_num_columns) {
+    if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
+       (partial_cols_num < real_num_columns || !_opt.update_exprs_desc.empty())) {
         writer_context.referenced_column_ids.reserve(partial_cols_num);
         for (auto i = 0; i < partial_cols_num; ++i) {
             const auto& slot_col_name = (*_opt.slots)[i]->col_name();
@@ -294,6 +295,9 @@ Status DeltaWriter::_init() {
     writer_context.segments_overlap = OVERLAPPING;
     writer_context.global_dicts = _opt.global_dicts;
     writer_context.miss_auto_increment_column = _opt.miss_auto_increment_column;
+    writer_context.is_ignore = _opt.is_ignore;
+    writer_context.update_exprs_desc = _opt.update_exprs_desc;
+
     Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer);
     if (!st.ok()) {
         auto msg = strings::Substitute("Fail to create rowset writer. tablet_id: $0, error: $1", _opt.tablet_id,

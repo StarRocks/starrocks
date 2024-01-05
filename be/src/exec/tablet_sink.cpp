@@ -168,6 +168,15 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         _colocate_mv_index = table_sink.enable_colocate_mv_index && config::enable_load_colocate_mv;
     }
 
+    if (table_sink.__isset.is_ignore) {
+      _is_ignore = table_sink.is_ignore;
+    }
+    if (table_sink.__isset.update_exprs_desc) {
+        ThriftSerializer ser(false, 4096);
+        RETURN_IF_ERROR(ser.serialize(&table_sink.update_exprs_desc, &_update_exprs_bytes));
+    }
+
+
     return Status::OK();
 }
 

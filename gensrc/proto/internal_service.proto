@@ -181,6 +181,7 @@ message PTabletWriterOpenRequest {
 
     // tablet's data size larger than this will mark as inmutable
     optional int64 immutable_tablet_size = 33 [default = 0];
+    optional bool is_ignore = 34;
 };
 
 message PTabletWriterOpenResult {

@@ -170,6 +170,7 @@ message RowsetMetaPB {
     optional bool partial_schema_change = 59;
     // tablet meta pb, for compaction
     optional TabletSchemaPB tablet_schema = 60;
+    optional bool is_ignore = 61;
 }
 
 enum DataFileType {

@@ -65,10 +65,10 @@ public:
     // old position to |deletes|.
     //
     // [not thread-safe]
-    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes, IOStat* stat = nullptr);
+    Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes, IOStat* stat = nullptr, const InsertDuplicatePolicy& type = InsertDuplicatePolicy::UPSERT);
 
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                  DeletesMap* deletes);
+                  DeletesMap* deletes, const InsertDuplicatePolicy& type = InsertDuplicatePolicy::UPSERT);
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // used for compaction, try replace input rowsets' rowid with output segment's rowid, if
@@ -157,7 +157,7 @@ private:
     Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks);
 
     Status _upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
-                                         uint32_t idx_end, DeletesMap* deletes, IOStat* stat);
+                                         uint32_t idx_end, DeletesMap* deletes, IOStat* stat, const InsertDuplicatePolicy& type);
 
     Status _erase_persistent_index(const Column& key_col, DeletesMap* deletes);
 

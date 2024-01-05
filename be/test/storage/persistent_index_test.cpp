@@ -139,10 +139,44 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index) {
     KeysInfo upsert_not_found;
     size_t upsert_num_found = 0;
     ASSERT_TRUE(idx->upsert(upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(), &upsert_not_found,
-                            &upsert_num_found, idxes)
+                            &upsert_num_found, idxes, InsertDuplicatePolicy::UPSERT)
                         .ok());
     ASSERT_EQ(upsert_num_found, expect_exists);
     ASSERT_EQ(upsert_not_found.size(), expect_not_found);
+
+    // test ignore
+    vector<Key> ignore_keys(N, 0);
+    vector<Slice> ignore_key_slices;
+    vector<IndexValue> ignore_values(ignore_keys.size());
+    ignore_values.reserve(N);
+    expect_exists = 0;
+    expect_not_found = 0;
+    idxes.clear();
+    for (int i = 0; i < N; i++) {
+        ignore_keys[i] = N + i;
+        if ((N + i) % 2 == 0) {
+            expect_exists++;
+        } else {
+            expect_not_found++;
+        }
+        ignore_key_slices.emplace_back((uint8_t*)(&ignore_keys[i]), sizeof(Key));
+        ignore_values[i] = i * 4;
+        idxes.emplace_back(i);
+    }
+    vector<IndexValue> ignore_old_values(ignore_keys.size());
+    KeysInfo ignore_not_found;
+    size_t ignore_num_found = 0;
+    ASSERT_TRUE(idx->upsert(ignore_key_slices.data(), ignore_values.data(), ignore_old_values.data(), &ignore_not_found,
+                            &ignore_num_found, idxes, InsertDuplicatePolicy::IGNORE)
+                        .ok());
+    ASSERT_EQ(ignore_num_found, expect_exists);
+    ASSERT_EQ(ignore_not_found.size(), expect_not_found);
+    ASSERT_EQ(ignore_old_values.size(), N);
+    for (int i = 0; i < N ; i++) {
+        if (i % 2 == 0) {
+            ASSERT_EQ(ignore_old_values[i].get_value(), i * 4);
+        }
+    }
 }
 
 TEST_P(PersistentIndexTest, test_small_varlen_mutable_index) {
@@ -234,10 +268,45 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index) {
     KeysInfo upsert_not_found;
     size_t upsert_num_found = 0;
     ASSERT_TRUE(idx->upsert(upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(), &upsert_not_found,
-                            &upsert_num_found, idxes)
+                            &upsert_num_found, idxes, InsertDuplicatePolicy::UPSERT)
                         .ok());
     ASSERT_EQ(upsert_num_found, expect_exists);
     ASSERT_EQ(upsert_not_found.size(), expect_not_found);
+
+    // test ignore
+    vector<Key> ignore_keys(N);
+    vector<Slice> ignore_key_slices;
+    vector<IndexValue> ignore_values(ignore_keys.size());
+    ignore_values.reserve(N);
+    expect_exists = 0;
+    expect_not_found = 0;
+    idxes.clear();
+    for (int i = 0; i < N; i++) {
+        ignore_keys[i] = "test_varlen_" + std::to_string(N + i);
+        if ((N + i) % 2 == 0) {
+            expect_exists++;
+        } else {
+            expect_not_found++;
+        }
+        ignore_key_slices.emplace_back(ignore_keys[i]);
+        ignore_values[i] = i * 4;
+        idxes.emplace_back(i);
+    }
+    vector<IndexValue> ignore_old_values(ignore_keys.size());
+    KeysInfo ignore_not_found;
+    size_t ignore_num_found = 0;
+    ASSERT_TRUE(idx->upsert(ignore_key_slices.data(), ignore_values.data(), ignore_old_values.data(), &ignore_not_found,
+                            &ignore_num_found, idxes, InsertDuplicatePolicy::IGNORE)
+                        .ok());
+    ASSERT_EQ(ignore_num_found, expect_exists);
+    ASSERT_EQ(ignore_not_found.size(), expect_not_found);
+    ASSERT_EQ(ignore_old_values.size(), N);
+    for (int i = 0; i < N ; i++) {
+        if (i % 2 == 0) {
+            ASSERT_EQ(ignore_old_values[i].get_value(), i * 4);
+        }
+    }
+
 }
 
 static std::string gen_random_string_of_random_length(size_t floor, size_t ceil) {
@@ -357,7 +426,7 @@ TEST_P(PersistentIndexTest, test_large_varlen_mutable_index) {
     KeysInfo upsert_not_found;
     size_t upsert_num_found = 0;
     ASSERT_TRUE(idx->upsert(upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(), &upsert_not_found,
-                            &upsert_num_found, idxes)
+                            &upsert_num_found, idxes, InsertDuplicatePolicy::UPSERT)
                         .ok());
     ASSERT_EQ(upsert_num_found, expect_exists);
     ASSERT_EQ(upsert_not_found.size(), expect_not_found);
