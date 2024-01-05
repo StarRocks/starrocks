@@ -434,7 +434,7 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
     for (auto& f : _tablet_writer->files()) {
         if (is_segment(f.path)) {
             op_write->mutable_rowset()->add_segments(std::move(f.path));
-            op_write->mutable_rowset()->add_segment_size(std::move(f.size.value()));
+            op_write->mutable_rowset()->add_segment_size(f.size.value());
         } else if (is_del(f.path)) {
             op_write->add_dels(std::move(f.path));
         } else {

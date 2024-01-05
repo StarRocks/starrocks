@@ -333,7 +333,7 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
             seg_options.stats = &_stats;
             std::string segment_file =
                     Rowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, seg_id);
-            auto segment = *Segment::open(seg_options.fs, segment_file, 0, tablet->tablet_schema());
+            auto segment = *Segment::open(seg_options.fs, FileInfo{segment_file}, 0, tablet->tablet_schema());
             ASSERT_NE(segment->num_rows(), 0);
             auto res = segment->new_iterator(schema, seg_options);
             ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
@@ -493,7 +493,7 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
 
             std::string segment_file =
                     Rowset::segment_file_path(writer_context.rowset_path_prefix, writer_context.rowset_id, seg_id);
-            auto segment = *Segment::open(seg_options.fs, segment_file, 0, tablet->tablet_schema());
+            auto segment = *Segment::open(seg_options.fs, FileInfo{segment_file}, 0, tablet->tablet_schema());
 
             ASSERT_NE(segment->num_rows(), 0);
             auto res = segment->new_iterator(schema, seg_options);
@@ -853,7 +853,7 @@ TEST_F(RowsetTest, SegmentWriteTest) {
 
         butil::IOBuf data;
         auto buf = new uint8[seg_info->data_size()];
-        data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[](uint8*) buf; });
+        data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[] (uint8*)buf; });
 
         ASSERT_TRUE(rfile->read_fully(buf, seg_info->data_size()).ok());
         auto st = segment_rowset_writer->flush_segment(*seg_info, data);
@@ -937,7 +937,7 @@ TEST_F(RowsetTest, SegmentRewriterAutoIncrementTest) {
     std::shared_ptr<FileSystem> fs = FileSystem::CreateSharedFromString(rowset->rowset_path()).value();
     std::string file_name = Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), 0);
 
-    auto partial_segment = *Segment::open(fs, file_name, 0, partial_tablet_schema);
+    auto partial_segment = *Segment::open(fs, FileInfo{file_name}, 0, partial_tablet_schema);
     ASSERT_EQ(partial_segment->num_rows(), num_rows);
 
     std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
@@ -964,7 +964,7 @@ TEST_F(RowsetTest, SegmentRewriterAutoIncrementTest) {
     ASSERT_OK(SegmentRewriter::rewrite(file_name, dst_file_name, tablet_schema, auto_increment_partial_update_state,
                                        column_ids, &write_columns));
 
-    auto segment = *Segment::open(fs, dst_file_name, 0, tablet_schema);
+    auto segment = *Segment::open(fs, FileInfo{dst_file_name}, 0, tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 }
 
@@ -1018,11 +1018,11 @@ TEST_F(RowsetTest, SegmentDeleteWriteTest) {
     butil::IOBuf data;
     auto buf = new uint8[seg_info->data_size()];
     ASSERT_TRUE(rfile->read_fully(buf, seg_info->data_size()).ok());
-    data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[](uint8*) buf; });
+    data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[] (uint8*)buf; });
 
     auto del_buf = new uint8[seg_info->delete_data_size()];
     ASSERT_TRUE(dfile->read_fully(del_buf, seg_info->delete_data_size()).ok());
-    data.append_user_data(del_buf, seg_info->delete_data_size(), [](void* buf) { delete[](uint8*) buf; });
+    data.append_user_data(del_buf, seg_info->delete_data_size(), [](void* buf) { delete[] (uint8*)buf; });
 
     auto st = segment_rowset_writer->flush_segment(*seg_info, data);
     LOG(INFO) << st;

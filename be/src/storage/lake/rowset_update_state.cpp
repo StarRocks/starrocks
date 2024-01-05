@@ -455,9 +455,8 @@ Status RowsetUpdateState::_prepare_partial_update_states(const TxnLogPB_OpWrite&
 }
 
 Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
-                                          Tablet* tablet, std::map<int, std::string>* replace_segments,
-                                          std::vector<std::string>* orphan_files,
-                                          std::map<std::string, uint64_t>* segments_size) {
+                                          Tablet* tablet, std::map<int, FileInfo>* replace_segments,
+                                          std::vector<std::string>* orphan_files) {
     TRACE_COUNTER_SCOPE_LATENCY_US("rewrite_segment_latency_us");
     const RowsetMetadata& rowset_meta = op_write.rowset();
     auto root_path = tablet->metadata_root_location();
@@ -495,25 +494,23 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
         int64_t t_rewrite_start = MonotonicMillis();
         if (op_write.txn_meta().has_auto_increment_partial_update_column_id() &&
             !_auto_increment_partial_update_states[i].skip_rewrite) {
-            uint64_t segment_size = 0;
+            FileInfo file_info{tablet->segment_location(dest_path)};
             RETURN_IF_ERROR(SegmentRewriter::rewrite(
-                    tablet->segment_location(src_path), tablet->segment_location(dest_path), tablet_schema,
+                    tablet->segment_location(src_path), file_info, tablet_schema,
                     _auto_increment_partial_update_states[i], read_column_ids,
                     _partial_update_states.size() != 0 ? &_partial_update_states[i].write_columns : nullptr, op_write,
-                    tablet, &segment_size));
-            if (segments_size != nullptr) {
-                (*segments_size)[dest_path] = segment_size;
-            }
+                    tablet));
+            file_info.path = dest_path;
+            (*replace_segments)[i] = file_info;
         } else if (_partial_update_states.size() != 0) {
             const FooterPointerPB& partial_rowset_footer = txn_meta.partial_rowset_footers(i);
-            uint64_t segment_size = 0;
+            FileInfo file_info{tablet->segment_location(dest_path)};
             // if rewrite fail, let segment gc to clean dest segment file
             RETURN_IF_ERROR(SegmentRewriter::rewrite(
-                    tablet->segment_location(src_path), tablet->segment_location(dest_path), tablet_schema,
-                    read_column_ids, _partial_update_states[i].write_columns, i, partial_rowset_footer, &segment_size));
-            if (segments_size != nullptr) {
-                (*segments_size)[dest_path] = segment_size;
-            }
+                    tablet->segment_location(src_path), file_info, tablet_schema,
+                    read_column_ids, _partial_update_states[i].write_columns, i, partial_rowset_footer));
+            file_info.path = dest_path;
+            (*replace_segments)[i] = file_info;
         } else {
             need_rename[i] = false;
         }
@@ -529,7 +526,6 @@ Status RowsetUpdateState::rewrite_segment(const TxnLogPB_OpWrite& op_write, cons
         if (need_rename[i]) {
             // after rename, add old segment to orphan files, for gc later.
             orphan_files->push_back(rowset_meta.segments(i));
-            (*replace_segments)[i] = op_write.rewrite_segments(i);
         }
     }
     TRACE("end rewrite segment");

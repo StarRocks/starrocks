@@ -40,9 +40,8 @@ public:
     // append delvec to builder's buffer
     void append_delvec(const DelVectorPtr& delvec, uint32_t segment_id);
     // handle txn log
-    void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, std::string>& replace_segments,
-                       const std::vector<std::string>& orphan_files,
-                       std::map<std::string, uint64_t>& replace_segments_file_size);
+    void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
+                       const std::vector<std::string>& orphan_files);
     void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
     // finalize will generate and sync final meta state to storage.
     // |txn_id| the maximum applied transaction ID, used to construct the delvec file name, and

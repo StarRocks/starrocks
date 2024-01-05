@@ -137,10 +137,12 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
     writer->close();
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0].path),
-                                             0, _tablet_schema));
-    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1].path),
-                                             1, _tablet_schema));
+    ASSIGN_OR_ABORT(auto seg0,
+                    Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[0].path)}, 0,
+                                  _tablet_schema));
+    ASSIGN_OR_ABORT(auto seg1,
+                    Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[1].path)}, 1,
+                                  _tablet_schema));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -226,10 +228,12 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
     writer->close();
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0].path),
-                                             0, _tablet_schema));
-    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1].path),
-                                             1, _tablet_schema));
+    ASSIGN_OR_ABORT(auto seg0,
+                    Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[0].path)}, 0,
+                                  _tablet_schema));
+    ASSIGN_OR_ABORT(auto seg1,
+                    Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[1].path)}, 1,
+                                  _tablet_schema));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
