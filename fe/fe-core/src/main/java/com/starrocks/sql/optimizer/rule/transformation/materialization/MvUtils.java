@@ -966,7 +966,8 @@ public class MvUtils {
         List<Range<PartitionKey>> ranges = Lists.newArrayList();
         for (PartitionKey selectedPartitionKey : scanOperatorPredicates.getSelectedPartitionKeys()) {
             try {
-                LiteralExpr expr = PartitionUtil.addOffsetForLiteral(selectedPartitionKey.getKeys().get(0), 1);
+                LiteralExpr expr = PartitionUtil.addOffsetForLiteral(selectedPartitionKey.getKeys().get(0), 1,
+                        PartitionUtil.getDateTimeInterval(hiveTable, hiveTable.getPartitionColumns().get(0)));
                 PartitionKey partitionKey = new PartitionKey(ImmutableList.of(expr), selectedPartitionKey.getTypes());
                 ranges.add(Range.closedOpen(selectedPartitionKey, partitionKey));
             } catch (AnalysisException e) {
