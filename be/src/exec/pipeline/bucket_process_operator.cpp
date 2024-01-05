@@ -31,6 +31,13 @@ Status BucketProcessContext::reset_operator_state(RuntimeState* state) {
     return Status::OK();
 }
 
+Status BucketProcessContext::finish_current_sink(RuntimeState* state) {
+    RETURN_IF_ERROR(this->sink->set_finishing(state));
+    this->current_bucket_sink_finished = true;
+    this->sink_complete_version++;
+    return Status::OK();
+}
+
 Status BucketProcessSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     RETURN_IF_ERROR(_ctx->sink->prepare(state));
@@ -59,12 +66,21 @@ Status BucketProcessSinkOperator::set_finishing(RuntimeState* state) {
         }
     });
     _ctx->all_input_finishing = true;
+    DCHECK(_ctx->reset_version <= _ctx->sink_complete_version);
+    // acquire finish token and never release
     bool token = _ctx->token;
     if (!token && _ctx->token.compare_exchange_strong(token, true)) {
-        RETURN_IF_ERROR(_ctx->sink->set_finishing(state));
+        // In this condition, if reset_version == ctx->sink_version. indicates that the
+        // Possibility 1: The BucketSourceOperator got the token first and executed it.
+        //
+        // Possibility 2: BucketSink did not receive the EOS chunk, possibly short-circuited.
+        //
+        // At this point we need to re-execute set_finishing on the sub operator to ensure that is_finished() returns true.
+        if (_ctx->reset_version == _ctx->sink_complete_version) {
+            RETURN_IF_ERROR(_ctx->finish_current_sink(state));
+        }
         _ctx->current_bucket_sink_finished = true;
     }
-
     return Status::OK();
 }
 
@@ -79,8 +95,7 @@ Status BucketProcessSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
         return Status::OK();
     }
     if (info.is_last_chunk()) {
-        RETURN_IF_ERROR(_ctx->sink->set_finishing(state));
-        _ctx->current_bucket_sink_finished = true;
+        RETURN_IF_ERROR(_ctx->finish_current_sink(state));
     }
     return Status::OK();
 }
@@ -89,10 +104,13 @@ Status BucketProcessSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     return _ctx->source->prepare(state);
 }
-
+// case 1: has_output() is true then call pull_chunk to pull chunk
+// case 2: has_output() is false (empty bucket) then to reset state
 bool BucketProcessSourceOperator::has_output() const {
     return _ctx->current_bucket_sink_finished && (_ctx->source->has_output() || _ctx->source->is_finished());
 }
+// condition 1 : all input should be finished
+// condition 2 : current bucket source finished (There will be no additional output on the source side.)
 bool BucketProcessSourceOperator::is_finished() const {
     return _ctx->finished || (_ctx->all_input_finishing && _ctx->source->is_finished());
 }
@@ -106,18 +124,21 @@ void BucketProcessSourceOperator::close(RuntimeState* state) {
 }
 
 StatusOr<ChunkPtr> BucketProcessSourceOperator::pull_chunk(RuntimeState* state) {
+    // BucketProcessSink::set_finishing execution timing is uncertain
     ChunkPtr chunk;
     if (_ctx->source->has_output()) {
         ASSIGN_OR_RETURN(chunk, _ctx->source->pull_chunk(state));
     }
-
     if (!_ctx->all_input_finishing && _ctx->source->is_finished()) {
         bool token = _ctx->token;
         if (!token && _ctx->token.compare_exchange_strong(token, true)) {
             RETURN_IF_ERROR(_ctx->reset_operator_state(state));
+            _ctx->reset_version++;
             if (_ctx->all_input_finishing) {
-                RETURN_IF_ERROR(_ctx->sink->set_finishing(state));
-                _ctx->current_bucket_sink_finished = true;
+                // BucketSink::set_finishing is called but we have called reset_state().
+                // call sub operator set_finishing to make sure the final state sub_sink_operator->is_finished() is true
+                RETURN_IF_ERROR(_ctx->finish_current_sink(state));
+                DCHECK_EQ(_ctx->sink_complete_version, _ctx->reset_version + 1);
             } else {
                 _ctx->current_bucket_sink_finished = false;
             }
