@@ -64,11 +64,7 @@ void HorizontalGeneralTabletWriter::close() {
         std::vector<std::string> full_paths_to_delete;
         full_paths_to_delete.reserve(_files.size());
         for (const auto& f : _files) {
-<<<<<<< HEAD
-            full_paths_to_delete.emplace_back(_tablet.segment_location(f));
-=======
-            full_paths_to_delete.emplace_back(_tablet_mgr->segment_location(_tablet_id, f.path));
->>>>>>> 20f001ad7c ([Refactor] Make lake::TabletWriter::files() return list of FileInfo (#38467))
+            full_paths_to_delete.emplace_back(_tablet.segment_location(f.path));
         }
         delete_files_async(std::move(full_paths_to_delete));
     }
@@ -96,14 +92,6 @@ Status HorizontalGeneralTabletWriter::flush_segment_writer() {
         std::string segment_name = std::string(basename(segment_path));
         _files.emplace_back(FileInfo{segment_name, segment_size});
         _data_size += segment_size;
-<<<<<<< HEAD
-=======
-        if (segment) {
-            segment->set_data_size(segment_size);
-            segment->set_index_size(index_size);
-            segment->set_path(segment_path);
-        }
->>>>>>> 20f001ad7c ([Refactor] Make lake::TabletWriter::files() return list of FileInfo (#38467))
         _seg_writer.reset();
     }
     return Status::OK();
@@ -225,11 +213,7 @@ void VerticalGeneralTabletWriter::close() {
         std::vector<std::string> full_paths_to_delete;
         full_paths_to_delete.reserve(_files.size());
         for (const auto& f : _files) {
-<<<<<<< HEAD
-            full_paths_to_delete.emplace_back(_tablet.segment_location(f));
-=======
-            full_paths_to_delete.emplace_back(_tablet_mgr->segment_location(_tablet_id, f.path));
->>>>>>> 20f001ad7c ([Refactor] Make lake::TabletWriter::files() return list of FileInfo (#38467))
+            full_paths_to_delete.emplace_back(_tablet.segment_location(f.path));
         }
         delete_files_async(std::move(full_paths_to_delete));
     }

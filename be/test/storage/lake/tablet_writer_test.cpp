@@ -133,17 +133,10 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
     writer->close();
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
-<<<<<<< HEAD
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0]), 0,
-                                             _tablet_schema.get()));
-    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1]), 1,
-                                             _tablet_schema.get()));
-=======
     ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0].path),
-                                             0, _tablet_schema));
+                                             0, _tablet_schema.get()));
     ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1].path),
-                                             1, _tablet_schema));
->>>>>>> 20f001ad7c ([Refactor] Make lake::TabletWriter::files() return list of FileInfo (#38467))
+                                             1, _tablet_schema.get()));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -226,17 +219,10 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
     writer->close();
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
-<<<<<<< HEAD
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0]), 0,
-                                             _tablet_schema.get()));
-    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1]), 1,
-                                             _tablet_schema.get()));
-=======
     ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0].path),
-                                             0, _tablet_schema));
+                                             0, _tablet_schema.get()));
     ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1].path),
-                                             1, _tablet_schema));
->>>>>>> 20f001ad7c ([Refactor] Make lake::TabletWriter::files() return list of FileInfo (#38467))
+                                             1, _tablet_schema.get()));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;

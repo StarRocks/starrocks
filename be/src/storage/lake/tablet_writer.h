@@ -18,11 +18,7 @@
 #include <vector>
 
 #include "common/status.h"
-<<<<<<< HEAD
-=======
 #include "fs/fs.h" // FileInfo
-#include "gen_cpp/data.pb.h"
->>>>>>> 20f001ad7c ([Refactor] Make lake::TabletWriter::files() return list of FileInfo (#38467))
 #include "gen_cpp/lake_types.pb.h"
 #include "storage/lake/tablet.h"
 
