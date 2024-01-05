@@ -66,10 +66,15 @@ Status IcebergMORProcessor::append_chunk_to_hashtable(ChunkPtr& chunk) {
 }
 
 Status IcebergMORProcessor::get_next(RuntimeState* state, ChunkPtr* chunk) {
+    if ((*chunk)->is_empty()) {
+        return Status::OK();
+    }
+
     if (!_prepared_probe.load()) {
         RETURN_IF_ERROR(_hash_joiner->prepare_prober(state, _runtime_profile));
         _prepared_probe.store(true);
     }
+
     RETURN_IF_ERROR(_hash_joiner->push_chunk(state, std::move(*chunk)));
     *chunk = std::move(_hash_joiner->pull_chunk(state)).value();
     return Status::OK();
