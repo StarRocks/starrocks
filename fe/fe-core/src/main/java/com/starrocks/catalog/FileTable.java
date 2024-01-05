@@ -35,6 +35,7 @@ import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.credential.azure.AzureCloudConfigurationProvider;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TFileTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -203,6 +204,7 @@ public class FileTable extends Table {
 
         tFileTable.setHive_column_names(columnNames);
         tFileTable.setHive_column_types(columnTypes);
+        tFileTable.setTime_zone(ConnectContext.get().getSessionVariable().getTimeZone());
 
         return tTableDescriptor;
     }

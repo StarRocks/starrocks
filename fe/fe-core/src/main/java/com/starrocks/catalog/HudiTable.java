@@ -33,6 +33,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.io.Text;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
@@ -293,6 +294,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         tHudiTable.setHive_column_types(hudiProperties.get(HUDI_TABLE_COLUMN_TYPES));
         tHudiTable.setInput_format(hudiProperties.get(HUDI_TABLE_INPUT_FOAMT));
         tHudiTable.setSerde_lib(hudiProperties.get(HUDI_TABLE_SERDE_LIB));
+        tHudiTable.setTime_zone(ConnectContext.get().getSessionVariable().getTimeZone());
 
         TTableDescriptor tTableDescriptor =
                 new TTableDescriptor(id, TTableType.HUDI_TABLE, fullSchema.size(), 0, hiveTableName, hiveDbName);

@@ -383,6 +383,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         tHdfsTable.setHive_column_names(hiveProperties.get(HIVE_TABLE_COLUMN_NAMES));
         tHdfsTable.setHive_column_types(hiveProperties.get(HIVE_TABLE_COLUMN_TYPES));
         tHdfsTable.setSerde_properties(serdeProperties);
+        tHdfsTable.setTime_zone(ConnectContext.get().getSessionVariable().getTimeZone());
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.HDFS_TABLE, fullSchema.size(),
                 0, hiveTableName, hiveDbName);

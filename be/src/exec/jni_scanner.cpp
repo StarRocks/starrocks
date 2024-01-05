@@ -183,57 +183,6 @@ Status JniScanner::_append_string_data(const FillColumnArgs& args) {
     return Status::OK();
 }
 
-Status JniScanner::_append_date_data(const FillColumnArgs& args) {
-    int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
-    char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
-
-    using ColumnType = typename starrocks::RunTimeColumnType<TYPE_DATE>;
-    auto* runtime_column = down_cast<ColumnType*>(args.column);
-    runtime_column->resize_uninitialized(args.num_rows);
-    DateValue* runtime_data = runtime_column->get_data().data();
-
-    for (int i = 0; i < args.num_rows; i++) {
-        if (args.nulls && args.nulls[i]) {
-            // NULL
-        } else {
-            std::string date_str(column_ptr + offset_ptr[i], column_ptr + offset_ptr[i + 1]);
-            DateValue dv;
-            if (!dv.from_string(date_str.c_str(), date_str.size())) {
-                return Status::DataQualityError(fmt::format("Invalid date value occurs on column[{}], value is [{}]",
-                                                            args.slot_name, date_str));
-            }
-            runtime_data[i] = dv;
-        }
-    }
-    return Status::OK();
-}
-
-Status JniScanner::_append_datetime_data(const FillColumnArgs& args) {
-    int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
-    char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
-
-    using ColumnType = typename starrocks::RunTimeColumnType<TYPE_DATETIME>;
-    auto* runtime_column = down_cast<ColumnType*>(args.column);
-    runtime_column->resize_uninitialized(args.num_rows);
-    TimestampValue* runtime_data = runtime_column->get_data().data();
-
-    for (int i = 0; i < args.num_rows; i++) {
-        if (args.nulls && args.nulls[i]) {
-            // NULL
-        } else {
-            std::string origin_str(column_ptr + offset_ptr[i], column_ptr + offset_ptr[i + 1]);
-            std::string datetime_str = origin_str.substr(0, origin_str.find('.'));
-            TimestampValue tsv;
-            if (!tsv.from_datetime_format_str(datetime_str.c_str(), datetime_str.size(), "%Y-%m-%d %H:%i:%s")) {
-                return Status::DataQualityError(fmt::format(
-                        "Invalid datetime value occurs on column[{}], value is [{}]", args.slot_name, origin_str));
-            }
-            runtime_data[i] = tsv;
-        }
-    }
-    return Status::OK();
-}
-
 Status JniScanner::_append_array_data(const FillColumnArgs& args) {
     DCHECK(args.slot_type.is_array_type());
 
@@ -375,9 +324,9 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
     } else if (column_type == LogicalType::TYPE_VARBINARY) {
         RETURN_IF_ERROR((_append_string_data<TYPE_VARBINARY>(args)));
     } else if (column_type == LogicalType::TYPE_DATE) {
-        RETURN_IF_ERROR((_append_date_data(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_DATE>(args)));
     } else if (column_type == LogicalType::TYPE_DATETIME) {
-        RETURN_IF_ERROR((_append_datetime_data(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_DATETIME>(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL32) {
         RETURN_IF_ERROR((_append_primitive_data<TYPE_DECIMAL32>(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL64) {

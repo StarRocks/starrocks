@@ -17,6 +17,7 @@ package com.starrocks.catalog;
 
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.planner.PaimonScanNode;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -115,6 +116,7 @@ public class PaimonTable extends Table {
         TPaimonTable tPaimonTable = new TPaimonTable();
         String encodedTable = PaimonScanNode.encodeObjectToString(paimonNativeTable);
         tPaimonTable.setPaimon_native_table(encodedTable);
+        tPaimonTable.setTime_zone(ConnectContext.get().getSessionVariable().getTimeZone());
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.PAIMON_TABLE,
                 fullSchema.size(), 0, tableName, databaseName);
         tTableDescriptor.setPaimonTable(tPaimonTable);
