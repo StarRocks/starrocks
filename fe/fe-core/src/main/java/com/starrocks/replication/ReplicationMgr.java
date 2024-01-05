@@ -90,10 +90,11 @@ public class ReplicationMgr extends FrontendDaemon {
         }
 
         // Limit replication data size
-        long totalReplicationDataSize = getTotalReplicationDataSize();
-        if (totalReplicationDataSize >= Config.replication_transaction_max_parallel_replication_data_size_mb) {
-            throw new RuntimeException("The total replication data size in replication jobs exceeds "
-                    + "replication_transaction_max_parallel_replication_data_size_mb: "
+        long replicatingDataSizeMB = getReplicatingDataSize() / 1048576;
+        if (replicatingDataSizeMB >= Config.replication_transaction_max_parallel_replication_data_size_mb) {
+            throw new RuntimeException("The replicating data size in all running replication jobs "
+                    + replicatingDataSizeMB
+                    + "(MB) exceeds replication_transaction_max_parallel_replication_data_size_mb: "
                     + Config.replication_transaction_max_parallel_replication_data_size_mb);
         }
 
@@ -103,6 +104,10 @@ public class ReplicationMgr extends FrontendDaemon {
 
         committedJobs.remove(job.getTableId()); // If the job is committed before, remove it from committed jobs
         abortedJobs.remove(job.getTableId()); // If the job is aborted before, remove it from aborted jobs
+
+        LOG.info("Added replication job, database id: {}, table id: {}, "
+                + "replication data size: {}, current replicating data size: {}(MB)",
+                job.getDatabaseId(), job.getTableId(), job.getReplicationDataSize(), replicatingDataSizeMB);
     }
 
     public boolean hasRunningJobs() {
@@ -173,12 +178,12 @@ public class ReplicationMgr extends FrontendDaemon {
         }
     }
 
-    private long getTotalReplicationDataSize() {
-        long totalReplicationDataSize = 0;
+    private long getReplicatingDataSize() {
+        long replicatingDataSize = 0;
         for (ReplicationJob job : runningJobs.values()) {
-            totalReplicationDataSize += job.getReplicationDataSize();
+            replicatingDataSize += job.getReplicationDataSize();
         }
-        return totalReplicationDataSize;
+        return replicatingDataSize;
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
