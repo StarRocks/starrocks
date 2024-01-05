@@ -685,8 +685,8 @@ StatusOr<pipeline::MorselQueuePtr> ConnectorScanNode::convert_scan_range_to_mors
         size_t num_total_scan_ranges) {
     _data_source_provider->peek_scan_ranges(scan_ranges);
     return ScanNode::convert_scan_range_to_morsel_queue(scan_ranges, node_id, pipeline_dop,
-                                                        size_t num_total_scan_ranges) {
-        _data_source_provider->peek_scan_ranges(scan_ranges);
-        _data_source_provider->peek_scan_ranges(scan_ranges);
+                                                        enable_tablet_internal_parallel, tablet_internal_parallel_mode,
+                                                        num_total_scan_ranges);
+}
 
-    } // namespace starrocks
+} // namespace starrocks
