@@ -112,7 +112,7 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
     param->fs = FileSystem::Default();
     param->path = file;
     param->file_size = range->file_length;
-    param->scan_ranges.emplace_back(range);
+    param->scan_range = range;
     param->tuple_desc = tuple_desc;
     std::vector<int> materialize_index_in_chunk;
     std::vector<int> partition_index_in_chunk;
@@ -1717,7 +1717,7 @@ TEST_F(HdfsScannerTest, TestCSVSmall) {
         auto* range1 = _create_scan_range(small_file, offset, 0);
         auto* tuple_desc = _create_tuple_desc(csv_descs);
         auto* param = _create_param(small_file, range0, tuple_desc);
-        param->scan_ranges.emplace_back(range1);
+        param->scan_range = range1;
         build_hive_column_names(param, tuple_desc);
         auto scanner = std::make_shared<HdfsTextScanner>();
 
@@ -1994,7 +1994,7 @@ TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         range->text_file_desc.field_delim = "";
-        param->scan_ranges[0] = range;
+        param->scan_range = range;
         auto scanner = std::make_shared<HdfsTextScanner>();
         auto status = scanner->init(_runtime_state, *param);
         EXPECT_FALSE(status.ok());
@@ -2002,7 +2002,7 @@ TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         range->text_file_desc.collection_delim = "";
-        param->scan_ranges[0] = range;
+        param->scan_range = range;
         auto scanner = std::make_shared<HdfsTextScanner>();
         auto status = scanner->init(_runtime_state, *param);
         EXPECT_FALSE(status.ok());
@@ -2010,7 +2010,7 @@ TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         range->text_file_desc.mapkey_delim = "";
-        param->scan_ranges[0] = range;
+        param->scan_range = range;
         auto scanner = std::make_shared<HdfsTextScanner>();
         auto status = scanner->init(_runtime_state, *param);
         EXPECT_FALSE(status.ok());
@@ -2018,7 +2018,7 @@ TEST_F(HdfsScannerTest, TestCSVWithBlankDelimiter) {
     {
         auto* range = _create_scan_range(small_file, 0, 0);
         range->text_file_desc.line_delim = "";
-        param->scan_ranges[0] = range;
+        param->scan_range = range;
         auto scanner = std::make_shared<HdfsTextScanner>();
         auto status = scanner->init(_runtime_state, *param);
         EXPECT_FALSE(status.ok());

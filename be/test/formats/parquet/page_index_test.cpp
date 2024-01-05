@@ -86,7 +86,7 @@ HdfsScannerContext* PageIndexTest::_create_file_random_read_context(const std::s
     };
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(file_path));
+    ctx->scan_range = (_create_scan_range(file_path));
 
     return ctx;
 }
@@ -101,7 +101,7 @@ HdfsScannerContext* PageIndexTest::_create_file_only_c0_context(const std::strin
     };
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(file_path));
+    ctx->scan_range = (_create_scan_range(file_path));
 
     return ctx;
 }
@@ -118,7 +118,7 @@ HdfsScannerContext* PageIndexTest::_create_file_c0_c1_c2_context(const std::stri
     };
     ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-    ctx->scan_ranges.emplace_back(_create_scan_range(file_path));
+    ctx->scan_range = (_create_scan_range(file_path));
 
     return ctx;
 }

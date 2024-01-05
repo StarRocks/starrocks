@@ -85,7 +85,7 @@ protected:
 
         ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
         Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-        ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
+        ctx->scan_range = (_create_scan_range(filepath));
         // --------------finish init context---------------
 
         Status status = file_reader->init(ctx);

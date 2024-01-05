@@ -67,7 +67,7 @@ public:
 
         _scanner_ctx->tuple_desc = _create_tuple_descriptor(nullptr, &_pool, slot_descs);
         _make_column_info_vector(_scanner_ctx->tuple_desc, &_scanner_ctx->materialized_columns);
-        _scanner_ctx->scan_ranges.emplace_back(_create_scan_range(_filepath));
+        _scanner_ctx->scan_range = (_create_scan_range(_filepath));
 
         {
             _file_reader = std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath), 0);
