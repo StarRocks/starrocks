@@ -259,6 +259,11 @@ public class AnalyzeInsertTest {
                 "\t\"compression\" = \"uncompressed\" ) \n" +
                 "select \"abc\" as k1");
 
+        analyzeSuccess("insert into files ( \n" +
+                "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                "\t\"format\"=\"parquet\" ) \n" +
+                "select \"abc\" as k1");
+
         analyzeFail("insert into files ( \n" +
                 "\t\"format\"=\"parquet\", \n" +
                 "\t\"compression\" = \"uncompressed\" ) \n" +
@@ -278,14 +283,6 @@ public class AnalyzeInsertTest {
                 "\t\"compression\" = \"uncompressed\" ) \n" +
                 "select \"abc\" as k1",
                 "use \"path\" = \"parquet\", as only parquet format is supported now");
-
-        analyzeFail("insert into files ( \n" +
-                        "\t\"path\" = \"s3://path/to/directory/\", \n" +
-                        "\t\"format\"=\"parquet\" ) \n" +
-                        "select \"abc\" as k1",
-                "compression is a mandatory property. " +
-                "Use \"compression\" = \"your_chosen_compression_type\". Supported compression types are" +
-                "(uncompressed, gzip, brotli, zstd, lz4).");
 
         analyzeFail("insert into files ( \n" +
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
