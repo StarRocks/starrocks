@@ -270,7 +270,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
 
         // refresh materialized view
-        doRefreshMaterializedView(mvToRefreshedPartitions, refTablePartitionNames);
+        doRefreshMaterializedViewWithRetry(mvToRefreshedPartitions, refTablePartitionNames);
 
         // insert execute successfully, update the meta of materialized view according to ExecPlan
         updateMeta(mvToRefreshedPartitions, mvContext.getExecPlan(), refTableRefreshPartitions);
@@ -289,8 +289,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return RefreshJobStatus.SUCCESS;
     }
 
-    private void doRefreshMaterializedView(Set<String> mvToRefreshedPartitions,
-                                           Map<String, Set<String>> refTablePartitionNames) throws DmlException {
+    /**
+     * Retry the `doRefreshMaterializedView` method to avoid insert fails in occasional cases.
+     */
+    private void doRefreshMaterializedViewWithRetry(Set<String> mvToRefreshedPartitions,
+                                                    Map<String, Set<String>> refTablePartitionNames) throws DmlException {
         // Use current connection variables instead of mvContext's session variables to be better debug.
         ConnectContext currConnectCtx = ConnectContext.get();
         int maxRefreshMaterializedViewRetryNum = 1;
@@ -306,10 +309,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         for (int i = 0; i < maxRefreshMaterializedViewRetryNum; i++) {
             boolean isRefreshFailed = false;
             try {
-                // Unlock current database and acquire lock for all databases referenced by the plan
-                InsertStmt insertStmt = prepareRefreshPlan(mvToRefreshedPartitions, refTablePartitionNames);
-                // execute the ExecPlan of insert outside lock
-                refreshMaterializedView(mvContext, mvContext.getExecPlan(), insertStmt);
+                doRefreshMaterializedView(mvToRefreshedPartitions, refTablePartitionNames);
             } catch (Throwable e) {
                 isRefreshFailed = true;
                 LOG.warn("Refresh materialized view {} at {}th retry time failed: {}",
@@ -319,6 +319,16 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (!isRefreshFailed) {
                 return;
             }
+
+            // sleep some time if it is not the last retry time
+            if (i < maxRefreshMaterializedViewRetryNum - 1) {
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    LOG.warn("InterruptedException: ", e);
+                    // ignore
+                }
+            }
         }
         if (lastException != null) {
             String errorMsg = lastException.getMessage();
@@ -326,10 +336,19 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 errorMsg = ExceptionUtils.getStackTrace(lastException);
             }
             // field ERROR_MESSAGE in information_schema.task_runs length is 65535
-            errorMsg = errorMsg.length() > MAX_FIELD_VARCHAR_LENGTH ? errorMsg.substring(0, MAX_FIELD_VARCHAR_LENGTH) : errorMsg;
+            errorMsg = errorMsg.length() > MAX_FIELD_VARCHAR_LENGTH ?
+                    errorMsg.substring(0, MAX_FIELD_VARCHAR_LENGTH) : errorMsg;
             throw new DmlException("Refresh materialized view %s failed after retrying %s times, error-msg : %s",
                     lastException, this.materializedView.getName(), maxRefreshMaterializedViewRetryNum, errorMsg);
         }
+    }
+
+    private void doRefreshMaterializedView(Set<String> mvToRefreshedPartitions,
+                                           Map<String, Set<String>> refTablePartitionNames) throws Exception {
+        // Unlock current database and acquire lock for all databases referenced by the plan
+        InsertStmt insertStmt = prepareRefreshPlan(mvToRefreshedPartitions, refTablePartitionNames);
+        // execute the ExecPlan of insert outside lock
+        refreshMaterializedView(mvContext, mvContext.getExecPlan(), insertStmt);
     }
 
     /**
