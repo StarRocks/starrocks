@@ -10,6 +10,138 @@
 
 namespace starrocks::pipeline {
 
+<<<<<<< HEAD
+=======
+FragmentContext::FragmentContext() : _data_sink(nullptr) {}
+
+FragmentContext::~FragmentContext() {
+    _data_sink.reset();
+    _runtime_filter_hub.close_all_in_filters(_runtime_state.get());
+    clear_all_drivers();
+    close_all_pipelines();
+    if (_plan != nullptr) {
+        _plan->close(_runtime_state.get());
+    }
+}
+
+void FragmentContext::clear_all_drivers() {
+    for (auto& pipe : _pipelines) {
+        pipe->clear_drivers();
+    }
+}
+void FragmentContext::close_all_pipelines() {
+    for (auto& pipe : _pipelines) {
+        pipe->close(_runtime_state.get());
+    }
+}
+
+Status FragmentContext::iterate_drivers(const std::function<Status(const DriverPtr&)>& call) {
+    for (const auto& pipeline : _pipelines) {
+        for (const auto& driver : pipeline->drivers()) {
+            RETURN_IF_ERROR(call(driver));
+        }
+    }
+    return Status::OK();
+}
+
+size_t FragmentContext::total_dop() const {
+    size_t total = 0;
+    for (const auto& pipeline : _pipelines) {
+        total += pipeline->degree_of_parallelism();
+    }
+    return total;
+}
+
+size_t FragmentContext::num_drivers() const {
+    size_t total = 0;
+    for (const auto& pipeline : _pipelines) {
+        total += pipeline->drivers().size();
+    }
+    return total;
+}
+
+void FragmentContext::move_tplan(TPlan& tplan) {
+    swap(_tplan, tplan);
+}
+void FragmentContext::set_data_sink(std::unique_ptr<DataSink> data_sink) {
+    _data_sink = std::move(data_sink);
+}
+
+void FragmentContext::count_down_pipeline(size_t val) {
+    // Note that _pipelines may be destructed after fetch_add
+    // memory_order_seq_cst semantics ensure that previous code does not reorder after fetch_add
+    size_t total_pipelines = _pipelines.size();
+    bool all_pipelines_finished = _num_finished_pipelines.fetch_add(val) + val == total_pipelines;
+    if (!all_pipelines_finished) {
+        return;
+    }
+
+    auto* state = runtime_state();
+    auto* query_ctx = state->query_ctx();
+
+    state->runtime_profile()->reverse_childs();
+    if (config::pipeline_print_profile) {
+        std::stringstream ss;
+        // Print profile for this fragment
+        state->runtime_profile()->compute_time_in_profile();
+        state->runtime_profile()->pretty_print(&ss);
+        LOG(INFO) << ss.str();
+    }
+
+    finish();
+    auto status = final_status();
+    state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, status, true, true);
+
+    destroy_pass_through_chunk_buffer();
+
+    query_ctx->count_down_fragments();
+}
+
+bool FragmentContext::need_report_exec_state() {
+    auto* state = runtime_state();
+    auto* query_ctx = state->query_ctx();
+    if (!query_ctx->enable_profile()) {
+        return false;
+    }
+    const auto now = MonotonicNanos();
+    const auto interval_ns = query_ctx->get_runtime_profile_report_interval_ns();
+    auto last_report_ns = _last_report_exec_state_ns.load();
+    return now - last_report_ns >= interval_ns;
+}
+
+void FragmentContext::report_exec_state_if_necessary() {
+    auto* state = runtime_state();
+    auto* query_ctx = state->query_ctx();
+    if (!query_ctx->enable_profile()) {
+        return;
+    }
+    const auto now = MonotonicNanos();
+    const auto interval_ns = query_ctx->get_runtime_profile_report_interval_ns();
+    auto last_report_ns = _last_report_exec_state_ns.load();
+    if (now - last_report_ns < interval_ns) {
+        return;
+    }
+
+    int64_t normalized_report_ns;
+    if (now - last_report_ns > 2 * interval_ns) {
+        // Maybe the first time, then initialized it.
+        normalized_report_ns = now;
+    } else {
+        // Fix the report interval regardless the noise.
+        normalized_report_ns = last_report_ns + interval_ns;
+    }
+    if (_last_report_exec_state_ns.compare_exchange_strong(last_report_ns, normalized_report_ns)) {
+        for (auto& pipeline : _pipelines) {
+            for (auto& driver : pipeline->drivers()) {
+                driver->runtime_report_action();
+            }
+        }
+
+        state->exec_env()->wg_driver_executor()->report_exec_state(query_ctx, this, Status::OK(), false, true);
+    }
+}
+
+>>>>>>> 3231be1db6 ([BugFix] Fix count_down_pipeline may cause use-after-free (#38532))
 void FragmentContext::set_final_status(const Status& status) {
     if (_final_status.load() != nullptr) {
         return;
