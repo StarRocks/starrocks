@@ -132,7 +132,6 @@ public:
         return std::tuple<int64_t, int64_t>{_owner_id, _version};
     }
 
-    int32_t partition_id() const { return _partition_id; }
     int32_t owner_id() const { return _owner_id; }
 
 private:

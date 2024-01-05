@@ -745,6 +745,7 @@ public class CoordinatorPreprocessor {
                                             || fragment.isForceAssignScanRangesPerDriverSeq());
                             if (!assignPerDriverSeq) {
                                 instanceParam.perNodeScanRanges.put(planNodeId, scanRangeParams);
+                                fragment.disablePhysicalPropertyOptimize();
                             } else {
                                 int expectedDop = Math.max(1, Math.min(pipelineDop, scanRangeParams.size()));
                                 List<List<TScanRangeParams>> scanRangeParamsPerDriverSeq = null;
