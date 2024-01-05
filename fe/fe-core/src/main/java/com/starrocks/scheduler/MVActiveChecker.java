@@ -15,6 +15,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.starrocks.alter.Alter;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -25,6 +26,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticUtils;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -83,8 +85,8 @@ public class MVActiveChecker extends LeaderDaemon {
         }
 
         // if the mv is set to inactive manually, we don't activate it
-        // TODO: check reason
-        if (mv.isActive()) {
+        String reason = mv.getInactiveReason();
+        if (mv.isActive() || Alter.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(reason) || StringUtils.isEmpty(reason)) {
             return;
         }
 
