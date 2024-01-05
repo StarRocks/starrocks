@@ -671,10 +671,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-        List<ShowMaterializedViewStatus> mvStatusList = listMaterializedViews(limit, matcher, currentUser, params);
-        for (ShowMaterializedViewStatus mvStatus : mvStatusList) {
-            tablesResult.add(mvStatus.toThrift());
-        }
+        listMaterializedViews(limit, matcher, currentUser, params).stream()
+                .map(s -> s.toThrift())
+                .forEach(t -> tablesResult.add(t));
         return result;
     }
 
@@ -705,6 +704,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     materializedViews.add(mvTable);
                 } else if (table.getType() == Table.TableType.OLAP) {
                     OlapTable olapTable = (OlapTable) table;
+                    // synchronized materialized view metadata size should be greater than 1.
+                    if (olapTable.getVisibleIndexMetas().size() <= 1) {
+                        continue;
+                    }
                     List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
                     long baseIdx = olapTable.getBaseIndexId();
                     for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
@@ -810,14 +813,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 continue;
             }
 
+            String taskName = status.getTaskName();
             TTaskRunInfo info = new TTaskRunInfo();
             info.setQuery_id(status.getQueryId());
-            info.setTask_name(status.getTaskName());
+            info.setTask_name(taskName);
             info.setCreate_time(status.getCreateTime() / 1000);
             info.setFinish_time(status.getFinishTime() / 1000);
             info.setState(status.getState().toString());
             info.setDatabase(ClusterNamespace.getNameFromFullName(status.getDbName()));
-            info.setDefinition(status.getDefinition());
+            try {
+                // NOTE: use task's definition to display task-run's definition here
+                Task task = taskManager.getTaskWithoutLock(taskName);
+                if (task != null) {
+                    info.setDefinition(task.getDefinition());
+                }
+            } catch (Exception e) {
+                LOG.warn("Get taskName {} definition failed: {}", taskName, e);
+            }
             info.setError_code(status.getErrorCode());
             info.setError_message(status.getErrorMessage());
             info.setExpire_time(status.getExpireTime() / 1000);
