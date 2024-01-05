@@ -138,10 +138,18 @@ public class OlapTableSink extends DataSink {
     private boolean enableAutomaticPartition;
     private TPartialUpdateMode partialUpdateMode;
     private long automaticBucketSize = 0;
+    private final boolean isIgnore;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
                          boolean nullExprInAutoIncrement, boolean enableAutomaticPartition) {
+        this(dstTable, tupleDescriptor, partitionIds, writeQuorum, enableReplicatedStorage,
+                nullExprInAutoIncrement, enableReplicatedStorage, false);
+
+    }
+    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
+                         TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
+                         boolean nullExprInAutoIncrement, boolean enableAutomaticPartition, boolean isIgnore) {
         this.dstTable = dstTable;
         this.tupleDescriptor = tupleDescriptor;
         this.partitionIds = partitionIds;
@@ -162,6 +170,7 @@ public class OlapTableSink extends DataSink {
             }
         }
         this.partialUpdateMode = TPartialUpdateMode.UNKNOWN_MODE;
+        this.isIgnore = isIgnore;
     }
 
     public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS)
@@ -191,6 +200,7 @@ public class OlapTableSink extends DataSink {
         if (db != null) {
             tSink.setDb_name(db.getFullName());
         }
+        tSink.setIs_ignore(isIgnore);
         tDataSink = new TDataSink(TDataSinkType.DATA_SPLIT_SINK);
         tDataSink.setType(TDataSinkType.OLAP_TABLE_SINK);
         tDataSink.setOlap_table_sink(tSink);

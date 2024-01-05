@@ -84,6 +84,7 @@ public class InsertStmt extends DmlStmt {
     // it is not allowed to write data to the materialized view.
     // If this is set to true it means a system refresh operation, which is allowed to write to materialized view.
     private boolean isSystem = false;
+    private boolean isIgnore = false;
     // Since insert overwrite internally reuses the insert statement,
     // this variable can be used to distinguish whether a partition is specified.
     private boolean partitionNotSpecifiedInOverwrite = false;
@@ -100,11 +101,11 @@ public class InsertStmt extends DmlStmt {
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
                       QueryStatement queryStatement, boolean isOverwrite) {
-        this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite, NodePosition.ZERO);
+        this(tblName, targetPartitionNames, label, cols, queryStatement, isOverwrite, NodePosition.ZERO, false);
     }
 
     public InsertStmt(TableName tblName, PartitionNames targetPartitionNames, String label, List<String> cols,
-                      QueryStatement queryStatement, boolean isOverwrite, NodePosition pos) {
+                      QueryStatement queryStatement, boolean isOverwrite, NodePosition pos, boolean isIgnore) {
         super(pos);
         this.tblName = tblName;
         this.targetPartitionNames = targetPartitionNames;
@@ -115,6 +116,7 @@ public class InsertStmt extends DmlStmt {
         this.tableFunctionAsTargetTable = false;
         this.tableFunctionProperties = null;
         this.blackHoleTableAsTargetTable = false;
+        this.isIgnore = isIgnore;
     }
 
     // Ctor for CreateTableAsSelectStmt
@@ -265,6 +267,10 @@ public class InsertStmt extends DmlStmt {
 
     public void setPartitionNotSpecifiedInOverwrite(boolean partitionNotSpecifiedInOverwrite) {
         this.partitionNotSpecifiedInOverwrite = partitionNotSpecifiedInOverwrite;
+    }
+
+    public boolean isIgnore() {
+        return isIgnore;
     }
 
     @Override
