@@ -392,7 +392,6 @@ public class MetadataMgr {
         return statistics.build();
     }
 
-
     public Statistics getTableStatistics(OptimizerContext session,
                                          String catalogName,
                                          Table table,
