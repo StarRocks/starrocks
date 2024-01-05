@@ -62,13 +62,13 @@ set query_timeout=5;
 -- !result
 select count(*), count(rn) from (select c0, c0, row_number() over (partition by c0) as rn from TABLE(generate_series(1, 1000000000)) t(c0)) tb;
 -- result:
-E: (1064, 'Query exceeded time limit of 5 seconds')
+E: (1064, 'query timeout')
 -- !result
 select count(*), count(c0), count(mc0) from (select max(c0) mc0, c0 from TABLE(generate_series(1, 1000000000)) t(c0) group by c0) tb;
 -- result:
-E: (1064, 'Query exceeded time limit of 5 seconds')
+E: (1064, 'query timeout')
 -- !result
 select count(*) from ( select * from (select c0 from TABLE(generate_series(1, 1000000000)) t(c0)) l join [broadcast] (select c1 from TABLE(generate_series(1, 1000000000)) t(c1)) r on l.c0 = r.c1 )tb;
 -- result:
-E: (1064, 'Query exceeded time limit of 5 seconds')
+E: (1064, 'query timeout')
 -- !result
