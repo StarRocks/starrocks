@@ -141,6 +141,9 @@ Status ShortCircuitHybridScanNode::_process_key_chunk() {
             RETURN_IF_ERROR(Expr::open(expr_ctxs, runtime_state()));
             auto& iteral_expr_ctx = expr_ctxs[0];
             ASSIGN_OR_RETURN(ColumnPtr value, iteral_expr_ctx->root()->evaluate_const(iteral_expr_ctx));
+            if (UNLIKELY(value == nullptr || value->only_null() || value->is_null(0))) {
+                return Status::EndOfFile("iteral_expr_ctx evaluated to null, won’t execute here");
+            }
             // add const column to chunk
             auto const_column = ColumnHelper::get_data_column(value.get());
             _key_chunk->get_column_by_index(j)->append(*const_column);
