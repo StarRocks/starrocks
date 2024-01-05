@@ -369,7 +369,7 @@ const std::string& OdpsTableDescriptor::get_table_name() const {
     return _table_name;
 }
 
-const std::string& PaimonTableDescriptor::get_time_zone() const {
+const std::string& OdpsTableDescriptor::get_time_zone() const {
     return _time_zone;
 }
 
