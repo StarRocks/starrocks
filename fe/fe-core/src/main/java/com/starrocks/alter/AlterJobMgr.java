@@ -408,8 +408,6 @@ public class AlterJobMgr {
             materializedView.setActive(true);
         } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason(MANUAL_INACTIVE_MV_REASON);
-            materializedView.setActive(false);
-        }
     }
 
     private void processModifyTableProperties(ModifyTablePropertiesClause modifyTablePropertiesClause,
@@ -624,7 +622,8 @@ public class AlterJobMgr {
                     newMaterializedViewName, oldMaterializedView.getId());
         } catch (Throwable e) {
             if (oldMaterializedView != null) {
-                oldMaterializedView.setActive(false);
+                oldMaterializedView.setInactiveAndReason("replay rename materialized-view failed: " +
+                        oldMaterializedView.getName());
                 LOG.warn("replay rename materialized-view failed: {}", oldMaterializedView.getName(), e);
             }
         } finally {
@@ -683,7 +682,8 @@ public class AlterJobMgr {
                     asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId());
         } catch (Throwable e) {
             if (oldMaterializedView != null) {
-                oldMaterializedView.setActive(false);
+                oldMaterializedView.setInactiveAndReason("replay change materialized-view refresh scheme failed: "
+                        + oldMaterializedView.getName());
                 LOG.warn("replay change materialized-view refresh scheme failed: {}",
                         oldMaterializedView.getName(), e);
             }
@@ -712,7 +712,7 @@ public class AlterJobMgr {
             }
         } catch (Throwable e) {
             if (mv != null) {
-                mv.setActive(false);
+                mv.setInactiveAndReason("replay alter materialized-view properties failed: " + mv.getName());
                 LOG.warn("replay alter materialized-view properties failed: {}", mv.getName(), e);
             }
         } finally {
@@ -731,7 +731,7 @@ public class AlterJobMgr {
             processChangeMaterializedViewStatus(mv, log.getStatus(), true);
         } catch (Exception e) {
             if (mv != null) {
-                mv.setActive(false);
+                mv.setInactiveAndReason("replay alter materialized-view status failed: " + mv.getName());
                 LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
             }
         } finally {

@@ -100,7 +100,6 @@ public class MVActiveChecker extends LeaderDaemon {
         String sql = String.format("ALTER MATERIALIZED VIEW %s active", mvFullName);
         try {
             ConnectContext connect = StatisticUtils.buildConnectContext();
-            connect.setStatisticsContext(false);
             connect.setDatabase(dbName.get());
 
             connect.executeSql(sql);
