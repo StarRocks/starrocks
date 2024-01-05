@@ -24,6 +24,8 @@ import com.aliyun.odps.table.TableIdentifier;
 import com.aliyun.odps.table.configuration.SplitOptions;
 import com.aliyun.odps.table.enviroment.Credentials;
 import com.aliyun.odps.table.enviroment.EnvironmentSettings;
+import com.aliyun.odps.table.optimizer.predicate.Predicate;
+import com.aliyun.odps.table.optimizer.predicate.RawPredicate;
 import com.aliyun.odps.table.read.TableBatchReadSession;
 import com.aliyun.odps.table.read.TableReadSessionBuilder;
 import com.aliyun.odps.table.read.split.InputSplit;
@@ -72,6 +74,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -350,14 +353,34 @@ public class OdpsMetadata implements ConnectorMetadata {
                     scanBuilder.identifier(TableIdentifier.of(odpsTable.getDbName(), odpsTable.getTableName()))
                             .withSettings(settings)
                             .requiredDataColumns(orderedColumnNames)
-                            .requiredPartitions(partitionSpecs);
+                            .requiredPartitions(partitionSpecs)
+                            .withSplitOptions(Objects.equals(properties.get(OdpsProperties.SPLIT_POLICY),
+                                    OdpsProperties.ROW_OFFSET) ?
+                                    SplitOptions.newBuilder().SplitByRowOffset().build() :
+                                    SplitOptions.createDefault());
+            TableBatchReadSession odpsTableScanSession;
+            if (Boolean.parseBoolean(properties.get(OdpsProperties.ENABLE_PREDICATE_PUSHDOWN))) {
+                String predicateExpr = predicate.toString();
+                LOG.info("try to push down predicate {}", predicateExpr);
+                tableReadSessionBuilder.withFilterPredicate(new RawPredicate(predicateExpr));
+                try {
+                    odpsTableScanSession = tableReadSessionBuilder.buildBatchReadSession();
+                } catch (IOException e) {
+                    LOG.warn("push down predicate failed {}", predicateExpr);
+                    // fallback: clear predicate and retry
+                    odpsTableScanSession =
+                            tableReadSessionBuilder.withFilterPredicate(Predicate.NO_PREDICATE).buildBatchReadSession();
+                }
+            } else {
+                odpsTableScanSession = tableReadSessionBuilder.buildBatchReadSession();
+            }
             OdpsSplitsInfo odpsSplitsInfo;
             switch (properties.get(OdpsProperties.SPLIT_POLICY)) {
                 case OdpsProperties.ROW_OFFSET:
-                    odpsSplitsInfo = callRowOffsetSplitsInfo(tableReadSessionBuilder, limit);
+                    odpsSplitsInfo = callRowOffsetSplitsInfo(odpsTableScanSession, limit);
                     break;
                 case OdpsProperties.SIZE:
-                    odpsSplitsInfo = callSizeSplitsInfo(tableReadSessionBuilder);
+                    odpsSplitsInfo = callSizeSplitsInfo(odpsTableScanSession);
                     break;
                 default:
                     throw new StarRocksConnectorException(
@@ -373,33 +396,27 @@ public class OdpsMetadata implements ConnectorMetadata {
         }
     }
 
-    private OdpsSplitsInfo callSizeSplitsInfo(TableReadSessionBuilder tableReadSessionBuilder)
+    private OdpsSplitsInfo callSizeSplitsInfo(TableBatchReadSession odpsTableScanSession)
             throws IOException {
         Map<String, String> splitProperties = new HashMap<>();
         splitProperties.put("tunnel_endpoint", properties.get(OdpsProperties.TUNNEL_ENDPOINT));
         splitProperties.put("quota_name", properties.get(OdpsProperties.TUNNEL_QUOTA));
         OdpsSplitsInfo odpsSplitsInfo;
-        TableBatchReadSession sizeScan = tableReadSessionBuilder
-                .withSplitOptions(SplitOptions.createDefault())
-                .buildBatchReadSession();
-        InputSplitAssigner assigner = sizeScan.getInputSplitAssigner();
-        odpsSplitsInfo = new OdpsSplitsInfo(Arrays.asList(assigner.getAllSplits()), sizeScan,
+        InputSplitAssigner assigner = odpsTableScanSession.getInputSplitAssigner();
+        odpsSplitsInfo = new OdpsSplitsInfo(Arrays.asList(assigner.getAllSplits()), odpsTableScanSession,
                 OdpsSplitsInfo.SplitPolicy.SIZE, splitProperties);
         return odpsSplitsInfo;
     }
 
-    private OdpsSplitsInfo callRowOffsetSplitsInfo(TableReadSessionBuilder tableReadSessionBuilder, long limit)
+    private OdpsSplitsInfo callRowOffsetSplitsInfo(TableBatchReadSession odpsTableScanSession, long limit)
             throws IOException {
         Map<String, String> splitProperties = new HashMap<>();
         splitProperties.put("tunnel_endpoint", properties.get(OdpsProperties.TUNNEL_ENDPOINT));
         splitProperties.put("quota_name", properties.get(OdpsProperties.TUNNEL_QUOTA));
         OdpsSplitsInfo odpsSplitsInfo;
         List<InputSplit> splits = new ArrayList<>();
-        TableBatchReadSession rowScan = tableReadSessionBuilder
-                .withSplitOptions(SplitOptions.newBuilder().SplitByRowOffset().build())
-                .buildBatchReadSession();
         RowRangeInputSplitAssigner inputSplitAssigner =
-                (RowRangeInputSplitAssigner) rowScan.getInputSplitAssigner();
+                (RowRangeInputSplitAssigner) odpsTableScanSession.getInputSplitAssigner();
         long rowsPerSplit = Long.parseLong(properties.get(OdpsProperties.SPLIT_ROW_COUNT));
         long totalRowCount = inputSplitAssigner.getTotalRowCount();
         if (limit != -1) {
@@ -415,7 +432,7 @@ public class OdpsMetadata implements ConnectorMetadata {
         InputSplitWithRowRange splitByRowOffset =
                 (InputSplitWithRowRange) inputSplitAssigner.getSplitByRowOffset(numRecord, totalRowCount);
         splits.add(splitByRowOffset);
-        odpsSplitsInfo = new OdpsSplitsInfo(splits, rowScan,
+        odpsSplitsInfo = new OdpsSplitsInfo(splits, odpsTableScanSession,
                 OdpsSplitsInfo.SplitPolicy.ROW_OFFSET, splitProperties);
         return odpsSplitsInfo;
     }
