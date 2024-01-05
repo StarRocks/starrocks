@@ -181,6 +181,7 @@ Status GroupReader::_do_get_next(ChunkPtr* chunk, size_t* row_count) {
 }
 
 Status GroupReader::_do_get_next_new(ChunkPtr* chunk, size_t* row_count) {
+    SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
     if (_is_group_filtered) {
         *row_count = 0;
         return Status::EndOfFile("");
@@ -341,7 +342,10 @@ void GroupReader::close() {
     } else {
         _param.lazy_column_coalesce_counter->fetch_sub(1, std::memory_order_relaxed);
     }
-    _param.stats->group_min_round_cost = _column_read_order_ctx->get_min_round_cost();
+    _param.stats->group_min_round_cost = _param.stats->group_min_round_cost == 0
+                                                 ? _column_read_order_ctx->get_min_round_cost()
+                                                 : std::min(_param.stats->group_min_round_cost,
+                                                            int64_t(_column_read_order_ctx->get_min_round_cost()));
     _column_readers.clear();
 }
 

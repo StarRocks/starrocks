@@ -122,11 +122,15 @@ public:
         ColumnContentType content_type =
                 _dict_filter_ctx == nullptr ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
         if (!converter->need_convert) {
+            SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
             return _reader->read_range(range, filter, content_type, dst);
         } else {
-            SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
             auto column = converter->create_src_column();
-            RETURN_IF_ERROR(_reader->read_range(range, filter, content_type, column.get()));
+            {
+                SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
+                RETURN_IF_ERROR(_reader->read_range(range, filter, content_type, column.get()));
+            }
+            SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
             return converter->convert(column, dst);
         }
     }
