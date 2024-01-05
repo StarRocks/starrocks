@@ -271,6 +271,11 @@ public class AnalyzeInsertTest {
                 "\t\"compression\" = \"uncompressed\" ) \n" +
                 "select \"abc\" as k1");
 
+        analyzeSuccess("insert into files ( \n" +
+                "\t\"path\" = \"s3://path/to/directory/\", \n" +
+                "\t\"format\"=\"parquet\" ) \n" +
+                "select \"abc\" as k1");
+
         analyzeFail("insert into files ( \n" +
                 "\t\"format\"=\"parquet\", \n" +
                 "\t\"compression\" = \"uncompressed\" ) \n" +
