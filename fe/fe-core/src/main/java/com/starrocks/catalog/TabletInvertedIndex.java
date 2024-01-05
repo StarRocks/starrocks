@@ -133,12 +133,12 @@ public class TabletInvertedIndex {
                              Map<Long, Long> transactionsToCommitTime,
                              ListMultimap<Long, Long> transactionsToClear,
                              ListMultimap<Long, Long> tabletRecoveryMap,
-                             Set<Pair<Long, Integer>> tabletWithoutPartitionId) {
+                             Set<Long> tabletWithoutPartitionId) {
 
         for (TTablet backendTablet : backendTablets.values()) {
             for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
                 if (!tabletInfo.isSetPartition_id() || tabletInfo.getPartition_id() < 1) {
-                    tabletWithoutPartitionId.add(new Pair<>(tabletInfo.getTablet_id(), tabletInfo.getSchema_hash()));
+                    tabletWithoutPartitionId.add(tabletInfo.getTablet_id());
                 }
             }
         }
