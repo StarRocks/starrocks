@@ -1147,6 +1147,13 @@ public class Config extends ConfigBase {
     public static boolean enable_backup_materialized_view = true;
 
     /**
+     * Whether to display all task runs or only the newest task run in ShowMaterializedViews command to be
+     * compatible with old version.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_show_materialized_views_include_all_task_runs = true;
+
+    /**
      * The smaller schedule time is, the higher frequency TaskManager schedule which means
      * materialized view need to schedule to refresh.
      * <p>

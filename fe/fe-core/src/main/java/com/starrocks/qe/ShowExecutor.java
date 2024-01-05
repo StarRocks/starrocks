@@ -578,16 +578,19 @@ public class ShowExecutor {
         //     the base table and supports multi table in MV definition.
         //  2. Table's type is OLAP, this is the old MV type which the MV table is associated with the base
         //     table and only supports single table in MV definition.
-        Map<String, TaskRunStatus> mvNameTaskMap = Maps.newHashMap();
+        Map<String, List<TaskRunStatus>> mvNameTaskMap = Maps.newHashMap();
         if (!materializedViews.isEmpty()) {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             TaskManager taskManager = globalStateMgr.getTaskManager();
-            mvNameTaskMap = taskManager.showMVLastRefreshTaskRunStatus(dbName);
+            Set<String> taskNames = materializedViews.stream()
+                    .map(mv -> TaskBuilder.getMvTaskName(mv.getId()))
+                    .collect(Collectors.toSet());
+            mvNameTaskMap = taskManager.listMVRefreshedTaskRunStatus(dbName, taskNames);
         }
         for (MaterializedView mvTable : materializedViews) {
             long mvId = mvTable.getId();
             ShowMaterializedViewStatus mvStatus = new ShowMaterializedViewStatus(mvId, dbName, mvTable.getName());
-            TaskRunStatus taskStatus = mvNameTaskMap.get(TaskBuilder.getMvTaskName(mvId));
+            List<TaskRunStatus> taskTaskStatusJob = mvNameTaskMap.get(TaskBuilder.getMvTaskName(mvId));
             // refresh_type
             MaterializedView.MvRefreshScheme refreshScheme = mvTable.getRefreshScheme();
             if (refreshScheme == null) {
@@ -607,7 +610,7 @@ public class ShowExecutor {
             // materialized view ddl
             mvStatus.setText(mvTable.getMaterializedViewDdlStmt(true));
             // task run status
-            mvStatus.setLastTaskRunStatus(taskStatus);
+            mvStatus.setLastJobTaskRunStatus(taskTaskStatusJob);
             rowSets.add(mvStatus);
         }
 

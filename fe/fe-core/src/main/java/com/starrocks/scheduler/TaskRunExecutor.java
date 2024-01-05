@@ -46,6 +46,8 @@ public class TaskRunExecutor {
 
         CompletableFuture<Constants.TaskRunState> future = CompletableFuture.supplyAsync(() -> {
             status.setState(Constants.TaskRunState.RUNNING);
+            // set process start time
+            status.setProcessStartTime(System.currentTimeMillis());
             try {
                 boolean isSuccess = taskRun.executeTaskRun();
                 if (isSuccess) {

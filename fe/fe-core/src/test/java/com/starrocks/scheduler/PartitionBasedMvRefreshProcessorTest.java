@@ -39,8 +39,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.ShowMaterializedViewStatus;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
@@ -3726,12 +3728,13 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                     // without db name
                     Assert.assertFalse(tm.showTaskRunStatus(null).isEmpty());
                     Assert.assertFalse(tm.showTasks(null).isEmpty());
-                    Assert.assertFalse(tm.showMVLastRefreshTaskRunStatus(null).isEmpty());
+                    Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(null, null).isEmpty());
+
 
                     // specific db
                     Assert.assertFalse(tm.showTaskRunStatus(TEST_DB_NAME).isEmpty());
                     Assert.assertFalse(tm.showTasks(TEST_DB_NAME).isEmpty());
-                    Assert.assertFalse(tm.showMVLastRefreshTaskRunStatus(TEST_DB_NAME).isEmpty());
+                    Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, null).isEmpty());
 
                     long taskId = tm.getTask(TaskBuilder.getMvTaskName(materializedView.getId())).getId();
                     Assert.assertNotNull(tm.getTaskRunManager().getRunnableTaskRun(taskId));
@@ -3939,6 +3942,376 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                                                 extraMessage.getBasePartitionsToRefreshMap().get("mock_tbl"));
                                         Assert.assertTrue(processor.getNextTaskRun() == null);
                                     }
+                                }
+                            });
+                }
+        );
+    }
+
+
+    @Test
+    public void testShowMaterializedViewsWithNonForce() {
+        MTable mTable = new MTable("mockTbl", "k2",
+                List.of(
+                        "k1 date",
+                        "k2 int",
+                        "v1 int"
+                ),
+                "k1",
+                List.of(
+                        "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
+                        "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
+                        "PARTITION p2 values [('2022-02-01'),('2022-03-01'))",
+                        "PARTITION p3 values [('2022-03-01'),('2022-04-01'))"
+                )
+        ).withValues(List.of(
+                "('2021-12-02',2,10)",
+                "('2022-01-02',2,10)",
+                "('2022-02-02',2,10)"
+        ));
+        starRocksAssert.withTable(mTable,
+                () -> {
+                    starRocksAssert.withMaterializedView("create materialized view mock_mv0 \n" +
+                                    "partition by k1 \n" +
+                                    "distributed by hash(k2) buckets 10\n" +
+                                    "refresh deferred manual\n" +
+                                    "properties(" +
+                                    "   'replication_num' = '1', " +
+                                    "   'partition_refresh_number'='1'" +
+                                    ")\n" +
+                                    "as select k1, k2 from mockTbl;",
+                            () -> {
+                                String mvName = "mock_mv0";
+                                Database testDb = GlobalStateMgr.getCurrentState().getDb(TEST_DB_NAME);
+                                MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+                                TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+
+                                executeInsertSql(connectContext, mTable.getGenerateDataSQL());
+
+                                // refresh materialized view(non force)
+                                starRocksAssert.refreshMV(String.format("REFRESH MATERIALIZED VIEW %s", mvName));
+
+                                // without db name
+                                Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(null, null).isEmpty());
+
+                                // specific db
+                                Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, null).isEmpty());
+
+                                String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
+                                Map<String, List<TaskRunStatus>> taskNameJobStatusMap =
+                                        tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, Set.of(mvTaskName));
+                                System.out.println(taskNameJobStatusMap);
+                                Assert.assertFalse(taskNameJobStatusMap.isEmpty());
+                                Assert.assertEquals(1, taskNameJobStatusMap.size());
+                                // refresh 4 times
+                                Assert.assertEquals(4, taskNameJobStatusMap.get(mvTaskName).size());
+
+                                ShowMaterializedViewStatus status =
+                                        new ShowMaterializedViewStatus(materializedView.getId(), TEST_DB_NAME,
+                                                materializedView.getName());
+                                status.setLastJobTaskRunStatus(taskNameJobStatusMap.get(mvTaskName));
+                                ShowMaterializedViewStatus.RefreshJobStatus refreshJobStatus = status.getRefreshJobStatus();
+                                System.out.println(refreshJobStatus);
+                                Assert.assertEquals(refreshJobStatus.isForce(), false);
+                                Assert.assertEquals(refreshJobStatus.isRefreshFinished(), true);
+                                Assert.assertEquals(refreshJobStatus.getRefreshState(), Constants.TaskRunState.SUCCESS);
+                                Assert.assertEquals(refreshJobStatus.getErrorCode(), "0");
+                                Assert.assertEquals(refreshJobStatus.getErrorMsg(), "");
+                                Assert.assertEquals("[NULL, 2022-01-01, 2022-02-01, 2022-03-01]",
+                                        refreshJobStatus.getRefreshedPartitionStarts().toString());
+                                Assert.assertEquals("[NULL, 2022-04-01, 2022-04-01, 2022-04-01]",
+                                        refreshJobStatus.getRefreshedPartitionEnds().toString());
+                                Assert.assertEquals("[{mockTbl=[p0]}, {mockTbl=[p1]}, {mockTbl=[p2]}, {mockTbl=[p3]}]",
+                                        refreshJobStatus.getRefreshedBasePartitionsToRefreshMaps().toString());
+                                Assert.assertEquals("[[p0], [p1], [p2], [p3]]",
+                                        refreshJobStatus.getRefreshedMvPartitionsToRefreshs().toString());
+                            });
+                }
+        );
+    }
+
+    @Test
+    public void testShowMaterializedViewsWithPartialRefresh() {
+        MTable mTable = new MTable("mockTbl", "k2",
+                List.of(
+                        "k1 date",
+                        "k2 int",
+                        "v1 int"
+                ),
+                "k1",
+                List.of(
+                        "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
+                        "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
+                        "PARTITION p2 values [('2022-02-01'),('2022-03-01'))",
+                        "PARTITION p3 values [('2022-03-01'),('2022-04-01'))"
+                )
+        ).withValues(List.of(
+                "('2021-12-02',2,10)",
+                "('2022-01-02',2,10)",
+                "('2022-02-02',2,10)"
+        ));
+        starRocksAssert.withTable(mTable,
+                () -> {
+                    starRocksAssert.withMaterializedView("create materialized view mock_mv0 \n" +
+                                    "partition by k1 \n" +
+                                    "distributed by hash(k2) buckets 10\n" +
+                                    "refresh deferred manual\n" +
+                                    "properties(" +
+                                    "   'replication_num' = '1', " +
+                                    "   'partition_refresh_number'='1'" +
+                                    ")\n" +
+                                    "as select k1, k2 from mockTbl;",
+                            () -> {
+                                String mvName = "mock_mv0";
+                                Database testDb = GlobalStateMgr.getCurrentState().getDb(TEST_DB_NAME);
+                                MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+                                TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+
+                                executeInsertSql(connectContext, mTable.getGenerateDataSQL());
+
+                                // refresh materialized view(non force)
+                                starRocksAssert.refreshMV(String.format("REFRESH MATERIALIZED VIEW %s\n" +
+                                        "PARTITION START (\"%s\") END (\"%s\")", mvName, "2021-12-01", "2022-02-01"));
+
+                                // without db name
+                                Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(null, null).isEmpty());
+
+                                // specific db
+                                Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, null).isEmpty());
+
+                                String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
+                                Map<String, List<TaskRunStatus>> taskNameJobStatusMap =
+                                        tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, Set.of(mvTaskName));
+                                System.out.println(taskNameJobStatusMap);
+                                Assert.assertFalse(taskNameJobStatusMap.isEmpty());
+                                Assert.assertEquals(1, taskNameJobStatusMap.size());
+                                // refresh 4 times
+                                Assert.assertEquals(2, taskNameJobStatusMap.get(mvTaskName).size());
+
+                                ShowMaterializedViewStatus status =
+                                        new ShowMaterializedViewStatus(materializedView.getId(), TEST_DB_NAME,
+                                                materializedView.getName());
+                                status.setLastJobTaskRunStatus(taskNameJobStatusMap.get(mvTaskName));
+                                ShowMaterializedViewStatus.RefreshJobStatus refreshJobStatus = status.getRefreshJobStatus();
+                                System.out.println(refreshJobStatus);
+                                Assert.assertEquals(refreshJobStatus.isForce(), false);
+                                Assert.assertEquals(refreshJobStatus.isRefreshFinished(), true);
+                                Assert.assertEquals(refreshJobStatus.getRefreshState(), Constants.TaskRunState.SUCCESS);
+                                Assert.assertEquals(refreshJobStatus.getErrorCode(), "0");
+                                Assert.assertEquals(refreshJobStatus.getErrorMsg(), "");
+                                Assert.assertEquals("[2021-12-01, 2022-01-01]",
+                                        refreshJobStatus.getRefreshedPartitionStarts().toString());
+                                Assert.assertEquals("[2022-02-01, 2022-02-01]",
+                                        refreshJobStatus.getRefreshedPartitionEnds().toString());
+                                Assert.assertEquals("[{mockTbl=[p0]}, {mockTbl=[p1]}]",
+                                        refreshJobStatus.getRefreshedBasePartitionsToRefreshMaps().toString());
+                                Assert.assertEquals("[[p0], [p1]]",
+                                        refreshJobStatus.getRefreshedMvPartitionsToRefreshs().toString());
+                            });
+                }
+        );
+    }
+
+    @Test
+    public void testShowMaterializedViewsWithForce() {
+        starRocksAssert.withTable(new MTable("mockTbl", "k2",
+                        List.of(
+                                "k1 date",
+                                "k2 int",
+                                "v1 int"
+                        ),
+                        "k1",
+                        List.of(
+                                "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
+                                "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
+                                "PARTITION p2 values [('2022-02-01'),('2022-03-01'))"
+                        )
+                ).withValues(List.of(
+                        "'2021-12-02',2,10",
+                        "'2022-01-02',2,10",
+                        "'2022-02-02',2,10"
+                )),
+                () -> {
+                    starRocksAssert.withMaterializedView("create materialized view mock_mv0 \n" +
+                                    "partition by k1 \n" +
+                                    "distributed by hash(k2) buckets 10\n" +
+                                    "refresh deferred manual\n" +
+                                    "properties(" +
+                                    "   'replication_num' = '1', " +
+                                    "   'partition_refresh_number'='1'" +
+                                    ")\n" +
+                                    "as select k1, k2 from mockTbl;",
+                            () -> {
+                                String mvName = "mock_mv0";
+                                Database testDb = GlobalStateMgr.getCurrentState().getDb(TEST_DB_NAME);
+                                MaterializedView materializedView = ((MaterializedView) testDb.getTable(mvName));
+                                TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
+
+                                // refresh materialized view(force)
+                                refreshMVRange(mvName, "2021-12-01", "2022-03-01", true);
+
+                                // without db name
+                                Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(null, null).isEmpty());
+
+                                // specific db
+                                Assert.assertFalse(tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, null).isEmpty());
+
+                                String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
+                                Map<String, List<TaskRunStatus>> taskNameJobStatusMap =
+                                        tm.listMVRefreshedTaskRunStatus(TEST_DB_NAME, Set.of(mvTaskName));
+                                System.out.println(taskNameJobStatusMap);
+                                Assert.assertFalse(taskNameJobStatusMap.isEmpty());
+                                Assert.assertEquals(1, taskNameJobStatusMap.size());
+
+                                ShowMaterializedViewStatus status =
+                                        new ShowMaterializedViewStatus(materializedView.getId(), TEST_DB_NAME,
+                                                materializedView.getName());
+                                status.setLastJobTaskRunStatus(taskNameJobStatusMap.get(mvTaskName));
+                                ShowMaterializedViewStatus.RefreshJobStatus refreshJobStatus = status.getRefreshJobStatus();
+                                System.out.println(refreshJobStatus);
+                                Assert.assertEquals(refreshJobStatus.isForce(), true);
+                                Assert.assertEquals(refreshJobStatus.isRefreshFinished(), true);
+                                Assert.assertEquals(refreshJobStatus.getRefreshState(), Constants.TaskRunState.SUCCESS);
+                                Assert.assertEquals(refreshJobStatus.getErrorCode(), "0");
+                                Assert.assertEquals(refreshJobStatus.getErrorMsg(), "");
+                            });
+                }
+        );
+    }
+
+    @Test
+    public void testMVRefreshStatus() {
+        starRocksAssert.withTables(List.of(
+                        new MTable("tt1", "k1",
+                                List.of(
+                                        "k1 date",
+                                        "k2 int",
+                                        "v1 int"
+                                ),
+
+                                "k1",
+                                List.of(
+                                        "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
+                                        "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
+                                        "PARTITION p2 values [('2022-02-01'),('2022-03-01'))",
+                                        "PARTITION p3 values [('2022-03-01'),('2022-04-01'))",
+                                        "PARTITION p4 values [('2022-04-01'),('2022-05-01'))"
+                                )
+                        ),
+                        new MTable("tt2", "k1",
+                                List.of(
+                                        "k1 date",
+                                        "k2 int",
+                                        "v1 int"
+                                ),
+
+                                "k1",
+                                List.of(
+                                        "PARTITION p0 values [('2021-12-01'),('2022-01-01'))",
+                                        "PARTITION p1 values [('2022-01-01'),('2022-02-01'))",
+                                        "PARTITION p2 values [('2022-02-01'),('2022-03-01'))",
+                                        "PARTITION p3 values [('2022-03-01'),('2022-04-01'))",
+                                        "PARTITION p4 values [('2022-04-01'),('2022-05-01'))"
+                                )
+                        )
+                ),
+                () -> {
+                    starRocksAssert.withMaterializedView("create materialized view mv_with_join0\n" +
+                                    "partition by k1\n" +
+                                    "distributed by hash(k2) buckets 10\n" +
+                                    "PROPERTIES('partition_refresh_number' = '1')" +
+                                    "refresh deferred manual\n" +
+                                    "as select a.k1, b.k2 from tt1 a join tt2 b on a.k1=b.k1;",
+                            () -> {
+                                Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+
+                                MaterializedView materializedView =
+                                        ((MaterializedView) testDb.getTable("mv_with_join0"));
+                                Assert.assertEquals(2, materializedView.getPartitionExprMaps().size());
+                                Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+                                Map<String, String> testProperties = task.getProperties();
+                                testProperties.put(TaskRun.IS_TEST, "true");
+
+                                TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+                                taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+                                taskRun.executeTaskRun();
+
+                                executeInsertSql(connectContext,
+                                        "insert into tt1 partition(p1) values('2022-01-02', 3, 10);");
+                                executeInsertSql(connectContext,
+                                        "insert into tt1 partition(p2) values('2022-02-03', 3, 10);");
+
+                                String jobID = "";
+                                {
+                                    TaskRunStatus taskRunStatus =
+                                            taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+                                    taskRun.executeTaskRun();
+                                    taskRunStatus.setState(Constants.TaskRunState.SUCCESS);
+                                    MvTaskRunContext mvContext =
+                                            ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
+                                    Assert.assertTrue(mvContext.hasNextBatchPartition());
+                                    PartitionBasedMvRefreshProcessor processor =
+                                            (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+                                    Assert.assertEquals(Sets.newHashSet("p1"),
+                                            processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
+
+                                    Assert.assertEquals(taskRunStatus.getStartTaskRunId(), taskRun.getUUID());
+
+                                    jobID = taskRunStatus.getStartTaskRunId();
+                                    {
+                                        MVTaskRunExtraMessage extraMessage = taskRunStatus.getMvTaskRunExtraMessage();
+                                        System.out.println(extraMessage);
+                                        Assert.assertTrue(extraMessage != null);
+                                        Assert.assertTrue(extraMessage.getPartitionStart() == null);
+                                        Assert.assertTrue(extraMessage.getPartitionEnd() == null);
+                                        Assert.assertEquals(extraMessage.getNextPartitionStart(), "2022-02-01");
+                                        Assert.assertEquals(extraMessage.getNextPartitionEnd(), "2022-03-01");
+
+
+                                        Assert.assertTrue(extraMessage.getExecuteOption() != null);
+                                        Assert.assertFalse(extraMessage.getExecuteOption().isMergeRedundant());
+                                        Assert.assertFalse(extraMessage.getExecuteOption().isReplay());
+                                    }
+
+                                    Assert.assertFalse(taskRunStatus.isRefreshFinished());
+                                    Assert.assertEquals(String.valueOf(taskRunStatus.getLastRefreshState()), "RUNNING");
+
+                                    taskRun = processor.getNextTaskRun();
+                                    Assert.assertTrue(taskRun != null);
+                                }
+
+                                {
+                                    TaskRunStatus taskRunStatus =
+                                            taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+                                    taskRun.executeTaskRun();
+                                    taskRunStatus.setState(Constants.TaskRunState.SUCCESS);
+
+                                    MvTaskRunContext mvContext =
+                                            ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
+                                    Assert.assertTrue(!mvContext.hasNextBatchPartition());
+                                    PartitionBasedMvRefreshProcessor processor =
+                                            (PartitionBasedMvRefreshProcessor) taskRun.getProcessor();
+                                    Assert.assertEquals(Sets.newHashSet("p2"),
+                                            processor.getMVTaskRunExtraMessage().getMvPartitionsToRefresh());
+
+                                    Assert.assertEquals(jobID, taskRunStatus.getStartTaskRunId());
+                                    {
+                                        MVTaskRunExtraMessage extraMessage = taskRunStatus.getMvTaskRunExtraMessage();
+                                        System.out.println(extraMessage);
+                                        Assert.assertTrue(extraMessage != null);
+                                        Assert.assertEquals(extraMessage.getPartitionStart(), "2022-02-01");
+                                        Assert.assertEquals(extraMessage.getPartitionEnd(), "2022-03-01");
+                                        Assert.assertTrue(extraMessage.getNextPartitionStart() == null);
+                                        Assert.assertTrue(extraMessage.getNextPartitionEnd() == null);
+                                        Assert.assertTrue(extraMessage.getExecuteOption() != null);
+                                        Assert.assertTrue(extraMessage.getExecuteOption().isMergeRedundant());
+                                        Assert.assertFalse(extraMessage.getExecuteOption().isReplay());
+                                    }
+
+                                    Assert.assertTrue(taskRunStatus.isRefreshFinished());
+                                    Assert.assertEquals(String.valueOf(taskRunStatus.getLastRefreshState()), "SUCCESS");
+                                    taskRun = processor.getNextTaskRun();
+                                    Assert.assertTrue(taskRun == null);
                                 }
                             });
                 }
