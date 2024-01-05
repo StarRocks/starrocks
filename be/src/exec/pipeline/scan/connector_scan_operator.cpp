@@ -36,8 +36,12 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
     mutable std::mutex lock;
 
     const int64_t dop = 0;
+    // total scan mem limit means limit for all scan nodes.
+    // scan mem limit means limit for this scan node.
+    int64_t total_scan_mem_limit = std::numeric_limits<int64_t>::max();
     std::atomic<int64_t> scan_mem_limit = 0;
     std::atomic<int64_t> running_chunk_source_count = 0;
+    int64_t default_data_source_mem_bytes = 0;
     std::atomic<int64_t> chunk_source_mem_bytes = 0;
     int64_t chunk_source_mem_bytes_update_count = 0;
     int64_t last_arb_chunk_source_mem_bytes = 0;
@@ -62,7 +66,7 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
         [[maybe_unused]] auto build_debug_string = [&]() {
             std::stringstream ss;
             ss << "available_chunk_source_count. max_count=" << max_count << "(" << scan_mem_limit_value << "/"
-               << chunk_source_mem_bytes_value << ")"
+               << chunk_source_mem_bytes_value << "), total_scan_mem_limit = " << total_scan_mem_limit
                << ", running_count = " << running_count << ", dop = " << dop << ", avail_count = " << avail_count
                << ", op_id = " << plan_node_id << "/" << driver_sequence << ", per_count = " << per_count;
             return ss.str();
@@ -79,12 +83,11 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
         return per_count;
     }
 
-    void update_running_chunk_source_count(int delta) {
-        running_chunk_source_count.fetch_add(delta, std::memory_order_relaxed);
-    }
+    int64_t update_running_chunk_source_count(int delta) { return running_chunk_source_count.fetch_add(delta); }
 
     void update_chunk_source_mem_bytes(int64_t value) {
         if (value == 0) return;
+        value = std::min(value, total_scan_mem_limit);
 
         std::lock_guard<std::mutex> L(lock);
         int64_t total =
@@ -92,6 +95,16 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
         chunk_source_mem_bytes_update_count += 1;
         chunk_source_mem_bytes.store(total / chunk_source_mem_bytes_update_count, std::memory_order_relaxed);
     }
+
+    void set_total_scan_mem_limit(int64_t value) { total_scan_mem_limit = value; }
+    void update_scan_mem_limit(int64_t value) { scan_mem_limit.store(value, std::memory_order_relaxed); }
+    void update_last_arb_chunk_source_mem_bytes(int64_t value) {
+        value = std::min(value, total_scan_mem_limit);
+        last_arb_chunk_source_mem_bytes = value;
+    }
+
+    void set_default_data_source_mem_bytes(int64_t value) { default_data_source_mem_bytes = value; }
+    int64_t get_default_data_source_mem_bytes() const { return default_data_source_mem_bytes; }
 };
 
 ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, RuntimeState* state,
@@ -126,15 +139,20 @@ const std::vector<ExprContext*>& ConnectorScanOperatorFactory::partition_exprs()
 
 void ConnectorScanOperatorFactory::set_chunk_source_mem_bytes(int64_t value) {
     _io_tasks_mem_limiter->update_chunk_source_mem_bytes(value);
-    _io_tasks_mem_limiter->last_arb_chunk_source_mem_bytes = value;
+    _io_tasks_mem_limiter->update_last_arb_chunk_source_mem_bytes(value);
 }
 
 void ConnectorScanOperatorFactory::set_scan_mem_limit(int64_t value) {
-    _io_tasks_mem_limiter->scan_mem_limit = value;
+    _io_tasks_mem_limiter->update_scan_mem_limit(value);
+    _io_tasks_mem_limiter->set_total_scan_mem_limit(value);
 }
 
 void ConnectorScanOperatorFactory::set_mem_share_arb(ConnectorScanOperatorMemShareArbitrator* arb) {
     _mem_share_arb = arb;
+}
+
+void ConnectorScanOperatorFactory::set_default_data_source_mem_bytes(int64_t value) {
+    _io_tasks_mem_limiter->set_default_data_source_mem_bytes(value);
 }
 
 // ===============================================================
@@ -192,8 +210,8 @@ int64_t ConnectorScanOperator::_adjust_scan_mem_limit(int64_t old_value, int64_t
     ConnectorScanOperatorMemShareArbitrator* arb = factory->_mem_share_arb;
     int64_t new_scan_mem_limit = arb->update_chunk_source_mem_bytes(old_value, new_value);
 
-    L->scan_mem_limit.store(new_scan_mem_limit, std::memory_order_relaxed);
-    L->last_arb_chunk_source_mem_bytes = new_value;
+    L->update_scan_mem_limit(new_scan_mem_limit);
+    L->update_last_arb_chunk_source_mem_bytes(new_value);
     ChunkBufferLimiter* limiter = factory->get_chunk_buffer().limiter();
     limiter->update_mem_limit(new_scan_mem_limit * ConnectorScanOperatorMemShareArbitrator::kChunkBufferMemRatio);
 
@@ -588,10 +606,22 @@ void ConnectorChunkSource::close(RuntimeState* state) {
         limiter->update_running_chunk_source_count(-1);
         uint64_t chunk_num = std::min<uint64_t>(state->chunk_size(), _chunk_rows_read);
 
-        // if we don't know chunk source mem bytes for sure, we use estimated old value.
-        int64_t chunk_source_mem_bytes = _data_source->estimated_mem_usage();
-        if (chunk_source_mem_bytes != 0) {
-            chunk_source_mem_bytes += avg_row_mem_bytes() * chunk_num;
+        bool need_update = true;
+        int64_t data_source_mem_bytes = _data_source->estimated_mem_usage();
+        // 1. if this data source can estimate memory usage but estimated mem usage == 0
+        // it means in this chunk source, estimated memory usage is not available, then we don't update
+        // 2. but if this data sourcen can not estimate memory usage, we will use default mem usage
+        // in following code. We can adjust chunk mem usage.
+        if (data_source_mem_bytes == 0 && _data_source->can_estimate_mem_usage()) {
+            need_update = false;
+        }
+
+        int64_t chunk_source_mem_bytes = 0;
+        if (need_update) {
+            if (data_source_mem_bytes == 0) {
+                data_source_mem_bytes = limiter->get_default_data_source_mem_bytes();
+            }
+            chunk_source_mem_bytes = data_source_mem_bytes + avg_row_mem_bytes() * chunk_num;
             limiter->update_chunk_source_mem_bytes(chunk_source_mem_bytes);
         }
 
@@ -602,7 +632,7 @@ void ConnectorChunkSource::close(RuntimeState* state) {
                << ", release. this = " << (void*)this << ", request mem bytes = " << _request_mem_tracker_bytes
                << ", chunk source mem bytes = " << chunk_source_mem_bytes
                << ", chunk mem bytes = " << avg_row_mem_bytes() << " * " << chunk_num
-               << ", data source mem usage = " << _data_source->estimated_mem_usage();
+               << ", data source mem usage = " << data_source_mem_bytes;
             return ss.str();
         };
         VLOG_OPERATOR << build_debug_string();
@@ -647,13 +677,24 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
             // VLOG_OPERATOR << build_debug_string("alloc failed");
             sched_yield();
         }
+
         if (*mem_alloc_failed) {
-            _request_mem_tracker_bytes = 0;
-            return Status::OK();
+            // if there is no running chunk source of this node,
+            // perhaps we want to make sure one is running to avoid deadlock of data flow.
+            // and memory is over-committed.
+            if (limiter->update_running_chunk_source_count(1) == 0) {
+                *mem_alloc_failed = false;
+                mem_tracker->consume(_request_mem_tracker_bytes);
+            } else {
+                limiter->update_running_chunk_source_count(-1);
+                _request_mem_tracker_bytes = 0;
+                return Status::OK();
+            }
+        } else {
+            limiter->update_running_chunk_source_count(1);
         }
 
         VLOG_OPERATOR << build_debug_string("consume");
-        limiter->update_running_chunk_source_count(1);
     }
 
     RETURN_IF_ERROR(_data_source->open(state));
@@ -686,7 +727,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
         RETURN_IF_ERROR(_open_data_source(state, &mem_alloc_failed));
         if (mem_alloc_failed) {
             _mem_alloc_failed_count += 1;
-            return Status::ResourceBusy("");
+            return Status::TimedOut("");
         }
         if (state->is_cancelled()) {
             return Status::Cancelled("canceled state");
