@@ -706,7 +706,7 @@ HdfsScanner* HiveDataSource::_create_odps_jni_scanner(const FSOptions& options) 
     jni_scanner_params["required_fields"] = required_fields;
     jni_scanner_params.insert(_scan_range.odps_split_infos.begin(), _scan_range.odps_split_infos.end());
     jni_scanner_params["nested_fields"] = nested_fields;
-    jni_scanner_params["time_zone"] = odps_table->get_time_zone();;
+    jni_scanner_params["time_zone"] = odps_table->get_time_zone();
 
     const AliyunCloudConfiguration aliyun_cloud_configuration =
             CloudConfigurationFactory::create_aliyun(*options.cloud_configuration);
