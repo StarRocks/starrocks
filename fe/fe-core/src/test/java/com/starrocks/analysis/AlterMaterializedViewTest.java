@@ -2,8 +2,10 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+import com.starrocks.alter.Alter;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.MVActiveChecker;
@@ -127,16 +129,18 @@ public class AlterMaterializedViewTest {
 
     @Test
     public void testActiveChecker() throws Exception {
+        Config.enable_mv_automatic_active_check = true;
         PlanTestBase.mockDml();
         MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
         checker.setStop();
 
         String baseTableName = "base_tbl_active";
         String createTableSql =
-                "create table " + baseTableName + " ( k1 int, k2 int) properties('replication_num'='1')";
+                "create table " + baseTableName + " ( k1 int, k2 int) distributed by hash(k1) " +
+                        "properties('replication_num'='1')";
         starRocksAssert.withTable(createTableSql);
         starRocksAssert.withMaterializedView("create materialized view mv_active " +
-                " refresh manual as select * from base_tbl_active");
+                " distributed by hash(k1) refresh manual as select * from base_tbl_active");
         MaterializedView mv = (MaterializedView) starRocksAssert.getTable(connectContext.getDatabase(), "mv_active");
         Assert.assertTrue(mv.isActive());
 
@@ -164,12 +168,13 @@ public class AlterMaterializedViewTest {
         Assert.assertTrue(mv.isActive());
 
         // manually set to inactive
-        mv.setInactiveAndReason(AlterJobMgr.MANUAL_INACTIVE_MV_REASON);
+        mv.setInactiveAndReason(Alter.MANUAL_INACTIVE_MV_REASON);
         Assert.assertFalse(mv.isActive());
         checker.runForTest();
         Assert.assertFalse(mv.isActive());
-        Assert.assertEquals(AlterJobMgr.MANUAL_INACTIVE_MV_REASON, mv.getInactiveReason());
+        Assert.assertEquals(Alter.MANUAL_INACTIVE_MV_REASON, mv.getInactiveReason());
 
         checker.start();
+        Config.enable_mv_automatic_active_check = false;
     }
 }

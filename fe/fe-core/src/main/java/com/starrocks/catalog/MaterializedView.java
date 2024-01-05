@@ -299,6 +299,9 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "active")
     private boolean active;
 
+    @SerializedName(value = "inactiveReason")
+    private String inactiveReason;
+
     // TODO: now it is original definition sql
     // for show create mv, constructing refresh job(insert into select)
     @SerializedName(value = "viewDefineSql")
@@ -358,7 +361,20 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     public void setActive(boolean active) {
         this.active = active;
+        if (active) {
+            this.inactiveReason = null;
+        }
         CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
+    }
+
+    public void setInactiveAndReason(String reason) {
+        this.active = false;
+        this.inactiveReason = reason;
+        CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
+    }
+
+    public String getInactiveReason() {
+        return inactiveReason;
     }
 
     public String getViewDefineSql() {
@@ -659,7 +675,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             setActive(desiredActive && reloadActive);
         } catch (Throwable e) {
             LOG.error("reload mv failed: {}", this, e);
-            setActive(false);
+            setInactiveAndReason("reload mv failed: " + e.getMessage());
         }
     }
 
@@ -670,7 +686,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
-            setActive(false);
+            setInactiveAndReason("db not exists: " + dbId);
             return false;
         }
         if (baseTableInfos == null) {
@@ -711,7 +727,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 }
             } else {
                 res = false;
-                setActive(false);
+                setInactiveAndReason("base-table dropped: " + baseTableInfo.getTableName());
             }
         }
         analyzePartitionInfo();
@@ -1082,7 +1098,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         // if non-partition-by table has changed, should refresh all mv partitions
         if (partitionInfo == null) {
             // mark it inactive
-            setActive(false);
+            setInactiveAndReason("partition method changed");
             LOG.warn("mark mv:{} inactive for get partition info failed", name);
             throw new RuntimeException(String.format("getting partition info failed for mv: %s", name));
         }
