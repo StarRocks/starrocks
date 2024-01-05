@@ -44,6 +44,8 @@ public:
     Status get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* key_indexes_info,
                KeyIndexesInfo* found_keys_info, int64_t version);
 
+    sstable::Iterator* iterator(const sstable::ReadOptions& options) { return _table->NewIterator(options); }
+
 private:
     std::unique_ptr<sstable::Table> _sst{nullptr};
     sstable::Table* _table;

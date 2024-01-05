@@ -223,6 +223,7 @@ add_library(Storage STATIC
     lake/sstable/filter_policy.cpp
     lake/sstable/iterator.cpp
     lake/sstable/options.cpp
+    lake/sstable/merger.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp
