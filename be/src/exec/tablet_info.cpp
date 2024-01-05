@@ -54,6 +54,7 @@ void OlapTableColumnParam::to_protobuf(POlapTableColumnParam* pcolumn) const {
 void OlapTableIndexSchema::to_protobuf(POlapTableIndexSchema* pindex) const {
     pindex->set_id(index_id);
     pindex->set_schema_hash(schema_hash);
+    pindex->set_schema_id(schema_id);
     for (auto slot : slots) {
         pindex->add_columns(slot->col_name());
     }
@@ -96,6 +97,11 @@ Status OlapTableSchemaParam::init(const POlapTableSchemaParam& pschema) {
             }
             col_param->short_key_column_count = p_index.column_param().short_key_column_count();
             index->column_param = col_param;
+        }
+        if (p_index.has_schema_id()) {
+            index->schema_id = p_index.schema_id();
+        } else {
+            index->schema_id = p_index.id();
         }
         _indexes.emplace_back(index);
     }
@@ -143,6 +149,12 @@ Status OlapTableSchemaParam::init(const TOlapTableSchemaParam& tschema, RuntimeS
         }
         if (t_index.__isset.where_clause) {
             RETURN_IF_ERROR(Expr::create_expr_tree(&_obj_pool, t_index.where_clause, &index->where_clause, state));
+        }
+        if (t_index.__isset.schema_id) {
+            index->schema_id = t_index.schema_id;
+        } else {
+            // schema id is same with index id in previous version, for compatibility
+            index->schema_id = t_index.id;
         }
         _indexes.emplace_back(index);
     }

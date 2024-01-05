@@ -261,6 +261,7 @@ public:
 
     // Caller should always check the returned value with `invalid_id()`.
     SchemaId id() const { return _id; }
+    void set_id(SchemaId id) { _id = id; }
     size_t estimate_row_size(size_t variable_len) const;
     int32_t field_index(int32_t col_unique_id) const;
     size_t field_index(std::string_view field_name) const;
