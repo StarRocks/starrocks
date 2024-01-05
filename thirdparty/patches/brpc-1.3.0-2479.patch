@@ -1,0 +1,336 @@
+From 1c737c68d3784ab83716bf46c9fe6c04ec0ad302 Mon Sep 17 00:00:00 2001
+From: stdpain <drfeng08@gmail.com>
+Date: Mon, 25 Dec 2023 16:10:25 +0800
+Subject: [PATCH] support gc for ListOfABAFreeId
+
+---
+ src/bthread/bthread.cpp          |   1 +
+ src/bthread/id.cpp               |   1 +
+ src/bthread/list_of_abafree_id.h | 154 ++++++++++++++++++++++++++++---
+ test/CMakeLists.txt              |   1 +
+ test/abalist_unittest.cc         |  46 +++++++++
+ 5 files changed, 190 insertions(+), 13 deletions(-)
+ create mode 100644 test/abalist_unittest.cc
+
+diff --git a/src/bthread/bthread.cpp b/src/bthread/bthread.cpp
+index 201a674592..b94d41384c 100644
+--- a/src/bthread/bthread.cpp
++++ b/src/bthread/bthread.cpp
+@@ -199,6 +199,7 @@ BUTIL_FORCE_INLINE bool can_run_thread_local(const bthread_attr_t* __restrict at
+ struct TidTraits {
+     static const size_t BLOCK_SIZE = 63;
+     static const size_t MAX_ENTRIES = 65536;
++    static const size_t INIT_GC_SIZE = 65536;
+     static const bthread_t ID_INIT;
+     static bool exists(bthread_t id) { return bthread::TaskGroup::exists(id); }
+ };
+diff --git a/src/bthread/id.cpp b/src/bthread/id.cpp
+index 41c49a3f7c..ba77580a04 100644
+--- a/src/bthread/id.cpp
++++ b/src/bthread/id.cpp
+@@ -291,6 +291,7 @@ void id_pool_status(std::ostream &os) {
+ struct IdTraits {
+     static const size_t BLOCK_SIZE = 63;
+     static const size_t MAX_ENTRIES = 100000;
++    static const size_t INIT_GC_SIZE = 4096;
+     static const bthread_id_t ID_INIT;
+     static bool exists(bthread_id_t id)
+     { return bthread::id_exists_with_true_negatives(id); }
+diff --git a/src/bthread/list_of_abafree_id.h b/src/bthread/list_of_abafree_id.h
+index ac2b223423..b4b584ab32 100644
+--- a/src/bthread/list_of_abafree_id.h
++++ b/src/bthread/list_of_abafree_id.h
+@@ -22,8 +22,10 @@
+ #ifndef BTHREAD_LIST_OF_ABAFREE_ID_H
+ #define BTHREAD_LIST_OF_ABAFREE_ID_H
+ 
+-#include <vector>
+ #include <deque>
++#include <vector>
++
++#include "butil/macros.h"
+ 
+ namespace bthread {
+ 
+@@ -48,6 +50,9 @@ namespace bthread {
+ //   // Max #entries. Often has close relationship with concurrency, 65536
+ //   // is "huge" for most apps.
+ //   static const size_t MAX_ENTRIES = 65536;
++//   // Initial GC length, when the number of blocks reaches this length, 
++//   // start to initiate list GC operation. It will release useless blocks
++//   static const size_t INIT_GC_SIZE = 4096;
+ //
+ //   // Initial value of id. Id with the value is treated as invalid.
+ //   static const Id ID_INIT = ...;
+@@ -64,13 +69,14 @@ class ListOfABAFreeId {
+ public:
+     ListOfABAFreeId();
+     ~ListOfABAFreeId();
+-    
++
+     // Add an identifier into the list.
+     int add(Id id);
+-    
++
+     // Apply fn(id) to all identifiers.
+-    template <typename Fn> void apply(const Fn& fn);
+-    
++    template <typename Fn>
++    void apply(const Fn& fn);
++
+     // Put #entries of each level into `counts'
+     // Returns #levels.
+     size_t get_sizes(size_t* counts, size_t n);
+@@ -82,19 +88,31 @@ class ListOfABAFreeId {
+         IdBlock* next;
+     };
+     void forward_index();
++
++    struct TempIdBlock {
++        IdBlock* block;
++        uint32_t index;
++        uint32_t nblock;
++    };
++
++    int gc();
++    int add_to_temp_list(TempIdBlock* temp_list, Id id);
++    template <typename Fn>
++    int for_each(const Fn& fn);
++    void free_list(IdBlock* block);
++
+     IdBlock* _cur_block;
+     uint32_t _cur_index;
+     uint32_t _nblock;
+     IdBlock _head_block;
++    uint32_t _next_gc_size;
+ };
+ 
+ // [impl.]
+ 
+ template <typename Id, typename IdTraits> 
+ ListOfABAFreeId<Id, IdTraits>::ListOfABAFreeId()
+-    : _cur_block(&_head_block)
+-    , _cur_index(0)
+-    , _nblock(1) {
++        : _cur_block(&_head_block), _cur_index(0), _nblock(1), _next_gc_size(IdTraits::INIT_GC_SIZE) {
+     for (size_t i = 0; i < IdTraits::BLOCK_SIZE; ++i) {
+         _head_block.ids[i] = IdTraits::ID_INIT;
+     }
+@@ -140,6 +158,23 @@ int ListOfABAFreeId<Id, IdTraits>::add(Id id) {
+         }
+         saved_pos[i] = pos;
+     }
++    if (_nblock * IdTraits::BLOCK_SIZE > IdTraits::MAX_ENTRIES) {
++        return EAGAIN;
++    }
++    // If the number of blocks exceeds the minimum GC length, start the GC operation
++    if (_nblock * IdTraits::BLOCK_SIZE > _next_gc_size) {
++        uint32_t before_gc_blocks = _nblock;
++        int rc = gc();
++        // To avoid frequent GC operations, we only let the GC be effective enough to continue the GC. 
++        // otherwise we let the next GC occur length * 2.
++        // 
++        // Condition for a GC to be sufficiently efficient: the number of blocks 
++        // retained after the GC is 1/8 of the previous one.
++        if ((before_gc_blocks - _nblock) * IdTraits::BLOCK_SIZE < (_next_gc_size - (_next_gc_size >> 3))) {
++            _next_gc_size <<= 1;
++        }
++        return rc;
++    }
+     // The list is considered to be "crowded", add a new block and scatter
+     // the conflict identifiers by inserting an empty entry after each of
+     // them, so that even if the identifiers are still valid when we walk
+@@ -152,9 +187,6 @@ int ListOfABAFreeId<Id, IdTraits>::add(Id id) {
+     //
+     //  [..xxxx....] -> [......yyyy] -> [..........]
+     //    block A        new block      block B
+-    if (_nblock * IdTraits::BLOCK_SIZE > IdTraits::MAX_ENTRIES) {
+-        return EAGAIN;
+-    }
+     IdBlock* new_block = new (std::nothrow) IdBlock;
+     if (NULL == new_block) {
+         return ENOMEM;
+@@ -188,6 +220,93 @@ int ListOfABAFreeId<Id, IdTraits>::add(Id id) {
+     return 0;
+ }
+ 
++template <typename Id, typename IdTraits>
++int ListOfABAFreeId<Id, IdTraits>::gc() {
++    IdBlock* new_block = new (std::nothrow) IdBlock;
++    if (NULL == new_block) {
++        return ENOMEM;
++    }
++    // reset head block
++    for (size_t i = 0; i < IdTraits::BLOCK_SIZE; ++i) {
++        new_block->ids[i] = IdTraits::ID_INIT;
++    }
++    new_block->next = NULL;
++
++    TempIdBlock tmp_id_block;
++    tmp_id_block.block = new_block;
++    tmp_id_block.nblock = 1;
++    tmp_id_block.index = 0;
++
++    // Add each element of the old list to the new list
++    int rc = for_each([&](Id id) {
++        int rc;
++        rc = add_to_temp_list(&tmp_id_block, id);
++        if (rc != 0) {
++            return rc;
++        }
++        rc = add_to_temp_list(&tmp_id_block, IdTraits::ID_INIT);
++        if (rc != 0) {
++            return rc;
++        }
++        return 0;
++    });
++
++    if (rc != 0) {
++        free_list(new_block);
++        return rc;
++    }
++
++    // reset head block
++    for (size_t i = 0; i < IdTraits::BLOCK_SIZE; ++i) {
++        _head_block.ids[i] = IdTraits::ID_INIT;
++    }
++
++    free_list(_head_block.next);
++    _cur_block = tmp_id_block.block;
++    _cur_index = tmp_id_block.index;
++    // nblock and head_block
++    _nblock = tmp_id_block.nblock + 1;
++    _head_block.next = new_block;
++
++    return 0;
++}
++
++template <typename Id, typename IdTraits>
++int ListOfABAFreeId<Id, IdTraits>::add_to_temp_list(TempIdBlock* block_list, Id id) {
++    block_list->block->ids[block_list->index++] = id;
++    // add new list
++    if (block_list->index == IdTraits::BLOCK_SIZE) {
++        block_list->index = 0;
++        block_list->nblock++;
++        block_list->block->next = new (std::nothrow) IdBlock;
++        if (NULL == block_list->block->next) {
++            return ENOMEM;
++        }
++        block_list->block = block_list->block->next;
++        for (size_t i = 0; i < IdTraits::BLOCK_SIZE; ++i) {
++            block_list->block->ids[i] = IdTraits::ID_INIT;
++        }
++        block_list->block->next = NULL;
++    }
++    return 0;
++}
++
++template <typename Id, typename IdTraits>
++template <typename Fn>
++int ListOfABAFreeId<Id, IdTraits>::for_each(const Fn& fn) {
++    for (IdBlock* p = &_head_block; p != NULL; p = p->next) {
++        for (size_t i = 0; i < IdTraits::BLOCK_SIZE; ++i) {
++            if (p->ids[i] != IdTraits::ID_INIT && IdTraits::exists(p->ids[i])) {
++                int rc = fn(p->ids[i]);
++                if (rc != 0) {
++                    return rc;
++                }
++            }
++        }
++    }
++    return 0;
++}
++
+ template <typename Id, typename IdTraits>
+ template <typename Fn>
+ void ListOfABAFreeId<Id, IdTraits>::apply(const Fn& fn) {
+@@ -200,6 +319,15 @@ void ListOfABAFreeId<Id, IdTraits>::apply(const Fn& fn) {
+     }
+ }
+ 
++template <typename Id, typename IdTraits>
++void ListOfABAFreeId<Id, IdTraits>::free_list(IdBlock* p) {
++    for (; p != NULL;) {
++        IdBlock* saved_next = p->next;
++        delete p;
++        p = saved_next;
++    }
++}
++
+ template <typename Id, typename IdTraits>
+ size_t ListOfABAFreeId<Id, IdTraits>::get_sizes(size_t* cnts, size_t n) {
+     if (n == 0) {
+@@ -210,6 +338,6 @@ size_t ListOfABAFreeId<Id, IdTraits>::get_sizes(size_t* cnts, size_t n) {
+     return 1;
+ }
+ 
+-}  // namespace bthread
++} // namespace bthread
+ 
+-#endif  // BTHREAD_LIST_OF_ABAFREE_ID_H
++#endif // BTHREAD_LIST_OF_ABAFREE_ID_H
+diff --git a/test/CMakeLists.txt b/test/CMakeLists.txt
+index 42cb647b82..051f52efb5 100644
+--- a/test/CMakeLists.txt
++++ b/test/CMakeLists.txt
+@@ -144,6 +144,7 @@ SET(TEST_BUTIL_SOURCES
+     ${PROJECT_SOURCE_DIR}/test/thread_id_name_manager_unittest.cc
+     ${PROJECT_SOURCE_DIR}/test/thread_local_storage_unittest.cc
+     ${PROJECT_SOURCE_DIR}/test/thread_local_unittest.cc
++    ${PROJECT_SOURCE_DIR}/test/abalist_unittest.cc
+     ${PROJECT_SOURCE_DIR}/test/watchdog_unittest.cc
+     ${PROJECT_SOURCE_DIR}/test/time_unittest.cc
+     ${PROJECT_SOURCE_DIR}/test/version_unittest.cc
+diff --git a/test/abalist_unittest.cc b/test/abalist_unittest.cc
+new file mode 100644
+index 0000000000..8a42d3d248
+--- /dev/null
++++ b/test/abalist_unittest.cc
+@@ -0,0 +1,46 @@
++// Copyright 2014 The Chromium Authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++#include <gtest/gtest.h>
++
++#include <unordered_set>
++
++#include "bthread/list_of_abafree_id.h"
++
++namespace bthread {
++// define TestId
++struct TestIdTraits {
++    static const size_t BLOCK_SIZE = 16;
++    static const size_t MAX_ENTRIES = 100000;
++    static const size_t INIT_GC_SIZE = 100;
++    static const int ID_INIT = 0xFF;
++    static std::unordered_set<int> id_set;
++    static bool exists(int id) { return id_set.count(id) > 0; }
++};
++
++std::unordered_set<int> TestIdTraits::id_set;
++
++TEST(AbaListTest, TestGc) {
++    ListOfABAFreeId<int, TestIdTraits> aba_list;
++
++    size_t wait_seq = 0;
++    for (size_t i = 0; i < 1000000; i++) {
++        size_t cnts[1];
++        aba_list.get_sizes(cnts, 1);
++        if (wait_seq > cnts[0] + 1) {
++            wait_seq = 0;
++            TestIdTraits::id_set.clear();
++        }
++        aba_list.add(i);
++        if (TestIdTraits::id_set.size() < 4) {
++            TestIdTraits::id_set.insert(i);
++        } else {
++            wait_seq++;
++        }
++    }
++    size_t cnts[1];
++    aba_list.get_sizes(cnts, 1);
++    EXPECT_EQ(cnts[0], (size_t)192);
++}
++} // namespace bthread
+\ No newline at end of file
