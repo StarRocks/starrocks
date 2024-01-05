@@ -402,6 +402,8 @@ struct TMaterializedViewStatus {
     23: optional string task_id
     24: optional string task_name
     25: optional string inactive_reason
+
+    26: optional string extra_message
 }
 
 struct TListPipesParams {

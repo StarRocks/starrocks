@@ -981,11 +981,21 @@ public class ShowExecutorTest {
         Assert.assertEquals("true", resultSet.getString(4));
         Assert.assertEquals("", resultSet.getString(5));
         Assert.assertEquals("RANGE", resultSet.getString(6));
-        for (int i = 6; i < mvSchemaTable.size() - 2; i++) {
-            Assert.assertEquals("", resultSet.getString(7));
+        Assert.assertEquals("0", resultSet.getString(7));
+        Assert.assertEquals("", resultSet.getString(8));
+        Assert.assertEquals("\\N", resultSet.getString(9));
+        Assert.assertEquals("\\N", resultSet.getString(10));
+        Assert.assertEquals("0.000", resultSet.getString(11));
+        Assert.assertEquals("", resultSet.getString(12));
+        Assert.assertEquals("false", resultSet.getString(13));
+        System.out.println(resultSet.getResultRows());
+        for (int i = 14; i < mvSchemaTable.size() - 3; i++) {
+            System.out.println(i);
+            Assert.assertEquals("", resultSet.getString(i));
         }
-        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 2));
-        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 1));
+        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 3));
+        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 2));
+        Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 1));
         Assert.assertFalse(resultSet.next());
     }
 
