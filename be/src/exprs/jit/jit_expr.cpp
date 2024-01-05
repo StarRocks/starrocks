@@ -95,7 +95,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         if (column->only_null()) { // TODO(Yueyang): remove this when support ifnull expr.
             return ColumnHelper::align_return_type(column, type(), column->size(), true);
         }
-        args.emplace_back(ColumnHelper::unpack_and_duplicate_const_column(column->size(), column));
+        args.emplace_back(column);
     }
 
 #ifdef DEBUG
@@ -108,7 +108,8 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     }
 #endif
 
-    auto result_column = ColumnHelper::create_column(type(), is_nullable(), is_constant(), ptr->num_rows(), false);
+    auto result_column =
+            ColumnHelper::create_column(type(), !is_constant() && is_nullable(), is_constant(), ptr->num_rows(), false);
     args.emplace_back(result_column);
 
     RETURN_IF_ERROR(JITFunction::llvm_function(_jit_function, args));
