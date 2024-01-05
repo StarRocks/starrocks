@@ -328,6 +328,7 @@ struct GroupConcatAggregateStateV2 {
             }
             data_columns->clear();
             data_columns.reset(nullptr);
+            delete output_index;
         }
     }
     // using pointer rather than vector to avoid variadic size
@@ -335,6 +336,7 @@ struct GroupConcatAggregateStateV2 {
     // output columns a and b.
     std::unique_ptr<Columns> data_columns = nullptr;
     int output_col_num = 0;
+    uint64_t* output_index = new uint64_t(0);
 };
 
 // group_concat concatenates non-null values from a group, and output null if the group is empty.
@@ -611,53 +613,7 @@ public:
         for (auto i = 0; i < output_col_num; ++i) {
             outputs[i] = (*state_impl.data_columns)[i];
         }
-        // order by
-        if (!ctx->get_is_asc_order().empty()) {
-            for (auto i = 0; i < output_col_num; ++i) {
-                outputs[i] = (*state_impl.data_columns)[i]->clone_empty();
-            }
-            Permutation perm;
-            Columns order_by_columns;
-            SortDescs sort_desc(ctx->get_is_asc_order(), ctx->get_nulls_first());
-            order_by_columns.assign(state_impl.data_columns->begin() + output_col_num, state_impl.data_columns->end());
-            Status st = sort_and_tie_columns(ctx->state()->cancelled_ref(), order_by_columns, sort_desc, &perm);
-            // release order-by columns early
-            order_by_columns.clear();
-            state_impl.release_order_by_columns();
-            if (UNLIKELY(ctx->state()->cancelled_ref())) {
-                ctx->set_error("group_concat detects cancelled.", false);
-                return;
-            }
-            if (UNLIKELY(!st.ok())) {
-                ctx->set_error(st.to_string().c_str(), false);
-                return;
-            }
-            for (auto i = 0; i < output_col_num; ++i) {
-                materialize_column_by_permutation(outputs[i].get(), {(*state_impl.data_columns)[i]}, perm);
-            }
-        }
-        // further remove duplicated values, pick the last unique one to identify the last sep and don't output it.
-        // TODO(fzh) optimize it later
-        std::vector<bool> duplicated(outputs[0]->size(), false);
-        if (ctx->get_is_distinct()) {
-            for (auto row_id = 0; row_id < elem_size; row_id++) {
-                bool is_duplicated = false;
-                for (auto next_id = row_id + 1; next_id < elem_size; next_id++) {
-                    bool tmp_duplicated = true;
-                    for (auto col_id = 0; col_id < output_col_num - 1; col_id++) { // exclude sep
-                        if (!outputs[col_id]->equals(next_id, *outputs[col_id], row_id)) {
-                            tmp_duplicated = false;
-                            break;
-                        }
-                    }
-                    if (tmp_duplicated) {
-                        is_duplicated = true;
-                        break;
-                    }
-                }
-                duplicated[row_id] = is_duplicated;
-            }
-        }
+
         // copy col_0, col_1 ... col_n row by row
         auto* string = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(to));
         if (to->is_nullable()) {
@@ -665,52 +621,33 @@ public:
         }
         Bytes& bytes = string->get_bytes();
         size_t offset = bytes.size();
+        size_t old_offset = offset;
         size_t length = 0;
         std::vector<BinaryColumn*> binary_cols(output_col_num);
         for (auto i = 0; i < output_col_num; ++i) {
             auto tmp = ColumnHelper::get_data_column(outputs[i].get());
             binary_cols[i] = down_cast<BinaryColumn*>(tmp);
-            length += binary_cols[i]->get_bytes().size();
+        }
+        for (auto j = *state_impl.output_index;
+             j < elem_size && j < ((*state_impl.output_index) + ctx->state()->chunk_size()); ++j) {
+            for (auto i = 0; i < output_col_num; ++i) {
+                auto str = binary_cols[i]->get_slice(j);
+                length += str.get_size();
+            }
         }
 
         bytes.resize(offset + length);
-        bool overflow = false;
-        size_t limit = ctx->get_group_concat_max_len() + offset;
-        for (auto j = 0; j < elem_size && !overflow; ++j) {
-            if (duplicated[j]) {
-                continue;
-            }
-            for (auto i = 0; i < output_col_num && !overflow; ++i) {
-                if (j + 1 == elem_size && i + 1 == output_col_num) { // ignore the last separator
-                    continue;
-                }
-                if (UNLIKELY(i + 1 < output_col_num && binary_cols[i]->is_null(j))) {
-                    ctx->set_error("group_concat mustn't output null", false);
-                    return;
-                }
+        for (auto j = *state_impl.output_index;
+             j < elem_size && j < ((*state_impl.output_index) + ctx->state()->chunk_size()); ++j) {
+            for (auto i = 0; i < output_col_num; ++i) {
                 auto str = binary_cols[i]->get_slice(j);
-                if (offset + str.get_size() <= limit) {
-                    memcpy(bytes.data() + offset, str.get_data(), str.get_size());
-                    offset += str.get_size();
-                    overflow = offset == limit;
-                } else { // make the last utf8 character valid
-                    std::vector<size_t> index;
-                    get_utf8_index(str, &index);
-                    size_t end = 0;
-                    for (auto id : index) {
-                        if (offset + id > limit) {
-                            break;
-                        }
-                        end = id;
-                    }
-                    memcpy(bytes.data() + offset, str.get_data(), end);
-                    offset += end;
-                    overflow = true;
-                }
+                memcpy(bytes.data() + offset, str.get_data(), str.get_size());
+                offset += str.get_size();
             }
+            string->get_offset().emplace_back(offset);
         }
         bytes.resize(offset);
-        string->get_offset().emplace_back(offset);
+        *state_impl.output_index += (string->get_offset().size() - old_offset);
     }
 
     std::string get_name() const override { return "group_concat2"; }
