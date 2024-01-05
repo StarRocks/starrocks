@@ -107,13 +107,14 @@ private:
 };
 
 class ScanSplitContext {
+public:
     virtual ~ScanSplitContext() = default;
 };
 using ScanSplitContextPtr = std::unique_ptr<ScanSplitContext>;
 
 class ScanMorsel : public Morsel {
 public:
-    ScanMorsel(int32_t plan_node_id, const TScanRange& scan_range)
+    ScanMorsel(int32_t plan_node_id, const TScanRange& scan_range, ScanSplitContextPtr&& split_context)
             : Morsel(plan_node_id), _scan_range(std::make_unique<TScanRange>(scan_range)) {
         if (_scan_range->__isset.internal_scan_range) {
             _owner_id = _scan_range->internal_scan_range.tablet_id;
@@ -127,12 +128,15 @@ public:
         if (_scan_range->__isset.binlog_scan_range) {
             _owner_id = _scan_range->binlog_scan_range.tablet_id;
         }
+        if (split_context != nullptr) {
+            _split_context = std::move(split_context);
+        }
     }
 
     ~ScanMorsel() override = default;
 
-    ScanMorsel(int32_t plan_node_id, const TScanRangeParams& scan_range)
-            : ScanMorsel(plan_node_id, scan_range.scan_range) {}
+    ScanMorsel(int32_t plan_node_id, const TScanRangeParams& scan_range, ScanSplitContextPtr&& split_context)
+            : ScanMorsel(plan_node_id, scan_range.scan_range, std::move(split_context)) {}
 
     TScanRange* get_scan_range() { return _scan_range.get(); }
 
@@ -147,6 +151,7 @@ public:
 
 private:
     std::unique_ptr<TScanRange> _scan_range;
+    ScanSplitContextPtr _split_context = nullptr;
     int64_t _owner_id = 0;
     int64_t _version = 0;
     int64_t _partition_id = 0;
