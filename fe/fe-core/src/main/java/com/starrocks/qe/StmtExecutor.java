@@ -1166,7 +1166,7 @@ public class StmtExecutor {
         int timeout = context.getSessionVariable().getQueryTimeoutS();
         try {
             Future<?> future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
-                    .submit(() -> executeAnalyze(analyzeStmt, analyzeStatus, db, table));
+                    .submit(() -> executeAnalyze(analyzeStmt, analyzeStatus, db, table, context.getCurrentWarehouseId()));
 
             if (!analyzeStmt.isAsync()) {
                 // sync statistics collection doesn't be interrupted by query timeout, but
@@ -1208,8 +1208,9 @@ public class StmtExecutor {
                 planNodeIds));
     }
 
-    private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
-        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+    private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db,
+                                Table table, long warehouseId) {
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContextWithWarehouse(warehouseId);
         // from current session, may execute analyze stmt
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                 context.getSessionVariable().getStatisticCollectParallelism());
@@ -1219,7 +1220,6 @@ public class StmtExecutor {
         } finally {
             ConnectContext.remove();
         }
-
     }
 
     private void executeAnalyze(ConnectContext statsConnectCtx, AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus,

@@ -81,6 +81,12 @@ public class StatisticUtils {
             .add("starrocks_monitor")
             .add("information_schema").build();
 
+    public static ConnectContext buildConnectContextWithWarehouse(long warehouseId) {
+        ConnectContext context = buildConnectContext();
+        context.setCurrentWarehouseId(warehouseId);
+        return context;
+    }
+
     public static ConnectContext buildConnectContext() {
         ConnectContext context = new ConnectContext();
         // Note: statistics query does not register query id to QeProcessorImpl::coordinatorMap,
