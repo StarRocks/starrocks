@@ -113,6 +113,10 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         return type == PartitionType.RANGE || type == PartitionType.EXPR_RANGE || type == PartitionType.EXPR_RANGE_V2;
     }
 
+    public boolean isListPartition() {
+        return type == PartitionType.LIST;
+    }
+
     public boolean isPartitioned() {
         return type != PartitionType.UNPARTITIONED;
     }
