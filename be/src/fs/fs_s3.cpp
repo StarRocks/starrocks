@@ -199,9 +199,8 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
         config.requestTimeoutMs = config::object_storage_request_timeout_ms;
     }
 
-    auto client_conf = std::make_shared<Aws::Client::ClientConfiguration>(config);
-    auto aws_config = std::make_shared<AWSCloudConfiguration>(aws_cloud_configuration);
-    ClientCacheKey client_cache_key{client_conf, aws_config};
+    ClientCacheKey client_cache_key{std::make_shared<Aws::Client::ClientConfiguration>(config),
+                                    std::make_shared<AWSCloudConfiguration>(aws_cloud_configuration)};
     {
         // Duplicate code for cache s3 client
         std::lock_guard l(_lock);
@@ -232,8 +231,8 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfigurati
 
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfiguration& config, const FSOptions& opts) {
     std::lock_guard l(_lock);
-    auto client_conf = std::make_shared<Aws::Client::ClientConfiguration>(config);
-    ClientCacheKey client_cache_key{client_conf, std::make_shared<AWSCloudConfiguration>()};
+    ClientCacheKey client_cache_key{std::make_shared<Aws::Client::ClientConfiguration>(config),
+                                    std::make_shared<AWSCloudConfiguration>()};
     for (size_t i = 0; i < _items; i++) {
         if (_client_cache_keys[i] == client_cache_key) return _clients[i];
     }
