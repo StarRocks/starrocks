@@ -95,7 +95,16 @@ public class Utils {
         return list;
     }
 
-    private static void extractConjunctsImpl(ScalarOperator root, List<ScalarOperator> result) {
+    public static Set<ScalarOperator> extractConjunctSet(ScalarOperator root) {
+        Set<ScalarOperator> list = Sets.newHashSet();
+        if (null == root) {
+            return list;
+        }
+        extractConjunctsImpl(root, list);
+        return list;
+    }
+
+    private static void extractConjunctsImpl(ScalarOperator root, Collection<ScalarOperator> result) {
         if (!OperatorType.COMPOUND.equals(root.getOpType())) {
             result.add(root);
             return;
