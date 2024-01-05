@@ -70,6 +70,7 @@ size_t ArrayColumn::byte_size(size_t idx) const {
 }
 
 void ArrayColumn::reserve(size_t n) {
+    _elements->reserve(n);
     _offsets->reserve(n + 1);
 }
 
