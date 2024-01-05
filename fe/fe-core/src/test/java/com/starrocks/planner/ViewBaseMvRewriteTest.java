@@ -387,4 +387,50 @@ public class ViewBaseMvRewriteTest extends MaterializedViewTestBase {
             testRewriteOK(mv, query);
         }
     }
+
+    @Test
+    public void testViewJoinRewrite() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(3000000);
+        starRocksAssert.withView("CREATE VIEW view_1 AS\n" +
+                "SELECT l_partkey,\n" +
+                "       l_suppkey,\n" +
+                "       sum(l_quantity) AS total_quantity\n" +
+                "FROM lineitem\n" +
+                "GROUP BY l_partkey,\n" +
+                "         l_suppkey;");
+        starRocksAssert.withView("CREATE VIEW view_2 AS\n" +
+                "SELECT l_partkey,\n" +
+                "       l_suppkey,\n" +
+                "       sum(l_tax) AS total_tax\n" +
+                "FROM lineitem\n" +
+                "GROUP BY l_partkey,\n" +
+                "         l_suppkey;");
+        {
+            starRocksAssert.withMaterializedView("CREATE materialized VIEW mv_2\n" +
+                    "distributed BY hash(l_partkey) \n" +
+                    "refresh manual AS\n" +
+                    "SELECT l_partkey,\n" +
+                    "       sum(l_discount) AS total_discount\n" +
+                    "FROM lineitem\n" +
+                    "group by l_partkey;");
+            String mv = "SELECT v1.l_partkey,\n" +
+                    "       v2.l_suppkey,\n" +
+                    "       total_quantity,\n" +
+                    "       total_tax\n" +
+                    "FROM view_1 v1\n" +
+                    "JOIN view_2 v2 ON v1.l_partkey = v2.l_partkey\n" +
+                    "AND v1.l_suppkey = v2.l_suppkey;\n";
+            String query = "SELECT v1.l_partkey,\n" +
+                    "       v2.l_suppkey,\n" +
+                    "       total_quantity,\n" +
+                    "       total_tax\n" +
+                    "FROM view_1 v1\n" +
+                    "JOIN view_2 v2 ON v1.l_partkey = v2.l_partkey\n" +
+                    "AND v1.l_suppkey = v2.l_suppkey;";
+            testRewriteOK(mv, query);
+            starRocksAssert.dropMaterializedView("mv_2");
+        }
+        starRocksAssert.dropView("view_1");
+        starRocksAssert.dropView("view_2");
+    }
 }
