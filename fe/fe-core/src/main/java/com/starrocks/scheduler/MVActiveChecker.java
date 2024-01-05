@@ -48,6 +48,10 @@ public class MVActiveChecker extends LeaderDaemon {
         // reset if the interval has been changed
         setInterval(Config.mv_active_checker_interval_seconds * 1000L);
 
+        if (!Config.enable_mv_automatic_active_check) {
+            return;
+        }
+
         try {
             process();
         } catch (Throwable e) {
@@ -75,6 +79,10 @@ public class MVActiveChecker extends LeaderDaemon {
     }
 
     public static void tryToActivate(MaterializedView mv) {
+        if (!Config.enable_mv_automatic_active_check) {
+            return;
+        }
+
         // if the mv is set to inactive manually, we don't activate it
         String reason = mv.getInactiveReason();
         if (mv.isActive() || AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(reason)) {
