@@ -320,4 +320,164 @@ TEST_F(ChunkHelperTest, Accumulator) {
     EXPECT_TRUE(accumulator.reach_limit());
 }
 
+<<<<<<< HEAD
+=======
+class ChunkPipelineAccumulatorTest : public ::testing::Test {
+protected:
+    ChunkPtr _generate_chunk(size_t rows, size_t cols);
+};
+
+ChunkPtr ChunkPipelineAccumulatorTest::_generate_chunk(size_t rows, size_t cols) {
+    auto chunk = std::make_shared<Chunk>();
+    for (size_t i = 0; i < cols; i++) {
+        auto col = Int8Column::create(rows, 0);
+        chunk->append_column(col, i);
+    }
+    return chunk;
+}
+
+TEST_F(ChunkPipelineAccumulatorTest, test_push) {
+    ChunkPipelineAccumulator accumulator;
+
+    // rows reach limit
+    accumulator.push(_generate_chunk(4093, 1));
+    ASSERT_TRUE(accumulator.has_output());
+    auto result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 4093);
+    accumulator.finalize();
+    ASSERT_FALSE(accumulator.has_output());
+
+    // mem reach limit
+    accumulator.reset_state();
+    accumulator.push(_generate_chunk(2048, 64));
+    ASSERT_TRUE(accumulator.has_output());
+    result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 2048);
+    accumulator.finalize();
+    ASSERT_FALSE(accumulator.has_output());
+
+    // merge chunk and reach rows limit
+    accumulator.reset_state();
+    for (size_t i = 0; i < 3; i++) {
+        accumulator.push(_generate_chunk(1000, 1));
+        ASSERT_FALSE(accumulator.has_output());
+    }
+    accumulator.push(_generate_chunk(1000, 1));
+    ASSERT_TRUE(accumulator.has_output());
+    result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 4000);
+    accumulator.finalize();
+    ASSERT_FALSE(accumulator.has_output());
+
+    // merge chunk and read mem limit
+    accumulator.reset_state();
+    for (size_t i = 0; i < 2; i++) {
+        accumulator.push(_generate_chunk(1000, 30));
+        ASSERT_FALSE(accumulator.has_output());
+    }
+    accumulator.push(_generate_chunk(1000, 30));
+    ASSERT_TRUE(accumulator.has_output());
+    result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 3000);
+    accumulator.finalize();
+    ASSERT_FALSE(accumulator.has_output());
+
+    // merge chunk and rows overflow
+    accumulator.reset_state();
+    accumulator.push(_generate_chunk(3000, 1));
+    ASSERT_FALSE(accumulator.has_output());
+    accumulator.push(_generate_chunk(3000, 1));
+    ASSERT_TRUE(accumulator.has_output());
+    result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 3000);
+    accumulator.finalize();
+    ASSERT_TRUE(accumulator.has_output());
+    result_chunk = std::move(accumulator.pull());
+    ASSERT_EQ(result_chunk->num_rows(), 3000);
+    ASSERT_FALSE(accumulator.has_output());
+}
+
+TEST_F(ChunkPipelineAccumulatorTest, test_owner_info) {
+    constexpr size_t kDesiredSize = 4096;
+
+    {
+        ChunkPipelineAccumulator accumulator;
+        accumulator.set_max_size(kDesiredSize);
+        DCHECK(accumulator.need_input());
+        // same owner info
+        {
+            auto chunk = _generate_chunk(1025, 2);
+            chunk->owner_info().set_owner_id(1, false);
+            accumulator.push(std::move(chunk));
+        }
+        DCHECK(accumulator.need_input());
+        {
+            // new empty chunk
+            auto chunk = std::make_unique<Chunk>();
+            chunk->owner_info().set_owner_id(1, true);
+            accumulator.push(std::move(chunk));
+        }
+
+        DCHECK(!accumulator.need_input());
+        DCHECK(accumulator.has_output());
+        auto chunk = std::move(accumulator.pull());
+        DCHECK(!chunk->owner_info().is_last_chunk());
+        accumulator.finalize();
+        DCHECK(accumulator.has_output());
+        chunk = std::move(accumulator.pull());
+        DCHECK(chunk->owner_info().is_last_chunk());
+    }
+
+    {
+        ChunkPipelineAccumulator accumulator;
+        accumulator.set_max_size(kDesiredSize);
+        DCHECK(accumulator.need_input());
+        // same owner info
+        {
+            auto chunk = _generate_chunk(1025, 2);
+            chunk->owner_info().set_owner_id(2, false);
+            accumulator.push(std::move(chunk));
+            chunk = _generate_chunk(1025, 2);
+            chunk->owner_info().set_owner_id(2, true);
+            accumulator.push(std::move(chunk));
+        }
+        DCHECK(accumulator.has_output());
+        auto chunk = std::move(accumulator.pull());
+        DCHECK(!chunk->owner_info().is_last_chunk());
+    }
+
+    {
+        ChunkPipelineAccumulator accumulator;
+        accumulator.set_max_size(kDesiredSize);
+        DCHECK(accumulator.need_input());
+        // not the same owner info
+        {
+            auto chunk = _generate_chunk(1025, 2);
+            chunk->owner_info().set_owner_id(3, false);
+            accumulator.push(std::move(chunk));
+            chunk = _generate_chunk(1025, 2);
+            chunk->owner_info().set_owner_id(4, false);
+            accumulator.push(std::move(chunk));
+        }
+        auto chunk = std::move(accumulator.pull());
+        DCHECK_EQ(chunk->owner_info().owner_id(), 3);
+    }
+
+    {
+        ChunkPipelineAccumulator accumulator;
+        accumulator.set_max_size(kDesiredSize);
+        DCHECK(accumulator.need_input());
+        // not the same owner info
+        {
+            auto chunk = _generate_chunk(1025, 2);
+            chunk->owner_info().set_owner_id(1, true);
+            accumulator.push(std::move(chunk));
+            DCHECK(!accumulator.need_input());
+        }
+        auto chunk = std::move(accumulator.pull());
+        DCHECK(chunk->owner_info().is_last_chunk());
+    }
+}
+
+>>>>>>> 7f0c034275 ([BugFix] Fix race condition in BucketProcess AGG (#38271))
 } // namespace starrocks

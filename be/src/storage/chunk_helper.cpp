@@ -501,7 +501,13 @@ void ChunkPipelineAccumulator::push(const ChunkPtr& chunk) {
     DCHECK(_out_chunk == nullptr);
     if (_in_chunk == nullptr) {
         _in_chunk = chunk;
+<<<<<<< HEAD
     } else if (_in_chunk->num_rows() + chunk->num_rows() > _max_size) {
+=======
+        _mem_usage = chunk->memory_usage();
+    } else if (_in_chunk->num_rows() + chunk->num_rows() > _max_size ||
+               _in_chunk->owner_info() != chunk->owner_info()) {
+>>>>>>> 7f0c034275 ([BugFix] Fix race condition in BucketProcess AGG (#38271))
         _out_chunk = std::move(_in_chunk);
         _in_chunk = chunk;
     } else {
@@ -509,7 +515,11 @@ void ChunkPipelineAccumulator::push(const ChunkPtr& chunk) {
     }
 
     if (_out_chunk == nullptr && (_in_chunk->num_rows() >= _max_size * LOW_WATERMARK_ROWS_RATE ||
+<<<<<<< HEAD
                                   _in_chunk->memory_usage() >= LOW_WATERMARK_BYTES)) {
+=======
+                                  _mem_usage >= LOW_WATERMARK_BYTES || _in_chunk->owner_info().is_last_chunk())) {
+>>>>>>> 7f0c034275 ([BugFix] Fix race condition in BucketProcess AGG (#38271))
         _out_chunk = std::move(_in_chunk);
     }
 }
