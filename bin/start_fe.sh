@@ -70,6 +70,8 @@ if [ -e $STARROCKS_HOME/conf/hadoop_env.sh ]; then
     source $STARROCKS_HOME/conf/hadoop_env.sh
 fi
 
+check_os_env
+
 # java
 if [[ -z ${JAVA_HOME} ]]; then
     if command -v javac &> /dev/null; then
