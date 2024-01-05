@@ -73,6 +73,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
@@ -879,6 +880,9 @@ public class Alter {
         olapNewTbl.checkAndSetName(origTblName, true);
         origTable.checkAndSetName(newTblName, true);
 
+        // inactive the related MVs
+        LocalMetastore.inactiveRelatedMaterializedView(db, origTable);
+        LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl);
         swapTableInternal(db, origTable, olapNewTbl);
 
         // write edit log
@@ -968,6 +972,7 @@ public class Alter {
             throw new DdlException("failed to init view stmt", e);
         }
         view.setNewFullSchema(newFullSchema);
+        LocalMetastore.inactiveRelatedMaterializedView(db, view);
 
         db.dropTable(viewName);
         db.createTable(view);
@@ -996,6 +1001,7 @@ public class Alter {
                 throw new DdlException("failed to init view stmt", e);
             }
             view.setNewFullSchema(newFullSchema);
+            LocalMetastore.inactiveRelatedMaterializedView(db, view);
 
             db.dropTable(viewName);
             db.createTable(view);
