@@ -29,7 +29,6 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
         executeSqlFile("sql/materialized-view/tpch-hive/ddl_tpch_mv1.sql");
     }
 
-
     @Test
     public void testQuery1() {
         runFileUnitTest("materialized-view/tpch-hive/q1");
@@ -62,7 +61,7 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery7() {
-        runFileUnitTestWithNormalizedResult("materialized-view/tpch-hive/q7");
+        runFileUnitTest("materialized-view/tpch-hive/q7");
     }
 
     @Test

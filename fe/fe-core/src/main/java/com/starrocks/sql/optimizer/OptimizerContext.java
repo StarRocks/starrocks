@@ -69,6 +69,10 @@ public class OptimizerContext {
     private List<LogicalViewScanOperator> viewScans;
 
     private boolean isShortCircuit = false;
+    // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
+    // lifecycle instead of per materialized view.
+    // TODO: refactor materialized view's variables/contexts into this.
+    private QueryMaterializationContext queryMaterializationContext;
 
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
@@ -264,4 +268,17 @@ public class OptimizerContext {
         isShortCircuit = shortCircuit;
     }
 
+    public void setQueryMaterializationContext(QueryMaterializationContext queryMaterializationContext) {
+        this.queryMaterializationContext = queryMaterializationContext;
+    }
+
+    public QueryMaterializationContext getQueryMaterializationContext() {
+        return queryMaterializationContext;
+    }
+
+    public void clear() {
+        if (this.queryMaterializationContext != null) {
+            this.queryMaterializationContext.clear();
+        }
+    }
 }
