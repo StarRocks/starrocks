@@ -50,6 +50,8 @@ public:
         ASSIGN_OR_ABORT(auto fs, FileSystem::CreateUniqueFromString("s3://"));
         (void)fs->delete_dir_recursive(S3Path("/"));
 
+        close_s3_clients();
+
         Aws::ShutdownAPI(_s_options);
     }
 
