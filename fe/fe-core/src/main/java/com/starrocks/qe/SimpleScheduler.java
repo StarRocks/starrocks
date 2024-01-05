@@ -70,15 +70,15 @@ public class SimpleScheduler {
     private static final AtomicLong NEXT_BACKEND_HOST_ID = new AtomicLong(0);
 
     //count id for get ComputeNode
-    private static final ConcurrentMap<Long, Integer> BLACKLIST_BACKENDS = Maps.newConcurrentMap();
+    private static final ConcurrentMap<Long, Integer> BLOCKLIST_BACKENDS = Maps.newConcurrentMap();
 
-    private static final AtomicBoolean ENABLE_UPDATE_BLACKLIST_THREAD;
-    private static final UpdateBlacklistThread UPDATE_BLACKLIST_THREAD;
+    private static final AtomicBoolean ENABLE_UPDATE_BLOCKLIST_THREAD;
+    private static final UpdateBlocklistThread UPDATE_BLOCKLIST_THREAD;
 
     static {
-        ENABLE_UPDATE_BLACKLIST_THREAD = new AtomicBoolean(true);
-        UPDATE_BLACKLIST_THREAD = new UpdateBlacklistThread();
-        UPDATE_BLACKLIST_THREAD.start();
+        ENABLE_UPDATE_BLOCKLIST_THREAD = new AtomicBoolean(true);
+        UPDATE_BLOCKLIST_THREAD = new UpdateBlocklistThread();
+        UPDATE_BLOCKLIST_THREAD.start();
     }
 
     @Nullable
@@ -94,7 +94,7 @@ public class SimpleScheduler {
 
         ComputeNode node = computeNodes.get(nodeId);
 
-        if (node != null && node.isAlive() && !BLACKLIST_BACKENDS.containsKey(nodeId)) {
+        if (node != null && node.isAlive() && !isInBlocklist(nodeId)) {
             backendIdRef.setRef(nodeId);
             return new TNetworkAddress(node.getHost(), node.getBePort());
         } else {
@@ -104,7 +104,7 @@ public class SimpleScheduler {
                 }
                 // choose the first alive backend(in analysis stage, the locations are random)
                 ComputeNode candidateBackend = computeNodes.get(location.backend_id);
-                if (candidateBackend != null && candidateBackend.isAlive() && !isInBlacklist(location.backend_id)) {
+                if (candidateBackend != null && candidateBackend.isAlive() && !isInBlocklist(location.backend_id)) {
                     backendIdRef.setRef(location.backend_id);
                     return new TNetworkAddress(candidateBackend.getHost(), candidateBackend.getBePort());
                 }
@@ -115,7 +115,7 @@ public class SimpleScheduler {
                 List<ComputeNode> allNodes = new ArrayList<>(computeNodes.size());
                 allNodes.addAll(computeNodes.values());
                 List<ComputeNode> candidateNodes = allNodes.stream()
-                        .filter(x -> x.getId() != nodeId && x.isAlive() && !isInBlacklist(x.getId()))
+                        .filter(x -> x.getId() != nodeId && x.isAlive() && !isInBlocklist(x.getId()))
                         .collect(Collectors.toList());
                 if (!candidateNodes.isEmpty()) {
                     // use modulo operation to ensure that the same node is selected for the dead node
@@ -173,7 +173,7 @@ public class SimpleScheduler {
         long id = nextId.getAndIncrement();
         for (int i = 0; i < nodes.size(); i++) {
             T node = nodes.get((int) (id % nodes.size()));
-            if (node != null && node.isAlive() && !isInBlacklist(node.getId())) {
+            if (node != null && node.isAlive() && !isInBlocklist(node.getId())) {
                 nextId.addAndGet(i); // skip failed nodes
                 return node;
             }
@@ -182,43 +182,43 @@ public class SimpleScheduler {
         return null;
     }
 
-    public static void addToBlacklist(Long backendID) {
+    public static void addToBlocklist(Long backendID) {
         if (backendID == null) {
             return;
         }
 
         int tryTime = Config.heartbeat_timeout_second + 1;
-        BLACKLIST_BACKENDS.put(backendID, tryTime);
+        BLOCKLIST_BACKENDS.put(backendID, tryTime);
         LOG.warn("add black list " + backendID);
     }
 
-    public static boolean isInBlacklist(long backendId) {
-        return BLACKLIST_BACKENDS.containsKey(backendId);
+    public static boolean isInBlocklist(long backendId) {
+        return BLOCKLIST_BACKENDS.containsKey(backendId);
     }
 
     // The function is used for unit test
     @VisibleForTesting
-    public static boolean removeFromBlacklist(Long backendID) {
+    public static boolean removeFromBlocklist(Long backendID) {
         if (backendID == null) {
             return true;
         }
 
-        return BLACKLIST_BACKENDS.remove(backendID) != null;
+        return BLOCKLIST_BACKENDS.remove(backendID) != null;
     }
 
-    public static void updateBlacklist() {
+    public static void updateBlocklist() {
         SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
 
         List<Long> removedBackends = new ArrayList<>();
         Map<Long, Integer> retryingBackends = new HashMap<>();
 
-        for (Map.Entry<Long, Integer> entry : BLACKLIST_BACKENDS.entrySet()) {
+        for (Map.Entry<Long, Integer> entry : BLOCKLIST_BACKENDS.entrySet()) {
             Long backendId = entry.getKey();
 
             // 1. If the backend is null, means that the backend has been removed.
             // 2. check the all ports of the backend
             // 3. retry Config.heartbeat_timeout_second + 1 times
-            // If both of the above conditions are met, the backend is removed from the blacklist
+            // If both of the above conditions are met, the backend is removed from the blocklist
             Backend backend = clusterInfoService.getBackend(backendId);
             if (backend == null) {
                 removedBackends.add(backendId);
@@ -245,25 +245,25 @@ public class SimpleScheduler {
 
         // remove backends.
         for (Long backendId : removedBackends) {
-            BLACKLIST_BACKENDS.remove(backendId);
+            BLOCKLIST_BACKENDS.remove(backendId);
         }
 
         // update the retry times.
         for (Map.Entry<Long, Integer> entry : retryingBackends.entrySet()) {
-            BLACKLIST_BACKENDS.computeIfPresent(entry.getKey(), (k, v) -> entry.getValue());
+            BLOCKLIST_BACKENDS.computeIfPresent(entry.getKey(), (k, v) -> entry.getValue());
         }
     }
 
-    public static void disableUpdateBlacklistThread() {
-        ENABLE_UPDATE_BLACKLIST_THREAD.set(false);
+    public static void disableUpdateBlocklistThread() {
+        ENABLE_UPDATE_BLOCKLIST_THREAD.set(false);
     }
 
-    private static class UpdateBlacklistThread implements Runnable {
-        private static final Logger LOG = LogManager.getLogger(UpdateBlacklistThread.class);
+    private static class UpdateBlocklistThread implements Runnable {
+        private static final Logger LOG = LogManager.getLogger(UpdateBlocklistThread.class);
         private static Thread thread;
 
-        public UpdateBlacklistThread() {
-            thread = new Thread(this, "UpdateBlacklistThread");
+        public UpdateBlocklistThread() {
+            thread = new Thread(this, "UpdateBlocklistThread");
             thread.setDaemon(true);
         }
 
@@ -274,11 +274,11 @@ public class SimpleScheduler {
         @Override
         public void run() {
             LOG.debug("UpdateBlacklistThread is start to run");
-            while (ENABLE_UPDATE_BLACKLIST_THREAD.get()) {
+            while (ENABLE_UPDATE_BLOCKLIST_THREAD.get()) {
                 try {
                     Thread.sleep(1000L);
                     LOG.debug("UpdateBlacklistThread retry begin");
-                    updateBlacklist();
+                    updateBlocklist();
                     LOG.debug("UpdateBlacklistThread retry end");
 
                 } catch (Throwable ex) {
