@@ -2705,6 +2705,12 @@ public class Config extends ConfigBase {
     public static long mv_plan_cache_max_size = 1000;
 
     /**
+     * Max cache key size during query lifecycle to avoid repeating computes.
+     */
+    @ConfField(mutable = true)
+    public static long mv_query_context_cache_max_size = 1000;
+
+    /**
      * Checking the connectivity of port opened by FE,
      * mainly used for checking edit log port currently.
      */

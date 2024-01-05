@@ -155,7 +155,7 @@ public class NormalizePredicateBench {
 
     @Benchmark
     public void bench_NormalizePredicate_Random() {
-        ScalarOperator res = MvUtils.canonizePredicateForRewrite(randomPredicate);
+        ScalarOperator res = MvUtils.canonizePredicateForRewrite(null, randomPredicate);
     }
 
     @Benchmark
@@ -172,7 +172,8 @@ public class NormalizePredicateBench {
      */
     @Benchmark
     public void bench_NormalizePredicate_Disjunctive() {
-        ScalarOperator res = MvUtils.canonizePredicateForRewrite(disjunctive);
+        ScalarOperator res =
+                MvUtils.canonizePredicateForRewrite(null, disjunctive);
     }
 
     @Benchmark
