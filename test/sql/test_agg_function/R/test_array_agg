@@ -349,11 +349,11 @@ select cardinality(array_agg(distinct arr order by score, cardinality(arr), arr)
 3
 3
 -- !result
-select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss group by id order by 1,2;
+select array_agg(distinct name order by 1,score, 1), count(distinct id), max(score)  from ss group by id order by 1,2;
 -- result:
 [null]	1	None
 [null,"Ti"]	0	99
-["May","欧阳诸葛方程","Ti"]	1	98
+["May","Ti","欧阳诸葛方程"]	1	98
 ["Tom"]	1	90
 ["Tom","王武程咬金"]	1	22
 ["张三掩耳盗铃","张三此地无银三百两"]	1	98
@@ -571,9 +571,9 @@ select cardinality(array_agg(distinct arr order by score,1)) from ss order by 1;
 -- result:
 9
 -- !result
-select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss order by 1;
+select array_agg(distinct name order by 1, score), count(distinct id), max(score)  from ss order by 1;
 -- result:
-[null,"May","Tom","李四大闹天空","欧阳诸葛方程","王武程咬金","张三掩耳盗铃","Ti","张三此地无银三百两"]	6	99
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	6	99
 -- !result
 select cardinality(array_agg(distinct mmap order by score, cardinality(mmap), name)),max(id) as a from ss order by a;
 -- result:
@@ -724,11 +724,11 @@ select cardinality(array_agg(distinct arr order by score, 1)) from ss group by i
 3
 3
 -- !result
-select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss group by id order by 1,2;
+select array_agg(distinct name order by 1,score, 1), count(distinct id), max(score)  from ss group by id order by 1,2;
 -- result:
 [null]	1	None
 [null,"Ti"]	0	99
-["May","欧阳诸葛方程","Ti"]	1	98
+["May","Ti","欧阳诸葛方程"]	1	98
 ["Tom"]	1	90
 ["Tom","王武程咬金"]	1	22
 ["张三掩耳盗铃","张三此地无银三百两"]	1	98
@@ -946,9 +946,9 @@ select cardinality(array_agg(distinct arr order by score, 1)) from ss order by 1
 -- result:
 9
 -- !result
-select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss order by 1;
+select array_agg(distinct name order by 1, score, 1), count(distinct id), max(score)  from ss order by 1;
 -- result:
-[null,"May","Tom","李四大闹天空","欧阳诸葛方程","王武程咬金","张三掩耳盗铃","Ti","张三此地无银三百两"]	6	99
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	6	99
 -- !result
 select cardinality(array_agg(distinct mmap order by score, cardinality(mmap)), name),max(id) as a from ss order by a;
 -- result:
@@ -1186,11 +1186,11 @@ select cardinality(array_agg(distinct arr order by score,1)) from ss group by id
 3
 3
 -- !result
-select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss group by id order by 1,2,3;
+select array_agg(distinct name order by 1,score, 1), count(distinct id), max(score)  from ss group by id order by 1,2,3;
 -- result:
 [null]	1	None
 [null,"Ti"]	0	99
-["May","欧阳诸葛方程","Ti"]	1	98
+["May","Ti","欧阳诸葛方程"]	1	98
 ["Tom"]	1	90
 ["Tom","王武程咬金"]	1	22
 ["张三掩耳盗铃","张三此地无银三百两"]	1	98
@@ -1408,9 +1408,9 @@ select cardinality(array_agg(distinct arr order by score, 1)) from ss order by 1
 -- result:
 9
 -- !result
-select array_agg(distinct name order by score, 1), count(distinct id), max(score)  from ss order by 1;
+select array_agg(distinct name order by 1, score, 1), count(distinct id), max(score)  from ss order by 1;
 -- result:
-[null,"May","Tom","李四大闹天空","欧阳诸葛方程","王武程咬金","张三掩耳盗铃","Ti","张三此地无银三百两"]	6	99
+[null,"May","Ti","Tom","张三掩耳盗铃","张三此地无银三百两","李四大闹天空","欧阳诸葛方程","王武程咬金"]	6	99
 -- !result
 select cardinality(array_agg(distinct mmap order by score, cardinality(mmap), name)),max(id) as a from ss order by a;
 -- result:
