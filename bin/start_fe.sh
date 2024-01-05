@@ -70,7 +70,9 @@ if [ -e $STARROCKS_HOME/conf/hadoop_env.sh ]; then
     source $STARROCKS_HOME/conf/hadoop_env.sh
 fi
 
-check_os_env
+if [[ $(ulimit -n) -lt 60000 ]]; then
+    ulimit -n 65535
+fi
 
 # java
 if [[ -z ${JAVA_HOME} ]]; then
