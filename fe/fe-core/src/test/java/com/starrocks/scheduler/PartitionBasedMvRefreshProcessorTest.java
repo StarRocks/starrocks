@@ -663,6 +663,13 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         Assert.assertTrue(plan.contains("4:HASH JOIN"));
     }
 
+    private static void triggerRefreshMv(Database testDb, MaterializedView partitionedMaterializedView)
+            throws Exception {
+        Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        initAndExecuteTaskRun(taskRun);
+    }
+
     @Test
     public void testRewriteNonPartitionedMVForOlapTable() throws Exception {
         starRocksAssert.useDatabase("test")
@@ -680,7 +687,6 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
     public void testCreateNonPartitionedMVForIceberg() throws Exception {
         starRocksAssert.useDatabase("test")
                 .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_mv1` " +
-                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                         "REFRESH DEFERRED MANUAL\n" +
                         "PROPERTIES (\n" +
@@ -689,7 +695,6 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
                         ")\n" +
                         "AS SELECT id, data, date  FROM `iceberg0`.`unpartitioned_db`.`t0` as a;")
                 .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_mv2` " +
-                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                         "REFRESH DEFERRED MANUAL\n" +
                         "PROPERTIES (\n" +
@@ -734,7 +739,6 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
         String mvName = "iceberg_parttbl_mv1";
         starRocksAssert.useDatabase("test")
                 .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_parttbl_mv1`\n" +
-                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY str2date(`date`, '%Y-%m-%d')\n" +
                         "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
                         "REFRESH DEFERRED MANUAL\n" +
@@ -746,7 +750,7 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
 
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView partitionedMaterializedView = ((MaterializedView) testDb.getTable("iceberg_parttbl_mv1"));
-        trigerRefreshPaimonMv(testDb, partitionedMaterializedView);
+        triggerRefreshMv(testDb, partitionedMaterializedView);
 
         Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
         Assert.assertEquals(4, partitions.size());
@@ -816,6 +820,139 @@ public class PartitionBasedMvRefreshProcessorTest extends MVRefreshTestBase {
 
         Collection<Partition> partitions = unpartitionedMaterializedView.getPartitions();
         Assert.assertEquals(1, partitions.size());
+    }
+
+    @Test
+    public void testCreatePartitionedMVForIcebergWithPartitionTransform() throws Exception {
+        // test partition by year(ts)
+        {
+            String mvName = "iceberg_year_mv1";
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_year_mv1`\n" +
+                            "PARTITION BY ts\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\",\n" +
+                            "\"storage_medium\" = \"HDD\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_year` as a;");
+
+            Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+            MaterializedView partitionedMaterializedView = ((MaterializedView) testDb.getTable("iceberg_year_mv1"));
+            triggerRefreshMv(testDb, partitionedMaterializedView);
+
+            Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
+            Assert.assertEquals(5, partitions.size());
+            List<String> partitionNames = ImmutableList.of("p20190101000000", "p20200101000000", "p20210101000000",
+                    "p20220101000000", "p20230101000000");
+            Assert.assertTrue(partitions.stream().map(Partition::getName).allMatch(partitionNames::contains));
+
+            MockIcebergMetadata mockIcebergMetadata =
+                    (MockIcebergMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
+                            getOptionalMetadata(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME).get();
+            mockIcebergMetadata.updatePartitions("partitioned_transforms_db", "t0_year",
+                    ImmutableList.of("ts_year=2020"));
+            // refresh only one partition
+            Task task = TaskBuilder.buildMvTask(partitionedMaterializedView, testDb.getFullName());
+            TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+            initAndExecuteTaskRun(taskRun);
+            PartitionBasedMvRefreshProcessor processor = (PartitionBasedMvRefreshProcessor)
+                    taskRun.getProcessor();
+
+            MvTaskRunContext mvContext = processor.getMvContext();
+            ExecPlan execPlan = mvContext.getExecPlan();
+            assertPlanContains(execPlan, "3: ts >= '2020-01-01 00:00:00', 3: ts < '2021-01-01 00:00:00'");
+
+            // test rewrite
+            starRocksAssert.query("SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_year`")
+                    .explainContains(mvName);
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+        // test partition by month(ts)
+        {
+            String mvName = "iceberg_month_mv1";
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_month_mv1`\n" +
+                            "PARTITION BY ts\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\",\n" +
+                            "\"storage_medium\" = \"HDD\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_month` as a;");
+
+            Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+            MaterializedView partitionedMaterializedView = ((MaterializedView) testDb.getTable("iceberg_month_mv1"));
+            triggerRefreshMv(testDb, partitionedMaterializedView);
+
+            Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
+            Assert.assertEquals(5, partitions.size());
+            List<String> partitionNames = ImmutableList.of("p20220101000000", "p20220201000000", "p20220301000000",
+                    "p20220401000000", "p20220501000000");
+            Assert.assertTrue(partitions.stream().map(Partition::getName).allMatch(partitionNames::contains));
+            // test rewrite
+            starRocksAssert.query("SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_month`")
+                    .explainContains(mvName);
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+        // test partition by day(ts)
+        {
+            String mvName = "iceberg_day_mv1";
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_day_mv1`\n" +
+                            "PARTITION BY ts\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\",\n" +
+                            "\"storage_medium\" = \"HDD\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_day` as a;");
+
+            Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+            MaterializedView partitionedMaterializedView = ((MaterializedView) testDb.getTable("iceberg_day_mv1"));
+            triggerRefreshMv(testDb, partitionedMaterializedView);
+
+            Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
+            Assert.assertEquals(5, partitions.size());
+            List<String> partitionNames = ImmutableList.of("p20220101000000", "p20220102000000", "p20220103000000",
+                    "p20220104000000", "p20220105000000");
+            Assert.assertTrue(partitions.stream().map(Partition::getName).allMatch(partitionNames::contains));
+            // test rewrite
+            starRocksAssert.query("SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_day`")
+                    .explainContains(mvName);
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+        // test partition by hour(ts)
+        {
+            String mvName = "iceberg_hour_mv1";
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_hour_mv1`\n" +
+                            "PARTITION BY ts\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\",\n" +
+                            "\"storage_medium\" = \"HDD\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_hour` as a;");
+
+            Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+            MaterializedView partitionedMaterializedView = ((MaterializedView) testDb.getTable("iceberg_hour_mv1"));
+            triggerRefreshMv(testDb, partitionedMaterializedView);
+
+            Collection<Partition> partitions = partitionedMaterializedView.getPartitions();
+            Assert.assertEquals(5, partitions.size());
+            List<String> partitionNames = ImmutableList.of("p20220101000000", "p20220101010000", "p20220101020000",
+                    "p20220101030000", "p20220101040000");
+            Assert.assertTrue(partitions.stream().map(Partition::getName).allMatch(partitionNames::contains));
+            // test rewrite
+            starRocksAssert.query("SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_hour`")
+                    .explainContains(mvName);
+            starRocksAssert.dropMaterializedView(mvName);
+        }
     }
 
     @Test

@@ -841,11 +841,20 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Materialized view partition column in partition exp " +
                         "must be base table partition column");
             } else {
+                if (icebergTable.specs().size() > 1) {
+                    throw new SemanticException("Do not support create materialized view when " +
+                            "base iceberg table has partition evolution");
+                }
                 boolean found = false;
                 for (PartitionField partitionField : partitionSpec.fields()) {
-                    String partitionColumnName = partitionField.name();
+                    String transformName = partitionField.transform().toString();
+                    String partitionColumnName = icebergTable.schema().findColumnName(partitionField.sourceId());
                     if (partitionColumnName.equalsIgnoreCase(slotRef.getColumnName())) {
                         checkPartitionColumnType(table.getColumn(partitionColumnName));
+                        if (transformName.startsWith("bucket") || transformName.startsWith("truncate")) {
+                            throw new SemanticException("Do not support create materialized view when " +
+                                    "base iceberg table partition transform has bucket or truncate");
+                        }
                         found = true;
                         break;
                     }
