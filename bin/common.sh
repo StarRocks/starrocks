@@ -136,4 +136,3 @@ detect_jvm_xmx() {
     let "MX = MEM_LIMIT * FE_JVM_XMX_PERCENTAGE / 100 / 1024 / 1024"
     echo "-Xmx${MX}m"
 }
-
