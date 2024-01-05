@@ -229,6 +229,13 @@ public class Config extends ConfigBase {
     public static boolean log_plan_cancelled_by_crash_be = true;
 
     /**
+     * In high-concurrency scenarios, the logging of register and unregister query ID can become a bottleneck.
+     * In such cases, it is possible to disable this switch.
+     */
+    @ConfField(mutable = true)
+    public static boolean log_register_and_unregister_query_id = true;
+
+    /**
      * Used to limit the maximum number of partitions that can be created when creating a dynamic partition table,
      * to avoid creating too many partitions at one time.
      */
