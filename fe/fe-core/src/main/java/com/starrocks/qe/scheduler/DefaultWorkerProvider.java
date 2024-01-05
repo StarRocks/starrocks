@@ -275,12 +275,23 @@ public class DefaultWorkerProvider implements WorkerProvider {
             return GlobalStateMgr.getCurrentState().getWarehouseMgr().getComputeNodesFromWarehouse();
         }
 
+        //define Resource Pool
+        Map<Long, ComputeNode> computeNodes = new HashMap<>();
+
+        //add CN to Resource Pool
         ImmutableMap<Long, ComputeNode> idToComputeNode
                 = ImmutableMap.copyOf(systemInfoService.getIdComputeNode());
         if (numUsedComputeNodes <= 0 || numUsedComputeNodes >= idToComputeNode.size()) {
-            return idToComputeNode;
+            for (int i = 0; i < idToComputeNode.size(); i++) {
+                ComputeNode computeNode =
+                        getNextWorker(idToComputeNode, DefaultWorkerProvider::getNextComputeNodeIndex);
+                Preconditions.checkNotNull(computeNode);
+                if (!isWorkerAvailable(computeNode)) {
+                    continue;
+                }
+                computeNodes.put(computeNode.getId(), computeNode);
+            }
         } else {
-            Map<Long, ComputeNode> computeNodes = new HashMap<>(numUsedComputeNodes);
             for (int i = 0; i < idToComputeNode.size() && computeNodes.size() < numUsedComputeNodes; i++) {
                 ComputeNode computeNode =
                         getNextWorker(idToComputeNode, DefaultWorkerProvider::getNextComputeNodeIndex);
@@ -290,8 +301,24 @@ public class DefaultWorkerProvider implements WorkerProvider {
                 }
                 computeNodes.put(computeNode.getId(), computeNode);
             }
-            return ImmutableMap.copyOf(computeNodes);
         }
+
+        //add BE to Resource Pool
+        ImmutableMap<Long, ComputeNode> idToBackend
+                = ImmutableMap.copyOf(systemInfoService.getIdToBackend());
+        for (int i = 0; i < idToBackend.size(); i++) {
+            ComputeNode backend = 
+                    getNextWorker(idToBackend, DefaultWorkerProvider::getNextBackendIndex);
+            Preconditions.checkNotNull(backend);
+            if (!isWorkerAvailable(backend)) {
+                    continue;
+            }
+            computeNodes.put(backend.getId(), backend);
+        }
+
+        //return Resource Pool
+        return ImmutableMap.copyOf(computeNodes);
+
     }
 
     private static <C extends ComputeNode> C getNextWorker(ImmutableMap<Long, C> workers,
