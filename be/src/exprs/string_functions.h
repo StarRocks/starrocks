@@ -550,6 +550,8 @@ public:
 
     DEFINE_VECTORIZED_FN(ngram_search_case_insensitive);
     static Status ngram_search_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status ngram_search_case_insensitive_prepare(FunctionContext* context,
+                                                        FunctionContext::FunctionStateScope scope);
     static Status ngram_search_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
 private:

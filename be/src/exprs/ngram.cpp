@@ -18,44 +18,102 @@
 #include "exprs/string_functions.h"
 namespace starrocks {
 static constexpr size_t max_string_size = 1 << 15;
+// uint16[2^16] can almost fit into L2
+static constexpr size_t map_size = 1 << 16;
+// we restrict needle's size smaller than 2^16, so even if every gram in needle is the same as each other
+// we still only need one uint16 to store its frequency
+using NgramHash = uint16;
+
+struct Ngramstate {
+    using DriverMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<NgramHash[]>, phmap::Hash<int32_t>,
+                                                    phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>,
+                                                    NUM_LOCK_SHARD_LOG, std::mutex>;
+    std::unique_ptr<NgramHash[]> publicHashMap;
+    DriverMap driver_maps; // hashMap for each pipeline_driver, to make it driver-local
+
+    size_t needle_gram_count = 0;
+
+    NgramHash* get_or_create_driver_hashmap() {
+        int32_t driver_id = CurrentThread::current().get_driver_id();
+        NgramHash* res = nullptr;
+        if (LIKELY(driver_maps.contains(driver_id))) {
+            res = driver_maps[driver_id].get();
+        } else {
+            auto per_driver_map = std::make_unique<NgramHash[]>(map_size);
+            std::memcpy(per_driver_map.get(), publicHashMap.get(), map_size * sizeof(NgramHash));
+            res = per_driver_map.get();
+            driver_maps.lazy_emplace(driver_id, [&](auto build) { build(driver_id, std::move(per_driver_map)); });
+        }
+
+        DCHECK(!!res);
+        return res;
+    }
+};
 
 template <size_t N, bool case_insensitive, bool use_utf_8, class Gram>
 class NgramFunctionImpl {
 public:
-    // we restrict needle's size smaller than 2^16, so even if every gram in needle is the same as each other
-    // we still only need one uint16 to store its frequency
-    using NgramHash = uint16;
-    // uint16[2^16] can almost fit into L2
-    static constexpr size_t map_size = 1 << 16;
+    StatusOr<ColumnPtr> static ngram_search_impl(FunctionContext* context, const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+        const ColumnPtr& haystack_ptr = columns[0];
 
-    struct Ngramstate {
-        using DriverMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<NgramHash[]>, phmap::Hash<int32_t>,
-                                                        phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>,
-                                                        NUM_LOCK_SHARD_LOG, std::mutex>;
-        std::unique_ptr<NgramHash[]> publicHashMap;
-        DriverMap driver_maps; // hashMap for each pipeline_driver, to make it driver-local
+        const ColumnPtr& needle_ptr = columns[1];
 
-        size_t needle_gram_count = 0;
-
-        NgramHash* get_or_create_driver_hashmap() {
-            int32_t driver_id = CurrentThread::current().get_driver_id();
-            NgramHash* res = nullptr;
-            if (LIKELY(driver_maps.contains(driver_id))) {
-                res = driver_maps[driver_id].get();
-            } else {
-                auto per_driver_map = std::make_unique<NgramHash[]>(map_size);
-                std::memcpy(per_driver_map.get(), publicHashMap.get(), map_size * sizeof(NgramHash));
-                res = per_driver_map.get();
-                driver_maps.lazy_emplace(driver_id, [&](auto build) { build(driver_id, std::move(per_driver_map)); });
-            }
-
-            DCHECK(!!res);
-            return res;
+        if (!needle_ptr->is_constant()) {
+            return Status::NotSupported("ngram function's second parameter must be const");
         }
-    };
 
-    static NgramHash getAsciiHash(const Gram* ch) { return crc_hash_32(ch, N, CRC_HASH_SEED1) & (0xffffu); }
+        const Slice& needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_ptr);
+        if (needle.get_size() >= max_string_size) {
+            return Status::NotSupported("ngram function's second parameter is larger than 2^15");
+        }
 
+        // needle is too small so we can not get even single Ngram, so they are not similar at all
+        if (needle.get_size() < N) {
+            return ColumnHelper::create_const_column<TYPE_FLOAT>(0, haystack_ptr->size());
+        }
+
+        auto state = reinterpret_cast<Ngramstate*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        NgramHash* map = state->get_or_create_driver_hashmap();
+        if (haystack_ptr->is_constant()) {
+            return haystack_const_and_needle_const(haystack_ptr, map, context);
+        } else {
+            return haystack_vector_and_needle_const(haystack_ptr, map, context);
+        }
+    }
+
+    Status static ngram_search_prepare_impl(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+        if (scope != FunctionContext::FRAGMENT_LOCAL) {
+            return Status::OK();
+        }
+
+        // make sure this funtion is idempotent
+        if (context->get_function_state(FunctionContext::FRAGMENT_LOCAL) != nullptr) {
+            return Status::OK();
+        }
+
+        auto* state = new Ngramstate();
+        state->publicHashMap = std::make_unique<NgramHash[]>(map_size);
+        std::memset(state->publicHashMap.get(), 0, map_size * sizeof(NgramHash));
+        context->set_function_state(scope, state);
+
+        if (!context->is_notnull_constant_column(1)) {
+            return Status::OK();
+        }
+
+        auto const& needle_ptr = context->get_constant_column(1);
+
+        const Slice& needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_ptr);
+        if (needle.get_size() >= max_string_size) {
+            return Status::OK();
+        }
+
+        // only calculate needle's hashmap once
+        state->needle_gram_count = calculateMapWithNeedle(state->publicHashMap.get(), needle);
+        return Status::OK();
+    }
+
+private:
     // for every gram of needle, we calculate its' hash value and store its' frequency in map, and return the number of gram in needle
     size_t static calculateMapWithNeedle(NgramHash* map, const Slice& needle) {
         size_t needle_length = needle.get_size();
@@ -76,42 +134,6 @@ public:
         }
 
         return i;
-    }
-
-    // traverse haystack‘s every gram, find whether this gram is in needle or not using gram's hash
-    // 16bit hash value may cause hash collision, but because we just calculate the similarity of two string
-    // so don't need to be so accurate.
-    template <bool need_recovery_map>
-    size_t static calculateDistanceWithHaystack(NgramHash* map, const Slice& haystack,
-                                                [[maybe_unused]] NgramHash* map_memo, size_t needle_gram_count) {
-        size_t haystack_length = haystack.get_size();
-        NgramHash cur_hash;
-        size_t i;
-        const char* ptr = haystack.get_data();
-
-        for (i = 0; i + N <= haystack_length; i++) {
-            cur_hash = getAsciiHash(ptr + i);
-            // if this gram is in needle
-            if (map[cur_hash] > 0) {
-                needle_gram_count--;
-                map[cur_hash]--;
-                if constexpr (need_recovery_map) {
-                    map_memo[i] = cur_hash;
-                }
-            }
-        }
-
-        if constexpr (need_recovery_map) {
-            for (int j = 0; j < i; j++) {
-                if (map_memo[j]) {
-                    map[map_memo[j]]++;
-                    // reset map_memo
-                    map_memo[j] = 0;
-                }
-            }
-        }
-
-        return needle_gram_count;
     }
 
     ColumnPtr static haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, NgramHash* map,
@@ -196,89 +218,70 @@ public:
         return ColumnHelper::create_const_column<TYPE_FLOAT>(result, haystack_ptr->size());
     }
 
-private:
+    // traverse haystack‘s every gram, find whether this gram is in needle or not using gram's hash
+    // 16bit hash value may cause hash collision, but because we just calculate the similarity of two string
+    // so don't need to be so accurate.
+    template <bool need_recovery_map>
+    size_t static calculateDistanceWithHaystack(NgramHash* map, const Slice& haystack,
+                                                [[maybe_unused]] NgramHash* map_memo, size_t needle_gram_count) {
+        size_t haystack_length = haystack.get_size();
+        NgramHash cur_hash;
+        size_t i;
+        const char* ptr = haystack.get_data();
+
+        for (i = 0; i + N <= haystack_length; i++) {
+            cur_hash = getAsciiHash(ptr + i);
+            // if this gram is in needle
+            if (map[cur_hash] > 0) {
+                needle_gram_count--;
+                map[cur_hash]--;
+                if constexpr (need_recovery_map) {
+                    map_memo[i] = cur_hash;
+                }
+            }
+        }
+
+        if constexpr (need_recovery_map) {
+            for (int j = 0; j < i; j++) {
+                if (map_memo[j]) {
+                    map[map_memo[j]]++;
+                    // reset map_memo
+                    map_memo[j] = 0;
+                }
+            }
+        }
+
+        return needle_gram_count;
+    }
+
     void inline static tolower(const Slice& str, std::string& buf) {
         buf = str.to_string();
         std::transform(buf.begin(), buf.end(), buf.begin(), [](unsigned char c) { return std::tolower(c); });
     }
+
+    static NgramHash getAsciiHash(const Gram* ch) { return crc_hash_32(ch, N, CRC_HASH_SEED1) & (0xffffu); }
 };
 
-template <size_t N, bool case_insensitive, bool use_utf_8, class Gram>
-StatusOr<ColumnPtr> static ngram_search_impl(FunctionContext* context, const Columns& columns) {
-    using imp = NgramFunctionImpl<N, case_insensitive, use_utf_8, Gram>;
-    RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    const ColumnPtr& haystack_ptr = columns[0];
-
-    const ColumnPtr& needle_ptr = columns[1];
-
-    if (!needle_ptr->is_constant()) {
-        return Status::NotSupported("ngram function's second parameter must be const");
-    }
-
-    const Slice& needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_ptr);
-    if (needle.get_size() >= max_string_size) {
-        return Status::NotSupported("ngram function's second parameter is larger than 2^15");
-    }
-
-    // needle is too small so we can not get even single Ngram, so they are not similar at all
-    if (needle.get_size() < N) {
-        return ColumnHelper::create_const_column<TYPE_FLOAT>(0, haystack_ptr->size());
-    }
-
-    auto state = reinterpret_cast<imp::Ngramstate*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
-    typename imp::NgramHash* map = state->get_or_create_driver_hashmap();
-    if (haystack_ptr->is_constant()) {
-        return imp::haystack_const_and_needle_const(haystack_ptr, map, context);
-    } else {
-        return imp::haystack_vector_and_needle_const(haystack_ptr, map, context);
-    }
-}
-
 StatusOr<ColumnPtr> StringFunctions::ngram_search(FunctionContext* context, const Columns& columns) {
-    return ngram_search_impl<4, false, false, char>(context, columns);
+    return NgramFunctionImpl<4, false, false, char>::ngram_search_impl(context, columns);
 }
 
 StatusOr<ColumnPtr> StringFunctions::ngram_search_case_insensitive(FunctionContext* context, const Columns& columns) {
-    return ngram_search_impl<4, true, false, char>(context, columns);
+    return NgramFunctionImpl<4, true, false, char>::ngram_search_impl(context, columns);
 }
 
 Status StringFunctions::ngram_search_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
-    using imp = NgramFunctionImpl<4, false, false, char>;
-    if (scope != FunctionContext::FRAGMENT_LOCAL) {
-        return Status::OK();
-    }
+    return NgramFunctionImpl<4, false, false, char>::ngram_search_prepare_impl(context, scope);
+}
 
-    // make sure this funtion is idempotent
-    if (context->get_function_state(FunctionContext::FRAGMENT_LOCAL) != nullptr) {
-        return Status::OK();
-    }
-
-    auto* state = new imp::Ngramstate();
-    state->publicHashMap = std::make_unique<imp::NgramHash[]>(imp::map_size);
-    std::memset(state->publicHashMap.get(), 0, imp::map_size * sizeof(imp::NgramHash));
-    context->set_function_state(scope, state);
-
-    if (!context->is_notnull_constant_column(1)) {
-        return Status::OK();
-    }
-
-    auto const& needle_ptr = context->get_constant_column(1);
-
-    const Slice& needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_ptr);
-    if (needle.get_size() >= max_string_size) {
-        return Status::OK();
-    }
-
-    // only calculate needle's hashmap once
-    state->needle_gram_count =
-            NgramFunctionImpl<4, false, false, char>::calculateMapWithNeedle(state->publicHashMap.get(), needle);
-    return Status::OK();
+Status StringFunctions::ngram_search_case_insensitive_prepare(FunctionContext* context,
+                                                              FunctionContext::FunctionStateScope scope) {
+    return NgramFunctionImpl<4, true, false, char>::ngram_search_prepare_impl(context, scope);
 }
 
 Status StringFunctions::ngram_search_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        auto* state = reinterpret_cast<NgramFunctionImpl<4, false, false, char>::Ngramstate*>(
-                context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        auto* state = reinterpret_cast<Ngramstate*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
         if (state != nullptr) {
             delete state;
             state = nullptr;
