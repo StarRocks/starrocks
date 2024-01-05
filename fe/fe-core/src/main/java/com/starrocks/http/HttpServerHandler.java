@@ -34,8 +34,11 @@
 
 package com.starrocks.http;
 
+import com.codahale.metrics.Histogram;
 import com.starrocks.http.action.IndexAction;
 import com.starrocks.http.action.NotFoundAction;
+import com.starrocks.metric.LongCounterMetric;
+import com.starrocks.metric.Metric;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
@@ -53,6 +56,10 @@ import io.netty.util.ReferenceCountUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import static com.starrocks.http.HttpMetricRegistry.HTTP_CONNECTIONS_NUM;
+import static com.starrocks.http.HttpMetricRegistry.HTTP_HANDLING_REQUESTS_NUM;
+import static com.starrocks.http.HttpMetricRegistry.HTTP_REQUEST_HANDLE_LATENCY_MS;
+
 public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     private static final Logger LOG = LogManager.getLogger(HttpServerHandler.class);
     // keep connectContext when channel is open
@@ -63,9 +70,22 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     private ActionController controller = null;
     private BaseAction action = null;
 
+    private final LongCounterMetric httpConnectionsNum;
+    private final LongCounterMetric handlingRequestsNum;
+    private final Histogram requestHandleLatencyMs;
+
     public HttpServerHandler(ActionController controller) {
         super();
         this.controller = controller;
+
+        HttpMetricRegistry httpMetricRegistry = HttpMetricRegistry.getInstance();
+        this.httpConnectionsNum = new LongCounterMetric(HTTP_CONNECTIONS_NUM,
+                Metric.MetricUnit.NOUNIT, "the number of established http connections currently");
+        httpMetricRegistry.registerCounter(httpConnectionsNum);
+        this.handlingRequestsNum = new LongCounterMetric(HTTP_HANDLING_REQUESTS_NUM, Metric.MetricUnit.NOUNIT,
+                "the number of http requests that is being handled");
+        httpMetricRegistry.registerCounter(handlingRequestsNum);
+        this.requestHandleLatencyMs = httpMetricRegistry.registerHistogram(HTTP_REQUEST_HANDLE_LATENCY_MS);
     }
 
     @Override
@@ -96,7 +116,18 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("action: {} ", action.getClass().getName());
                 }
-                action.handleRequest(req);
+
+                long startTime = System.currentTimeMillis();
+                try {
+                    handlingRequestsNum.increase(1L);
+                    action.handleRequest(req);
+                } finally {
+                    long latency = System.currentTimeMillis() - startTime;
+                    handlingRequestsNum.increase(-1L);
+                    requestHandleLatencyMs.update(latency);
+                    LOG.info("receive http request. url: {}, thread id: {}, startTime: {}, latency: {} ms",
+                            req.getRequest().uri(), Thread.currentThread().getId(), startTime, latency);
+                }
             }
         } else {
             ReferenceCountUtil.release(msg);
@@ -105,6 +136,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelActive(ChannelHandlerContext ctx) throws Exception {
+        httpConnectionsNum.increase(1L);
         // create HttpConnectContext when channel is establised, and store it in channel attr
         ctx.channel().attr(HTTP_CONNECT_CONTEXT_ATTRIBUTE_KEY).setIfAbsent(new HttpConnectContext());
         super.channelActive(ctx);
@@ -112,6 +144,7 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
 
     @Override
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        httpConnectionsNum.increase(-1L);
         if (action != null) {
             action.handleChannelInactive(ctx);
         }
