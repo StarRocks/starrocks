@@ -416,6 +416,7 @@ public class UtFrameUtils {
                                    GetPlanHook<R> returnedSupplier) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
+        // connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
         connectContext.setThreadLocalInfo();
         if (connectContext.getSessionVariable().getEnableQueryDump()) {
             connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
@@ -426,6 +427,9 @@ public class UtFrameUtils {
         List<StatementBase> statements;
         try (Timer ignored = Tracers.watchScope("Parser")) {
             statements = SqlParser.parse(originStmt, connectContext.getSessionVariable());
+        }
+        if (connectContext.getDumpInfo() != null) {
+            connectContext.getDumpInfo().setOriginStmt(originStmt);
         }
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
         StatementBase statementBase = statements.get(0);

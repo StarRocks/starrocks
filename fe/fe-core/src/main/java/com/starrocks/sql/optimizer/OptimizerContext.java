@@ -68,6 +68,11 @@ public class OptimizerContext {
     // collect LogicalViewScanOperators
     private List<LogicalViewScanOperator> viewScans;
 
+    // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
+    // lifecycle instead of per materialized view.
+    // TODO: refactor materialized view's variables/contexts into this.
+    private QueryMaterializationContext queryMaterializationContext;
+
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -252,5 +257,19 @@ public class OptimizerContext {
 
     public List<LogicalViewScanOperator> getViewScans() {
         return viewScans;
+    }
+
+    public void setQueryMaterializationContext(QueryMaterializationContext queryMaterializationContext) {
+        this.queryMaterializationContext = queryMaterializationContext;
+    }
+
+    public QueryMaterializationContext getQueryMaterializationContext() {
+        return queryMaterializationContext;
+    }
+
+    public void clear() {
+        if (this.queryMaterializationContext != null) {
+            this.queryMaterializationContext.clear();
+        }
     }
 }

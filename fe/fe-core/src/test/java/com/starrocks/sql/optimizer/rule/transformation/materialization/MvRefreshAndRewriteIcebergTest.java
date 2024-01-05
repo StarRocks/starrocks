@@ -1078,7 +1078,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
                     " where t1.d in ('2023-08-01', '2023-08-02') " +
                     " group by t1.d, t2.b, t3.c;";
-            String plan = getFragmentPlan(query);
+            String plan = getFragmentPlan(query, "MV");
             PlanTestBase.assertContains(plan, "UNION");
             PlanTestBase.assertContains(plan, "test_mv1");
         }
@@ -1204,6 +1204,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                 materializedView.getPartitions().stream().map(Partition::getName).sorted()
                         .collect(Collectors.toList());
         Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
 
         {
             String query = "select t1.a, t2.b, t1.d, count(t1.c)\n" +
@@ -1274,7 +1275,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d \n" +
                     " where t1.d >= '2023-08-01' \n" +
                     " group by t1.a, t2.b, t1.d;";
-            String plan = getFragmentPlan(query);
+            String plan = getFragmentPlan(query, "MV");
             PlanTestBase.assertContains(plan, "UNION");
             PlanTestBase.assertContains(plan, "14:OlapScanNode\n" +
                     "     TABLE: test_mv1\n" +

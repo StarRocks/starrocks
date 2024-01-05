@@ -276,6 +276,9 @@ public class MSchema {
             )
     ).withValues("('2020-01-01', '{'a': 1, 'gender': 'man'}')");
 
+    public static final MTable TABLE_WITH_DAY_PARTITION1 = TABLE_WITH_DAY_PARTITION.copyWithName("table_with_day_partition1");
+    public static final MTable TABLE_WITH_DAY_PARTITION2 = TABLE_WITH_DAY_PARTITION.copyWithName("table_with_day_partition2");
+
     public static final List<MTable>  TABLE_MARKETING = List.of(
             EMPS,
             EMPS_NULL,
@@ -290,6 +293,8 @@ public class MSchema {
             T0,
             TABLE_WITH_PARTITION,
             TABLE_WITH_DAY_PARTITION,
+            TABLE_WITH_DAY_PARTITION1,
+            TABLE_WITH_DAY_PARTITION2,
             TABLE_WITH_DATETIME_PARTITION,
             TEST_BASE_PART,
             T1,
