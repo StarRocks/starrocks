@@ -41,7 +41,7 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
     int64_t total_scan_mem_limit = std::numeric_limits<int64_t>::max();
     std::atomic<int64_t> scan_mem_limit = 0;
     std::atomic<int64_t> running_chunk_source_count = 0;
-    int64_t default_data_source_mem_bytes = 0;
+    int64_t data_source_mem_bytes = 0;
     std::atomic<int64_t> chunk_source_mem_bytes = 0;
     int64_t chunk_source_mem_bytes_update_count = 0;
     int64_t last_arb_chunk_source_mem_bytes = 0;
@@ -83,7 +83,9 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
         return per_count;
     }
 
-    int64_t update_running_chunk_source_count(int delta) { return running_chunk_source_count.fetch_add(delta); }
+    int64_t update_running_chunk_source_count(int delta) {
+        return running_chunk_source_count.fetch_add(delta, std::memory_order_relaxed);
+    }
 
     void update_chunk_source_mem_bytes(int64_t value) {
         if (value == 0) return;
@@ -103,8 +105,8 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
         last_arb_chunk_source_mem_bytes = value;
     }
 
-    void set_default_data_source_mem_bytes(int64_t value) { default_data_source_mem_bytes = value; }
-    int64_t get_default_data_source_mem_bytes() const { return default_data_source_mem_bytes; }
+    void set_data_source_mem_bytes(int64_t value) { data_source_mem_bytes = value; }
+    int64_t get_data_source_mem_bytes() const { return data_source_mem_bytes; }
 };
 
 ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, RuntimeState* state,
@@ -151,8 +153,8 @@ void ConnectorScanOperatorFactory::set_mem_share_arb(ConnectorScanOperatorMemSha
     _mem_share_arb = arb;
 }
 
-void ConnectorScanOperatorFactory::set_default_data_source_mem_bytes(int64_t value) {
-    _io_tasks_mem_limiter->set_default_data_source_mem_bytes(value);
+void ConnectorScanOperatorFactory::set_data_source_mem_bytes(int64_t value) {
+    _io_tasks_mem_limiter->set_data_source_mem_bytes(value);
 }
 
 // ===============================================================
@@ -619,7 +621,7 @@ void ConnectorChunkSource::close(RuntimeState* state) {
         int64_t chunk_source_mem_bytes = 0;
         if (need_update) {
             if (data_source_mem_bytes == 0) {
-                data_source_mem_bytes = limiter->get_default_data_source_mem_bytes();
+                data_source_mem_bytes = limiter->get_data_source_mem_bytes();
             }
             chunk_source_mem_bytes = data_source_mem_bytes + avg_row_mem_bytes() * chunk_num;
             limiter->update_chunk_source_mem_bytes(chunk_source_mem_bytes);
@@ -679,20 +681,10 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
         }
 
         if (*mem_alloc_failed) {
-            // if there is no running chunk source of this node,
-            // perhaps we want to make sure one is running to avoid deadlock of data flow.
-            // and memory is over-committed.
-            if (limiter->update_running_chunk_source_count(1) == 0) {
-                *mem_alloc_failed = false;
-                mem_tracker->consume(_request_mem_tracker_bytes);
-            } else {
-                limiter->update_running_chunk_source_count(-1);
-                _request_mem_tracker_bytes = 0;
-                return Status::OK();
-            }
-        } else {
-            limiter->update_running_chunk_source_count(1);
+            _request_mem_tracker_bytes = 0;
+            return Status::OK();
         }
+        limiter->update_running_chunk_source_count(1);
 
         VLOG_OPERATOR << build_debug_string("consume");
     }
