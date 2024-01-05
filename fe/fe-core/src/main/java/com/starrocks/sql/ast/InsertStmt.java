@@ -24,6 +24,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
@@ -284,6 +285,16 @@ public class InsertStmt extends DmlStmt {
                 .map(field -> new Column(field.getName(), field.getType(), field.isNullable()))
                 .collect(Collectors.toList());
 
+<<<<<<< HEAD
+=======
+    public Table makeBlackHoleTable() {
+        return new BlackHoleTable(collectSelectedFieldsFromQueryStatement());
+    }
+
+    public Table makeTableFunctionTable(SessionVariable sessionVariable) {
+        checkState(tableFunctionAsTargetTable, "tableFunctionAsTargetTable is false");
+        List<Column> columns = collectSelectedFieldsFromQueryStatement();
+>>>>>>> d8933d6703 ([Enhancement] add connnector_sink_compression_codec to control file compression scheme (#37912))
         List<String> columnNames = columns.stream()
                 .map(Column::getName)
                 .collect(Collectors.toList());
@@ -324,10 +335,9 @@ public class InsertStmt extends DmlStmt {
             throw new SemanticException("use \"path\" = \"parquet\", as only parquet format is supported now");
         }
 
+        // if compression codec is not specified, use compression codec from session
         if (compressionType == null) {
-            throw new SemanticException("compression is a mandatory property. " +
-                    "Use \"compression\" = \"your_chosen_compression_type\". Supported compression types are" +
-                    "(uncompressed, gzip, brotli, zstd, lz4).");
+            compressionType = sessionVariable.getConnectorSinkCompressionCodec();
         }
 
         if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionType)) {

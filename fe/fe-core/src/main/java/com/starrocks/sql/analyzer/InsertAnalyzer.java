@@ -305,7 +305,13 @@ public class InsertAnalyzer {
 
     private static Table getTargetTable(InsertStmt insertStmt, ConnectContext session) {
         if (insertStmt.useTableFunctionAsTargetTable()) {
+<<<<<<< HEAD
             return insertStmt.makeTableFunctionTable();
+=======
+            return insertStmt.makeTableFunctionTable(session.getSessionVariable());
+        } else if (insertStmt.useBlackHoleTableAsTargetTable()) {
+            return insertStmt.makeBlackHoleTable();
+>>>>>>> d8933d6703 ([Enhancement] add connnector_sink_compression_codec to control file compression scheme (#37912))
         }
 
         MetaUtils.normalizationTableName(session, insertStmt.getTableName());
