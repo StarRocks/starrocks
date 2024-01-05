@@ -154,16 +154,15 @@ Status ShortCircuitHybridScanNode::_process_key_chunk() {
 // found vector value
 Status ShortCircuitHybridScanNode::_process_value_chunk(std::vector<bool>& found) {
     std::vector<string> value_field_names;
-    auto value_schema =
-            std::make_unique<Schema>(_tablet_schema->schema(), _tablet_schema->schema()->value_field_column_ids());
-
+    vector<starrocks::ColumnId> value_column_ids;
     for (auto slot_desc : _tuple_desc->slots()) {
-        auto field = value_schema->get_field_by_name(slot_desc->col_name());
+        auto field = _tablet_schema->schema()->get_field_by_name(slot_desc->col_name());
         if (field != nullptr && !field->is_key()) {
             value_field_names.emplace_back(field->name());
+            value_column_ids.emplace_back(field->id());
         }
     }
-
+    auto value_schema = std::make_unique<Schema>(_tablet_schema->schema(), value_column_ids);
     // tmp value_chunk, order not match key_chunk
     ChunkPtr value_chunk = ChunkHelper::new_chunk(*(value_schema), _num_rows);
     // final value_chunk, order match key_chunk
