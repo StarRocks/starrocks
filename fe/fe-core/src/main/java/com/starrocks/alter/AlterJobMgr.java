@@ -98,6 +98,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.AlterTableStatementAnalyzer;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -376,7 +377,8 @@ public class AlterJobMgr {
         }
     }
 
-    private void processChangeMaterializedViewStatus(MaterializedView materializedView, String status, boolean isReplay) {
+    private void processChangeMaterializedViewStatus(MaterializedView materializedView, String status,
+                                                     boolean isReplay) {
 
         if (AlterMaterializedViewStmt.ACTIVE.equalsIgnoreCase(status)) {
             String viewDefineSql = materializedView.getViewDefineSql();
@@ -396,7 +398,8 @@ public class AlterJobMgr {
             }
 
             Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
-            List<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(tableNameTableMap, !isReplay);
+            List<BaseTableInfo> baseTableInfos =
+                    MaterializedViewAnalyzer.getBaseTableInfos(tableNameTableMap, !isReplay);
             materializedView.setBaseTableInfos(baseTableInfos);
             materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
             GlobalStateMgr.getCurrentState().updateBaseTableRelatedMv(materializedView.getDbId(),
@@ -423,7 +426,8 @@ public class AlterJobMgr {
         }
         int autoRefreshPartitionsLimit = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
-            autoRefreshPartitionsLimit = PropertyAnalyzer.analyzeAutoRefreshPartitionsLimit(properties, materializedView);
+            autoRefreshPartitionsLimit =
+                    PropertyAnalyzer.analyzeAutoRefreshPartitionsLimit(properties, materializedView);
         }
         List<TableName> excludedTriggerTables = Lists.newArrayList();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
@@ -453,7 +457,8 @@ public class AlterJobMgr {
                             ", please add `session.` prefix if you want add session variables for mv(" +
                             "eg, \"session.query_timeout\"=\"30000000\").");
                 }
-                String varKey = entry.getKey().substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+                String varKey =
+                        entry.getKey().substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
                 SystemVariable variable = new SystemVariable(varKey, new StringLiteral(entry.getValue()));
                 setListItems.add(variable);
             }
@@ -474,7 +479,8 @@ public class AlterJobMgr {
             isChanged = true;
         } else if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT) &&
                 materializedView.getTableProperty().getAutoRefreshPartitionsLimit() != autoRefreshPartitionsLimit) {
-            curProp.put(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT, String.valueOf(autoRefreshPartitionsLimit));
+            curProp.put(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT,
+                    String.valueOf(autoRefreshPartitionsLimit));
             materializedView.getTableProperty().setAutoRefreshPartitionsLimit(autoRefreshPartitionsLimit);
             isChanged = true;
         }
@@ -556,7 +562,8 @@ public class AlterJobMgr {
                 IntervalLiteral intervalLiteral = asyncRefreshSchemeDesc.getIntervalLiteral();
                 if (intervalLiteral != null) {
                     final IntLiteral step = (IntLiteral) intervalLiteral.getValue();
-                    final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
+                    final MaterializedView.AsyncRefreshContext asyncRefreshContext =
+                            refreshScheme.getAsyncRefreshContext();
                     asyncRefreshContext.setDefineStartTime(asyncRefreshSchemeDesc.isDefineStartTime());
                     asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
                     asyncRefreshContext.setStep(step.getLongValue());
@@ -565,14 +572,16 @@ public class AlterJobMgr {
                     if (materializedView.getBaseTableInfos().stream().anyMatch(tableInfo ->
                             !tableInfo.getTable().isNativeTableOrMaterializedView()
                     )) {
-                        throw new DdlException("Materialized view which type is ASYNC need to specify refresh interval for " +
-                                "external table");
+                        throw new DdlException(
+                                "Materialized view which type is ASYNC need to specify refresh interval for " +
+                                        "external table");
                     }
                     refreshScheme.setAsyncRefreshContext(new MaterializedView.AsyncRefreshContext());
                 }
             }
 
-            final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
+            final ChangeMaterializedViewRefreshSchemeLog log =
+                    new ChangeMaterializedViewRefreshSchemeLog(materializedView);
             GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);
         } finally {
             db.writeUnlock();
@@ -655,12 +664,13 @@ public class AlterJobMgr {
             newMvRefreshScheme.setType(refreshType);
             newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
 
-            long maxChangedTableRefreshTime = log.getAsyncRefreshContext().getBaseTableVisibleVersionMap().values().stream()
-                    .map(x -> x.values().stream().map(
-                            MaterializedView.BasePartitionInfo::getLastRefreshTime).max(Long::compareTo))
-                    .map(x -> x.orElse(null)).filter(Objects::nonNull)
-                    .max(Long::compareTo)
-                    .orElse(System.currentTimeMillis());
+            long maxChangedTableRefreshTime =
+                    log.getAsyncRefreshContext().getBaseTableVisibleVersionMap().values().stream()
+                            .map(x -> x.values().stream().map(
+                                    MaterializedView.BasePartitionInfo::getLastRefreshTime).max(Long::compareTo))
+                            .map(x -> x.orElse(null)).filter(Objects::nonNull)
+                            .max(Long::compareTo)
+                            .orElse(System.currentTimeMillis());
             newMvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
             oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
             LOG.info(
@@ -769,7 +779,7 @@ public class AlterJobMgr {
 
             if (olapTable.getState() != OlapTableState.NORMAL) {
                 throw new DdlException("The state of \"" + table.getName() + "\" is " + olapTable.getState().name()
-                                       + ". Alter operation is only permitted if NORMAL");
+                        + ". Alter operation is only permitted if NORMAL");
             }
 
             if (currentAlterOps.hasSchemaChangeOp()) {
@@ -889,7 +899,8 @@ public class AlterJobMgr {
 
                 olapTable = (OlapTable) db.getTable(tableName);
                 if (olapTable.isCloudNativeTable()) {
-                    throw new DdlException("Lake table not support alter in_memory or enable_persistent_index or write_quorum");
+                    throw new DdlException(
+                            "Lake table not support alter in_memory or enable_persistent_index or write_quorum");
                 }
 
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
@@ -948,6 +959,9 @@ public class AlterJobMgr {
         olapNewTbl.checkAndSetName(origTblName, true);
         origTable.checkAndSetName(newTblName, true);
 
+        // inactive the related MVs
+        LocalMetastore.inactiveRelatedMaterializedView(db, origTable);
+        LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl);
         swapTableInternal(db, origTable, olapNewTbl);
 
         // write edit log
@@ -1019,7 +1033,6 @@ public class AlterJobMgr {
                 throw new DdlException("The specified table [" + tableName + "] is not a view");
             }
 
-
             AlterViewClause alterViewClause = (AlterViewClause) stmt.getAlterClause();
             String inlineViewDef = alterViewClause.getInlineViewDef();
             List<Column> newFullSchema = alterViewClause.getColumns();
@@ -1035,11 +1048,13 @@ public class AlterJobMgr {
                 throw new DdlException("failed to init view stmt", e);
             }
             view.setNewFullSchema(newFullSchema);
+            LocalMetastore.inactiveRelatedMaterializedView(db, view);
 
             db.dropTable(viewName);
             db.createTable(view);
 
-            AlterViewInfo alterViewInfo = new AlterViewInfo(db.getId(), view.getId(), inlineViewDef, newFullSchema, sqlMode);
+            AlterViewInfo alterViewInfo =
+                    new AlterViewInfo(db.getId(), view.getId(), inlineViewDef, newFullSchema, sqlMode);
             GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
             LOG.info("modify view[{}] definition to {}", viewName, inlineViewDef);
         } finally {
@@ -1065,6 +1080,7 @@ public class AlterJobMgr {
                 throw new DdlException("failed to init view stmt", e);
             }
             view.setNewFullSchema(newFullSchema);
+            LocalMetastore.inactiveRelatedMaterializedView(db, view);
 
             db.dropTable(viewName);
             db.createTable(view);
@@ -1178,7 +1194,8 @@ public class AlterJobMgr {
                     } else {
                         String stringUpperValue = partitionKey.getKeys().get(0).getStringValue();
                         DateTimeFormatter dateTimeFormatter = DateUtils.probeFormat(stringUpperValue);
-                        LocalDateTime upperTime = DateUtils.parseStringWithDefaultHSM(stringUpperValue, dateTimeFormatter);
+                        LocalDateTime upperTime =
+                                DateUtils.parseStringWithDefaultHSM(stringUpperValue, dateTimeFormatter);
                         LocalDateTime updatedUpperTime = upperTime.plus(periodDuration);
                         DateLiteral dateLiteral = new DateLiteral(updatedUpperTime, Type.DATETIME);
                         long coolDownTimeStamp = dateLiteral.unixTimestamp(TimeUtils.getTimeZone());
