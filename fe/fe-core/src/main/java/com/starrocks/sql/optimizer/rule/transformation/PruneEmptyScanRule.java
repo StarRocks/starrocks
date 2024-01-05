@@ -34,7 +34,7 @@ public class PruneEmptyScanRule extends TransformationRule {
     public static final PruneEmptyScanRule HUDI_SCAN = new PruneEmptyScanRule(OperatorType.LOGICAL_HUDI_SCAN);
     public static final PruneEmptyScanRule ICEBERG_SCAN = new PruneEmptyScanRule(OperatorType.LOGICAL_ICEBERG_SCAN);
     public static final PruneEmptyScanRule PAIMON_SCAN = new PruneEmptyScanRule(OperatorType.LOGICAL_PAIMON_SCAN);
-
+    public static final PruneEmptyScanRule ODPS_SCAN = new PruneEmptyScanRule(OperatorType.LOGICAL_ODPS_SCAN);
     private PruneEmptyScanRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PRUNE_EMPTY_SCAN, Pattern.create(logicalOperatorType));
     }

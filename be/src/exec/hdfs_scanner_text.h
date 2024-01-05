@@ -32,8 +32,10 @@ public:
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
     Status parse_csv(int chunk_size, ChunkPtr* chunk);
+    int64_t estimated_mem_usage() const override;
 
 private:
+    Status _setup_io_ranges() const;
     // create a reader or re init reader
     Status _create_or_reinit_reader();
     Status _build_hive_column_name_2_index();

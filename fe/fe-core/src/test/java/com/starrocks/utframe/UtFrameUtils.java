@@ -223,6 +223,7 @@ public class UtFrameUtils {
         }
 
         Config.plugin_dir = starRocksHome + "/plugins";
+        Config.max_create_table_timeout_second = 180;
         // start fe in "STARROCKS_HOME/fe/mocked/"
         MockedFrontend frontend = MockedFrontend.getInstance();
         Map<String, String> feConfMap = Maps.newHashMap();
@@ -415,15 +416,17 @@ public class UtFrameUtils {
                                    GetPlanHook<R> returnedSupplier) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
         connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
         connectContext.setThreadLocalInfo();
+        if (connectContext.getSessionVariable().getEnableQueryDump()) {
+            connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+            connectContext.getDumpInfo().setOriginStmt(originStmt);
+        }
         originStmt = LogUtil.removeLineSeparator(originStmt);
 
         List<StatementBase> statements;
         try (Timer ignored = Tracers.watchScope("Parser")) {
             statements = SqlParser.parse(originStmt, connectContext.getSessionVariable());
         }
-        connectContext.getDumpInfo().setOriginStmt(originStmt);
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
         StatementBase statementBase = statements.get(0);
 
@@ -768,6 +771,37 @@ public class UtFrameUtils {
         return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
     }
 
+    public static String setUpTestDump(ConnectContext connectContext, QueryDumpInfo replayDumpInfo) throws Exception {
+        String replaySql = initMockEnv(connectContext, replayDumpInfo);
+        replaySql = LogUtil.removeLineSeparator(replaySql);
+        return replaySql;
+    }
+
+    public static Pair<String, ExecPlan> replaySql(ConnectContext connectContext, String sql) throws Exception {
+        StatementBase statementBase;
+        try (Timer st = Tracers.watchScope("Parse")) {
+            statementBase = com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable()).get(0);
+            if (statementBase instanceof QueryStatement) {
+                replaceTableCatalogName(statementBase);
+            }
+        }
+
+        com.starrocks.sql.analyzer.Analyzer.analyze(statementBase, connectContext);
+
+        if (statementBase instanceof QueryStatement) {
+            return getQueryExecPlan((QueryStatement) statementBase, connectContext);
+        } else if (statementBase instanceof InsertStmt) {
+            return getInsertExecPlan((InsertStmt) statementBase, connectContext);
+        } else {
+            Preconditions.checkState(false, "Do not support the statement");
+            return null;
+        }
+    }
+
+    public static void tearDownTestDump() {
+        tearMockEnv();
+    }
+
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
                                                                        QueryDumpInfo replayDumpInfo) throws Exception {
         String replaySql = initMockEnv(connectContext, replayDumpInfo);
@@ -1005,6 +1039,7 @@ public class UtFrameUtils {
         ctx.setCurrentUserIdentity(userIdentity);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         ctx.setQualifiedUser(userIdentity.getUser());
+        ctx.setQueryId(UUIDUtil.genUUID());
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         globalStateMgr.initAuth(true);
         ctx.setGlobalStateMgr(globalStateMgr);

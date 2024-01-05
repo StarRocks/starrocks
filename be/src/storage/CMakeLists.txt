@@ -47,6 +47,8 @@ add_library(Storage STATIC
     primary_index.cpp
     primary_key_encoder.cpp
     protobuf_file.cpp
+    replication_txn_manager.cpp
+    replication_utils.cpp
     rowset_update_state.cpp
     rowset_column_update_state.cpp
     update_compaction_state.cpp
@@ -181,6 +183,7 @@ add_library(Storage STATIC
     lake/vacuum.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
+    lake/replication_txn_manager.cpp
     lake/rowset.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
@@ -208,6 +211,8 @@ add_library(Storage STATIC
     lake/txn_log_applier.cpp
     lake/lake_local_persistent_index.cpp
     persistent_index_compaction_manager.cpp
+    persistent_index_tablet_loader.cpp
+    lake/lake_local_persistent_index_tablet_loader.cpp
     lake/lake_persistent_index.cpp
     lake/persistent_index_memtable.cpp
     lake/local_pk_index_manager.cpp

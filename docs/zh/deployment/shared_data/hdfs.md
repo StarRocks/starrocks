@@ -111,7 +111,7 @@ HDFS 存储的 URL，例如 `hdfs://127.0.0.1:9000/user/xxx/starrocks/`。
 
 ```SQL
 CREATE STORAGE VOLUME def_volume
-TYPE = S3
+TYPE = HDFS
 LOCATIONS = ("hdfs://127.0.0.1:9000/user/starrocks/");
 
 SET def_volume AS DEFAULT STORAGE VOLUME;

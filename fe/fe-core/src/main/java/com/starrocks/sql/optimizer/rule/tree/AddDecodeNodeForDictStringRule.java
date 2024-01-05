@@ -972,7 +972,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
         LogicalProperty decodeProperty = new LogicalProperty(childExpr.get(0).getLogicalProperty());
         result.setLogicalProperty(
-                DecodeVisitor.rewriteLogicProperty(decodeProperty, decodeOperator.getDictToStrings()));
+                DecodeVisitor.rewriteLogicProperty(decodeProperty, decodeOperator.getDictIdToStringsId()));
         context.clear();
         return result;
     }

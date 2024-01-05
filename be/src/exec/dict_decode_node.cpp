@@ -51,6 +51,18 @@ Status DictDecodeNode::init(const TPlanNode& tnode, RuntimeState* state) {
         _decode_column_cids.emplace_back(decode_id);
     }
 
+    auto& tuple_id = this->_tuple_ids[0];
+    for (const auto& dict_id : _decode_column_cids) {
+        auto idx = this->row_desc().get_tuple_idx(tuple_id);
+        auto& tuple = this->row_desc().tuple_descriptors()[idx];
+        for (const auto& slot : tuple->slots()) {
+            if (slot->id() == dict_id) {
+                _decode_column_types.emplace_back(&slot->type());
+                break;
+            }
+        }
+    }
+
     return Status::OK();
 }
 
@@ -141,7 +153,7 @@ Status DictDecodeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
         desc.type = TYPE_VARCHAR;
 
         decode_columns[i] = ColumnHelper::create_column(desc, encode_column->is_nullable());
-        RETURN_IF_ERROR(_decoders[i]->decode(encode_column.get(), decode_columns[i].get()));
+        RETURN_IF_ERROR(_decoders[i]->decode_string(encode_column.get(), decode_columns[i].get()));
     }
 
     ChunkPtr nchunk = std::make_shared<Chunk>();
@@ -173,7 +185,7 @@ pipeline::OpFactories DictDecodeNode::decompose_to_pipeline(pipeline::PipelineBu
     OpFactories operators = _children[0]->decompose_to_pipeline(context);
     operators.emplace_back(std::make_shared<DictDecodeOperatorFactory>(
             context->next_operator_id(), id(), std::move(_encode_column_cids), std::move(_decode_column_cids),
-            std::move(_expr_ctxs), std::move(_string_functions)));
+            std::move(_decode_column_types), std::move(_expr_ctxs), std::move(_string_functions)));
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     // Initialize OperatorFactory's fields involving runtime filters.

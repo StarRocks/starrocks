@@ -17,7 +17,9 @@ package com.starrocks.load.pipe;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.load.pipe.filelist.FileListTableRepo;
@@ -35,8 +37,10 @@ import com.starrocks.scheduler.SubmitResult;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendServiceImpl;
+import com.starrocks.sql.analyzer.PipeAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
@@ -128,6 +132,12 @@ public class PipeManagerTest {
         pm.createPipe(createStmt);
     }
 
+    private void alterPipe(String sql) throws Exception {
+        PipeManager pm = ctx.getGlobalStateMgr().getPipeManager();
+        AlterPipeStmt createStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        pm.alterPipe(createStmt);
+    }
+
     private void dropPipe(String name) throws Exception {
         String sql = "drop pipe " + name;
         DropPipeStmt dropStmt = (DropPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -145,6 +155,39 @@ public class PipeManagerTest {
         String sql = "alter pipe " + name + " resume";
         AlterPipeStmt alterStmt = (AlterPipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.alterPipe(alterStmt);
+    }
+
+    @Test
+    public void testPipeWithWarehouse() throws Exception {
+        // not exists
+        String sql = "create pipe p_warehouse properties('warehouse' = 'w1') " +
+                "as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
+        Exception e = Assert.assertThrows(AnalysisException.class, () -> createPipe(sql));
+        Assert.assertEquals("Getting analyzing error. Detail message: Invalid parameter w1.", e.getMessage());
+
+        // mock the warehouse
+        new MockUp<PipeAnalyzer>() {
+            @Mock
+            public void analyzeWarehouseProperty(String warehouseName) {
+            }
+        };
+        new MockUp<WarehouseManager>() {
+            @Mock
+            public boolean warehouseExists(String warehouseName) {
+                return true;
+            }
+        };
+
+        createPipe(sql);
+        Pipe pipe = getPipe("p_warehouse");
+        Assert.assertTrue(pipe.getTaskProperties().toString(),
+                pipe.getTaskProperties().containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
+        Assert.assertEquals("('warehouse'='w1')", pipe.getPropertiesString());
+
+        // alter pipe
+        alterPipe("alter pipe p_warehouse set('warehouse' = 'w2') ");
+        Assert.assertEquals(pipe.getTaskProperties().toString(),
+                "w2", pipe.getTaskProperties().get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
     }
 
     @Test
@@ -620,10 +663,26 @@ public class PipeManagerTest {
         // create if not exists
         CreatePipeStmt createAgain = createStmt;
         Assert.assertThrows(SemanticException.class, () -> pm.createPipe(createAgain));
-        sql =
-                "create pipe if not exists p_crud as insert into tbl1 select * from files('path'='fake://pipe', 'format'='parquet')";
+        sql = "create pipe if not exists p_crud as insert into tbl1 " +
+                "select * from files('path'='fake://pipe', 'format'='parquet')";
         createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.createPipe(createStmt);
+
+        // create or replace
+        String createOrReplaceSql = "create or replace pipe p_crud as insert into tbl1 " +
+                "select * from files('path'='fake://pipe', 'format'='parquet')";
+        CreatePipeStmt createOrReplace = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(createOrReplaceSql, ctx);
+        long previousId = getPipe("p_crud").getId();
+        pm.createPipe(createOrReplace);
+        Assert.assertNotEquals(previousId, getPipe("p_crud").getId());
+        pipe = pm.mayGetPipe(name).get();
+
+        // create or replace when not exists
+        previousId = pipe.getId();
+        dropPipe(name.getPipeName());
+        pm.createPipe(createOrReplace);
+        pipe = pm.mayGetPipe(name).get();
+        Assert.assertNotEquals(previousId, pipe.getId());
 
         // pause
         sql = "alter pipe p_crud suspend";

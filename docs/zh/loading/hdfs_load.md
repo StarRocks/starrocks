@@ -288,7 +288,6 @@ REJECTED_RECORD_PATH: NULL
 
 ### Broker Load 优势
 
-- Broker Load 支持在导入过程中执行[数据转换](../loading/Etl_in_loading.md)、以及 [UPSERT、DELETE 等数据变更操作](../loading/Load_to_Primary_Key_tables.md)。
 - Broker Load 在后台运行，客户端不需要保持连接也能确保导入作业不中断。
 - Broker Load 作业默认超时时间为 4 小时，适合导入数据较大、导入运行时间较长的场景。
 - 除 Parquet 和 ORC 文件格式，Broker Load 还支持 CSV 文件格式。

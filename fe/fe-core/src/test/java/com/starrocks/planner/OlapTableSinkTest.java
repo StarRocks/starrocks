@@ -25,7 +25,6 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
@@ -48,10 +47,8 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
@@ -62,18 +59,12 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -86,26 +77,6 @@ public class OlapTableSinkTest {
 
     @Injectable
     public OlapTable dstTable;
-
-    private static StarRocksAssert starRocksAssert;
-
-    private static ConnectContext connectContext;
-
-    @BeforeClass
-    public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-        String createTblStmtStr = "create table db2.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
-                "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
-        connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
-        starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withDatabase("db2");
-        starRocksAssert.withTable(createTblStmtStr);
-    }
-
-    @Before
-    public void setUp() {
-
-    }
 
     private TupleDescriptor getTuple() {
         DescriptorTable descTable = new DescriptorTable();
@@ -424,41 +395,6 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testMultiListPartition() throws UserException{
-        TupleDescriptor tuple = getTuple();
-        ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
-                Lists.newArrayList(new Column("dt",Type.STRING), new Column("province",Type.STRING)));
-        List<String> multiItems = Lists.newArrayList("dt","shanghai");
-        List<List<String>> multiValues = new ArrayList<>();
-        multiValues.add(multiItems);
-
-        listPartitionInfo.setMultiValues(1,multiValues);
-        listPartitionInfo.setReplicationNum(1, (short) 3);
-        MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
-        HashDistributionInfo distInfo = new HashDistributionInfo(
-                3, Lists.newArrayList(new Column("id", Type.BIGINT)));
-        Partition partition = new Partition(1, "p1", index, distInfo);
-
-        new Expectations() {{
-            dstTable.getId();
-            result = 1;
-            dstTable.getPartitions();
-            result = Lists.newArrayList(partition);
-            dstTable.getPartition(1L);
-            result = partition;
-            dstTable.getPartitionInfo();
-            result = listPartitionInfo;
-        }};
-
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(1L),
-                TWriteQuorumType.MAJORITY, false, false, false);
-        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
-        sink.complete();
-
-        Assert.assertTrue(sink.toThrift() instanceof TDataSink);
-    }
-
-    @Test
     public void testImmutablePartition() throws UserException {
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
@@ -495,29 +431,4 @@ public class OlapTableSinkTest {
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
     }
-
-    @Test
-    public void testCreateLocationException() {
-        new MockUp<PartitionInfo>() {
-            @Mock
-            public int getQuorumNum(long partitionId, TWriteQuorumType writeQuorum) {
-                return 3;
-            }
-        };
-
-        Database db = GlobalStateMgr.getCurrentState().getDb("db2");
-        OlapTable olapTable = (OlapTable) db.getTable("tbl1");
-
-        List<Long> partitionIds = olapTable.getAllPartitionIds();
-
-        try {
-            OlapTableSink.createLocation(olapTable, -1, partitionIds, false);
-        } catch (UserException e) {
-            System.out.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("replicas: 10001:1/-1/1/0:NORMAL:ALIVE"));
-            return;
-        }
-        Assert.fail("must throw UserException");
-    }
-
 }

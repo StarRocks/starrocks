@@ -64,8 +64,6 @@ static Status create_hdfs_fs_handle(const std::string& namenode, const std::shar
     const std::map<std::string, std::string> cloud_properties = get_cloud_properties(options);
     if (!cloud_properties.empty()) {
         for (const auto& cloud_property : cloud_properties) {
-            VLOG_FILE << "[xxx] cloud property: key = " << cloud_property.first.data()
-                      << ", value = " << cloud_property.second.data();
             hdfsBuilderConfSetStr(hdfs_builder, cloud_property.first.data(), cloud_property.second.data());
         }
     }

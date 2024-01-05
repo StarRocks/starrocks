@@ -1572,8 +1572,10 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
     int64_t wait_start = MonotonicMillis();
     while (true) {
         if (_apply_stopped) {
-            return Status::InternalError(strings::Substitute("wait_for_version version:$0 failed: apply stopped $1",
-                                                             version.to_string(), _debug_string(false, true)));
+            return Status::InternalError(
+                    strings::Substitute("wait_for_version version:$0 failed: apply stopped, tablet "
+                                        "might have been dropped due to certain reasons and you can retry. $1",
+                                        version.to_string(), _debug_string(false, true)));
         }
         _apply_version_changed.wait_for(ul, std::chrono::seconds(2));
         if (_error) {
@@ -1965,6 +1967,15 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     // `enable_persistent_index` of tablet maybe change by alter, we should get `enable_persistent_index` from index to
     // avoid inconsistency between persistent index file and PersistentIndexMeta
     bool enable_persistent_index = index.enable_persistent_index();
+    // release or remove index entry when function end
+    DeferOp index_defer([&]() {
+        index.reset_cancel_major_compaction();
+        if (enable_persistent_index ^ _tablet.get_enable_persistent_index()) {
+            manager->index_cache().remove(index_entry);
+        } else {
+            manager->index_cache().release(index_entry);
+        }
+    });
     if (enable_persistent_index && !rebuild_index) {
         st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
         if (!st.ok() && !st.is_not_found()) {
@@ -1976,17 +1987,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     }
 
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
-    // release or remove index entry when function end
-    DeferOp index_defer([&]() {
-        index.reset_cancel_major_compaction();
-        if (enable_persistent_index ^ _tablet.get_enable_persistent_index()) {
-            manager->index_cache().remove(index_entry);
-        } else {
-            manager->index_cache().release(index_entry);
-        }
-    });
     if (!st.ok()) {
-        manager->index_cache().remove(index_entry);
         _compaction_state.reset();
         std::string msg = strings::Substitute("_apply_compaction_commit error: load primary index failed: $0 $1",
                                               st.to_string(), debug_string());
@@ -2306,7 +2307,8 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         // Remove useless delta column group
         auto update_manager = StorageEngine::instance()->update_manager();
         size_t dcg_deleted = 0;
-        res = update_manager->clear_delta_column_group_before_version(meta_store, tablet_id, min_readable_version);
+        res = update_manager->clear_delta_column_group_before_version(meta_store, _tablet.schema_hash_path(), tablet_id,
+                                                                      min_readable_version);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to clear_delta_column_group_before_version tablet:" << tablet_id
                          << " min_readable_version:" << min_readable_version << " msg:" << res.status();
@@ -2439,6 +2441,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
         rowsets = _edit_version_infos[_apply_version_idx]->rowsets;
     }
     size_t total_valid_rowsets = 0;
+    size_t total_valid_segments = 0;
     size_t total_rows = 0;
     size_t total_bytes = 0;
     size_t total_segments = 0;
@@ -2460,6 +2463,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
             } else if (itr->second->compaction_score > 0) {
                 auto& stat = *itr->second;
                 total_valid_rowsets++;
+                total_valid_segments += stat.num_segments;
                 if (stat.num_rows == stat.num_dels) {
                     // add to compaction directly
                     info->inputs.push_back(itr->first);
@@ -2486,7 +2490,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     for (auto& e : candidates) {
         size_t new_rows = total_rows_after_compaction + e.num_rows - e.num_dels;
         size_t new_bytes = total_bytes_after_compaction + e.bytes * (e.num_rows - e.num_dels) / e.num_rows;
-        if (info->inputs.size() > 0 && new_bytes > config::update_compaction_result_bytes * 2) {
+        if (total_bytes_after_compaction > 0 && new_bytes > config::update_compaction_result_bytes * 2) {
             break;
         }
         // When we enable lazy delta column compaction, which means that we don't want to merge
@@ -2518,7 +2522,8 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     LOG(INFO) << "update compaction start tablet:" << _tablet.tablet_id()
               << " version:" << info->start_version.to_string() << " score:" << total_score
               << " pick:" << info->inputs.size() << "/valid:" << total_valid_rowsets << "/all:" << rowsets.size() << " "
-              << int_list_to_string(info->inputs) << " #segments:" << total_segments << " #rows:" << total_rows << "->"
+              << int_list_to_string(info->inputs) << " #pick_segments:" << total_segments
+              << " #valid_segments:" << total_valid_segments << " #rows:" << total_rows << "->"
               << total_rows_after_compaction << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES) << "->"
               << PrettyPrinter::print(total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
 

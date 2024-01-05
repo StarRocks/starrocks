@@ -122,6 +122,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [char_length，character_length](./string-functions/char_length.md) | 返回字符串的长度。  |
 | [concat](./string-functions/concat.md) |  将多个字符串连接起来。 |
 | [concat_ws](./string-functions/concat_ws.md) | 使用分隔符将两个或以上的字符串拼接成一个新的字符串。  |
+| [crc32](./string-functions/crc32.md) | 返回字符串的 32 位循环冗余校验值。 |
 | [ends_with](./string-functions/ends_with.md) | 如果字符串以指定后缀结尾，返回 true，否则返回 false。  |
 | [find_in_set](./string-functions/find_in_set.md) | 返回指定的字符串在一系列字符串列表中第一次出现的位置。  |
 | [group_concat](./string-functions/group_concat.md) | 将结果集中的多行结果连接成一个字符串。  |
@@ -172,9 +173,9 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [avg](./aggregate-functions/avg.md)| 用于返回选中字段的平均值。 |
 |  [bitmap](./aggregate-functions/bitmap.md)| 通过 bitmap 函数实现聚合。 |
 |  [bitmap_agg](./bitmap-functions/bitmap_agg.md)| 将一列中的多行非 NULL 数值合并成一行 BITMAP 值，即多行转一行。 |
-| [corr](./aggregate-functions/corr.md) | 返回两个随机变量的皮尔逊相关系数. |
-| [covar_pop](./aggregate-functions/covar_pop.md)| 返回两个随机变量的总体协方差。 |
-| [covar_samp](./aggregate-functions/covar_samp.md)| 返回两个随机变量的样本协方差。 |
+|  [corr](./aggregate-functions/corr.md) | 返回两个随机变量的皮尔逊相关系数. |
+|  [covar_pop](./aggregate-functions/covar_pop.md)| 返回两个随机变量的总体协方差。 |
+|  [covar_samp](./aggregate-functions/covar_samp.md)| 返回两个随机变量的样本协方差。 |
 |  [count](./aggregate-functions/count.md)| 返回满足条件的行数。 |
 |  [group_concat](./string-functions/group_concat.md)| 将结果集中的多行结果连接成一个字符串。|
 |  [grouping](./aggregate-functions/grouping.md)| 判断一个列是否为聚合列，如果是聚合列则返回 0，否则返回 1。|
@@ -321,6 +322,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)| 将大 bitmap 拆成多个子 bitmap。|
 |  [sub_bitmap](./bitmap-functions/sub_bitmap.md)| 计算两个 bitmap 之间相同元素的个数。|
 |  [to_bitmap](./bitmap-functions/to_bitmap.md)| 将输入值转换为 bitmap。 |
+|  [unnest_bitmap](./bitmap-functions/unnest_bitmap.md)| 将 bitmap 展开成多行。|
 
 ## JSON 函数
 
@@ -375,6 +377,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [json_each](./json-functions/json-query-and-processing-functions/json_each.md) | 将 JSON 对象的最外层按照键和值展开为两列，返回一行或多行数据的集合。 |
 | [subdivide_bitmap](./bitmap-functions/subdivide_bitmap.md)| 将大 bitmap 拆成多个子 bitmap。|
 | [unnest](./array-functions/unnest.md) | 用于将一个数组展开成多行。|
+| [unnest_bitmap](./bitmap-functions/unnest_bitmap.md) | 用于将一个 bitmap 展开成多行。|
 
 ## Bit 函数
 

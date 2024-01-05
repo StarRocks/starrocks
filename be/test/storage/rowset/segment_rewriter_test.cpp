@@ -56,7 +56,7 @@ protected:
         StoragePageCache::instance()->prune();
     }
 
-    const std::string kSegmentDir = "./ut_dir/segment_rewriter_test";
+    const std::string kSegmentDir = "./segment_rewriter_test";
 
     std::shared_ptr<FileSystem> _fs;
 };

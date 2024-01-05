@@ -145,6 +145,15 @@ public:
     Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
 };
 
+class TimeColumnReader : public PrimitiveColumnReader {
+public:
+    TimeColumnReader(const TypeDescriptor& type, const orc::Type* orc_type, bool nullable, OrcChunkReader* reader)
+            : PrimitiveColumnReader(type, orc_type, nullable, reader) {}
+    ~TimeColumnReader() override = default;
+
+    Status get_next(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size) override;
+};
+
 class DecimalColumnReader : public PrimitiveColumnReader {
 public:
     DecimalColumnReader(const TypeDescriptor& type, const orc::Type* orc_type, bool nullable, OrcChunkReader* reader)

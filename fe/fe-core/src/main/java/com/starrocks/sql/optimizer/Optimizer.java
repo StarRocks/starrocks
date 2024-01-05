@@ -502,11 +502,8 @@ public class Optimizer {
                 }
             }
         } catch (Exception e) {
-            OptimizerTraceUtil.logMVRewrite("VIEW_BASED_MV_REWRITE", "single table view based mv rule rewrite failed.", e);
-        } finally {
-            // reset logical tree with view
-            // no need to try view base rewrite in cost phase again
-            context.setLogicalTreeWithView(null);
+            OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE",
+                    "single table view based mv rule rewrite failed.", e);
         }
     }
 
@@ -658,7 +655,7 @@ public class Optimizer {
 
         if (!sessionVariable.isMVPlanner()) {
             // add join implementRule
-            String joinImplementationMode = ConnectContext.get().getSessionVariable().getJoinImplementationMode();
+            String joinImplementationMode = connectContext.getSessionVariable().getJoinImplementationMode();
             if ("merge".equalsIgnoreCase(joinImplementationMode)) {
                 context.getRuleSet().addMergeJoinImplementationRule();
             } else if ("hash".equalsIgnoreCase(joinImplementationMode)) {

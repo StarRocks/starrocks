@@ -47,7 +47,13 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                 LOG.warn("ignored dropped partition {} when applying commit log", partitionId);
                 continue;
             }
-            partition.setNextVersion(partition.getNextVersion() + 1);
+
+            // The version of a replication transaction may not continuously
+            if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+                partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+            } else {
+                partition.setNextVersion(partition.getNextVersion() + 1);
+            }
         }
     }
 
@@ -68,7 +74,9 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             long version = partitionCommitInfo.getVersion();
             long versionTime = partitionCommitInfo.getVersionTime();
             Quantiles compactionScore = partitionCommitInfo.getCompactionScore();
-            Preconditions.checkState(version == partition.getVisibleVersion() + 1);
+            // The version of a replication transaction may not continuously
+            Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                    || version == partition.getVisibleVersion() + 1);
 
             partition.updateVisibleVersion(version, versionTime);
 

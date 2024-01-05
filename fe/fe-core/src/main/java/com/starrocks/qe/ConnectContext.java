@@ -316,6 +316,19 @@ public class ConnectContext {
         threadLocalInfo.set(this);
     }
 
+    /**
+     * Set this connect to thread-local if not exists
+     *
+     * @return set or not
+     */
+    public boolean setThreadLocalInfoIfNotExists() {
+        if (threadLocalInfo.get() == null) {
+            threadLocalInfo.set(this);
+            return true;
+        }
+        return false;
+    }
+
     public void setGlobalStateMgr(GlobalStateMgr globalStateMgr) {
         this.globalStateMgr = globalStateMgr;
     }
@@ -661,6 +674,10 @@ public class ConnectContext {
         this.currentWarehouse = currentWarehouse;
     }
 
+    public void setCurrentWarehouseId(long id) {
+        // not implemented in this codebase
+    }
+
     public void setParentConnectContext(ConnectContext parent) {
         this.parent = parent;
     }
@@ -833,6 +850,34 @@ public class ConnectContext {
         setThreadLocalInfo();
         executor.execute();
         return executor;
+    }
+
+    public ScopeGuard bindScope() {
+        return ScopeGuard.setIfNotExists(this);
+    }
+
+    /**
+     * Set thread-local context for the scope, and remove it after leaving the scope
+     */
+    public static class ScopeGuard implements AutoCloseable {
+
+        private boolean set = false;
+
+        private ScopeGuard() {
+        }
+
+        public static ScopeGuard setIfNotExists(ConnectContext session) {
+            ScopeGuard res = new ScopeGuard();
+            res.set = session.setThreadLocalInfoIfNotExists();
+            return res;
+        }
+
+        @Override
+        public void close() {
+            if (set) {
+                ConnectContext.remove();
+            }
+        }
     }
 
     public class ThreadInfo {

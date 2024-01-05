@@ -24,6 +24,12 @@ curl -XPOST http://be_host:http_port/api/update_config?<configuration_item>=<val
 
 BE dynamic parameters are as follows.
 
+#### enable_stream_load_verbose_log
+
+- **Default:** false
+- **Description:** Specifies whether to log the HTTP requests and responses for Stream Load jobs.
+- **Introduced in:** 2.5.17, 3.0.9, 3.1.6, 3.2.1
+
 #### report_task_interval_seconds
 
 - **Default:** 10 seconds
@@ -743,7 +749,7 @@ BE static parameters are as follows.
 
 - **Default**: 90%
 - **Unit**: N/A
-- **Description**: BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100GB").
+- **Description**: BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100G"). The default hard limit is 90% of the server's memory size, and the soft limit is 80%. You need to configure this parameter if you want to deploy StarRocks with other memory-intensive services on a same server.
 
 #### flush_thread_num_per_store
 

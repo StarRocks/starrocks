@@ -8,6 +8,8 @@ import LoadMethodIntro from '../assets/commonMarkdown/loadMethodIntro.md'
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
+import PipeAdvantages from '../assets/commonMarkdown/pipeAdvantages.md'
+
 StarRocks provides the following options for loading data from HDFS:
 
 <LoadMethodIntro />
@@ -22,7 +24,7 @@ Make sure the source data you want to load into StarRocks is properly stored in 
 
 <InsertPrivNote />
 
-### Gather connection details
+### Gather authentication details
 
 You can use the simple authentication method to establish connections with your HDFS cluster. To use simple authentication, you need to gather the username and password of the account that you can use to access the NameNode of the HDFS cluster.
 
@@ -288,7 +290,6 @@ This method supports the Parquet, ORC, and CSV file formats.
 
 ### Advantages of Broker Load
 
-- Broker Load supports [data transformation](../loading/Etl_in_loading.md) and [data changes](../loading/Load_to_Primary_Key_tables.md) such as UPSERT and DELETE operations during loading.
 - Broker Load runs in the background and clients do not need to stay connected for the job to continue.
 - Broker Load is preferred for long-running jobs, with the default timeout spanning 4 hours.
 - In addition to Parquet and ORC file formats, Broker Load supports CSV files.
@@ -417,6 +418,8 @@ The following query result is returned, indicating that the data has been succes
 Starting from v3.2, StarRocks provides the Pipe loading method, which currently supports only the Parquet and ORC file formats.
 
 ### Advantages of Pipe
+
+<PipeAdvantages menu=" HDFS uses LastModifiedTime "/>
 
 Pipe is ideal for continuous data loading and large-scale data loading:
 
