@@ -226,6 +226,9 @@ public interface ConnectorMetadata {
         throw new StarRocksConnectorException("This connector doesn't support sink");
     }
 
+    default void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
+    }
+
     default void alterTable(AlterTableStmt stmt) throws UserException {
         throw new StarRocksConnectorException("This connector doesn't support alter table");
     }

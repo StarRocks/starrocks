@@ -229,6 +229,13 @@ public class Config extends ConfigBase {
     public static boolean log_plan_cancelled_by_crash_be = true;
 
     /**
+     * In high-concurrency scenarios, the logging of register and unregister query ID can become a bottleneck.
+     * In such cases, it is possible to disable this switch.
+     */
+    @ConfField(mutable = true)
+    public static boolean log_register_and_unregister_query_id = true;
+
+    /**
      * Used to limit the maximum number of partitions that can be created when creating a dynamic partition table,
      * to avoid creating too many partitions at one time.
      */
@@ -897,7 +904,7 @@ public class Config extends ConfigBase {
     public static int prepared_transaction_default_timeout_second = 86400; // 1day
 
     /**
-     * Max load timeout applicable to all type of load except for stream load
+     * Max load timeout applicable to all type of load except for stream load and lake compaction
      */
     @ConfField(mutable = true)
     public static int max_load_timeout_second = 259200; // 3days
@@ -2387,6 +2394,13 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
+
+    /**
+     * Default lake compaction txn timeout
+     */
+    @ConfField(mutable = true)
+    public static int lake_compaction_default_timeout_second = 86400; // 1 day
+
 
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;

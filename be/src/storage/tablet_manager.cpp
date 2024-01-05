@@ -1330,7 +1330,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
         }
         normal_request.tablet_schema.columns.emplace_back();
         TColumn& column = normal_request.tablet_schema.columns.back();
-        column.__set_column_name("__row");
+        column.__set_column_name(Schema::FULL_ROW_COLUMN);
         TColumnType ctype;
         ctype.__set_type(TPrimitiveType::VARCHAR);
         //TODO

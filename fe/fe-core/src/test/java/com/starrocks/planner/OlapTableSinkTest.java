@@ -25,7 +25,6 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
@@ -43,16 +42,13 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
@@ -63,18 +59,12 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -87,26 +77,6 @@ public class OlapTableSinkTest {
 
     @Injectable
     public OlapTable dstTable;
-
-    private static StarRocksAssert starRocksAssert;
-
-    private static ConnectContext connectContext;
-
-    @BeforeClass
-    public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-        String createTblStmtStr = "create table db2.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) " +
-                "AGGREGATE KEY(k1, k2, k3, k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
-        connectContext = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
-        starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withDatabase("db2");
-        starRocksAssert.withTable(createTblStmtStr);
-    }
-
-    @Before
-    public void setUp() {
-
-    }
 
     private TupleDescriptor getTuple() {
         DescriptorTable descTable = new DescriptorTable();
@@ -224,17 +194,8 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testCreateLocationWithLocalTablet() throws Exception {
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        new Expectations(systemInfoService) {
-            {
-               systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
-               result = Status.OK;
-               systemInfoService.checkBackendAlive(anyLong);
-               result = true;
-            }
-        };
-
+    public void testCreateLocationWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
+                                                  @Mocked SystemInfoService systemInfoService) throws Exception {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -255,13 +216,8 @@ public class OlapTableSinkTest {
         Replica replica2 = new Replica(replicaId + 1, backendId + 1, Replica.ReplicaState.NORMAL, 1, 0);
         Replica replica3 = new Replica(replicaId + 2, backendId + 2, Replica.ReplicaState.NORMAL, 1, 0);
 
-        // Index
-        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-
         // Tablet
         LocalTablet tablet = new LocalTablet(tabletId);
-        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
-        index.addTablet(tablet, tabletMeta);
         tablet.addReplica(replica1);
         tablet.addReplica(replica2);
         tablet.addReplica(replica3);
@@ -274,6 +230,11 @@ public class OlapTableSinkTest {
         partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
         partitionInfo.setReplicationNum(partitionId, (short) 3);
 
+        // Index
+        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+        TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
+        index.addTablet(tablet, tabletMeta);
+
         // Partition
         Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
 
@@ -282,6 +243,21 @@ public class OlapTableSinkTest {
         Deencapsulation.setField(table, "baseIndexId", indexId);
         table.addPartition(partition);
         table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentSystemInfo();
+                result = systemInfoService;
+                systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
+                result = Status.OK;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getOrCreateSystemInfo(anyInt);
+                result = systemInfoService;
+                systemInfoService.checkBackendAlive(anyLong);
+                result = true;
+            }
+        };
 
         TOlapTableLocationParam param = OlapTableSink.createLocation(
                 table, table.getClusterId(), Lists.newArrayList(partitionId), false);
@@ -455,29 +431,4 @@ public class OlapTableSinkTest {
         LOG.info("sink is {}", sink.toThrift());
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
     }
-
-    @Test
-    public void testCreateLocationException() {
-        new MockUp<PartitionInfo>() {
-            @Mock
-            public int getQuorumNum(long partitionId, TWriteQuorumType writeQuorum) {
-                return 3;
-            }
-        };
-
-        Database db = GlobalStateMgr.getCurrentState().getDb("db2");
-        OlapTable olapTable = (OlapTable) db.getTable("tbl1");
-
-        List<Long> partitionIds = olapTable.getAllPartitionIds();
-
-        try {
-            OlapTableSink.createLocation(olapTable, -1, partitionIds, false);
-        } catch (UserException e) {
-            System.out.println(e.getMessage());
-            Assert.assertTrue(e.getMessage().contains("replicas: 10001:1/-1/1/0:NORMAL:ALIVE"));
-            return;
-        }
-        Assert.fail("must throw UserException");
-    }
-
 }

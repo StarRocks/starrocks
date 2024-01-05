@@ -66,7 +66,6 @@ public class CompactionScheduler extends Daemon {
     private static final Logger LOG = LogManager.getLogger(CompactionScheduler.class);
     private static final String HOST_NAME = FrontendOptions.getLocalHostAddress();
     private static final long LOOP_INTERVAL_MS = 200L;
-    private static final long TXN_TIMEOUT_SECOND = 86400L;
     private static final long MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS = LOOP_INTERVAL_MS * 2;
     private static final long MIN_COMPACTION_INTERVAL_MS_ON_FAILURE = LOOP_INTERVAL_MS * 10;
     private static final long PARTITION_CLEAN_INTERVAL_SECOND = 30;
@@ -364,7 +363,7 @@ public class CompactionScheduler extends Daemon {
     }
 
     // REQUIRE: has acquired the exclusive lock of Database.
-    private long beginTransaction(PartitionIdentifier partition)
+    protected long beginTransaction(PartitionIdentifier partition)
             throws BeginTransactionException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
         long dbId = partition.getDbId();
         long tableId = partition.getTableId();
@@ -375,7 +374,7 @@ public class CompactionScheduler extends Daemon {
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(txnSourceType, HOST_NAME);
         String label = String.format("COMPACTION_%d-%d-%d-%d", dbId, tableId, partitionId, currentTs);
         return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
-                loadJobSourceType, TXN_TIMEOUT_SECOND);
+                loadJobSourceType, Config.lake_compaction_default_timeout_second);
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job)
