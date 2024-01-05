@@ -384,7 +384,6 @@ Status OptionalStoredColumnReader::_read_records_and_levels(size_t* num_records,
     size_t records_read = 0;
     do {
         if (_num_values_left_in_cur_page == 0) {
-            SCOPED_RAW_TIMER(&_opts.stats->page_read_ns);
             size_t read_count = 0;
             auto st = next_page(*num_records - records_read, content_type, &read_count, dst);
             records_read += read_count;
@@ -403,10 +402,7 @@ Status OptionalStoredColumnReader::_read_records_and_levels(size_t* num_records,
             break;
         }
 
-        {
-            SCOPED_RAW_TIMER(&_opts.stats->level_decode_ns);
-            RETURN_IF_ERROR(_decode_levels(records_to_read));
-        }
+        RETURN_IF_ERROR(_decode_levels(records_to_read));
 
         {
             _is_nulls.resize(records_to_read);
@@ -414,7 +410,6 @@ Status OptionalStoredColumnReader::_read_records_and_levels(size_t* num_records,
             for (size_t i = 0; i < records_to_read; ++i) {
                 _is_nulls[i] = _def_levels[_levels_parsed + i] < _field->max_def_level();
             }
-            SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
             RETURN_IF_ERROR(_reader->decode_values(records_to_read, &_is_nulls[0], content_type, dst));
         }
         _num_values_left_in_cur_page -= records_to_read;
@@ -435,7 +430,6 @@ Status OptionalStoredColumnReader::_read_records_only(size_t* num_records, Colum
     size_t records_read = 0;
     do {
         if (_num_values_left_in_cur_page == 0) {
-            SCOPED_RAW_TIMER(&_opts.stats->page_read_ns);
             size_t read_count = 0;
             auto st = next_page(*num_records - records_read, content_type, &read_count, dst);
             records_read += read_count;
@@ -458,50 +452,40 @@ Status OptionalStoredColumnReader::_read_records_only(size_t* num_records, Colum
         if (repeated_count > 0) {
             records_to_read = std::min(records_to_read, repeated_count);
             level_t def_level = 0;
-            {
-                SCOPED_RAW_TIMER(&_opts.stats->level_decode_ns);
-                def_level = _reader->def_level_decoder().get_repeated_value(records_to_read);
-            }
-            SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
+            { def_level = _reader->def_level_decoder().get_repeated_value(records_to_read); }
             if (def_level >= _field->max_def_level()) {
                 RETURN_IF_ERROR(_reader->decode_values(records_to_read, content_type, dst));
             } else {
                 dst->append_nulls(records_to_read);
             }
         } else {
-            {
-                SCOPED_RAW_TIMER(&_opts.stats->level_decode_ns);
-
-                size_t new_capacity = records_to_read;
-                if (new_capacity > _levels_capacity) {
-                    new_capacity = BitUtil::next_power_of_two(new_capacity);
-                    _def_levels.resize(new_capacity);
-
-                    _levels_capacity = new_capacity;
-                }
-                size_t res_def = _reader->decode_def_levels(records_to_read, &_def_levels[0]);
-                if (UNLIKELY(res_def != records_to_read)) {
-                    return Status::InternalError(fmt::format("def levels need to parsed: {}, def levels parsed: {}",
-                                                             records_to_read, res_def));
-                }
+            size_t new_capacity = records_to_read;
+            if (new_capacity > _levels_capacity) {
+                new_capacity = BitUtil::next_power_of_two(new_capacity);
+                _def_levels.resize(new_capacity);
+                _levels_capacity = new_capacity;
             }
+            size_t res_def = _reader->decode_def_levels(records_to_read, &_def_levels[0]);
+            if (UNLIKELY(res_def != records_to_read)) {
+                return Status::InternalError(
+                        fmt::format("def levels need to parsed: {}, def levels parsed: {}", records_to_read, res_def));
+            }
+        }
 
-            SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
-            size_t i = 0;
-            while (i < records_to_read) {
-                size_t j = i;
-                bool is_null = _def_levels[j] < _field->max_def_level();
+        size_t i = 0;
+        while (i < records_to_read) {
+            size_t j = i;
+            bool is_null = _def_levels[j] < _field->max_def_level();
+            j++;
+            while (j < records_to_read && is_null == (_def_levels[j] < _field->max_def_level())) {
                 j++;
-                while (j < records_to_read && is_null == (_def_levels[j] < _field->max_def_level())) {
-                    j++;
-                }
-                if (is_null) {
-                    dst->append_nulls(j - i);
-                } else {
-                    RETURN_IF_ERROR(_reader->decode_values(j - i, content_type, dst));
-                }
-                i = j;
             }
+            if (is_null) {
+                dst->append_nulls(j - i);
+            } else {
+                RETURN_IF_ERROR(_reader->decode_values(j - i, content_type, dst));
+            }
+            i = j;
         }
 
         _num_values_left_in_cur_page -= records_to_read;
