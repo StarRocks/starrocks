@@ -1400,10 +1400,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     /**
      * Whether to compensate partition predicates in mv rewrite, see
      * <code>Materialization#isCompensatePartitionPredicate</code> for more details.
-     * NOTE: if set it false, it will be rewritten by the mv defined sql with user's query and will add
+     * NOTE: if set it false, it will be rewritten by the mv defined sql with user's query and will not add
      * extra compensated predicates which can rewrite more cases but may lose consistency check.
      */
-    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE)
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewRewritePartitionCompensate = true;
 
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)

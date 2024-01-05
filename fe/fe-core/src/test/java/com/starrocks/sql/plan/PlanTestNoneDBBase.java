@@ -137,8 +137,9 @@ public class PlanTestNoneDBBase {
         return Stream.of(plan.split("\n"))
                 .filter(s -> !s.contains("tabletList"))
                 .map(str -> str.replaceAll("\\d+: ", "col\\$: ").trim())
-                .map(str -> str.replaceAll("\\d+, ", "col\\$, ").trim())
-                .map(str -> str.replaceAll("\\d+]", "col\\$]").trim())
+                .map(str -> str.replaceAll("\\[\\d+]", "[col\\$]").trim())
+                .map(str -> str.replaceAll("\\[\\d+, \\d+]", "[col\\$, col\\$]").trim())
+                .map(str -> str.replaceAll("\\[\\d+, \\d+, \\d+]", "[col\\$, col\\$, col\\$]").trim())
                 .map(str -> normalizeLogicalPlanPredicate(str))
                 .collect(Collectors.joining("\n"));
     }

@@ -1014,9 +1014,8 @@ public class MvUtils {
         }
 
         List<ScalarOperator> partitionPredicates = Lists.newArrayList();
-        boolean isCompensatePartition = mvContext.isCompensatePartitionPredicate(queryExpression);
+        boolean isCompensatePartition = mvContext.getOrInitCompensatePartitionPredicate(queryExpression);
         // Compensate partition predicates and add them into query predicate.
-        boolean isPartitionCompensate = mvContext.isCompensatePartitionPredicate();
         Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> scanOperatorScalarOperatorMap =
                 mvContext.getScanOpToPartitionCompensatePredicates();
         for (LogicalScanOperator scanOperator : scanOperators) {
@@ -1024,7 +1023,7 @@ public class MvUtils {
                 continue;
             }
             List<ScalarOperator> partitionPredicate = scanOperatorScalarOperatorMap
-                    .computeIfAbsent(Pair.create(scanOperator, isPartitionCompensate), x -> {
+                    .computeIfAbsent(Pair.create(scanOperator, isCompensatePartition), x -> {
                         return isCompensatePartition ? getCompensatePartitionPredicates(columnRefFactory, scanOperator) :
                                 getScanOpPrunedPartitionPredicates(scanOperator);
                     });

@@ -424,18 +424,18 @@ public class MaterializationContext {
      *  means MV's partitions can cover all needed partitions from Query.
      * </p>
      */
-    public boolean isCompensatePartitionPredicate(OptExpression queryExpression) {
+    public boolean getOrInitCompensatePartitionPredicate(OptExpression queryExpression) {
         if (!isCompensatePartitionPredicateOpt.isPresent()) {
             SessionVariable sessionVariable = optimizerContext.getSessionVariable();
             // only set this when `queryExpression` contains ref table, otherwise the cached value maybe dirty.
             isCompensatePartitionPredicateOpt = sessionVariable.isEnableMaterializedViewRewritePartitionCompensate() ?
                     MvUtils.isNeedCompensatePartitionPredicate(queryExpression, this) : Optional.of(false);
         }
-        return isCompensatePartitionPredicateOpt.isPresent() ? isCompensatePartitionPredicateOpt.get() : true;
+        return isCompensatePartitionPredicateOpt.orElse(true);
     }
 
     public boolean isCompensatePartitionPredicate() {
-        return isCompensatePartitionPredicateOpt.isPresent() ? isCompensatePartitionPredicateOpt.get() : true;
+        return isCompensatePartitionPredicateOpt.orElse(true);
     }
 
     public ScalarOperator getMVPrunedPartitionPredicate() {

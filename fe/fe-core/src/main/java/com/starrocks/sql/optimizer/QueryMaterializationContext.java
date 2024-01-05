@@ -36,8 +36,11 @@ import java.util.Set;
 public class QueryMaterializationContext {
     protected static final Logger LOG = LogManager.getLogger(QueryMaterializationContext.class);
 
-    // Because PredicateSplit's construct is expensive, cache query predicates to its final predicate split per query.
-    // Cache query predicate to its canonized predicate to avoid one predicate's repeat canonized.
+    // `mvQueryContextCache` is designed for a common cache which is used during the query's rewrite lifecycle, so can be
+    // managed in a more unified mode. In the current situation, it's used in two ways:
+    // 1. cache query predicates to its final predicate split per query because PredicateSplit's construct is expensive.
+    // 2. cache query predicate to its canonized predicate to avoid one predicate's repeat canonized.
+    // It can be be used for more situations later.
     private final Cache<Object, Object> mvQueryContextCache = Caffeine.newBuilder()
             .maximumSize(Config.mv_query_context_cache_max_size)
             .recordStats()
@@ -76,18 +79,15 @@ public class QueryMaterializationContext {
     }
 
     public ScalarOperator getCanonizedPredicate(ScalarOperator predicate) {
-        try {
-            return (ScalarOperator) mvQueryContextCache.get(predicate, x -> {
-                ScalarOperator rewritten = new ScalarOperatorRewriter()
-                        .rewrite(predicate.clone(), ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
-                return rewritten;
-            });
-        } catch (NullPointerException e) {
-            return null;
-        } catch (Exception e) {
-            LOG.warn("Canonize predicate for rewrite failed: ", e);
+        if (predicate == null) {
             return null;
         }
+
+        return (ScalarOperator) mvQueryContextCache.get(predicate, x -> {
+            ScalarOperator rewritten = new ScalarOperatorRewriter()
+                    .rewrite(predicate.clone(), ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
+            return rewritten;
+        });
     }
 
     // Invalidate all caches by hand to avoid memory allocation after query optimization.
