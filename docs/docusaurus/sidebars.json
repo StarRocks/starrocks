@@ -106,6 +106,12 @@
     },
     {
       "type": "category",
+      "label": "Project Help",
+      "link": {"type": "doc", "id": "project_help/project_help"},
+      "items": ["project_help/slack"]
+    },
+    {
+      "type": "category",
       "label": "Deployment",
       "link": {"type": "doc", "id": "deployment/deployment_overview"},
       "items": [
@@ -938,6 +944,12 @@
       "label": "快速开始",
       "link": {"type": "doc", "id": "quick_start/quick_start"},
       "items": ["quick_start/deploy_with_docker", "quick_start/Create_table", "quick_start/Import_and_query"]
+    },
+    {
+      "type": "category",
+      "label": " 项目协助",
+      "link": {"type": "doc", "id": "project_help/project_help"},
+      "items": ["project_help/slack"]
     },
     {
       "type": "category",
