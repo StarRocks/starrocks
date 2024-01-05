@@ -133,12 +133,15 @@ public:
             _owner_id = _scan_range->binlog_scan_range.tablet_id;
             _has_owner_id = true;
         }
+        if (split_context != nullptr) {
+            _split_context = std::move(split_context);
+        }
     }
 
     ~ScanMorsel() override = default;
 
-    ScanMorsel(int32_t plan_node_id, const TScanRangeParams& scan_range)
-            : ScanMorsel(plan_node_id, scan_range.scan_range) {}
+    ScanMorsel(int32_t plan_node_id, const TScanRangeParams& scan_range, ScanSplitContextPtr&& split_context)
+            : ScanMorsel(plan_node_id, scan_range.scan_range, std::move(split_context)) {}
 
     TScanRange* get_scan_range() { return _scan_range.get(); }
 
