@@ -79,8 +79,16 @@ void FragmentContext::set_data_sink(std::unique_ptr<DataSink> data_sink) {
     _data_sink = std::move(data_sink);
 }
 
+<<<<<<< HEAD
 void FragmentContext::count_down_pipeline(RuntimeState* state, size_t val) {
     bool all_pipelines_finished = _num_finished_pipelines.fetch_add(val) + val == _pipelines.size();
+=======
+void FragmentContext::count_down_pipeline(size_t val) {
+    // Note that _pipelines may be destructed after fetch_add
+    // memory_order_seq_cst semantics ensure that previous code does not reorder after fetch_add
+    size_t total_pipelines = _pipelines.size();
+    bool all_pipelines_finished = _num_finished_pipelines.fetch_add(val) + val == total_pipelines;
+>>>>>>> 3231be1db6 ([BugFix] Fix count_down_pipeline may cause use-after-free (#38532))
     if (!all_pipelines_finished) {
         return;
     }
