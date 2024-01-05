@@ -210,6 +210,7 @@ public class TaskRun implements Comparable<TaskRun> {
                 }
             }
         }
+        runCtx.getState().reset();
         taskRunContext.setCtx(runCtx);
         taskRunContext.setRemoteIp(runCtx.getMysqlChannel().getRemoteHostPortString());
         taskRunContext.setProperties(taskRunContextProperties);
