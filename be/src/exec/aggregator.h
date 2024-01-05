@@ -498,6 +498,17 @@ protected:
     std::shared_ptr<spill::Spiller> _spiller;
     SpillProcessChannelPtr _spill_channel;
 
+    enum AggregateRunStage {
+        Ready = 0,
+        Inited,
+        Prepared,
+        Opened,
+        Run,
+    };
+    AggregateRunStage _agg_run_stage = Ready;
+
+    std::mutex _agg_run_stage_mutex;
+
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);
     void build_hash_map_with_selection(size_t chunk_size);
