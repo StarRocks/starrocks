@@ -36,9 +36,9 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
     mutable std::mutex lock;
 
     const int64_t dop = 0;
-    // total scan mem limit means limit for all scan nodes.
+    // query scan mem limit means limit for all scan nodes.
     // scan mem limit means limit for this scan node.
-    int64_t total_scan_mem_limit = std::numeric_limits<int64_t>::max();
+    int64_t query_scan_mem_limit = std::numeric_limits<int64_t>::max();
     std::atomic<int64_t> scan_mem_limit = 0;
     std::atomic<int64_t> running_chunk_source_count = 0;
     int64_t data_source_mem_bytes = 0;
@@ -51,8 +51,8 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
 
     int available_chunk_source_count(int32_t plan_node_id, int driver_sequence) const {
         int64_t scan_mem_limit_value = scan_mem_limit.load(std::memory_order_relaxed);
-        int64_t chunk_source_mem_bytes_value = chunk_source_mem_bytes.load(std::memory_order_relaxed);
         int64_t running_count = running_chunk_source_count.load(std::memory_order_relaxed);
+        int64_t chunk_source_mem_bytes_value = get_chunk_source_mem_bytes();
 
         int64_t max_count = std::max(1L, scan_mem_limit_value / chunk_source_mem_bytes_value);
         int64_t avail_count = max_count;
@@ -66,7 +66,7 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
         [[maybe_unused]] auto build_debug_string = [&]() {
             std::stringstream ss;
             ss << "available_chunk_source_count. max_count=" << max_count << "(" << scan_mem_limit_value << "/"
-               << chunk_source_mem_bytes_value << "), total_scan_mem_limit = " << total_scan_mem_limit
+               << chunk_source_mem_bytes_value << "), query_scan_mem_limit = " << query_scan_mem_limit
                << ", running_count = " << running_count << ", dop = " << dop << ", avail_count = " << avail_count
                << ", op_id = " << plan_node_id << "/" << driver_sequence << ", per_count = " << per_count;
             return ss.str();
@@ -84,29 +84,29 @@ struct ConnectorScanOperatorIOTasksMemLimiter {
     }
 
     int64_t update_running_chunk_source_count(int delta) {
-        return running_chunk_source_count.fetch_add(delta, std::memory_order_relaxed);
+        return running_chunk_source_count.fetch_add(delta, std::memory_order_seq_cst);
     }
 
     void update_chunk_source_mem_bytes(int64_t value) {
         if (value == 0) return;
-        value = std::min(value, total_scan_mem_limit);
+        value = std::min(value, query_scan_mem_limit);
 
         std::lock_guard<std::mutex> L(lock);
-        int64_t total =
-                chunk_source_mem_bytes.load(std::memory_order_relaxed) * chunk_source_mem_bytes_update_count + value;
+        int64_t total = get_chunk_source_mem_bytes() * chunk_source_mem_bytes_update_count + value;
         chunk_source_mem_bytes_update_count += 1;
         chunk_source_mem_bytes.store(total / chunk_source_mem_bytes_update_count, std::memory_order_relaxed);
     }
 
-    void set_total_scan_mem_limit(int64_t value) { total_scan_mem_limit = value; }
+    void set_query_scan_mem_limit(int64_t value) { query_scan_mem_limit = value; }
     void update_scan_mem_limit(int64_t value) { scan_mem_limit.store(value, std::memory_order_relaxed); }
     void update_last_arb_chunk_source_mem_bytes(int64_t value) {
-        value = std::min(value, total_scan_mem_limit);
+        value = std::min(value, query_scan_mem_limit);
         last_arb_chunk_source_mem_bytes = value;
     }
 
     void set_data_source_mem_bytes(int64_t value) { data_source_mem_bytes = value; }
     int64_t get_data_source_mem_bytes() const { return data_source_mem_bytes; }
+    int64_t get_chunk_source_mem_bytes() const { return chunk_source_mem_bytes.load(std::memory_order_relaxed); }
 };
 
 ConnectorScanOperatorFactory::ConnectorScanOperatorFactory(int32_t id, ScanNode* scan_node, RuntimeState* state,
@@ -146,7 +146,7 @@ void ConnectorScanOperatorFactory::set_chunk_source_mem_bytes(int64_t value) {
 
 void ConnectorScanOperatorFactory::set_scan_mem_limit(int64_t value) {
     _io_tasks_mem_limiter->update_scan_mem_limit(value);
-    _io_tasks_mem_limiter->set_total_scan_mem_limit(value);
+    _io_tasks_mem_limiter->set_query_scan_mem_limit(value);
 }
 
 void ConnectorScanOperatorFactory::set_mem_share_arb(ConnectorScanOperatorMemShareArbitrator* arb) {
@@ -444,8 +444,7 @@ int ConnectorScanOperator::available_pickup_morsel_count() {
     // scan operator(0) as representative of this scan node,
     // to adjust mem limit via mem share arbitrater.
     if (_driver_sequence == 0) {
-        int64_t current_chunk_source_mem_bytes = L->chunk_source_mem_bytes.load(std::memory_order_relaxed);
-        _adjust_scan_mem_limit(L->last_arb_chunk_source_mem_bytes, current_chunk_source_mem_bytes);
+        _adjust_scan_mem_limit(L->last_arb_chunk_source_mem_bytes, L->get_chunk_source_mem_bytes());
     }
 
     // adjust io tasks according information collected
@@ -671,24 +670,33 @@ Status ConnectorChunkSource::_open_data_source(RuntimeState* state, bool* mem_al
         while (retry > 0) {
             retry--;
             *mem_alloc_failed = false;
-            _request_mem_tracker_bytes = limiter->chunk_source_mem_bytes.load();
+            _request_mem_tracker_bytes = limiter->get_chunk_source_mem_bytes();
             if (mem_tracker->try_consume(_request_mem_tracker_bytes) == nullptr) {
                 break;
             }
             *mem_alloc_failed = true;
-            // VLOG_OPERATOR << build_debug_string("alloc failed");
             sched_yield();
         }
 
         if (*mem_alloc_failed) {
-            _request_mem_tracker_bytes = 0;
-            return Status::OK();
+            // if this is the only running chunk source of this scan node
+            // we have to let it run to avoid deadlock of data flow.
+            // and in this case, memory is over-committed.
+            int64_t running = limiter->update_running_chunk_source_count(1);
+            if (running == 0) {
+                *mem_alloc_failed = false;
+                mem_tracker->consume(_request_mem_tracker_bytes);
+            } else {
+                limiter->update_running_chunk_source_count(-1);
+                // VLOG_OPERATOR << build_debug_string("alloc failed");
+                _request_mem_tracker_bytes = 0;
+                return Status::OK();
+            }
+        } else {
+            limiter->update_running_chunk_source_count(1);
         }
-        limiter->update_running_chunk_source_count(1);
-
         VLOG_OPERATOR << build_debug_string("consume");
     }
-
     RETURN_IF_ERROR(_data_source->open(state));
     if (!_data_source->has_any_predicate() && _limit != -1 && _limit < state->chunk_size()) {
         _ck_acc.set_max_size(_limit);

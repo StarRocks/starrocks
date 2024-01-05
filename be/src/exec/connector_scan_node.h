@@ -62,8 +62,6 @@ public:
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
             size_t num_total_scan_ranges) override;
 
-    size_t estimated_chunk_source_mem_bytes() const { return _estimated_data_source_mem_bytes; }
-
 private:
     // non-pipeline methods.
     void _init_counter();
