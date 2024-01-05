@@ -52,7 +52,6 @@ private:
     std::vector<Column*> _column_raw_ptrs;
     std::vector<ConverterPtr> _converters;
     std::shared_ptr<CSVReader> _reader = nullptr;
-    size_t _current_range_index = 0;
     // _materialize_slots_index_2_csv_column_index[0] = 5 means materialize_slots[0]->column index 5 in csv
     // materialize_slots is StarRocks' table definition, column index is the actual position in csv
     std::vector<size_t> _materialize_slots_index_2_csv_column_index;

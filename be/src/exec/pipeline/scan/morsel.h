@@ -106,6 +106,11 @@ private:
     std::optional<std::vector<RowsetSharedPtr>> _delta_rowsets;
 };
 
+class ScanSplitContext {
+    virtual ~ScanSplitContext() = default;
+};
+using ScanSplitContextPtr = std::unique_ptr<ScanSplitContext>;
+
 class ScanMorsel : public Morsel {
 public:
     ScanMorsel(int32_t plan_node_id, const TScanRange& scan_range)
