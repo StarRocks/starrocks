@@ -151,10 +151,17 @@ public class IcebergTable extends Table {
     @Override
     public List<Column> getPartitionColumns() {
         if (partitionColumns == null) {
+<<<<<<< HEAD
             List<PartitionField> identityPartitionFields = this.getNativeTable().spec().fields().stream().
                     filter(partitionField -> partitionField.transform().isIdentity()).collect(Collectors.toList());
             partitionColumns = identityPartitionFields.stream().map(partitionField -> getColumn(partitionField.name()))
                     .collect(Collectors.toList());
+=======
+            List<PartitionField> partitionFields = this.getNativeTable().spec().fields();
+            Schema schema = this.getNativeTable().schema();
+            partitionColumns = partitionFields.stream().map(partitionField ->
+                    getColumn(getPartitionSourceName(schema, partitionField))).collect(Collectors.toList());
+>>>>>>> 3b757e138a ([Enhancement] Support create mv base on iceberg table with partition transform (#38196))
         }
 
         return partitionColumns;
@@ -233,6 +240,14 @@ public class IcebergTable extends Table {
 
     public String getTableLocation() {
         return getNativeTable().location();
+    }
+
+    public PartitionField getPartitionFiled(String colName) {
+        org.apache.iceberg.Table nativeTable = getNativeTable();
+        return nativeTable.spec().fields().stream()
+                .filter(field -> nativeTable.schema().findColumnName(field.sourceId()).equalsIgnoreCase(colName))
+                .findFirst()
+                .orElse(null);
     }
 
     public org.apache.iceberg.Table getNativeTable() {
