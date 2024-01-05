@@ -30,7 +30,7 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.DebugUtil;
+import com.starrocks.external.starrocks.TableMetaSyncer;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
@@ -391,14 +391,14 @@ public class StatementPlanner {
             return;
         }
 
-        String label = DebugUtil.printId(session.getExecutionId());
+        String label;
         if (stmt instanceof InsertStmt) {
             String stmtLabel = ((InsertStmt) stmt).getLabel();
-            label = Strings.isNullOrEmpty(stmtLabel) ? "insert_" + label : stmtLabel;
+            label = Strings.isNullOrEmpty(stmtLabel) ? MetaUtils.genInsertLabel(session.getExecutionId()) : stmtLabel;
         } else if (stmt instanceof UpdateStmt) {
-            label = "update_" + label;
+            label = MetaUtils.genUpdateLabel(session.getExecutionId());
         } else if (stmt instanceof DeleteStmt) {
-            label = "delete_" + label;
+            label = MetaUtils.genDeleteLabel(session.getExecutionId());
         } else {
             throw UnsupportedException.unsupportedException("Unsupported dml statement " + stmt.getClass().getSimpleName());
         }
@@ -407,7 +407,11 @@ public class StatementPlanner {
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
         long txnId = -1L;
         if (targetTable instanceof ExternalOlapTable) {
-            ExternalOlapTable tbl = (ExternalOlapTable) targetTable;
+            if (!(stmt instanceof InsertStmt)) {
+                throw UnsupportedException.unsupportedException("External OLAP table only supports insert statement");
+            }
+            ExternalOlapTable tbl = syncOLAPExternalTableMeta((ExternalOlapTable) targetTable);
+            ((InsertStmt) stmt).setTargetTable(tbl);
             TAuthenticateParams authenticateParams = new TAuthenticateParams();
             authenticateParams.setUser(tbl.getSourceTableUser());
             authenticateParams.setPasswd(tbl.getSourceTablePassword());
@@ -440,5 +444,12 @@ public class StatementPlanner {
         }
 
         stmt.setTxnId(txnId);
+    }
+
+    private static ExternalOlapTable syncOLAPExternalTableMeta(ExternalOlapTable externalOlapTable) {
+        ExternalOlapTable copiedTable = new ExternalOlapTable();
+        externalOlapTable.copyOnlyForQuery(copiedTable);
+        new TableMetaSyncer().syncTable(copiedTable);
+        return copiedTable;
     }
 }
