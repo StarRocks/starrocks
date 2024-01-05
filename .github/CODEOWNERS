@@ -45,4 +45,4 @@
 
 # restful
 /fe/fe-core/src/main/java/com/starrocks/http @StarRocks/restful-maintainer
-/be/src/http be/src/http @StarRocks/restful-maintainer
+/be/src/http @StarRocks/restful-maintainer
