@@ -754,7 +754,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     COUNTER_UPDATE(_profile.scan_ranges_size, scan_range.length);
     HdfsScannerParams scanner_params;
     scanner_params.runtime_filter_collector = _runtime_filters;
-    scanner_params.scan_ranges = {&scan_range};
+    scanner_params.scan_range = &scan_range;
     scanner_params.fs = _pool.add(fs.release());
     scanner_params.path = native_file_path;
     scanner_params.file_size = _scan_range.file_length;
@@ -775,7 +775,6 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.hive_column_names = &_hive_column_names;
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
-    scanner_params.open_limit = nullptr;
     scanner_params.lazy_column_coalesce_counter = get_lazy_column_coalesce_counter();
 
     if (!_equality_delete_slots.empty()) {
@@ -937,6 +936,11 @@ void HiveDataSourceProvider::default_data_source_mem_bytes(int64_t* min_value, i
     // here we compute as default mem bytes = max(MIN_SIZE, min(max_file_length, MAX_SIZE))
     int64_t size = std::max(*min_value, std::min(_max_file_length * 3 / 2, *max_value));
     *min_value = *max_value = size;
+}
+
+void HiveDataSource::get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) {
+    if (_scanner == nullptr) return;
+    // _scanner->get_split_tasks(split_tasks);
 }
 
 } // namespace starrocks::connector
