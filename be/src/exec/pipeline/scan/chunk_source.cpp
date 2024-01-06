@@ -82,10 +82,6 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
                     chunk->owner_info().set_owner_id(owner_id, false);
                     _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
                     _status = Status::OK();
-                } else if (_status.is_resource_busy()) {
-                    // see ConnectorChunkSource::_read_chunk
-                    // there are too much io tasks which leads to failure of memory allocaiton
-                    _status = Status::OK();
                 }
                 break;
             }

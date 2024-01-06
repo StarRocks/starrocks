@@ -69,6 +69,7 @@ public:
     void set_chunk_source_mem_bytes(int64_t mem_bytes);
     void set_scan_mem_limit(int64_t scan_mem_limit);
     void set_mem_share_arb(ConnectorScanOperatorMemShareArbitrator* arb);
+    void set_data_source_mem_bytes(int64_t value);
 
 private:
     // TODO: refactor the OlapScanContext, move them into the context
