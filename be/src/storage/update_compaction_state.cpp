@@ -143,7 +143,7 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
     return Status::OK();
 }
 
-void CompactionState::release_segments(Rowset* rowset, uint32_t segment_id) {
+void CompactionState::release_segment(uint32_t segment_id) {
     if (segment_id >= pk_cols.size() || pk_cols[segment_id] == nullptr) {
         return;
     }
@@ -151,7 +151,7 @@ void CompactionState::release_segments(Rowset* rowset, uint32_t segment_id) {
     auto tracker = update_manager->compaction_state_mem_tracker();
     _memory_usage -= pk_cols[segment_id]->memory_usage();
     tracker->release(pk_cols[segment_id]->memory_usage());
-    pk_cols[segment_id]->reset_column();
+    pk_cols[segment_id].reset();
 }
 
 Status CompactionState::_do_load(Rowset* rowset) {

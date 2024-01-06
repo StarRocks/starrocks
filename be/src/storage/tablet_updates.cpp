@@ -75,8 +75,6 @@ std::string EditVersion::to_string() const {
     }
 }
 
-using IteratorList = TabletUpdates::IteratorList;
-
 TabletUpdates::TabletUpdates(Tablet& tablet) : _tablet(tablet), _unused_rowsets(UINT64_MAX) {}
 
 TabletUpdates::~TabletUpdates() {
@@ -2075,7 +2073,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
             total_deletes += tmp_deletes.size();
         }
         delvecs.emplace_back(rssid, dv);
-        _compaction_state->release_segments(rowset, i);
+        _compaction_state->release_segment(i);
     }
     // release memory
     _compaction_state.reset();
