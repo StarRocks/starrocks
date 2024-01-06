@@ -54,13 +54,8 @@ private:
     friend class HdfsOrcScanner;
     std::unordered_map<SlotId, FilterPtr> _dict_filter_eval_cache;
     bool _can_do_filter_on_orc_cvb{true}; // cvb: column vector batch.
-    // key: end of range.
-    // value: start of range.
-    // ranges are not overlapped.
-    // check `offset` in a range or not:
-    // 1. use `upper_bound` to find the first range.end > `offset`
-    // 2. and check if range.start <= `offset`
-    std::map<uint64_t, uint64_t> _scan_ranges;
+    uint64_t scan_range_begin = 0;
+    uint64_t scan_range_end = 0;
     OrcChunkReader* _reader;
     int64_t _writer_tzoffset_in_seconds;
 };
@@ -87,8 +82,9 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerContext& scanner_ctx, Or
         }
     }
     if (scanner_ctx.scan_range != nullptr) {
-        const auto* r = _scanner_ctx.scan_range;
-        _scan_ranges.insert(std::make_pair(r->offset + r->length, r->offset));
+        const auto* r = scanner_ctx.scan_range;
+        scan_range_begin = r->offset;
+        scan_range_end = r->offset + r->length;
     }
 }
 
@@ -96,9 +92,7 @@ bool OrcRowReaderFilter::filterOnOpeningStripe(uint64_t stripeIndex,
                                                const orc::proto::StripeInformation* stripeInformation) {
     _current_stripe_index = stripeIndex;
     uint64_t offset = stripeInformation->offset();
-    // range end must > offset
-    auto it = _scan_ranges.upper_bound(offset);
-    if ((it != _scan_ranges.end()) && (offset >= it->second) && (offset < it->first)) {
+    if (offset >= scan_range_begin && offset < scan_range_end) {
         return false;
     }
     return true;
