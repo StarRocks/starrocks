@@ -255,7 +255,8 @@ private:
         } else {
             auto old_next_rowset_id = _metadata->next_rowset_id();
             auto old_rowsets = std::move(*_metadata->mutable_rowsets());
-            _metadata->clear_rowsets();
+            _metadata->mutable_rowsets()->Clear();
+            _metadata->mutable_delvec_meta()->Clear();
 
             for (const auto& op_write : op_replication.op_writes()) {
                 if (op_write.dels_size() > 0 || op_write.rowset().num_rows() > 0 ||
@@ -469,7 +470,7 @@ private:
                       << ", txn_id: " << op_replication.txn_meta().txn_id();
         } else {
             auto old_rowsets = std::move(*_metadata->mutable_rowsets());
-            _metadata->clear_rowsets();
+            _metadata->mutable_rowsets()->Clear();
 
             for (const auto& op_write : op_replication.op_writes()) {
                 RETURN_IF_ERROR(apply_write_log(op_write));

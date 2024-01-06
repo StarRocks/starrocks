@@ -624,7 +624,7 @@ bool UpdateManager::try_remove_primary_index_cache(uint32_t tablet_id) {
 void UpdateManager::unload_primary_index(int64_t tablet_id) {
     auto index_entry = _index_cache.get_or_create(tablet_id);
     index_entry->value().unload();
-    _index_cache.remove(index_entry);
+    _index_cache.release(index_entry);
 }
 
 Status UpdateManager::check_meta_version(const Tablet& tablet, int64_t base_version) {
