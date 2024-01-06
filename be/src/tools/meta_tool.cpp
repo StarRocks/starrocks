@@ -1051,18 +1051,18 @@ int meta_tool_main(int argc, char** argv) {
             return -1;
         }
         std::cout << "[pk dump] meta: " << dump_pb.Utf8DebugString() << std::endl;
-        st = starrocks::PrimaryKeyDump::deserialize_kvs_from_meta(
+        st = starrocks::PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
                 FLAGS_file, dump_pb,
-                [&](const starrocks::PartialKeysPB& keys) {
-                    std::cout << " pk column: " << std::endl;
-                    for (const auto& key : keys.keys()) {
-                        std::cout << "primary key " << key << std::endl;
+                [&](const starrocks::Chunk& chunk) {
+                    for (int i = 0; i < chunk.num_rows(); i++) {
+                        std::cout << "pk column " << chunk.debug_row(i) << std::endl;
                     }
                 },
                 [&](const std::string& filename, const starrocks::PartialKVsPB& kvs) {
                     std::cout << " pk index, filename: " << filename << std::endl;
                     for (int i = 0; i < kvs.keys_size(); i++) {
-                        std::cout << "index key " << kvs.keys(i) << " value " << kvs.values(i) << std::endl;
+                        std::cout << "index key " << starrocks::hexdump(kvs.keys(i).data(), kvs.keys(i).size())
+                                  << " value " << kvs.values(i) << std::endl;
                     }
                 });
         if (!st.ok()) {

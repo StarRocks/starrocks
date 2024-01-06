@@ -28,19 +28,18 @@ class WritableFile;
 class Tablet;
 class SegmentWriter;
 class PagePointerPB;
-class PartialKeysPB;
 class PartialKVsPB;
 
 /*
 * PrimaryKeyDump is desgined for providing more information about primary key tablet when issue debug,
 * such as `Tablet in error state` happen, data inconsistency and so on.
 * PrimaryKeyDump will try to get all helpfull information and generate file [tablet_id].pkdump .
-* In [tablet_id].pkdump, data layeout:
+* In [tablet_id].pkdump, Data Layout:
 *
 * |  ------ Begin -------  |
-* | Primary key columns (after encode) - part 1 |
-* | Primary key columns (after encode) - part 2 |
-* | Primary key columns (after encode) - part 3 |
+* | Primary key columns (segment file format) - part 1 |
+* | Primary key columns (segment file format) - part 2 |
+* | Primary key columns (segment file format) - part 3 |
 * | ... |
 * | Primary Index kvs - part 1 |
 * | Primary Index kvs - part 2 |
@@ -56,7 +55,7 @@ class PartialKVsPB;
 * | ... |
 * | DeltaColumnGroupListIdPB |
 * | DeleteVectorStatPB |
-* | PrimaryKeyColumnPB (Use PagePointerPB point to real keys) |
+* | PrimaryKeyColumnPB (Use PagePointerPB point to columns) |
 * | PrimaryIndexMultiLevelPB (Use PagePointerPB point to real kvs) |
 * | ---------- end ----------|
 *
@@ -67,29 +66,28 @@ class PartialKVsPB;
 class PrimaryKeyDump {
 public:
     PrimaryKeyDump(Tablet* tablet);
+    // for UT only
+    PrimaryKeyDump(const std::string& dump_filepath);
     ~PrimaryKeyDump() = default;
 
     Status dump();
 
-    // Append primary index' kv into dump file
-    Status add_pindex_kvs(const std::string& key, uint64_t value, PrimaryIndexDumpPB* dump_pb);
-    Status finish_pindex_kvs(PrimaryIndexDumpPB* dump_pb);
+    Status init_dump_file();
 
-    // Append primary key column into dump file
-    Status add_pk_column_keys(const std::string& key, PrimaryKeyColumnPB* dump_pb);
-    Status finish_pk_column_keys(PrimaryKeyColumnPB* dump_pb);
+    // Append primary index' kv into dump file
+    Status add_pindex_kvs(const std::string_view& key, uint64_t value, PrimaryIndexDumpPB* dump_pb);
+    Status finish_pindex_kvs(PrimaryIndexDumpPB* dump_pb);
 
     // read PrimaryKeyDumpPB from dump file and deserialize it.
     static Status read_deserialize_from_file(const std::string& dump_filepath, PrimaryKeyDumpPB* dump_pb);
 
     // deserialize pk column and pk index from dump file.
-    static Status deserialize_kvs_from_meta(
+    static Status deserialize_pkcol_pkindex_from_meta(
             const std::string& dump_filepath, const PrimaryKeyDumpPB& dump_pb,
-            const std::function<void(const PartialKeysPB&)>& column_key_func,
+            const std::function<void(const Chunk&)>& column_key_func,
             const std::function<void(const std::string&, const PartialKVsPB&)>& index_kvs_func);
 
 private:
-    Status _init_dump_file();
     Status _dump_tablet_meta();
     Status _dump_rowset_meta();
     Status _dump_primary_index();
@@ -106,9 +104,6 @@ private:
     Tablet* _tablet = nullptr;
     std::string _dump_filepath;
     PrimaryKeyDumpPB _dump_pb;
-    // Store pk column key after encode
-    std::unique_ptr<PartialKeysPB> _partial_pk_column_keys;
-    int64_t _partial_pk_column_keys_bytes = 0;
 
     // Store pk index kvs
     std::unique_ptr<PartialKVsPB> _partial_pindex_kvs;

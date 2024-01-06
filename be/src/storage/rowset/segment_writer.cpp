@@ -239,6 +239,10 @@ uint64_t SegmentWriter::estimate_segment_size() {
     return size;
 }
 
+uint64_t SegmentWriter::current_filesz() const {
+    return _wfile->size();
+}
+
 Status SegmentWriter::finalize(uint64_t* segment_file_size, uint64_t* index_size, uint64_t* footer_position) {
     RETURN_IF_ERROR(finalize_columns(index_size));
     *footer_position = _wfile->size();

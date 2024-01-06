@@ -313,32 +313,27 @@ message OLAPRawDeltaHeaderMessage {
 
 message RowsetMetaIdPB {
     // rowset id
-    optional uint32 rid = 1;
+    optional uint32 rowset_id = 1;
     optional RowsetMetaPB rowset_meta = 2;
 }
 
 message RowsetStatIdPB {
     // rowset id
-    optional uint32 rid = 1;
+    optional uint32 rowset_id = 1;
     optional string rowset_stat = 2;
 }
 
 message DeltaColumnGroupListIdPB {
     // segment id
-    optional uint32 sid = 1;
+    optional uint32 segment_id = 1;
     optional DeltaColumnGroupListPB dcg_list = 2;
 }
 
 message DeleteVectorStatPB {
     // segment id
-    optional uint32 sid = 1;
+    optional uint32 segment_id = 1;
     optional int64 version = 2;
     optional uint32 cardinality = 3;
-}
-
-message PartialKeysPB {
-    // primary key column's encode keys
-    repeated string keys = 1;
 }
 
 message PartialKVsPB {
@@ -348,9 +343,9 @@ message PartialKVsPB {
 
 message PrimaryKeyColumnPB {
     // segment id
-    optional uint32 sid = 1;
-    // Point to PartialKeys
-    repeated PagePointerPB keys = 2;
+    optional uint32 segment_id = 1;
+    // Point to column data (segment format)
+    optional PagePointerPB page = 2;
 }
 
 message PrimaryIndexDumpPB {
@@ -362,7 +357,7 @@ message PrimaryIndexDumpPB {
 }
 
 message PrimaryIndexMultiLevelPB {
-    // there will be multi levels in pk index, order by chronologic
+    // there will be multi levels in pk index, order by l2 -> l1 -> l0
     repeated PrimaryIndexDumpPB primary_index_levels = 1;
 }
 

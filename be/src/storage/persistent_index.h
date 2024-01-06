@@ -267,7 +267,7 @@ public:
 
     virtual size_t memory_usage() = 0;
 
-    virtual Status iterate_all_kvs(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) = 0;
+    virtual Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) = 0;
 
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 
@@ -393,7 +393,7 @@ public:
 
     static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size, const std::string& path);
 
-    Status iterate_all_kvs(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb);
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb);
 
 private:
     friend class PersistentIndex;
@@ -497,7 +497,7 @@ public:
     static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<RandomAccessFile>&& index_rb,
                                                           bool load_bf_data);
 
-    Status iterate_all_kvs(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb);
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb);
 
 private:
     friend class PersistentIndex;
@@ -786,7 +786,7 @@ public:
     static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
                                    const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
 
-    Status iterate_all_kvs(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,

@@ -139,7 +139,7 @@ public:
 
     void reset_cancel_major_compaction();
 
-    Status iterate_all_kvs(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 
 protected:
     void _set_schema(const Schema& pk_schema);

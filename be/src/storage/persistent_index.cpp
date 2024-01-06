@@ -912,11 +912,11 @@ public:
 
     bool dump(phmap::BinaryOutputArchive& ar) override { return _map.dump(ar); }
 
-    Status iterate_all_kvs(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) override {
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) override {
         for (const auto& each : _map) {
-            RETURN_IF_ERROR(
-                    dump->add_pindex_kvs(hexdump(reinterpret_cast<const char*>(each.first.data), sizeof(KeyType)),
-                                         each.second.get_value(), dump_pb));
+            RETURN_IF_ERROR(dump->add_pindex_kvs(
+                    std::string_view(reinterpret_cast<const char*>(each.first.data), sizeof(KeyType)),
+                    each.second.get_value(), dump_pb));
         }
         return dump->finish_pindex_kvs(dump_pb);
     }
@@ -1254,11 +1254,11 @@ public:
         // return _set.dump(ar);
     }
 
-    Status iterate_all_kvs(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) override {
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) override {
         for (const auto& composite_key : _set) {
             auto value = UNALIGNED_LOAD64(composite_key.data() + composite_key.size() - kIndexValueSize);
-            RETURN_IF_ERROR(dump->add_pindex_kvs(hexdump(composite_key.data(), composite_key.size() - kIndexValueSize),
-                                                 value, dump_pb));
+            RETURN_IF_ERROR(dump->add_pindex_kvs(
+                    std::string_view(composite_key.data(), composite_key.size() - kIndexValueSize), value, dump_pb));
         }
         return dump->finish_pindex_kvs(dump_pb);
     }
@@ -1877,10 +1877,10 @@ bool ShardByLengthMutableIndex::dump(phmap::BinaryOutputArchive& ar_out, std::se
     return true;
 }
 
-Status ShardByLengthMutableIndex::iterate_all_kvs(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) {
+Status ShardByLengthMutableIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) {
     for (uint32_t i = 0; i < _shards.size(); ++i) {
         const auto& shard = _shards[i];
-        RETURN_IF_ERROR(shard->iterate_all_kvs(dump, dump_pb));
+        RETURN_IF_ERROR(shard->pk_dump(dump, dump_pb));
     }
     return Status::OK();
 }
@@ -2500,7 +2500,7 @@ Status ImmutableIndex::_get_in_shard_by_page(size_t shard_idx, size_t n, const S
     }
 }
 
-Status ImmutableIndex::iterate_all_kvs(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) {
+Status ImmutableIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) {
     // put all kvs in one shard
     std::vector<std::vector<KVRef>> kvs_by_shard(1);
     for (size_t shard_idx = 0; shard_idx < _shards.size(); shard_idx++) {
@@ -2525,8 +2525,8 @@ Status ImmutableIndex::iterate_all_kvs(PrimaryKeyDump* dump, PrimaryIndexDumpPB*
         for (const auto& each_kv : each) {
             auto value = UNALIGNED_LOAD64(each_kv.kv_pos + each_kv.size - kIndexValueSize);
             RETURN_IF_ERROR(dump->add_pindex_kvs(
-                    hexdump(reinterpret_cast<const char*>(each_kv.kv_pos), each_kv.size - kIndexValueSize), value,
-                    dump_pb));
+                    std::string_view(reinterpret_cast<const char*>(each_kv.kv_pos), each_kv.size - kIndexValueSize),
+                    value, dump_pb));
         }
     }
     return dump->finish_pindex_kvs(dump_pb);
@@ -5118,21 +5118,21 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
     return Status::OK();
 }
 
-Status PersistentIndex::iterate_all_kvs(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb) {
+Status PersistentIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb) {
     for (const auto& l2 : _l2_vec) {
         PrimaryIndexDumpPB* level = dump_pb->add_primary_index_levels();
         level->set_filename(l2->filename());
-        RETURN_IF_ERROR(l2->iterate_all_kvs(dump, level));
+        RETURN_IF_ERROR(l2->pk_dump(dump, level));
     }
     for (const auto& l1 : _l1_vec) {
         PrimaryIndexDumpPB* level = dump_pb->add_primary_index_levels();
         level->set_filename(l1->filename());
-        RETURN_IF_ERROR(l1->iterate_all_kvs(dump, level));
+        RETURN_IF_ERROR(l1->pk_dump(dump, level));
     }
     if (_l0) {
         PrimaryIndexDumpPB* level = dump_pb->add_primary_index_levels();
         level->set_filename("persistent index l0");
-        RETURN_IF_ERROR(_l0->iterate_all_kvs(dump, level));
+        RETURN_IF_ERROR(_l0->pk_dump(dump, level));
     }
     return Status::OK();
 }
