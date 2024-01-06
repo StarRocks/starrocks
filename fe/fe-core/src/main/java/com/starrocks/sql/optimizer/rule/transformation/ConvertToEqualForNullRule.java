@@ -14,8 +14,9 @@
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.IsNullPredicate;
+import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -29,6 +30,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 public class ConvertToEqualForNullRule extends TransformationRule {
     public ConvertToEqualForNullRule() {
@@ -51,50 +54,60 @@ public class ConvertToEqualForNullRule extends TransformationRule {
         List<ScalarOperator> conjuncts = Utils.extractConjuncts(onPredicate);
         List<ScalarOperator> newConjuncts = Lists.newArrayList();
         for (ScalarOperator conjunct : conjuncts) {
-            if (conjunct instanceof CompoundPredicateOperator) {
-                CompoundPredicateOperator compoundOp = (CompoundPredicateOperator) conjunct;
-                if (!compoundOp.isOr()) {
-                    newConjuncts.add(conjunct);
-                } else {
-
-                }
-                ScalarOperator left = compoundOp.getChild(0);
-                ScalarOperator right = compoundOp.getChild(1);
-                if (left instanceof BinaryPredicateOperator && right instanceof CompoundPredicateOperator) {
-                    BinaryPredicateOperator leftOp = (BinaryPredicateOperator) left;
-                    CompoundPredicateOperator rightOp = (CompoundPredicateOperator) right;
-                    if (leftOp.getBinaryType().isEqual() && rightOp.isOr()) {
-
-                    }
-                }
-            }
+            newConjuncts.add(convertToEqualForNull(conjunct).orElse(conjunct));
         }
+        OptExpression newJoinOpt = OptExpression.create(new LogicalJoinOperator.Builder().withOperator(joinOperator)
+                .setOnPredicate(Utils.compoundAnd(newConjuncts))
+                .build(), input.getInputs());
 
-        return conjuncts.stream().anyMatch( e -> e instanceof CompoundPredicateOperator
-                && ((CompoundPredicateOperator) e).isOr());
+        return Lists.newArrayList(newJoinOpt);
     }
 
-    private boolean isPatternMatched(ScalarOperator scalarOperator) {
+    private Optional<ScalarOperator> convertToEqualForNull(ScalarOperator scalarOperator) {
         if (!(scalarOperator instanceof CompoundPredicateOperator)) {
-            return false;
+            return Optional.empty();
         }
 
         CompoundPredicateOperator compoundOp = (CompoundPredicateOperator) scalarOperator;
         if (!compoundOp.isOr()) {
-            return false;
+            return Optional.empty();
+        }
+
+        if (compoundOp.getChild(0) instanceof CompoundPredicateOperator
+                || compoundOp.getChild(1) instanceof BinaryPredicateOperator) {
+            compoundOp = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+                    compoundOp.getChild(1), compoundOp.getChild(0));
         }
 
         if (!(compoundOp.getChild(0) instanceof BinaryPredicateOperator)
                 || !(compoundOp.getChild(1) instanceof CompoundPredicateOperator)) {
-            return false;
+            return Optional.empty();
         }
 
         BinaryPredicateOperator left = (BinaryPredicateOperator) compoundOp.getChild(0);
         CompoundPredicateOperator right = (CompoundPredicateOperator) compoundOp.getChild(1);
-        if (!left.getBinaryType().isEqual() || !right.isOr()) {
-            return false;
+        if (!left.getBinaryType().isEqual() || !right.isAnd()) {
+            return Optional.empty();
         }
 
-        if (right.getChild(0) instanceof IsNullPredicateOperator
+        if (!(right.getChild(0) instanceof IsNullPredicateOperator)
+                || !(right.getChild(1) instanceof IsNullPredicateOperator)) {
+            return Optional.empty();
+        }
+
+        IsNullPredicateOperator isNullLeft = (IsNullPredicateOperator) right.getChild(0);
+        IsNullPredicateOperator isNullRight = (IsNullPredicateOperator) right.getChild(1);
+        if (isNullRight.isNotNull() || isNullRight.isNotNull()) {
+            return Optional.empty();
+        }
+
+        Set<ScalarOperator> leftChildren = ImmutableSet.of(left.getChild(0), left.getChild(1));
+        Set<ScalarOperator> rightChildren = ImmutableSet.of(isNullLeft.getChild(0), isNullRight.getChild(0));
+
+        if (leftChildren.equals(rightChildren)) {
+            return Optional.of(new BinaryPredicateOperator(BinaryType.EQ_FOR_NULL, left.getChild(0), left.getChild(1)));
+        } else {
+            return Optional.empty();
+        }
     }
 }
