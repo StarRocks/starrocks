@@ -223,7 +223,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // 4. Analyze and prepare partition
         Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(ctx, insertStmt);
         ExecPlan execPlan = null;
-        try {
+        try (ConnectContext.ScopeGuard guard = ctx.bindScope()) {
             StatementPlanner.lock(dbs);
 
             insertStmt =
@@ -470,6 +470,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throw new DmlException("database " + context.ctx.getDatabase() + " do not exist.");
         }
         materializedView = (MaterializedView) table;
+
+        // try to activate the mv before refresh
+        if (!materializedView.isActive()) {
+            MVActiveChecker.tryToActivate(materializedView);
+            LOG.info("Activated the MV before refreshing: {}", materializedView.getName());
+        }
         if (!materializedView.isActive()) {
             String errorMsg = String.format("Materialized view: %s/%d is not active", materializedView.getName(), mvId);
             LOG.warn(errorMsg);

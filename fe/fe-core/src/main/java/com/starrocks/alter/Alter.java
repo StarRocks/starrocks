@@ -120,7 +120,10 @@ import java.util.Objects;
 import static com.starrocks.catalog.TableProperty.INVALID;
 
 public class Alter {
+
     private static final Logger LOG = LogManager.getLogger(Alter.class);
+
+    public static final String MANUAL_INACTIVE_MV_REASON = "user use alter materialized view set status to inactive";
 
     private AlterHandler schemaChangeHandler;
     private AlterHandler materializedViewHandler;
@@ -360,7 +363,7 @@ public class Alter {
                     materializedView, baseTableInfos);
             materializedView.setActive(true);
         } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
-            materializedView.setActive(false);
+            materializedView.setInactiveAndReason(Alter.MANUAL_INACTIVE_MV_REASON);
         }
     }
 
@@ -568,7 +571,8 @@ public class Alter {
                     newMaterializedViewName, oldMaterializedView.getId());
         } catch (Throwable e) {
             if (oldMaterializedView != null) {
-                oldMaterializedView.setActive(false);
+                oldMaterializedView.setInactiveAndReason("replay rename materialized-view failed: " +
+                        oldMaterializedView.getName());
                 LOG.warn("replay rename materialized-view failed: {}", oldMaterializedView.getName(), e);
             }
         } finally {
@@ -626,7 +630,8 @@ public class Alter {
                     asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId());
         } catch (Throwable e) {
             if (oldMaterializedView != null) {
-                oldMaterializedView.setActive(false);
+                oldMaterializedView.setInactiveAndReason("replay change materialized-view refresh scheme failed: "
+                        + oldMaterializedView.getName());
                 LOG.warn("replay change materialized-view refresh scheme failed: {}",
                         oldMaterializedView.getName(), e);
             }
@@ -655,7 +660,7 @@ public class Alter {
             }
         } catch (Throwable e) {
             if (mv != null) {
-                mv.setActive(false);
+                mv.setInactiveAndReason("replay alter materialized-view properties failed: " + mv.getName());
                 LOG.warn("replay alter materialized-view properties failed: {}", mv.getName(), e);
             }
         } finally {
@@ -674,7 +679,7 @@ public class Alter {
             processChangeMaterializedViewStatus(mv, log.getStatus(), true);
         } catch (Exception e) {
             if (mv != null) {
-                mv.setActive(false);
+                mv.setInactiveAndReason("replay alter materialized-view status failed: " + mv.getName());
                 LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
             }
         } finally {
