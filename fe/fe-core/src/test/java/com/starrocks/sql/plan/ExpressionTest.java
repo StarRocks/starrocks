@@ -1690,8 +1690,9 @@ public class ExpressionTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "PREDICATES: (11: id_bool = FALSE) OR (11: id_bool)");
 
-        sql = "select * from test_object where bitmap_contains(b1, v1) = true";
+        sql = "select * from test_object where true = bitmap_contains(b1, v1) or bitmap_contains(b1, v2) = true";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: bitmap_contains(5: b1, CAST(1: v1 AS BIGINT))");
+        assertContains(plan, "PREDICATES: (bitmap_contains(5: b1, CAST(1: v1 AS BIGINT))) " +
+                "OR (bitmap_contains(5: b1, CAST(2: v2 AS BIGINT)))");
     }
 }
