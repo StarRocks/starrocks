@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
@@ -23,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
@@ -70,5 +72,29 @@ public class ConvertToEqualForNullRule extends TransformationRule {
 
         return conjuncts.stream().anyMatch( e -> e instanceof CompoundPredicateOperator
                 && ((CompoundPredicateOperator) e).isOr());
+    }
+
+    private boolean isPatternMatched(ScalarOperator scalarOperator) {
+        if (!(scalarOperator instanceof CompoundPredicateOperator)) {
+            return false;
+        }
+
+        CompoundPredicateOperator compoundOp = (CompoundPredicateOperator) scalarOperator;
+        if (!compoundOp.isOr()) {
+            return false;
+        }
+
+        if (!(compoundOp.getChild(0) instanceof BinaryPredicateOperator)
+                || !(compoundOp.getChild(1) instanceof CompoundPredicateOperator)) {
+            return false;
+        }
+
+        BinaryPredicateOperator left = (BinaryPredicateOperator) compoundOp.getChild(0);
+        CompoundPredicateOperator right = (CompoundPredicateOperator) compoundOp.getChild(1);
+        if (!left.getBinaryType().isEqual() || !right.isOr()) {
+            return false;
+        }
+
+        if (right.getChild(0) instanceof IsNullPredicateOperator
     }
 }
