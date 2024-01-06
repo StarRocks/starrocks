@@ -86,7 +86,7 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerContext& scanner_ctx, Or
             VLOG_FILE << "OrcRowReaderFilter: min_max_ctx = " << ctx->root()->debug_string();
         }
     }
-    {
+    if (scanner_ctx.scan_range != nullptr) {
         const auto* r = _scanner_ctx.scan_range;
         _scan_ranges.insert(std::make_pair(r->offset + r->length, r->offset));
     }

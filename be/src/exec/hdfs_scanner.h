@@ -137,7 +137,7 @@ struct HdfsScanProfile {
 
 struct HdfsScannerParams {
     // one file split (parition_id, file_path, file_length, offset, length, file_format)
-    const THdfsScanRange* scan_range;
+    const THdfsScanRange* scan_range = nullptr;
 
     // runtime bloom filter.
     const RuntimeFilterProbeCollector* runtime_filter_collector = nullptr;
@@ -231,7 +231,7 @@ struct HdfsScannerContext {
     std::vector<ColumnPtr> partition_values;
 
     // scan range
-    const THdfsScanRange* scan_range;
+    const THdfsScanRange* scan_range = nullptr;
 
     // min max slots
     const TupleDescriptor* min_max_tuple_desc = nullptr;

@@ -1711,25 +1711,32 @@ TEST_F(HdfsScannerTest, TestCSVSmall) {
         READ_SCANNER_ROWS(scanner, 2);
         scanner->close();
     }
+
     for (int offset = 10; offset < 20; offset++) {
-        auto* range0 = _create_scan_range(small_file, 0, offset);
-        // at '\n'
-        auto* range1 = _create_scan_range(small_file, offset, 0);
-        auto* tuple_desc = _create_tuple_desc(csv_descs);
-        auto* param = _create_param(small_file, range0, tuple_desc);
-        param->scan_range = range1;
-        build_hive_column_names(param, tuple_desc);
-        auto scanner = std::make_shared<HdfsTextScanner>();
+        // read two scan range ranges and # of records = 2
+        int records = 0;
 
-        status = scanner->init(_runtime_state, *param);
-        ASSERT_TRUE(status.ok()) << status.message();
+        auto read_range = [&](int start, int end) {
+            auto* range0 = _create_scan_range(small_file, start, end);
+            auto* tuple_desc = _create_tuple_desc(csv_descs);
+            auto* param = _create_param(small_file, range0, tuple_desc);
+            build_hive_column_names(param, tuple_desc);
+            auto scanner = std::make_shared<HdfsTextScanner>();
 
-        status = scanner->open(_runtime_state);
-        ASSERT_TRUE(status.ok()) << status.message();
+            status = scanner->init(_runtime_state, *param);
+            ASSERT_TRUE(status.ok()) << status.message();
 
-        READ_SCANNER_ROWS(scanner, 2);
+            status = scanner->open(_runtime_state);
+            ASSERT_TRUE(status.ok()) << status.message();
 
-        scanner->close();
+            READ_SCANNER_RETURN_ROWS(scanner, records);
+
+            scanner->close();
+        };
+
+        read_range(0, offset);
+        read_range(offset, 0);
+        ASSERT_EQ(records, 2);
     }
 }
 
