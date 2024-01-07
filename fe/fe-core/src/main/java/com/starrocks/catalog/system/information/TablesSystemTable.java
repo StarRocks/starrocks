@@ -50,6 +50,7 @@ public class TablesSystemTable {
                 .column("CHECKSUM", ScalarType.createType(PrimitiveType.BIGINT))
                 .column("CREATE_OPTIONS", ScalarType.createVarchar(255))
                 .column("TABLE_COMMENT", ScalarType.createVarchar(2048))
+                .column("ENABLE_FAST_SCHEMA_EVOLUTION", ScalarType.createType(PrimitiveType.BOOLEAN))
                 .build(), TSchemaTableType.SCH_TABLES);
     }
 }

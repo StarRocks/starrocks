@@ -708,6 +708,8 @@ public class AlterJobMgr {
                 String s = (((CompactionClause) alterClause).isBaseCompaction() ? "base" : "cumulative")
                         + " compact " + tableName + " partitions: " + ((CompactionClause) alterClause).getPartitionNames();
                 compactionHandler.process(alterClauses, db, olapTable);
+            } else if (alterClause instanceof UpdateSchemaClause) {
+                updateSchemaHandler.process(alterClause, db, olapTable);
             }
         }
 

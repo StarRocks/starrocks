@@ -369,6 +369,12 @@ public class InformationSchemaDataSource {
                         info.setTable_collation(UTF8_GENERAL_CI);
                         info.setChecksum(DEFAULT_EMPTY_NUM);
                         info.setTable_comment(table.getComment());
+                        if (table.isOlapTable()) {
+                            Boolean fastSchemaEvolution = ((OlapTable) table).getUseFastSchemaEvolution();
+                            info.setEnable_fast_schema_evolution(fastSchemaEvolution);
+                        } else {
+                            info.setEnable_fast_schema_evolution(false);
+                        }
 
                         if (table.isNativeTableOrMaterializedView() || table.getType() == TableType.OLAP_EXTERNAL) {
                             // OLAP (done)

@@ -158,6 +158,11 @@ public class ShowTableStatusStmt extends ShowStmt {
         item = new SelectListItem(new SlotRef(TABLE_NAME, "TABLE_COMMENT"), "Comment");
         selectList.addItem(item);
         aliasMap.put(new SlotRef(null, "Comment"), item.getExpr().clone(null));
+        // Enable_fast_schema_evolution
+        item = new SelectListItem(new SlotRef(TABLE_NAME, "ENABLE_FAST_SCHEMA_EVOLUTION"), 
+                                    "Enable_fast_schema_evolution");
+        selectList.addItem(item);
+        aliasMap.put(new SlotRef(null, "Enable_fast_schema_evolution"), item.getExpr().clone(null));        
 
         where = where.substitute(aliasMap);
 

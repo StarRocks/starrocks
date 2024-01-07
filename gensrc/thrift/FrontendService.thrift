@@ -1506,6 +1506,7 @@ struct TTableInfo {
     19: optional i64 checksum
     20: optional string create_options
     21: optional string table_comment
+    22: optional bool enable_fast_schema_evolution
 }
 
 struct TAllocateAutoIncrementIdParam {

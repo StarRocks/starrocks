@@ -80,6 +80,7 @@ public class AnalyzeShowTest {
                         "information_schema.tables.CHECKSUM AS Checksum, " +
                         "information_schema.tables.CREATE_OPTIONS AS Create_options, " +
                         "information_schema.tables.TABLE_COMMENT AS Comment " +
+                        "information_schema.tables.ENABLE_FAST_SCHEMA_EVOLUTION AS Enable_fast_schema_evolution " +
                         "FROM information_schema.tables WHERE information_schema.tables.TABLE_NAME = 't1'",
                 AstToStringBuilder.toString(statement.toSelectStmt()));
     }

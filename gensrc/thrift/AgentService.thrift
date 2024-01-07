@@ -253,6 +253,11 @@ struct TCompactionReq {
     2: optional bool is_base_compaction
 }
 
+struct TUpdateSchemaReq {
+    1: optional map<i64, list<Types.TTabletId>> index_to_tablets
+    2: optional map<i64, TOlapTableColumnParam> index_to_column_param
+}
+
 struct TUploadReq {
     1: required i64 job_id;
     2: required map<string, string> src_dest_map

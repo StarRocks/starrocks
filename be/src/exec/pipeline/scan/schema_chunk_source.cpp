@@ -59,6 +59,7 @@ Status SchemaChunkSource::prepare(RuntimeState* state) {
     } else {
         _index_map.resize(slot_num);
     }
+    LOG(INFO) << "src_slot_descs size:" << src_slot_descs.size() << ", dest_slot_descs size:" << src_slot_descs.size();
     for (int i = 0; i < slot_num; ++i) {
         int j = 0;
         for (; j < src_slot_descs.size(); ++j) {

@@ -46,10 +46,13 @@ SchemaScanner::ColumnDesc SchemaTablesScanner::_s_tbls_columns[] = {
         {"CHECKSUM", TYPE_BIGINT, sizeof(int64_t), true},
         {"CREATE_OPTIONS", TYPE_VARCHAR, sizeof(StringValue), true},
         {"TABLE_COMMENT", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"ENABLE_FAST_SCHEMA_EVOLUTION", TYPE_BOOLEAN, sizeof(bool), false},
 };
 
 SchemaTablesScanner::SchemaTablesScanner()
-        : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
+        : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {
+    LOG(INFO) << "sizeof(_s_tbls):" << sizeof(_s_tbls_columns) << ", sizeof(columnDesc):" << sizeof(SchemaScanner::ColumnDesc);
+}
 
 SchemaTablesScanner::~SchemaTablesScanner() = default;
 
@@ -361,6 +364,15 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
                 const std::string* str = &table_info.table_comment;
                 Slice value(str->c_str(), str->length());
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&value);
+            }
+            break;
+        }
+        case 22: {
+            // enable_fast_schema_evolution
+            {
+                ColumnPtr column = (*chunk)->get_column_by_slot_id(22);
+                fill_column_with_slot<TYPE_BOOLEAN>(column.get(), 
+                                                    (void*)&table_info.enable_fast_schema_evolution);
             }
             break;
         }
