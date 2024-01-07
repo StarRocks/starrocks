@@ -178,21 +178,33 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_or(FunctionContext* context, const s
 StatusOr<ColumnPtr> BitmapFunctions::bitmap_and(FunctionContext* context, const starrocks::Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    ColumnViewer<TYPE_OBJECT> lhs(columns[0]);
-    ColumnViewer<TYPE_OBJECT> rhs(columns[1]);
-
+    std::vector<ColumnViewer<TYPE_OBJECT>> list;
+    list.reserve(columns.size());
+    for (const ColumnPtr& col : columns) {
+        list.emplace_back(col);
+    }
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
     for (int row = 0; row < size; ++row) {
-        if (lhs.is_null(row) || rhs.is_null(row)) {
+        bool is_null = false;
+        for (auto& viewer : list) {
+            if (viewer.is_null(row)) {
+                is_null = true;
+                break;
+            }
+        }
+        if(is_null) {
             builder.append_null();
             continue;
         }
-
         BitmapValue bitmap;
-        bitmap |= (*lhs.value(row));
-        bitmap &= (*rhs.value(row));
-
+        for (int i = 0; i < list.size(); i++) {
+            if (i == 0) {
+                bitmap |= *(list[i].value(row));
+            } else {
+                bitmap &= *(list[i].value(row));
+            }
+        }
         builder.append(&bitmap);
     }
 
