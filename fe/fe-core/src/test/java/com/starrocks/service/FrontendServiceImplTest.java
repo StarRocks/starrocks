@@ -75,6 +75,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.transaction.CommitRateExceededException;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
@@ -365,6 +366,13 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testCreatePartitionApi() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_day");
         List<List<String>> partitionValues = Lists.newArrayList();
@@ -432,6 +440,13 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testCreatePartitionApiSlice() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_slice");
         List<List<String>> partitionValues = Lists.newArrayList();
@@ -456,6 +471,13 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testCreatePartitionApiMultiValues() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_day");
         List<List<String>> partitionValues = Lists.newArrayList();
@@ -486,6 +508,13 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testCreatePartitionApiMonth() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_month");
         List<List<String>> partitionValues = Lists.newArrayList();
@@ -522,6 +551,13 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testCreatePartitionApiBorder() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_border");
         List<List<String>> partitionValues = Lists.newArrayList();
@@ -639,6 +675,13 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testCreatePartitionApiHour() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_hour");
         List<List<String>> partitionValues = Lists.newArrayList();
