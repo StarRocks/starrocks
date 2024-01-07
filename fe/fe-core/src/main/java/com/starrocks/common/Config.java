@@ -2378,12 +2378,19 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean mv_auto_analyze_async = true;
 
+    @ConfField(mutable = true)
+    public static long mv_active_checker_interval_seconds = 60;
+
+    @ConfField(mutable = true, comment = "Whether enable the active mv automatically in daemon thread")
+    public static boolean enable_mv_automatic_active_check = false;
+
     /**
      * To prevent the external catalog from displaying too many entries in the grantsTo system table,
      * you can use this variable to ignore the entries in the external catalog
      */
     @ConfField(mutable = true)
     public static boolean enable_show_external_catalog_privilege = true;
+
 
     @ConfField(mutable = true)
     public static int catalog_metadata_cache_size = 500;
