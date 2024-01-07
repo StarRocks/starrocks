@@ -245,7 +245,7 @@ struct ArithmeticBinaryOperator {
                 r_is_zero = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), 0));
                 auto* sum = b.CreateAdd(r, llvm::ConstantInt::get(r->getType(), 1));
                 auto* adjusted_r = b.CreateSelect(r_is_zero, sum, r);
-                if constexpr (may_cause_fpe<LType> && may_cause_fpe<RType>) {
+                if constexpr (may_cause_fpe<ResultType> && may_cause_fpe<LType> && may_cause_fpe<RType>) {
                     // fpe = l == signed_minimum<LType> && r == -1;
                     auto* cond_left = b.CreateICmpEQ(l, llvm::ConstantInt::get(l->getType(), signed_minimum<LType>));
                     auto* cond_right = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), -1));
@@ -276,7 +276,7 @@ struct ArithmeticBinaryOperator {
                 auto* sum = b.CreateAdd(r, llvm::ConstantInt::get(r->getType(), 1));
                 auto* adjusted_r = b.CreateSelect(r_is_zero, sum, r);
                 llvm::Value* fpe = b.getInt1(false);
-                if constexpr (may_cause_fpe<LType> && may_cause_fpe<RType>) {
+                if constexpr (may_cause_fpe<ResultType> && may_cause_fpe<LType> && may_cause_fpe<RType>) {
                     // fpe = l == signed_minimum<LType> && r == -1;
                     auto* cond_left = b.CreateICmpEQ(l, llvm::ConstantInt::get(l->getType(), signed_minimum<LType>));
                     auto* cond_right = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), -1));
