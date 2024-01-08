@@ -198,12 +198,9 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_and(FunctionContext* context, const 
             continue;
         }
         BitmapValue bitmap;
-        for (int i = 0; i < list.size(); i++) {
-            if (i == 0) {
-                bitmap |= *(list[i].value(row));
-            } else {
-                bitmap &= *(list[i].value(row));
-            }
+        bitmap |= *(list[0].value(row));
+        for (int i = 1; i < list.size(); i++) {
+            bitmap &= *(list[i].value(row));
         }
         builder.append(&bitmap);
     }
