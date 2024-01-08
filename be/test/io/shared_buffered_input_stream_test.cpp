@@ -31,10 +31,10 @@ PARALLEL_TEST(SharedBufferedInputStreamTest, test_release) {
     std::vector<io::SharedBufferedInputStream::IORange> ranges;
     // make two ranges one is active and another is lazy to avoid merging together.
     // 150k -> 520k
-    auto r_active = io::SharedBufferedInputStream::IORange{.offset = 150 * 1024, .size = 370 * 1024, .active = true};
+    auto r_active = io::SharedBufferedInputStream::IORange(150 * 1024, 370 * 1024, true);
     ranges.push_back(r_active);
     // 550k -> 650k
-    auto r_lazy = io::SharedBufferedInputStream::IORange{.offset = 550 * 1024, .size = 100 * 1024, .active = false};
+    auto r_lazy = io::SharedBufferedInputStream::IORange(550 * 1024, 100 * 1024, false);
     ranges.push_back(r_lazy);
     auto st = sb_stream->set_io_ranges(ranges, false);
     ASSERT_OK(st);
