@@ -13,7 +13,7 @@ USE quickstart;
 
 #### Crashdata 表
 
-车祸数据集中包含较多字段。以下创建的 Crashdata 表的字段经过裁剪，仅包含可能有助于回答有关天气对驾驶条件有影响的字段。
+创建 `crashdata` 表，用于存储交通事故数据集中的数据。该表的字段经过裁剪，仅包含与该教程相关字段。
 
 ```sql
 CREATE TABLE IF NOT EXISTS crashdata (
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS crashdata (
 
 #### Weatherdata 表
 
-与车祸数据集类似，天气数据集包含较多字段（总共 125 列）。因此，以下创建的 weatherdata 表仅包括可能相关的字段。
+创建 `weatherdata` 表，用于存储天气数据集中的数据。该表的字段同样经过裁剪，仅包含与该教程相关字段。
 
 ```sql
 CREATE TABLE IF NOT EXISTS weatherdata (
