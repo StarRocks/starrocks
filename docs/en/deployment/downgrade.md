@@ -56,8 +56,8 @@ If you want to downgrade your StarRocks cluster to an earlier minor or major ver
 Before downgrading your StarRocks cluster, you must disable tablet clone.
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "0");
-ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_balancing_tablets" = "0");
 ADMIN SET FRONTEND CONFIG ("disable_balance"="true");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
 ```
@@ -65,8 +65,8 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
 After the downgrade, you can enable tablet clone again if the status of all BE nodes becomes `Alive`.
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "2000");
-ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "100");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "10000");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_balancing_tablets" = "500");
 ADMIN SET FRONTEND CONFIG ("disable_balance"="false");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 ```
