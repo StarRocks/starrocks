@@ -436,7 +436,7 @@ void RowReaderImpl::loadStripeIndex() {
         const proto::Stream& pbStream = currentStripeFooter.streams(i);
         uint64_t colId = pbStream.column();
         // We only need to load active column's RowIndex
-        if (selectedColumns[colId] && !lazyLoadColumns[colId] && pbStream.has_kind() &&
+        if (selectedColumns[colId] && pbStream.has_kind() &&
             (pbStream.kind() == proto::Stream_Kind_ROW_INDEX ||
              pbStream.kind() == proto::Stream_Kind_BLOOM_FILTER_UTF8)) {
             std::unique_ptr<SeekableInputStream> inStream =
