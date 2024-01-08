@@ -27,6 +27,22 @@ namespace starrocks {
 
 static const std::string LOAD_OP_COLUMN = "__op";
 
+struct VectorCompare {
+    bool operator()(const std::vector<std::string>& a, const std::vector<std::string>& b) const {
+        if (a.size() != b.size()) {
+            return a.size() < b.size();
+        }
+
+        for (size_t i = 0; i < a.size(); ++i) {
+            if (a[i] != b[i]) {
+                return a[i] < b[i];
+            }
+        }
+
+        return false;
+    }
+};
+
 std::string ChunkRow::debug_string() {
     std::stringstream os;
     os << "index " << index << " [";
@@ -498,6 +514,7 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
 
     _compute_hashes(chunk, indexes);
 
+    std::set<std::vector<std::string>, VectorCompare> partition_columns_set;
     if (!_partition_columns.empty()) {
         Columns partition_columns(_partition_slot_descs.size());
         if (!_partitions_expr_ctxs.empty()) {
@@ -535,7 +552,10 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
                                         << row.debug_string();
                                 partition_value_items->emplace_back(column->raw_item_value(i));
                             }
-                            (*partition_not_exist_row_values).emplace_back(*partition_value_items);
+                            auto r = partition_columns_set.insert(*partition_value_items);
+                            if (r.second) {
+                                (*partition_not_exist_row_values).emplace_back(*partition_value_items);
+                            }
                         } else {
                             VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partition row "
                                     << row.debug_string();
@@ -566,6 +586,9 @@ Status OlapTablePartitionParam::find_tablets(Chunk* chunk, std::vector<OlapTable
                                 VLOG(3) << "partition not exist chunk row:" << chunk->debug_row(i) << " partition row "
                                         << row.debug_string();
                                 partition_value_items->emplace_back(column->raw_item_value(i));
+                            }
+                            auto r = partition_columns_set.insert(*partition_value_items);
+                            if (r.second) {
                                 (*partition_not_exist_row_values).emplace_back(*partition_value_items);
                             }
                         } else {
