@@ -42,7 +42,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
@@ -53,7 +52,6 @@ import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.binlog.BinlogManager;
-import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.CatalogIdGenerator;
@@ -86,7 +84,6 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -135,7 +132,6 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.elasticsearch.EsRepository;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -1652,47 +1648,12 @@ public class GlobalStateMgr {
         for (String dbName : dbNames) {
             Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
             for (MaterializedView mv : db.getMaterializedViews()) {
-                List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
-                updateBaseTableRelatedMv(db.getId(), mv, baseTableInfos);
+                mv.onReload();
             }
         }
 
         long duration = System.currentTimeMillis() - startMillis;
         LOG.info("finish processing all tables' related materialized views in {}ms", duration);
-    }
-
-    public void updateBaseTableRelatedMv(Long dbId, MaterializedView mv, List<BaseTableInfo> baseTableInfos) {
-        for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            Table table;
-            try {
-                table = baseTableInfo.getTable();
-            } catch (Exception e) {
-                LOG.warn("there is an exception during get table from mv base table. exception:", e);
-                continue;
-            }
-            if (table == null) {
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                        "the table {} was not exist.", mv.getName(), mv.getId(), baseTableInfo.getTableName());
-                mv.setInactiveAndReason("base table dropped: " + baseTableInfo.getTableId());
-                continue;
-            }
-            if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
-                MaterializedView baseMv = (MaterializedView) table;
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                "the materialized view{}({}) is invalid.", mv.getName(), mv.getId(),
-                        baseMv.getName(), baseMv.getId());
-                mv.setInactiveAndReason("base mv is not active: " + baseMv.getName());
-                continue;
-            }
-            MvId mvId = new MvId(dbId, mv.getId());
-            table.addRelatedMaterializedView(mvId);
-            if (!table.isNativeTableOrMaterializedView()) {
-                connectorTblMetaInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
-                        baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
-                        ConnectorTableInfo.builder().setRelatedMaterializedViews(
-                                Sets.newHashSet(mvId)).build());
-            }
-        }
     }
 
     private void checkOpTypeValid() throws IOException {
