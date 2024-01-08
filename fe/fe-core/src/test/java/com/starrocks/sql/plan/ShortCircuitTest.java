@@ -40,7 +40,7 @@ public class ShortCircuitTest extends PlanTestBase {
         connectContext.getSessionVariable().setPreferComputeNode(true);
 
         // support short circuit
-        String sql = "select * from tprimary1 where pk1=20";
+        String sql = "select pk1 || v3 from tprimary1 where pk1=20";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
         //  support short circuit

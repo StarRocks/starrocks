@@ -75,7 +75,6 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeApplyWithTableFuncti
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithSortRule;
-import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoFiltersRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionPruneRule;
@@ -417,13 +416,13 @@ public class RuleSet {
                 new PushDownPredicateProjectRule(),
                 PushDownPredicateScanRule.OLAP_SCAN,
                 new CastToEmptyRule(),
+                new PruneProjectColumnsRule(),
                 PruneScanColumnRule.OLAP_SCAN,
                 new PruneProjectEmptyRule(),
                 new MergeTwoProjectRule(),
                 new PruneProjectRule(),
                 new PartitionPruneRule(),
-                new DistributionPruneRule(),
-                new MergeProjectWithChildRule()));
+                new DistributionPruneRule()));
     }
 
     public RuleSet() {

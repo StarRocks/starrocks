@@ -247,6 +247,9 @@ public:
 
     void set_children(std::vector<ExecNode*>&& children) { _children = std::move(children); }
 
+    [[nodiscard]] static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
+                                                       const DescriptorTbl& descs, ExecNode** node);
+
 protected:
     friend class DataSink;
 
@@ -296,9 +299,6 @@ protected:
     /// Returns true if this node is inside the right-hand side plan tree of a SubplanNode.
     /// Valid to call in or after Prepare().
     bool is_in_subplan() const { return false; }
-
-    [[nodiscard]] static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
-                                                       const DescriptorTbl& descs, ExecNode** node);
 
     [[nodiscard]] static Status create_tree_helper(RuntimeState* state, ObjectPool* pool,
                                                    const std::vector<TPlanNode>& tnodes, const DescriptorTbl& descs,
