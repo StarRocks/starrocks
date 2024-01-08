@@ -145,7 +145,7 @@ public enum ErrorCode {
             "data cannot be inserted into table with empty partition. " +
                     "Use `SHOW PARTITIONS FROM %s` to see the currently partitions of this table. "),
     ERR_NO_SUCH_PARTITION(1749, new byte[] {'H', 'Y', '0', '0', '0'}, "partition '%s' doesn't exist"),
-    
+
     // Following is StarRocks's error code, which start from 5000
     ERR_NOT_OLAP_TABLE(5000, new byte[] {'H', 'Y', '0', '0', '0'}, "Table '%s' is not a OLAP table"),
     ERR_WRONG_PROC_PATH(5001, new byte[] {'H', 'Y', '0', '0', '0'}, "Proc path '%s' doesn't exist"),
@@ -334,7 +334,23 @@ public enum ErrorCode {
     ERR_INVALID_PARAMETER(6013, new byte[] {'4', '2', '0', '0', '0'}, "Invalid parameter %s"),
 
     ERR_PRIVILEGE_STORAGE_VOLUME_DENIED(6020, new byte[] {'4', '2', '0', '0', '0'},
-            "Access denied for user '%s' to storage volume '%s' when checking privilege");
+            "Access denied for user '%s' to storage volume '%s' when checking privilege"),
+
+
+    ERR_TXN_SAFE_MODE(1301, new byte[] {'4', '2', '0', '0', '0'},
+            "The cluster is under is safe mode or disable_load_job is set to true, all transactions are rejected"),
+    ERR_TXN_INVALID_TIMEOUT(1302, new byte[] {'4', '2', '0', '0', '0'},
+            "Invalid transaction timeout. Timeout should between %s and %s seconds"),
+
+
+    /**
+     * 5100 - 5199: Database and Table Meta
+     */
+    ERR_DB_ID_NOT_EXIST(5100, new byte[] {'4', '2', '0', '0', '0'},
+            "The database corresponding to id %s does not exist, which may be caused by concurrent drop database operations."),
+    ERR_DB_QUOTA_EXCEED(5101, new byte[] {'4', '2', '0', '0', '0'},
+            "Database %s data size exceeds quota %s"),
+    ;
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;
