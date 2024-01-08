@@ -263,20 +263,6 @@ public class CachedStatisticStorageTest {
                 connectorTableCachedStatistics.getAll(cacheKeys);
         Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> result = future.get();
 
-<<<<<<< HEAD
-        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
-
-        List<ConnectorTableColumnStats> connectorColumnStatistics = Deencapsulation
-                .invoke(cachedStatisticStorage, "getConnectorTableStatistics", table,
-                        ImmutableList.of("c1", "c2"));
-        Assert.assertEquals(2, connectorColumnStatistics.size());
-        Assert.assertEquals(5, connectorColumnStatistics.get(0).getRowCount());
-        Assert.assertEquals(0, connectorColumnStatistics.get(0).getColumnStatistic().getMinValue(), 0.0001);
-        Assert.assertEquals(10, connectorColumnStatistics.get(0).getColumnStatistic().getMaxValue(), 0.0001);
-        Assert.assertEquals(0, connectorColumnStatistics.get(0).getColumnStatistic().getNullsFraction(), 0.0001);
-        Assert.assertEquals(20, connectorColumnStatistics.get(0).getColumnStatistic().getAverageRowSize(), 0.0001);
-        Assert.assertEquals(5, connectorColumnStatistics.get(0).getColumnStatistic().getDistinctValuesCount(), 0.0001);
-=======
         Assert.assertEquals(3, result.size());
         Assert.assertEquals(5, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
                         "c1")).get().getRowCount());
@@ -286,7 +272,6 @@ public class CachedStatisticStorageTest {
                         "c1")).get().getColumnStatistic().getMaxValue(), 0.0001);
         Assert.assertEquals(0, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
                         "c1")).get().getColumnStatistic().getMinValue(), 0.0001);
->>>>>>> 4a82571556 ([UT] Fix unstable UT (#38548))
     }
 
     @Test
