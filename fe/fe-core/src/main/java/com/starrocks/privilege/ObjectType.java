@@ -66,9 +66,7 @@ public class ObjectType {
     public static final ObjectType GLOBAL_FUNCTION = new ObjectType(11);
     public static final ObjectType STORAGE_VOLUME = new ObjectType(12);
     public static final ObjectType PIPE = new ObjectType(13);
-    public static final ObjectType TABLE_COLUMN = new ObjectType(14);
-    public static final ObjectType VIEW_COLUMN = new ObjectType(15);
-    public static final ObjectType MATERIALIZED_VIEW_COLUMN = new ObjectType(16);
+    public static final ObjectType COLUMN = new ObjectType(14);
 
     public static final Set<ObjectType> VALID_OBJECT_TYPE = new ImmutableSet.Builder<ObjectType>().add(
             TABLE,
@@ -84,9 +82,7 @@ public class ObjectType {
             GLOBAL_FUNCTION,
             STORAGE_VOLUME,
             PIPE,
-            TABLE_COLUMN,
-            VIEW_COLUMN,
-            MATERIALIZED_VIEW_COLUMN
+            COLUMN
     ).build();
 
     public static final Map<Integer, Pair<String, String>> OBJECT_TO_NAME =
