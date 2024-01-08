@@ -299,6 +299,7 @@ endif ()
 
 set(EXEC_FILES_PART2
         ./fs/fs_broker_test.cpp
+        ./fs/fs_hdfs_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
         ./fs/fs_s3_test.cpp
