@@ -334,7 +334,7 @@ public class HiveCommitter {
             Joiner.on("; ").appendTo(message, failedUpdateStatsTaskDescs);
             StarRocksConnectorException exception = new StarRocksConnectorException(message.toString());
             suppressedExceptions.forEach(exception::addSuppressed);
-            throw exception;
+            LOG.error(exception);
         }
     }
 
