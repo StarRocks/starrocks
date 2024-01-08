@@ -68,6 +68,8 @@ public class OptimizerContext {
     // collect LogicalViewScanOperators
     private List<LogicalViewScanOperator> viewScans;
 
+    private boolean isShortCircuit = false;
+
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -253,4 +255,13 @@ public class OptimizerContext {
     public List<LogicalViewScanOperator> getViewScans() {
         return viewScans;
     }
+
+    public boolean isShortCircuit() {
+        return isShortCircuit;
+    }
+
+    public void setShortCircuit(boolean shortCircuit) {
+        isShortCircuit = shortCircuit;
+    }
+
 }
