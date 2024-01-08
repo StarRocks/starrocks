@@ -135,16 +135,22 @@ public:
 
     std::string delvec_location(int64_t tablet_id, std::string_view delvec_filename) const;
 
-    const LocationProvider* location_provider() const { return _location_provider; }
+    const LocationProvider* location_provider() const {
+        return _location_provider;
+    }
 
     UpdateManager* update_mgr();
 
-    CompactionScheduler* compaction_scheduler() { return _compaction_scheduler.get(); }
+    CompactionScheduler* compaction_scheduler() {
+        return _compaction_scheduler.get();
+    }
 
     void update_metacache_limit(size_t limit);
 
     // The return value will never be null.
-    Metacache* metacache() { return _metacache.get(); }
+    Metacache* metacache() {
+        return _metacache.get();
+    }
 
     StatusOr<int64_t> get_tablet_data_size(int64_t tablet_id, int64_t* version_hint);
 
@@ -164,8 +170,7 @@ public:
     void update_segment_cache_size(std::string_view key, intptr_t segment_addr_hint = 0);
 
     StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
-                                      bool fill_data_cache, bool fill_metadata_cache, TabletSchemaPtr tablet_schema,
-                                      uint64_t segment_size = 0);
+                                      bool fill_data_cache, bool fill_metadata_cache, TabletSchemaPtr tablet_schema);
 
 private:
     static std::string global_schema_cache_key(int64_t index_id);

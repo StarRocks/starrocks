@@ -246,16 +246,15 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_data_c
     int index = 0;
 
     for (const auto& seg_name : metadata().segments()) {
-        uint64_t segment_size = 0;
+        auto segment_path = _tablet_mgr->segment_location(tablet_id(), seg_name);
+        auto segment_info = FileInfo{.path = segment_path};
         if (LIKELY(has_segment_size)) {
-            segment_size = files_to_size.Get(index);
+            segment_info.size = files_to_size.Get(index);
         }
         index++;
 
-        auto segment_path = _tablet_mgr->segment_location(tablet_id(), seg_name);
-        auto segment_info = FileInfo{segment_path};
         auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id++, &footer_size_hint, fill_data_cache,
-                                                    fill_metadata_cache, _tablet_schema, segment_size);
+                                                    fill_metadata_cache, _tablet_schema);
         if (segment_or.ok()) {
             segments->emplace_back(std::move(segment_or.value()));
         } else if (segment_or.status().is_not_found() && ignore_lost_segment) {

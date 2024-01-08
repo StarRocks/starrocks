@@ -571,7 +571,7 @@ StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t v
 
 StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
                                                  bool fill_data_cache, bool fill_metadata_cache,
-                                                 TabletSchemaPtr tablet_schema, uint64_t segment_size) {
+                                                 TabletSchemaPtr tablet_schema) {
     auto segment = metacache()->lookup_segment(segment_info.path);
     if (segment == nullptr) {
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(segment_info.path));
