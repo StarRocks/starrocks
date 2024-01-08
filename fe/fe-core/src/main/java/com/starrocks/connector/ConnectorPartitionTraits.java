@@ -44,6 +44,7 @@ import com.starrocks.catalog.PaimonPartitionKey;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -310,7 +311,7 @@ public abstract class ConnectorPartitionTraits {
         @Override
         public Optional<Long> maxPartitionRefreshTs() {
             OlapTable olapTable = (OlapTable) table;
-            return olapTable.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo);
+            return olapTable.getPhysicalPartitions().stream().map(PhysicalPartition::getVisibleVersionTime).max(Long::compareTo);
         }
 
         @Override
