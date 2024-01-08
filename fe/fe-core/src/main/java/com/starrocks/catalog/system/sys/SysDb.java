@@ -37,8 +37,9 @@ public class SysDb extends Database {
     }
 
     @Override
-    public void dropTable(String name) {
+    public Table dropTable(String name) {
         // Do nothing.
+        return null;
     }
 
     @Override
