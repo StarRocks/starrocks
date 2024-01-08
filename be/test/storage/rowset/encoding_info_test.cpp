@@ -47,7 +47,6 @@ namespace starrocks {
 class EncodingInfoTest : public testing::Test {
 public:
     EncodingInfoTest() {
-        _number_types_supports_dict_encoding.emplace(TYPE_TINYINT);
         _number_types_supports_dict_encoding.emplace(TYPE_SMALLINT);
         _number_types_supports_dict_encoding.emplace(TYPE_INT);
         _number_types_supports_dict_encoding.emplace(TYPE_BIGINT);

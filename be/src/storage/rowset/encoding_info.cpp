@@ -186,7 +186,7 @@ public:
     // 2. If optimization for value seek is required, retrieve the encoding method from _value_seek_encoding_map.
     // 3. In the last scenario, directly retrieve it from _default_encoding_type_map.
     EncodingTypePB get_default_encoding(LogicalType type, bool optimize_value_seek) const {
-        if (enable_non_string_column_dict_encoding() && number_types_supports_dict_encoding(delegate_type(type)) &&
+        if (enable_non_string_column_dict_encoding() && numeric_types_support_dict_encoding(delegate_type(type)) &&
             !optimize_value_seek) {
             return DICT_ENCODING;
         }
@@ -300,7 +300,6 @@ EncodingInfoResolver::EncodingInfoResolver() {
 
     // These number typs are support dict encoding, if you need to change this, please
     // change supports_dict_encoding function as same time.
-    _add_map<TYPE_TINYINT, DICT_ENCODING>();
     _add_map<TYPE_SMALLINT, DICT_ENCODING>();
     _add_map<TYPE_INT, DICT_ENCODING>();
     _add_map<TYPE_BIGINT, DICT_ENCODING>();

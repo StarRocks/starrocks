@@ -53,15 +53,11 @@ class PageBuilderOptions;
 
 inline bool enable_non_string_column_dict_encoding() {
     double epsilon = 0.0001;
-    if (std::abs(config::dictionary_encoding_ratio_for_non_string_column - 0) < epsilon) {
-        return false;
-    }
-    return true;
+    return std::abs(config::dictionary_encoding_ratio_for_non_string_column - 0) > epsilon;
 }
 
-inline bool number_types_supports_dict_encoding(LogicalType type) {
+inline bool numeric_types_support_dict_encoding(LogicalType type) {
     switch (type) {
-    case TYPE_TINYINT:
     case TYPE_SMALLINT:
     case TYPE_INT:
     case TYPE_BIGINT:
@@ -82,7 +78,7 @@ inline bool supports_dict_encoding(LogicalType type) {
     if (type == TYPE_VARCHAR || type == TYPE_CHAR) {
         return true;
     }
-    return number_types_supports_dict_encoding(type);
+    return numeric_types_support_dict_encoding(type);
 }
 
 class EncodingInfo {

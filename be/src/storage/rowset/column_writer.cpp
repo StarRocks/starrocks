@@ -307,7 +307,7 @@ StatusOr<std::unique_ptr<ColumnWriter>> ColumnWriter::create(const ColumnWriterO
         auto column_writer = std::make_unique<ScalarColumnWriter>(str_opts, type_info, wfile);
         return std::make_unique<StringColumnWriter>(str_opts, std::move(type_info), std::move(column_writer));
     } else if (enable_non_string_column_dict_encoding() &&
-               number_types_supports_dict_encoding(delegate_type(column->type()))) {
+               numeric_types_support_dict_encoding(delegate_type(column->type()))) {
         DCHECK(column->type() != TYPE_VARCHAR);
         DCHECK(column->type() != TYPE_CHAR);
         ColumnWriterOptions dict_opts = opts;
@@ -803,8 +803,6 @@ inline void StringColumnWriter::speculate_column_and_set_encoding(const Column& 
 }
 
 inline EncodingTypePB StringColumnWriter::speculate_string_encoding(const BinaryColumn& bin_col) {
-    const size_t dictionary_min_rowcount = 256;
-
     auto row_count = bin_col.size();
     auto ratio = config::dictionary_encoding_ratio;
     auto max_card = static_cast<size_t>(static_cast<double>(row_count) * ratio);
@@ -882,8 +880,9 @@ Status DictColumnWriter::append(const Column& column) {
     }
 
     if (_buf_column == nullptr) {
-        // first column size is greater than speculate size
-        if (column.size() >= config::dictionary_speculate_min_chunk_size) {
+        // First column size is greater than speculate size or byte size large than UINT32_MAX.
+        // Because if columns' byte size than UINT32_MAX, that will cause BinaryColumn<uint32_t> overflow
+        if (column.size() >= config::dictionary_speculate_min_chunk_size || column.byte_size() >= UINT32_MAX) {
             _is_speculated = true;
             RETURN_IF_ERROR(speculate_column_and_set_encoding(column));
             return _scalar_column_writer->append(column);
@@ -893,16 +892,19 @@ Status DictColumnWriter::append(const Column& column) {
             return Status::OK();
         }
     }
-    _buf_column->append(column, 0, column.size());
-    if (_buf_column->size() < config::dictionary_speculate_min_chunk_size) {
-        return Status::OK();
-    } else {
+    if (column.size() + _buf_column->size() >= config::dictionary_speculate_min_chunk_size ||
+        column.byte_size() + _buf_column->byte_size() >= UINT32_MAX) {
+        // If it is predicted that _buf_column will exceed the limit after append column,
+        // skip append column
         _is_speculated = true;
         RETURN_IF_ERROR(speculate_column_and_set_encoding(*_buf_column));
-        Status st = _scalar_column_writer->append(*_buf_column);
+        RETURN_IF_ERROR(_scalar_column_writer->append(*_buf_column));
         _buf_column.reset();
-        return st;
+        RETURN_IF_ERROR(_scalar_column_writer->append(column));
+    } else {
+        _buf_column->append(column, 0, column.size());
     }
+    return Status::OK();
 }
 
 inline Status DictColumnWriter::speculate_column_and_set_encoding(const Column& column) {
@@ -910,9 +912,6 @@ inline Status DictColumnWriter::speculate_column_and_set_encoding(const Column& 
     EncodingTypePB detect_encoding;
     LogicalType logicalType = delegate_type(type_info()->type());
     switch (logicalType) {
-    case TYPE_TINYINT:
-        detect_encoding = speculate_encoding<TYPE_TINYINT>(column);
-        break;
     case TYPE_SMALLINT:
         detect_encoding = speculate_encoding<TYPE_SMALLINT>(column);
         break;
@@ -964,7 +963,6 @@ inline EncodingTypePB DictColumnWriter::speculate_encoding(const Column& column)
     } else {
         bin_col = &down_cast<const ColumnType&>(column);
     }
-    const size_t dictionary_min_rowcount = 256;
 
     auto row_count = bin_col->size();
     auto ratio = config::dictionary_encoding_ratio_for_non_string_column;

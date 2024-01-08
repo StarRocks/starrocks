@@ -200,19 +200,6 @@ TEST_F(DictPageTest, TestSmallDataSizeWithDouble) {
     test_encode_decode_page_template<TYPE_DOUBLE>(floats.get(), size);
 }
 
-TEST_F(DictPageTest, TestSmallDataSizeWithInt8_t) {
-    int lower = std::numeric_limits<int8_t>::min();
-    int upper = std::numeric_limits<int8_t>::max();
-    const uint32_t size = upper - lower + 1;
-    std::unique_ptr<int8_t[]> ints(new int8_t[size]);
-    int cur = 0;
-    // Generate all int8_t numbers, we can test if dict index overflow.
-    for (int i = lower; i <= upper; i++) {
-        ints.get()[cur++] = i;
-    }
-    test_encode_decode_page_template<TYPE_TINYINT>(ints.get(), size);
-}
-
 TEST_F(DictPageTest, TestSmallDataSizeWithInt16_t) {
     int lower = std::numeric_limits<int16_t>::min();
     int upper = std::numeric_limits<int16_t>::max();

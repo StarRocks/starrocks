@@ -62,16 +62,6 @@ struct DataTypeTraits {
 };
 
 template <>
-struct DataTypeTraits<TYPE_TINYINT> {
-    static const LogicalType type = TYPE_UNSIGNED_TINYINT;
-};
-
-template <>
-struct DataTypeTraits<TYPE_UNSIGNED_TINYINT> {
-    static const LogicalType type = TYPE_UNSIGNED_TINYINT;
-};
-
-template <>
 struct DataTypeTraits<TYPE_SMALLINT> {
     static const LogicalType type = TYPE_UNSIGNED_SMALLINT;
 };

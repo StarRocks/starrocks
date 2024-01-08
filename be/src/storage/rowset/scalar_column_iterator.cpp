@@ -73,9 +73,6 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     case TYPE_VARCHAR:
         _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_VARCHAR>;
         break;
-    case TYPE_TINYINT:
-        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_TINYINT>;
-        break;
     case TYPE_SMALLINT:
         _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_SMALLINT>;
         break;

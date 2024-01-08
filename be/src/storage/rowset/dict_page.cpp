@@ -258,7 +258,6 @@ Status DictPageDecoder<Type>::next_dict_codes(const SparseRange<>& range, Column
     return _data_page_decoder->next_batch(range, dst);
 }
 
-template class DictPageDecoder<TYPE_TINYINT>;
 template class DictPageDecoder<TYPE_SMALLINT>;
 template class DictPageDecoder<TYPE_INT>;
 template class DictPageDecoder<TYPE_BIGINT>;
@@ -272,7 +271,6 @@ template class DictPageDecoder<TYPE_DATETIME>;
 template class DictPageDecoder<TYPE_DECIMAL>;
 template class DictPageDecoder<TYPE_DECIMALV2>;
 
-template class DictPageBuilder<TYPE_TINYINT>;
 template class DictPageBuilder<TYPE_SMALLINT>;
 template class DictPageBuilder<TYPE_INT>;
 template class DictPageBuilder<TYPE_BIGINT>;
