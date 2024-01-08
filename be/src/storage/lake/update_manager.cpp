@@ -492,6 +492,7 @@ void UpdateManager::expire_cache() {
     if (MonotonicMillis() - _last_clear_expired_cache_millis > _cache_expire_ms) {
         _update_state_cache.clear_expired();
         _index_cache.clear_expired();
+        _compaction_cache.clear_expired();
         _last_clear_expired_cache_millis = MonotonicMillis();
     }
 }
@@ -717,6 +718,12 @@ void UpdateManager::TEST_remove_compaction_cache(uint32_t tablet_id, int64_t txn
     }
 }
 
+void UpdateManager::try_remove_cache(uint32_t tablet_id, int64_t txn_id) {
+    auto key = cache_key(tablet_id, txn_id);
+    _update_state_cache.try_remove_by_key(key);
+    _compaction_cache.try_remove_by_key(key);
+}
+
 void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
     // use tabletid-txnid as update state cache's key, so it can retry safe.
     auto state_entry = _update_state_cache.get_or_create(cache_key(tablet->id(), txnlog.txn_id()));
@@ -745,6 +752,7 @@ void UpdateManager::preload_update_state(const TxnLog& txnlog, Tablet* tablet) {
     } else {
         _update_state_cache.remove(state_entry);
     }
+    TEST_SYNC_POINT("UpdateManager::preload_update_state:return");
 }
 
 void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet& tablet,
@@ -776,6 +784,7 @@ void UpdateManager::preload_compaction_state(const TxnLog& txnlog, const Tablet&
         // just release it, will use it again in publish
         _compaction_cache.release(compaction_entry);
     }
+    TEST_SYNC_POINT("UpdateManager::preload_compaction_state:return");
 }
 
 } // namespace starrocks::lake
