@@ -21,6 +21,7 @@ import com.google.gson.JsonSerializer;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.persist.gson.GsonUtils;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -34,6 +35,7 @@ import java.time.format.ResolverStyle;
 import java.time.format.SignStyle;
 import java.time.temporal.ChronoField;
 import java.time.temporal.TemporalAccessor;
+import java.time.temporal.WeekFields;
 
 public class DateUtils {
     // These are marked as deprecated because they don't support year 0000 parsing
@@ -272,7 +274,8 @@ public class DateUtils {
                                 .appendValue(ChronoField.SECOND_OF_MINUTE, 2);
                         break;
                     case 'v': // %v Week (01..53), where Monday is the first day of the week; used with %x
-                        builder.appendValue(ChronoField.ALIGNED_WEEK_OF_YEAR, 2);
+                        final WeekFields weekFields = WeekFields.of(DayOfWeek.MONDAY, 4);
+                        builder.appendValue(weekFields.weekOfWeekBasedYear(), 2);
                         break;
                     case 'Y': // %Y Year, numeric, four digits
                         builder.appendValue(ChronoField.YEAR, 4);
