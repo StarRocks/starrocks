@@ -420,7 +420,8 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
         }
         auto segment = Segment::open(fs, file_info, segment_id, tablet_schema);
         if (!segment.ok()) {
-            LOG(WARNING) << "Fail to open rssid: " << segment_id << " path: " << path << " : " << segment.status();
+            LOG(WARNING) << "Fail to open rssid: " << segment_id << " path: " << file_info.path << " : "
+                         << segment.status();
             return segment.status();
         }
         if ((*segment)->num_rows() == 0) {
@@ -448,7 +449,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
         }
 
         // use 0 segment_id is safe, because we need not get either delvector or dcg here
-        RETURN_IF_ERROR(fetch_values_from_segment(rssid_to_path[rssid], 0, tablet_schema, rowids));
+        RETURN_IF_ERROR(fetch_values_from_segment(rssid_to_file_info[rssid], 0, tablet_schema, rowids));
     }
     if (auto_increment_state != nullptr && with_default) {
         if (fs == nullptr) {
@@ -458,7 +459,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
         uint32_t segment_id = auto_increment_state->segment_id;
         const std::vector<uint32_t>& rowids = auto_increment_state->rowids;
 
-        RETURN_IF_ERROR(fetch_values_from_segment(op_write.rowset().segments(segment_id), segment_id,
+        RETURN_IF_ERROR(fetch_values_from_segment(FileInfo{.path = op_write.rowset().segments(segment_id)}, segment_id,
                                                   auto_increment_state->schema, rowids));
     }
     cost_str << " [fetch vals by rowid] " << watch.elapsed_time();

@@ -119,7 +119,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
     }
 
     FileInfo file_info{.path = dst_file_name};
-    ASSERT_OK(SegmentRewriter::rewrite(file_name, file_info, tablet_schema, read_column_ids, write_columns,
+    ASSERT_OK(SegmentRewriter::rewrite(file_name, &file_info, tablet_schema, read_column_ids, write_columns,
                                        partial_segment->id(), partial_rowset_footer));
 
     auto segment = *Segment::open(_fs, FileInfo{dst_file_name}, 0, tablet_schema);

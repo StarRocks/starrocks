@@ -26,7 +26,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path
                                 const FooterPointerPB& partial_rowset_footer) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path->path));
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path.path));
+    ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path->path));
     ASSIGN_OR_RETURN(auto rfile, fs->new_random_access_file(src_path));
 
     SegmentFooterPB footer;
@@ -217,7 +217,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path
     itr->close();
 
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path.path));
+    ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path->path));
 
     std::vector<uint32_t> full_column_ids(tschema->num_columns());
     std::iota(full_column_ids.begin(), full_column_ids.end(), 0);
