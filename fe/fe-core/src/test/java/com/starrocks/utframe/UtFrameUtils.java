@@ -419,9 +419,9 @@ public class UtFrameUtils {
         connectContext.setThreadLocalInfo();
         if (connectContext.getSessionVariable().getEnableQueryDump()) {
             connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
+            originStmt = LogUtil.removeLineSeparator(originStmt);
             connectContext.getDumpInfo().setOriginStmt(originStmt);
         }
-        originStmt = LogUtil.removeLineSeparator(originStmt);
 
         List<StatementBase> statements;
         try (Timer ignored = Tracers.watchScope("Parser")) {
