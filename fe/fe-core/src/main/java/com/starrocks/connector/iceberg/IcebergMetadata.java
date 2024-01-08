@@ -39,23 +39,18 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.iceberg.alter.AlterTableAction;
+import com.starrocks.connector.iceberg.alter.AlterTableActionFactory;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AddColumnClause;
-import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AlterClause;
-import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
-import com.starrocks.sql.ast.ModifyColumnClause;
-import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -233,33 +228,27 @@ public class IcebergMetadata implements ConnectorMetadata {
         String tableName = stmt.getTableName();
         org.apache.iceberg.Table table = icebergCatalog.getTable(dbName, tableName);
 
-        if (table == null) {
-            throw new StarRocksConnectorException(
-                    "Failed to load iceberg table: " + stmt.getTbl().toString());
-        }
+        Preconditions.checkNotNull(table, "Failed to load iceberg table: " + stmt.getTbl().toString());
+
+        Transaction transaction = table.newTransaction();
+        Preconditions.checkArgument(transaction != null, "Transaction or table cannot be null");
 
         List<AlterClause> alterClauses = stmt.getOps();
-        List<AlterClause> tableChanges = Lists.newArrayList();
-        List<AlterClause> schemaChanges = Lists.newArrayList();
         for (AlterClause clause : alterClauses) {
-            if (clause instanceof AddColumnClause
-                    || clause instanceof AddColumnsClause
-                    || clause instanceof DropColumnClause
-                    || clause instanceof ColumnRenameClause
-                    || clause instanceof ModifyColumnClause) {
-                schemaChanges.add(clause);
-            } else if (clause instanceof ModifyTablePropertiesClause
-                    || clause instanceof TableRenameClause
-                    || clause instanceof AlterTableCommentClause
-            ) {
-                tableChanges.add(clause);
+            // rename table is a catalog operator
+            if (clause instanceof TableRenameClause) {
+                TableRenameClause tableRenameClause = (TableRenameClause) clause;
+                Preconditions.checkNotNull(icebergCatalog, "iceberg catalog cannot be null");
+
+                icebergCatalog.renameTable(dbName, tableName, tableRenameClause.getNewTableName());
             } else {
-                throw new StarRocksConnectorException(
-                        "Unsupported alter operation for iceberg connector: " + clause.toString());
+                AlterTableAction action = AlterTableActionFactory.getAction(clause.getClass().getName());
+                Preconditions.checkNotNull(action, "Unsupported alter operation for iceberg connector: " + clause);
+                action.execute(transaction, clause);
             }
         }
 
-        commitAlterTable(dbName, tableName, table, schemaChanges, tableChanges);
+        transaction.commitTransaction();
 
         synchronized (this) {
             tables.remove(TableIdentifier.of(dbName, tableName));
@@ -271,24 +260,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             asyncRefreshOthersFeMetadataCache(dbName, tableName);
         }
-    }
-
-    private void commitAlterTable(String dbName,
-                                  String tableName,
-                                  org.apache.iceberg.Table table,
-                                  List<AlterClause> schemaChanges,
-                                  List<AlterClause> tableChanges) {
-        Transaction transaction = table.newTransaction();
-
-        if (!tableChanges.isEmpty()) {
-            IcebergApiConverter.applyTableChanges(transaction, icebergCatalog, dbName, tableName, tableChanges);
-        }
-
-        if (!schemaChanges.isEmpty()) {
-            IcebergApiConverter.applySchemaChanges(transaction.updateSchema(), schemaChanges);
-        }
-
-        transaction.commitTransaction();
     }
 
     @Override
