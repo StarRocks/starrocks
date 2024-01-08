@@ -15,6 +15,7 @@
 package com.starrocks.schema;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 
 import java.util.List;
@@ -236,6 +237,19 @@ public class MSchema {
             " ,(2,1,1),(2,1,2),(2,1,3),(2,2,1),(2,2,2),(2,2,3),(2,3,1),(2,3,2),(2,3,3)" +
             " ,(3,1,1),(3,1,2),(3,1,3),(3,2,1),(3,2,2),(3,2,3),(3,3,1),(3,3,2),(3,3,3)");
 
+    public static final MTable T_METRICS = new MTable("t_metrics", "c1",
+            Lists.newArrayList(
+                    " c1 int",
+                    " c2 int",
+                    " c3 int",
+                    " c4 int",
+                    " c5 int",
+                    " c6 int",
+                    " c7 int",
+                    " c8 int"
+            )
+    );
+
     public static final MTable JSON_TBL = new MTable("json_tbl", "p_dt",
             ImmutableList.of(
                     "  `p_dt` date NULL",
@@ -259,7 +273,8 @@ public class MSchema {
             TABLE_WITH_DAY_PARTITION,
             TEST_BASE_PART,
             T1,
-            JSON_TBL
+            JSON_TBL,
+            T_METRICS
     );
     public static final Map<String, MTable> TABLE_MAP = Maps.newHashMap();
 

@@ -93,6 +93,10 @@ public class Pattern {
         return OperatorType.PATTERN_MULTIJOIN.equals(opType);
     }
 
+    public static boolean isScanOperator(OperatorType operatorType) {
+        return ALL_SCAN_TYPES.contains(operatorType);
+    }
+
     public boolean matchWithoutChild(GroupExpression expression) {
         if (expression == null) {
             return false;
