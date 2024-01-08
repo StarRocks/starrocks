@@ -34,6 +34,7 @@ SchemaScanner::ColumnDesc SchemaBeTabletsScanner::_s_columns[] = {
         {"MAX_VERSION", TYPE_BIGINT, sizeof(int64_t), false},
         {"MIN_VERSION", TYPE_BIGINT, sizeof(int64_t), false},
         {"NUM_ROWSET", TYPE_BIGINT, sizeof(int64_t), false},
+        {"NUM_SEGMENT", TYPE_BIGINT, sizeof(int64_t), false},
         {"NUM_ROW", TYPE_BIGINT, sizeof(int64_t), false},
         {"DATA_SIZE", TYPE_BIGINT, sizeof(int64_t), false},
         {"INDEX_MEM", TYPE_BIGINT, sizeof(int64_t), false},
@@ -45,7 +46,6 @@ SchemaScanner::ColumnDesc SchemaBeTabletsScanner::_s_columns[] = {
         {"SCHEMA_HASH", TYPE_BIGINT, sizeof(int64_t), false},
         {"INDEX_DISK", TYPE_BIGINT, sizeof(int64_t), false},
         {"MEDIUM_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-
 };
 
 SchemaBeTabletsScanner::SchemaBeTabletsScanner()
@@ -160,59 +160,63 @@ Status SchemaBeTabletsScanner::fill_chunk(ChunkPtr* chunk) {
                 break;
             }
             case 9: {
+                // NUM_SEGMENT
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_segment);
+            }
+            case 10: {
                 // num rows
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_row);
                 break;
             }
-            case 10: {
+            case 11: {
                 // data size
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.data_size);
                 break;
             }
-            case 11: {
+            case 12: {
                 // index mem
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.index_mem);
                 break;
             }
-            case 12: {
+            case 13: {
                 // create time
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.create_time);
                 break;
             }
-            case 13: {
+            case 14: {
                 // state
                 Slice state = Slice(tablet_state_to_string((TabletState)info.state));
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&state);
                 break;
             }
-            case 14: {
+            case 15: {
                 // type
                 Slice type = Slice(keys_type_to_string((KeysType)info.type));
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&type);
                 break;
             }
-            case 15: {
+            case 16: {
                 // DATA_DIR
                 Slice data_dir = Slice(info.data_dir);
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&data_dir);
                 break;
             }
-            case 16: {
+            case 17: {
                 // SHARD_ID
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.shard_id);
                 break;
             }
-            case 17: {
+            case 18: {
                 // SCHEMA_HASH
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.schema_hash);
                 break;
             }
-            case 18: {
+            case 19: {
                 // INDEX_DISK
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.index_disk_usage);
                 break;
             }
-            case 19: {
+            case 20: {
                 // medium type
                 Slice medium_type = Slice(medium_type_to_string(info.medium_type));
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&medium_type);
