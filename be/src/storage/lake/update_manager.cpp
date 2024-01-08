@@ -405,17 +405,17 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
     cost_str << " [with_default] " << watch.elapsed_time();
     watch.reset();
 
-    std::unordered_map<uint32_t, std::string> rssid_to_path;
-    rowset_rssid_to_path(metadata, op_write, rssid_to_path);
+    std::unordered_map<uint32_t, FileInfo> rssid_to_file_info;
+    rowset_rssid_to_segment(metadata, op_write, rssid_to_file_info);
     cost_str << " [catch rssid_to_path] " << watch.elapsed_time();
     watch.reset();
 
     std::shared_ptr<FileSystem> fs;
-    auto fetch_values_from_segment = [&](const std::string& segment_name, uint32_t segment_id,
+    auto fetch_values_from_segment = [&](const FileInfo& segment_info, uint32_t segment_id,
                                          const TabletSchemaCSPtr& tablet_schema,
                                          const std::vector<uint32_t>& rowids) -> Status {
-        std::string path = tablet->segment_location(segment_name);
-        auto segment = Segment::open(fs, FileInfo{path}, segment_id, tablet_schema);
+        FileInfo file_info{.path = tablet->segment_location(segment_info.path), .size = segment_info.size};
+        auto segment = Segment::open(fs, file_info, segment_id, tablet_schema);
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open rssid: " << segment_id << " path: " << path << " : " << segment.status();
             return segment.status();
@@ -427,7 +427,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
-        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(path));
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(file_info));
         iter_opts.read_file = read_file.get();
         for (auto i = 0; i < column_ids.size(); ++i) {
             const TabletColumn& col = tablet_schema->column(column_ids[i]);

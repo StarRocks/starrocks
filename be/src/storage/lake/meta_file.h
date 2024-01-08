@@ -95,7 +95,7 @@ bool is_primary_key(const TabletMetadata& metadata);
 
 // TODO(yixin): cache rowset_rssid_to_path
 void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
-                          std::unordered_map<uint32_t, std::string>& rssid_to_path);
+                          std::unordered_map<uint32_t, FileInfo>& rssid_to_path);
 
 } // namespace lake
 } // namespace starrocks
