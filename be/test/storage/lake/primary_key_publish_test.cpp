@@ -670,6 +670,46 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
     }
 }
 
+TEST_P(LakePrimaryKeyPublishTest, test_abort_txn) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->LoadDependency(
+            {{"UpdateManager::preload_update_state:return", "transactions::abort_txn:enter"}});
+
+    auto tablet_id = _tablet_metadata->id();
+    auto txn_id = next_id();
+    std::thread t1([&]() {
+        auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true);
+        auto tablet_id = _tablet_metadata->id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+    });
+
+    std::thread t2([&]() {
+        lake::AbortTxnRequest request;
+        request.add_tablet_ids(tablet_id);
+        request.add_txn_ids(txn_id);
+        request.set_skip_cleanup(false);
+        lake::AbortTxnResponse response;
+        auto lake_service = LakeServiceImpl(ExecEnv::GetInstance(), _tablet_mgr.get());
+        lake_service.abort_txn(nullptr, &request, &response, nullptr);
+    });
+
+    t1.join();
+    t2.join();
+    ASSERT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+    SyncPoint::GetInstance()->DisableProcessing();
+}
+
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,
                          ::testing::Values(PrimaryKeyParam{true}, PrimaryKeyParam{false}));
 

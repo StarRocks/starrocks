@@ -150,6 +150,8 @@ public:
 
     void unlock_pk_index_shard(int64_t tablet_id) { _get_pk_index_shard_lock(tablet_id).unlock(); }
 
+    void try_remove_cache(uint32_t tablet_id, int64_t txn_id);
+
 private:
     // print memory tracker state
     void _print_memory_stats();
