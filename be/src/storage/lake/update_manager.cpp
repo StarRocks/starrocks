@@ -406,7 +406,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
     watch.reset();
 
     std::unordered_map<uint32_t, FileInfo> rssid_to_file_info;
-    rowset_rssid_to_segment(metadata, op_write, rssid_to_file_info);
+    rowset_rssid_to_path(metadata, op_write, rssid_to_file_info);
     cost_str << " [catch rssid_to_path] " << watch.elapsed_time();
     watch.reset();
 

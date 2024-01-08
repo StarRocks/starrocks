@@ -332,23 +332,23 @@ bool is_primary_key(const TabletMetadata& metadata) {
 
 void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
                           std::unordered_map<uint32_t, FileInfo>& rssid_to_file_info) {
-    auto get_file_info_from_rowset = [&](const RowsetMetadataPB& meta) -> void {
+    auto get_file_info_from_rowset = [&](const RowsetMetadataPB& meta, const uint32_t rowset_id) -> void {
         bool has_segment_size = (meta.segments_size() == meta.segment_size_size());
         for (int i = 0; i < meta.segments_size(); i++) {
             FileInfo segment_info{.path = meta.segments(i)};
             if (LIKELY(has_segment_size)) {
                 segment_info.size = meta.segment_size(i);
             }
-            rssid_to_file_info[meta.id() + i] = segment_info;
+            rssid_to_file_info[rowset_id + i] = segment_info;
         }
     };
 
     for (auto& rs : metadata.rowsets()) {
-        get_file_info_from_rowset(rs);
+        get_file_info_from_rowset(rs, rs.id());
     }
     const uint32_t rowset_id = metadata.next_rowset_id();
     for (int i = 0; i < op_write.rowset().segments_size(); i++) {
-        get_file_info_from_rowset(op_write.rowset());
+        get_file_info_from_rowset(op_write.rowset(), rowset_id);
     }
 }
 

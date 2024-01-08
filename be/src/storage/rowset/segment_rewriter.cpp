@@ -20,11 +20,11 @@ namespace starrocks {
 
 SegmentRewriter::SegmentRewriter() = default;
 
-Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo& dest_path,
+Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path,
                                 const std::shared_ptr<const TabletSchema>& tschema, std::vector<uint32_t>& column_ids,
                                 std::vector<std::unique_ptr<Column>>& columns, uint32_t segment_id,
                                 const FooterPointerPB& partial_rowset_footer) {
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path.path));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path->path));
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path.path));
     ASSIGN_OR_RETURN(auto rfile, fs->new_random_access_file(src_path));
@@ -64,8 +64,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo& dest_path
     RETURN_IF_ERROR(writer.finalize_columns(&index_size));
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
-    dest_path.size = segment_file_size;
-
+    dest_path->size = segment_file_size;
     return Status::OK();
 }
 
@@ -161,7 +160,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 // This function is used when the auto-increment column is not specified in partial update.
 // In this function, we use the segment iterator to read the old data, replace the old auto
 // increment column, and rewrite the full segment file through SegmentWriter.
-Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo& dest_path, const TabletSchemaCSPtr& tschema,
+Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path, const TabletSchemaCSPtr& tschema,
                                 starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
                                 std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>* columns,
                                 const starrocks::lake::TxnLogPB_OpWrite& op_write, starrocks::lake::Tablet* tablet) {
@@ -169,7 +168,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo& dest_path
         DCHECK_EQ(columns, nullptr);
     }
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path.path));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path->path));
 
     uint32_t auto_increment_column_id = 0;
     for (const auto& col : tschema->columns()) {
@@ -249,8 +248,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo& dest_path
     RETURN_IF_ERROR(writer.finalize_columns(&index_size));
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
-    dest_path.size = segment_file_size;
-
+    dest_path->size = segment_file_size;
     return Status::OK();
 }
 
