@@ -22,10 +22,11 @@ namespace starrocks {
 
 namespace lake {
 
-LakePersistentIndexSstable::LakePersistentIndexSstable(RandomAccessFile* rf, const int64_t filesz) {
+Status LakePersistentIndexSstable::init(RandomAccessFile* rf, const int64_t filesz) {
     sstable::Options options;
-    sstable::Table::Open(options, rf, filesz, &_table);
+    RETURN_IF_ERROR(sstable::Table::Open(options, rf, filesz, &_table));
     _sst.reset(_table);
+    return Status::OK();
 }
 
 Status LakePersistentIndexSstable::build_sstable(
@@ -42,6 +43,20 @@ Status LakePersistentIndexSstable::build_sstable(
     *filesz = builder.FileSize();
     return Status::OK();
 }
+Status LakePersistentIndexSstable::build_sstable(
+        phmap::btree_map<std::string, phmap::btree_map<int64_t, int64_t, std::greater<>>, std::less<>>& map,
+        WritableFile* wf, uint64_t* filesz) {
+    sstable::Options options;
+    sstable::TableBuilder builder(options, wf);
+    for (const auto& [k, m] : map) {
+        auto index_value_info_pb = std::make_unique<IndexValueInfoPB>();
+        to_protobuf(m, index_value_info_pb.get());
+        builder.Add(Slice(k), Slice(index_value_info_pb->SerializeAsString()));
+    }
+    RETURN_IF_ERROR(builder.Finish());
+    *filesz = builder.FileSize();
+    return Status::OK();
+}
 
 void LakePersistentIndexSstable::to_protobuf(const std::list<std::pair<int64_t, IndexValue>>& index_value_infos,
                                              IndexValueInfoPB* index_value_info_pb) {
@@ -49,6 +64,16 @@ void LakePersistentIndexSstable::to_protobuf(const std::list<std::pair<int64_t, 
     while (it != index_value_infos.end()) {
         index_value_info_pb->mutable_versions()->Add((*it).first);
         index_value_info_pb->mutable_values()->Add((*it).second.get_value());
+        ++it;
+    }
+}
+
+void LakePersistentIndexSstable::to_protobuf(const phmap::btree_map<int64_t, int64_t, std::greater<>>& m,
+                                             IndexValueInfoPB* index_value_info_pb) {
+    auto it = m.begin();
+    while (it != m.end()) {
+        index_value_info_pb->mutable_versions()->Add((*it).first);
+        index_value_info_pb->mutable_values()->Add((*it).second);
         ++it;
     }
 }
@@ -62,7 +87,6 @@ Status LakePersistentIndexSstable::get(size_t n, const Slice* keys, IndexValue* 
     const auto& key_index_infos = key_indexes_info->key_index_infos;
     for (size_t i = 0; i < key_index_infos.size(); ++i) {
         if (!index_value_infos[key_index_infos[i]].empty()) {
-            LOG(INFO) << keys[key_index_infos[i]].to_string();
             IndexValueInfoPB index_value_info;
             if (!index_value_info.ParseFromString(index_value_infos[key_index_infos[i]])) {
                 return Status::InternalError("parse index value info failed");

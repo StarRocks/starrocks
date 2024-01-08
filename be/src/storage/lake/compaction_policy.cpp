@@ -472,6 +472,11 @@ StatusOr<CompactionPolicyPtr> CompactionPolicy::create(TabletManager* tablet_mgr
     }
 }
 
+StatusOr<std::vector<PersistentIndexSstablePB>> CompactionPolicy::pick_ssts() {
+    std::vector<PersistentIndexSstablePB> ssts;
+    return ssts;
+}
+
 double compaction_score(TabletManager* tablet_mgr, const std::shared_ptr<const TabletMetadataPB>& metadata) {
     if (is_primary_key(*metadata)) {
         return primary_compaction_score(tablet_mgr, metadata);

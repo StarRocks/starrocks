@@ -71,10 +71,10 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
                     fs::new_random_access_file(
                             opts, _tablet_mgr->sst_location(
                                           _tablet_id, _sstable_meta->sstables(i - 1).sstables(j - 1).filename())));
-            auto pindex_sst = std::make_unique<LakePersistentIndexSstable>(
-                    rf.get(), _sstable_meta->sstables(i - 1).sstables(j - 1).filesz());
+            auto pindex_sst = std::make_unique<LakePersistentIndexSstable>();
+            RETURN_IF_ERROR(pindex_sst->init(rf.get(), _sstable_meta->sstables(i - 1).sstables(j - 1).filesz()));
             KeyIndexesInfo found_key_indexes_info;
-            pindex_sst->get(n, keys, values, key_indexes_info, &found_key_indexes_info, version);
+            RETURN_IF_ERROR(pindex_sst->get(n, keys, values, key_indexes_info, &found_key_indexes_info, version));
             if (found_key_indexes_info.size() != 0) {
                 std::sort(found_key_indexes_info.key_index_infos.begin(), found_key_indexes_info.key_index_infos.end());
                 // modify key_indexess_info
@@ -92,7 +92,7 @@ Status LakePersistentIndex::get_from_immutable_memtable(size_t n, const Slice* k
     }
     std::sort(key_indexes_info->key_index_infos.begin(), key_indexes_info->key_index_infos.end());
     KeyIndexesInfo found_key_indexes_info;
-    _immutable_memtable->get(n, keys, values, key_indexes_info, &found_key_indexes_info, version);
+    RETURN_IF_ERROR(_immutable_memtable->get(n, keys, values, key_indexes_info, &found_key_indexes_info, version));
     if (found_key_indexes_info.size() != 0) {
         std::sort(found_key_indexes_info.key_index_infos.begin(), found_key_indexes_info.key_index_infos.end());
         // modify key_indexess_info
@@ -105,6 +105,9 @@ Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values,
     KeyIndexesInfo not_founds;
     size_t num_found;
     RETURN_IF_ERROR(_memtable->get(n, keys, values, &not_founds, &num_found, version));
+    if (num_found == n) {
+        return Status::OK();
+    }
     RETURN_IF_ERROR(get_from_immutable_memtable(n, keys, values, &not_founds, version));
     RETURN_IF_ERROR(get_from_sstables(n, keys, values, &not_founds, version));
     return Status::OK();
@@ -115,6 +118,9 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
     KeyIndexesInfo not_founds;
     size_t num_found;
     RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, version));
+    if (num_found == n) {
+        return Status::OK();
+    }
     RETURN_IF_ERROR(get_from_immutable_memtable(n, keys, old_values, &not_founds, -1));
     RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &not_founds, -1));
     if (is_memtable_full()) {
@@ -138,6 +144,9 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     KeyIndexesInfo not_founds;
     size_t num_found;
     RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, version));
+    if (num_found == n) {
+        return Status::OK();
+    }
     RETURN_IF_ERROR(get_from_immutable_memtable(n, keys, old_values, &not_founds, -1));
     RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &not_founds, -1));
     return Status::OK();
@@ -213,6 +222,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     if (sstables_size > 0) {
         max_sstable_version = sstables[sstables_size - 1].version();
     }
+    LOG(INFO) << "max sstable version " << max_sstable_version;
     if (max_sstable_version > base_version) {
         return Status::OK();
     }
@@ -233,7 +243,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     for (auto& rowset : rowsets) {
         int64_t rowset_version = rowset->version() != 0 ? rowset->version() : base_version;
         if (rowset->version() >= max_sstable_version && rowset->version() <= base_version) {
-            auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, rowset_version, builder, &stats);
+            auto res = rowset->get_each_segment_iterator_with_delvec(pkey_schema, base_version, builder, &stats);
             if (!res.ok()) {
                 return res.status();
             }
@@ -260,7 +270,6 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
                             pkc = pk_column.get();
                         } else {
                             pkc = chunk->columns()[0].get();
-                            LOG(INFO) << pkc->debug_string();
                         }
                         uint32_t rssid = rowset->id() + i;
                         uint64_t base = ((uint64_t)rssid) << 32;

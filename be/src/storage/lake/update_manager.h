@@ -136,8 +136,7 @@ public:
                                                 std::unique_ptr<std::lock_guard<std::mutex>>& lock);
 
     // commit primary index, only take affect when it is persistent index
-    Status commit_primary_index(IndexEntry* index_entry, const TabletMetadataPtr& metadata, MetaFileBuilder* builder,
-                                int64_t base_version);
+    Status commit_primary_index(IndexEntry* index_entry, const TabletMetadataPtr& metadata, MetaFileBuilder* builder);
 
     // release index entry if it isn't nullptr
     void release_primary_index_cache(IndexEntry* index_entry);
@@ -145,6 +144,9 @@ public:
     void remove_primary_index_cache(IndexEntry* index_entry);
 
     void unload_and_remove_primary_index(int64_t tablet_id);
+
+    Status compact_ssts(Tablet* tablet, const std::vector<PersistentIndexSstablePB>& ssts,
+                        std::shared_ptr<TxnLogPB>& txn_log);
 
     DynamicCache<uint64_t, LakePrimaryIndex>& index_cache() { return _index_cache; }
 

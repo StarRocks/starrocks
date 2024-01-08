@@ -1272,7 +1272,7 @@ Status PrimaryIndex::_erase_persistent_index(const Column& key_col, DeletesMap* 
     std::vector<Slice> keys;
     std::vector<uint64_t> old_values(key_col.size(), NullIndexValue);
     const Slice* vkeys = _build_persistent_keys(key_col, 0, key_col.size(), &keys);
-    st = _persistent_index->erase(key_col.size(), vkeys, reinterpret_cast<IndexValue*>(old_values.data(), version));
+    st = _persistent_index->erase(key_col.size(), vkeys, reinterpret_cast<IndexValue*>(old_values.data()), version);
     if (!st.ok()) {
         LOG(WARNING) << "erase persistent index failed";
     }
@@ -1319,7 +1319,8 @@ Status PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_st
     values.reserve(pks.size());
     RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, 0, pks.size(), &values));
     Status st = _persistent_index->try_replace(pks.size(), _build_persistent_keys(pks, 0, pks.size(), &keys),
-                                               reinterpret_cast<IndexValue*>(values.data()), max_src_rssid, deletes, version);
+                                               reinterpret_cast<IndexValue*>(values.data()), max_src_rssid, deletes,
+                                               version);
     if (!st.ok()) {
         LOG(WARNING) << "try replace persistent index failed";
     }
@@ -1344,8 +1345,8 @@ Status PrimaryIndex::insert(uint32_t rssid, uint32_t rowid_start, const Column& 
     return insert(rssid, rids, pks);
 }
 
-Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes,
-                            IOStat* stat, int64_t version) {
+Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes, IOStat* stat,
+                            int64_t version) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
@@ -1369,7 +1370,8 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
 }
 
 [[maybe_unused]] Status PrimaryIndex::try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
-                                                  const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes, int64_t version) {
+                                                  const vector<uint32_t>& src_rssid, vector<uint32_t>* deletes,
+                                                  int64_t version) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {

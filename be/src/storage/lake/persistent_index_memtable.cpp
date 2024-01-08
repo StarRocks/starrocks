@@ -87,6 +87,7 @@ Status PersistentIndexMemtable::erase(size_t n, const Slice* keys, IndexValue* o
         } else {
             auto& index_value_infos = it->second;
             auto old_index_value = index_value_infos.front().second;
+            old_values[i] = old_index_value;
             nfound += old_index_value.get_value() != NullIndexValue;
             index_value_infos.emplace_front(version, IndexValue(NullIndexValue));
         }
@@ -101,7 +102,11 @@ Status PersistentIndexMemtable::replace(const Slice* keys, const IndexValue* val
         auto key = keys[idx].to_string();
         const auto value = values[idx];
         auto it = _map.find(key);
-        if (it != _map.end()) {
+        if (it == _map.end()) {
+            std::list<IndexValueInfo> index_value_infos;
+            index_value_infos.emplace_front(version, value);
+            _map.emplace(key, index_value_infos);
+        } else {
             auto& index_value_infos = it->second;
             index_value_infos.emplace_front(version, value);
         }
@@ -149,7 +154,7 @@ Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* val
 }
 
 Status PersistentIndexMemtable::get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* keys_info,
-               KeyIndexesInfo* found_keys_info, int64_t version) {
+                                    KeyIndexesInfo* found_keys_info, int64_t version) {
     const auto& key_index_infos = keys_info->key_index_infos;
     for (size_t i = 0; i < key_index_infos.size(); ++i) {
         auto key = std::string_view(keys[key_index_infos[i]]);
@@ -183,7 +188,7 @@ void PersistentIndexMemtable::clear() {
 }
 
 size_t PersistentIndexMemtable::memory_usage() {
-    size_t mem_usage = 0; 
+    size_t mem_usage = 0;
     for (auto const& it : _map) {
         mem_usage += it.first.size();
         mem_usage += it.second.size() * sizeof(IndexValueInfo);
@@ -191,7 +196,7 @@ size_t PersistentIndexMemtable::memory_usage() {
     return mem_usage;
 }
 
-Status PersistentIndexMemtable::flush(int64_t txn_id, SstablePB *sstable) {
+Status PersistentIndexMemtable::flush(int64_t txn_id, SstablePB* sstable) {
     auto name = gen_sst_filename(txn_id);
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(_tablet_mgr->sst_location(_tablet_id, name)));
     uint64_t filesz;

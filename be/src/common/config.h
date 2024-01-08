@@ -967,6 +967,7 @@ CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "1000");
 // Used for control memory usage of update state cache and compaction state cache
 CONF_mInt32(lake_pk_preload_memory_limit_percent, "30");
+CONF_mInt64(lake_compaction_max_sstable_versions, "5");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 

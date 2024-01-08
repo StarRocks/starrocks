@@ -31,14 +31,23 @@ namespace lake {
 
 class LakePersistentIndexSstable {
 public:
-    LakePersistentIndexSstable(RandomAccessFile* rf, const int64_t filesz);
-    ~LakePersistentIndexSstable() {}
+    LakePersistentIndexSstable() = default;
+    ~LakePersistentIndexSstable() = default;
+
+    Status init(RandomAccessFile* rf, const int64_t filesz);
 
     static Status build_sstable(
             phmap::btree_map<std::string, std::list<std::pair<int64_t, IndexValue>>, std::less<>>& memtable,
             WritableFile* wf, uint64_t* filesz);
 
+    static Status build_sstable(
+            phmap::btree_map<std::string, phmap::btree_map<int64_t, int64_t, std::greater<>>, std::less<>>& map,
+            WritableFile* wf, uint64_t* filesz);
+
     static void to_protobuf(const std::list<std::pair<int64_t, IndexValue>>& index_value_infos,
+                            IndexValueInfoPB* index_value_info_pb);
+
+    static void to_protobuf(const phmap::btree_map<int64_t, int64_t, std::greater<>>& m,
                             IndexValueInfoPB* index_value_info_pb);
 
     Status get(size_t n, const Slice* keys, IndexValue* values, KeyIndexesInfo* key_indexes_info,

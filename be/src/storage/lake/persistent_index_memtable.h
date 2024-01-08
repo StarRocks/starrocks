@@ -64,7 +64,7 @@ public:
 
     size_t memory_usage();
 
-    Status flush(int64_t txn_id, SstablePB *sstable);
+    Status flush(int64_t txn_id, SstablePB* sstable);
 
 private:
     // phmap::flat_hash_map<std::string, std::list<IndexValueInfo>> _map;

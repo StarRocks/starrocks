@@ -494,12 +494,15 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(CompactionTaskContext* contex
     auto tablet_metadata = tablet.metadata();
     ASSIGN_OR_RETURN(auto compaction_policy, CompactionPolicy::create(this, tablet_metadata));
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets());
+    ASSIGN_OR_RETURN(auto ssts, compaction_policy->pick_ssts());
     ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
     if (algorithm == VERTICAL_COMPACTION) {
-        return std::make_shared<VerticalCompactionTask>(std::move(tablet), std::move(input_rowsets), context);
+        return std::make_shared<VerticalCompactionTask>(std::move(tablet), std::move(input_rowsets), context,
+                                                        std::move(ssts));
     } else {
         DCHECK(algorithm == HORIZONTAL_COMPACTION);
-        return std::make_shared<HorizontalCompactionTask>(std::move(tablet), std::move(input_rowsets), context);
+        return std::make_shared<HorizontalCompactionTask>(std::move(tablet), std::move(input_rowsets), context,
+                                                          std::move(ssts));
     }
 }
 

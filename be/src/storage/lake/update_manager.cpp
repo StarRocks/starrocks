@@ -22,6 +22,11 @@
 #include "storage/lake/local_pk_index_manager.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/sstable/iterator.h"
+#include "storage/lake/sstable/lake_persistent_index_sst.h"
+#include "storage/lake/sstable/merger.h"
+#include "storage/lake/sstable/options.h"
+#include "storage/lake/sstable/table.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/update_compaction_state.h"
 #include "storage/rowset/column_iterator.h"
@@ -29,6 +34,7 @@
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "testutil/sync_point.h"
+#include "util/phmap/btree.h"
 #include "util/pretty_printer.h"
 #include "util/trace.h"
 
@@ -100,7 +106,7 @@ StatusOr<IndexEntry*> UpdateManager::prepare_primary_index(const TabletMetadataP
 }
 
 Status UpdateManager::commit_primary_index(IndexEntry* index_entry, const TabletMetadataPtr& metadata,
-                                           MetaFileBuilder* builder, int64_t base_version) {
+                                           MetaFileBuilder* builder) {
     TRACE_COUNTER_SCOPE_LATENCY_US("primary_index_commit_latency_us");
     if (index_entry != nullptr) {
         auto& index = index_entry->value();
@@ -155,6 +161,67 @@ void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
         guard.reset(nullptr);
         _index_cache.remove(index_entry);
     }
+}
+
+Status UpdateManager::compact_ssts(Tablet* tablet, const std::vector<PersistentIndexSstablePB>& ssts,
+                                   std::shared_ptr<TxnLogPB>& txn_log) {
+    sstable::Options options;
+    std::vector<sstable::Iterator*> iters;
+    std::vector<std::unique_ptr<RandomAccessFile>> read_files;
+    std::vector<std::unique_ptr<sstable::Table>> tables;
+    sstable::ReadOptions read_options;
+    int i = 0;
+    for (auto& sst : ssts) {
+        for (auto& sst_pb : sst.sstables()) {
+            ASSIGN_OR_RETURN(auto rf, fs::new_random_access_file(tablet->sst_location(sst_pb.filename())));
+            read_files.emplace_back(std::move(rf));
+            sstable::Table* table;
+            RETURN_IF_ERROR(sstable::Table::Open(options, read_files[i].get(), sst_pb.filesz(), &table));
+            std::unique_ptr<sstable::Table> table_ptr = nullptr;
+            table_ptr.reset(table);
+            tables.emplace_back(std::move(table_ptr));
+            sstable::Iterator* iter = tables[i]->NewIterator(read_options);
+            iters.emplace_back(iter);
+            ++i;
+        }
+        auto input_sst = txn_log->mutable_op_compaction()->add_input_sstables();
+        input_sst->CopyFrom(sst);
+    }
+    phmap::btree_map<std::string, phmap::btree_map<int64_t, int64_t, std::greater<>>, std::less<>> map;
+    std::unique_ptr<sstable::Iterator> iter_ptr = nullptr;
+    sstable::Iterator* iter = sstable::NewMergingIterator(options.comparator, &iters[0], iters.size());
+    iter_ptr.reset(iter);
+    iter_ptr->SeekToFirst();
+    while (iter_ptr->Valid()) {
+        auto key = iter_ptr->key().to_string();
+        auto value = iter_ptr->value().to_string();
+        IndexValueInfoPB index_value_info;
+        if (!index_value_info.ParseFromString(value)) {
+            return Status::InternalError("parse index value info failed");
+        }
+        auto it = map.find(key);
+        if (it == map.end()) {
+            phmap::btree_map<int64_t, int64_t, std::greater<>> index_value_infos;
+            for (int i = 0; i < index_value_info.versions_size(); ++i) {
+                index_value_infos.emplace(index_value_info.versions(i), index_value_info.values(i));
+            }
+            map.emplace(key, index_value_infos);
+        } else {
+            auto& index_value_infos = it->second;
+            for (int i = 0; i < index_value_info.versions_size(); ++i) {
+                index_value_infos.emplace(index_value_info.versions(i), index_value_info.values(i));
+            }
+        }
+        iter_ptr->Next();
+    }
+    auto name = gen_sst_filename(txn_log->txn_id());
+    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(tablet->sst_location(name)));
+    uint64_t filesz;
+    RETURN_IF_ERROR(LakePersistentIndexSstable::build_sstable(map, wf.get(), &filesz));
+    RETURN_IF_ERROR(wf->close());
+    txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filename(name);
+    txn_log->mutable_op_compaction()->mutable_output_sstable()->set_filesz(filesz);
+    return Status::OK();
 }
 
 // |metadata| contain last tablet meta info with new version
@@ -670,8 +737,7 @@ Status UpdateManager::publish_primary_compaction(const TxnLogPB_OpCompaction& op
     for (auto&& each : delvecs) {
         builder->append_delvec(each.second, each.first);
     }
-    builder->apply_opcompaction(op_compaction, max_rowset_id);
-    builder->apply_opcompaction(op_compaction, version);
+    builder->apply_opcompaction(op_compaction, max_rowset_id, version);
     RETURN_IF_ERROR(builder->update_num_del_stat(segment_id_to_add_dels));
 
     TRACE_COUNTER_INCREMENT("rowsetid", rowset_id);

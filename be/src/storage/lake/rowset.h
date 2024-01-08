@@ -116,10 +116,8 @@ private:
 inline std::vector<RowsetPtr> Rowset::get_rowsets(TabletManager* tablet_mgr, const TabletMetadataPtr& tablet_metadata) {
     std::vector<RowsetPtr> rowsets;
     rowsets.reserve(tablet_metadata->rowsets_size());
-    LOG(INFO) << "rowset size " << tablet_metadata->rowsets_size(); 
     for (int i = 0, size = tablet_metadata->rowsets_size(); i < size; ++i) {
         auto version = tablet_metadata->rowsets(i).version();
-        LOG(INFO) << version;
         auto rowset = std::make_shared<Rowset>(tablet_mgr, tablet_metadata, i, version);
         rowsets.emplace_back(std::move(rowset));
     }

@@ -25,6 +25,7 @@ class Rowset;
 using RowsetPtr = std::shared_ptr<Rowset>;
 class CompactionPolicy;
 using CompactionPolicyPtr = std::shared_ptr<CompactionPolicy>;
+class PersistentIndexSstablePB;
 class TabletMetadataPB;
 class TabletManager;
 
@@ -34,6 +35,8 @@ public:
     virtual ~CompactionPolicy();
 
     virtual StatusOr<std::vector<RowsetPtr>> pick_rowsets() = 0;
+
+    virtual StatusOr<std::vector<PersistentIndexSstablePB>> pick_ssts();
 
     virtual StatusOr<CompactionAlgorithm> choose_compaction_algorithm(const std::vector<RowsetPtr>& rowsets);
 

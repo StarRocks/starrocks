@@ -155,6 +155,7 @@ TEST_F(CloudNativePersistentIndexSstableTest, test_merge) {
         }
     }
 
+    ASSERT_EQ(N, map.size());
     const std::string filename = "test_merge_4.sst";
     ASSIGN_OR_ABORT(auto file, fs::new_writable_file(join_path(kTestDir, filename)));
     sstable::TableBuilder builder(options, file.get());

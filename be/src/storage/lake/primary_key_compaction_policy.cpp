@@ -138,7 +138,7 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
     ASSIGN_OR_RETURN(auto rowset_indexes, pick_rowset_indexes(tablet_metadata, calc_score, has_dels));
     input_rowsets.reserve(rowset_indexes.size());
     for (auto rowset_index : rowset_indexes) {
-        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, tablet_metadata, rowset_index));
+        input_rowsets.emplace_back(std::make_shared<Rowset>(_tablet_mgr, tablet_metadata, rowset_index, -1 /*unused*/));
     }
     VLOG(2) << strings::Substitute(
             "lake PrimaryCompactionPolicy pick_rowsets tabletid:$0 version:$1 inputs:$2", tablet_metadata->id(),
@@ -155,6 +155,26 @@ int64_t PrimaryCompactionPolicy::_get_data_size(const std::shared_ptr<const Tabl
         size += rowset.data_size();
     }
     return size;
+}
+
+StatusOr<std::vector<PersistentIndexSstablePB>> PrimaryCompactionPolicy::pick_ssts() {
+    std::vector<PersistentIndexSstablePB> ssts;
+    if (!_tablet_metadata->enable_persistent_index()) {
+        return ssts;
+    }
+    auto index_type = _tablet_metadata->persistent_index_type();
+    if (index_type != PersistentIndexTypePB::CLOUD_NATIVE) {
+        return ssts;
+    }
+
+    auto sst_meta = _tablet_metadata->pindex_sstable_meta();
+    if (sst_meta.sstables_size() == 0) {
+        return ssts;
+    }
+    for (int i = 0; i < sst_meta.sstables_size() && i < config::lake_compaction_max_sstable_versions; ++i) {
+        ssts.emplace_back(sst_meta.sstables(i));
+    }
+    return ssts;
 }
 
 } // namespace starrocks::lake

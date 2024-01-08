@@ -14,6 +14,7 @@
 
 #include "meta_file.h"
 
+#include <algorithm>
 #include <memory>
 
 #include "fs/fs_util.h"
@@ -142,6 +143,36 @@ void MetaFileBuilder::apply_opcompaction(const TxnLogPB_OpCompaction& op_compact
         rowset->set_max_compact_input_rowset_id(max_compact_input_rowset_id);
         rowset->set_version(version);
         _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + rowset->segments_size());
+    }
+
+    if (op_compaction.has_output_sstable()) {
+        auto pindex_sst_meta = _tablet_meta->mutable_pindex_sstable_meta();
+        int64_t max_version = 0;
+        for (auto& input_sst : op_compaction.input_sstables()) {
+            auto it = pindex_sst_meta->mutable_sstables()->begin();
+            max_version = std::max(input_sst.version(), max_version);
+            while (it != pindex_sst_meta->mutable_sstables()->end()) {
+                if (it->version() == input_sst.version()) {
+                    pindex_sst_meta->mutable_sstables()->erase(it);
+                    break;
+                } else {
+                    ++it;
+                }
+            }
+        }
+        PersistentIndexSstableMetaPB new_sst_meta;
+        auto sst_meta = new_sst_meta.add_sstables();
+        auto* sst = sst_meta->add_sstables();
+        sst->CopyFrom(op_compaction.output_sstable());
+        sst_meta->set_version(max_version);
+        auto it = pindex_sst_meta->mutable_sstables()->begin();
+        while (it != pindex_sst_meta->mutable_sstables()->end()) {
+            sst_meta = new_sst_meta.add_sstables();
+            sst_meta->CopyFrom(*it);
+            ++it;
+        }
+        _tablet_meta->mutable_pindex_sstable_meta()->CopyFrom(new_sst_meta);
+        LOG(INFO) << _tablet_meta->pindex_sstable_meta().DebugString();
     }
 
     VLOG(2) << fmt::format("MetaFileBuilder apply_opcompaction, id:{} input range:{} delvec del cnt:{} output:{}",
@@ -279,14 +310,6 @@ void MetaFileBuilder::_fill_delvec_cache() {
         if (delvec_iter != _segmentid_to_delvec.end() && delvec_iter->second != nullptr) {
             _tablet.tablet_mgr()->metacache()->cache_delvec(cache_item.first, delvec_iter->second);
         }
-    }
-}
-
-void MetaFileBuilder::handle_failure() {
-    if (is_primary_key(_tablet_meta.get()) && !_has_finalized && _has_update_index) {
-        // if we meet failures and have not finalized yet, have to clear primary index cache,
-        // then we can retry again.
-        _update_mgr->remove_primary_index_cache(_tablet_meta->id());
     }
 }
 

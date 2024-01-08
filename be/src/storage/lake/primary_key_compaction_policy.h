@@ -133,6 +133,8 @@ public:
     static StatusOr<std::unique_ptr<PKSizeTieredLevel>> pick_max_level(bool calc_score,
                                                                        std::vector<RowsetCandidate>& rowsets);
 
+    StatusOr<std::vector<PersistentIndexSstablePB>> pick_ssts() override;
+
 private:
     int64_t _get_data_size(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata);
 };

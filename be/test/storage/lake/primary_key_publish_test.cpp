@@ -653,7 +653,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
-    if (GetParam().enable_persistent_index) {
+    if (GetParam().enable_persistent_index && GetParam().index_type == PersistentIndexTypePB::LOCAL) {
         check_local_persistent_index_meta(tablet_id, version);
     }
 }
