@@ -21,6 +21,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IndexDef;
@@ -1027,7 +1028,8 @@ public class MaterializedViewAnalyzer {
             }
             Preconditions.checkState(table instanceof MaterializedView);
             MaterializedView mv = (MaterializedView) table;
-            if (!mv.isActive()) {
+            String reason = mv.getInactiveReason();
+            if (!mv.isActive() && (reason == null || reason.equalsIgnoreCase(AlterJobMgr.MANUAL_INACTIVE_MV_REASON))) {
                 throw new SemanticException(
                         "Refresh materialized view failed because " + mv.getName() + " is not active. " +
                                 "You can try to active it with ALTER MATERIALIZED VIEW " + mv.getName() + " ACTIVE.");

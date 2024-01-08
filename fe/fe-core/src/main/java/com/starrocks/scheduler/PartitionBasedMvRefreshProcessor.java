@@ -426,7 +426,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             currentTablePartitionInfo.putAll(partitionInfoMap);
 
             // remove partition info of not-exist partition for snapshot table from version map
-            Table snapshotTable = snapshotBaseTables.get(tableId).second;
+            Table snapshotTable = Preconditions.checkNotNull(snapshotBaseTables.get(tableId),
+                    "base table not found: " + tableId).second;
             if (snapshotTable.isOlapOrCloudNativeTable()) {
                 OlapTable snapshotOlapTable = (OlapTable) snapshotTable;
                 currentTablePartitionInfo.keySet().removeIf(partitionName ->
@@ -460,7 +461,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         BaseTableInfo partitionTableInfo = null;
         if (mvContext.hasNextBatchPartition()) {
             Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
-            partitionTableInfo = snapshotBaseTables.get(partitionTableAndColumn.first.getId()).first;
+            partitionTableInfo =
+                    Preconditions.checkNotNull(snapshotBaseTables.get(partitionTableAndColumn.first.getId()),
+                            "base table not found: " + partitionTableAndColumn.first.getId())
+                            .first;
         }
         // update version map of materialized view
         for (Map.Entry<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> tableEntry
@@ -503,6 +507,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throw new DmlException("database " + context.ctx.getDatabase() + " do not exist.");
         }
         materializedView = (MaterializedView) table;
+
+        // try to activate the mv before refresh
+        if (!materializedView.isActive()) {
+            MVActiveChecker.tryToActivate(materializedView);
+            LOG.info("Activated the MV before refreshing: {}", materializedView.getName());
+        }
         if (!materializedView.isActive()) {
             String errorMsg = String.format("Materialized view: %s/%d is not active",
                     materializedView.getName(), mvId);
