@@ -89,7 +89,7 @@ public class DefaultWorkerProviderTest {
         id2ComputeNode.get(deadCNId).setAlive(false);
         new MockUp<SimpleScheduler>() {
             @Mock
-            public boolean isInBlacklist(long backendId) {
+            public boolean isInBlocklist(long backendId) {
                 return backendId == inBlacklistBEId || backendId == inBlacklistCNId;
             }
         };
@@ -161,7 +161,7 @@ public class DefaultWorkerProviderTest {
             id2ComputeNode.get(deadCNId).setAlive(false);
             new MockUp<SimpleScheduler>() {
                 @Mock
-                public boolean isInBlacklist(long backendId) {
+                public boolean isInBlocklist(long backendId) {
                     return backendId == inBlacklistBEId || backendId == inBlacklistCNId;
                 }
             };
