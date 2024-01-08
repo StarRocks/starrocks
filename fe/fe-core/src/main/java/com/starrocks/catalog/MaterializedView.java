@@ -36,6 +36,7 @@ import com.starrocks.backup.Status;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
@@ -921,7 +922,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
             if (table == null) {
                 res = false;
-                setInactiveAndReason("base-table dropped: " + baseTableInfo.getTableName());
+                setInactiveAndReason(
+                        MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
                 continue;
             } else if (table.isMaterializedView()) {
                 MaterializedView baseMV = (MaterializedView) table;

@@ -68,6 +68,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidOlapTableStateException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
@@ -2826,7 +2827,8 @@ public class OlapTable extends Table {
         // in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
-        LocalMetastore.inactiveRelatedMaterializedView(db, this, "base-table dropped: " + getName());
+        LocalMetastore.inactiveRelatedMaterializedView(db, this,
+                MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()));
     }
 
     public void onErase(boolean isReplay) {
