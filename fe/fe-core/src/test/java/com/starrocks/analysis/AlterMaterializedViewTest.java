@@ -311,6 +311,7 @@ public class AlterMaterializedViewTest {
         MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
         checker.setStop();
 
+        String mvName = "mv_active";
         String baseTableName = "base_tbl_active";
         String createTableSql =
                 "create table " + baseTableName + " ( k1 int, k2 int) properties('replication_num'='1')";
@@ -338,7 +339,13 @@ public class AlterMaterializedViewTest {
             Assert.assertFalse(mv.isActive());
         }
 
+        // foreground active
+        starRocksAssert.refreshMV("refresh materialized view " + mvName);
+        Assert.assertTrue(mv.isActive());
+
         // clear the grace period and active it again
+        starRocksAssert.dropTable(baseTableName);
+        starRocksAssert.withTable(createTableSql);
         checker.runForTest(true);
         Assert.assertTrue(mv.isActive());
 
