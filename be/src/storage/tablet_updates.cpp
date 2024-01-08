@@ -75,8 +75,6 @@ std::string EditVersion::to_string() const {
     }
 }
 
-using IteratorList = TabletUpdates::IteratorList;
-
 TabletUpdates::TabletUpdates(Tablet& tablet) : _tablet(tablet), _unused_rowsets(UINT64_MAX) {}
 
 TabletUpdates::~TabletUpdates() {
@@ -386,7 +384,16 @@ size_t TabletUpdates::data_size() const {
         LOG_EVERY_N(WARNING, 10) << "data_size() some rowset stats not found tablet=" << _tablet.tablet_id()
                                  << " rowset=" << err_rowsets;
     }
-    return total_size;
+    int64_t pindex_size = 0;
+    int64_t col_size = 0;
+    Status st = _get_extra_file_size(&pindex_size, &col_size);
+    if (!st.ok()) {
+        // Ignore error status here, because we don't to break up tablet report because of get extra file size failure.
+        // So just print error log and keep going.
+        LOG(ERROR) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
+                   << " status: " << st;
+    }
+    return total_size + pindex_size + col_size;
 }
 
 size_t TabletUpdates::num_rows() const {
@@ -442,7 +449,16 @@ std::pair<int64_t, int64_t> TabletUpdates::num_rows_and_data_size() const {
         LOG_EVERY_N(WARNING, 10) << "data_size() some rowset stats not found tablet=" << _tablet.tablet_id()
                                  << " rowset=" << err_rowsets;
     }
-    return {total_row, total_size};
+    int64_t pindex_size = 0;
+    int64_t col_size = 0;
+    Status st = _get_extra_file_size(&pindex_size, &col_size);
+    if (!st.ok()) {
+        // Ignore error status here, because we don't to break up tablet report because of get extra file size failure.
+        // So just print error log and keep going.
+        LOG(ERROR) << "get extra file size in primary table fail, tablet_id: " << _tablet.tablet_id()
+                   << " status: " << st;
+    }
+    return {total_row, total_size + pindex_size + col_size};
 }
 
 size_t TabletUpdates::num_rowsets() const {
@@ -1967,6 +1983,15 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     // `enable_persistent_index` of tablet maybe change by alter, we should get `enable_persistent_index` from index to
     // avoid inconsistency between persistent index file and PersistentIndexMeta
     bool enable_persistent_index = index.enable_persistent_index();
+    // release or remove index entry when function end
+    DeferOp index_defer([&]() {
+        index.reset_cancel_major_compaction();
+        if (enable_persistent_index ^ _tablet.get_enable_persistent_index()) {
+            manager->index_cache().remove(index_entry);
+        } else {
+            manager->index_cache().release(index_entry);
+        }
+    });
     if (enable_persistent_index && !rebuild_index) {
         st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, &index_meta);
         if (!st.ok() && !st.is_not_found()) {
@@ -1978,17 +2003,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
     }
 
     manager->index_cache().update_object_size(index_entry, index.memory_usage());
-    // release or remove index entry when function end
-    DeferOp index_defer([&]() {
-        index.reset_cancel_major_compaction();
-        if (enable_persistent_index ^ _tablet.get_enable_persistent_index()) {
-            manager->index_cache().remove(index_entry);
-        } else {
-            manager->index_cache().release(index_entry);
-        }
-    });
     if (!st.ok()) {
-        manager->index_cache().remove(index_entry);
         _compaction_state.reset();
         std::string msg = strings::Substitute("_apply_compaction_commit error: load primary index failed: $0 $1",
                                               st.to_string(), debug_string());
@@ -2076,7 +2091,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
             total_deletes += tmp_deletes.size();
         }
         delvecs.emplace_back(rssid, dv);
-        _compaction_state->release_segments(rowset, i);
+        _compaction_state->release_segment(i);
     }
     // release memory
     _compaction_state.reset();
@@ -2856,7 +2871,7 @@ size_t TabletUpdates::_get_rowset_num_deletes(const Rowset& rowset) {
     return num_dels;
 }
 
-Status TabletUpdates::_get_extra_file_size(int64_t* pindex_size, int64_t* col_size) {
+Status TabletUpdates::_get_extra_file_size(int64_t* pindex_size, int64_t* col_size) const {
     const std::string tablet_path = _tablet.schema_hash_path();
     try {
         for (const auto& entry : std::filesystem::directory_iterator(tablet_path)) {

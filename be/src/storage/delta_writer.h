@@ -200,7 +200,7 @@ private:
     // tablet schema owned by delta writer, all write will use this tablet schema
     // it's build from unsafe_tablet_schema_ref（stored when create tablet） and OlapTableSchema
     // every request will have it's own tablet schema so simple schema change can work
-    TabletSchemaSPtr _tablet_schema;
+    TabletSchemaCSPtr _tablet_schema;
 
     std::unique_ptr<FlushToken> _flush_token;
     std::unique_ptr<ReplicateToken> _replicate_token;

@@ -53,6 +53,8 @@ Status GroupReader::prepare() {
     _init_read_chunk();
     _range = SparseRange<uint64_t>(_row_group_first_row, _row_group_first_row + _row_group_metadata->num_rows);
     if (config::parquet_page_index_enable) {
+        SCOPED_RAW_TIMER(&_param.stats->page_index_ns);
+        _param.stats->rows_before_page_index += _row_group_metadata->num_rows;
         auto page_index_reader = std::make_unique<PageIndexReader>(this, _param.file, _column_readers,
                                                                    _row_group_metadata, _param.min_max_conjunct_ctxs);
         ASSIGN_OR_RETURN(bool flag, page_index_reader->generate_read_range(_range));
@@ -181,6 +183,7 @@ Status GroupReader::_do_get_next(ChunkPtr* chunk, size_t* row_count) {
 }
 
 Status GroupReader::_do_get_next_new(ChunkPtr* chunk, size_t* row_count) {
+    SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
     if (_is_group_filtered) {
         *row_count = 0;
         return Status::EndOfFile("");
@@ -341,7 +344,10 @@ void GroupReader::close() {
     } else {
         _param.lazy_column_coalesce_counter->fetch_sub(1, std::memory_order_relaxed);
     }
-    _param.stats->group_min_round_cost = _column_read_order_ctx->get_min_round_cost();
+    _param.stats->group_min_round_cost = _param.stats->group_min_round_cost == 0
+                                                 ? _column_read_order_ctx->get_min_round_cost()
+                                                 : std::min(_param.stats->group_min_round_cost,
+                                                            int64_t(_column_read_order_ctx->get_min_round_cost()));
     _column_readers.clear();
 }
 

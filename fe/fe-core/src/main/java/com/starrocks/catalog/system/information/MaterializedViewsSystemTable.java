@@ -51,6 +51,7 @@ public class MaterializedViewsSystemTable {
                         .column("TABLE_ROWS", ScalarType.createVarchar(50))
                         .column("MATERIALIZED_VIEW_DEFINITION",
                                 ScalarType.createVarchar(MAX_FIELD_VARCHAR_LENGTH))
+                        .column("EXTRA_MESSAGE", ScalarType.createVarchar(1024))
                         .build(), TSchemaTableType.SCH_MATERIALIZED_VIEWS);
     }
 }

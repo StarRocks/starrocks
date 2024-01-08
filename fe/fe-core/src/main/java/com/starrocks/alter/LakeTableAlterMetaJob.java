@@ -76,12 +76,12 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
     @SerializedName(value = "watershedTxnId")
     private long watershedTxnId = -1;
 
-    // PartitionId -> indexId -> MaterializedIndex
+    // PhysicalPartitionId -> indexId -> MaterializedIndex
     @SerializedName(value = "partitionIndexMap")
-    private Table<Long, Long, MaterializedIndex> partitionIndexMap = HashBasedTable.create();
+    private Table<Long, Long, MaterializedIndex> physicalPartitionIndexMap = HashBasedTable.create();
 
     @SerializedName(value = "commitVersionMap")
-    // Mapping from partition id to commit version
+    // Mapping from physical partition id to commit version
     private Map<Long, Long> commitVersionMap = new HashMap<>();
 
     public LakeTableAlterMetaJob(long jobId, long dbId, long tableId, String tableName,
@@ -153,8 +153,8 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
         }
         try {
             commitVersionMap.clear();
-            for (long partitionId : partitionIndexMap.rowKeySet()) {
-                Partition partition = table.getPartition(partitionId);
+            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkNotNull(partition, partitionId);
                 long commitVersion = partition.getNextVersion();
                 commitVersionMap.put(partitionId, commitVersion);
@@ -244,8 +244,8 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             throw new AlterCancelException("table does not exist, tableId:" + tableId);
         }
         try {
-            for (long partitionId : partitionIndexMap.rowKeySet()) {
-                Partition partition = table.getPartition(partitionId);
+            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(partition != null, partitionId);
                 long commitVersion = commitVersionMap.get(partitionId);
                 if (commitVersion != partition.getVisibleVersion() + 1) {
@@ -263,9 +263,9 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
 
     boolean publishVersion() {
         try {
-            for (long partitionId : partitionIndexMap.rowKeySet()) {
+            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
-                Map<Long, MaterializedIndex> dirtyIndexMap = partitionIndexMap.row(partitionId);
+                Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
                     Utils.publishVersion(index.getTablets(), watershedTxnId, commitVersion - 1, commitVersion,
                             finishedTimeMs / 1000);
@@ -279,7 +279,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
     }
 
     public void addDirtyPartitionIndex(long partitionId, long indexId, MaterializedIndex index) {
-        partitionIndexMap.put(partitionId, indexId, index);
+        physicalPartitionIndexMap.put(partitionId, indexId, index);
     }
 
     public void updatePartitionTabletMeta(Database db,
@@ -302,7 +302,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
                         MaterializedIndex.IndexExtState.VISIBLE)) {
-                    addDirtyPartitionIndex(partition.getId(), index.getId(), index);
+                    addDirtyPartitionIndex(physicalPartition.getId(), index.getId(), index);
                     int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
                     for (Tablet tablet : index.getTablets()) {
                         Long backendId = Utils.chooseBackend((LakeTablet) tablet);
@@ -366,27 +366,27 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
     }
 
     void updateNextVersion(@NotNull LakeTable table) {
-        for (long partitionId : partitionIndexMap.rowKeySet()) {
-            Partition partition = table.getPartition(partitionId);
+        for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
             Preconditions.checkState(partition.getNextVersion() == commitVersion,
                     "partitionNextVersion=" + partition.getNextVersion() + " commitVersion=" + commitVersion);
             partition.setNextVersion(commitVersion + 1);
             LOG.info("LakeTableAlterMetaJob id: {} update next version of partition: {}, commitVersion: {}",
-                    jobId, partition.getName(), commitVersion);
+                    jobId, partition.getId(), commitVersion);
         }
     }
 
     void updateVisibleVersion(@NotNull LakeTable table) {
-        for (long partitionId : partitionIndexMap.rowKeySet()) {
-            Partition partition = table.getPartition(partitionId);
+        for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
             Preconditions.checkState(partition.getVisibleVersion() == commitVersion - 1,
                     "partitionVisitionVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             partition.updateVisibleVersion(commitVersion);
             LOG.info("partitionVisibleVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             LOG.info("LakeTableAlterMetaJob id: {} update visible version of partition: {}, visible Version: {}",
-                    jobId, partition.getName(), commitVersion);
+                    jobId, partition.getId(), commitVersion);
         }
     }
 
@@ -455,7 +455,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             this.errMsg = other.errMsg;
             this.timeoutMs = other.timeoutMs;
 
-            this.partitionIndexMap = other.partitionIndexMap;
+            this.physicalPartitionIndexMap = other.physicalPartitionIndexMap;
             this.watershedTxnId = other.watershedTxnId;
             this.commitVersionMap = other.commitVersionMap;
         }
@@ -493,7 +493,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
 
     // for test
     public Table<Long, Long, MaterializedIndex> getPartitionIndexMap() {
-        return partitionIndexMap;
+        return physicalPartitionIndexMap;
     }
 
     // for test

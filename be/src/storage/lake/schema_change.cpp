@@ -202,7 +202,7 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
 
     // update new rowset meta
     for (auto& f : writer->files()) {
-        new_rowset_metadata->add_segments(std::move(f));
+        new_rowset_metadata->add_segments(std::move(f.path));
     }
     new_rowset_metadata->set_id(_next_rowset_id);
     new_rowset_metadata->set_num_rows(writer->num_rows());
@@ -285,7 +285,7 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
 
     // update new rowset meta
     for (auto& f : writer->files()) {
-        new_rowset_metadata->add_segments(std::move(f));
+        new_rowset_metadata->add_segments(std::move(f.path));
     }
     new_rowset_metadata->set_id(_next_rowset_id);
     new_rowset_metadata->set_num_rows(writer->num_rows());

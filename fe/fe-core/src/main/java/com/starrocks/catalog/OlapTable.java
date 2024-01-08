@@ -104,6 +104,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -270,26 +271,26 @@ public class OlapTable extends Table {
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
-            PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo) {
+                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo) {
         this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo, null);
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
-            PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo, TableIndexes indexes) {
+                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo, TableIndexes indexes) {
         this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
                 GlobalStateMgr.getCurrentState().getClusterId(), indexes, TableType.OLAP);
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
-            PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
-            int clusterId, TableIndexes indexes) {
+                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
+                     int clusterId, TableIndexes indexes) {
         this(id, tableName, baseSchema, keysType, partitionInfo, defaultDistributionInfo,
                 clusterId, indexes, TableType.OLAP);
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
-            PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
-            int clusterId, TableIndexes indexes, TableType tableType) {
+                     PartitionInfo partitionInfo, DistributionInfo defaultDistributionInfo,
+                     int clusterId, TableIndexes indexes, TableType tableType) {
         super(id, tableName, tableType, baseSchema);
 
         this.clusterId = clusterId;
@@ -518,28 +519,28 @@ public class OlapTable extends Table {
     }
 
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
-            int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType) {
+                             int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType) {
         setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
                 null, null);
     }
 
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
-            int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
-            OriginStatement origStmt) {
+                             int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
+                             OriginStatement origStmt) {
         setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
                 origStmt, null);
     }
 
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
-            int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
-            OriginStatement origStmt, List<Integer> sortColumns) {
+                             int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
+                             OriginStatement origStmt, List<Integer> sortColumns) {
         setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
                 origStmt, sortColumns, null);
     }
 
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
-            int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
-            OriginStatement origStmt, List<Integer> sortColumns, List<Integer> sortColumnUniqueIds) {
+                             int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
+                             OriginStatement origStmt, List<Integer> sortColumns, List<Integer> sortColumnUniqueIds) {
         // Nullable when meta comes from schema change log replay.
         // The replay log only save the index id, so we need to get name by id.
         if (indexName == null) {
@@ -797,8 +798,8 @@ public class OlapTable extends Table {
     }
 
     public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
-            int replicationNum, long version, int schemaHash,
-            long partitionId, long shardGroupId) {
+                                          int replicationNum, long version, int schemaHash,
+                                          long partitionId, long shardGroupId) {
         for (int i = 0; i < tabletNum; i++) {
             long newTabletId = globalStateMgr.getNextId();
             LocalTablet newTablet = new LocalTablet(newTabletId);
@@ -971,7 +972,6 @@ public class OlapTable extends Table {
 
         }
     }
-
 
     /**
      * @return : table's partition name to range partition key mapping.
@@ -1925,8 +1925,8 @@ public class OlapTable extends Table {
     }
 
     protected OlapTable selectiveCopyInternal(OlapTable copied, Collection<String> reservedPartitions,
-            boolean resetState,
-            IndexExtState extState) {
+                                              boolean resetState,
+                                              IndexExtState extState) {
         if (resetState) {
             // remove shadow index from copied table
             List<MaterializedIndex> shadowIndex = copied.getPhysicalPartitions().stream().findFirst()
@@ -2497,7 +2497,7 @@ public class OlapTable extends Table {
      *
      */
     public void replaceTempPartitions(List<String> partitionNames, List<String> tempPartitionNames,
-            boolean strictRange, boolean useTempPartitionName) throws DdlException {
+                                      boolean strictRange, boolean useTempPartitionName) throws DdlException {
         if (partitionInfo instanceof RangePartitionInfo) {
             RangePartitionInfo rangeInfo = (RangePartitionInfo) partitionInfo;
 
@@ -2760,7 +2760,6 @@ public class OlapTable extends Table {
         tableProperty.buildUseFastSchemaEvolution();
     }
 
-
     @Override
     public void onReload() {
         analyzePartitionInfo();
@@ -2960,14 +2959,6 @@ public class OlapTable extends Table {
         return true;
     }
 
-    public boolean supportColumnWithRow() {
-        // must have noKey column
-        List<Column> noKeys = getColumns().stream().filter(column -> !column.isKey()).collect(Collectors.toList());
-        // not support complex type
-        boolean hasComplexType = getColumns().stream().anyMatch(col -> col.getType().isComplexType());
-        return noKeys.size() > 0 && !hasComplexType;
-    }
-
     public boolean hasRowStorageType() {
         return TStorageType.ROW == getStorageType() || TStorageType.COLUMN_WITH_ROW == getStorageType();
     }
@@ -3039,7 +3030,11 @@ public class OlapTable extends Table {
         }
 
         PeriodDuration cacheDuration = tableProperty.getDataCachePartitionDuration();
-        if (cacheDuration != null && getPartitionInfo().isRangePartition()) {
+        if (cacheDuration == null) {
+            return true;
+        }
+
+        if (getPartitionInfo().isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) getPartitionInfo();
             Range<PartitionKey> partitionRange = rangePartitionInfo.getRange(partition.getId());
             Range<PartitionKey> dataCacheRange;
@@ -3051,16 +3046,52 @@ public class OlapTable extends Table {
                     dataCacheRange = Range.openClosed(PartitionKey.ofDateTime(lower), PartitionKey.ofDateTime(upper));
                     return partitionRange.isConnected(dataCacheRange);
                 } catch (Exception e) {
-                    LOG.warn("Table name: {}, datacache.partiton_duration: {}, Failed to compare with partition range. " +
-                            "Error: {}.", super.name, cacheDuration.toString(), e.getMessage());
+                    LOG.warn("Table name: {}, Partition name: {}, Datacache.partiton_duration: {}, Failed to check the " +
+                            " validaity of range partition. Error: {}.", super.name, partition.getName(),
+                            cacheDuration.toString(), e.getMessage());
                     return false;
                 }
-            } else {
-                // If the table was not partitioned by DATE/DATETIME, ignore the property "datacache.partition_duration" and
-                // enable data cache by default.
+            }
+        } else if (getPartitionInfo().isListPartition()) {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) getPartitionInfo();
+            List<Column> columns = listPartitionInfo.getPartitionColumns();
+            int dateTypeColumnIdx = ListUtils.indexOf(columns, column -> column.getPrimitiveType().isDateType());
+
+            if (dateTypeColumnIdx == -1) {
+                // List partition has no date type column.
                 return true;
             }
+
+            LocalDateTime upper = LocalDateTime.now();
+            LocalDateTime lower = upper.minus(cacheDuration);
+            List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partition.getId());
+            List<String> values = listPartitionInfo.getIdToValues().get(partition.getId());
+            try {
+                if (multiValues != null) {
+                    for (List<String> multivalue : multiValues) {
+                        LocalDateTime partitionTime = DateUtils.parseDatTimeString(multivalue.get(dateTypeColumnIdx));
+                        if (lower.isBefore(partitionTime) && (partitionTime.isBefore(upper) || partitionTime.isEqual(upper))) {
+                            return true;
+                        }
+                    }
+                }
+                if (values != null) {
+                    for (String value : values) {
+                        LocalDateTime partitionTime = DateUtils.parseDatTimeString(value);
+                        if (lower.isBefore(partitionTime) && (partitionTime.isBefore(upper) || partitionTime.isEqual(upper))) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            } catch (Exception e) {
+                LOG.warn("Table name: {}, Partition name: {}, Datacache.partiton_duration: {}, Failed to check the " +
+                        "validaity of list partition. Error: {}.", super.name, partition.getName(),
+                        cacheDuration.toString(), e.getMessage());
+                return false;
+            }
         }
+
         return true;
     }
     // ------ for lake table and lake materialized view end ------

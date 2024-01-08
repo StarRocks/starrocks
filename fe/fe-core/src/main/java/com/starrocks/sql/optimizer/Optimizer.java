@@ -37,6 +37,7 @@ import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRul
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
+import com.starrocks.sql.optimizer.rule.transformation.ConvertToEqualForNullRule;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
@@ -137,11 +138,14 @@ public class Optimizer {
                                   ColumnRefFactory columnRefFactory) {
         prepare(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
 
-        if (optimizerConfig.isRuleBased()) {
-            return optimizeByRule(logicOperatorTree, requiredProperty, requiredColumns);
-        } else {
-            return optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
-        }
+        OptExpression result = optimizerConfig.isRuleBased() ?
+                optimizeByRule(logicOperatorTree, requiredProperty, requiredColumns) :
+                optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
+
+        // clear caches in OptimizerContext
+        context.clear();
+
+        return result;
     }
 
     public void setQueryTables(Set<OlapTable> queryTables) {
@@ -271,6 +275,9 @@ public class Optimizer {
         // prepare related mvs if needed
         new MvRewritePreprocessor(connectContext, columnRefFactory,
                 context, logicOperatorTree, requiredColumns).prepare(logicOperatorTree);
+        if (context.getCandidateMvs() != null && !context.getCandidateMvs().isEmpty()) {
+            context.setQueryMaterializationContext(new QueryMaterializationContext());
+        }
     }
 
     private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {
@@ -311,6 +318,7 @@ public class Optimizer {
     private OptExpression logicalRuleRewrite(
             OptExpression tree,
             TaskContext rootTaskContext) {
+        rootTaskContext.getOptimizerContext().setShortCircuit(tree.getShortCircuit());
         tree = OptExpression.createForShortCircuit(new LogicalTreeAnchorOperator(), tree, tree.getShortCircuit());
         // for short circuit
         Optional<OptExpression> result = ruleRewriteForShortCircuit(tree, rootTaskContext);
@@ -351,6 +359,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new SkewJoinOptimizeRule());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new ConvertToEqualForNullRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         deriveLogicalProperty(tree);
@@ -475,6 +484,7 @@ public class Optimizer {
         if (isShortCircuit) {
             deriveLogicalProperty(tree);
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SHORT_CIRCUIT_SET);
+            ruleRewriteOnlyOnce(tree, rootTaskContext, new MergeProjectWithChildRule());
             OptExpression result = tree.getInputs().get(0);
             result.setShortCircuit(true);
             return Optional.of(result);
@@ -504,10 +514,6 @@ public class Optimizer {
         } catch (Exception e) {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE",
                     "single table view based mv rule rewrite failed.", e);
-        } finally {
-            // reset logical tree with view
-            // no need to try view base rewrite in cost phase again
-            context.setLogicalTreeWithView(null);
         }
     }
 
