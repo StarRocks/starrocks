@@ -960,15 +960,15 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
-    def wait_async_materialized_view_finish(self, mv_name, min_success_num = 1, check_count=60):
+    def wait_async_materialized_view_finish(self, mv_name, check_count=60):
         """
         wait async materialized view job finish and return status
         """
         status = ""
         show_sql = "SHOW MATERIALIZED VIEWS WHERE name='" + mv_name + "'"
         count = 0
-        success_num = 0
-        while count < check_count and success_num < min_success_num:
+        num = 0
+        while count < check_count:
             res = self.execute_sql(show_sql, True)
             status = res["result"][-1][12]
             if status != "SUCCESS":
@@ -976,7 +976,7 @@ class StarrocksSQLApiLib(object):
             else:
                 # sleep another 5s to avoid FE's async action.
                 time.sleep(1)
-                success_num += 1
+                break
             count += 1
         tools.assert_equal("SUCCESS", status, "wait aysnc materialized view finish error")
 

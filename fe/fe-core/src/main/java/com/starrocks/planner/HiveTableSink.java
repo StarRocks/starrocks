@@ -24,6 +24,7 @@ import com.starrocks.connector.hive.HiveWriteUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TCloudConfiguration;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDataSink;
@@ -59,7 +60,11 @@ public class HiveTableSink extends DataSink {
             throw new StarRocksConnectorException("Writing to hive table in [%s] format is not supported.", format.name());
         }
         this.fileFormat = hiveTable.getStorageFormat().name().toLowerCase();
-        this.compressionType = hiveTable.getProperties().getOrDefault("compression_codec", "gzip");
+        this.compressionType = sessionVariable.getConnectorSinkCompressionCodec();
+        if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionType)) {
+            throw new SemanticException("compression type " + compressionType + " is not supported. " +
+                    "Use any of (uncompressed, gzip, brotli, zstd, lz4).");
+        }
         String catalogName = hiveTable.getCatalogName();
         Connector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
         Preconditions.checkState(connector != null,

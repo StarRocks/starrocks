@@ -49,6 +49,7 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String PARTITION_START = "PARTITION_START";
     public static final String PARTITION_END = "PARTITION_END";
     public static final String FORCE = "FORCE";
+    public static final String START_TASK_RUN_ID = "START_TASK_RUN_ID";
     public static final String IS_TEST = "__IS_TEST__";
 
     private long taskId;
@@ -71,11 +72,11 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private ExecuteOption executeOption;
 
-    private final String uuid;
+    private final String taskRunId;
 
     TaskRun() {
         future = new CompletableFuture<>();
-        uuid = UUIDUtil.genUUID().toString();
+        taskRunId = UUIDUtil.genUUID().toString();
     }
 
     public long getTaskId() {
@@ -134,6 +135,10 @@ public class TaskRun implements Comparable<TaskRun> {
         this.executeOption = executeOption;
     }
 
+    public String getUUID() {
+        return taskRunId;
+    }
+
     public Map<String, String> refreshTaskProperties(ConnectContext ctx) {
         Map<String, String> newProperties = Maps.newHashMap();
         if (task.getSource() != Constants.TaskSource.MV) {
@@ -173,9 +178,14 @@ public class TaskRun implements Comparable<TaskRun> {
 
     public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
-        Preconditions.checkNotNull(status.getDefinition(), "The definition of task run should not null");
-        taskRunContext.setDefinition(status.getDefinition());
+
+        // Definition will cause a lot of repeats and cost a lot of metadata memory resources, so
+        // ignore it here, and we can get the `definition` from the materialized view's definition too.
+        // Use task's definition rather than status's to avoid costing too much metadata memory.
+        Preconditions.checkNotNull(task.getDefinition(), "The definition of task run should not null");
+        taskRunContext.setDefinition(task.getDefinition());
         taskRunContext.setPostRun(status.getPostRun());
+
         runCtx = new ConnectContext(null);
         if (parentRunCtx != null) {
             runCtx.setParentConnectContext(parentRunCtx);
@@ -210,6 +220,8 @@ public class TaskRun implements Comparable<TaskRun> {
                 }
             }
         }
+        // If this is the first task run of the job, use its uuid as the job id.
+        taskRunContext.setTaskRunId(taskRunId);
         taskRunContext.setCtx(runCtx);
         taskRunContext.setRemoteIp(runCtx.getMysqlChannel().getRemoteHostPortString());
         taskRunContext.setProperties(taskRunContextProperties);
@@ -219,6 +231,7 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setExecuteOption(executeOption);
 
         processor.processTaskRun(taskRunContext);
+
         QueryState queryState = runCtx.getState();
         LOG.info("[QueryId:{}] finished to execute task run, task_id:{}, query_state:{}",
                 runCtx.getQueryId(), taskId, queryState);
@@ -289,9 +302,10 @@ public class TaskRun implements Comparable<TaskRun> {
         }
         status.setUser(task.getCreateUser());
         status.setDbName(task.getDbName());
-        status.setDefinition(task.getDefinition());
         status.setPostRun(task.getPostRun());
         status.setExpireTime(System.currentTimeMillis() + Config.task_runs_ttl_second * 1000L);
+        status.getMvTaskRunExtraMessage().setExecuteOption(this.executeOption);
+
         this.status = status;
         return status;
     }
@@ -313,16 +327,17 @@ public class TaskRun implements Comparable<TaskRun> {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        if (status.getDefinition() == null) {
+        if (task.getDefinition() == null) {
             return false;
         }
         TaskRun taskRun = (TaskRun) o;
-        return status.getDefinition().equals(taskRun.getStatus().getDefinition());
+        return this.taskId == taskRun.getTaskId() &&
+                this.task.getDefinition().equals(taskRun.getTask().getDefinition());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(status);
+        return Objects.hash(task);
     }
 
     @Override
@@ -330,7 +345,7 @@ public class TaskRun implements Comparable<TaskRun> {
         return "TaskRun{" +
                 "taskId=" + taskId +
                 ", type=" + type +
-                ", uuid=" + uuid +
+                ", uuid=" + taskRunId +
                 ", task_state=" + status.getState() +
                 ", properties=" + properties +
                 ", extra_message =" + status.getExtraMessage() +

@@ -1147,6 +1147,13 @@ public class Config extends ConfigBase {
     public static boolean enable_backup_materialized_view = true;
 
     /**
+     * Whether to display all task runs or only the newest task run in ShowMaterializedViews command to be
+     * compatible with old version.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_show_materialized_views_include_all_task_runs = true;
+
+    /**
      * The smaller schedule time is, the higher frequency TaskManager schedule which means
      * materialized view need to schedule to refresh.
      * <p>
@@ -2717,6 +2724,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long mv_plan_cache_max_size = 1000;
+
+    @ConfField(mutable = true, comment = "Max materialized view rewrite cache size during one query's lifecycle " +
+            "so can avoid repeating compute to reduce optimizer time in materialized view rewrite, " +
+            "but may occupy some extra FE's memory. It's well-done when there are many relative " +
+            "materialized views(>10) or query is complex(multi table joins).")
+    public static long mv_query_context_cache_max_size = 1000;
 
     /**
      * Checking the connectivity of port opened by FE,

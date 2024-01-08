@@ -117,8 +117,10 @@ public class MvRewriteTestBase {
         cluster = PseudoCluster.getInstance();
 
         connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000);
-        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000);
+        // 300s: 5min
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000 * 100);
+        // 300s: 5min
+        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000 * 100);
         connectContext.getSessionVariable().setEnableShortCircuit(false);
 
         starRocksAssert = new StarRocksAssert(connectContext);

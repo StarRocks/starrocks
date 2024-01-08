@@ -29,6 +29,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Queue;
@@ -42,7 +43,8 @@ public class TaskRunManager {
 
     // taskId -> pending TaskRun Queue, for each Task only support 1 running taskRun currently,
     // so the map value is priority queue need to be sorted by priority from large to small
-    private final Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = Maps.newConcurrentMap();
+    private final Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap =
+            Collections.synchronizedMap(Maps.newLinkedHashMap());
 
     // taskId -> running TaskRun, for each Task only support 1 running taskRun currently,
     // so the map value is not queue
@@ -137,7 +139,7 @@ public class TaskRunManager {
                     // and queryId will be changed.
                     if (!oldTaskRun.equals(taskRun)) {
                         LOG.warn("failed to remove TaskRun definition is [{}]",
-                                taskRun.getStatus().getDefinition());
+                                taskRun);
                         continue;
                     }
 

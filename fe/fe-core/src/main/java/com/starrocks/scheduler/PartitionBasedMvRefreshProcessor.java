@@ -103,6 +103,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ListPartitionDiff;
 import com.starrocks.sql.common.PartitionDiffer;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -422,17 +423,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             StatementPlanner.unLock(locker, dbs);
         }
 
-        // add trace info if needed
-        Tracers.log(Tracers.Module.MV,
-                args -> "[TRACE QUERY] MV: " + materializedView.getName() +
-                        "\nMV PartitionsToRefresh: " + String.join(",", (Set<String>) args[0]) +
-                        "\nBase PartitionsToScan:" + refTablePartitionNames +
-                        "\nInsert Plan:\n" +
-                        ((ExecPlan) args[1]).getExplainString(StatementBase.ExplainLevel.VERBOSE),
-                mvToRefreshedPartitions, execPlan);
+        QueryDebugOptions debugOptions = ctx.getSessionVariable().getQueryDebugOptions();
         // log the final mv refresh plan for each refresh for better trace and debug
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("MV Refresh Final Plan" +
+        if (LOG.isDebugEnabled() || debugOptions.isEnableQueryTraceLog()) {
+            LOG.info("MV Refresh Final Plan" +
                             "\nMV: {}" +
                             "\nMV PartitionsToRefresh: {}" +
                             "\nBase PartitionsToScan: {}" +
@@ -592,6 +586,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         newProperties.put(TaskRun.PARTITION_START, mvContext.getNextPartitionStart());
         newProperties.put(TaskRun.PARTITION_END, mvContext.getNextPartitionEnd());
+        if (mvContext.getStatus() != null) {
+            newProperties.put(TaskRun.START_TASK_RUN_ID, mvContext.getStatus().getStartTaskRunId());
+        }
+        updateTaskRunStatus(status -> {
+            MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
+            extraMessage.setNextPartitionStart(mvContext.getNextPartitionStart());
+            extraMessage.setNextPartitionEnd(mvContext.getNextPartitionEnd());
+        });
 
         // Partition refreshing task run should have the HIGHEST priority, and be scheduled before other tasks
         // Otherwise this round of partition refreshing would be staved and never got finished
@@ -887,6 +889,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // should keep up with the base tables, or it will return outdated result.
         oldTransactionVisibleWaitTimeout = context.ctx.getSessionVariable().getTransactionVisibleWaitTimeout();
         context.ctx.getSessionVariable().setTransactionVisibleWaitTimeout(Long.MAX_VALUE / 1000);
+
+        // Initialize status's job id which is used to track a batch of task runs.
+        String jobId = properties.containsKey(TaskRun.START_TASK_RUN_ID) ?
+                properties.get(TaskRun.START_TASK_RUN_ID) : context.getTaskRunId();
+        if (context.status != null) {
+            context.status.setStartTaskRunId(jobId);
+        }
 
         mvContext = new MvTaskRunContext(context);
     }
