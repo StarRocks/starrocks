@@ -516,6 +516,8 @@ public class OffHeapColumnVector {
                 appendBinary(o.getBytes());
                 break;
             case STRING:
+                appendString(o.getString(typeValue));
+                break;
             case DATE:
                 appendDate(o.getDate());
                 break;
