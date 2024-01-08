@@ -346,6 +346,13 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     for (auto& i : scan_nodes) {
         auto* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges = request.scan_ranges_of_node(scan_node->id());
+<<<<<<< HEAD
+=======
+        const auto& scan_ranges_per_driver_seq = request.per_driver_seq_scan_ranges_of_node(scan_node->id());
+
+        // num_lanes ranges in [1,16] in default 4.
+        _fragment_ctx->cache_param().num_lanes = std::min(16, std::max(1, config::query_cache_num_lanes_per_driver));
+>>>>>>> 9f9ba1842b ([Enhancement] Add be config item: query_cache_num_lanes_per_driver (#38635))
 
         PerDriverScanRangesMap& scan_ranges_per_driver = _fragment_ctx->scan_ranges_per_driver();
         if (scan_ranges.size() >= dop && _fragment_ctx->enable_cache()) {
