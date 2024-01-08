@@ -199,8 +199,6 @@ public:
     // For benchmark, we need to separate io from parsing.
     Status init_buff() { return _fill_buffer(); }
 
-    size_t buff_capacity() const;
-
 protected:
     CSVParseOptions _parse_options;
     size_t _row_delimiter_length;

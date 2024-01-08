@@ -593,8 +593,4 @@ void CSVReader::split_record(const Record& record, Fields* columns) const {
     }
 }
 
-size_t CSVReader::buff_capacity() const {
-    return _buff.capacity();
-}
-
 } // namespace starrocks

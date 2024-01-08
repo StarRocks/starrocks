@@ -29,23 +29,6 @@ namespace pipeline {
 
 struct ConnectorScanOperatorIOTasksMemLimiter;
 
-struct ConnectorScanOperatorMemShareArbitrator {
-    static constexpr double kChunkBufferMemRatio = 0.5;
-    int64_t query_mem_limit = 0;
-    int64_t scan_mem_limit = 0;
-    std::atomic<int64_t> total_chunk_source_mem_bytes = 0;
-
-    ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit)
-            : query_mem_limit(query_mem_limit), scan_mem_limit(query_mem_limit) {}
-
-    int64_t set_scan_mem_ratio(double mem_ratio) {
-        scan_mem_limit = query_mem_limit * mem_ratio;
-        return scan_mem_limit;
-    }
-
-    int64_t update_chunk_source_mem_bytes(int64_t old_value, int64_t new_value);
-};
-
 class ConnectorScanOperatorFactory : public ScanOperatorFactory {
 public:
     using ActiveInputKey = std::pair<int32_t, int32_t>;
@@ -66,9 +49,8 @@ public:
 
     TPartitionType::type partition_type() const override { return TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED; }
     const std::vector<ExprContext*>& partition_exprs() const override;
-    void set_chunk_source_mem_bytes(int64_t mem_bytes);
-    void set_scan_mem_limit(int64_t scan_mem_limit);
-    void set_mem_share_arb(ConnectorScanOperatorMemShareArbitrator* arb);
+    void set_estimated_mem_usage_per_chunk_source(int64_t mem_usage);
+    void set_scan_mem_limit(int64_t mem_limit);
 
 private:
     // TODO: refactor the OlapScanContext, move them into the context
@@ -76,8 +58,7 @@ private:
     ActiveInputSet _active_inputs;
 
 public:
-    ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter = nullptr;
-    ConnectorScanOperatorMemShareArbitrator* _mem_share_arb = nullptr;
+    ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter;
 };
 
 struct ConnectorScanOperatorAdaptiveProcessor;
@@ -113,7 +94,6 @@ public:
     bool is_running_all_io_tasks() const override;
 
 public:
-    int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);
     mutable ConnectorScanOperatorAdaptiveProcessor* _adaptive_processor;
     bool _enable_adaptive_io_tasks = true;
 };
@@ -131,11 +111,9 @@ public:
 
     bool reach_limit() override { return _limit != -1 && _reach_limit.load(); }
 
-    uint64_t avg_row_mem_bytes() const;
-
 protected:
-    virtual bool _reach_eof() const { return _limit != -1 && _chunk_rows_read >= _limit; }
-    Status _open_data_source(RuntimeState* state, bool* mem_alloc_failed);
+    virtual bool _reach_eof() const { return _limit != -1 && _rows_read >= _limit; }
+    Status _open_data_source(RuntimeState* state);
 
     connector::DataSourcePtr _data_source;
     [[maybe_unused]] ConnectorScanNode* _scan_node;
@@ -159,10 +137,7 @@ private:
     ChunkPipelineAccumulator _ck_acc;
     bool _opened = false;
     bool _closed = false;
-    uint64_t _chunk_rows_read = 0;
-    uint64_t _chunk_mem_bytes = 0;
-    int64_t _request_mem_tracker_bytes = 0;
-    int64_t _mem_alloc_failed_count = 0;
+    uint64_t _rows_read = 0;
 };
 
 } // namespace pipeline
