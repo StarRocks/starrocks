@@ -46,7 +46,7 @@ T 代表传输（Transfer），用于指定需要传输的文件名。
 08/05/2014,9:10,BRONX,10469,40.8733019,-73.8536375,"(40.8733019, -73.8536375)",
 ```
 
-由于 DATETIME 的格式为 `YYYY-MM-DD HH:MI:SS`，因此需要转换数据集中的数据，将两列数据合并，并以空格分割。则 `columns:` 应为：
+由于 StarRocks 中的 DATETIME 格式为 `YYYY-MM-DD HH:MI:SS`，因此需要转换数据集中的数据，将两列数据合并，并以空格分隔。则此处 `columns:` 参数应为：
 
 ```bash
 -H "columns:tmp_CRASH_DATE, tmp_CRASH_TIME, CRASH_DATE=str_to_date(concat_ws(' ', tmp_CRASH_DATE, tmp_CRASH_TIME), '%m/%d/%Y %H:%i')
@@ -54,8 +54,8 @@ T 代表传输（Transfer），用于指定需要传输的文件名。
 
 通过设置以上参数可实现以下目标：
 
-1. 将 CSV 文件的第一列内容分配给 `tmp_CRASH_DATE`；
-2. 将 CSV 文件的第二列内容分配给 `tmp_CRASH_TIME`；
-3. 通过 `concat_ws()` 函数使用空格将 `tmp_CRASH_DATE` 和 `tmp_CRASH_TIME` 连接在一起；
+1. 将 CSV 文件的第一列内容分配给 `tmp_CRASH_DATE` 列；
+2. 将 CSV 文件的第二列内容分配给 `tmp_CRASH_TIME` 列；
+3. 通过 `concat_ws()` 函数，使用空格将 `tmp_CRASH_DATE` 列和 `tmp_CRASH_TIME` 列连接在一起；
 4. 通过 `str_to_date()` 函数使用连接后的字符串生成 DATETIME 数据；
 5. 将生成的 DATETIME 数据存储在列 `CRASH_DATE` 中。
