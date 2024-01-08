@@ -473,7 +473,6 @@ public class StmtExecutor {
                         PrepareStmt prepareStmt = prepareStmtContext.getStmt();
                         parsedStmt = prepareStmt.assignValues(executeStmt.getParamsExpr());
                         parsedStmt.setOrigStmt(originStmt);
-                        redirectStatus = parsedStmt.getRedirectStatus();
                         try {
                             execPlan = StatementPlanner.plan(parsedStmt, context);
                         } catch (SemanticException e) {

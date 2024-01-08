@@ -551,6 +551,16 @@ public class ConnectProcessor {
         }
     }
 
+    private void handleStmtReset() {
+        ctx.getState().setOk();
+    }
+
+    private void handleStmtClose() {
+        int stmtId = packetBuf.getInt();
+        ctx.removePreparedStmt(String.valueOf(stmtId));
+        ctx.getState().setStateType(QueryState.MysqlStateType.NOOP);
+    }
+
     private static boolean isNull(byte[] bitmap, int position) {
         return (bitmap[position / 8] & (0xff & (1 << (position & 7)))) != 0;
     }
@@ -577,8 +587,15 @@ public class ConnectProcessor {
                 handleQuit();
                 break;
             case COM_QUERY:
+            case COM_STMT_PREPARE:
                 handleQuery();
                 ctx.setStartTime();
+                break;
+            case COM_STMT_RESET:
+                handleStmtReset();
+                break;
+            case COM_STMT_CLOSE:
+                handleStmtClose();
                 break;
             case COM_FIELD_LIST:
                 handleFieldList();

@@ -20,6 +20,10 @@ insert into prepare_stmt values (1, 2, 3, 4, '2', true, '2021-02-01', '1', '2021
 -- result:
 []
 -- !result
+insert into prepare_stmt values (3, 2, 3, 4, '2', true, '2021-02-01', '1', '2021-02-01 00:00:12', '1', 2);
+-- result:
+[]
+-- !result
 PREPARE stmt1 FROM select * from prepare_stmt where k1 = ? and k2 = ?;
 -- result:
 []
@@ -37,6 +41,10 @@ set @i = 1;
 []
 -- !result
 set @i2 = 2;
+-- result:
+[]
+-- !result
+set @i3 = 3;
 -- result:
 []
 -- !result

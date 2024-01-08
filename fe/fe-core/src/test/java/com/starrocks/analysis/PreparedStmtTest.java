@@ -96,7 +96,7 @@ public class PreparedStmtTest{
     }
 
     @Test
-    public void testPrepareStatementParser() throws Exception {
+    public void testPrepareStatementParser() {
         String sql = "PREPARE stmt1 FROM insert into demo.prepare_stmt values (?, ?, ?, ?);";
         assertThrows("Invalid statement type for prepared statement", ValidateException.class,
                 () -> UtFrameUtils.parseStmtWithNewParser(sql, ctx));
