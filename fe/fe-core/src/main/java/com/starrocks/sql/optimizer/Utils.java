@@ -684,9 +684,6 @@ public class Utils {
         // 1. Must do one stage aggregate If the child contains limit,
         //    the aggregation must be a single node to ensure correctness.
         //    eg. select count(*) from (select * table limit 2) t
-        if (childOp.hasLimit()) {
-            return false;
-        }
 
         // 2. check if must generate multi stage aggregate.
         if (mustGenerateMultiStageAggregate(inputOp, childOp)) {
