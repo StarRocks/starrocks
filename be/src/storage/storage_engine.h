@@ -73,6 +73,7 @@ class DataDir;
 class EngineTask;
 class MemTableFlushExecutor;
 class Tablet;
+class ReplicationTxnManager;
 class UpdateManager;
 class CompactionManager;
 class PublishVersionManager;
@@ -214,6 +215,8 @@ public:
 
     TxnManager* txn_manager() { return _txn_manager.get(); }
 
+    ReplicationTxnManager* replication_txn_manager() { return _replication_txn_manager.get(); }
+
     CompactionManager* compaction_manager() { return _compaction_manager.get(); }
 
     PublishVersionManager* publish_version_manager() { return _publish_version_manager.get(); }
@@ -311,9 +314,6 @@ private:
 
     void _clean_unused_rowset_metas();
 
-    // remove pk index meta first, and if success then remove dir.
-    Status _clear_persistent_index(DataDir* data_dir, int64_t tablet_id, const std::string& dir);
-
     Status _do_sweep(const std::string& scan_root, const time_t& local_tm_now, const int32_t expire);
 
     Status _get_remote_next_increment_id_interval(const TAllocateAutoIncrementIdParam& request,
@@ -342,8 +342,8 @@ private:
     void* _pk_index_major_compaction_thread_callback(void* arg);
 
 #ifdef USE_STAROS
-    // local pk index of SHARD_DATA gc function
-    void* _local_pk_index_shard_data_gc_thread_callback(void* arg);
+    // local pk index of SHARED_DATA gc/evict function
+    void* _local_pk_index_shared_data_gc_evict_thread_callback(void* arg);
 #endif
 
     bool _check_and_run_manual_compaction_task();
@@ -364,6 +364,8 @@ private:
     void* _path_gc_thread_callback(void* arg);
 
     void* _path_scan_thread_callback(void* arg);
+
+    void* _clear_expired_replication_snapshots_callback(void* arg);
 
     void* _tablet_checkpoint_callback(void* arg);
 
@@ -414,8 +416,8 @@ private:
     std::vector<std::thread> _manual_compaction_threads;
     // thread to run pk index major compaction
     std::thread _pk_index_major_compaction_thread;
-    // thread to gc local pk index in sharded_data
-    std::thread _local_pk_index_shard_data_gc_thread;
+    // thread to gc/evict local pk index in sharded_data
+    std::thread _local_pk_index_shared_data_gc_evict_thread;
 
     // threads to clean all file descriptor not actively in use
     std::thread _fd_cache_clean_thread;
@@ -425,6 +427,8 @@ private:
     std::vector<std::thread> _path_scan_threads;
     // threads to run tablet checkpoint
     std::vector<std::thread> _tablet_checkpoint_threads;
+
+    std::thread _clear_expired_replcation_snapshots_thread;
 
     std::thread _compaction_checker_thread;
     std::mutex _checker_mutex;
@@ -446,6 +450,8 @@ private:
 
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TxnManager> _txn_manager;
+
+    std::unique_ptr<ReplicationTxnManager> _replication_txn_manager;
 
     std::unique_ptr<RowsetIdGenerator> _rowset_id_generator;
 

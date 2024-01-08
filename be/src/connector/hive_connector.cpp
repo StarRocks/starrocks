@@ -237,6 +237,26 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
         }
     }
 
+    if (_scan_range.__isset.delete_column_slot_ids && !_scan_range.delete_column_slot_ids.empty()) {
+        std::map<SlotId, SlotDescriptor*> id_to_slots;
+        for (const auto& slot : _materialize_slots) {
+            id_to_slots.emplace(slot->id(), slot);
+        }
+
+        int32_t delete_column_index = slots.size();
+        auto* delete_column_tuple_desc =
+                state->desc_tbl().get_tuple_descriptor(_provider->_hdfs_scan_node.mor_tuple_id);
+
+        std::vector<SlotDescriptor*> equality_delete_slots;
+        for (SlotDescriptor* d_slot_desc : delete_column_tuple_desc->slots()) {
+            _equality_delete_slots.emplace_back(d_slot_desc);
+            if (id_to_slots.find(d_slot_desc->id()) == id_to_slots.end()) {
+                _materialize_slots.push_back(d_slot_desc);
+                _materialize_index_in_chunk.push_back(delete_column_index++);
+            }
+        }
+    }
+
     if (hdfs_scan_node.__isset.hive_column_names) {
         _hive_column_names = hdfs_scan_node.hive_column_names;
     }
@@ -609,6 +629,15 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.open_limit = nullptr;
+
+    if (!_equality_delete_slots.empty()) {
+        MORParams& mor_params = scanner_params.mor_params;
+        mor_params.tuple_desc = _tuple_desc;
+        mor_params.equality_slots = _equality_delete_slots;
+        mor_params.mor_tuple_id = _provider->_hdfs_scan_node.mor_tuple_id;
+        mor_params.runtime_profile = _runtime_profile;
+    }
+
     for (const auto& delete_file : scan_range.delete_files) {
         scanner_params.deletes.emplace_back(&delete_file);
     }
@@ -662,7 +691,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
 
         // After catching the AWS 404 file not found error and returning it to the FE,
         // the FE will refresh the file information of table and re-execute the SQL operation.
-        if (st.is_io_error() && st.message().starts_with("code=404")) {
+        if (st.is_io_error() && st.message().to_string().find("404") != std::string::npos) {
             st = Status::RemoteFileNotFound(st.message());
         }
         return st.clone_and_append(msg);

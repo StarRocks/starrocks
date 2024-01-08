@@ -106,6 +106,12 @@
     },
     {
       "type": "category",
+      "label": "Project Help",
+      "link": {"type": "doc", "id": "project_help/project_help"},
+      "items": ["project_help/slack"]
+    },
+    {
+      "type": "category",
       "label": "Deployment",
       "link": {"type": "doc", "id": "deployment/deployment_overview"},
       "items": [
@@ -370,7 +376,15 @@
           "link": {"type": "doc", "id": "cover_pages/performance_tuning"},
           "items": [
             "administration/Query_planning",
-            "administration/query_profile",
+            {
+              "type": "category",
+              "label": "Query Profile",
+              "link": {"type": "doc", "id": "administration/query_profile_overview"},
+              "items": [
+                "administration/query_profile_text_based_analysis",
+                "administration/query_profile_details"
+              ]
+            },
             "administration/Profiling"
           ]
         }
@@ -695,7 +709,8 @@
         "data_source/datalake_faq",
         "faq/Sql_faq",
         "faq/Dump_query",
-        "faq/Others"
+        "faq/Others",
+        "faq/FAQ_On_Github"
       ]
     },
     {
@@ -819,6 +834,12 @@
       "label": "快速开始",
       "link": {"type": "doc", "id": "quick_start/quick_start"},
       "items": ["quick_start/deploy_with_docker", "quick_start/Create_table", "quick_start/Import_and_query"]
+    },
+    {
+      "type": "category",
+      "label": " 项目协助",
+      "link": {"type": "doc", "id": "project_help/project_help"},
+      "items": ["project_help/slack"]
     },
     {
       "type": "category",
@@ -1075,7 +1096,15 @@
           "link": {"type": "doc", "id": "cover_pages/performance_tuning"},
           "items": [
             "administration/Query_planning",
-            "administration/query_profile",
+            {
+              "type": "category",
+              "label": "Query Profile",
+              "link": {"type": "doc", "id": "administration/query_profile_overview"},
+              "items": [
+                "administration/query_profile_text_based_analysis",
+                "administration/query_profile_details"
+              ]
+            },
             "administration/Profiling"
           ]
         }
@@ -1400,7 +1429,8 @@
         "data_source/datalake_faq",
         "faq/Sql_faq",
         "faq/Dump_query",
-        "faq/Others"
+        "faq/Others",
+        "faq/FAQ_On_Github"
       ]
     },
     {

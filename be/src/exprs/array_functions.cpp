@@ -160,6 +160,11 @@ private:
             return (*null_map)[idx] != 0;
         };
 
+        auto* targets_col = &targets;
+        if constexpr (ConstTarget) {
+            targets_col = down_cast<const ConstColumn*>(&targets)->data_column().get();
+        }
+
         uint32_t result_offset = 0;
         for (size_t i = 0; i < num_array; i++) {
             size_t offset = offsets_ptr[i];
@@ -210,7 +215,11 @@ private:
                 if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
                               std::is_same_v<StructColumn, ElementColumn> ||
                               std::is_same_v<JsonColumn, ElementColumn>) {
-                    found = elements.equals(offset + j, targets, i);
+                    if constexpr (ConstTarget) {
+                        found = elements.equals(offset + j, *targets_col, 0);
+                    } else {
+                        found = elements.equals(offset + j, targets, i);
+                    }
                 } else if constexpr (ConstTarget) {
                     [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
                     auto targets_ptr = (const ValueType*)(targets.raw_data());
@@ -491,6 +500,11 @@ private:
             return (*null_map)[idx] != 0;
         };
 
+        auto* targets_col = &targets;
+        if constexpr (ConstTarget) {
+            targets_col = down_cast<const ConstColumn*>(&targets)->data_column().get();
+        }
+
         for (size_t i = 0; i < num_array; i++) {
             size_t offset = offsets_ptr[i];
             size_t array_size = offsets_ptr[i + 1] - offsets_ptr[i];
@@ -522,7 +536,11 @@ private:
                 if constexpr (std::is_same_v<ArrayColumn, ElementColumn> || std::is_same_v<MapColumn, ElementColumn> ||
                               std::is_same_v<StructColumn, ElementColumn> ||
                               std::is_same_v<JsonColumn, ElementColumn>) {
-                    found = elements.equals(offset + j, targets, i);
+                    if (ConstTarget) {
+                        found = elements.equals(offset + j, *targets_col, 0);
+                    } else {
+                        found = elements.equals(offset + j, targets, i);
+                    }
                 } else if constexpr (ConstTarget) {
                     [[maybe_unused]] auto elements_ptr = (const ValueType*)(elements.raw_data());
                     auto targets_ptr = (const ValueType*)(targets.raw_data());

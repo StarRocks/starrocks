@@ -55,6 +55,7 @@ import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LogUtil;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
@@ -218,6 +219,7 @@ public class UtFrameUtils {
         }
 
         Config.plugin_dir = starRocksHome + "/plugins";
+        Config.max_create_table_timeout_second = 180;
         // start fe in "STARROCKS_HOME/fe/mocked/"
         MockedFrontend frontend = MockedFrontend.getInstance();
         Map<String, String> feConfMap = Maps.newHashMap();
@@ -902,6 +904,7 @@ public class UtFrameUtils {
         ctx.setCurrentUserIdentity(userIdentity);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
         ctx.setQualifiedUser(userIdentity.getUser());
+        ctx.setQueryId(UUIDUtil.genUUID());
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         globalStateMgr.initAuth(true);
         ctx.setGlobalStateMgr(globalStateMgr);

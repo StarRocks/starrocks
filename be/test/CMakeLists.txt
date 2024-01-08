@@ -1,4 +1,5 @@
 set(EXEC_FILES
+        ./agent/agent_task_test.cpp
         ./agent/master_info_test.cpp
         ./column/array_column_test.cpp
         ./column/binary_column_test.cpp
@@ -217,6 +218,7 @@ set(EXEC_FILES
         ./storage/lake/primary_key_publish_test.cpp
         ./storage/lake/meta_file_test.cpp
         ./storage/lake/metacache_test.cpp
+        ./storage/lake/replication_txn_manager_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp
@@ -270,6 +272,7 @@ set(EXEC_FILES
         ./storage/projection_iterator_test.cpp
         ./storage/push_handler_test.cpp
         ./storage/range_test.cpp
+        ./storage/replication_txn_manager_test.cpp
         ./storage/row_source_mask_test.cpp
         ./storage/union_iterator_test.cpp
         ./storage/unique_iterator_test.cpp
@@ -384,6 +387,7 @@ set(EXEC_FILES
         ./gutil/cpu_test.cc
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
+        ./storage/lake/local_pk_index_manager_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")

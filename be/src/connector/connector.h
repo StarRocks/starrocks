@@ -80,7 +80,7 @@ protected:
     std::vector<ExprContext*> _conjunct_ctxs;
     const RuntimeFilterProbeCollector* _runtime_filters = nullptr;
     RuntimeProfile* _runtime_profile = nullptr;
-    const TupleDescriptor* _tuple_desc = nullptr;
+    TupleDescriptor* _tuple_desc = nullptr;
     void _init_chunk(ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
 };
 

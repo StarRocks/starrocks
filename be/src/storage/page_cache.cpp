@@ -39,6 +39,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 #include "util/defer_op.h"
+#include "util/lru_cache.h"
 #include "util/metrics.h"
 #include "util/starrocks_metrics.h"
 
@@ -81,7 +82,7 @@ static void init_metrics() {
 }
 
 StoragePageCache::StoragePageCache(MemTracker* mem_tracker, size_t capacity)
-        : _mem_tracker(mem_tracker), _cache(new_lru_cache(capacity)) {
+        : _mem_tracker(mem_tracker), _cache(new_lru_cache(capacity, ChargeMode::MEMSIZE)) {
     init_metrics();
 }
 
@@ -123,8 +124,10 @@ bool StoragePageCache::lookup(const CacheKey& key, PageCacheHandle* handle) {
 }
 
 void StoragePageCache::insert(const CacheKey& key, const Slice& data, PageCacheHandle* handle, bool in_memory) {
+    // mem size should equals to data size when running UT
+    int64_t mem_size = data.size;
 #ifndef BE_TEST
-    int64_t mem_size = malloc_usable_size(data.data);
+    mem_size = malloc_usable_size(data.data);
     tls_thread_status.mem_release(mem_size);
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
     tls_thread_status.mem_consume(mem_size);
@@ -136,8 +139,9 @@ void StoragePageCache::insert(const CacheKey& key, const Slice& data, PageCacheH
     if (in_memory) {
         priority = CachePriority::DURABLE;
     }
-
-    auto* lru_handle = _cache->insert(key.encode(), data.data, data.size, deleter, priority);
+    // Use mem size managed by memory allocator as this record charge size. At the same time, we should record this record size
+    // for data fetching when lookup.
+    auto* lru_handle = _cache->insert(key.encode(), data.data, mem_size, deleter, priority, data.size);
     *handle = PageCacheHandle(_cache.get(), lru_handle);
 }
 

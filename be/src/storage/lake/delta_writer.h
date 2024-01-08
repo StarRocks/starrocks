@@ -26,6 +26,7 @@ class SlotDescriptor;
 class Chunk;
 class TabletSchema;
 class ThreadPool;
+struct FileInfo;
 } // namespace starrocks
 
 namespace starrocks::lake {
@@ -106,9 +107,9 @@ public:
 
     const int64_t queueing_memtable_num() const;
 
-    // Return the list of files created by this DeltaWriter.
+    // Return the list of file infos created by this DeltaWriter.
     // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.
-    std::vector<std::string> files() const;
+    std::vector<FileInfo> files() const;
 
     // The sum of all segment file sizes, in bytes.
     // NOTE: Do NOT invoke this function after `close()`, otherwise may get unexpected result.

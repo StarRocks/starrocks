@@ -167,8 +167,13 @@ CONF_Int32(sleep_one_second, "1");
 CONF_Int32(sleep_five_seconds, "5");
 
 // The count of thread to compact
-CONF_Int32(compact_threads, "4");
+CONF_mInt32(compact_threads, "4");
 CONF_Int32(compact_thread_pool_queue_size, "100");
+
+// The count of thread to replication
+CONF_Int32(replication_threads, "64");
+CONF_Int32(replication_thread_pool_queue_size, "2048");
+CONF_Int32(clear_expired_replcation_snapshots_interval_seconds, "3600");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -1043,8 +1048,8 @@ CONF_mInt32(pindex_major_compaction_limit_per_disk, "1");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
 
-// control the local persistent index in shared_data gc interval
-CONF_mInt64(pindex_shard_data_gc_interval_seconds, "18000"); // 5 hour
+// control the local persistent index in shared_data gc/evict interval
+CONF_mInt64(pindex_shared_data_gc_evict_interval_seconds, "18000"); // 5 hour
 // enable persistent index compression
 CONF_mBool(enable_pindex_compression, "false");
 
@@ -1130,5 +1135,9 @@ CONF_mInt64(lake_vacuum_min_batch_delete_size, "1000");
 CONF_mInt32(desc_hint_split_range, "10");
 
 CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
+
+// If the local pk index file is older than this threshold
+// it may be evicted if the disk is full
+CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
 } // namespace starrocks::config

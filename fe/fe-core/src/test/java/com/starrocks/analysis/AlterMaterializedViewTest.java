@@ -284,7 +284,6 @@ public class AlterMaterializedViewTest {
         starRocksAssert.dropTable(baseTableName);
         starRocksAssert.withTable(createTableSql);
         Assert.assertFalse(mv.isActive());
-        Thread.sleep(1000);
         starRocksAssert.getCtx().executeSql("refresh materialized view " + mv.getName() + " with sync mode");
         Assert.assertTrue(mv.isActive());
 
@@ -292,6 +291,10 @@ public class AlterMaterializedViewTest {
         mv.setInactiveAndReason(AlterJobMgr.MANUAL_INACTIVE_MV_REASON);
         Assert.assertFalse(mv.isActive());
         checker.runForTest(true);
+        Assert.assertFalse(mv.isActive());
+        Assert.assertEquals(AlterJobMgr.MANUAL_INACTIVE_MV_REASON, mv.getInactiveReason());
+        // manual active
+        starRocksAssert.getCtx().executeSql("refresh materialized view " + mv.getName() + " with sync mode");
         Assert.assertFalse(mv.isActive());
         Assert.assertEquals(AlterJobMgr.MANUAL_INACTIVE_MV_REASON, mv.getInactiveReason());
 

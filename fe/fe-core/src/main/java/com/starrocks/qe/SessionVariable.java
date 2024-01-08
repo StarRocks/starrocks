@@ -389,6 +389,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
     public static final String ENABLE_PARALLEL_MERGE = "enable_parallel_merge";
 
+    public static final String ENABLE_QUERY_QUEUE = "enable_query_queue";
+
     public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
 
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
@@ -422,6 +424,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_ICEBERG_IDENTITY_COLUMN_OPTIMIZE = "enable_iceberg_identity_column_optimize";
     public static final String ENABLE_PIPELINE_LEVEL_SHUFFLE = "enable_pipeline_level_shuffle";
+
+    public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
 
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
@@ -571,6 +575,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_EQ_BASE_TYPE = "cbo_eq_base_type";
 
+    // whether rewrite bitmap_union(to_bitmap(x)) to bitmap_agg(x) directly.
+    public static final String ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG = "enable_rewrite_bitmap_union_to_bitamp_agg";
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1166,6 +1172,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = CONSISTENT_HASH_VIRTUAL_NUMBER, flag = VariableMgr.INVISIBLE)
     private int consistentHashVirtualNodeNum = 128;
 
+    @VarAttr(name = ENABLE_REWRITE_BITMAP_UNION_TO_BITMAP_AGG)
+    private boolean enableRewriteBitmapUnionToBitmapAgg = false;
+
+    public boolean isEnableRewriteBitmapUnionToBitmapAgg() {
+        return enableRewriteBitmapUnionToBitmapAgg;
+    }
+
+    public void setEnableRewriteBitmapUnionToBitmapAgg(boolean enableRewriteBitmapUnionToBitmapAgg) {
+        this.enableRewriteBitmapUnionToBitmapAgg = enableRewriteBitmapUnionToBitmapAgg;
+    }
+
     public void setPartialUpdateMode(String mode) {
         this.partialUpdateMode = mode;
     }
@@ -1452,6 +1469,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_EQ_BASE_TYPE, flag = VariableMgr.INVISIBLE)
     private String cboEqBaseType = SessionVariableConstants.VARCHAR;
 
+
+
+
+    @VarAttr(name = ENABLE_QUERY_QUEUE, flag = VariableMgr.INVISIBLE)
+    private boolean enableQueryQueue = true;
+
+    public boolean isEnableQueryQueue() {
+        return enableQueryQueue;
+    }
+
     public boolean isCboDecimalCastStringStrict() {
         return cboDecimalCastStringStrict;
     }
@@ -1488,6 +1515,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = FOLLOWER_QUERY_FORWARD_MODE, flag = VariableMgr.INVISIBLE | VariableMgr.DISABLE_FORWARD_TO_LEADER)
     private String followerForwardMode = "";
+
+    @VarAttr(name = ENABLE_STRICT_ORDER_BY)
+    private boolean enableStrictOrderBy = true;
 
     public void setFollowerQueryForwardMode(String mode) {
         this.followerForwardMode = mode;
@@ -2808,6 +2838,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setCrossJoinCostPenalty(long crossJoinCostPenalty) {
         this.crossJoinCostPenalty = crossJoinCostPenalty;
+    }
+
+    public boolean isEnableStrictOrderBy() {
+        return enableStrictOrderBy;
+    }
+
+    public void setEnableStrictOrderBy(boolean enableStrictOrderBy) {
+        this.enableStrictOrderBy = enableStrictOrderBy;
     }
 
     // Serialize to thrift object

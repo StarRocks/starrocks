@@ -23,6 +23,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IndexDef;
@@ -1022,7 +1023,7 @@ public class MaterializedViewAnalyzer {
                         mvName.getPos());
             }
             MaterializedView mv = (MaterializedView) table;
-            if (!mv.isActive()) {
+            if (!mv.isActive() && AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(mv.getInactiveReason())) {
                 throw new SemanticException("Refresh materialized view failed because [" + mv.getName() +
                         "] is not active. You can try to active it with ALTER MATERIALIZED VIEW " + mv.getName()
                         + " ACTIVE; ", mvName.getPos());

@@ -104,6 +104,7 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -113,7 +114,6 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -2685,26 +2685,68 @@ public class OlapTable extends Table {
         }
 
         PeriodDuration cacheDuration = tableProperty.getDataCachePartitionDuration();
-        if (cacheDuration != null && getPartitionInfo().isRangePartition()) {
+        if (cacheDuration == null) {
+            return true;
+        }
+
+        if (getPartitionInfo().isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) getPartitionInfo();
             Range<PartitionKey> partitionRange = rangePartitionInfo.getRange(partition.getId());
             Range<PartitionKey> dataCacheRange;
-            if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATETIME)) {
-                LocalDateTime upper = LocalDateTime.now();
-                LocalDateTime lower = upper.minus(cacheDuration);
-                dataCacheRange = Range.openClosed(PartitionKey.ofDateTime(lower), PartitionKey.ofDateTime(upper));
-                return partitionRange.isConnected(dataCacheRange);
-            } else if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATE)) {
-                LocalDate upper = LocalDate.now();
-                LocalDate lower = upper.minus(cacheDuration);
-                dataCacheRange = Range.openClosed(PartitionKey.ofDate(lower), PartitionKey.ofDate(upper));
-                return partitionRange.isConnected(dataCacheRange);
-            } else {
-                // If the table was not partitioned by DATE/DATETIME, ignore the property "datacache.partition_duration" and
-                // enable data cache by default.
+            if (rangePartitionInfo.isPartitionedBy(PrimitiveType.DATETIME) ||
+                    rangePartitionInfo.isPartitionedBy(PrimitiveType.DATE)) {
+                try {
+                    LocalDateTime upper = LocalDateTime.now();
+                    LocalDateTime lower = upper.minus(cacheDuration);
+                    dataCacheRange = Range.openClosed(PartitionKey.ofDateTime(lower), PartitionKey.ofDateTime(upper));
+                    return partitionRange.isConnected(dataCacheRange);
+                } catch (Exception e) {
+                    LOG.warn("Table name: {}, Partition name: {}, Datacache.partiton_duration: {}, Failed to check the " +
+                            " validaity of range partition. Error: {}.", super.name, partition.getName(),
+                            cacheDuration.toString(), e.getMessage());
+                    return false;
+                }
+            }
+        } else if (getPartitionInfo().isListPartition()) {
+            ListPartitionInfo listPartitionInfo = (ListPartitionInfo) getPartitionInfo();
+            List<Column> columns = listPartitionInfo.getPartitionColumns();
+            int dateTypeColumnIdx = ListUtils.indexOf(columns, column -> column.getPrimitiveType().isDateType());
+
+            if (dateTypeColumnIdx == -1) {
+                // List partition has no date type column.
                 return true;
             }
+
+            LocalDateTime upper = LocalDateTime.now();
+            LocalDateTime lower = upper.minus(cacheDuration);
+            List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partition.getId());
+            List<String> values = listPartitionInfo.getIdToValues().get(partition.getId());
+            try {
+                if (multiValues != null) {
+                    for (List<String> multivalue : multiValues) {
+                        LocalDateTime partitionTime = DateUtils.parseDatTimeString(multivalue.get(dateTypeColumnIdx));
+                        if (lower.isBefore(partitionTime) && (partitionTime.isBefore(upper) || partitionTime.isEqual(upper))) {
+                            return true;
+                        }
+                    }
+                }
+                if (values != null) {
+                    for (String value : values) {
+                        LocalDateTime partitionTime = DateUtils.parseDatTimeString(value);
+                        if (lower.isBefore(partitionTime) && (partitionTime.isBefore(upper) || partitionTime.isEqual(upper))) {
+                            return true;
+                        }
+                    }
+                }
+                return false;
+            } catch (Exception e) {
+                LOG.warn("Table name: {}, Partition name: {}, Datacache.partiton_duration: {}, Failed to check the " +
+                        "validaity of list partition. Error: {}.", super.name, partition.getName(),
+                        cacheDuration.toString(), e.getMessage());
+                return false;
+            }
         }
+
         return true;
     }
     // ------ for lake table and lake materialized view end ------

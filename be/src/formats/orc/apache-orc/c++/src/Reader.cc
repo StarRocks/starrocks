@@ -435,6 +435,7 @@ void RowReaderImpl::loadStripeIndex() {
     for (int i = 0; i < currentStripeFooter.streams_size(); ++i) {
         const proto::Stream& pbStream = currentStripeFooter.streams(i);
         uint64_t colId = pbStream.column();
+        // We only need to load active column's RowIndex
         if (selectedColumns[colId] && pbStream.has_kind() &&
             (pbStream.kind() == proto::Stream_Kind_ROW_INDEX ||
              pbStream.kind() == proto::Stream_Kind_BLOOM_FILTER_UTF8)) {
@@ -1016,7 +1017,8 @@ void RowReaderImpl::buildIORanges(std::vector<InputStream::IORange>* io_ranges) 
     for (const proto::Stream& stream : currentStripeFooter.streams()) {
         uint32_t columnId = stream.column();
         uint64_t length = stream.length();
-        if (selectedColumns[columnId] || lazyLoadColumns[columnId]) {
+        // ColumnId = 0 is root column, we always need it
+        if (columnId == 0 || selectedColumns[columnId] || lazyLoadColumns[columnId]) {
             io_ranges->emplace_back(InputStream::IORange{.offset = offset, .size = length});
         }
         offset += length;
@@ -1107,9 +1109,10 @@ void RowReaderImpl::startNextStripe() {
                                                      ? getTimezoneByName(currentStripeFooter.writertimezone())
                                                      : getLocalTimezone();
 
-            StripeStreamsImpl stripeStreams(*this, currentStripe, currentStripeInfo, currentStripeFooter,
-                                            currentStripeInfo.offset(), *contents->stream, writerTimezone,
-                                            readerTimezone);
+            // We need use shared_ptr to hold stripe, otherwise, when LazyColumnReader is created, the life cycle of stripe has ended.
+            std::shared_ptr<StripeStreams> stripeStreams = std::make_shared<StripeStreamsImpl>(
+                    *this, currentStripe, currentStripeInfo, currentStripeFooter, currentStripeInfo.offset(),
+                    *contents->stream, writerTimezone, readerTimezone);
             reader = buildReader(*contents->schema, stripeStreams);
 
             if (sargsApplier) {

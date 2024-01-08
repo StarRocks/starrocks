@@ -630,6 +630,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         return timestampProgress;
     }
 
+    protected abstract String getSourceProgressString();
+
     public double getMaxFilterRatio() {
         return maxFilterRatio;
     }
@@ -1449,6 +1451,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     protected abstract String getStatistic();
 
+
     public List<String> getShowInfo() {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         Table tbl = null;
@@ -1503,6 +1506,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             }
             row.add(Joiner.on(", ").join(errorLogUrls));
             row.add(otherMsg);
+            row.add(getSourceProgressString());
             return row;
         } finally {
             readUnlock();

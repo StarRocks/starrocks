@@ -71,7 +71,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -1217,4 +1216,11 @@ public class OlapScanNode extends ScanNode {
 
         return partitionToTabletMap;
     }
+
+    @Override
+    protected boolean canEliminateNull(SlotDescriptor slot) {
+        return super.canEliminateNull(slot) ||
+                prunedPartitionPredicates.stream().anyMatch(expr -> canEliminateNull(expr, slot));
+    }
+
 }

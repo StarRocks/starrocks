@@ -237,6 +237,8 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TStreamLoadPutResult;
 import com.starrocks.thrift.TTablePrivDesc;
+import com.starrocks.thrift.TTableReplicationRequest;
+import com.starrocks.thrift.TTableReplicationResponse;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletLocation;
@@ -271,11 +273,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.thrift.TStatusCode.NOT_IMPLEMENTED_ERROR;
 import static com.starrocks.thrift.TStatusCode.OK;
 import static com.starrocks.thrift.TStatusCode.RUNTIME_ERROR;
+import static com.starrocks.thrift.TStatusCode.SERVICE_UNAVAILABLE;
 
 // Frontend service used to serve all request for this frontend through
 // thrift protocol
@@ -283,6 +287,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private static final Logger LOG = LogManager.getLogger(LeaderImpl.class);
     private final LeaderImpl leaderImpl;
     private final ExecuteEnv exeEnv;
+    public AtomicLong partitionRequestNum = new AtomicLong(0);
 
     public FrontendServiceImpl(ExecuteEnv exeEnv) {
         leaderImpl = new LeaderImpl();
@@ -1820,14 +1825,26 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         TCreatePartitionResult result;
         try {
+            if (partitionRequestNum.incrementAndGet() >= Config.thrift_server_max_worker_threads / 4) {
+                result = new TCreatePartitionResult();
+                TStatus errorStatus = new TStatus(SERVICE_UNAVAILABLE);
+                errorStatus.setError_msgs(Lists.newArrayList(
+                        String.format("Too many create partition requests, please try again later txn_id=%d",
+                        request.getTxn_id())));
+                result.setStatus(errorStatus);
+                return result;
+            }
+
             result = createPartitionProcess(request);
-        } catch (Throwable t) {
-            LOG.warn(t);
+        } catch (Exception t) {
+            LOG.warn(DebugUtil.getStackTrace(t));
             result = new TCreatePartitionResult();
             TStatus errorStatus = new TStatus(RUNTIME_ERROR);
             errorStatus.setError_msgs(Lists.newArrayList(String.format("txn_id=%d failed. %s",
                     request.getTxn_id(), t.getMessage())));
             result.setStatus(errorStatus);
+        } finally {
+            partitionRequestNum.decrementAndGet();
         }
 
         return result;
@@ -1913,13 +1930,27 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
 
+        db.readLock();
+        try {
+            return buildCreatePartitionResponse(olapTable, partitions, tablets, partitionColNames);
+        } finally {
+            db.readUnlock();
+        }
+    }
+
+    private static TCreatePartitionResult buildCreatePartitionResponse(OlapTable olapTable,
+                                                                       List<TOlapTablePartition> partitions,
+                                                                       List<TTabletLocation> tablets,
+                                                                       List<String> partitionColNames) {
+        TCreatePartitionResult result = new TCreatePartitionResult();
+        TStatus errorStatus = new TStatus(RUNTIME_ERROR);
         for (String partitionName : partitionColNames) {
-            Partition partition = table.getPartition(partitionName);
+            Partition partition = olapTable.getPartition(partitionName);
             TOlapTablePartition tPartition = new TOlapTablePartition();
             tPartition.setId(partition.getId());
             buildPartitionInfo(olapTable, partitions, partition, tPartition);
             // tablet
-            int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), ((OlapTable) table).writeQuorum());
+            int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), olapTable.writeQuorum());
             for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 if (olapTable.isCloudNativeTable()) {
                     for (Tablet tablet : index.getTablets()) {
@@ -2164,5 +2195,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         res.setStatus(tstatus);
 
         return res;
+    }
+
+    @Override
+    public TTableReplicationResponse startTableReplication(TTableReplicationRequest request) throws TException {
+        return leaderImpl.startTableReplication(request);
     }
 }

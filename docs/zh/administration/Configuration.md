@@ -752,6 +752,12 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：是否允许系统自动检查和重新激活异步物化视图。启用此功能后，系统将会自动激活因基表（或视图）Schema Change 或重建而失效（Inactive）的物化视图。请注意，此功能不会激活由用户手动设置为 Inactive 的物化视图。此项功能支持从 v3.1.6 版本开始。
 - 默认值: TRUE
 
+##### default_mv_refresh_immediate
+
+- 含义：创建异步物化视图后，是否立即刷新该物化视图。当设置为 `true` 时，异步物化视图创建后会立即刷新。
+- 默认值：TRUE
+- 引入版本：v3.1.7
+
 ### 配置 FE 静态参数
 
 以下 FE 配置项为静态参数，不支持在线修改，您需要在 `fe.conf` 中修改并重启 FE。
@@ -2019,7 +2025,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### mem_limit
 
-- 含义：BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100GB"）。
+- 含义：BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100G"）。默认硬上限为 BE 所在机器内存的 90%，软上限为 BE 所在机器内存的 80%。如果 BE 为独立部署，则无需配置，如果 BE 与其它占用内存较多的服务混合部署，则需要合理配置。
 - 默认值：90%
 
 #### flush_thread_num_per_store

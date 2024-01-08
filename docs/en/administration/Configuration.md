@@ -835,6 +835,13 @@ The system calculates the number of Compaction tasks based on the number of tabl
 - **Default**: TRUE
 - **Description**: Whether to enable the system to automatically check and re-activate the asynchronous materialized views that are set inactive because their base tables (views) had undergone Schema Change or had been dropped and re-created. Please note that this feature will not re-activate the materialized views that are manually set inactive by users. This item is supported from v3.1.6 onwards.
 
+##### default_mv_refresh_immediate
+
+- **Unit**: -
+- **Default**: TRUE
+- **Description**: Whether to refresh an asynchronous materialized view immediately after creation. When this item is set to `true`, newly created materialized view will be refreshed immediately.
+- **Introduced in**: v3.1.7
+
 ### Configure FE static parameters
 
 This section provides an overview of the static parameters that you can configure in the FE configuration file **fe.conf**. After you reconfigure these parameters for an FE, you must restart the FE for the changes to take effect.
@@ -2123,7 +2130,7 @@ BE static parameters are as follows.
 
 - **Default**: 90%
 - **Unit**: N/A
-- **Description**: BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100GB").
+- **Description**: BE process memory upper limit. You can set it as a percentage ("80%") or a physical limit ("100G"). The default hard limit is 90% of the server's memory size, and the soft limit is 80%. You need to configure this parameter if you want to deploy StarRocks with other memory-intensive services on a same server.
 
 #### flush_thread_num_per_store
 

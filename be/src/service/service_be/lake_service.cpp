@@ -343,9 +343,10 @@ void LakeServiceImpl::abort_txn(::google::protobuf::RpcController* controller,
     auto task = [&]() {
         DeferOp defer([&] { latch.count_down(); });
         auto txn_ids = request->txn_ids().data();
-        auto txn_ids_size = request->txn_ids_size();
+        auto txn_types = request->txn_types_size() > 0 ? request->txn_types().data() : nullptr;
+        auto txn_size = request->txn_ids_size();
         for (auto tablet_id : request->tablet_ids()) {
-            lake::abort_txn(_tablet_mgr, tablet_id, txn_ids, txn_ids_size);
+            lake::abort_txn(_tablet_mgr, tablet_id, txn_ids, txn_types, txn_size);
         }
     };
     auto st = thread_pool->submit_func(task);

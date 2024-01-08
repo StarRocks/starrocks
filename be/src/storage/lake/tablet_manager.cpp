@@ -87,6 +87,10 @@ std::string TabletManager::txn_log_location(int64_t tablet_id, int64_t txn_id) c
     return _location_provider->txn_log_location(tablet_id, txn_id);
 }
 
+std::string TabletManager::txn_slog_location(int64_t tablet_id, int64_t txn_id) const {
+    return _location_provider->txn_slog_location(tablet_id, txn_id);
+}
+
 std::string TabletManager::txn_vlog_location(int64_t tablet_id, int64_t version) const {
     return _location_provider->txn_vlog_location(tablet_id, version);
 }
@@ -317,6 +321,11 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_vlog(const std::string& path, bool fi
     return get_txn_log(path, fill_cache);
 }
 
+StatusOr<TxnLogPtr> TabletManager::get_txn_slog(const std::string& path, bool fill_cache) {
+    TEST_ERROR_POINT("TabletManager::get_txn_slog");
+    return get_txn_log(path, fill_cache);
+}
+
 StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fill_cache) {
     if (auto ptr = _metacache->lookup_txn_log(path); ptr != nullptr) {
         TRACE("got cached txn log");
@@ -334,11 +343,15 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(int64_t tablet_id, int64_t txn_id
     return get_txn_log(txn_log_location(tablet_id, txn_id));
 }
 
+StatusOr<TxnLogPtr> TabletManager::get_txn_slog(int64_t tablet_id, int64_t txn_id) {
+    return get_txn_log(txn_slog_location(tablet_id, txn_id));
+}
+
 StatusOr<TxnLogPtr> TabletManager::get_txn_vlog(int64_t tablet_id, int64_t version) {
     return get_txn_log(txn_vlog_location(tablet_id, version), false);
 }
 
-Status TabletManager::put_txn_log(const TxnLogPtr& log) {
+Status TabletManager::put_txn_log(const TxnLogPtr& log, const std::string& path) {
     if (UNLIKELY(!log->has_tablet_id())) {
         return Status::InvalidArgument("txn log does not have tablet id");
     }
@@ -346,16 +359,19 @@ Status TabletManager::put_txn_log(const TxnLogPtr& log) {
         return Status::InvalidArgument("txn log does not have txn id");
     }
     auto t0 = butil::gettimeofday_us();
-    auto txn_log_path = txn_log_location(log->tablet_id(), log->txn_id());
 
-    ProtobufFile file(txn_log_path);
+    ProtobufFile file(path);
     RETURN_IF_ERROR(file.save(*log));
 
-    _metacache->cache_txn_log(txn_log_path, log);
+    _metacache->cache_txn_log(path, log);
 
     auto t1 = butil::gettimeofday_us();
     g_put_txn_log_latency << (t1 - t0);
     return Status::OK();
+}
+
+Status TabletManager::put_txn_log(const TxnLogPtr& log) {
+    return put_txn_log(log, txn_log_location(log->tablet_id(), log->txn_id()));
 }
 
 Status TabletManager::put_txn_log(const TxnLog& log) {
@@ -407,17 +423,27 @@ StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_
 
 #ifdef USE_STAROS
 bool TabletManager::is_tablet_in_worker(int64_t tablet_id) {
+    bool in_worker = true;
     if (g_worker != nullptr) {
         auto shard_info_or = g_worker->get_shard_info(tablet_id);
         if (absl::IsNotFound(shard_info_or.status())) {
-            return false;
+            in_worker = false;
         }
     }
+    TEST_SYNC_POINT_CALLBACK("is_tablet_in_worker:1", &in_worker);
     // think the tablet is assigned to this worker by default,
     // for we may take action if tablet is not in the worker
-    return true;
+    return in_worker;
 }
 #endif // USE_STAROS
+
+Status TabletManager::put_txn_slog(const TxnLogPtr& log) {
+    return put_txn_log(log, txn_slog_location(log->tablet_id(), log->txn_id()));
+}
+
+Status TabletManager::put_txn_slog(const TxnLogPtr& log, const std::string& path) {
+    return put_txn_log(log, path);
+}
 
 StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema(int64_t tablet_id, int64_t* version_hint) {
     // 1. direct lookup in cache, if there is schema info for the tablet

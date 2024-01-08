@@ -189,7 +189,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f));
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -290,8 +290,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
         new_metadata->set_version(version + 1);
         std::unique_ptr<MetaFileBuilder> builder = std::make_unique<MetaFileBuilder>(tablet, new_metadata);
         // update primary table state, such as primary index
+        std::unique_ptr<std::lock_guard<std::mutex>> lock = nullptr;
         ASSIGN_OR_ABORT(auto index_entry, tablet.update_mgr()->prepare_primary_index(
-                                                  *new_metadata, &tablet, builder.get(), version, version + 1));
+                                                  *new_metadata, &tablet, builder.get(), version, version + 1, lock));
         ASSERT_OK(tablet.update_mgr()->publish_primary_key_tablet(txn_log->op_write(), txn_log->txn_id(), *new_metadata,
                                                                   &tablet, index_entry, builder.get(), version));
         // if builder.finalize fail, remove primary index cache and retry

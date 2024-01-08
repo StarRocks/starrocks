@@ -854,44 +854,49 @@ public class ShowExecutor {
 
     // Show databases statement
     private void handleShowDb() {
-        ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
-        List<List<String>> rows = Lists.newArrayList();
-        List<String> dbNames;
-        String catalogName;
-        if (showDbStmt.getCatalogName() == null) {
-            catalogName = connectContext.getCurrentCatalog();
-        } else {
-            catalogName = showDbStmt.getCatalogName();
-        }
-        dbNames = metadataMgr.listDbNames(catalogName);
+        GlobalStateMgr.getCurrentState().tryLock(true);
+        try {
+            ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
+            List<List<String>> rows = Lists.newArrayList();
+            List<String> dbNames;
+            String catalogName;
+            if (showDbStmt.getCatalogName() == null) {
+                catalogName = connectContext.getCurrentCatalog();
+            } else {
+                catalogName = showDbStmt.getCatalogName();
+            }
+            dbNames = metadataMgr.listDbNames(catalogName);
 
-        PatternMatcher matcher = null;
-        if (showDbStmt.getPattern() != null) {
-            matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(),
-                    CaseSensibility.DATABASE.getCaseSensibility());
-        }
-        Set<String> dbNameSet = Sets.newTreeSet();
-        for (String dbName : dbNames) {
-            // Filter dbname
-            if (matcher != null && !matcher.match(dbName)) {
-                continue;
+            PatternMatcher matcher = null;
+            if (showDbStmt.getPattern() != null) {
+                matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(),
+                        CaseSensibility.DATABASE.getCaseSensibility());
+            }
+            Set<String> dbNameSet = Sets.newTreeSet();
+            for (String dbName : dbNames) {
+                // Filter dbname
+                if (matcher != null && !matcher.match(dbName)) {
+                    continue;
+                }
+
+                try {
+                    Authorizer.checkAnyActionOnOrInDb(connectContext.getCurrentUserIdentity(),
+                            connectContext.getCurrentRoleIds(), catalogName, dbName);
+                } catch (AccessDeniedException e) {
+                    continue;
+                }
+
+                dbNameSet.add(dbName);
             }
 
-            try {
-                Authorizer.checkAnyActionOnOrInDb(connectContext.getCurrentUserIdentity(),
-                        connectContext.getCurrentRoleIds(), catalogName, dbName);
-            } catch (AccessDeniedException e) {
-                continue;
+            for (String dbName : dbNameSet) {
+                rows.add(Lists.newArrayList(dbName));
             }
 
-            dbNameSet.add(dbName);
+            resultSet = new ShowResultSet(showDbStmt.getMetaData(), rows);
+        } finally {
+            GlobalStateMgr.getCurrentState().unlock();
         }
-
-        for (String dbName : dbNameSet) {
-            rows.add(Lists.newArrayList(dbName));
-        }
-
-        resultSet = new ShowResultSet(showDbStmt.getMetaData(), rows);
     }
 
     // Show table statement.
@@ -914,36 +919,8 @@ public class ShowExecutor {
         Map<String, String> tableMap = Maps.newTreeMap();
         MetaUtils.checkDbNullAndReport(db, showTableStmt.getDb());
 
-        if (CatalogMgr.isInternalCatalog(catalogName)) {
-            db.readLock();
-            try {
-                for (Table tbl : db.getTables()) {
-                    if (matcher != null && !matcher.match(tbl.getName())) {
-                        continue;
-                    }
-
-                    try {
-                        if (tbl.isView()) {
-                            Authorizer.checkAnyActionOnView(
-                                    connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
-                                    new TableName(db.getFullName(), tbl.getName()));
-                        } else if (tbl.isMaterializedView()) {
-                            Authorizer.checkAnyActionOnMaterializedView(connectContext.getCurrentUserIdentity(),
-                                    connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), tbl.getName()));
-                        } else {
-                            Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
-                                    connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), tbl.getName()));
-                        }
-                    } catch (AccessDeniedException e) {
-                        continue;
-                    }
-
-                    tableMap.put(tbl.getName(), tbl.getMysqlType());
-                }
-            } finally {
-                db.readUnlock();
-            }
-        } else {
+        db.readLock();
+        try {
             List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
 
             for (String tableName : tableNames) {
@@ -956,14 +933,26 @@ public class ShowExecutor {
                     continue;
                 }
                 try {
-                    Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
-                            connectContext.getCurrentRoleIds(), new TableName(catalogName, dbName, tableName));
+                    if (table.isView()) {
+                        Authorizer.checkAnyActionOnView(
+                                connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                                new TableName(db.getFullName(), table.getName()));
+                    } else if (table.isMaterializedView()) {
+                        Authorizer.checkAnyActionOnMaterializedView(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), table.getName()));
+                    } else {
+                        Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(),
+                                new TableName(catalogName, db.getFullName(), table.getName()));
+                    }
                 } catch (AccessDeniedException e) {
                     continue;
                 }
 
                 tableMap.put(tableName, table.getMysqlType());
             }
+        } finally {
+            db.readUnlock();
         }
 
         for (Map.Entry<String, String> entry : tableMap.entrySet()) {

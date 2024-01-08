@@ -472,6 +472,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (table == null) {
                 LOG.warn("table {} do not exist when refreshing materialized view:{}",
                         baseTableInfo.getTableInfoStr(), materializedView.getName());
+                materializedView.setInactiveAndReason(String.format("base-table dropped: %s",
+                        baseTableInfo.getTableName()));
                 throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
             }
 
@@ -611,7 +613,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             currentTablePartitionInfo.putAll(partitionInfoMap);
 
             // remove partition info of not-exist partition for snapshot table from version map
-            Table snapshotTable = snapshotBaseTables.get(tableId).second;
+            Table snapshotTable = Preconditions.checkNotNull(snapshotBaseTables.get(tableId),
+                    "base table not found: " + tableId).second;
             if (snapshotTable.isOlapOrCloudNativeTable()) {
                 OlapTable snapshotOlapTable = (OlapTable) snapshotTable;
                 currentTablePartitionInfo.keySet().removeIf(partitionName ->
@@ -636,7 +639,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         BaseTableInfo partitionTableInfo = null;
         if (mvContext.hasNextBatchPartition()) {
             Pair<Table, Column> partitionTableAndColumn = getRefBaseTableAndPartitionColumn(snapshotBaseTables);
-            partitionTableInfo = snapshotBaseTables.get(partitionTableAndColumn.first.getId()).first;
+            partitionTableInfo =
+                    Preconditions.checkNotNull(snapshotBaseTables.get(partitionTableAndColumn.first.getId()),
+                            "base table not found: " + partitionTableAndColumn.first.getId())
+                            .first;
         }
         // update version map of materialized view
         for (Map.Entry<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> tableEntry
@@ -688,8 +694,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             LOG.info("Activated the MV before refreshing: {}", materializedView.getName());
         }
         if (!materializedView.isActive()) {
-            String errorMsg = String.format("Materialized view: %s, id: %d is not active, " +
-                    "skip sync partition and data with base tables", materializedView.getName(), mvId);
+            String errorMsg = String.format("Materialized view: %s/%d is not active due to %s.",
+                    materializedView.getName(), mvId, materializedView.getInactiveReason());
             LOG.warn(errorMsg);
             throw new DmlException(errorMsg);
         }
