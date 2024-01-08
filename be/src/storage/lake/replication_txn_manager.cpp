@@ -280,11 +280,11 @@ StatusOr<TxnLogPtr> ReplicationTxnManager::replicate_remote_snapshot(const TRepl
             RETURN_IF_ERROR(convert_rowset_meta(rowset_meta, request.transaction_id, op_write, &filename_map));
         }
 
-        for (const auto& pair : snapshot_meta.delete_vectors()) {
+        for (const auto& [segment_id, delvec] : snapshot_meta.delete_vectors()) {
             auto* delvecs = txn_log->mutable_op_replication()->mutable_delvecs();
-            auto& delvec_data = (*delvecs)[pair.first];
-            delvec_data.set_version(pair.second.version());
-            pair.second.save_to(delvec_data.mutable_data());
+            auto& delvec_data = (*delvecs)[segment_id];
+            delvec_data.set_version(delvec.version());
+            delvec.save_to(delvec_data.mutable_data());
         }
 
         if (snapshot_meta.tablet_meta().has_schema()) {
@@ -350,9 +350,11 @@ Status ReplicationTxnManager::convert_rowset_meta(const RowsetMeta& rowset_meta,
                                                   std::unordered_map<std::string, std::string>* filename_map) {
     // Convert rowset metadata
     auto* rowset_metadata = op_write->mutable_rowset();
+    rowset_metadata->set_id(rowset_meta.get_rowset_seg_id());
     rowset_metadata->set_overlapped(rowset_meta.is_segments_overlapping());
     rowset_metadata->set_num_rows(rowset_meta.num_rows());
     rowset_metadata->set_data_size(rowset_meta.data_disk_size());
+    rowset_metadata->set_num_dels(rowset_meta.get_num_delete_files());
     if (rowset_meta.has_delete_predicate()) {
         rowset_metadata->mutable_delete_predicate()->CopyFrom(rowset_meta.delete_predicate());
     }

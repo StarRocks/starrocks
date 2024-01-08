@@ -253,27 +253,27 @@ private:
                       << ", base_version: " << _base_version << ", new_version: " << _new_version
                       << ", txn_id: " << txn_id;
         } else {
-            auto old_next_rowset_id = _metadata->next_rowset_id();
             auto old_rowsets = std::move(*_metadata->mutable_rowsets());
             _metadata->mutable_rowsets()->Clear();
             _metadata->mutable_delvec_meta()->Clear();
 
+            auto new_next_rowset_id = _metadata->next_rowset_id();
             for (const auto& op_write : op_replication.op_writes()) {
-                if (op_write.dels_size() > 0 || op_write.rowset().num_rows() > 0 ||
-                    op_write.rowset().has_delete_predicate()) {
-                    auto rowset = _metadata->add_rowsets();
-                    rowset->CopyFrom(op_write.rowset());
-                    rowset->set_id(_metadata->next_rowset_id());
-                    _metadata->set_next_rowset_id(_metadata->next_rowset_id() + std::max(1, rowset->segments_size()));
-                }
+                auto rowset = _metadata->add_rowsets();
+                rowset->CopyFrom(op_write.rowset());
+                const auto new_rowset_id = rowset->id() + _metadata->next_rowset_id();
+                rowset->set_id(new_rowset_id);
+                new_next_rowset_id =
+                        std::max<uint32_t>(new_next_rowset_id, new_rowset_id + std::max(1, rowset->segments_size()));
             }
 
-            for (const auto& pair : op_replication.delvecs()) {
+            for (const auto& [segment_id, delvec_data] : op_replication.delvecs()) {
                 auto delvec = std::make_shared<DelVector>();
-                RETURN_IF_ERROR(delvec->load(_new_version, pair.second.data().data(), pair.second.data().size()));
-                _builder.append_delvec(delvec, pair.first + old_next_rowset_id);
+                RETURN_IF_ERROR(delvec->load(_new_version, delvec_data.data().data(), delvec_data.data().size()));
+                _builder.append_delvec(delvec, segment_id + _metadata->next_rowset_id());
             }
 
+            _metadata->set_next_rowset_id(new_next_rowset_id);
             _metadata->set_cumulative_point(0);
             old_rowsets.Swap(_metadata->mutable_compaction_inputs());
 
