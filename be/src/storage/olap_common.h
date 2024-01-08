@@ -67,11 +67,6 @@ typedef UniqueId TabletUid;
 
 enum CompactionType { BASE_COMPACTION = 1, CUMULATIVE_COMPACTION = 2, UPDATE_COMPACTION = 3, INVALID_COMPACTION };
 
-enum InsertDuplicatePolicy {
-    UPSERT = 0,
-    IGNORE = 1,
-};
-
 inline std::string to_string(CompactionType type) {
     switch (type) {
     case BASE_COMPACTION:

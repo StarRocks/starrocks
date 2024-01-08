@@ -194,9 +194,6 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.set_timeout_ms(_rpc_timeout_ms);
 
     request.set_is_ignore(_parent->_is_ignore);
-    if (!_parent->_update_exprs_bytes.empty()) {
-        request.set_update_exprs_desc(_parent->_update_exprs_bytes);
-    }
 
     // set global dict
     const auto& global_dict = _runtime_state->get_load_global_dict_map();

@@ -802,11 +802,11 @@ public:
             auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
             for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
                 if (keys[i].size != keys[idx_begin].size) {
-                    get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, i, deletes, type);
+                    get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, i, delete, type);
                     idx_begin = i;
                 }
             }
-            get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes, type);
+            get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, idx_end, delete, type);
         }
     }
 
@@ -1230,7 +1230,7 @@ Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowi
         }
         if (old != NullIndexValue) {
             if (type == InsertDuplicatePolicy::IGNORE) {
-                (*deletes)[rssid].push_back(rowid_start + idx_begin + i);
+                (*deletes)[rssid].push_back(rowid_start + idx_begin + old);
             } else {
                 (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
             }
@@ -1331,9 +1331,9 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
-        st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes, nullptr, type);
+        st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, delete, nullptr, type);
     } else {
-        _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes, type);
+        _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, delete, type);
     }
     return st;
 }

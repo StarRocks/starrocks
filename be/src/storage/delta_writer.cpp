@@ -296,7 +296,6 @@ Status DeltaWriter::_init() {
     writer_context.global_dicts = _opt.global_dicts;
     writer_context.miss_auto_increment_column = _opt.miss_auto_increment_column;
     writer_context.is_ignore = _opt.is_ignore;
-    writer_context.update_exprs_desc = _opt.update_exprs_desc;
 
     Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer);
     if (!st.ok()) {

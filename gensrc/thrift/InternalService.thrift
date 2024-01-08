@@ -121,6 +121,7 @@ enum TTabletInternalParallelMode {
 enum TOverflowMode {
   OUTPUT_NULL = 0;
   REPORT_ERROR = 1;
+  IGNORE = 2;
 }
 
 struct TQueryQueueOptions {

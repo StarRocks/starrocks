@@ -1674,7 +1674,7 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
                                              idx_begin + upsert_idx_step, new_deletes, index_type));
             }
         } else {
-            RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, index_type));
+            RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, nullptr, index_type));
         }
     } else {
         std::unique_ptr<IOStat> iostat = std::make_unique<IOStat>();

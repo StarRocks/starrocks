@@ -1669,7 +1669,7 @@ Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const Inde
             auto& not_found = not_founds_by_key_size[key_size];
             for (auto i = 0; i < shard_size; ++i) {
                 RETURN_IF_ERROR(_shards[shard_offset + i]->upsert(keys, values, old_values, &not_found, num_found,
-                                                                  idxes_by_shard[i]));
+                                                                  idxes_by_shard[i], type));
             }
         }
     }
