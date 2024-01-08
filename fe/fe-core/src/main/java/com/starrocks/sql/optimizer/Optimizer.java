@@ -495,6 +495,7 @@ public class Optimizer {
     // for single scan node, to make sure we can rewrite
     private void viewBasedMvRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
         try {
+            OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "try VIEW_BASED_MV_REWRITE");
             OptExpression treeWithView = context.getLogicalTreeWithView();
             // should add a LogicalTreeAnchorOperator for rewrite
             treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
@@ -510,7 +511,11 @@ public class Optimizer {
                     // if there are view scan operator left, we should replace it back to original plans
                     MvUtils.replaceLogicalViewScanOperator(tree, context.getViewScans());
                 }
+                OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE",
+                        "original view scans size: {}, left view scans size: {}",
+                        context.getViewScans().size(), viewScanOperators.size());
             }
+            OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "VIEW_BASED_MV_REWRITE applied");
         } catch (Exception e) {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE",
                     "single table view based mv rule rewrite failed.", e);
