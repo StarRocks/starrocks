@@ -1362,21 +1362,16 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         UserIdentity user = statement.getUserIdent();
         try {
             if (user != null && !user.equals(context.getCurrentUserIdentity())) {
-                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.GRANT);
+                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
             } else if (statement.getRole() != null) {
                 AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
-                try {
-                    List<String> roleNames = authorizationManager.getRoleNamesByUser(context.getCurrentUserIdentity());
-                    if (!roleNames.contains(statement.getRole())) {
-                        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.GRANT);
-                    }
-                } catch (PrivilegeException e) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                List<String> roleNames = authorizationManager.getRoleNamesByUser(context.getCurrentUserIdentity());
+                if (!roleNames.contains(statement.getRole())) {
+                    Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.GRANT);
                 }
             }
-        } catch (AccessDeniedException e) {
+        } catch (AccessDeniedException | PrivilegeException e) {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),

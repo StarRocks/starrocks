@@ -1688,7 +1688,8 @@ public class ShowExecutor {
     private void handleShowData() {
         ShowDataStmt showStmt = (ShowDataStmt) stmt;
         String dbName = showStmt.getDbName();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -1765,10 +1766,10 @@ public class ShowExecutor {
                     Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
                             connectContext.getCurrentRoleIds(), new TableName(dbName, tableName));
                 } catch (AccessDeniedException e) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW DATA",
-                            connectContext.getCurrentUserIdentity().getUser(),
-                            connectContext.getCurrentUserIdentity().getHost(),
-                            tableName);
+                    AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            connectContext.getCurrentUserIdentity(),
+                            connectContext.getCurrentRoleIds(),
+                            PrivilegeType.ANY.name(), ObjectType.TABLE.name(), tableName);
                 }
 
                 Table table = db.getTable(tableName);

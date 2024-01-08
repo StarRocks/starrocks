@@ -24,6 +24,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.hive.HiveMetastore;
 import com.starrocks.meta.MetaContext;
@@ -47,6 +48,7 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
@@ -1859,5 +1861,47 @@ public class AuthorizationMgrTest {
         ShowGrantsStmt showStreamLoadStmt = (ShowGrantsStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, showStreamLoadStmt);
         ShowResultSet resultSet = executor.execute();
+    }
+
+    @Test
+    public void testDataDesc() throws Exception {
+        DataDescription desc = new DataDescription("tbl1", null, Lists.newArrayList("abc.txt"),
+                Lists.newArrayList("col1", "col1"), null, null, null, false, null);
+        ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
+
+        try {
+            desc.analyze("db");
+            Assert.fail();
+        } catch (ErrorReportException e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied"));
+        }
+
+        String sql = "grant insert on table db.tbl1 to test_user";
+        GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(grantPrivilegeStmt, ctx);
+
+        desc = new DataDescription("tbl1", null, "tbl2", false, null, null, null);
+        try {
+            desc.analyze("db");
+            Assert.fail();
+        } catch (ErrorReportException e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied"));
+        }
+    }
+
+    @Test
+    public void testShowGrants() throws Exception {
+        String sql = "create role r_show_grants";
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        DDLStmtExecutor.execute(stmt, ctx);
+        ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%"));
+        ShowGrantsStmt showGrantsStmt = new ShowGrantsStmt("r_show_grants");
+
+        try {
+            Authorizer.check(showGrantsStmt, ctx);
+            Assert.fail();
+        } catch (ErrorReportException e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied"));
+        }
     }
 }
