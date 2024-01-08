@@ -1699,4 +1699,16 @@ public class ExpressionTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "<slot 4> : date_trunc('day', CAST(2: v2 AS DATETIME))");
     }
+
+    @Test
+    public void testSimplifyTruePredicate() throws Exception {
+        String sql = "select id_bool = true from test_bool where id_bool = false or id_bool = true";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: (11: id_bool = FALSE) OR (11: id_bool)");
+
+        sql = "select * from test_object where true = bitmap_contains(b1, v1) or bitmap_contains(b1, v2) = true";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: (bitmap_contains(5: b1, CAST(1: v1 AS BIGINT))) " +
+                "OR (bitmap_contains(5: b1, CAST(2: v2 AS BIGINT)))");
+    }
 }

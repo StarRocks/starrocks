@@ -137,8 +137,13 @@ public class GlobalTransactionMgr {
                                  long timeoutSecond)
             throws LabelAlreadyUsedException, RunningTxnExceedException, DuplicatedRequestException, AnalysisException {
 
-        if (Config.disable_load_job || GlobalStateMgr.getCurrentState().isSafeMode()) {
+        if (Config.disable_load_job) {
             throw new AnalysisException("disable_load_job is set to true, all load jobs are prevented");
+        }
+
+        if (GlobalStateMgr.getCurrentState().isSafeMode()) {
+            throw new AnalysisException(String.format("The cluster is under safe mode state," +
+                    " all load jobs are rejected."));
         }
 
         switch (sourceType) {
