@@ -53,6 +53,8 @@ Status GroupReader::prepare() {
     _init_read_chunk();
     _range = SparseRange<uint64_t>(_row_group_first_row, _row_group_first_row + _row_group_metadata->num_rows);
     if (config::parquet_page_index_enable) {
+        SCOPED_RAW_TIMER(&_param.stats->page_index_ns);
+        _param.stats->rows_before_page_index += _row_group_metadata->num_rows;
         auto page_index_reader = std::make_unique<PageIndexReader>(this, _param.file, _column_readers,
                                                                    _row_group_metadata, _param.min_max_conjunct_ctxs);
         ASSIGN_OR_RETURN(bool flag, page_index_reader->generate_read_range(_range));

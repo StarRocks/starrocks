@@ -71,6 +71,9 @@ struct HdfsScanStats {
     bool has_page_statistics = false;
     // page skip
     int64_t page_skip = 0;
+    // page index
+    int64_t rows_before_page_index = 0;
+    int64_t page_index_ns = 0;
 
     // late materialize round-by-round
     int64_t group_min_round_cost = 0;
