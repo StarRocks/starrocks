@@ -73,6 +73,8 @@ public class OptimizerContext {
     // TODO: refactor materialized view's variables/contexts into this.
     private QueryMaterializationContext queryMaterializationContext;
 
+    private boolean isShortCircuit = false;
+
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -265,6 +267,14 @@ public class OptimizerContext {
 
     public QueryMaterializationContext getQueryMaterializationContext() {
         return queryMaterializationContext;
+    }
+
+    public boolean isShortCircuit() {
+        return isShortCircuit;
+    }
+
+    public void setShortCircuit(boolean shortCircuit) {
+        isShortCircuit = shortCircuit;
     }
 
     public void clear() {
