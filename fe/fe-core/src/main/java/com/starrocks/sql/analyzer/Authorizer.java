@@ -149,20 +149,6 @@ public class Authorizer {
                 tableName, columns, privilegeType);
     }
 
-    public static void checkViewColumnsAction(UserIdentity currentUser, Set<Long> roleIds,
-                                              TableName tableName, Set<String> columns,
-                                              PrivilegeType privilegeType) throws AccessDeniedException {
-        getInstance().getAccessControlOrDefault(tableName.getCatalog()).checkViewColumnsAction(currentUser, roleIds,
-                tableName, columns, privilegeType);
-    }
-
-    public static void checkMaterializedViewColumnsAction(UserIdentity currentUser, Set<Long> roleIds,
-                                                          TableName tableName, Set<String> columns,
-                                                          PrivilegeType privilegeType) throws AccessDeniedException {
-        getInstance().getAccessControlOrDefault(tableName.getCatalog()).checkMaterializedViewColumnsAction(currentUser,
-                roleIds, tableName, columns, privilegeType);
-    }
-
     public static void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
                                        PrivilegeType privilegeType) throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
