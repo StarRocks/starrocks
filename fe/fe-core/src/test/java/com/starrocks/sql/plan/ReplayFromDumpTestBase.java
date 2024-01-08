@@ -78,7 +78,7 @@ public class ReplayFromDumpTestBase {
     }
 
     @Before
-    public void before() {
+    public void before() throws Exception {
         BackendCoreStat.reset();
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
     }
@@ -118,7 +118,7 @@ public class ReplayFromDumpTestBase {
         return modelContentBuilder.toString();
     }
 
-    public QueryDumpInfo getDumpInfoFromJson(String dumpInfoString) {
+    public static QueryDumpInfo getDumpInfoFromJson(String dumpInfoString) {
         return GsonUtils.GSON.fromJson(dumpInfoString, QueryDumpInfo.class);
     }
 
@@ -140,7 +140,7 @@ public class ReplayFromDumpTestBase {
         Assert.assertEquals(originCostPlan, replayCostPlan);
     }
 
-    protected String getDumpInfoFromFile(String fileName) throws Exception {
+    protected static String getDumpInfoFromFile(String fileName) throws Exception {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + fileName + ".json");
         StringBuilder sb = new StringBuilder();

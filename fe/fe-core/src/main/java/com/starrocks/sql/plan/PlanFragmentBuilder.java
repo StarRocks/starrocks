@@ -1122,15 +1122,7 @@ public class PlanFragmentBuilder {
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(referenceTable);
 
-            // set slot
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
-                SlotDescriptor slotDescriptor =
-                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
-                slotDescriptor.setColumn(entry.getValue());
-                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
-                slotDescriptor.setIsMaterialized(true);
-                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
-            }
+            prepareContextSlots(node, context, tupleDescriptor);
 
             DeltaLakeScanNode deltaLakeScanNode =
                     new DeltaLakeScanNode(context.getNextNodeId(), tupleDescriptor, "DeltaLakeScanNode");
@@ -1219,8 +1211,9 @@ public class PlanFragmentBuilder {
             // set slot
             prepareContextSlots(node, context, tupleDescriptor);
 
+            TupleDescriptor equalityDeleteTupleDesc = context.getDescTbl().createTupleDescriptor();
             IcebergScanNode icebergScanNode =
-                    new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode");
+                    new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode", equalityDeleteTupleDesc);
             icebergScanNode.computeStatistics(optExpression.getStatistics());
             icebergScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             try {
@@ -1235,8 +1228,6 @@ public class PlanFragmentBuilder {
 
                 icebergScanNode.preProcessIcebergPredicate(node.getPredicate());
                 icebergScanNode.setupScanRangeLocations(context.getDescTbl());
-                // set slot for equality delete file
-                icebergScanNode.appendEqualityColumns(node, columnRefFactory, context);
 
                 HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
                 prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);

@@ -469,7 +469,7 @@ public class ExpressionRangePartitionInfoTest {
                 "\"compression\" = \"LZ4\"\n" +
                 ");";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("table_hitcount");
         // serialize
@@ -548,5 +548,4 @@ public class ExpressionRangePartitionInfoTest {
         // deserialize
         OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
     }
-
 }

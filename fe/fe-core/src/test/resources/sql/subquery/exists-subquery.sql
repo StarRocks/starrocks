@@ -616,7 +616,7 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
         EXCHANGE BROADCAST
             SCAN (columns[4: v4] predicate[4: v4 = 2])
     EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{11: countRows=count(11: countRows)}] group by [[]] having [11: countRows IS NOT NULL = true]
+        AGGREGATE ([GLOBAL] aggregate [{11: countRows=count(11: countRows)}] group by [[]] having [11: countRows IS NOT NULL]
             EXCHANGE GATHER
                 AGGREGATE ([LOCAL] aggregate [{11: countRows=count(1)}] group by [[]] having [null]
                     SCAN (columns[7: v7] predicate[null])
@@ -631,7 +631,7 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
         EXCHANGE SHUFFLE[4]
             SCAN (columns[4: v4] predicate[4: v4 IS NOT NULL])
     EXCHANGE BROADCAST
-        AGGREGATE ([GLOBAL] aggregate [{11: countRows=count(11: countRows)}] group by [[]] having [11: countRows IS NOT NULL = true]
+        AGGREGATE ([GLOBAL] aggregate [{11: countRows=count(11: countRows)}] group by [[]] having [11: countRows IS NOT NULL]
             EXCHANGE GATHER
                 AGGREGATE ([LOCAL] aggregate [{11: countRows=count(1)}] group by [[]] having [null]
                     SCAN (columns[7: v7] predicate[null])
