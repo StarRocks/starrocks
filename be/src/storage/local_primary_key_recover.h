@@ -37,6 +37,10 @@ public:
 
     int64_t tablet_id() override;
 
+    // Sorrt rowset by rowsetid
+    // also consider sorting in data loading and compact concurrency scenarios
+    static Status sort_rowsets(std::vector<RowsetSharedPtr>* rowsets);
+
 private:
     Tablet* _tablet;
     UpdateManager* _update_mgr;

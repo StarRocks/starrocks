@@ -21,6 +21,7 @@
 #include "column/schema.h"
 #include "common/status.h"
 #include "storage/lake/tablet_metadata.h"
+#include "storage/lake/types_fwd.h"
 #include "storage/primary_key_recover.h"
 
 namespace starrocks {
@@ -52,6 +53,10 @@ public:
     Status finalize_delvec(const PrimaryIndex::DeletesMap& new_deletes) override;
 
     int64_t tablet_id() override;
+
+    // Sorrt rowset by rowsetid
+    // also consider sorting in data loading and compact concurrency scenarios
+    static Status sort_rowsets(std::vector<RowsetPtr>* rowsets);
 
 private:
     MetaFileBuilder* _builder;

@@ -1888,6 +1888,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     edit.set_creation_time(creation_time);
     uint32_t rowsetid = _next_rowset_id;
     const auto& inputs = (*pinfo)->inputs;
+    const uint32_t max_compact_input_rowset_id = *std::max_element(inputs.begin(), inputs.end());
     const auto& ors = _edit_version_infos.back()->rowsets;
     for (auto rowset_id : inputs) {
         if (std::find(ors.begin(), ors.end(), rowset_id) == ors.end()) {
@@ -1923,7 +1924,7 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     edit.set_rowsetid_add(rowsetid_add);
 
     // TODO: is rollback modification of rowset meta required if commit failed?
-    rowset->make_commit(edit_version_pb->major_number(), rowsetid);
+    rowset->make_commit(edit_version_pb->major_number(), rowsetid, max_compact_input_rowset_id);
     RowsetMetaPB rowset_meta;
     rowset->rowset_meta()->get_full_meta_pb(&rowset_meta);
 
