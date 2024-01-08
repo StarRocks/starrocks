@@ -97,7 +97,7 @@ public class ConvertToEqualForNullRule extends TransformationRule {
 
         IsNullPredicateOperator isNullLeft = (IsNullPredicateOperator) right.getChild(0);
         IsNullPredicateOperator isNullRight = (IsNullPredicateOperator) right.getChild(1);
-        if (isNullRight.isNotNull() || isNullRight.isNotNull()) {
+        if (isNullLeft.isNotNull() || isNullRight.isNotNull()) {
             return Optional.empty();
         }
 

@@ -35,7 +35,7 @@ class ConvertToEqualForNullRuleTest extends PlanTestBase {
 
     @ParameterizedTest(name = "sql_{index}: {0}.")
     @MethodSource("getSqlList")
-    void test(String sql, String expectedPlan) throws Exception {
+    void testToEqualForNull(String sql, String expectedPlan) throws Exception {
         String plan = getFragmentPlan(sql);
         assertContains(plan, expectedPlan);
     }
@@ -45,6 +45,10 @@ class ConvertToEqualForNullRuleTest extends PlanTestBase {
         List<Arguments> sqlList = Lists.newArrayList();
         sqlList.add(Arguments.of("select * from t0 join t1 on v1 = v4 or v1 is null and v4 is null",
                 "equal join conjunct: 1: v1 <=> 4: v4"));
+        sqlList.add(Arguments.of("select * from t0 join t1 on v1 = v4 or v1 is not null and v4 is null",
+                "other join predicates: (1: v1 = 4: v4) OR ((1: v1 IS NOT NULL) AND (4: v4 IS NULL))"));
+        sqlList.add(Arguments.of("select * from t0 join t1 on v2 = v4 or v1 is not null and v4 is null",
+                "other join predicates: (2: v2 = 4: v4) OR ((1: v1 IS NOT NULL) AND (4: v4 IS NULL))"));
         sqlList.add(Arguments.of("select * from t0 join t1 on v4 = v1 or v1 is null and v4 is null",
                 "equal join conjunct: 1: v1 <=> 4: v4"));
         sqlList.add(Arguments.of("select * from t0 join t1 on v4 = v1 or v4 is null and v1 is null",
