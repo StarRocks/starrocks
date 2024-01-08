@@ -38,5 +38,10 @@ select * from short_circuit where c1 in (10);
 -- result:
 10	10
 -- !result
+select c1||c2 from short_circuit where c1 = 6;
+-- result:
+66
+-- !result
 set enable_short_circuit=false;
 -- result:
+-- !result

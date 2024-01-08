@@ -203,6 +203,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -588,11 +589,13 @@ public class PlanFragmentBuilder {
 
             projectNode.setHasNullableGenerateChild();
 
-            Statistics statistics = optExpression.getStatistics();
-            Statistics.Builder b = Statistics.builder();
-            b.setOutputRowCount(statistics.getOutputRowCount());
-            b.addColumnStatisticsFromOtherStatistic(statistics, new ColumnRefSet(node.getOutputColumns()));
-            projectNode.computeStatistics(b.build());
+            Optional.ofNullable(optExpression.getStatistics()).ifPresent(statistics -> {
+                Statistics.Builder b = Statistics.builder();
+                b.setOutputRowCount(statistics.getOutputRowCount());
+                b.addColumnStatisticsFromOtherStatistic(statistics, new ColumnRefSet(node.getOutputColumns()));
+                projectNode.computeStatistics(b.build());
+            });
+
 
             for (SlotId sid : projectMap.keySet()) {
                 SlotDescriptor slotDescriptor = tupleDescriptor.getSlot(sid.asInt());
