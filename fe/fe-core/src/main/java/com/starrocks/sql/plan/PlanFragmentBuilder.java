@@ -775,6 +775,8 @@ public class PlanFragmentBuilder {
             scanNode.setLimit(node.getLimit());
             scanNode.computeStatistics(optExpr.getStatistics());
             scanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
+            scanNode.setIsOutputChunkByBucket(node.needOutputChunkByBucket());
             // set tablet
             try {
                 scanNode.updateScanInfo(node.getSelectedPartitionId(),
@@ -870,7 +872,6 @@ public class PlanFragmentBuilder {
 
             // set unused output columns 
             setUnUsedOutputColumns(node, scanNode, predicates, referenceTable);
-            scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
 
             // set isPreAggregation
             scanNode.setIsPreAggregation(node.isPreAggregation(), node.getTurnOffReason());
@@ -1913,6 +1914,7 @@ public class PlanFragmentBuilder {
             }
 
             aggregationNode.setUseSortAgg(node.isUseSortAgg());
+            aggregationNode.setUsePerBucketOptimize(node.isUsePerBucketOptmize());
             aggregationNode.setStreamingPreaggregationMode(node.getNeededPreaggregationMode());
             aggregationNode.setHasNullableGenerateChild();
             aggregationNode.computeStatistics(optExpr.getStatistics());

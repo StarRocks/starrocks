@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/pipeline/runtime_filter_types.h"
@@ -91,6 +93,9 @@ public:
 
     // Whether we could pull chunk from this operator
     virtual bool has_output() const = 0;
+
+    // return true if operator should ignore eos chunk
+    virtual bool ignore_empty_eos() const { return true; }
 
     // Whether we could push chunk to this operator
     virtual bool need_input() const = 0;
