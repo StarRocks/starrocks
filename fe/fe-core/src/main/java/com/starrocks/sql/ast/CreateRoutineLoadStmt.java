@@ -136,7 +136,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String PULSAR_DEFAULT_INITIAL_POSITION = "pulsar_default_initial_position";
 
     private static final String NAME_TYPE = "ROUTINE LOAD NAME";
-    private static final String ENDPOINT_REGEX = "[-A-Za-z0-9+&@#/%?=~_|!:,.;]+[-A-Za-z0-9+&@#/%=~_|]";
+    private static final String ENDPOINT_REGEX = "[-A-Za-z0-9+&@#/%?=~_|!:,.;\\[\\]]+[-A-Za-z0-9+&@#/%=~_|]";
 
     private static final ImmutableSet<String> PROPERTIES_SET = new ImmutableSet.Builder<String>()
             .add(DESIRED_CONCURRENT_NUMBER_PROPERTY)
