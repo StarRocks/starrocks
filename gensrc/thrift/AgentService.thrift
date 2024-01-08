@@ -254,8 +254,9 @@ struct TCompactionReq {
 }
 
 struct TUpdateSchemaReq {
-    1: optional map<i64, list<Types.TTabletId>> index_to_tablets
-    2: optional map<i64, TOlapTableColumnParam> index_to_column_param
+    1: optional i64 index_id
+    2: optional list<i64> tablets
+    3: optional Descriptors.TOlapTableColumnParam column_param
 }
 
 struct TUploadReq {

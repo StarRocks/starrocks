@@ -44,6 +44,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.alter.UpdateSchemaHandler;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
@@ -2327,6 +2328,10 @@ public class GlobalStateMgr {
 
     public MaterializedViewHandler getRollupHandler() {
         return (MaterializedViewHandler) this.alterJobMgr.getMaterializedViewHandler();
+    }
+
+    public UpdateSchemaHandler getUpdateSchemaHandler() {
+        return (UpdateSchemaHandler) this.alterJobMgr.getUpdateSchemaHandler();
     }
 
     public BackupHandler getBackupHandler() {

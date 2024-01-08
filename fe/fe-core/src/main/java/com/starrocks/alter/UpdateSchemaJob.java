@@ -34,36 +34,51 @@
 
 package com.starrocks.alter;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Table;
+import com.google.common.collect.Table.Cell;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.catalog.Tablet;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.task.AgentTask;
+import com.starrocks.task.AgentTaskExecutor;
+import com.starrocks.task.AgentTaskQueue;
+import com.starrocks.task.UpdateSchemaTask;
+import com.starrocks.thrift.TColumn;
+import com.starrocks.thrift.TOlapTableColumnParam;
+import com.starrocks.thrift.TTaskType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 public class UpdateSchemaJob extends AlterJobV2 {
     private static final Logger LOG = LogManager.getLogger(UpdateSchemaJob.class);
-
-    @SerializedName(value = "backendToIndexTabletMap")
-    private Table<Long, Long, List<Long>> backendToIndexTabletMap = HashBasedTable.create();
-    @SerializedName(value = "indexToColumnParam")
-    private Map<Long, TOlapTableColumnParam> indexToColumnParam = Maps.newHashMap();
 
     private AgentBatchTask updateSchemaBatchTask = new AgentBatchTask();
 
     private Table<Long, Long, List<Long>> backendToIndexTabletMap = HashBasedTable.create();
     private Map<Long, TOlapTableColumnParam> indexToColumnParam = Maps.newHashMap();
-    private Map<Long, Set<Long>> successTabletToBackends = Maps.newHashMap<>();
 
 
-    public UpdateSchemaJob(long jobId, long dbId, long tableId, String tableName, long timeooutMs) {
+    public UpdateSchemaJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
         super(jobId, JobType.UPDATE_SCHEMA, dbId, tableId, tableName, timeoutMs);
-    }
-
-    @Override
-    public synchronized void run() {
-        try {
-            while (true) {
-                JobState
-            }
-        } catch (AlterCancelException e) {
-
-        }
     }
 
     @Override
@@ -78,7 +93,7 @@ public class UpdateSchemaJob extends AlterJobV2 {
             return;
         }
 
-        //
+        // check table exist
         OlapTable tbl = (OlapTable) db.getTable(tableId);
         if (tbl == null) {
             throw new AlterCancelException("Table " + tableId + " does not exist");
@@ -88,16 +103,17 @@ public class UpdateSchemaJob extends AlterJobV2 {
         locker.lockDatabase(db, LockType.READ);
         try {
             // get index schema
-            for (Map.Entry<Long, MaterializedIndexMeta> pair : tbl.getIndexIdToMeta()) {
-                MaterializedIndexMeta indexMeta = pait.getValue();
+            for (Map.Entry<Long, MaterializedIndexMeta> pair : tbl.getIndexIdToMeta().entrySet()) {
+                MaterializedIndexMeta indexMeta = pair.getValue();
                 List<String> columns = Lists.newArrayList();
                 List<TColumn> columnsDesc = Lists.newArrayList();
                 List<Integer> columnSortKeyUids = Lists.newArrayList();
 
                 for (Column column : indexMeta.getSchema()) {
                     TColumn tColumn = column.toThrift();
-                    tColumn.setColumn_name(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, tColumn.column_name));
-                    column.setIndexFlag(tCOlumn, tbl.getIndexes(), tbl.getBfColumns());
+                    tColumn.setColumn_name(
+                            column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, tColumn.column_name));
+                    column.setIndexFlag(tColumn, tbl.getIndexes(), tbl.getBfColumns());
                     columnsDesc.add(tColumn);
                 }
                 if (indexMeta.getSortKeyUniqueIds() != null) {
@@ -105,7 +121,7 @@ public class UpdateSchemaJob extends AlterJobV2 {
                 }
                 TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids,
                                                                               indexMeta.getShortKeyColumnCount());
-                indexToColumnParam.put(indexMeta.getId(), columnParam);
+                indexToColumnParam.put(indexMeta.getIndexId(), columnParam);
             }
             // get all tablet
             for (Partition partition : tbl.getPartitions()) {
@@ -114,9 +130,18 @@ public class UpdateSchemaJob extends AlterJobV2 {
                             MaterializedIndex.IndexExtState.VISIBLE)) {
                         for (Tablet tablet : index.getTablets()) {
                             for (Long backendId : ((LocalTablet) tablet).getBackendIds()) {
-                                backendToIndexTabletMap.put(backendId, index.getId(), tablet.getId());
+                                List<Long> tabletsList = backendToIndexTabletMap.get(backendId, index.getId());
+                                if (tabletsList != null) {
+                                    tabletsList.add(Long.valueOf(tablet.getId()));
+                                } else {
+                                    tabletsList = Lists.newArrayList();
+                                    tabletsList.add(Long.valueOf(tablet.getId()));
+                                    backendToIndexTabletMap.put(backendId, index.getId(), tabletsList);
+                                }
                             }
                         }
+                    }
+                }
             }
 
             // create AgentBatch Task
@@ -124,33 +149,29 @@ public class UpdateSchemaJob extends AlterJobV2 {
                 Long backendId = cell.getRowKey();
                 Long indexId = cell.getColumnKey();
                 List<Long> tablets = cell.getValue();
-                if (!indexToColumnParam.contains(indexId)) {
+                if (!indexToColumnParam.containsKey(indexId)) {
                     // throw exception
                 }
                 UpdateSchemaTask task = new UpdateSchemaTask(null, backendId, db.getId(), tbl.getId(),
-                            indexId, tablets, indexToColumnParam.get(indexId));
+                            indexId, jobId, tablets, indexToColumnParam.get(indexId));
                 // add task to send
                 updateSchemaBatchTask.addTask(task);
             }
 
-            if (batchTask.getTaskNum() > 0) {
-                for (AgentTask task : batchTask.getAllTasks()) {
+            if (updateSchemaBatchTask.getTaskNum() > 0) {
+                for (AgentTask task : updateSchemaBatchTask.getAllTasks()) {
                     AgentTaskQueue.addTask(task);
                 }
-                AgentTaskExecutor.submit(batchTask);
-                LOG.debug("table[{}] send update scheam task. num: {}", tbl.getName(), batchTask.getTaskNum());
+                AgentTaskExecutor.submit(updateSchemaBatchTask);
+                LOG.debug("table[{}] send update scheam task. num: {}", tbl.getName(), updateSchemaBatchTask.getTaskNum());
             }
             this.jobState = JobState.RUNNING;
             tbl.setState(OlapTableState.UPDATE_SCHEMA);
 
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
-        } catch (AlterCancelException e) {
-            // cancel
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
-        
-
     }
 
 
@@ -170,8 +191,8 @@ public class UpdateSchemaJob extends AlterJobV2 {
 
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
+        OlapTable tbl = (OlapTable) db.getTable(tableId);
         try {
-            OlapTable tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null) {
                 throw new AlterCancelException("Table " + tableId + " does not exist");
             }
@@ -180,18 +201,22 @@ public class UpdateSchemaJob extends AlterJobV2 {
         }
 
         if (!updateSchemaBatchTask.isFinished()) {
-            // TODO retry
-            List<AgentTask> task = updateSchemaBatchTask.getUnfinishedTasks(2000);
+            List<AgentTask> tasks = updateSchemaBatchTask.getUnfinishedTasks(2000);
+            for (AgentTask task : tasks) {
+                if (task.isFailed() || task.getFailedTimes() >= 3) {
+                    throw new AlterCancelException("update schema task failed: " + task.getErrorMsg());
+                }
+            }
+            return;
         }
 
         // remove task, write EditLog
-        onFinished(tbl);
-
         this.jobState = JobState.FINISHED;
         this.finishedTimeMs = System.currentTimeMillis();
 
         // write EditLog
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        tbl.setState(OlapTableState.NORMAL);
     }
 
 
@@ -201,7 +226,17 @@ public class UpdateSchemaJob extends AlterJobV2 {
      */
     @Override
     protected synchronized boolean cancelImpl(String errMsg) {
+        if (jobState.isFinalState()) {
+            return false;
+        }
+        cancelInternal();
+        return true;
+    }
 
+    private void cancelInternal() {
+        // clear tasks if has
+        AgentTaskQueue.removeBatchTask(updateSchemaBatchTask, TTaskType.ALTER);
+        jobState = JobState.CANCELLED;
     }
 
 
@@ -209,8 +244,20 @@ public class UpdateSchemaJob extends AlterJobV2 {
         this.jobState = JobState.PENDING;
     }
 
+    private void replayFinished(UpdateSchemaJob replayedJob) {
+        this.jobState = JobState.FINISHED;
+        this.finishedTimeMs = replayedJob.finishedTimeMs;
+    }
+
+    private void replayCancelled(UpdateSchemaJob replayedJob) {
+        cancelInternal();
+        this.jobState = JobState.CANCELLED;
+        this.finishedTimeMs = replayedJob.finishedTimeMs;
+        this.errMsg = replayedJob.errMsg;
+    }
+
     @Override
-    public void replay(AlterJObV2 replayedJob) {
+    public void replay(AlterJobV2 replayedJob) {
         UpdateSchemaJob replayedUpdateSchemaJob = (UpdateSchemaJob) replayedJob;
         switch (replayedJob.jobState) {
             case PENDING:
@@ -229,18 +276,20 @@ public class UpdateSchemaJob extends AlterJobV2 {
         }
     }
 
-    public void handleFinishedUpdateSchemaTask(UpdateSchemaTask finishedTask, TFinishTaskRequest request) {
-        List<Long> errorTabletIds = null;
-        if (request.isSetError_tablet_ids()) {
-            errorTabletIds = request.getError_tablet_ids();
-        }
-        if (errorTabletIds.size() == finishedTask.getTablets().size()) {
-            // all tablets failed, retry
-        } else {
-            UpdateSchemaTask task = new UpdateSchemaTask(null, finishedTask.getBackendId(), finishedTask.getDbId(),
-                        finishedTask.getTableId(), finishedTask.getIndexId(), )
-            finishedTask.setFinished(true);
-        }
+    @Override
+    protected void getInfo(List<List<Comparable>> infos) {
+        // TODO(zhangqiang)
+    }
+
+    @Override
+    protected void runFinishedRewritingJob() {
+        // nothing to do
+    }
+
+
+    @Override
+    public Optional<Long> getTransactionId() {
+        return Optional.of(Long.valueOf(-1));
     }
 
 } 

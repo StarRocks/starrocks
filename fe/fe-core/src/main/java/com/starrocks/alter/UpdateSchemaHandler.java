@@ -34,43 +34,38 @@
 
 package com.starrocks.alter;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.Tablet;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CancelStmt;
-import com.starrocks.sql.ast.UpdateSchemaClause;
-import com.starrocks.task.AgentBatchTask;
-import com.starrocks.task.AgentTask;
-import com.starrocks.task.AgentTaskExecutor;
-import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.UpdateSchemaTask;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.AbstractMap.SimpleEntry;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.ThreadPoolExecutor;
 
 
 public class UpdateSchemaHandler extends AlterHandler {
     private static final Logger LOG = LogManager.getLogger(UpdateSchemaHandler.class);
     protected ConcurrentMap<Long, AlterJobV2> updateSchemaJobs = Maps.newConcurrentMap();
 
+    protected ThreadPoolExecutor updateSchemaExecutor;
+
     public UpdateSchemaHandler() {
-        super("update schema");
+        super("updateSchema");
+        updateSchemaExecutor = ThreadPoolManager
+                .newDaemonCacheThreadPool(Config.alter_max_worker_threads, Config.alter_max_worker_queue_size,
+                          "updateSchema_pool", true);
     }
 
     @Override
@@ -79,102 +74,28 @@ public class UpdateSchemaHandler extends AlterHandler {
         runUpdateSchemaJob();
     }
 
-    @Override
-    public List<List<Comparable>> getAlterJobInfosByDb(Database db) {
-        throw new NotImplementedException();
+    public void addUpdateSchemaJob(AlterJobV2 alterJob) {
+        this.updateSchemaJobs.put(alterJob.getJobId(), alterJob);
+    }
+
+    private void runUpdateSchemaJob() {
+        for (AlterJobV2 alterJob : updateSchemaJobs.values()) {
+            if (alterJob.jobState.isFinalState()) {
+                continue;
+            }
+            alterJob.run();
+        }
     }
 
     @Override
-    // add synchronized to avoid process 2 or more stmts at same time
-    // TODO(zhangqiang)
-    public synchronized ShowResultSet process(List<AlterClause> alterClauses, Database db,
+    public synchronized ShowResultSet process(List<AlterClause> alterClauses, Database db, 
                                               OlapTable olapTable) throws UserException {
-        Preconditions.checkArgument(alterClauses.size() == 1);
-        AlterClause alterClause = alterClauses.get(0);
-        if (alterClause instanceof UpdateSchemaClause) {
-            UpdateSchemaClause updateClause = (UpdateSchemaClause) alterClause;
-            Map<Long, ArrayListMultimap<Long, Long>> backendToIndexTablets = new HashMap<>();
-            Map<Long, TOlapTableColumnParam> indexToColumns = new HashMap<>();
-            AgentBatchTask batchTask = new AgentBatchTask();
-
-            Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
-            try {
-
-                // TODO(zhangqiang)
-                // split a seperate function
-                for (Map.Entry<Long, MaterializedIndexMeta> pair : table.getIndexIdToMeta().entrySet()) {
-                    MaterializedIndexMeta indexMeta = pair.getValue();
-                    List<String> columns = Lists.newArrayList();
-                    List<TColumn> columnsDesc = Lists.newArrayList();
-                    List<Integer> columnSortKeyUids = Lists.newArrayList();
-
-                    for (Column column : indexMeta.getSchema()) {
-                        TColumn tColumn = column.toThrift();
-                        tColumn.setColumn_name(column.getNameWithoutPrefix(SchemaChangeHandler.SHADOW_NAME_PRFIX, tColumn.column_name));
-                        column.setIndexFlag(tColumn, table.getIndexes(), table.getBfColumns());
-                        columnsDesc.add(tColumn);
-                    }
-                    if (indexMeta.getSortKeyUniqueIds() != null) {
-                        columnSortKeyUids.addAll(indexMeta.getSortKeyUniqueIds());
-                    }
-                    TOlapTableColumnParam columnParam = new TOlapTableColumnParam(columnsDesc, columnSortKeyUids, 
-                                                                                  indexMeta.getShortKeyColumnCount());
-                    indexToColumns[indexMeta.getId()] = columnParam;
-                }
-
-                // TODO(zhangqiang)
-                // split a seperate function
-                List<Partition> allPartitions = new ArrayList<>();
-                allPartitions.addAll(olapTable.getPartitions());
-                for (Partition partition : allPartitions) {
-                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                        for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
-                                MaterializedIndex.IndexExtState.VISIBLE)) {
-                            for (Tablet tablet : index.getTablets()) {
-                                for (Long backendId : ((LocalTablet) tablet).getBackendIds()) {
-                                    if (!backendToIndexTablets.containsKey(backendId)) {
-                                        ArrayListMultimap<Long, Long> indexToTablets = ArrayListMultimap.create();
-                                        indexToTablets.put(index.getId(), tablet.getId());
-                                        backendToIndexTablets.put(backendId, indexToTablets);
-                                    } else {
-                                        ArrayListMultimap<Long, Long> indexToTablets = backendToIndexTablets.get(backendId);
-                                        indexToTablets.put(index.getId(), tablet.getId());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                // submit agent task
-                for (Long backendId : backendToIndexTablets.keySet()) {
-                    UpdateSchemaTask task =  new UpdateSchemaTask(null, backendId,
-                                db.getId(),
-                                olapTable.getId(),
-                                backendToIndexTablets.get(backendId),
-                                indexToColumns
-                    );
-
-                    // add task to send
-                    batchTask.addTask(task);
-                }
-                if (batchTask.getTaskNum() > 0) {
-                    for (AgentTask task : batchTask.getAllTasks()) {
-                        AgentTaskQueue.addTask(task);
-                    }
-                    AgentTaskExecutor.submit(batchTask);
-                    LOG.debug("tablet[{}] send update schema task. num: {}", batchTask.getTaskNum());
-                }
-
-            } catch (Exception e) {
-                throw new UserException(e.getMessage());
-            } finally {
-                locker.unLockDatabase(db, LockType.READ);
-            }
-        } else {
-            Preconditions.checkState(false, alterClause.getClass());
-        }
         return null;
+    }
+
+    @Override
+    public List<List<Comparable>> getAlterJobInfosByDb(Database db) {
+        throw new NotImplementedException();
     }
 
     @Override
@@ -182,11 +103,17 @@ public class UpdateSchemaHandler extends AlterHandler {
         throw new NotImplementedException();
     }
 
-    public void finishUpdateSchemaTask(UpdateSchemaTask task, TFinishTaskRequest request) {
-        UpdateSchemaJob job = updateSchemaJobs.get(task.getJobId());
-        if (job == nullptr) {
-            // TODO
+    public void handleFinishUpdateSchemaTask(UpdateSchemaTask task) throws RejectedExecutionException {
+        updateSchemaExecutor.submit(task);
+    }
+
+    public void replayUpdateSchemaJob(AlterJobV2 alterJob) {
+        AlterJobV2 existingJob = updateSchemaJobs.get(alterJob.getJobId());
+        if (existingJob == null) {
+            alterJob.replay(alterJob);
+            updateSchemaJobs.put(alterJob.getJobId(), alterJob);
+        } else {
+            existingJob.replay(alterJob);
         }
-        job.finishUpdateSchemaTask(task, request);
     }
 }

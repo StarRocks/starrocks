@@ -34,18 +34,17 @@
 
 package com.starrocks.task;
 
-import com.google.common.collect.ArrayListMultimap;
-import com.starrocks.thrift.TUpdateSchemaReq;
+import com.starrocks.thrift.TOlapTableColumnParam;
 import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.thrift.TUpdateSchemaReq;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
 public class UpdateSchemaTask extends AgentTask implements Runnable {
-
-    public Map<Long, List<Long>> getIndexTabletIds() {
-        return indexToTablets;
-    }
+    private static final Logger LOG = LogManager.getLogger(UpdateSchemaTask.class);
 
     private Long jobId;
     private List<Long> tablets;
@@ -61,12 +60,41 @@ public class UpdateSchemaTask extends AgentTask implements Runnable {
         this.columnParam = columnParam;
     }
 
-    public UpdateSchemaTask
+    public long getJobId() {
+        return jobId;
+    }
+
+    public List<Long> getTablets() {
+        return tablets;
+    }
+
+    public TOlapTableColumnParam getColumnParam() {
+        return columnParam;
+    }
 
     // TODO(zhangqiang)
     public TUpdateSchemaReq toThrift() {
         TUpdateSchemaReq req = new TUpdateSchemaReq();
-        req.setIndex_to_tablets();
-        req.setIndex_to_column_param();
+        req.setIndex_id(indexId);
+        req.setTablets(tablets);
+        req.setColumn_param(columnParam);
+        return req;
+    }
+
+
+    public void handleFinishUpdateSchemaTask() throws Exception {
+        setFinished(true);
+    }
+
+    @Override
+    public void run() {
+        try {
+            handleFinishUpdateSchemaTask();
+        } catch (Exception e) {
+            String errMsg = "failed to handle finish update schema task: " + getSignature() + ", " + e.getMessage();
+            LOG.warn(errMsg);
+            setErrorMsg(errMsg);
+            setFailed(true);
+        }
     }
 }

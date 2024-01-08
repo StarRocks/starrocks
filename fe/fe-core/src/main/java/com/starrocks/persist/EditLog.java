@@ -827,6 +827,9 @@ public class EditLog {
                         case OPTIMIZE:
                             globalStateMgr.getSchemaChangeHandler().replayAlterJobV2(alterJob);
                             break;
+                        case UPDATE_SCHEMA:
+                            globalStateMgr.getUpdateSchemaHandler().replayUpdateSchemaJob(alterJob);
+                            break;    
                         default:
                             break;
                     }

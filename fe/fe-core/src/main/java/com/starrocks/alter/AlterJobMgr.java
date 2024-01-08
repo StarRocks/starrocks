@@ -154,12 +154,14 @@ public class AlterJobMgr {
     private final MaterializedViewHandler materializedViewHandler;
     private final SystemHandler clusterHandler;
     private CompactionHandler compactionHandler;
+    private UpdateSchemaHandler updateSchemaHandler;
 
     public AlterJobMgr() {
         schemaChangeHandler = new SchemaChangeHandler();
         materializedViewHandler = new MaterializedViewHandler();
         clusterHandler = new SystemHandler();
         compactionHandler = new CompactionHandler();
+        updateSchemaHandler = new UpdateSchemaHandler();
     }
 
     public void start() {
@@ -167,6 +169,7 @@ public class AlterJobMgr {
         materializedViewHandler.start();
         clusterHandler.start();
         compactionHandler = new CompactionHandler();
+        updateSchemaHandler.start();
     }
 
     public void processCreateSynchronousMaterializedView(CreateMaterializedViewStmt stmt)
@@ -708,8 +711,6 @@ public class AlterJobMgr {
                 String s = (((CompactionClause) alterClause).isBaseCompaction() ? "base" : "cumulative")
                         + " compact " + tableName + " partitions: " + ((CompactionClause) alterClause).getPartitionNames();
                 compactionHandler.process(alterClauses, db, olapTable);
-            } else if (alterClause instanceof UpdateSchemaClause) {
-                updateSchemaHandler.process(alterClause, db, olapTable);
             }
         }
 
@@ -992,6 +993,10 @@ public class AlterJobMgr {
 
     public AlterHandler getClusterHandler() {
         return this.clusterHandler;
+    }
+
+    public AlterHandler getUpdateSchemaHandler() {
+        return this.updateSchemaHandler;
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
