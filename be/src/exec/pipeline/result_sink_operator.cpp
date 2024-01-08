@@ -158,7 +158,9 @@ Status ResultSinkOperatorFactory::prepare(RuntimeState* state) {
 }
 
 void ResultSinkOperatorFactory::close(RuntimeState* state) {
-    WARN_IF_ERROR(_sender->close(_fragment_ctx->final_status()), "close sender failed");
+    if (_sender != nullptr) {
+        WARN_IF_ERROR(_sender->close(_fragment_ctx->final_status()), "close sender failed");
+    }
 
     Expr::close(_output_expr_ctxs, state);
     OperatorFactory::close(state);
