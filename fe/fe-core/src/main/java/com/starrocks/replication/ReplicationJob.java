@@ -653,8 +653,8 @@ public class ReplicationJob implements GsonPostProcessable {
             GlobalStateMgr.getServingState().getGlobalTransactionMgr().abortTransaction(databaseId, transactionId,
                     reason);
         } catch (Exception e) {
-            LOG.warn("Replication job abort transaction failed, ignore, database id: {}, table id: {}, ",
-                    databaseId, tableId, e);
+            LOG.warn("Abort transaction failed, ignore, database id: {}, table id: {}, transaction id: {}, ",
+                    databaseId, tableId, transactionId, e);
         }
     }
 
@@ -737,7 +737,20 @@ public class ReplicationJob implements GsonPostProcessable {
     }
 
     private boolean isAllTaskFinished() {
-        return runningTasks.isEmpty() && finishedTasks.size() == taskNum;
+        if (runningTasks.isEmpty() && finishedTasks.size() == taskNum) {
+            return true;
+        }
+        LOG.info("Replication job running tasks: {}, finished tasks: {}, transaction id: {}",
+                runningTasks.size(), finishedTasks.size(), transactionId);
+        if (runningTasks.size() < finishedTasks.size() / 2) {
+            Map<Long, List<Long>> unfinishedTasks = Maps.newHashMap();
+            for (AgentTask task : runningTasks.values()) {
+                unfinishedTasks.computeIfAbsent(task.getBackendId(), key -> Lists.newArrayList())
+                        .add(task.getSignature());
+            }
+            LOG.info("Replication job unfinished tasks: {}, transaction id: {}", unfinishedTasks, transactionId);
+        }
+        return false;
     }
 
     private boolean isCrashRecovery() {
