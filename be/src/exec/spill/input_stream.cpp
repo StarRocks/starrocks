@@ -239,9 +239,11 @@ private:
     std::shared_ptr<BlockReader> _current_reader;
     size_t _current_idx = 0;
     SerdePtr _serde;
+    DECLARE_RACE_DETECTOR(detect_get_next)
 };
 
 StatusOr<ChunkUniquePtr> UnorderedInputStream::get_next(SerdeContext& ctx) {
+    RACE_DETECT(detect_get_next, var1);
     if (_current_idx >= _input_blocks.size()) {
         return Status::EndOfFile("end of reading spilled UnorderedInputStream");
     }

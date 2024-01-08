@@ -109,6 +109,7 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
         int pipeline_dop, bool enable_tablet_internal_parallel,
         TTabletInternalParallelMode::type tablet_internal_parallel_mode) {
+    DCHECK(!output_chunk_by_bucket() || !scan_ranges_per_driver_seq.empty());
     if (scan_ranges_per_driver_seq.empty()) {
         ASSIGN_OR_RETURN(auto morsel_queue,
                          convert_scan_range_to_morsel_queue(global_scan_ranges, node_id, pipeline_dop,
@@ -140,8 +141,13 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
             queue_per_driver_seq.emplace(dop, std::move(queue));
         }
 
-        return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(queue_per_driver_seq),
-                                                                        /*could_local_shuffle*/ false);
+        if (output_chunk_by_bucket()) {
+            return std::make_unique<pipeline::BucketSequenceMorselQueueFactory>(std::move(queue_per_driver_seq),
+                                                                                /*could_local_shuffle*/ false);
+        } else {
+            return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(queue_per_driver_seq),
+                                                                            /*could_local_shuffle*/ false);
+        }
     }
 }
 

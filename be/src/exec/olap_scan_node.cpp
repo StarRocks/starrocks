@@ -30,6 +30,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
 #include "glog/logging.h"
+#include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -61,6 +62,10 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
     if (tnode.olap_scan_node.__isset.sorted_by_keys_per_tablet) {
         _sorted_by_keys_per_tablet = tnode.olap_scan_node.sorted_by_keys_per_tablet;
+    }
+
+    if (tnode.olap_scan_node.__isset.output_chunk_by_bucket) {
+        _output_chunk_by_bucket = tnode.olap_scan_node.output_chunk_by_bucket;
     }
 
     if (_olap_scan_node.__isset.bucket_exprs) {
@@ -390,6 +395,13 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
     pipeline::Morsels morsels;
     for (const auto& scan_range : scan_ranges) {
         morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
+    }
+
+    if (output_chunk_by_bucket()) {
+        std::sort(morsels.begin(), morsels.end(), [](auto& l, auto& r) {
+            return down_cast<pipeline::ScanMorsel*>(l.get())->owner_id() <
+                   down_cast<pipeline::ScanMorsel*>(r.get())->owner_id();
+        });
     }
 
     // None tablet to read shouldn't use tablet internal parallel.

@@ -535,7 +535,6 @@ public class CoordinatorPreprocessor {
             dataSizePerGroup[minIndex] += scanRangeParam.getScan_range().getInternal_scan_range().getRow_count();
             result.get(minIndex).add(scanRangeParam);
         }
-
         if (LOG.isDebugEnabled()) {
             LOG.debug("dataSizePerGroup: {}", dataSizePerGroup);
         }
@@ -746,6 +745,7 @@ public class CoordinatorPreprocessor {
                                             || fragment.isForceAssignScanRangesPerDriverSeq());
                             if (!assignPerDriverSeq) {
                                 instanceParam.perNodeScanRanges.put(planNodeId, scanRangeParams);
+                                fragment.disablePhysicalPropertyOptimize();
                             } else {
                                 int expectedDop = Math.max(1, Math.min(pipelineDop, scanRangeParams.size()));
                                 List<List<TScanRangeParams>> scanRangeParamsPerDriverSeq = null;

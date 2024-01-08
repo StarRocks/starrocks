@@ -30,7 +30,7 @@ bool SpillableAggregateDistinctBlockingSinkOperator::is_finished() const {
 
 Status SpillableAggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
     auto defer_set_finishing = DeferOp([this]() {
-        _aggregator->spill_channel()->set_finishing();
+        _aggregator->spill_channel()->set_finishing_if_not_reuseable();
         _is_finished = true;
     });
 
@@ -94,6 +94,14 @@ Status SpillableAggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* 
     if (_spill_strategy == spill::SpillStrategy::SPILL_ALL) {
         return _spill_all_inputs(state, chunk);
     }
+    return Status::OK();
+}
+
+Status SpillableAggregateDistinctBlockingSinkOperator::reset_state(RuntimeState* state,
+                                                                   const std::vector<ChunkPtr>& refill_chunks) {
+    _is_finished = false;
+    RETURN_IF_ERROR(_aggregator->spiller()->reset_state(state));
+    RETURN_IF_ERROR(AggregateDistinctBlockingSinkOperator::reset_state(state, refill_chunks));
     return Status::OK();
 }
 
@@ -230,8 +238,15 @@ StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::pull_chunk(
     return res;
 }
 
+Status SpillableAggregateDistinctBlockingSourceOperator::reset_state(RuntimeState* state,
+                                                                     const std::vector<ChunkPtr>& refill_chunks) {
+    _is_finished = false;
+    _has_last_chunk = true;
+    _accumulator.reset_state();
+    return Status::OK();
+}
+
 StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::_pull_spilled_chunk(RuntimeState* state) {
-    DCHECK(_accumulator.need_input());
     ChunkPtr res;
 
     if (_accumulator.has_output()) {
@@ -240,6 +255,7 @@ StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::_pull_spill
     }
 
     if (!_aggregator->is_spilled_eos()) {
+        DCHECK(_accumulator.need_input());
         auto executor = _aggregator->spill_channel()->io_executor();
         auto& spiller = _aggregator->spiller();
         ASSIGN_OR_RETURN(auto chunk, spiller->restore(state, *executor, TRACKER_WITH_SPILLER_GUARD(state, spiller)));
@@ -252,6 +268,7 @@ StatusOr<ChunkPtr> SpillableAggregateDistinctBlockingSourceOperator::_pull_spill
         _accumulator.push(std::move(res));
 
     } else if (_has_last_chunk) {
+        DCHECK(_accumulator.need_input());
         _has_last_chunk = false;
         ASSIGN_OR_RETURN(res, _stream_aggregator->pull_eos_chunk());
         if (res != nullptr && !res->is_empty()) {
