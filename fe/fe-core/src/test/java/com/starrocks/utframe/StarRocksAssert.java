@@ -577,6 +577,13 @@ public class StarRocksAssert {
         return this;
     }
 
+    public void refreshMV(String sql) throws Exception {
+        if (!sql.toLowerCase().endsWith("with sync mode")) {
+            sql += " with sync mode";
+        }
+        ddl(sql);
+    }
+
     public StarRocksAssert refreshMvPartition(String sql) throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         if (stmt instanceof RefreshMaterializedViewStatement) {
