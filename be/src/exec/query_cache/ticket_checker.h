@@ -17,10 +17,11 @@
 #include <glog/logging.h>
 
 #include <memory>
-#include <mutex>
 #include <unordered_map>
 
 #include "gutil/macros.h"
+#include "util/spinlock.h"
+
 namespace starrocks::query_cache {
 
 // TicketChecker is used to count down EOS chunk of the SplitMorsels generated from the same
@@ -68,6 +69,7 @@ public:
 
 private:
     DISALLOW_COPY_AND_MOVE(TicketChecker);
+    SpinLock _lock;
     std::unordered_map<int64_t, Ticket> _tickets;
 };
 } // namespace starrocks::query_cache
