@@ -73,6 +73,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
@@ -119,7 +120,10 @@ import java.util.Objects;
 import static com.starrocks.catalog.TableProperty.INVALID;
 
 public class Alter {
+
     private static final Logger LOG = LogManager.getLogger(Alter.class);
+
+    public static final String MANUAL_INACTIVE_MV_REASON = "user use alter materialized view set status to inactive";
 
     private AlterHandler schemaChangeHandler;
     private AlterHandler materializedViewHandler;
@@ -359,7 +363,7 @@ public class Alter {
                     materializedView, baseTableInfos);
             materializedView.setActive(true);
         } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
-            materializedView.setActive(false);
+            materializedView.setInactiveAndReason(Alter.MANUAL_INACTIVE_MV_REASON);
         }
     }
 
@@ -567,7 +571,8 @@ public class Alter {
                     newMaterializedViewName, oldMaterializedView.getId());
         } catch (Throwable e) {
             if (oldMaterializedView != null) {
-                oldMaterializedView.setActive(false);
+                oldMaterializedView.setInactiveAndReason("replay rename materialized-view failed: " +
+                        oldMaterializedView.getName());
                 LOG.warn("replay rename materialized-view failed: {}", oldMaterializedView.getName(), e);
             }
         } finally {
@@ -625,7 +630,8 @@ public class Alter {
                     asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId());
         } catch (Throwable e) {
             if (oldMaterializedView != null) {
-                oldMaterializedView.setActive(false);
+                oldMaterializedView.setInactiveAndReason("replay change materialized-view refresh scheme failed: "
+                        + oldMaterializedView.getName());
                 LOG.warn("replay change materialized-view refresh scheme failed: {}",
                         oldMaterializedView.getName(), e);
             }
@@ -654,7 +660,7 @@ public class Alter {
             }
         } catch (Throwable e) {
             if (mv != null) {
-                mv.setActive(false);
+                mv.setInactiveAndReason("replay alter materialized-view properties failed: " + mv.getName());
                 LOG.warn("replay alter materialized-view properties failed: {}", mv.getName(), e);
             }
         } finally {
@@ -673,7 +679,7 @@ public class Alter {
             processChangeMaterializedViewStatus(mv, log.getStatus(), true);
         } catch (Exception e) {
             if (mv != null) {
-                mv.setActive(false);
+                mv.setInactiveAndReason("replay alter materialized-view status failed: " + mv.getName());
                 LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
             }
         } finally {
@@ -879,6 +885,9 @@ public class Alter {
         olapNewTbl.checkAndSetName(origTblName, true);
         origTable.checkAndSetName(newTblName, true);
 
+        // inactive the related MVs
+        LocalMetastore.inactiveRelatedMaterializedView(db, origTable);
+        LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl);
         swapTableInternal(db, origTable, olapNewTbl);
 
         // write edit log
@@ -968,6 +977,7 @@ public class Alter {
             throw new DdlException("failed to init view stmt", e);
         }
         view.setNewFullSchema(newFullSchema);
+        LocalMetastore.inactiveRelatedMaterializedView(db, view);
 
         db.dropTable(viewName);
         db.createTable(view);
@@ -996,6 +1006,7 @@ public class Alter {
                 throw new DdlException("failed to init view stmt", e);
             }
             view.setNewFullSchema(newFullSchema);
+            LocalMetastore.inactiveRelatedMaterializedView(db, view);
 
             db.dropTable(viewName);
             db.createTable(view);

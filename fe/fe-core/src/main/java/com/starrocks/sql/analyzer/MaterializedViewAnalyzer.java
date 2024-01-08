@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.Alter;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
@@ -634,7 +635,8 @@ public class MaterializedViewAnalyzer {
                     public Void visitSlot(SlotRef slotRef, ExprShuttleContext context) {
                         Expr resolved = resolveSlotRefForView(slotRef, connectContext, aliasTableMap);
                         if (resolved == null) {
-                            throw new RuntimeException(String.format("can not resolve slotRef: %s", slotRef.debugString()));
+                            throw new RuntimeException(
+                                    String.format("can not resolve slotRef: %s", slotRef.debugString()));
                         }
                         if (resolved != slotRef) {
                             if (context.parent != null) {
@@ -661,7 +663,8 @@ public class MaterializedViewAnalyzer {
                 table = connectContext.getGlobalStateMgr()
                         .getMetadataMgr().getTable(catalog, tableName.getDb(), tableName.getTbl());
                 if (table == null) {
-                    throw new SemanticException("Materialized view partition expression %s could only ref to base table",
+                    throw new SemanticException(
+                            "Materialized view partition expression %s could only ref to base table",
                             slotRef.toSql());
                 }
             }
@@ -842,7 +845,7 @@ public class MaterializedViewAnalyzer {
             PrimitiveType type = partitionColumn.getPrimitiveType();
             if (!type.isFixedPointType() && !type.isDateType()) {
                 throw new SemanticException("Materialized view partition exp column:"
-                        + partitionColumn.getName() + " with type "  + type + " not supported");
+                        + partitionColumn.getName() + " with type " + type + " not supported");
             }
         }
 
@@ -943,7 +946,7 @@ public class MaterializedViewAnalyzer {
                 if (!(table instanceof MaterializedView)) {
                     throw new SemanticException(mvName.getTbl() + " is not async materialized view");
                 }
-            }  else if (statement.getStatus() != null) {
+            } else if (statement.getStatus() != null) {
                 String status = statement.getStatus();
                 if (!AlterMaterializedViewStmt.SUPPORTED_MV_STATUS.contains(status)) {
                     throw new SemanticException("Unsupported modification for materialized view status:" + status);
@@ -969,7 +972,8 @@ public class MaterializedViewAnalyzer {
             }
             Preconditions.checkState(table instanceof MaterializedView);
             MaterializedView mv = (MaterializedView) table;
-            if (!mv.isActive()) {
+            if (!mv.isActive() && (mv.getInactiveReason() == null ||
+                    Alter.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(mv.getInactiveReason()))) {
                 throw new SemanticException(
                         "Refresh materialized view failed because " + mv.getName() + " is not active.");
             }
@@ -986,7 +990,8 @@ public class MaterializedViewAnalyzer {
             } else if (partitionColumn.getType().isIntegerType()) {
                 validateNumberTypePartition(statement.getPartitionRangeDesc());
             } else {
-                throw new SemanticException("Unsupported batch partition build type:" + partitionColumn.getType() + ".");
+                throw new SemanticException(
+                        "Unsupported batch partition build type:" + partitionColumn.getType() + ".");
             }
             return null;
         }

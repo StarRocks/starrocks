@@ -2143,6 +2143,12 @@ public class Config extends ConfigBase {
     public static int external_table_commit_timeout_ms = 10000; // 10s
 
     @ConfField(mutable = true)
+    public static long mv_active_checker_interval_seconds = 60;
+
+    @ConfField(mutable = true, comment = "Whether enable the active mv automatically in daemon thread")
+    public static boolean enable_mv_automatic_active_check = false;
+
+    @ConfField(mutable = true)
     public static int catalog_metadata_cache_size = 500;
 
     /**
