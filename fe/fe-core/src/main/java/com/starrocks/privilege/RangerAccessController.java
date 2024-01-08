@@ -22,7 +22,6 @@ import com.starrocks.common.Config;
 import com.starrocks.privilege.ranger.RangerStarRocksAccessRequest;
 import com.starrocks.privilege.ranger.starrocks.RangerStarRocksResource;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.conf.Configuration;
@@ -39,7 +38,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 import static java.util.Locale.ENGLISH;
 
@@ -141,27 +139,5 @@ public abstract class RangerAccessController extends ExternalAccessController {
         } else {
             return null;
         }
-    }
-
-    @Override
-    public void checkColumnsAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
-                                   Set<String> columns, PrivilegeType privilegeType) throws AccessDeniedException {
-        // roll back to table level
-        checkTableAction(currentUser, roleIds, tableName, privilegeType);
-    }
-
-    @Override
-    public void checkViewColumnsAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
-                                       Set<String> columns, PrivilegeType privilegeType) throws AccessDeniedException {
-        // roll back to view level
-        checkViewAction(currentUser, roleIds, tableName, privilegeType);
-    }
-
-    @Override
-    public void checkMaterializedViewColumnsAction(UserIdentity currentUser, Set<Long> roleIds,
-                                                   TableName tableName, Set<String> columns,
-                                                   PrivilegeType privilegeType) throws AccessDeniedException {
-        // roll back to view level
-        checkMaterializedViewAction(currentUser, roleIds, tableName, privilegeType);
     }
 }
