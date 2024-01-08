@@ -254,6 +254,7 @@ import com.starrocks.thrift.TObjectDependencyReq;
 import com.starrocks.thrift.TObjectDependencyRes;
 import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTablePartition;
+import com.starrocks.thrift.TOlapTablePartitionParam;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TReleaseSlotRequest;
@@ -2786,11 +2787,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         response.setSchema(OlapTableSink.createSchema(db.getId(), dictTable, tupleDescriptor));
         try {
             List<Long> allPartitions = dictTable.getAllPartitionIds();
-            response.setPartition(
-                    OlapTableSink.createPartition(db.getId(), dictTable, tupleDescriptor, dictTable.supportedAutomaticPartition(),
-                    dictTable.getAutomaticBucketSize(), allPartitions));
+            TOlapTablePartitionParam partitionParam = OlapTableSink.createPartition(
+                    db.getId(), dictTable, tupleDescriptor, dictTable.supportedAutomaticPartition(),
+                    dictTable.getAutomaticBucketSize(), allPartitions);
+            response.setPartition(partitionParam);
             response.setLocation(OlapTableSink.createLocation(
-                    dictTable, dictTable.getClusterId(), allPartitions, dictTable.enableReplicatedStorage()));
+                    dictTable, dictTable.getClusterId(), partitionParam, dictTable.enableReplicatedStorage()));
             response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(dictTable.getClusterId()));
         } catch (UserException e) {
             SemanticException semanticException = new SemanticException("build DictQueryParams error in dict_query_expr.");

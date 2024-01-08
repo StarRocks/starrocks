@@ -242,10 +242,10 @@ public class OlapTableSink extends DataSink {
         tSink.setNum_replicas(numReplicas);
         tSink.setNeed_gen_rollup(dstTable.shouldLoadToNewRollup());
         tSink.setSchema(createSchema(tSink.getDb_id(), dstTable, tupleDescriptor));
-        tSink.setPartition(
-                createPartition(tSink.getDb_id(), dstTable, tupleDescriptor,
-                                enableAutomaticPartition, automaticBucketSize, partitionIds));
-        tSink.setLocation(createLocation(dstTable, clusterId, partitionIds, enableReplicatedStorage));
+        TOlapTablePartitionParam partitionParam = createPartition(tSink.getDb_id(), dstTable, tupleDescriptor,
+                enableAutomaticPartition, automaticBucketSize, partitionIds);
+        tSink.setPartition(partitionParam);
+        tSink.setLocation(createLocation(dstTable, clusterId, partitionParam, enableReplicatedStorage));
         tSink.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(clusterId));
         tSink.setPartial_update_mode(this.partialUpdateMode);
         tSink.setAutomatic_bucket_size(automaticBucketSize);
@@ -552,6 +552,7 @@ public class OlapTableSink extends DataSink {
                 throw new UserException("unsupported partition for OlapTable, partition=" + partType);
             }
         }
+        LOG.debug("partitionParam: {}", partitionParam);
         return partitionParam;
     }
 
@@ -638,7 +639,7 @@ public class OlapTableSink extends DataSink {
         return selectedDistInfo;
     }
 
-    public static TOlapTableLocationParam createLocation(OlapTable table, int clusterId, List<Long> partitionIds,
+    public static TOlapTableLocationParam createLocation(OlapTable table, int clusterId, TOlapTablePartitionParam partitionParam,
                                                           boolean enableReplicatedStorage) throws UserException {
         TOlapTableLocationParam locationParam = new TOlapTableLocationParam();
         // replica -> path hash
@@ -646,60 +647,56 @@ public class OlapTableSink extends DataSink {
         Map<Long, Long> bePrimaryMap = new HashMap<>();
         SystemInfoService infoService = GlobalStateMgr.getCurrentState()
                 .getOrCreateSystemInfo(clusterId);
-        for (Long partitionId : partitionIds) {
-            Partition partition = table.getPartition(partitionId);
-            int quorum = table.getPartitionInfo().getQuorumNum(partition.getId(), table.writeQuorum());
+        if (partitionParam.getPartitions() == null) {
+            return locationParam;
+        }
+        for (TOlapTablePartition partition : partitionParam.getPartitions()) {
+            PhysicalPartition physicalPartition = table.getPhysicalPartition(partition.getId());
+            int quorum = table.getPartitionInfo().getQuorumNum(physicalPartition.getParentId(), table.writeQuorum());
             // `selectedBackedIds` keeps the selected backendIds for 1st index which will be used to choose the later index's
             // tablets' replica in colocate mv index optimization.
             List<Long> selectedBackedIds = Lists.newArrayList();
-            for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                LOG.debug("partition: {}, physical partition: {}", partition, physicalPartition);
-                if (physicalPartition.isImmutable()) {
-                    continue;
-                }
-                for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
-                    for (int idx = 0; idx < index.getTablets().size(); ++idx) {
-                        Tablet tablet = index.getTablets().get(idx);
-                        if (table.isCloudNativeTableOrMaterializedView()) {
-                            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
-                            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
-                            locationParam.addToTablets(new TTabletLocation(tablet.getId(),
-                                    Lists.newArrayList(((LakeTablet) tablet).getPrimaryComputeNodeId(workerGroupId))));
-                        } else {
-                            // we should ensure the replica backend is alive
-                            // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
-                            LocalTablet localTablet = (LocalTablet) tablet;
-                            Multimap<Replica, Long> bePathsMap =
-                                    localTablet.getNormalReplicaBackendPathMap(table.getClusterId());
-                            if (bePathsMap.keySet().size() < quorum) {
-                                throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
-                                        String.format("Tablet lost replicas. Check if any backend is down or not. " +
-                                                        "tablet_id: %s, replicas: %s. Check quorum number failed" +
-                                                        "(OlapTableSink): BeReplicaSize:%s, quorum:%s",
-                                                tablet.getId(), localTablet.getReplicaInfos(), bePathsMap.size(), quorum));
-                            }
+            LOG.debug("partition: {}, physical partition: {}", partition, physicalPartition);
+            for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.ALL)) {
+                for (int idx = 0; idx < index.getTablets().size(); ++idx) {
+                    Tablet tablet = index.getTablets().get(idx);
+                    if (table.isCloudNativeTableOrMaterializedView()) {
+                        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+                        long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+                        locationParam.addToTablets(new TTabletLocation(tablet.getId(),
+                                Lists.newArrayList(((LakeTablet) tablet).getPrimaryComputeNodeId(workerGroupId))));
+                    } else {
+                        // we should ensure the replica backend is alive
+                        // otherwise, there will be a 'unknown node id, id=xxx' error for stream load
+                        LocalTablet localTablet = (LocalTablet) tablet;
+                        Multimap<Replica, Long> bePathsMap =
+                                localTablet.getNormalReplicaBackendPathMap(table.getClusterId());
+                        if (bePathsMap.keySet().size() < quorum) {
+                            throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
+                                    "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
+                                            + tablet.getId() + ", replicas: " + localTablet.getReplicaInfos());
+                        }
 
-                            List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
-                            if (enableReplicatedStorage) {
-                                int lowUsageIndex = findPrimaryReplica(table, bePrimaryMap, infoService, index,
-                                        selectedBackedIds, idx, replicas);
-                                if (lowUsageIndex != -1) {
-                                    bePrimaryMap.put(replicas.get(lowUsageIndex).getBackendId(),
-                                            bePrimaryMap.getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
-                                                    + 1);
-                                    // replicas[0] will be the primary replica
-                                    Collections.swap(replicas, 0, lowUsageIndex);
-                                    selectedBackedIds.add(replicas.get(0).getBackendId());
-                                } else {
-                                    LOG.warn("Tablet {} replicas {} all has write fail flag", tablet.getId(), replicas);
-                                }
+                        List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
+                        if (enableReplicatedStorage) {
+                            int lowUsageIndex = findPrimaryReplica(table, bePrimaryMap, infoService, index,
+                                    selectedBackedIds, idx, replicas);
+                            if (lowUsageIndex != -1) {
+                                bePrimaryMap.put(replicas.get(lowUsageIndex).getBackendId(),
+                                        bePrimaryMap.getOrDefault(replicas.get(lowUsageIndex).getBackendId(), (long) 0)
+                                                + 1);
+                                // replicas[0] will be the primary replica
+                                Collections.swap(replicas, 0, lowUsageIndex);
+                                selectedBackedIds.add(replicas.get(0).getBackendId());
+                            } else {
+                                LOG.warn("Tablet {} replicas {} all has write fail flag", tablet.getId(), replicas);
                             }
-                            locationParam
-                                    .addToTablets(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
-                                    .collect(Collectors.toList())));
-                            for (Map.Entry<Replica, Long> entry : bePathsMap.entries()) {
-                                allBePathsMap.put(entry.getKey().getBackendId(), entry.getValue());
-                            }
+                        }
+                        locationParam
+                                .addToTablets(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
+                                .collect(Collectors.toList())));
+                        for (Map.Entry<Replica, Long> entry : bePathsMap.entries()) {
+                            allBePathsMap.put(entry.getKey().getBackendId(), entry.getValue());
                         }
                     }
                 }
