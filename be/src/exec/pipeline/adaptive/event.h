@@ -48,9 +48,9 @@ public:
 
 public:
     static EventPtr create_event();
-    static EventPtr create_collect_stats_source_initialize_event(DriverExecutor* const executor,
-                                                                 SourceOperatorFactory* const leader_source_op,
+    static EventPtr create_collect_stats_source_initialize_event(DriverExecutor* executor,
                                                                  std::vector<Pipeline*>&& pipelines);
+    static EventPtr depends_all(const std::vector<EventPtr>& events);
 
 protected:
     size_t _num_dependencies{0};
