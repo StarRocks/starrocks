@@ -94,8 +94,11 @@ public:
         }
 
         if (!st.ok()) {
-            _writer->abort(true);
+            Status cancel_st = Status::InternalError("cancel writer because fail to run flush task, " + st.to_string());
+            _writer->cancel(cancel_st);
             _send_fail_response(st);
+            LOG(ERROR) << "failed to flush segment, txn_id: " << _request->txn_id()
+                       << ", tablet id: " << _request->tablet_id() << ", status: " << st;
         } else {
             _send_success_response(eos, st);
         }
