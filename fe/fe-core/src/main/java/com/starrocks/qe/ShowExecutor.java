@@ -101,6 +101,7 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.load.DeleteMgr;
@@ -262,6 +263,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.Table.TableType.JDBC;
+import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
 
 // Execute one show statement.
 public class ShowExecutor {
@@ -1119,14 +1121,21 @@ public class ShowExecutor {
 
         // Location
         String location = null;
+        Map<String, String> properties = new HashMap<>();
         if (table.isHiveTable() || table.isHudiTable()) {
             location = ((HiveMetaStoreTable) table).getTableLocation();
         } else if (table.isIcebergTable()) {
             location = table.getTableLocation();
+            properties.putAll(table.getProperties());
+            properties.remove(ICEBERG_CATALOG_TYPE);
         } else if (table.isDeltalakeTable()) {
             location = table.getTableLocation();
         } else if (table.isPaimonTable()) {
             location = table.getTableLocation();
+        }
+
+        if (!Strings.isNullOrEmpty(location)) {
+            properties.put(IcebergMetadata.LOCATION_PROPERTY, location);
         }
 
         // Comment
@@ -1134,8 +1143,20 @@ public class ShowExecutor {
             createTableSql.append("\nCOMMENT (\"").append(table.getComment()).append("\")");
         }
 
-        if (!Strings.isNullOrEmpty(location)) {
-            createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
+        if (!properties.isEmpty()) {
+            createTableSql.append("\nPROPERTIES (\n");
+            Iterator<Map.Entry<String, String>> iterator = properties.entrySet().iterator();
+            while (iterator.hasNext()) {
+                Map.Entry<String, String> entry = iterator.next();
+                createTableSql.append("\"")
+                        .append(entry.getKey()).append("\" = \"")
+                        .append(entry.getValue())
+                        .append("\"");
+                if (iterator.hasNext()) {
+                    createTableSql.append(",\n");
+                }
+            }
+            createTableSql.append("\n);");
         }
 
         List<List<String>> rows = Lists.newArrayList();
