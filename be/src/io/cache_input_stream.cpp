@@ -69,6 +69,9 @@ CacheInputStream::~CacheInputStream() {
 }
 
 Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bool can_zero_copy) {
+    if (UNLIKELY(size == 0)) {
+        return Status::OK();
+    }
     DCHECK(size <= _block_size);
     int64_t block_id = offset / _block_size;
 
