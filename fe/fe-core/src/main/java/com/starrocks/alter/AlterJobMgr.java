@@ -421,8 +421,7 @@ public class AlterJobMgr {
                     Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
             materializedView.setBaseTableInfos(baseTableInfos);
             materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
-            GlobalStateMgr.getCurrentState().updateBaseTableRelatedMv(materializedView.getDbId(),
-                    materializedView, baseTableInfos);
+            materializedView.onReload();
             materializedView.setActive();
         } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason(MANUAL_INACTIVE_MV_REASON);
