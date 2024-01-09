@@ -68,17 +68,17 @@ public class JDBCMetadataTest {
         columnResult.addColumn("DATA_TYPE",
                 Arrays.asList(Types.INTEGER, Types.DECIMAL, Types.CHAR, Types.VARCHAR, Types.TINYINT, Types.SMALLINT,
                         Types.INTEGER, Types.BIGINT, Types.TINYINT, Types.SMALLINT,
-                        Types.INTEGER, Types.BIGINT));
+                        Types.INTEGER, Types.BIGINT, Types.DATE, Types.TIME, Types.TIMESTAMP));
         columnResult.addColumn("TYPE_NAME",
                 Arrays.asList("INTEGER", "DECIMAL", "CHAR", "VARCHAR", "TINYINT UNSIGNED", "SMALLINT UNSIGNED",
                         "INTEGER UNSIGNED", "BIGINT UNSIGNED", "TINYINT", "SMALLINT",
-                        "INTEGER", "BIGINT"));
-        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(4, 10, 10, 10, 1, 2, 4, 8, 1, 2, 4, 8));
-        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
+                        "INTEGER", "BIGINT", "DATE", "TIME", "TIMESTAMP"));
+        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(4, 10, 10, 10, 1, 2, 4, 8, 1, 2, 4, 8, 8, 8, 8));
+        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
         columnResult.addColumn("COLUMN_NAME",
-                Arrays.asList("a", "b", "c", "d", "e1", "e2", "e4", "e8", "f1", "f2", "f3", "f4"));
+                Arrays.asList("a", "b", "c", "d", "e1", "e2", "e4", "e8", "f1", "f2", "f3", "f4", "g1", "g2", "g3"));
         columnResult.addColumn("IS_NULLABLE",
-                Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO"));
+                Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO"));
         properties = new HashMap<>();
         properties.put(DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
         properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
@@ -217,6 +217,9 @@ public class JDBCMetadataTest {
         Assert.assertTrue(columns.get(9).getType().equals(ScalarType.createType(PrimitiveType.SMALLINT)));
         Assert.assertTrue(columns.get(10).getType().equals(ScalarType.createType(PrimitiveType.INT)));
         Assert.assertTrue(columns.get(11).getType().equals(ScalarType.createType(PrimitiveType.BIGINT)));
+        Assert.assertTrue(columns.get(12).getType().equals(ScalarType.createType(PrimitiveType.DATE)));
+        Assert.assertTrue(columns.get(13).getType().equals(ScalarType.createType(PrimitiveType.TIME)));
+        Assert.assertTrue(columns.get(14).getType().equals(ScalarType.createType(PrimitiveType.DATETIME)));
     }
 
     @Test
