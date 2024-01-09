@@ -460,15 +460,10 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
     PredicateParser pred_parser(_tablet->tablet_schema());
 
     std::shared_lock header_lock(_tablet->get_header_lock());
-    // here we can not use DeletePredicatePB from  _tablet->delete_predicates() because
-    // _rowsets maybe stale rowset, and stale rowset's delete predicates may be removed
-    // from _tablet->delete_predicates() after compation
-    for (const RowsetSharedPtr& rowset : _rowsets) {
-        const RowsetMetaSharedPtr& rowset_meta = rowset->rowset_meta();
-        if (!rowset_meta->has_delete_predicate()) {
+    for (const DeletePredicatePB& pred_pb : _tablet->delete_predicates()) {
+        if (pred_pb.version() > _delete_predicates_version.second) {
             continue;
         }
-        const DeletePredicatePB& pred_pb = rowset_meta->delete_predicate();
 
         ConjunctivePredicates conjunctions;
         for (int i = 0; i != pred_pb.sub_predicates_size(); ++i) {
@@ -516,6 +511,10 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
             conjunctions.add(pred);
             // save for memory release.
             _predicate_free_list.emplace_back(pred);
+        }
+
+        if (conjunctions.empty()) {
+            continue;
         }
 
         dels->add(pred_pb.version(), conjunctions);
