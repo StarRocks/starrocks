@@ -195,6 +195,10 @@ public class Table extends MetaObject implements Writable {
         return type == TableType.OLAP;
     }
 
+    public boolean isView() {
+        return type == TableType.VIEW;
+    }
+
     public boolean isMaterializedView() {
         return type == TableType.MATERIALIZED_VIEW;
     }

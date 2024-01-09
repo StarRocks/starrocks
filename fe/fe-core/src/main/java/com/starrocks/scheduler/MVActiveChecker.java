@@ -80,10 +80,6 @@ public class MVActiveChecker extends LeaderDaemon {
     }
 
     public static void tryToActivate(MaterializedView mv) {
-        if (!Config.enable_mv_automatic_active_check) {
-            return;
-        }
-
         // if the mv is set to inactive manually, we don't activate it
         String reason = mv.getInactiveReason();
         if (mv.isActive() || Alter.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(reason) || StringUtils.isEmpty(reason)) {

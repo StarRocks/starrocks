@@ -21,6 +21,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
@@ -679,6 +680,20 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         }
     }
 
+    public void onReload() {
+        try {
+            boolean desiredActive = active;
+            active = false;
+            boolean reloadActive = onReloadImpl();
+            if (desiredActive && reloadActive) {
+                setActive(true);
+            }
+        } catch (Throwable e) {
+            LOG.error("reload mv failed: {}", this, e);
+            setInactiveAndReason("reload failed: " + e.getMessage());
+        }
+    }
+
     /**
      * @return active or not
      */
@@ -704,30 +719,39 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         boolean res = true;
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            // Do not set the active when table is null, it would be checked in MVActiveChecker
-            Table table = baseTableInfo.getTable();
-            if (table != null) {
-                if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
+            Table table = null;
+            try {
+                table = baseTableInfo.getTable();
+            } catch (Exception e) {
+                LOG.warn("failed to get base table {} of MV {}", baseTableInfo, this, e);
+            }
+            if (table == null) {
+                res = false;
+                setInactiveAndReason(
+                        MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
+                continue;
+            } else if (table.isMaterializedView()) {
+                MaterializedView baseMV = (MaterializedView) table;
+                // recursive reload MV, to guarantee the order of hierarchical MV
+                baseMV.onReload();
+                if (!baseMV.isActive()) {
                     LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
                             baseTableInfo.getTableName(), id);
-                    active = false;
+                    setInactiveAndReason("base mv is not active: " + baseTableInfo.getTableName());
                     res = false;
-                    continue;
                 }
-                MvId mvId = new MvId(db.getId(), id);
-                table.addRelatedMaterializedView(mvId);
+            }
 
-                if (!table.isLocalTable()) {
-                    GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().addConnectorTableInfo(
-                            baseTableInfo.getCatalogName(), baseTableInfo.getDbName(),
-                            baseTableInfo.getTableIdentifier(),
-                            ConnectorTableInfo.builder().setRelatedMaterializedViews(
-                                    Sets.newHashSet(mvId)).build()
-                    );
-                }
-            } else {
-                res = false;
-                setInactiveAndReason("base-table dropped: " + baseTableInfo.getTableName());
+            // Build the relationship
+            MvId mvId = getMvId();
+            table.addRelatedMaterializedView(mvId);
+            if (!table.isNativeTableOrMaterializedView() && !table.isView()) {
+                GlobalStateMgr.getCurrentState().getConnectorTblMetaInfoMgr().addConnectorTableInfo(
+                        baseTableInfo.getCatalogName(), baseTableInfo.getDbName(),
+                        baseTableInfo.getTableIdentifier(),
+                        ConnectorTableInfo.builder().setRelatedMaterializedViews(
+                                Sets.newHashSet(mvId)).build()
+                );
             }
         }
         analyzePartitionInfo();
