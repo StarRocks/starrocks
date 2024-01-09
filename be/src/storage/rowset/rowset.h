@@ -305,8 +305,6 @@ public:
 
     bool get_is_compacting() { return is_compacting.load(); }
 
-    DeletePredicatePB* mutable_delete_predicate() { return _rowset_meta->mutable_delete_predicate(); }
-
     static bool comparator(const RowsetSharedPtr& left, const RowsetSharedPtr& right) {
         return left->end_version() < right->end_version();
     }
