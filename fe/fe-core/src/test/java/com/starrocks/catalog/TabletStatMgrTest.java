@@ -201,6 +201,8 @@ public class TabletStatMgrTest {
         long tablet2NumRows = 21L;
         long tablet1DataSize = 30L;
         long tablet2DataSize = 31L;
+        long tabletPrimaryIndexMemSize = 32L;
+        long tabletPrimaryIndexDiskSize = 33L;
 
         new Expectations() {
             {
@@ -237,11 +239,15 @@ public class TabletStatMgrTest {
                                 stat1.tabletId = tablet1Id;
                                 stat1.numRows = tablet1NumRows;
                                 stat1.dataSize = tablet1DataSize;
+                                stat1.primaryIndexMemSize = tabletPrimaryIndexMemSize;
+                                stat1.primaryIndexDiskSize = tabletPrimaryIndexDiskSize;
                                 stats.add(stat1);
                                 TabletStat stat2 = new TabletStat();
                                 stat2.tabletId = tablet2Id;
                                 stat2.numRows = tablet2NumRows;
                                 stat2.dataSize = tablet2DataSize;
+                                stat2.primaryIndexMemSize = tabletPrimaryIndexMemSize;
+                                stat2.primaryIndexDiskSize = tabletPrimaryIndexDiskSize;
                                 stats.add(stat2);
 
                                 TabletStatResponse response = new TabletStatResponse();
@@ -269,8 +275,12 @@ public class TabletStatMgrTest {
 
         Assert.assertEquals(tablet1.getRowCount(-1), tablet1NumRows);
         Assert.assertEquals(tablet1.getDataSize(true), tablet1DataSize);
+        Assert.assertEquals(tablet1.getPrimaryIndexMemSize(), tabletPrimaryIndexMemSize);
+        Assert.assertEquals(tablet1.getPrimaryIndexDiskSize(), tabletPrimaryIndexDiskSize);
         Assert.assertEquals(tablet2.getRowCount(-1), tablet2NumRows);
         Assert.assertEquals(tablet2.getDataSize(true), tablet2DataSize);
+        Assert.assertEquals(tablet2.getPrimaryIndexMemSize(), tabletPrimaryIndexMemSize);
+        Assert.assertEquals(tablet2.getPrimaryIndexDiskSize(), tabletPrimaryIndexDiskSize);
         Assert.assertTrue(tablet1.getDataSizeUpdateTime() >= t1 && tablet1.getDataSizeUpdateTime() <= t2);
         Assert.assertTrue(tablet2.getDataSizeUpdateTime() >= t1 && tablet2.getDataSizeUpdateTime() <= t2);
     }
@@ -317,8 +327,12 @@ public class TabletStatMgrTest {
 
         Assert.assertEquals(0, tablet1.getRowCount(-1));
         Assert.assertEquals(0, tablet1.getDataSize(true));
+        Assert.assertEquals(0, tablet1.getPrimaryIndexMemSize());
+        Assert.assertEquals(0, tablet1.getPrimaryIndexDiskSize());
         Assert.assertEquals(0, tablet2.getRowCount(-1));
         Assert.assertEquals(0, tablet2.getDataSize(true));
+        Assert.assertEquals(0, tablet2.getPrimaryIndexMemSize());
+        Assert.assertEquals(0, tablet2.getPrimaryIndexDiskSize());
         Assert.assertEquals(0L, tablet1.getDataSizeUpdateTime());
         Assert.assertEquals(0L, tablet2.getDataSizeUpdateTime());
     }
@@ -408,8 +422,12 @@ public class TabletStatMgrTest {
 
         Assert.assertEquals(0, tablet1.getRowCount(-1));
         Assert.assertEquals(0, tablet1.getDataSize(true));
+        Assert.assertEquals(0, tablet1.getPrimaryIndexMemSize());
+        Assert.assertEquals(0, tablet1.getPrimaryIndexDiskSize());
         Assert.assertEquals(0, tablet2.getRowCount(-1));
         Assert.assertEquals(0, tablet2.getDataSize(true));
+        Assert.assertEquals(0, tablet2.getPrimaryIndexMemSize());
+        Assert.assertEquals(0, tablet2.getPrimaryIndexDiskSize());
         Assert.assertEquals(0L, tablet1.getDataSizeUpdateTime());
         Assert.assertEquals(0L, tablet2.getDataSizeUpdateTime());
     }
