@@ -210,9 +210,7 @@ public:
 
     uint32_t get_num_update_files() const { return _rowset_meta_pb->num_update_files(); }
 
-    //const RowsetMetaPB& get_meta_pb() const { return *_rowset_meta_pb; }
-
-    // rowset_meta_pb keep `tablet_scheam_pb` right now and it will use more memory.
+    // rowset_meta_pb keep `tablet_schema_pb` right now and it will use more memory.
     // But it is not necessary always hold tablet schema pb in memory. The access frequency of
     // tablet_schema_pb is very low and it could be generated from `_schema` temporarily.
     // So we will remove `tablet_scheam_pb` from rowset_meta_pb in memory. But when we persistent
