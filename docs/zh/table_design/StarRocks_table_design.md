@@ -19,7 +19,9 @@ StarRocks 中建表操作简单易用，您只需要在 CREATE TABLE 语句中�
 
 ```SQL
 CREATE DATABASE example_db;
+
 USE example_db;
+
 CREATE TABLE user_access (
     uid int,
     name varchar(64),
