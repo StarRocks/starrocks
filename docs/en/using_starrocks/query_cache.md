@@ -270,7 +270,7 @@ PARTITION p7 VALUES [('1998-01-01'), ('1999-01-01')))
 DISTRIBUTED BY HASH(`lo_orderkey`)
 PROPERTIES 
 (
-    "replication_num" = "1",
+    "replication_num" = "3",
     "colocate_with" = "groupxx1",
     "storage_format" = "DEFAULT",
     "enable_persistent_index" = "false",
@@ -334,7 +334,7 @@ PARTITION BY RANGE(ts)
 DISTRIBUTED BY HASH(`ts`, `k0`, `k1`)
 PROPERTIES
 (
-    "replication_num" = "1", 
+    "replication_num" = "3", 
     "storage_format" = "default"
 );
 ```
@@ -568,7 +568,7 @@ The parameters in the preceding API operations are as follows:
    DISTRIBUTED BY HASH(`ts`, `k0`, `k1`)
    PROPERTIES
    (
-       "replication_num" = "1",
+       "replication_num" = "3",
        "storage_format" = "DEFAULT",
        "enable_persistent_index" = "false"
    );
