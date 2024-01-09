@@ -17,6 +17,7 @@ package com.starrocks.hive.reader;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import org.apache.hadoop.hive.common.type.HiveDecimal;
+import org.apache.hadoop.hive.serde2.io.TimestampWritableV2;
 import org.apache.hadoop.hive.serde2.objectinspector.ListObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.MapObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
@@ -176,9 +177,15 @@ public class HiveColumnValue implements ColumnValue {
     @Override
     public LocalDateTime getDateTime(ColumnType.TypeValue type) {
         if (fieldData instanceof Timestamp) {
-            return LocalDateTime.ofInstant(((Timestamp) fieldData).toInstant(), ZoneId.of(timeZone));
+            return ((Timestamp) fieldData).toLocalDateTime();
+        } else if (fieldData instanceof TimestampWritableV2) {
+            return LocalDateTime.ofInstant(Instant.ofEpochSecond((((TimestampObjectInspector) fieldInspector)
+                    .getPrimitiveJavaObject(fieldData)).toEpochSecond()), ZoneId.of(timeZone));
+        } else {
+            org.apache.hadoop.hive.common.type.Timestamp timestamp =
+                    ((TimestampObjectInspector) fieldInspector).getPrimitiveJavaObject(fieldData);
+            return LocalDateTime.of(timestamp.getYear(), timestamp.getMonth(), timestamp.getDay(),
+                    timestamp.getHours(), timestamp.getMinutes(), timestamp.getSeconds());
         }
-        return LocalDateTime.ofInstant(Instant.ofEpochSecond((((TimestampObjectInspector) fieldInspector)
-                .getPrimitiveJavaObject(fieldData)).toEpochSecond()), ZoneId.of(timeZone));
     }
 }
