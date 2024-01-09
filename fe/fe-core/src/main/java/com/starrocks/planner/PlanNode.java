@@ -803,6 +803,12 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
         // theoretically runtime filter can be applied on multiple child nodes.
         boolean accept = false;
+        List<PlanNode> children = Lists.newArrayList(this.children);
+        if (candidatePartitionByExprs.isEmpty() && this instanceof JoinNode && ((JoinNode) this).isFKRight) {
+            // For UK FK join with the fk table as right table(larger table), we should push down runtime filter to
+            // the right table first, because the right table is larger and the runtime filter can filter more data.
+            children = Lists.reverse(children);
+        }
         for (PlanNode node : children) {
             if (candidatePartitionByExprs.isEmpty()) {
                 if (node.pushDownRuntimeFilters(descTbl, description, probeExpr, Lists.newArrayList())) {

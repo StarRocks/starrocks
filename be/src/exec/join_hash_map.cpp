@@ -315,6 +315,7 @@ void JoinHashTable::create(const HashTableParam& param) {
         _probe_state->output_probe_column_timer = param.output_probe_column_timer;
         _probe_state->output_build_column_timer = param.output_build_column_timer;
     }
+    _probe_state->is_one_match_probe = param.is_one_match_probe;
 
     _table_items->build_chunk = std::make_shared<Chunk>();
     _table_items->with_other_conjunct = param.with_other_conjunct;

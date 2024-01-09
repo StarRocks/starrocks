@@ -973,6 +973,9 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht(RuntimeState* state, 
                         _probe_state->probe_match_filter[i] = 1;
                     }
                     RETURN_IF_CHUNK_FULL()
+                    if (_probe_state->is_one_match_probe) {
+                        break;
+                    }
                 }
                 build_index = _table_items->next[build_index];
             } while (build_index != 0);

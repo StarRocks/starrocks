@@ -44,6 +44,10 @@ Status HashJoinProbeOperator::prepare(RuntimeState* state) {
         _join_prober->ref();
     }
 
+    if (_join_prober->is_one_match_probe()) {
+        _unique_metrics->add_info_string("UseOneMatchProbe");
+    }
+
     RETURN_IF_ERROR(_join_prober->prepare_prober(state, _unique_metrics.get()));
 
     return Status::OK();

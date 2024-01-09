@@ -130,6 +130,9 @@ public class HashJoinNode extends JoinNode {
             msg.hash_join_node.setInterpolate_passthrough(
                     ConnectContext.get().getSessionVariable().isHashJoinInterpolatePassthrough());
         }
+        if (isOneMatchProbe()) {
+            msg.hash_join_node.setIs_one_match_probe(true);
+        }
     }
 
     @Override

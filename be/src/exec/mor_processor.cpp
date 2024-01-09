@@ -43,7 +43,7 @@ Status IcebergMORProcessor::init(RuntimeState* runtime_state, const MORParams& p
     _probe_row_desc = std::make_unique<RowDescriptor>(params.tuple_desc, false);
 
     const auto param = _pool.add(
-            new HashJoinerParam(&_pool, hash_join_node, 1, TPlanNodeType::HASH_JOIN_NODE,
+            new HashJoinerParam(&_pool, hash_join_node, 1, TPlanNodeType::HASH_JOIN_NODE, false,
                                 std::vector<bool>(params.equality_slots.size(), false), _join_exprs, _join_exprs,
                                 std::vector<ExprContext*>(), std::vector<ExprContext*>(), *_build_row_desc,
                                 *_probe_row_desc, *_probe_row_desc, TPlanNodeType::HDFS_SCAN_NODE,

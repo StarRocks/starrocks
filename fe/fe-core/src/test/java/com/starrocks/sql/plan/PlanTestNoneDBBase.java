@@ -581,7 +581,6 @@ public class PlanTestNoneDBBase {
         return false;
     }
 
-
     public static String format(String result) {
         StringBuilder sb = new StringBuilder();
         Arrays.stream(result.split("\n")).forEach(d -> sb.append(d.trim()).append("\n"));
@@ -589,7 +588,8 @@ public class PlanTestNoneDBBase {
     }
 
     private void debugSQL(BufferedWriter writer, boolean hasResult, boolean hasFragment, boolean hasDump,
-                          boolean hasStatistics, boolean hasScheduler, int nthPlan, String sql, String plan, String fragment,
+                          boolean hasStatistics, boolean hasScheduler, int nthPlan, String sql, String plan,
+                          String fragment,
                           String dump,
                           String statistic,
                           String comment,

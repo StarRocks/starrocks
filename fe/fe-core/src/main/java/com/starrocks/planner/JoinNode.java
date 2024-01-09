@@ -80,6 +80,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     protected String colocateReason = ""; // if can not do colocate join, set reason here
     // the flag for local bucket shuffle join
     protected boolean isLocalHashBucket = false;
+    protected boolean isFKRight = false;
 
     protected final List<RuntimeFilterDescription> buildRuntimeFilters = Lists.newArrayList();
     protected final List<Integer> filter_null_value_columns = Lists.newArrayList();
@@ -92,6 +93,7 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     // The partitionByExprs which need to check the probe side for partition join.
     protected List<Expr> probePartitionByExprs;
     protected boolean canLocalShuffle = false;
+    protected boolean isOneMatchProbe = false;
 
     public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
         return buildRuntimeFilters;
@@ -396,6 +398,18 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         canLocalShuffle = v;
     }
 
+    public boolean isOneMatchProbe() {
+        return isOneMatchProbe;
+    }
+
+    public void setOneMatchProbe(boolean oneMatchProbe) {
+        isOneMatchProbe = oneMatchProbe;
+    }
+
+    public void setFKRight(boolean fkRight) {
+        this.isFKRight = fkRight;
+    }
+
     @Override
     protected String getNodeExplainString(String detailPrefix, TExplainLevel detailLevel) {
         String distrModeStr =
@@ -448,6 +462,10 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
             if (FeConstants.showJoinLocalShuffleInExplain) {
                 output.append(detailPrefix).append("can local shuffle: " + canLocalShuffle + "\n");
+            }
+
+            if (isOneMatchProbe) {
+                output.append(detailPrefix).append("OneMatchProbeOptimization\n");
             }
         }
         return output.toString();
