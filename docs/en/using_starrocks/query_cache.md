@@ -303,12 +303,8 @@ PARTITION BY RANGE(ts)
 DISTRIBUTED BY HASH(`ts`, `k0`, `k1`) BUCKETS 1
 PROPERTIES
 (
-<<<<<<< HEAD
-    "replication_num" = "1", 
-    "in_memory" = "false",
-=======
     "replication_num" = "3", 
->>>>>>> 246de1466a ([Doc] handle replication_num in query cache doc (#38714))
+    "in_memory" = "false",
     "storage_format" = "default"
 );
 ```
@@ -542,12 +538,8 @@ The parameters in the preceding API operations are as follows:
    DISTRIBUTED BY HASH(`ts`, `k0`, `k1`) BUCKETS 64 
    PROPERTIES
    (
-<<<<<<< HEAD
-       "replication_num" = "1",
-       "in_memory" = "false",
-=======
        "replication_num" = "3",
->>>>>>> 246de1466a ([Doc] handle replication_num in query cache doc (#38714))
+       "in_memory" = "false",
        "storage_format" = "DEFAULT",
        "enable_persistent_index" = "false"
    );
