@@ -39,20 +39,16 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.iceberg.alter.AlterTableAction;
-import com.starrocks.connector.iceberg.alter.AlterTableActionFactory;
 import com.starrocks.connector.iceberg.cost.IcebergMetricsReporter;
 import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -215,6 +211,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         PartitionSpec partitionSpec = parsePartitionFields(schema, partitionColNames);
         Map<String, String> properties = stmt.getProperties() == null ? new HashMap<>() : stmt.getProperties();
         String tableLocation = properties.get(LOCATION_PROPERTY);
+        properties.put(COMMENT, stmt.getComment());
         Map<String, String> createTableProperties = IcebergApiConverter.rebuildCreateTableProperties(properties);
 
         return icebergCatalog.createTable(dbName, tableName, schema, partitionSpec, tableLocation, createTableProperties);
@@ -226,27 +223,13 @@ public class IcebergMetadata implements ConnectorMetadata {
         String tableName = stmt.getTableName();
         org.apache.iceberg.Table table = icebergCatalog.getTable(dbName, tableName);
 
-        Preconditions.checkNotNull(table, "Failed to load iceberg table: " + stmt.getTbl().toString());
-
-        Transaction transaction = table.newTransaction();
-        Preconditions.checkArgument(transaction != null, "Transaction or table cannot be null");
-
-        List<AlterClause> alterClauses = stmt.getOps();
-        for (AlterClause clause : alterClauses) {
-            // rename table is a catalog operator
-            if (clause instanceof TableRenameClause) {
-                TableRenameClause tableRenameClause = (TableRenameClause) clause;
-                Preconditions.checkNotNull(icebergCatalog, "iceberg catalog cannot be null");
-
-                icebergCatalog.renameTable(dbName, tableName, tableRenameClause.getNewTableName());
-            } else {
-                AlterTableAction action = AlterTableActionFactory.getAction(clause.getClass().getName());
-                Preconditions.checkNotNull(action, "Unsupported alter operation for iceberg connector: " + clause);
-                action.execute(transaction, clause);
-            }
+        if (table == null) {
+            throw new StarRocksConnectorException(
+                    "Failed to load iceberg table: " + stmt.getTbl().toString());
         }
 
-        transaction.commitTransaction();
+        IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(stmt, table, icebergCatalog);
+        executor.execute();
 
         synchronized (this) {
             try {

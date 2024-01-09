@@ -12,12 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.connector.iceberg.alter;
+package com.starrocks.transaction;
 
-import com.starrocks.sql.ast.AlterClause;
-import org.apache.iceberg.Transaction;
+public class RunningTxnExceedException extends TransactionException {
 
-public interface AlterTableAction {
+    private static final long serialVersionUID = 1L;
 
-    void execute(Transaction transaction, AlterClause clause);
+    public RunningTxnExceedException(String msg) {
+        super(msg);
+    }
+
+    public RunningTxnExceedException(String msg, Throwable e) {
+        super(msg, e);
+    }
 }

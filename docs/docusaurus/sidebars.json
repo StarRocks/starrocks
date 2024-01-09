@@ -70,22 +70,22 @@
           "items": [
             {
               "type": "link",
-              "label": "StarRocks Flink Connector",
+              "label": "Flink Connector",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/ecosystem_release/flink_connector.md"
             },
             {
               "type": "link",
-              "label": "StarRocks Kafka Connector",
+              "label": "Kafka Connector",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/ecosystem_release/kafka_connector.md"
             },
             {
               "type": "link",
-              "label": "StarRocks Spark Connector",
+              "label": "Spark Connector",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/ecosystem_release/spark_connector.md"
             },
             {
               "type": "link",
-              "label": "starrocks-kubernetes-operator",
+              "label": "Kubernetes Operator",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/ecosystem_release/starrocks-kubernetes-operator.md"
             }
           ]
@@ -144,8 +144,9 @@
     {
       "type": "category",
       "label": "Table Design",
-      "link": {"type": "doc", "id": "table_design/StarRocks_table_design"},
+      "link": {"type": "doc", "id": "table_design/catalog_db_tbl"},
       "items": [
+        "table_design/StarRocks_table_design",
         {
           "type": "category",
           "label": "Table types",
@@ -911,22 +912,22 @@
           "items": [
             {
               "type": "link",
-              "label": "StarRocks Flink Connector",
+              "label": "Flink Connector",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/ecosystem_release/flink_connector.md"
             },
             {
               "type": "link",
-              "label": "StarRocks Kafka Connector",
+              "label": "Kafka Connector",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/ecosystem_release/kafka_connector.md"
             },
             {
               "type": "link",
-              "label": "StarRocks Spark Connector",
+              "label": "Spark Connector",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/ecosystem_release/spark_connector.md"
             },
             {
               "type": "link",
-              "label": "starrocks-kubernetes-operator",
+              "label": "Kubernetes Operator",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/ecosystem_release/starrocks-kubernetes-operator.md"
             }
           ]
@@ -985,8 +986,9 @@
     {
       "type": "category",
       "label": "表设计",
-      "link": {"type": "doc", "id": "table_design/StarRocks_table_design"},
+      "link": {"type": "doc", "id": "table_design/catalog_db_tbl"},
       "items": [
+        "table_design/StarRocks_table_design",
         {
           "type": "category",
           "label": "数据模型",

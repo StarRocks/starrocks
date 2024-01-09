@@ -1134,7 +1134,7 @@ public class IcebergMetadataTest extends TableTestBase {
         AddColumnClause addC4 = new AddColumnClause(c4, null, null, new HashMap<>());
         clauses.add(addC4);
         AlterTableStmt stmtC4 = new AlterTableStmt(tableName, clauses);
-        Assert.assertThrows(StarRocksConnectorException.class, () -> metadata.alterTable(stmtC4));
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(stmtC4));
         clauses.clear();
 
         // drop/rename/modify column
