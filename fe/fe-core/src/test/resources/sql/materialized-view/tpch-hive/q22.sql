@@ -39,8 +39,8 @@ order by
 [result]
 TOP-N (order by [[29: substring ASC NULLS FIRST]])
     TOP-N (order by [[29: substring ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{: count=count(), : sum=sum(: c_acctbal)}] group by [[: substring]] having [null]
-            EXCHANGE SHUFFLE[]
+        AGGREGATE ([GLOBAL] aggregate [{30: count=count(), 31: sum=sum(6: c_acctbal)}] group by [[29: substring]] having [null]
+            EXCHANGE SHUFFLE[29]
                 RIGHT ANTI JOIN (join-predicate [20: o_custkey = 1: c_custkey] post-join-predicate [null])
                     EXCHANGE SHUFFLE[20]
                         HIVE SCAN (columns{20} predicate[null])
@@ -51,7 +51,7 @@ TOP-N (order by [[29: substring ASC NULLS FIRST]])
                                 ASSERT LE 1
                                     AGGREGATE ([GLOBAL] aggregate [{95: sum=sum(95: sum), 96: count=sum(96: count)}] group by [[]] having [null]
                                         EXCHANGE GATHER
-                                            AGGREGATE ([LOCAL] aggregate [{95: sum=sum(40: c_sum), 96: count=sum(39: c_count)}] group by [[]] having [null]
-                                                SCAN (mv[customer_agg_mv1] columns[37: c_acctbal, 38: substring_phone, 39: c_count, 40: c_sum] predicate[37: c_acctbal > 0.00 AND 38: substring_phone IN (21, 24, 28, 32, 34, 35, 37)])
+                                            AGGREGATE ([LOCAL] aggregate [{95: sum=sum(84: c_sum), 96: count=sum(83: c_count)}] group by [[]] having [null]
+                                                SCAN (mv[customer_agg_mv1] columns[81: c_acctbal, 82: substring_phone, 83: c_count, 84: c_sum] predicate[81: c_acctbal > 0.00 AND 82: substring_phone IN (21, 24, 28, 32, 34, 35, 37)])
 [end]
 
