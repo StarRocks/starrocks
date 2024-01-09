@@ -23,6 +23,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/txn_log_applier.h"
+#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h" // delete_files_async
 #include "util/lru_cache.h"
 
@@ -221,6 +222,7 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t
 
 void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_ids, const int32_t* txn_types,
                size_t txn_size) {
+    TEST_SYNC_POINT("transactions::abort_txn:enter");
     std::vector<std::string> files_to_delete;
     for (size_t i = 0; i < txn_size; ++i) {
         auto txn_id = txn_ids[i];
@@ -273,6 +275,8 @@ void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_
         files_to_delete.emplace_back(log_path);
 
         tablet_mgr->metacache()->erase(log_path);
+
+        tablet_mgr->update_mgr()->try_remove_cache(tablet_id, txn_id);
     }
 
     delete_files_async(std::move(files_to_delete));
