@@ -38,11 +38,13 @@ public:
     }
     void TearDown() override { ASSERT_TRUE(fs::remove_all(_root_path).ok()); }
 
+    void create_file_and_destroy();
+
 public:
     std::string _root_path;
 };
 
-TEST_F(HdfsFileSystemTest, create_file_and_destroy) {
+void HdfsFileSystemTest::create_file_and_destroy() {
     auto fs = new_fs_hdfs(FSOptions());
     // use file:// as the fs scheme, which will leverage Hadoop LocalFileSystem for testing
     std::string filepath = "file://" + _root_path + "/create_file_and_destroy_file";
@@ -63,6 +65,12 @@ TEST_F(HdfsFileSystemTest, create_file_and_destroy) {
 
     // done the file, check if there is any memory leak
     (*wfile).reset();
+}
+
+TEST_F(HdfsFileSystemTest, create_file_and_destroy) {
+    // NOTE: use separate thread to run the test case to avoid some weird tls memory issue introduced by JVM
+    auto thread = std::thread([this] { create_file_and_destroy(); });
+    thread.join();
 }
 
 } // namespace starrocks
