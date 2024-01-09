@@ -294,7 +294,13 @@ public:
 
     bool contains_version(Version version) const { return rowset_meta()->version().contains(version); }
 
+<<<<<<< HEAD
     DeletePredicatePB* mutable_delete_predicate() { return _rowset_meta->mutable_delete_predicate(); }
+=======
+    void set_is_compacting(bool flag) { is_compacting.store(flag); }
+
+    bool get_is_compacting() { return is_compacting.load(); }
+>>>>>>> 6b63d3d266 ([BugFix] Use delete predicates to filter data when creating sync mv (#38652))
 
     static bool comparator(const RowsetSharedPtr& left, const RowsetSharedPtr& right) {
         return left->end_version() < right->end_version();
