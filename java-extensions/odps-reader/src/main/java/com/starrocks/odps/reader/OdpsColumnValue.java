@@ -35,9 +35,12 @@ public class OdpsColumnValue implements ColumnValue {
     private final Object fieldData;
     private final TypeInfo dataType;
 
-    public OdpsColumnValue(Object fieldData, TypeInfo dataType) {
+    private final String timezone;
+
+    public OdpsColumnValue(Object fieldData, TypeInfo dataType, String timeZone) {
         this.fieldData = fieldData;
         this.dataType = dataType;
+        this.timezone = timeZone;
     }
 
     @Override
@@ -72,19 +75,7 @@ public class OdpsColumnValue implements ColumnValue {
 
     @Override
     public String getString(ColumnType.TypeValue type) {
-        if (type == ColumnType.TypeValue.DATE) {
-            LocalDate date = (LocalDate) fieldData;
-            return OdpsTypeUtils.formatDate(date);
-        } else {
-            return fieldData.toString();
-        }
-    }
-
-    @Override
-    public String getTimestamp(ColumnType.TypeValue type) {
-        Instant ts = (Instant) fieldData;
-        LocalDateTime dateTime = LocalDateTime.ofInstant(ts, ZoneId.systemDefault());
-        return OdpsTypeUtils.formatDateTime(dateTime);
+        return fieldData.toString();
     }
 
     @Override
@@ -98,7 +89,7 @@ public class OdpsColumnValue implements ColumnValue {
         List data = (List) fieldData;
         ArrayTypeInfo arrayTypeInfo = (ArrayTypeInfo) dataType;
         for (int i = 0; i < data.size(); i++) {
-            values.add(new OdpsColumnValue(data.get(i), arrayTypeInfo.getElementTypeInfo()));
+            values.add(new OdpsColumnValue(data.get(i), arrayTypeInfo.getElementTypeInfo(), timezone));
         }
     }
 
@@ -107,8 +98,8 @@ public class OdpsColumnValue implements ColumnValue {
         MapTypeInfo mapTypeInfo = (MapTypeInfo) dataType;
         Map data = (Map) fieldData;
         data.forEach((key, value) -> {
-            keys.add(new OdpsColumnValue(key, mapTypeInfo.getKeyTypeInfo()));
-            values.add(new OdpsColumnValue(value, mapTypeInfo.getValueTypeInfo()));
+            keys.add(new OdpsColumnValue(key, mapTypeInfo.getKeyTypeInfo(), timezone));
+            values.add(new OdpsColumnValue(value, mapTypeInfo.getValueTypeInfo(), timezone));
         });
     }
 
@@ -118,7 +109,7 @@ public class OdpsColumnValue implements ColumnValue {
         List<TypeInfo> fieldTypeInfos = structTypeInfo.getFieldTypeInfos();
         Struct data = (Struct) fieldData;
         for (int i = 0; i < data.getFieldCount(); i++) {
-            values.add(new OdpsColumnValue(data.getFieldValue(i), fieldTypeInfos.get(i)));
+            values.add(new OdpsColumnValue(data.getFieldValue(i), fieldTypeInfos.get(i), timezone));
         }
     }
 
@@ -130,5 +121,16 @@ public class OdpsColumnValue implements ColumnValue {
     @Override
     public BigDecimal getDecimal() {
         return (BigDecimal) fieldData;
+    }
+
+    @Override
+    public LocalDate getDate() {
+        return (LocalDate) fieldData;
+    }
+
+    @Override
+    public LocalDateTime getDateTime(ColumnType.TypeValue type) {
+        Instant ts = (Instant) fieldData;
+        return LocalDateTime.ofInstant(ts, ZoneId.systemDefault());
     }
 }
