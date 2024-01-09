@@ -41,17 +41,17 @@ mysql> select ngram_search("chinese","china");
 |                              0.5 |
 +----------------------------------+
 
--- haystack is a column and
-mysql> select rowkey,ngram_search(rowkey,"000073a7-274f-46bf-bfaf-678868cc26cd") as a from string_table order by a;
-+--------------------------------------+------------+
-| rowkey                               | a          |
-+--------------------------------------+------------+
-| 1bd32347-274f-4a30-93f3-9087594de9cd | 0.15151513 |
-| 2548c7aa-d94f-46bf-b0a4-d769f248cbb2 | 0.18181819 |
-| 93da4b36-5401-46bf-bfa7-2bde65779623 | 0.21212119 |
-| e6249ba1-5b54-46bf-bfaf-89d69094b757 | 0.24242425 |
-| 000073a7-274f-46bf-bfaf-678868cc26cd |          1 |
-+--------------------------------------+------------+
+-- haystack is a column and needle are const value
+mysql> select rowkey,ngram_search(rowkey,"31dc496b-760d-6f1a-4521-050073a70000") as string_similarity from string_table order by string_similarity desc limit 5;
++--------------------------------------+-------------------+
+| rowkey                               | string_similarity |
++--------------------------------------+-------------------+
+| 31dc496b-760d-6f1a-4521-050073a70000 |                 1 |
+| 31dc496b-760d-6f1a-4521-050073a40000 |         0.8787879 |
+| 31dc496b-760d-6f1a-4521-05007fa70000 |         0.8787879 |
+| 31dc496b-760d-6f1a-4521-050073a30000 |         0.8787879 |
+| 31dc496b-760d-6f1a-4521-0500c3a70000 |         0.8787879 |
++--------------------------------------+-------------------+
 ```
 
 ## note
