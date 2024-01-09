@@ -21,6 +21,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.TimestampArithmeticExpr.TimeUnit;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
@@ -126,6 +127,25 @@ public class TableFunction extends Function {
                     Lists.newArrayList("generate_series"),
                     Lists.newArrayList(type, type, type),
                     Lists.newArrayList(type), defaultArgs);
+            functionSet.addBuiltin(func);
+        }
+
+        //generate time series
+        for (TimeUnit timeUnit : Lists.newArrayList(TimeUnit.YEAR, TimeUnit.MONTH, TimeUnit.DAY, TimeUnit.HOUR,
+                TimeUnit.MINUTE, TimeUnit.SECOND)) {
+            String funcOpName = String.format("%s_BY_%s", FunctionSet.GENERATE_SERIES, timeUnit.name());
+
+            Vector<Pair<String, Expr>> defaultArgs = new Vector<>();
+            try {
+                defaultArgs.add(new Pair("step", LiteralExpr.create("1", Type.INT)));
+            } catch (AnalysisException ex) { //ignored
+            }
+            // generate time series
+            TableFunction func = new TableFunction(new FunctionName(funcOpName),
+                    Lists.newArrayList("start", "end", "step"),
+                    Lists.newArrayList("generate_series"),
+                    Lists.newArrayList(Type.DATETIME, Type.DATETIME, Type.INT),
+                    Lists.newArrayList(Type.DATETIME), defaultArgs);
             functionSet.addBuiltin(func);
         }
 

@@ -462,6 +462,9 @@ public class FunctionSet {
     public static final String STRUCT = "struct";
     public static final String NAMED_STRUCT = "named_struct";
 
+    // table function
+    public static final String GENERATE_SERIES = "generate_series";
+
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);

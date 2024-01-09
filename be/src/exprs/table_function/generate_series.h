@@ -24,7 +24,7 @@
 
 namespace starrocks {
 
-template <LogicalType Type>
+template <LogicalType SeriesType, LogicalType StepType, TimeUnit UNIT = TimeUnit::DAY>
 class GenerateSeries final : public TableFunction {
     struct MyState final : public TableFunctionState {
         ~MyState() override = default;
@@ -53,18 +53,19 @@ public:
 
     std::pair<Columns, UInt32Column::Ptr> process(RuntimeState* runtime_state,
                                                   TableFunctionState* base_state) const override {
-        using NumericType = RunTimeCppType<Type>;
+        using SeriesRunTimeType = RunTimeCppType<SeriesType>;
+        using StepRunTimeType = RunTimeCppType<StepType>;
         auto max_chunk_size = runtime_state->chunk_size();
         auto state = down_cast<MyState*>(base_state);
-        auto res = RunTimeColumnType<Type>::create();
+        auto res = RunTimeColumnType<SeriesType>::create();
         auto offsets = UInt32Column::create();
-        auto arg_start = ColumnViewer<Type>(state->get_columns()[0]);
-        auto arg_stop = ColumnViewer<Type>(state->get_columns()[1]);
+        auto arg_start = ColumnViewer<SeriesType>(state->get_columns()[0]);
+        auto arg_stop = ColumnViewer<SeriesType>(state->get_columns()[1]);
         auto curr_row = state->processed_rows();
 
-        std::unique_ptr<ColumnViewer<Type>> arg_step;
+        std::unique_ptr<ColumnViewer<StepType>> arg_step;
         if (state->get_columns().size() > 2) {
-            arg_step = std::make_unique<ColumnViewer<Type>>(state->get_columns()[2]);
+            arg_step = std::make_unique<ColumnViewer<StepType>>(state->get_columns()[2]);
         }
 
         auto move_to_next_row = [&]() {
@@ -75,19 +76,19 @@ public:
 
         auto step_is_null = [&](size_t row) { return (arg_step == nullptr) ? false : arg_step->is_null(row); };
 
-        auto get_step = [&](size_t row) -> NumericType { return (arg_step == nullptr) ? 1 : arg_step->value(row); };
+        auto get_step = [&](size_t row) -> StepRunTimeType { return (arg_step == nullptr) ? 1 : arg_step->value(row); };
 
         while (res->size() < max_chunk_size && curr_row < arg_start.size()) {
             offsets->append(res->size());
             if (arg_start.is_null(curr_row) || arg_stop.is_null(curr_row) || step_is_null(curr_row)) {
                 move_to_next_row();
             } else {
-                auto start = arg_start.value(curr_row);
-                auto stop = arg_stop.value(curr_row);
+                auto start = (SeriesRunTimeType)arg_start.value(curr_row);
+                auto stop = (SeriesRunTimeType)arg_stop.value(curr_row);
                 auto step = get_step(curr_row);
-                auto offset = (NumericType)state->get_offset();
+                auto offset = state->get_offset();
                 auto current = start;
-                if (add_overflow(start, offset, &current)) {
+                if (add_overflow_unit(start, offset, &current)) {
                     move_to_next_row();
                     continue;
                 }
@@ -102,7 +103,7 @@ public:
                     continue;
                 }
 
-                auto count = (stop - current) / step + 1;
+                auto count = get_unit_count(current, stop) / step + 1;
                 if (count > max_chunk_size - res->size()) {
                     count = max_chunk_size - res->size();
                 }
@@ -113,7 +114,7 @@ public:
                 auto* data = res->get_data().data();
                 for (decltype(count) i = 0; i < count; i++) {
                     data[old_size + i] = current;
-                    overflow = add_overflow(current, step, &current);
+                    overflow = add_overflow_unit(current, step, &current);
                     if (overflow) {
                         break;
                     }
@@ -123,7 +124,7 @@ public:
                 if (done || overflow) {
                     move_to_next_row();
                 } else {
-                    state->set_offset(current - start);
+                    state->set_offset(get_unit_count(start, current));
                 }
             }
         } // while
@@ -138,6 +139,81 @@ private:
         } else {
             column->resize(new_size);
         }
+    }
+
+private:
+    template <typename SERIES_T, typename APPEND_T>
+    static bool add_overflow_unit(SERIES_T a, APPEND_T b, SERIES_T* c) {
+        return add_overflow(a, (SERIES_T)b, c);
+    }
+
+    template <typename APPEND_T>
+    static bool add_overflow_unit(TimestampValue a, APPEND_T b, TimestampValue* c) {
+        *c = a.add<UNIT>(b);
+        return *c == TimestampValue();
+    }
+
+    template <typename SERIES_T>
+    static SERIES_T get_unit_count(SERIES_T start, SERIES_T stop) {
+        return (stop - start);
+    }
+
+    static int64_t get_unit_count(TimestampValue start, TimestampValue stop) {
+        switch (UNIT) {
+        case SECOND:
+            return stop.diff_microsecond(start) / USECS_PER_SEC;
+        case MINUTE:
+            return stop.diff_microsecond(start) / USECS_PER_MINUTE;
+        case HOUR:
+            return stop.diff_microsecond(start) / USECS_PER_HOUR;
+        case DAY:
+            return stop.diff_microsecond(start) / USECS_PER_DAY;
+        case MONTH:
+            return month_diff(stop, start);
+        case YEAR:
+            return year_diff(stop, start);
+        default:
+            __builtin_unreachable();
+        }
+    }
+
+    // from time_function.cpp
+    inline static int32_t month_diff(TimestampValue l, TimestampValue r) {
+        int year1, month1, day1, hour1, mintue1, second1, usec1;
+        int year2, month2, day2, hour2, mintue2, second2, usec2;
+        l.to_timestamp(&year1, &month1, &day1, &hour1, &mintue1, &second1, &usec1);
+        r.to_timestamp(&year2, &month2, &day2, &hour2, &mintue2, &second2, &usec2);
+
+        int month = (year1 - year2) * 12 + (month1 - month2);
+
+        if (month >= 0) {
+            month -= (day1 * 1000000L + (hour1 * 10000 + mintue1 * 100 + second1) <
+                      day2 * 1000000L + (hour2 * 10000 + mintue2 * 100 + second2));
+        } else {
+            month += (day1 * 1000000L + (hour1 * 10000 + mintue1 * 100 + second1) >
+                      day2 * 1000000L + (hour2 * 10000 + mintue2 * 100 + second2));
+        }
+        return month;
+    }
+
+    // from time_function.cpp
+    inline static int32_t year_diff(TimestampValue l, TimestampValue r) {
+        int year1, month1, day1, hour1, mintue1, second1, usec1;
+        int year2, month2, day2, hour2, mintue2, second2, usec2;
+        l.to_timestamp(&year1, &month1, &day1, &hour1, &mintue1, &second1, &usec1);
+        r.to_timestamp(&year2, &month2, &day2, &hour2, &mintue2, &second2, &usec2);
+
+        int year = (year1 - year2);
+
+        if (year >= 0) {
+            year -= ((month1 * 100 + day1) * 1000000L + (hour1 * 10000 + mintue1 * 100 + second1) <
+                     (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + mintue2 * 100 + second2));
+        } else {
+            year += ((month1 * 100 + day1) * 1000000L + (hour1 * 10000 + mintue1 * 100 + second1) >
+                     (month2 * 100 + day2) * 1000000L + (hour2 * 10000 + mintue2 * 100 + second2));
+        }
+
+        return year;
     }
 };
 

@@ -117,15 +117,55 @@ TableFunctionResolver::TableFunctionResolver() {
 
     // ----=====---- generate_series ----====----
     // implicit step size
-#define M(TYPE) add_function_mapping("generate_series", {TYPE, TYPE}, {TYPE}, std::make_shared<GenerateSeries<TYPE>>());
+#define M(TYPE) \
+    add_function_mapping("generate_series", {TYPE, TYPE}, {TYPE}, std::make_shared<GenerateSeries<TYPE, TYPE>>());
     APPLY_FOR_ALL_INT_TYPE(M)
 #undef M
 
     // explicit step size
-#define M(TYPE) \
-    add_function_mapping("generate_series", {TYPE, TYPE, TYPE}, {TYPE}, std::make_shared<GenerateSeries<TYPE>>());
+#define M(TYPE)                                                         \
+    add_function_mapping("generate_series", {TYPE, TYPE, TYPE}, {TYPE}, \
+                         std::make_shared<GenerateSeries<TYPE, TYPE, TimeUnit::DAY>>());
     APPLY_FOR_ALL_INT_TYPE(M)
 #undef M
+
+    // generate time series with implicit step size
+    add_function_mapping("generate_series_by_year", {TYPE_DATETIME, TYPE_DATETIME}, {TYPE_DATETIME},
+                         std::make_shared<GenerateSeries<TYPE_DATETIME, TYPE_INT, TimeUnit::YEAR>>());
+
+    add_function_mapping("generate_series_by_month", {TYPE_DATETIME, TYPE_DATETIME}, {TYPE_DATETIME},
+                         std::make_shared<GenerateSeries<TYPE_DATETIME, TYPE_INT, TimeUnit::MONTH>>());
+
+    add_function_mapping("generate_series_by_day", {TYPE_DATETIME, TYPE_DATETIME}, {TYPE_DATETIME},
+                         std::make_shared<GenerateSeries<TYPE_DATETIME, TYPE_INT, TimeUnit::DAY>>());
+
+    add_function_mapping("generate_series_by_hour", {TYPE_DATETIME, TYPE_DATETIME}, {TYPE_DATETIME},
+                         std::make_shared<GenerateSeries<TYPE_DATETIME, TYPE_INT, TimeUnit::HOUR>>());
+
+    add_function_mapping("generate_series_by_minute", {TYPE_DATETIME, TYPE_DATETIME}, {TYPE_DATETIME},
+                         std::make_shared<GenerateSeries<TYPE_DATETIME, TYPE_INT, TimeUnit::MINUTE>>());
+
+    add_function_mapping("generate_series_by_second", {TYPE_DATETIME, TYPE_DATETIME}, {TYPE_DATETIME},
+                         std::make_shared<GenerateSeries<TYPE_DATETIME, TYPE_INT, TimeUnit::SECOND>>());
+
+    // generate time series with explicit step size
+    add_function_mapping("generate_series_by_year", {TYPE_DATETIME, TYPE_DATETIME, TYPE_INT}, {TYPE_DATETIME},
+                         std::make_shared<GenerateSeries<TYPE_DATETIME, TYPE_INT, TimeUnit::YEAR>>());
+
+    add_function_mapping("generate_series_by_month", {TYPE_DATETIME, TYPE_DATETIME, TYPE_INT}, {TYPE_DATETIME},
+                         std::make_shared<GenerateSeries<TYPE_DATETIME, TYPE_INT, TimeUnit::MONTH>>());
+
+    add_function_mapping("generate_series_by_day", {TYPE_DATETIME, TYPE_DATETIME, TYPE_INT}, {TYPE_DATETIME},
+                         std::make_shared<GenerateSeries<TYPE_DATETIME, TYPE_INT, TimeUnit::DAY>>());
+
+    add_function_mapping("generate_series_by_hour", {TYPE_DATETIME, TYPE_DATETIME, TYPE_INT}, {TYPE_DATETIME},
+                         std::make_shared<GenerateSeries<TYPE_DATETIME, TYPE_INT, TimeUnit::HOUR>>());
+
+    add_function_mapping("generate_series_by_minute", {TYPE_DATETIME, TYPE_DATETIME, TYPE_INT}, {TYPE_DATETIME},
+                         std::make_shared<GenerateSeries<TYPE_DATETIME, TYPE_INT, TimeUnit::MINUTE>>());
+
+    add_function_mapping("generate_series_by_second", {TYPE_DATETIME, TYPE_DATETIME, TYPE_INT}, {TYPE_DATETIME},
+                         std::make_shared<GenerateSeries<TYPE_DATETIME, TYPE_INT, TimeUnit::SECOND>>());
 
     // ----=====---- list_rowsets ----====----
     add_function_mapping("list_rowsets", {TYPE_BIGINT, TYPE_BIGINT},

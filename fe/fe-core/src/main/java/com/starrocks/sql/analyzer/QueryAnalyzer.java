@@ -25,13 +25,16 @@ import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HiveView;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -60,6 +63,7 @@ import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.IntersectRelation;
+import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.sql.ast.PartitionNames;
@@ -867,7 +871,53 @@ public class QueryAnalyzer {
             if (names != null && !names.isEmpty()) {
                 namesArray = names.toArray(String[]::new);
             }
-            Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes, namesArray,
+
+            String functionName = node.getFunctionName().getFunction();
+            if (FunctionSet.GENERATE_SERIES.equalsIgnoreCase(functionName) && args.size() >= 2) {
+                int stepParamIndex = 2;
+                List<Integer> startStopParamIndex = new ArrayList<>();
+                if (namesArray != null) {
+                    for (int i = 0; i < namesArray.length; i++) {
+                        if ("step".equalsIgnoreCase(namesArray[i])) {
+                            stepParamIndex = i;
+                        } else {
+                            startStopParamIndex.add(i);
+                        }
+                    }
+                }
+
+                boolean isGenerateTimeSeries = true;
+                for (Integer index : startStopParamIndex) {
+                    if (!(argTypes[index].isDatetime() || Type.canCastTo(argTypes[index], Type.DATETIME)) ||
+                            args.get(index) instanceof NullLiteral) {
+                        isGenerateTimeSeries = false;
+                    }
+                }
+                isGenerateTimeSeries = !Arrays.stream(argTypes).allMatch(Type::isFixedPointType) && isGenerateTimeSeries;
+
+                if (isGenerateTimeSeries) {
+                    for (Integer index : startStopParamIndex) {
+                        if (!argTypes[index].isDatetime()) {
+                            args.set(index, TypeManager.addCastExpr(args.get(index), Type.DATETIME));
+                            argTypes[index] = Type.DATETIME;
+                        }
+                    }
+
+                    String unit = TimestampArithmeticExpr.TimeUnit.DAY.name();
+                    if (args.size() > stepParamIndex && args.get(stepParamIndex) instanceof IntervalLiteral) {
+                        IntervalLiteral stepExpr = (IntervalLiteral) args.get(stepParamIndex);
+                        Expr intervalValue = stepExpr.getValue();
+                        analyzeExpression(intervalValue, analyzeState, scope);
+                        argTypes[stepParamIndex] = intervalValue.getType();
+                        node.getFunctionParams().exprs().set(stepParamIndex, intervalValue);
+                        unit = stepExpr.getUnitIdentifier().getDescription();
+                    }
+
+                    functionName = String.format("%s_BY_%s", FunctionSet.GENERATE_SERIES, unit);
+                }
+            }
+
+            Function fn = Expr.getBuiltinFunction(functionName, argTypes, namesArray,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             if (fn == null) {

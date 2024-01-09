@@ -295,4 +295,10 @@ public class AnalyzeFunctionTest {
         analyzeFail("select covar_pop(v1,3) from t0");
         analyzeFail("select corr(v1) from t0");
     }
+
+    @Test
+    public void testTableFunction() throws Exception {
+        analyzeSuccess("SELECT * FROM TABLE(generate_series(2, 5, 2));");
+        analyzeSuccess("select * from table(generate_series('2023-12-31 19:00:00', '2024-01-01 00:00:00', interval 3 hour));");
+    }
 }
