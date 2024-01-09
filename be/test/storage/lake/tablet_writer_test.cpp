@@ -127,16 +127,21 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
     auto files = writer->files();
     ASSERT_EQ(2, files.size());
     ASSERT_NE(files[0].path, files[1].path);
+    ASSERT_GT(files[0].size.value(), 0);
+    ASSERT_GT(files[1].size.value(), 0);
     ASSERT_EQ(2 * segment_rows, writer->num_rows());
     ASSERT_GT(writer->data_size(), 0);
+    ASSERT_EQ(files[1].size.value() + files[1].size.value(), writer->data_size());
 
     writer->close();
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0].path),
-                                             0, _tablet_schema.get()));
-    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1].path),
-                                             1, _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto seg0,
+                    Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[0].path)}, 0,
+                                  _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto seg1,
+                    Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[1].path)}, 1,
+                                  _tablet_schema.get()));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -213,16 +218,21 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
     auto files = writer->files();
     ASSERT_EQ(2, files.size());
     ASSERT_NE(files[0].path, files[1].path);
+    ASSERT_GT(files[0].size.value(), 0);
+    ASSERT_GT(files[1].size.value(), 0);
+    ASSERT_EQ(files[1].size.value() + files[1].size.value(), writer->data_size());
     ASSERT_EQ(2 * segment_rows, writer->num_rows());
     ASSERT_GT(writer->data_size(), 0);
 
     writer->close();
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0].path),
-                                             0, _tablet_schema.get()));
-    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1].path),
-                                             1, _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto seg0,
+                    Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[0].path)}, 0,
+                                  _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto seg1,
+                    Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[1].path)}, 1,
+                                  _tablet_schema.get()));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;

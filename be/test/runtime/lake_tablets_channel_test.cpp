@@ -218,7 +218,7 @@ protected:
         auto path = _location_provider->segment_location(tablet_id, filename);
         std::cerr << path << '\n';
 
-        ASSIGN_OR_ABORT(auto seg, Segment::open(fs, path, 0, _tablet_schema.get()));
+        ASSIGN_OR_ABORT(auto seg, Segment::open(fs, FileInfo{path}, 0, _tablet_schema.get()));
 
         OlapReaderStatistics statistics;
         SegmentReadOptions opts;
