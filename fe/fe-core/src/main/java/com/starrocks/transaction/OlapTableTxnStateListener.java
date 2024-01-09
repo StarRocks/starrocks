@@ -72,6 +72,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
     public void preCommit(TransactionState txnState, List<TabletCommitInfo> tabletCommitInfos,
                           List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
+        txnState.clearAutomaticPartitionSnapshot();
         if (table.getState() == OlapTable.OlapTableState.RESTORE) {
             throw new TransactionCommitFailedException("Cannot write RESTORE state table \"" + table.getName() + "\"");
         }
@@ -303,6 +304,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void postAbort(TransactionState txnState, List<TabletFailInfo> failedTablets) {
+        txnState.clearAutomaticPartitionSnapshot();
         Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
         if (db != null) {
             Locker locker = new Locker();
