@@ -14,8 +14,15 @@
 
 package com.starrocks.transaction;
 
-public class BeginTransactionException extends TransactionException {
-    public BeginTransactionException(String msg) {
+public class RunningTxnExceedException extends TransactionException {
+
+    private static final long serialVersionUID = 1L;
+
+    public RunningTxnExceedException(String msg) {
         super(msg);
+    }
+
+    public RunningTxnExceedException(String msg, Throwable e) {
+        super(msg, e);
     }
 }

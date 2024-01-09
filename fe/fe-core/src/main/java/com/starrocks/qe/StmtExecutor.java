@@ -180,6 +180,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.RemoteTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionCommitFailedException;
@@ -1979,7 +1980,7 @@ public class StmtExecutor {
                 if (filteredRows > 0) {
                     if (targetTable instanceof ExternalOlapTable) {
                         ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                        transactionMgr.abortRemoteTransaction(
+                        RemoteTransactionMgr.abortRemoteTransaction(
                                 externalTable.getSourceTableDbId(), transactionId,
                                 externalTable.getSourceTableHost(),
                                 externalTable.getSourceTablePort(),
@@ -2028,7 +2029,7 @@ public class StmtExecutor {
 
             if (targetTable instanceof ExternalOlapTable) {
                 ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                if (transactionMgr.commitRemoteTransaction(
+                if (RemoteTransactionMgr.commitRemoteTransaction(
                         externalTable.getSourceTableDbId(), transactionId,
                         externalTable.getSourceTableHost(),
                         externalTable.getSourceTablePort(),
@@ -2118,7 +2119,7 @@ public class StmtExecutor {
             try {
                 if (targetTable instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                    transactionMgr.abortRemoteTransaction(
+                    RemoteTransactionMgr.abortRemoteTransaction(
                             externalTable.getSourceTableDbId(), transactionId,
                             externalTable.getSourceTableHost(),
                             externalTable.getSourceTablePort(),

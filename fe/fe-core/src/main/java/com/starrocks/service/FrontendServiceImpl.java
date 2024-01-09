@@ -2235,7 +2235,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 TStatus errorStatus = new TStatus(SERVICE_UNAVAILABLE);
                 errorStatus.setError_msgs(Lists.newArrayList(
                         String.format("Too many create partition requests, please try again later txn_id=%d",
-                        request.getTxn_id())));
+                                request.getTxn_id())));
                 result.setStatus(errorStatus);
                 return result;
             }
