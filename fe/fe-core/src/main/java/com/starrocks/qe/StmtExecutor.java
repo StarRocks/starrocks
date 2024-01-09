@@ -1378,7 +1378,7 @@ public class StmtExecutor {
     }
 
     // Process use catalog statement
-    private void handleUseCatalogStmt() throws AnalysisException {
+    private void handleUseCatalogStmt() {
         UseCatalogStmt useCatalogStmt = (UseCatalogStmt) parsedStmt;
         try {
             String catalogName = useCatalogStmt.getCatalogName();

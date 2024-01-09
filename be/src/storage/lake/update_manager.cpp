@@ -139,7 +139,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
     _update_state_cache.update_object_size(state_entry, state.memory_usage());
     // 2. rewrite segment file if it is partial update
     std::vector<std::string> orphan_files;
-    std::map<int, std::string> replace_segments;
+    std::map<int, FileInfo> replace_segments;
     RETURN_IF_ERROR(state.rewrite_segment(op_write, metadata, tablet, &replace_segments, &orphan_files));
     PrimaryIndex::DeletesMap new_deletes;
     for (uint32_t i = 0; i < op_write.rowset().segments_size(); i++) {
@@ -405,19 +405,23 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
     cost_str << " [with_default] " << watch.elapsed_time();
     watch.reset();
 
-    std::unordered_map<uint32_t, std::string> rssid_to_path;
-    rowset_rssid_to_path(metadata, op_write, rssid_to_path);
+    std::unordered_map<uint32_t, FileInfo> rssid_to_file_info;
+    rowset_rssid_to_path(metadata, op_write, rssid_to_file_info);
     cost_str << " [catch rssid_to_path] " << watch.elapsed_time();
     watch.reset();
 
     std::shared_ptr<FileSystem> fs;
-    auto fetch_values_from_segment = [&](const std::string& segment_name, uint32_t segment_id,
+    auto fetch_values_from_segment = [&](const FileInfo& segment_info, uint32_t segment_id,
                                          const TabletSchemaCSPtr& tablet_schema,
                                          const std::vector<uint32_t>& rowids) -> Status {
-        std::string path = tablet->segment_location(segment_name);
-        auto segment = Segment::open(fs, path, segment_id, tablet_schema);
+        FileInfo file_info{.path = tablet->segment_location(segment_info.path)};
+        if (segment_info.size.has_value()) {
+            file_info.size = segment_info.size;
+        }
+        auto segment = Segment::open(fs, file_info, segment_id, tablet_schema);
         if (!segment.ok()) {
-            LOG(WARNING) << "Fail to open rssid: " << segment_id << " path: " << path << " : " << segment.status();
+            LOG(WARNING) << "Fail to open rssid: " << segment_id << " path: " << file_info.path << " : "
+                         << segment.status();
             return segment.status();
         }
         if ((*segment)->num_rows() == 0) {
@@ -427,7 +431,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
-        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(path));
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(file_info));
         iter_opts.read_file = read_file.get();
         for (auto i = 0; i < column_ids.size(); ++i) {
             const TabletColumn& col = tablet_schema->column(column_ids[i]);
@@ -445,7 +449,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
         }
 
         // use 0 segment_id is safe, because we need not get either delvector or dcg here
-        RETURN_IF_ERROR(fetch_values_from_segment(rssid_to_path[rssid], 0, tablet_schema, rowids));
+        RETURN_IF_ERROR(fetch_values_from_segment(rssid_to_file_info[rssid], 0, tablet_schema, rowids));
     }
     if (auto_increment_state != nullptr && with_default) {
         if (fs == nullptr) {
@@ -455,7 +459,7 @@ Status UpdateManager::get_column_values(Tablet* tablet, const TabletMetadata& me
         uint32_t segment_id = auto_increment_state->segment_id;
         const std::vector<uint32_t>& rowids = auto_increment_state->rowids;
 
-        RETURN_IF_ERROR(fetch_values_from_segment(op_write.rowset().segments(segment_id), segment_id,
+        RETURN_IF_ERROR(fetch_values_from_segment(FileInfo{.path = op_write.rowset().segments(segment_id)}, segment_id,
                                                   auto_increment_state->schema, rowids));
     }
     cost_str << " [fetch vals by rowid] " << watch.elapsed_time();

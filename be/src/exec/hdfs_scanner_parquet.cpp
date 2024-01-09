@@ -68,6 +68,9 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* page_skip = nullptr;
     // round-by-round
     RuntimeProfile::Counter* group_min_round_cost = nullptr;
+    // page index
+    RuntimeProfile::Counter* rows_before_page_index = nullptr;
+    RuntimeProfile::Counter* page_index_timer = nullptr;
 
     RuntimeProfile* root = profile->runtime_profile;
     ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::NONE);
@@ -104,6 +107,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     group_min_round_cost = root->AddLowWaterMarkCounter(
             "GroupMinRound", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
             kParquetProfileSectionPrefix);
+    rows_before_page_index = ADD_CHILD_COUNTER(root, "RowsBeforePageIndex", TUnit::UNIT, kParquetProfileSectionPrefix);
+    page_index_timer = ADD_CHILD_TIMER(root, "PageIndexTime", kParquetProfileSectionPrefix);
 
     COUNTER_UPDATE(request_bytes_read, _app_stats.request_bytes_read);
     COUNTER_UPDATE(request_bytes_read_uncompressed, _app_stats.request_bytes_read_uncompressed);
@@ -126,6 +131,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(page_skip, _app_stats.page_skip);
     group_min_round_cost->set(_app_stats.group_min_round_cost);
     do_update_iceberg_v2_counter(root, kParquetProfileSectionPrefix);
+    COUNTER_UPDATE(rows_before_page_index, _app_stats.rows_before_page_index);
+    COUNTER_UPDATE(page_index_timer, _app_stats.page_index_ns);
 }
 
 Status HdfsParquetScanner::do_open(RuntimeState* runtime_state) {
