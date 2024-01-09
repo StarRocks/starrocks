@@ -403,8 +403,7 @@ public class AlterJobMgr {
                     MaterializedViewAnalyzer.getBaseTableInfos(tableNameTableMap, !isReplay);
             materializedView.setBaseTableInfos(baseTableInfos);
             materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
-            GlobalStateMgr.getCurrentState().updateBaseTableRelatedMv(materializedView.getDbId(),
-                    materializedView, baseTableInfos);
+            materializedView.onReload();
             materializedView.setActive(true);
         } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason(MANUAL_INACTIVE_MV_REASON);
@@ -963,8 +962,8 @@ public class AlterJobMgr {
         origTable.checkAndSetName(newTblName, true);
 
         // inactive the related MVs
-        LocalMetastore.inactiveRelatedMaterializedView(db, origTable);
-        LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl);
+        LocalMetastore.inactiveRelatedMaterializedView(db, origTable, "base-table-swapped: " + origTblName);
+        LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl, "base-table-swapped: " + newTblName);
         swapTableInternal(db, origTable, olapNewTbl);
 
         // write edit log
@@ -1051,7 +1050,7 @@ public class AlterJobMgr {
                 throw new DdlException("failed to init view stmt", e);
             }
             view.setNewFullSchema(newFullSchema);
-            LocalMetastore.inactiveRelatedMaterializedView(db, view);
+            LocalMetastore.inactiveRelatedMaterializedView(db, view, "base-table changed: " + viewName);
 
             db.dropTable(viewName);
             db.createTable(view);
@@ -1083,7 +1082,7 @@ public class AlterJobMgr {
                 throw new DdlException("failed to init view stmt", e);
             }
             view.setNewFullSchema(newFullSchema);
-            LocalMetastore.inactiveRelatedMaterializedView(db, view);
+            LocalMetastore.inactiveRelatedMaterializedView(db, view, "base-table changed: " + viewName);
 
             db.dropTable(viewName);
             db.createTable(view);
