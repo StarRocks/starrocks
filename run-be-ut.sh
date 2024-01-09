@@ -52,6 +52,23 @@ Usage: $0 <options>
   exit 1
 }
 
+# Append negative cases to existing $TEST_NAME
+# refer to https://github.com/google/googletest/blob/main/docs/advanced.md#running-a-subset-of-the-tests
+# for detailed explanation of `--gtest_filter`
+append_negative_case() {
+    local exclude_case=$1
+    case $TEST_NAME in
+      *-*)
+        # already has negative cases, just append the cases to the end
+        TEST_NAME=${TEST_NAME}:$exclude_case
+        ;;
+      *)
+        # doesn't have negative cases, start the negative session
+        TEST_NAME=${TEST_NAME}-$exclude_case
+        ;;
+    esac
+}
+
 # -l run and -l gtest_filter only used for compatibility
 OPTS=$(getopt \
   -n $0 \
@@ -217,6 +234,14 @@ if [ "${WITH_CACHELIB}" == "ON"  ]; then
     export LD_LIBRARY_PATH=$CACHELIB_DIR/lib:$CACHELIB_DIR/lib64:$CACHELIB_DIR/deps/lib:$CACHELIB_DIR/deps/lib64:$LD_LIBRARY_PATH
 fi
 
+THIRDPARTY_HADOOP_HOME=${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop
+if [[ -d ${THIRDPARTY_HADOOP_HOME} ]] ; then
+    export HADOOP_CLASSPATH=${THIRDPARTY_HADOOP_HOME}/common/*:${THIRDPARTY_HADOOP_HOME}/common/lib/*:${THIRDPARTY_HADOOP_HOME}/hdfs/*:${THIRDPARTY_HADOOP_HOME}/hdfs/lib/*
+else
+    # exclude HdfsFileSystemTest related test case if no hadoop env found
+    echo "[INFO] Can't find available HADOOP common lib, disable HdfsFileSystemTest related test!"
+    append_negative_case "HdfsFileSystemTest*"
+fi
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
 export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
@@ -226,7 +251,7 @@ export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
 export STARROCKS_TEST_BINARY_DIR=${STARROCKS_TEST_BINARY_DIR}/test
 
 if [ $WITH_AWS = "OFF" ]; then
-    TEST_NAME="$TEST_NAME*:-*S3*"
+    append_negative_case "*S3*"
 fi
 
 # prepare util test_data
@@ -240,6 +265,7 @@ test_files=`find ${STARROCKS_TEST_BINARY_DIR} -type f -perm -111 -name "*test" \
     | grep -v bench_test \
     | grep -e "$TEST_MODULE" `
 
+echo "[INFO] gtest_filter: $TEST_NAME"
 # run cases in starrocks_test in parallel if has gtest-parallel script.
 # reference: https://github.com/google/gtest-parallel
 if [[ $TEST_MODULE == '.*'  || $TEST_MODULE == 'starrocks_test' ]]; then
