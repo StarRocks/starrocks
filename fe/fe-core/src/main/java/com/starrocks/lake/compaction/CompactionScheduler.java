@@ -392,13 +392,17 @@ public class CompactionScheduler extends Daemon {
         }
 
         VisibleStateWaiter waiter;
+
+        TransactionState transactionState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                .getTransactionState(db.getId(), job.getTxnId());
+        List<Long> tableIdList = transactionState.getTableIdList();
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockTables(db, tableIdList, LockType.WRITE);
         try {
             waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
                     Collections.emptyList(), null);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTables(db, tableIdList, LockType.WRITE);
         }
         job.setVisibleStateWaiter(waiter);
         job.setCommitTs(System.currentTimeMillis());

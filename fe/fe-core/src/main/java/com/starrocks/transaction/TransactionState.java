@@ -83,6 +83,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
@@ -350,6 +351,20 @@ public class TransactionState implements Writable {
     // Therefore, a snapshot of this information is maintained here.
     private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
     private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
+
+    private final ReentrantReadWriteLock txnLock = new ReentrantReadWriteLock(true);
+
+    public void writeLock() {
+        if (Config.use_lock_manager) {
+            txnLock.writeLock().lock();
+        }
+    }
+
+    public void writeUnlock() {
+        if (Config.use_lock_manager) {
+            txnLock.writeLock().unlock();
+        }
+    }
 
     public TransactionState() {
         this.dbId = -1;

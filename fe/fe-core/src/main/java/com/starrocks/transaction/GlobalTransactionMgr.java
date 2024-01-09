@@ -269,15 +269,19 @@ public class GlobalTransactionMgr {
         VisibleStateWaiter waiter;
         StopWatch stopWatch = new StopWatch();
         stopWatch.start();
+
+        TransactionState transactionState = getTransactionState(db.getId(), transactionId);
+        List<Long> tableIdList = transactionState.getTableIdList();
+
         Locker locker = new Locker();
-        if (!locker.tryLockDatabase(db, LockType.WRITE, timeoutMillis)) {
+        if (!locker.tryLockTables(db, tableIdList, LockType.WRITE, timeoutMillis)) {
             throw new UserException("get database write lock timeout, database="
                     + db.getFullName() + ", timeoutMillis=" + timeoutMillis);
         }
         try {
             waiter = getDatabaseTransactionMgr(db.getId()).commitPreparedTransaction(transactionId);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTables(db, tableIdList, LockType.WRITE);
         }
 
         MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
@@ -388,12 +392,15 @@ public class GlobalTransactionMgr {
             @NotNull Database db, long transactionId, @NotNull List<TabletCommitInfo> tabletCommitInfos,
             @NotNull List<TabletFailInfo> tabletFailInfos,
             @Nullable TxnCommitAttachment attachment) throws UserException {
+        TransactionState transactionState = getTransactionState(db.getId(), transactionId);
+        List<Long> tableId = transactionState.getTableIdList();
+
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        locker.lockTables(db, tableId, LockType.WRITE);
         try {
             return commitTransaction(db.getId(), transactionId, tabletCommitInfos, tabletFailInfos, attachment);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTables(db, tableId, LockType.WRITE);
         }
     }
 
