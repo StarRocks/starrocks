@@ -29,7 +29,6 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
         executeSqlFile("sql/materialized-view/tpch-hive/ddl_tpch_mv1.sql");
     }
 
-
     @Test
     public void testQuery1() {
         runFileUnitTest("materialized-view/tpch-hive/q1");
@@ -62,9 +61,13 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery7() {
+<<<<<<< HEAD
         FeConstants.isCanonizePredicateAfterMVRewrite = true;
         runFileUnitTest("materialized-view/tpch-hive/q7");
         FeConstants.isCanonizePredicateAfterMVRewrite = false;
+=======
+        runFileUnitTest("materialized-view/tpch-hive/q7");
+>>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
     }
 
     @Test

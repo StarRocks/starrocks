@@ -94,6 +94,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PartitionDiffer;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -324,9 +325,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             StatementPlanner.unLock(dbs);
         }
 
+<<<<<<< HEAD
+=======
+        QueryDebugOptions debugOptions = ctx.getSessionVariable().getQueryDebugOptions();
+>>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
         // log the final mv refresh plan for each refresh for better trace and debug
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("MV Refresh Final Plan" +
+        if (LOG.isDebugEnabled() || debugOptions.isEnableQueryTraceLog()) {
+            LOG.info("MV Refresh Final Plan" +
                             "\nMV: {}" +
                             "\nMV PartitionsToRefresh: {}" +
                             "\nBase PartitionsToScan: {}" +

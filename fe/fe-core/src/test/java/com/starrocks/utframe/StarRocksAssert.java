@@ -141,6 +141,10 @@ public class StarRocksAssert {
         public abstract void run() throws Exception;
     }
 
+    public interface ExceptionConsumer<T> {
+        public abstract void accept(T name) throws Exception;
+    }
+
     public ConnectContext getCtx() {
         return this.ctx;
     }
@@ -519,7 +523,61 @@ public class StarRocksAssert {
 
     // Add materialized view to the schema
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
+<<<<<<< HEAD
         return withMaterializedView(sql, false, false);
+=======
+        // Only test mv rewrite in default 1 replica to avoid more occasional errors.
+        return withMaterializedView(sql, true, false);
+    }
+
+    public StarRocksAssert withMaterializedView(String sql, ExceptionConsumer action) {
+        String mvName = null;
+        try {
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
+            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
+            mvName = createMaterializedViewStatement.getTableName().getTbl();
+            withMaterializedView(sql);
+            action.accept(mvName);
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail();
+        } finally {
+            // Create mv may fail.
+            if (!Strings.isNullOrEmpty(mvName)) {
+                try {
+                    dropMaterializedView(mvName);
+                } catch (Exception e) {
+                    // e.printStackTrace();
+                }
+            }
+        }
+        return this;
+    }
+
+    public StarRocksAssert withMaterializedView(String sql, ExceptionRunnable action) {
+        String mvName = null;
+        try {
+            StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
+            CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
+            mvName = createMaterializedViewStatement.getTableName().getTbl();
+            System.out.println(sql);
+            withMaterializedView(sql);
+            action.run();
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.fail();
+        } finally {
+            Preconditions.checkState(!Strings.isNullOrEmpty(mvName));
+            try {
+                dropMaterializedView(mvName);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        return this;
+>>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
     }
 
     public void assertMVWithoutComplexExpression(String dbName, String tableName) {

@@ -14,16 +14,36 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+<<<<<<< HEAD
+=======
+import com.google.common.base.Joiner;
+import com.google.common.collect.ImmutableList;
+import com.starrocks.common.Pair;
+import com.starrocks.common.profile.Tracers;
+>>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
 import com.starrocks.sql.plan.PlanTestBase;
+import org.apache.parquet.Strings;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
+=======
+import java.util.List;
+
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
+>>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
 public class MvRewritePartitionTest extends MvRewriteTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
+<<<<<<< HEAD
+=======
+        starRocksAssert.withTable(cluster, "table_with_day_partition");
+        starRocksAssert.withTable(cluster, "table_with_day_partition1");
+        starRocksAssert.withTable(cluster, "table_with_day_partition2");
+>>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
         prepareDatas();
     }
 
@@ -482,4 +502,227 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
         }
         starRocksAssert.dropMaterializedView("test_partition_tbl_mv2");
     }
+<<<<<<< HEAD
+=======
+
+
+    @Test
+    public void testMVPartitionPruneWithMultiLeftOuterJoin() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW if not exists test_mv1\n" +
+                "PARTITION BY date_trunc('day', id_date) \n" +
+                "DISTRIBUTED BY hash(t1a) BUCKETS 4  \n" +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "\"replication_num\"=\"1\"\n" +
+                ") " +
+                "AS " +
+                "select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) " +
+                "from table_with_day_partition a" +
+                " left join table_with_day_partition1 b on a.id_date=b.id_date " +
+                " left join table_with_day_partition2 c on a.id_date=c.id_date " +
+                "group by a.t1a,a.id_date;");
+        cluster.runSql("test", "refresh materialized view test_mv1 partition " +
+                "start('1991-03-30') end('1991-03-31') with sync mode; ");
+
+        {
+            String query = "select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) \n" +
+                    "from table_with_day_partition a\n" +
+                    " left join table_with_day_partition1 b on a.id_date=b.id_date \n" +
+                    " left join table_with_day_partition2 c on a.id_date=c.id_date \n" +
+                    " where a.id_date='1991-03-30' " +
+                    " group by a.t1a,a.id_date;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                    "     TABLE: test_mv1\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=1/1\n" +
+                    "     rollup: test_mv1");
+        }
+
+        {
+            String query = "select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) \n" +
+                    "from table_with_day_partition a\n" +
+                    " left join table_with_day_partition1 b on a.id_date=b.id_date \n" +
+                    " left join table_with_day_partition2 c on a.id_date=c.id_date \n" +
+                    " where a.id_date>='1991-03-30' " +
+                    " group by a.t1a,a.id_date;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                    "     TABLE: table_with_day_partition\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=4/4");
+        }
+
+        {
+            String query = "select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) \n" +
+                    "from table_with_day_partition a\n" +
+                    " left join table_with_day_partition1 b on a.id_date=b.id_date \n" +
+                    " left join table_with_day_partition2 c on a.id_date=c.id_date \n" +
+                    " group by a.t1a,a.id_date;";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+                    "     TABLE: table_with_day_partition\n" +
+                    "     PREAGGREGATION: ON\n" +
+                    "     partitions=4/4");
+        }
+    }
+
+    class PartitionCompensateParam {
+        public String mvPartitionExpr;
+        public String refreshStart;
+        public String refreshEnd;
+        public List<Pair<String, Boolean>> expectPartitionPredicates;
+        public PartitionCompensateParam(String mvPartitionExpr,
+                                        String refreshStart, String refreshEnd,
+                                        List<Pair<String, Boolean>> expectPartitionPredicates) {
+            this.mvPartitionExpr = mvPartitionExpr;
+            this.refreshStart = refreshStart;
+            this.refreshEnd = refreshEnd;
+            this.expectPartitionPredicates = expectPartitionPredicates;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("mvPartitionExpr=%s, refreshStart=%s, refreshEnd=%s, " +
+                    "expectPartitionPredicates=%s", mvPartitionExpr, refreshStart, refreshEnd,
+                    Joiner.on(",").join(expectPartitionPredicates));
+        }
+    }
+
+    private void testRefreshAndRewriteWithMultiJoinMV(PartitionCompensateParam param) {
+        starRocksAssert.withMaterializedView(String.format("CREATE MATERIALIZED VIEW if not exists test_mv1\n" +
+                        "PARTITION BY %s \n" +
+                        "REFRESH DEFERRED MANUAL " +
+                        "AS " +
+                        "select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) " +
+                        "from table_with_day_partition a" +
+                        " left join table_with_day_partition1 b on a.id_date=b.id_date " +
+                        " left join table_with_day_partition2 c on a.id_date=c.id_date " +
+                        "group by a.t1a,a.id_date;", param.mvPartitionExpr),
+                (obj) -> {
+                    String mvName = (String) obj;
+                    cluster.runSql("test", String.format("refresh materialized view %s partition " +
+                            "start('%s') end('%s') with sync mode;", mvName, param.refreshStart, param.refreshEnd));
+                    for (Pair<String, Boolean> expect : param.expectPartitionPredicates) {
+                        if (!Strings.isNullOrEmpty(expect.first)) {
+                            System.out.println(String.format("predicate:%s, expect:%s", expect.first, expect.second));
+                            String query = String.format("select a.t1a, a.id_date, sum(a.t1b), sum(b.t1b) \n" +
+                                    "from table_with_day_partition a\n" +
+                                    " left join table_with_day_partition1 b on a.id_date=b.id_date \n" +
+                                    " left join table_with_day_partition2 c on a.id_date=c.id_date \n" +
+                                    " where %s " +
+                                    " group by a.t1a,a.id_date;", expect.first);
+                            String plan = getFragmentPlan(query);
+                            if (expect.second) {
+                                PlanTestBase.assertContains(plan, mvName);
+                            } else {
+                                PlanTestBase.assertNotContains(plan, mvName);
+                            }
+                        }
+                    }
+                });
+    }
+
+    @Test
+    public void testMVPartitionWithCompensate() {
+        List<PartitionCompensateParam> params = ImmutableList.of(
+                // partition: date_trunc expr
+                new PartitionCompensateParam("date_trunc('day', id_date)",
+                        "1991-03-30", "1991-03-31",
+                        ImmutableList.of(
+                                // no partition expressions
+                                Pair.create("a.id_date='1991-03-30'", true),
+                                Pair.create("a.id_date>='1991-03-30'", false),
+                                Pair.create("a.id_date!='1991-03-30'", false),
+                                // with partition expressions && partition expressions can be pruned
+                                Pair.create("date_format(a.id_date, '%Y%m%d')='19910330'", true),
+                                Pair.create("date_format(a.id_date, '%Y-%m-%d')='1991-03-30'", true),
+                                Pair.create("date_trunc('day', a.id_date)='1991-03-30'", true),
+                                Pair.create("date_trunc('day', a.id_date)>='1991-03-30'", false),
+                                Pair.create("subdate(a.id_date, interval 1 day)='1991-03-29'", true),
+                                Pair.create("adddate(a.id_date, interval 1 day)='1991-03-31'", true),
+                                // with partition expressions && partition expressions can be pruned
+                                Pair.create("cast(a.id_date as string)='1991-03-30'", false),
+                                Pair.create("cast(a.id_date as string) >='1991-03-30'", false)
+                        )
+                ),
+                // partition: slot
+                new PartitionCompensateParam("id_date",
+                        "1991-03-30", "1991-03-31",
+                        ImmutableList.of(
+                                // no partition expressions
+                                Pair.create("a.id_date='1991-03-30'", true),
+                                Pair.create("a.id_date>='1991-03-30'", false),
+                                Pair.create("a.id_date!='1991-03-30'", false),
+                                // with partition expressions && partition expressions can be pruned
+                                Pair.create("date_format(a.id_date, '%Y%m%d')='19910330'", true),
+                                Pair.create("date_format(a.id_date, '%Y-%m-%d')='1991-03-30'", true),
+                                Pair.create("date_trunc('day', a.id_date)='1991-03-30'", true),
+                                Pair.create("date_trunc('day', a.id_date)>='1991-03-30'", false),
+                                Pair.create("subdate(a.id_date, interval 1 day)='1991-03-29'", true),
+                                Pair.create("adddate(a.id_date, interval 1 day)='1991-03-31'", true),
+                                // with partition expressions && partition expressions can be pruned
+                                Pair.create("cast(a.id_date as string)='1991-03-30'", false),
+                                Pair.create("cast(a.id_date as string) >='1991-03-30'", false)
+                        )
+                )
+        );
+        for (PartitionCompensateParam param : params) {
+            System.out.println("start to execute: " + param);
+            testRefreshAndRewriteWithMultiJoinMV(param);
+        }
+    }
+
+    @Test
+    public void testMVPartitionWithNoPartitionCompensate() {
+        connectContext.getSessionVariable().setEnableMaterializedViewRewritePartitionCompensate(false);
+        List<PartitionCompensateParam> params = ImmutableList.of(
+                // partition: date_trunc expr
+                new PartitionCompensateParam("date_trunc('day', id_date)",
+                        "1991-03-30", "1991-03-31",
+                        ImmutableList.of(
+                                // no partition expressions
+                                Pair.create("a.id_date='1991-03-30'", true),
+                                Pair.create("a.id_date>='1991-03-30'", true),
+                                Pair.create("a.id_date!='1991-03-30'", true),
+                                // with partition expressions && partition expressions can be pruned
+                                Pair.create("date_format(a.id_date, '%Y%m%d')='19910330'", true),
+                                Pair.create("date_format(a.id_date, '%Y-%m-%d')='1991-03-30'", true),
+                                Pair.create("date_trunc('day', a.id_date)='1991-03-30'", true),
+                                Pair.create("date_trunc('day', a.id_date)>='1991-03-30'", true),
+                                Pair.create("subdate(a.id_date, interval 1 day)='1991-03-29'", true),
+                                Pair.create("adddate(a.id_date, interval 1 day)='1991-03-31'", true),
+                                // with partition expressions && partition expressions can be pruned
+                                Pair.create("cast(a.id_date as string)='1991-03-30'", true),
+                                Pair.create("cast(a.id_date as string) >='1991-03-30'", true)
+                        )
+                ),
+                // partition: slot
+                new PartitionCompensateParam("id_date",
+                        "1991-03-30", "1991-03-31",
+                        ImmutableList.of(
+                                // no partition expressions
+                                Pair.create("a.id_date='1991-03-30'", true),
+                                Pair.create("a.id_date>='1991-03-30'", true),
+                                Pair.create("a.id_date!='1991-03-30'", true),
+                                // with partition expressions && partition expressions can be pruned
+                                Pair.create("date_format(a.id_date, '%Y%m%d')='19910330'", true),
+                                Pair.create("date_format(a.id_date, '%Y-%m-%d')='1991-03-30'", true),
+                                Pair.create("date_trunc('day', a.id_date)='1991-03-30'", true),
+                                Pair.create("date_trunc('day', a.id_date)>='1991-03-30'", true),
+                                Pair.create("subdate(a.id_date, interval 1 day)='1991-03-29'", true),
+                                Pair.create("adddate(a.id_date, interval 1 day)='1991-03-31'", true),
+                                // with partition expressions && partition expressions can be pruned
+                                Pair.create("cast(a.id_date as string)='1991-03-30'", true),
+                                Pair.create("cast(a.id_date as string) >='1991-03-30'", true)
+                        )
+                )
+        );
+        for (PartitionCompensateParam param : params) {
+            System.out.println("start to execute: " + param);
+            testRefreshAndRewriteWithMultiJoinMV(param);
+        }
+        connectContext.getSessionVariable().setEnableMaterializedViewRewritePartitionCompensate(true);
+    }
+>>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
 }

@@ -102,8 +102,17 @@ public class MvRewriteTestBase {
         cluster = PseudoCluster.getInstance();
 
         connectContext = UtFrameUtils.createDefaultCtx();
+<<<<<<< HEAD
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
+=======
+
+        // 300s: 5min
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000 * 100);
+        // 300s: 5min
+        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000 * 100);
+        connectContext.getSessionVariable().setEnableShortCircuit(false);
+>>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
         connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(30000000);
 
         ConnectorPlanTestBase.mockCatalog(connectContext);
