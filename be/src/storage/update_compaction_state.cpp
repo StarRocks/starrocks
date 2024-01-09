@@ -120,6 +120,7 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
         CHECK(col->size() == num_rows) << "read segment: iter rows != num rows";
     }
     dest = std::move(col);
+    dest->raw_data();
     _memory_usage += dest->memory_usage();
     tracker->consume(dest->memory_usage());
 
