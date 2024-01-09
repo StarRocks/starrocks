@@ -108,7 +108,11 @@ protected:
         uint64_t file_size, index_size, footer_position;
         ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
+<<<<<<< HEAD
         *res = *Segment::open(_fs, filename, 0, &query_schema);
+=======
+        *res = *Segment::open(_fs, FileInfo{filename}, 0, query_schema);
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
         ASSERT_EQ(nrows, (*res)->num_rows());
     }
 
@@ -217,7 +221,11 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
     uint64_t footer_position;
     ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
+<<<<<<< HEAD
     auto segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
+=======
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;
@@ -319,7 +327,11 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
 
     ASSERT_OK(writer.finalize_footer(&file_size));
 
+<<<<<<< HEAD
     auto segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
+=======
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;
@@ -418,7 +430,11 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     }
 
     ASSERT_OK(writer.finalize_footer(&file_size));
+<<<<<<< HEAD
     auto segment = *Segment::open(_fs, file_name, 0, tablet_schema.get());
+=======
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;

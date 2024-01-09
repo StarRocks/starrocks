@@ -20,12 +20,20 @@ namespace starrocks {
 
 SegmentRewriter::SegmentRewriter() = default;
 
+<<<<<<< HEAD
 Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& dest_path, const TabletSchema& tschema,
                                 std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>& columns,
                                 uint32_t segment_id, const FooterPointerPB& partial_rowset_footer) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path));
+=======
+Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path,
+                                const std::shared_ptr<const TabletSchema>& tschema, std::vector<uint32_t>& column_ids,
+                                std::vector<std::unique_ptr<Column>>& columns, uint32_t segment_id,
+                                const FooterPointerPB& partial_rowset_footer) {
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path->path));
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path));
+    ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path->path));
     ASSIGN_OR_RETURN(auto rfile, fs->new_random_access_file(src_path));
 
     SegmentFooterPB footer;
@@ -63,6 +71,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     RETURN_IF_ERROR(writer.finalize_columns(&index_size));
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
+    dest_path->size = segment_file_size;
     return Status::OK();
 }
 
@@ -157,7 +166,11 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
 // This function is used when the auto-increment column is not specified in partial update.
 // In this function, we use the segment iterator to read the old data, replace the old auto
 // increment column, and rewrite the full segment file through SegmentWriter.
+<<<<<<< HEAD
 Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& dest_path, const TabletSchema& tschema,
+=======
+Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path, const TabletSchemaCSPtr& tschema,
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
                                 starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
                                 std::vector<uint32_t>& column_ids, std::vector<std::unique_ptr<Column>>* columns,
                                 const starrocks::lake::TxnLogPB_OpWrite& op_write, starrocks::lake::Tablet* tablet) {
@@ -165,7 +178,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
         DCHECK_EQ(columns, nullptr);
     }
 
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(dest_path->path));
 
     uint32_t auto_increment_column_id = 0;
     for (const auto& col : tschema.columns()) {
@@ -186,11 +199,22 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     }
     Schema src_schema = ChunkHelper::convert_schema(tschema, src_column_ids);
 
+<<<<<<< HEAD
     std::unique_ptr<starrocks::lake::Rowset> rowset = std::make_unique<starrocks::lake::Rowset>(
             tablet, std::make_shared<starrocks::lake::RowsetMetadataPB>(op_write.rowset()));
     std::vector<starrocks::lake::SegmentPtr> segments;
     RETURN_IF_ERROR(rowset->load_segments(&segments, false));
     uint32_t num_rows = segments[segment_id]->num_rows();
+=======
+    size_t footer_sine_hint = 16 * 1024;
+    auto fill_cache = false;
+    auto tablet_mgr = tablet->tablet_mgr();
+    auto segment_path = tablet->segment_location(op_write.rowset().segments(segment_id));
+    auto segment_info = FileInfo{.path = segment_path};
+    ASSIGN_OR_RETURN(auto segment, tablet_mgr->load_segment(segment_info, segment_id, &footer_sine_hint, fill_cache,
+                                                            fill_cache, tschema));
+    uint32_t num_rows = segment->num_rows();
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
 
     auto chunk_shared_ptr = ChunkHelper::new_chunk(src_schema, num_rows);
     auto read_chunk = chunk_shared_ptr.get();
@@ -211,7 +235,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     itr->close();
 
     WritableFileOptions wopts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-    ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path));
+    ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(wopts, dest_path->path));
 
     std::vector<uint32_t> full_column_ids(tschema.num_columns());
     std::iota(full_column_ids.begin(), full_column_ids.end(), 0);
@@ -242,6 +266,7 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     RETURN_IF_ERROR(writer.finalize_columns(&index_size));
     RETURN_IF_ERROR(writer.finalize_footer(&segment_file_size));
 
+    dest_path->size = segment_file_size;
     return Status::OK();
 }
 

@@ -635,7 +635,12 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
                 _partial_update_states.size() != 0 ? &_partial_update_states[segment_id].write_columns : nullptr));
     } else if (_partial_update_states.size() != 0) {
         FooterPointerPB partial_rowset_footer = txn_meta.partial_rowset_footers(segment_id);
+<<<<<<< HEAD
         RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, dest_path, tablet->tablet_schema(), read_column_ids,
+=======
+        FileInfo file_info{.path = dest_path};
+        RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, &file_info, _tablet_schema, read_column_ids,
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
                                                  _partial_update_states[segment_id].write_columns, segment_id,
                                                  partial_rowset_footer));
     }

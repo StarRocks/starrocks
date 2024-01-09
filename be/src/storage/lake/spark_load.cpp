@@ -114,6 +114,7 @@ Status SparkLoadHandler::_load_convert(Tablet& cur_tablet) {
     for (auto& f : writer->files()) {
         if (is_segment(f.path)) {
             op_write->mutable_rowset()->add_segments(std::move(f.path));
+            op_write->mutable_rowset()->add_segment_size(f.size.value());
         } else {
             return Status::InternalError(fmt::format("unknown file {}", f.path));
         }

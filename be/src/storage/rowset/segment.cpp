@@ -72,6 +72,7 @@ namespace starrocks {
 
 using strings::Substitute;
 
+<<<<<<< HEAD
 StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs, const std::string& path,
                                                  uint32_t segment_id, const TabletSchema* tablet_schema,
                                                  size_t* footer_length_hint,
@@ -82,11 +83,15 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs,
 }
 
 StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs, const std::string& path,
+=======
+StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info,
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
                                                  uint32_t segment_id, std::shared_ptr<const TabletSchema> tablet_schema,
                                                  size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer,
                                                  bool skip_fill_local_cache, lake::TabletManager* tablet_manager) {
-    auto segment = std::make_shared<Segment>(std::move(fs), path, segment_id, std::move(tablet_schema), tablet_manager);
+    auto segment = std::make_shared<Segment>(std::move(fs), std::move(segment_file_info), segment_id,
+                                             std::move(tablet_schema), tablet_manager);
     RETURN_IF_ERROR(segment->open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache));
     return std::move(segment);
 }
@@ -181,6 +186,7 @@ Status Segment::parse_segment_footer(RandomAccessFile* read_file, SegmentFooterP
     return Status::OK();
 }
 
+<<<<<<< HEAD
 Segment::Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
                  const TabletSchema* tablet_schema)
         : _fs(std::move(fs)), _fname(std::move(path)), _tablet_schema(tablet_schema), _segment_id(segment_id) {
@@ -189,8 +195,12 @@ Segment::Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segm
 
 Segment::Segment(std::shared_ptr<FileSystem> fs, std::string path, uint32_t segment_id,
                  std::shared_ptr<const TabletSchema> tablet_schema, lake::TabletManager* tablet_manager)
+=======
+Segment::Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uint32_t segment_id,
+                 TabletSchemaCSPtr tablet_schema, lake::TabletManager* tablet_manager)
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
         : _fs(std::move(fs)),
-          _fname(std::move(path)),
+          _segment_file_info(std::move(segment_file_info)),
           _tablet_schema(std::move(tablet_schema)),
           _segment_id(segment_id),
           _tablet_manager(tablet_manager) {
@@ -223,7 +233,8 @@ Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial
                       bool skip_fill_local_cache) {
     SegmentFooterPB footer;
     RandomAccessFileOptions opts{.skip_fill_local_cache = skip_fill_local_cache};
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _fname));
+
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _segment_file_info));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
     RETURN_IF_ERROR(_create_column_readers(&footer));
     _num_rows = footer.num_rows();
@@ -266,8 +277,16 @@ StatusOr<ChunkIteratorPtr> Segment::_new_iterator(const Schema& schema, const Se
             // skip segment zonemap filter when this segment has column files link to it.
             const TabletColumn& tablet_column = _tablet_schema->column(column_id);
             if (tablet_column.is_key() || _use_segment_zone_map_filter(read_options)) {
+<<<<<<< HEAD
                 read_options.stats->segment_stats_filtered += _column_readers[column_id]->num_rows();
                 return Status::EndOfFile(strings::Substitute("End of file $0, empty iterator", _fname));
+=======
+                if (read_options.is_first_split_of_segment) {
+                    read_options.stats->segment_stats_filtered += _column_readers.at(column_unique_id)->num_rows();
+                }
+                return Status::EndOfFile(
+                        strings::Substitute("End of file $0, empty iterator", _segment_file_info.path));
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
             } else {
                 break;
             }
@@ -318,7 +337,7 @@ Status Segment::load_index(bool skip_fill_local_cache) {
 Status Segment::_load_index(bool skip_fill_local_cache) {
     // read and parse short key index page
     RandomAccessFileOptions file_opts{.skip_fill_local_cache = skip_fill_local_cache};
-    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(file_opts, _fname));
+    ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(file_opts, _segment_file_info));
 
     PageReadOptions opts;
     opts.use_page_cache = !config::disable_storage_page_cache;
@@ -413,16 +432,45 @@ StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(uint32_t 
     return _column_readers[cid]->new_iterator(path);
 }
 
+<<<<<<< HEAD
 Status Segment::new_bitmap_index_iterator(uint32_t cid, const IndexReadOptions& options, BitmapIndexIterator** iter) {
     if (_column_readers[cid] != nullptr && _column_readers[cid]->has_bitmap_index()) {
         return _column_readers[cid]->new_bitmap_index_iterator(options, iter);
+=======
+StatusOr<std::unique_ptr<ColumnIterator>> Segment::new_column_iterator(ColumnUID id, ColumnAccessPath* path) {
+    auto iter = _column_readers.find(id);
+    if (iter != _column_readers.end()) {
+        return iter->second->new_iterator(path);
+    } else {
+        return Status::NotFound(fmt::format("{} does not contain column of id {}", _segment_file_info.path, id));
+    }
+}
+
+Status Segment::new_bitmap_index_iterator(ColumnUID id, const IndexReadOptions& options, BitmapIndexIterator** res) {
+    auto iter = _column_readers.find(id);
+    if (iter != _column_readers.end() && iter->second->has_bitmap_index()) {
+        return iter->second->new_bitmap_index_iterator(options, res);
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
     }
     return Status::OK();
 }
 
+<<<<<<< HEAD
 StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx) {
     return Segment::open(_fs, dcg.column_files(parent_name(_fname))[idx], 0,
                          TabletSchema::create_with_uid(*_tablet_schema, dcg.column_ids()[idx]), nullptr);
+=======
+StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGroup& dcg, uint32_t idx,
+                                                            const TabletSchemaCSPtr& read_tablet_schema) {
+    std::shared_ptr<TabletSchema> tablet_schema;
+    if (read_tablet_schema != nullptr) {
+        tablet_schema = TabletSchema::create_with_uid(read_tablet_schema, dcg.column_ids()[idx]);
+    } else {
+        tablet_schema = TabletSchema::create_with_uid(_tablet_schema.schema(), dcg.column_ids()[idx]);
+    }
+    FileInfo info{.path = dcg.column_files(parent_name(_segment_file_info.path))[idx]};
+    return Segment::open(_fs, info, 0, tablet_schema, nullptr);
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
 }
 
 Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {

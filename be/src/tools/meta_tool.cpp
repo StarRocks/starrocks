@@ -681,7 +681,11 @@ Status SegmentDump::_init() {
 
     // open segment
     size_t footer_length = 16 * 1024 * 1024;
+<<<<<<< HEAD
     auto segment_res = Segment::open(_fs, _path, 0, _tablet_schema.get(), &footer_length, nullptr);
+=======
+    auto segment_res = Segment::open(_fs, FileInfo{_path}, 0, _tablet_schema, &footer_length, nullptr);
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
     if (!segment_res.ok()) {
         std::cout << "open segment failed: " << segment_res.status() << std::endl;
         return Status::InternalError("");

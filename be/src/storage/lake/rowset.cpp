@@ -216,10 +216,35 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_data_c
     size_t footer_size_hint = 16 * 1024;
     uint32_t seg_id = 0;
     bool ignore_lost_segment = config::experimental_lake_ignore_lost_segment;
+<<<<<<< HEAD
     segments->reserve(_rowset_metadata->segments().size());
     for (const auto& seg_name : _rowset_metadata->segments()) {
         auto segment_or =
                 _tablet->load_segment(seg_name, seg_id++, &footer_size_hint, fill_data_cache, fill_metadata_cache);
+=======
+
+    // RowsetMetaData upgrade from old version may not have the field of segment_size
+    auto segment_size_size = metadata().segment_size_size();
+    auto segment_file_size = metadata().segments_size();
+    bool has_segment_size = segment_size_size == segment_file_size;
+    LOG_IF(ERROR, segment_size_size > 0 && segment_size_size != segment_file_size)
+            << "segment_size size != segment file size, tablet: " << _tablet_id << ", rowset: " << metadata().id()
+            << ", segment file size: " << segment_file_size << ", segment_size size: " << segment_size_size;
+
+    const auto& files_to_size = metadata().segment_size();
+    int index = 0;
+
+    for (const auto& seg_name : metadata().segments()) {
+        auto segment_path = _tablet_mgr->segment_location(tablet_id(), seg_name);
+        auto segment_info = FileInfo{.path = segment_path};
+        if (LIKELY(has_segment_size)) {
+            segment_info.size = files_to_size.Get(index);
+        }
+        index++;
+
+        auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id++, &footer_size_hint, fill_data_cache,
+                                                    fill_metadata_cache, _tablet_schema);
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
         if (segment_or.ok()) {
             segments->emplace_back(std::move(segment_or.value()));
         } else if (segment_or.status().is_not_found() && ignore_lost_segment) {

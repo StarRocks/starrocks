@@ -299,7 +299,11 @@ static StatusOr<ChunkPtr> read_from_source_segment(Rowset* rowset, const Schema&
                                                    OlapReaderStatistics* stats, int64_t version,
                                                    RowsetSegmentId rowset_seg_id, const std::string& path) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
+<<<<<<< HEAD
     auto segment = Segment::open(fs, path, rowset_seg_id.segment_id, &rowset->schema());
+=======
+    auto segment = Segment::open(fs, FileInfo{path}, rowset_seg_id.segment_id, rowset->schema());
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
     if (!segment.ok()) {
         LOG(WARNING) << "Fail to open " << path << ": " << segment.status();
         return segment.status();

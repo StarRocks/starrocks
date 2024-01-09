@@ -4469,7 +4469,11 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         }
         std::string seg_path =
                 Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), rssid - iter->first);
+<<<<<<< HEAD
         auto segment = Segment::open(fs, seg_path, rssid - iter->first, &rowset->schema());
+=======
+        auto segment = Segment::open(fs, FileInfo{seg_path}, rssid - iter->first, rowset->schema());
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();
@@ -4505,8 +4509,9 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         uint32_t rssid = rowset->rowset_meta()->get_rowset_seg_id() + segment_id;
 
         std::string seg_path = Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), segment_id);
+        FileInfo seg_info{.path = seg_path};
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(seg_path));
-        auto segment = Segment::open(fs, seg_path, segment_id, auto_increment_state->schema);
+        auto segment = Segment::open(fs, seg_info, segment_id, auto_increment_state->schema);
         if (!segment.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << segment.status();
             return segment.status();

@@ -218,7 +218,11 @@ protected:
         auto path = _location_provider->segment_location(tablet_id, filename);
         std::cerr << path << '\n';
 
+<<<<<<< HEAD
         ASSIGN_OR_ABORT(auto seg, Segment::open(fs, path, 0, _tablet_schema.get()));
+=======
+        ASSIGN_OR_ABORT(auto seg, Segment::open(fs, FileInfo{path}, 0, _tablet_schema));
+>>>>>>> 6676b578da ([Enhancement]Reduce HeadObject before read segment file (#36772))
 
         OlapReaderStatistics statistics;
         SegmentReadOptions opts;
