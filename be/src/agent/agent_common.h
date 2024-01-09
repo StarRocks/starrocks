@@ -108,5 +108,6 @@ using UpdateTabletMetaInfoAgentTaskRequest = AgentTaskRequestWithReqBody<TUpdate
 using DropAutoIncrementMapAgentTaskRequest = AgentTaskRequestWithReqBody<TDropAutoIncrementMapReq>;
 using RemoteSnapshotAgentTaskRequest = AgentTaskRequestWithReqBody<TRemoteSnapshotRequest>;
 using ReplicateSnapshotAgentTaskRequest = AgentTaskRequestWithReqBody<TReplicateSnapshotRequest>;
+using UpdateSchemaTaskRequest = AgentTaskRequestWithoutReqBody<TUpdateSchemaReq>
 
 } // namespace starrocks

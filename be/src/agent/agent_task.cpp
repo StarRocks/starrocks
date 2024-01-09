@@ -537,6 +537,17 @@ void run_compaction_task(const std::shared_ptr<CompactionTaskRequest>& agent_tas
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 }
 
+void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+    const TUpdateSchemaReq& update_schema_req = agent_task_req->task_req;
+    TStatusCode::type status_code = TStatusCode::OK;
+    std::vector<std::string> error_msgs;
+    TStatus task_status;
+
+    int64_t index_id = update_schema_req.index_id;
+    int64_t schema_version = update_schema_req.schema_version;
+    TOlapTableColumnParam column_param = update_schema_req.column_param;
+}
+
 void run_upload_task(const std::shared_ptr<UploadAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     const TUploadReq& upload_request = agent_task_req->task_req;
 
