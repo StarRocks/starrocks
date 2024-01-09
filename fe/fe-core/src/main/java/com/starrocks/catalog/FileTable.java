@@ -25,6 +25,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileDesc;
@@ -203,6 +204,7 @@ public class FileTable extends Table {
 
         tFileTable.setHive_column_names(columnNames);
         tFileTable.setHive_column_types(columnTypes);
+        tFileTable.setTime_zone(TimeUtils.getSessionTimeZone());
 
         return tTableDescriptor;
     }

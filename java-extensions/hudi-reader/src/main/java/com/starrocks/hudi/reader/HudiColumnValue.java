@@ -23,9 +23,11 @@ import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.PrimitiveObjectInspector;
 import org.apache.hadoop.hive.serde2.objectinspector.StructField;
 import org.apache.hadoop.hive.serde2.objectinspector.StructObjectInspector;
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.DateObjectInspector;
 import org.apache.hadoop.io.LongWritable;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
@@ -36,10 +38,12 @@ import static com.starrocks.hudi.reader.HudiScannerUtils.TIMESTAMP_UNIT_MAPPING;
 public class HudiColumnValue implements ColumnValue {
     private final Object fieldData;
     private final ObjectInspector fieldInspector;
+    private final String timezone;
 
-    HudiColumnValue(ObjectInspector fieldInspector, Object fieldData) {
+    HudiColumnValue(ObjectInspector fieldInspector, Object fieldData, String timezone) {
         this.fieldInspector = fieldInspector;
         this.fieldData = fieldData;
+        this.timezone = timezone;
     }
 
     private Object inspectObject() {
@@ -82,19 +86,6 @@ public class HudiColumnValue implements ColumnValue {
     }
 
     @Override
-    public String getTimestamp(ColumnType.TypeValue type) {
-        // INT64 timestamp type
-        if (HudiScannerUtils.isMaybeInt64Timestamp(type) && (fieldData instanceof LongWritable)) {
-            long datetime = ((LongWritable) fieldData).get();
-            TimeUnit timeUnit = TIMESTAMP_UNIT_MAPPING.get(type);
-            LocalDateTime localDateTime = HudiScannerUtils.getTimestamp(datetime, timeUnit, true);
-            return HudiScannerUtils.formatDateTime(localDateTime);
-        } else {
-            return inspectObject().toString();
-        }
-    }
-
-    @Override
     public byte[] getBytes() {
         return (byte[]) inspectObject();
     }
@@ -107,7 +98,7 @@ public class HudiColumnValue implements ColumnValue {
         for (Object item : items) {
             HudiColumnValue cv = null;
             if (item != null) {
-                cv = new HudiColumnValue(itemInspector, item);
+                cv = new HudiColumnValue(itemInspector, item, timezone);
             }
             values.add(cv);
         }
@@ -122,10 +113,10 @@ public class HudiColumnValue implements ColumnValue {
             HudiColumnValue cv0 = null;
             HudiColumnValue cv1 = null;
             if (kv.getKey() != null) {
-                cv0 = new HudiColumnValue(keyObjectInspector, kv.getKey());
+                cv0 = new HudiColumnValue(keyObjectInspector, kv.getKey(), timezone);
             }
             if (kv.getValue() != null) {
-                cv1 = new HudiColumnValue(valueObjectInspector, kv.getValue());
+                cv1 = new HudiColumnValue(valueObjectInspector, kv.getValue(), timezone);
             }
             keys.add(cv0);
             values.add(cv1);
@@ -143,7 +134,7 @@ public class HudiColumnValue implements ColumnValue {
                 StructField sf = fields.get(idx);
                 Object o = inspector.getStructFieldData(fieldData, sf);
                 if (o != null) {
-                    cv = new HudiColumnValue(sf.getFieldObjectInspector(), o);
+                    cv = new HudiColumnValue(sf.getFieldObjectInspector(), o, timezone);
                 }
             }
             values.add(cv);
@@ -158,5 +149,20 @@ public class HudiColumnValue implements ColumnValue {
     @Override
     public BigDecimal getDecimal() {
         return ((HiveDecimal) inspectObject()).bigDecimalValue();
+    }
+
+
+    @Override
+    public LocalDate getDate() {
+        return LocalDate.ofEpochDay((((DateObjectInspector) fieldInspector).getPrimitiveJavaObject(fieldData))
+                .toEpochDay());
+    }
+
+    @Override
+    public LocalDateTime getDateTime(ColumnType.TypeValue type) {
+        Long dateTime = ((LongWritable) fieldData).get();
+        TimeUnit timeUnit = TIMESTAMP_UNIT_MAPPING.get(type);
+        LocalDateTime localDateTime = HudiScannerUtils.getTimestamp(dateTime, timeUnit, timezone);
+        return localDateTime;
     }
 }
