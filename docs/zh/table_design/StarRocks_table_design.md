@@ -41,7 +41,7 @@ DUPLICATE KEY(uid, name);
 
 :::
 
-执行 [DESCRIBE](../sql-reference/sql-statements/data-management/DESCRIBE.md) 查看表结构。
+执行 [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) 查看表结构。
 
 ```SQL
 MySQL [example_db]> DESCRIBE user_access;
@@ -88,7 +88,7 @@ PROPERTIES (
 
 本节详细介绍 StarRocks 表结构，帮助您深入了解表结构，根据场景设计高效的数据管理结构。。
 
-### [表类型](../table_types.md)
+### [表类型](./table_types.md)
 
 StarRocks 提供四种类型的表，包括明细表、主键表、聚合表和更新表，适用于存储多种业务数据，例如原始数据、实时频繁更新的数据和聚合数据。
 
@@ -122,7 +122,7 @@ StarRocks 提供两种分桶方式：
 
 除了基本的数据类型，如数值、日期和字符串类型，StarRocks 还支持复杂的半结构化数据类型，包括 ARRAY、JSON、MAP、STRUCT。
 
-### [索引](./index.md)
+### [索引](../using_starrocks/index.md)
 
 索引是一种特殊的数据结构，相当于数据的目录。查询条件命中索引列时，StarRocks 能够快速定位到满足条件的数据的位置。
 

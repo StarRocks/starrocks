@@ -39,7 +39,7 @@ If a StarRocks cluster in a staging environment contains only one BE, the number
 
 :::
 
-Execute [DESCRIBE](../sql-reference/sql-statements/data-management/DESCRIBE.md) to view the table schema.
+Execute [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) to view the table schema.
 
 ```SQL
 MySQL [test]> DESCRIBE user_access;
@@ -86,7 +86,7 @@ PROPERTIES (
 
 A deep dive into StarRocks table structures helps you design efficient data management structure tailored  to your business needs.
 
-### [Table types](../table_types.md)
+### [Table types](./table_types.md)
 
 StarRocks provides four types of tables which are Duplicate Key tables, Primary Key tables, Aggregate tables, and Unique Key tables, to store data for various business scenarios, such as raw data, frequently updated realtime data, and aggregated data.
 
@@ -105,7 +105,7 @@ StarRocks uses a partitioning+bucketing two-tier data distribution strategy, to 
 
 The first level is partitioning: Data in tables can be divided into smaller data management units based on partitioning columns which are usually columns that hold dates and time. During queries, partition pruning can reduce the amount of data that needs to be scanned, effectively optimizing query performance.
 
-1. StarRocks provides an easy-to-use partitioning method, expression partitioning, and also offers more flexible methods like range and list partitioning.
+StarRocks provides an easy-to-use partitioning method, expression partitioning, and also offers more flexible methods like range and list partitioning.
 
 #### Bucketing
 
@@ -120,7 +120,7 @@ StarRocks provides two bucketing methods:
 
 In addition to basic data types such as NUMERIC, DATE, and STRING, StarRocks supports complex semi-structured data types, including ARRAY, JSON, MAP, and STRUCT.
 
-### [Index](./index.md)
+### [Index](../using_starrocks/index.md)
 
 An index is a special data structure and is used as a pointer to data in a table. When the conditional columns in queries are indexed columns, StarRocks can swiftly locate the data that meets the conditions.
 
