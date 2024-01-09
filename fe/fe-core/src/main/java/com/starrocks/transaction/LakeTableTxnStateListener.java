@@ -69,6 +69,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     public void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
             List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
+        txnState.clearAutomaticPartitionSnapshot();
         if (!finishedTablets.isEmpty()) {
             txnState.setTabletCommitInfos(finishedTablets);
         }
@@ -206,6 +207,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         } else {
             abortTxnWithCleanup(txnState);
         }
+        txnState.clearAutomaticPartitionSnapshot();
     }
 
     private void abortTxnSkipCleanup(TransactionState txnState) {
