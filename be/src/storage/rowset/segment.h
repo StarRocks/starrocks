@@ -100,7 +100,8 @@ public:
                                                      size_t* footer_length_hint,
                                                      const FooterPointerPB* partial_rowset_footer);
 
-    Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uint32_t segment_id, const TabletSchema* tablet_schema);
+    Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uint32_t segment_id,
+            const TabletSchema* tablet_schema);
 
     Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uint32_t segment_id,
             std::shared_ptr<const TabletSchema> tablet_schema, lake::TabletManager* tablet_manager);

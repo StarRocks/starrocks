@@ -223,8 +223,9 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_data_c
     auto segment_file_size = _rowset_metadata->segments_size();
     bool has_segment_size = segment_size_size == segment_file_size;
     LOG_IF(ERROR, segment_size_size > 0 && segment_size_size != segment_file_size)
-            << "segment_size size != segment file size, tablet: " << _tablet->id() << ", rowset: " << _rowset_metadata->id()
-            << ", segment file size: " << segment_file_size << ", segment_size size: " << segment_size_size;
+            << "segment_size size != segment file size, tablet: " << _tablet->id()
+            << ", rowset: " << _rowset_metadata->id() << ", segment file size: " << segment_file_size
+            << ", segment_size size: " << segment_size_size;
 
     const auto& files_to_size = _rowset_metadata->segment_size();
     int index = 0;
