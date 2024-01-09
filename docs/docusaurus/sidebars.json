@@ -144,8 +144,9 @@
     {
       "type": "category",
       "label": "Table Design",
-      "link": {"type": "doc", "id": "table_design/StarRocks_table_design"},
+      "link": {"type": "doc", "id": "table_design/catalog_db_tbl"},
       "items": [
+        "table_design/StarRocks_table_design",
         {
           "type": "category",
           "label": "Table types",
@@ -985,8 +986,9 @@
     {
       "type": "category",
       "label": "表设计",
-      "link": {"type": "doc", "id": "table_design/StarRocks_table_design"},
+      "link": {"type": "doc", "id": "table_design/catalog_db_tbl"},
       "items": [
+        "table_design/StarRocks_table_design",
         {
           "type": "category",
           "label": "数据模型",
