@@ -40,7 +40,7 @@ public:
     // append delvec to builder's buffer
     void append_delvec(DelVectorPtr delvec, uint32_t segment_id);
     // handle txn log
-    void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, std::string>& replace_segments,
+    void apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                        const std::vector<std::string>& orphan_files);
     void apply_opcompaction(const TxnLogPB_OpCompaction& op_compaction);
     // finalize will generate and sync final meta state to storage.
@@ -95,7 +95,7 @@ bool is_primary_key(const TabletMetadata& metadata);
 
 // TODO(yixin): cache rowset_rssid_to_path
 void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
-                          std::unordered_map<uint32_t, std::string>& rssid_to_path);
+                          std::unordered_map<uint32_t, FileInfo>& rssid_to_path);
 
 } // namespace lake
 } // namespace starrocks
