@@ -772,7 +772,8 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
                 _partial_update_states.size() != 0 ? &_partial_update_states[segment_id].write_columns : nullptr));
     } else if (_partial_update_states.size() != 0) {
         FooterPointerPB partial_rowset_footer = txn_meta.partial_rowset_footers(segment_id);
-        RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, dest_path, _tablet_schema, read_column_ids,
+        FileInfo file_info{.path = dest_path};
+        RETURN_IF_ERROR(SegmentRewriter::rewrite(src_path, &file_info, _tablet_schema, read_column_ids,
                                                  _partial_update_states[segment_id].write_columns, segment_id,
                                                  partial_rowset_footer));
     }

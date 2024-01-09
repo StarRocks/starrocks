@@ -189,7 +189,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSetWithUnusedColumn) {
     ASSERT_OK(segment_data_builder.finalize_footer());
 
     //
-    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema);
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;
@@ -291,7 +291,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDictWithUnusedColumn) {
     ASSERT_OK(segment_data_builder.append(1, slice_provider));
     ASSERT_OK(segment_data_builder.finalize_footer());
 
-    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema);
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;
@@ -385,7 +385,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNotSuperSet) {
     ASSERT_OK(segment_data_builder.append(1, slice_provider));
     ASSERT_OK(segment_data_builder.finalize_footer());
 
-    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema);
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;
@@ -479,7 +479,7 @@ TEST_F(SegmentIteratorTest, TestGlobalDictNoLocalDict) {
     ASSERT_OK(segment_data_builder.append(1, slice_provider));
     ASSERT_OK(segment_data_builder.finalize_footer());
 
-    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema);
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;

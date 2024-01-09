@@ -203,7 +203,9 @@ Status DirectSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
     // update new rowset meta
     for (auto& f : writer->files()) {
         new_rowset_metadata->add_segments(std::move(f.path));
+        new_rowset_metadata->add_segment_size(f.size.value());
     }
+
     new_rowset_metadata->set_id(_next_rowset_id);
     new_rowset_metadata->set_num_rows(writer->num_rows());
     new_rowset_metadata->set_data_size(writer->data_size());
@@ -283,10 +285,11 @@ Status SortedSchemaChange::process(RowsetPtr rowset, RowsetMetadata* new_rowset_
 
     RETURN_IF_ERROR(writer->finish(DeltaWriter::kDontWriteTxnLog));
 
-    // update new rowset meta
     for (auto& f : writer->files()) {
         new_rowset_metadata->add_segments(std::move(f.path));
+        new_rowset_metadata->add_segment_size(f.size.value());
     }
+
     new_rowset_metadata->set_id(_next_rowset_id);
     new_rowset_metadata->set_num_rows(writer->num_rows());
     new_rowset_metadata->set_data_size(writer->data_size());
