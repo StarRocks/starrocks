@@ -409,6 +409,7 @@ public class ReplicationJob implements GsonPostProcessable {
 
                 replicaInfo.setSrcSnapshotPath(request.snapshot_path);
                 replicaInfo.setSrcIncrementalSnapshot(request.incremental_snapshot);
+                task.setFinished(true);
             } else {
                 task.setFailed(true);
                 task.setErrorMsg("No snapshot path or incremental snapshot");
@@ -429,7 +430,9 @@ public class ReplicationJob implements GsonPostProcessable {
             return;
         }
 
-        if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
+        if (request.getTask_status().getStatus_code() == TStatusCode.OK) {
+            task.setFinished(true);
+        } else {
             task.setFailed(true);
             task.setErrorMsg(request.getTask_status().getError_msgs().get(0));
             LOG.warn("Replicate snapshot task failed, task: {}, error: {}", task, task.getErrorMsg());
@@ -656,15 +659,26 @@ public class ReplicationJob implements GsonPostProcessable {
             LOG.warn("Abort transaction failed, ignore, database id: {}, table id: {}, transaction id: {}, ",
                     databaseId, tableId, transactionId, e);
         }
+
+        removeRunningTasks();
     }
 
     private boolean isTransactionAborted() {
         TransactionState txnState = GlobalStateMgr.getServingState().getGlobalTransactionMgr()
                 .getTransactionState(databaseId, transactionId);
-        if (txnState == null) {
+        if (txnState == null || txnState.getTransactionStatus() == TransactionStatus.ABORTED) {
+            removeRunningTasks();
             return true;
         }
-        return txnState.getTransactionStatus() == TransactionStatus.ABORTED;
+
+        if (txnState.getTransactionStatus() == TransactionStatus.PREPARE) {
+            Database db = GlobalStateMgr.getServingState().getDb(databaseId);
+            if (db == null || db.getTable(tableId) == null) {
+                abortTransaction("Table is deleted");
+                return true;
+            }
+        }
+        return false;
     }
 
     private void sendRemoteSnapshotTasks() {
@@ -734,6 +748,13 @@ public class ReplicationJob implements GsonPostProcessable {
         }
 
         AgentTaskExecutor.submit(batchTask);
+    }
+
+    private void removeRunningTasks() {
+        for (AgentTask task : runningTasks.values()) {
+            AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+        }
+        runningTasks.clear();
     }
 
     private boolean isAllTaskFinished() {

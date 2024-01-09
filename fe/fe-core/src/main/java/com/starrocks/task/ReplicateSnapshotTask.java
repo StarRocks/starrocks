@@ -40,7 +40,8 @@ public class ReplicateSnapshotTask extends AgentTask {
             TTabletType tabletType, long transactionId, int schemaHash, long visibleVersion,
             String srcToken, long srcTabletId, TTabletType srcTabletType, int srcSchemaHash,
             long srcVisibleVersion, List<TRemoteSnapshotInfo> srcSnapshotInfos) {
-        super(null, backendId, TTaskType.REPLICATE_SNAPSHOT, dbId, tableId, partitionId, indexId, tabletId, tabletId);
+        super(null, backendId, TTaskType.REPLICATE_SNAPSHOT, dbId, tableId, partitionId, indexId, tabletId, tabletId,
+                System.currentTimeMillis());
         this.transactionId = transactionId;
         this.tabletType = tabletType;
         this.schemaHash = schemaHash;

@@ -36,15 +36,6 @@ public:
     AgentTaskTest() = default;
     ~AgentTaskTest() override = default;
     void SetUp() override {
-        _transaction_id = 100;
-        _table_id = 10001;
-        _partition_id = 10002;
-        _tablet_id = 10003;
-        _src_tablet_id = 10004;
-        _schema_hash = 368169781;
-        _version = 2;
-        _src_version = 10;
-
         TCreateTabletReq create_tablet_req = get_create_tablet_request(_tablet_id, _schema_hash, _version);
         Status create_st = StorageEngine::instance()->tablet_manager()->create_tablet(
                 create_tablet_req, StorageEngine::instance()->get_stores());
@@ -56,7 +47,18 @@ public:
         ASSERT_TRUE(src_create_st.ok());
     }
 
-    void TearDown() override {}
+    void TearDown() override {
+        auto status = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet_id, kDeleteFiles);
+        EXPECT_TRUE(status.ok()) << status;
+        status = StorageEngine::instance()->tablet_manager()->drop_tablet(_src_tablet_id, kDeleteFiles);
+        EXPECT_TRUE(status.ok()) << status;
+        status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_tablet_id);
+        EXPECT_TRUE(status.ok()) << status;
+        status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_src_tablet_id);
+        EXPECT_TRUE(status.ok()) << status;
+        status = fs::remove_all(config::storage_root_path);
+        EXPECT_TRUE(status.ok()) << status;
+    }
 
     TCreateTabletReq get_create_tablet_request(int64_t tablet_id, int schema_hash, int64_t version) {
         TColumnType col_type;
@@ -82,14 +84,14 @@ public:
     }
 
 protected:
-    int64_t _transaction_id;
-    int64_t _table_id;
-    int64_t _partition_id;
-    int64_t _tablet_id;
-    int64_t _src_tablet_id;
-    int32_t _schema_hash;
-    int64_t _version;
-    int64_t _src_version;
+    int64_t _transaction_id = 100;
+    int64_t _table_id = 10001;
+    int64_t _partition_id = 10002;
+    int64_t _tablet_id = 10003;
+    int64_t _src_tablet_id = 10004;
+    int32_t _schema_hash = 368169781;
+    int64_t _version = 2;
+    int64_t _src_version = 10;
 };
 
 TEST_F(AgentTaskTest, test_replication_txn) {

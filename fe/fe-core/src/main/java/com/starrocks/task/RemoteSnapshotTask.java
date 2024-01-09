@@ -42,7 +42,8 @@ public class RemoteSnapshotTask extends AgentTask {
             TTabletType tabletType, long transactionId, int schemaHash, long visibleVersion,
             String srcToken, long srcTabletId, TTabletType srcTabletType, int srcSchemaHash,
             long srcVisibleVersion, List<TBackend> srcBackends, int timeoutSec) {
-        super(null, backendId, TTaskType.REMOTE_SNAPSHOT, dbId, tableId, partitionId, indexId, tabletId, tabletId);
+        super(null, backendId, TTaskType.REMOTE_SNAPSHOT, dbId, tableId, partitionId, indexId, tabletId, tabletId,
+                System.currentTimeMillis());
         this.transactionId = transactionId;
         this.tabletType = tabletType;
         this.schemaHash = schemaHash;
