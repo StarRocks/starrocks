@@ -988,11 +988,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 }
             }
 
+            TableName tableName =
+                    new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), this.name);
             ExpressionAnalyzer.analyzeExpression(partitionExpr, new AnalyzeState(),
                     new Scope(RelationId.anonymous(),
                             new RelationFields(this.getBaseSchema().stream()
-                                    .map(col -> new Field(col.getName(), col.getType(),
-                                            new TableName(db.getFullName(), this.name), null))
+                                    .map(col -> new Field(col.getName(), col.getType(), tableName, null))
                                     .collect(Collectors.toList()))), connectContext);
         }
     }
