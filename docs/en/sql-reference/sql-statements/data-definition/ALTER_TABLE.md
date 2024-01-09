@@ -166,8 +166,8 @@ DROP TEMPORARY PARTITION <partition_name>
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-    MODIFY PARTITION { <partition_name> | partition_name_list | (*) }
-        SET ("key" = "value", ...);
+MODIFY PARTITION { <partition_name> | ( <partition1_name> [, <partition2_name> ...] ) | (*) }
+SET ("key" = "value", ...);
 ```
 
 **Usages**
@@ -543,7 +543,7 @@ Bitmap index supports the following modifications:
 Syntax:
 
 ```sql
- ALTER TABLE [<db_name>.]<tbl_name>
+ALTER TABLE [<db_name>.]<tbl_name>
 ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
 ```
 
@@ -609,8 +609,13 @@ Before v3.1, compaction is performed in two ways:
 Starting from v3.1, StarRocks offers a SQL interface for users to manually perform compaction by running SQL commands. They can choose a specific table or partition for compaction. This provides more flexibility and control over the compaction process.
 
 Syntax:
+```SQL
+ALTER TABLE <tbl_name> [ BASE | COMULATIVE ] COMPACT [ <partition_name> | ( <partition1_name> [, <partition2_name> ...] ) ]
+```
 
-```sql
+That is:
+
+```SQL
 -- Perform compaction on the entire table.
 ALTER TABLE <tbl_name> COMPACT
 
