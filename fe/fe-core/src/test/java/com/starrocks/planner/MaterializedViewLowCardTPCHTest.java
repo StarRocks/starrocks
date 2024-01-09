@@ -17,7 +17,6 @@ package com.starrocks.planner;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.plan.MockTpchStatisticStorage;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
@@ -51,28 +50,17 @@ public class MaterializedViewLowCardTPCHTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery7() throws Exception {
-        QueryDebugOptions debugOptions = new QueryDebugOptions();
-        debugOptions.setEnableNormalizePredicateAfterMVRewrite(true);
-        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
-
         FeConstants.USE_MOCK_DICT_MANAGER = true;
         String plan = getVerboseExplain(TpchSQL.Q07);
         assertContainsIgnoreColRefs(plan, "group by: [425: n_name, INT, true], " +
                 "[426: n_name, INT, true], " +
                 "[49: year, SMALLINT, false]");
-        connectContext.getSessionVariable().setQueryDebugOptions("");
     }
 
     @Test
     public void testQuery12() throws Exception {
-        QueryDebugOptions debugOptions = new QueryDebugOptions();
-        debugOptions.setEnableNormalizePredicateAfterMVRewrite(true);
-        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
-
         FeConstants.USE_MOCK_DICT_MANAGER = true;
-        System.out.println(TpchSQL.Q12);
         String plan = getVerboseExplain(TpchSQL.Q12);
         assertCContains(plan, "group by: [90: l_shipmode, INT, true]");
-        connectContext.getSessionVariable().setQueryDebugOptions("");
     }
 }

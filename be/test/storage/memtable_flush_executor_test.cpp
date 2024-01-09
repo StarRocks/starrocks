@@ -271,7 +271,7 @@ public:
 };
 
 TEST_F(MemTableFlushExecutorTest, testMemtableFlush) {
-    const string path = "./ut_dir/MemTableFlushExecutorTest_testDupKeysInsertFlushRead";
+    const string path = "./MemTableFlushExecutorTest_testDupKeysInsertFlushRead";
     MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
     auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
     auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
@@ -289,7 +289,8 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlush) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    auto res = mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_TRUE(mem_table->finalize().ok());
 
     ASSERT_TRUE(flush_token->submit(std::move(mem_table)).ok());
@@ -300,7 +301,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlush) {
 }
 
 TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSeg) {
-    const string path = "./ut_dir/MemTableFlushExecutorTest_testMemtableFlushWithSeg";
+    const string path = "./MemTableFlushExecutorTest_testMemtableFlushWithSeg";
     MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
     auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
     auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
@@ -318,7 +319,8 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSeg) {
         indexes.emplace_back(i);
     }
     std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
-    mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    auto res = mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(res.ok());
     ASSERT_TRUE(mem_table->finalize().ok());
 
     size_t ret_num_rows = 0;
@@ -340,7 +342,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSeg) {
 }
 
 TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithNullSeg) {
-    const string path = "./ut_dir/MemTableFlushExecutorTest_testMemtableFlushWithSeg";
+    const string path = "./MemTableFlushExecutorTest_testMemtableFlushWithSeg";
     MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
 
     auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();

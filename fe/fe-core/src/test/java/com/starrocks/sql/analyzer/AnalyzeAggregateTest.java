@@ -133,7 +133,15 @@ public class AnalyzeAggregateTest {
         analyzeFail("select distinct v1 from t0 order by v2",
                 "must be an aggregate expression or appear in GROUP BY clause");
         analyzeFail("select distinct v1 as v from t0 order by v2",
-                "must be an aggregate expression or appear in GROUP BY clause");
+                " must be an aggregate expression or appear in GROUP BY clause");
+        analyzeFail("select * from t0 order by max(v2)",
+                "column must appear in the GROUP BY clause or be used in an aggregate function.");
+        analyzeFail("select distinct max(v1) from t0",
+                "cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
+        analyzeFail("select distinct abs(v1) from t0 order by max(v1)",
+                "for SELECT DISTINCT, ORDER BY expressions must appear in select list");
+        analyzeFail("select distinct abs(v1) from t0 order by max(v2)",
+                "for SELECT DISTINCT, ORDER BY expressions must appear in select list");
 
         analyzeSuccess("select distinct v1 as v from t0 having v = 1");
         analyzeFail("select distinct v1 as v from t0 having v2 = 2",
@@ -299,5 +307,4 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("SELECT window_funnel(1, ta, 0, [ta='a', ta='b']) FROM tall");
         analyzeSuccess("SELECT window_funnel(1, ta, 0, [true, true, false]) FROM tall");
     }
-
 }

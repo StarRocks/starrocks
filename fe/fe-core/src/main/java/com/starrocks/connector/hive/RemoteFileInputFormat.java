@@ -49,6 +49,9 @@ public enum RemoteFileInputFormat {
                     .put(HUDI_PARQUET_INPUT_FORMAT, true)
                     .put(ORC_INPUT_FORMAT_CLASS, true)
                     .put(TEXT_INPUT_FORMAT_CLASS, true)
+                    .put(AVRO_INPUT_FORMAT_CLASS, true)
+                    .put(RCFILE_INPUT_FORMAT_CLASS, true)
+                    .put(SEQUENCE_INPUT_FORMAT_CLASS, true)
                     .build();
 
     public static RemoteFileInputFormat fromHdfsInputFormatClass(String className) {

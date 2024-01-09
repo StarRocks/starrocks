@@ -52,7 +52,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
-import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
@@ -74,7 +73,7 @@ import java.util.List;
 import java.util.Set;
 
 public class MvRewriteTestBase {
-    private static final Logger LOG = LogManager.getLogger(MvRewriteTestBase.class);
+    protected static final Logger LOG = LogManager.getLogger(MvRewriteTestBase.class);
     protected static ConnectContext connectContext;
     protected static PseudoCluster cluster;
     protected static StarRocksAssert starRocksAssert;
@@ -111,16 +110,19 @@ public class MvRewriteTestBase {
         // Default REFRESH DEFERRED
         Config.default_mv_refresh_immediate = false;
 
-        PseudoCluster.getOrCreateWithRandomPort(true, 3);
-        GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
+        Config.default_replication_num = 1;
+        PseudoCluster.getOrCreateWithRandomPort(true, 1);
+
+        GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(500);
         cluster = PseudoCluster.getInstance();
 
         connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
-        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(30000000);
+        // 300s: 5min
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000 * 100);
+        // 300s: 5min
+        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000 * 100);
         connectContext.getSessionVariable().setEnableShortCircuit(false);
 
-        ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
 
@@ -145,7 +147,11 @@ public class MvRewriteTestBase {
 
     @AfterClass
     public static void tearDown() throws Exception {
-        PseudoCluster.getInstance().shutdown(true);
+        try {
+            PseudoCluster.getInstance().shutdown(true);
+        } catch (Exception e) {
+            // ignore exception
+        }
     }
 
     private static void setPartitionVersion(Partition partition, long version) {

@@ -73,6 +73,18 @@ select c2["key1"] from map_top_n;
 12
 7
 -- !result
+select map{1: "a", 2: "b"}[c1] from map_top_n;
+-- result:
+a
+b
+None
+None
+None
+-- !result
+select map{null: "a", 2: "b"}[null];
+-- result:
+a
+-- !result
 -- name: testEmptyMap
 with t0 as (
     select c1 from (values(map())) as t(c1)

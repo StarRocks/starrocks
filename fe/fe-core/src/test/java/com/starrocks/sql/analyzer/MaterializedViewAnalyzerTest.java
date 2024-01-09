@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
@@ -30,13 +31,16 @@ import com.starrocks.common.Pair;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.util.Lists;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 import java.util.Arrays;
 import java.util.List;
@@ -47,6 +51,8 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class MaterializedViewAnalyzerTest {
     static StarRocksAssert starRocksAssert;
+    @ClassRule
+    public static TemporaryFolder temp = new TemporaryFolder();
 
     @Test
     public void testMaterializedAnalyPaimonTable(@Mocked SlotRef slotRef, @Mocked PaimonTable table) {
@@ -160,6 +166,7 @@ public class MaterializedViewAnalyzerTest {
         AnalyzeTestUtil.init();
         Config.enable_experimental_mv = true;
         starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
+        ConnectorPlanTestBase.mockAllCatalogs(starRocksAssert.getCtx(), temp.newFolder().toURI().toString());
         starRocksAssert.useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +
@@ -182,6 +189,46 @@ public class MaterializedViewAnalyzerTest {
     }
 
     @Test
+    public void testCreateIcebergTable() throws Exception {
+        {
+            String mvName = "iceberg_parttbl_mv1";
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_parttbl_mv1`\n" +
+                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                            "PARTITION BY str2date(`date`, '%Y-%m-%d')\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\",\n" +
+                            "\"storage_medium\" = \"HDD\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, date  FROM `iceberg0`.`partitioned_db`.`t1` as a;");
+            Table mv = starRocksAssert.getTable("test", mvName);
+            Assert.assertTrue(mv != null);
+            starRocksAssert.dropMaterializedView(mvName);
+        }
+
+        try {
+            starRocksAssert.useDatabase("test")
+                    .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`iceberg_bucket_mv1`\n" +
+                            "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                            "PARTITION BY ts\n" +
+                            "DISTRIBUTED BY HASH(`id`) BUCKETS 10\n" +
+                            "REFRESH DEFERRED MANUAL\n" +
+                            "PROPERTIES (\n" +
+                            "\"replication_num\" = \"1\",\n" +
+                            "\"storage_medium\" = \"HDD\"\n" +
+                            ")\n" +
+                            "AS SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_bucket` as a;");
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().
+                    contains("Do not support create materialized view when base iceberg table partition transform " +
+                            "has bucket or truncate."));
+        }
+    }
+
+    @Test
     public void testRefreshMaterializedView() throws Exception {
         analyzeSuccess("refresh materialized view mv");
         Database testDb = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
@@ -189,7 +236,7 @@ public class MaterializedViewAnalyzerTest {
         Assert.assertNotNull(table);
         Assert.assertTrue(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
-        mv.setInactiveAndReason("");
+        mv.setInactiveAndReason(AlterJobMgr.MANUAL_INACTIVE_MV_REASON);
         analyzeFail("refresh materialized view mv");
     }
 

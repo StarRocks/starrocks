@@ -52,6 +52,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -76,6 +77,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
 public class StatementPlanner {
 
@@ -103,7 +106,7 @@ public class StatementPlanner {
 
         // 1. For all queries, we need db lock when analyze phase
         Locker locker = new Locker();
-        try {
+        try (var guard = session.bindScope()) {
             lock(locker, dbs);
             try (Timer ignored = Tracers.watchScope("Analyzer")) {
                 Analyzer.analyze(stmt, session);
@@ -150,7 +153,7 @@ public class StatementPlanner {
         QueryStatement queryStmt = (QueryStatement) stmt;
         resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
         ExecPlan plan;
-        if (!isOnlyOlapTable || session.getSessionVariable().isCboUseDBLock()) {
+        if (!isOnlyOlapTable || !GlobalStateMgr.getCurrentState().isLeader() || session.getSessionVariable().isCboUseDBLock()) {
             plan = createQueryPlan(queryStmt.getQueryRelation(), session, resultSinkType);
         } else {
             plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType);
@@ -262,12 +265,23 @@ public class StatementPlanner {
                         resultSinkType,
                         !session.getSessionVariable().isSingleNodeExecPlan());
                 isSchemaValid = olapTables.stream().noneMatch(t -> t.lastSchemaUpdateTime.get() > planStartTime);
+
                 isSchemaValid = isSchemaValid && olapTables.stream().allMatch(t ->
                         t.lastVersionUpdateEndTime.get() < buildFragmentStartTime &&
                                 t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());
                 if (isSchemaValid) {
                     return plan;
                 }
+
+                // if exists table is applying visible log, we wait 10 ms to retry
+                if (olapTables.stream().anyMatch(t -> t.lastVersionUpdateStartTime.get() > t.lastVersionUpdateEndTime.get())) {
+                    try (Timer timer = Tracers.watchScope("PlanRetrySleepTime")) {
+                        Thread.sleep(10);
+                    } catch (InterruptedException e) {
+                        throw new StarRocksPlannerException("query had been interrupted", INTERNAL_ERROR);
+                    }
+                }
+
             }
         }
         Preconditions.checkState(false, "The tablet write operation update metadata " +
@@ -347,11 +361,11 @@ public class StatementPlanner {
     private static void beginTransaction(DmlStmt stmt, ConnectContext session)
             throws BeginTransactionException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
         // not need begin transaction here
-        // 1. explain
+        // 1. explain (exclude explain analyze)
         // 2. insert into files
         // 3. old delete
         // 4. insert overwrite
-        if (stmt.isExplain()) {
+        if (stmt.isExplain() && !StatementBase.ExplainLevel.ANALYZE.equals(stmt.getExplainLevel())) {
             return;
         }
         if (stmt instanceof InsertStmt) {

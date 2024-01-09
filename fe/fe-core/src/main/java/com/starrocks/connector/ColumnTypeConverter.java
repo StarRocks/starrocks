@@ -50,6 +50,7 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
+import org.apache.paimon.types.VarBinaryType;
 import org.apache.paimon.types.VarCharType;
 
 import java.util.ArrayList;
@@ -497,6 +498,10 @@ public class ColumnTypeConverter {
             return ScalarType.createType(PrimitiveType.VARBINARY);
         }
 
+        public Type visit(VarBinaryType varBinaryType) {
+            return ScalarType.createType(PrimitiveType.VARBINARY);
+        }
+
         public Type visit(CharType charType) {
             return ScalarType.createCharType(charType.getLength());
         }
@@ -636,6 +641,7 @@ public class ColumnTypeConverter {
             case BINARY:
                 return Type.VARBINARY;
             case TIME:
+                return Type.TIME;
             case FIXED:
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;

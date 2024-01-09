@@ -20,6 +20,7 @@
 #include "agent/master_info.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/client_cache.h"
@@ -68,6 +69,11 @@ QueryContext::~QueryContext() noexcept {
         }
         _exec_env->runtime_filter_cache()->remove(_query_id);
     }
+
+    // Make sure all bytes are released back to parent trackers.
+    if (_connector_scan_mem_tracker != nullptr) {
+        _connector_scan_mem_tracker->release_without_root();
+    }
 }
 
 void QueryContext::count_down_fragments() {
@@ -98,7 +104,7 @@ void QueryContext::cancel(const Status& status) {
 }
 
 void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
-                                    int64_t spill_mem_limit, workgroup::WorkGroup* wg) {
+                                    int64_t spill_mem_limit, workgroup::WorkGroup* wg, RuntimeState* runtime_state) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter =
@@ -122,6 +128,25 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         _static_query_mem_limit = p->limit();
         if (query_mem_limit > 0) {
             _static_query_mem_limit = std::min(query_mem_limit, _static_query_mem_limit);
+        }
+        if (big_query_mem_limit > 0) {
+            _static_query_mem_limit = std::min(big_query_mem_limit, _static_query_mem_limit);
+        }
+        _connector_scan_operator_mem_share_arbitrator =
+                _object_pool.add(new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit));
+
+        {
+            MemTracker* connector_scan_parent = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker();
+            if (wg != nullptr) {
+                connector_scan_parent = wg->connector_scan_mem_tracker();
+            }
+            double connector_scan_use_query_mem_ratio = config::connector_scan_use_query_mem_ratio;
+            if (runtime_state != nullptr && runtime_state->query_options().__isset.connector_scan_use_query_mem_ratio) {
+                connector_scan_use_query_mem_ratio = runtime_state->query_options().connector_scan_use_query_mem_ratio;
+            }
+            _connector_scan_mem_tracker = std::make_shared<MemTracker>(
+                    MemTracker::QUERY, _static_query_mem_limit * connector_scan_use_query_mem_ratio,
+                    _profile->name() + "/connector_scan", connector_scan_parent);
         }
     });
 }

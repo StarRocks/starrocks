@@ -254,6 +254,7 @@ import com.starrocks.thrift.TObjectDependencyReq;
 import com.starrocks.thrift.TObjectDependencyRes;
 import com.starrocks.thrift.TOlapTableIndexTablets;
 import com.starrocks.thrift.TOlapTablePartition;
+import com.starrocks.thrift.TOlapTablePartitionParam;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TReleaseSlotRequest;
@@ -277,6 +278,8 @@ import com.starrocks.thrift.TStreamLoadInfo;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TStreamLoadPutResult;
 import com.starrocks.thrift.TTablePrivDesc;
+import com.starrocks.thrift.TTableReplicationRequest;
+import com.starrocks.thrift.TTableReplicationResponse;
 import com.starrocks.thrift.TTableStatus;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletLocation;
@@ -312,11 +315,13 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.thrift.TStatusCode.NOT_IMPLEMENTED_ERROR;
 import static com.starrocks.thrift.TStatusCode.OK;
 import static com.starrocks.thrift.TStatusCode.RUNTIME_ERROR;
+import static com.starrocks.thrift.TStatusCode.SERVICE_UNAVAILABLE;
 
 // Frontend service used to serve all request for this frontend through
 // thrift protocol
@@ -324,6 +329,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private static final Logger LOG = LogManager.getLogger(LeaderImpl.class);
     private final LeaderImpl leaderImpl;
     private final ExecuteEnv exeEnv;
+    public AtomicLong partitionRequestNum = new AtomicLong(0);
 
     public FrontendServiceImpl(ExecuteEnv exeEnv) {
         leaderImpl = new LeaderImpl();
@@ -576,6 +582,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TListPipesInfo row = new TListPipesInfo();
             row.setPipe_id(pipe.getPipeId().getId());
             row.setPipe_name(pipe.getName());
+            row.setProperties(pipe.getPropertiesString());
             row.setDatabase_name(databaseName);
             row.setState(pipe.getState().toString());
             row.setTable_name(Optional.ofNullable(pipe.getTargetTable()).map(TableName::toString).orElse(""));
@@ -665,10 +672,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-        List<ShowMaterializedViewStatus> mvStatusList = listMaterializedViews(limit, matcher, currentUser, params);
-        for (ShowMaterializedViewStatus mvStatus : mvStatusList) {
-            tablesResult.add(mvStatus.toThrift());
-        }
+        listMaterializedViews(limit, matcher, currentUser, params).stream()
+                .map(s -> s.toThrift())
+                .forEach(t -> tablesResult.add(t));
         return result;
     }
 
@@ -699,6 +705,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     materializedViews.add(mvTable);
                 } else if (table.getType() == Table.TableType.OLAP) {
                     OlapTable olapTable = (OlapTable) table;
+                    // synchronized materialized view metadata size should be greater than 1.
+                    if (olapTable.getVisibleIndexMetas().size() <= 1) {
+                        continue;
+                    }
                     List<MaterializedIndexMeta> visibleMaterializedViews = olapTable.getVisibleIndexMetas();
                     long baseIdx = olapTable.getBaseIndexId();
                     for (MaterializedIndexMeta mvMeta : visibleMaterializedViews) {
@@ -769,6 +779,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setDatabase(ClusterNamespace.getNameFromFullName(task.getDbName()));
             info.setDefinition(task.getDefinition());
             info.setExpire_time(task.getExpireTime() / 1000);
+            info.setProperties(task.getPropertiesString());
             tasksResult.add(info);
         }
 
@@ -803,14 +814,23 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 continue;
             }
 
+            String taskName = status.getTaskName();
             TTaskRunInfo info = new TTaskRunInfo();
             info.setQuery_id(status.getQueryId());
-            info.setTask_name(status.getTaskName());
+            info.setTask_name(taskName);
             info.setCreate_time(status.getCreateTime() / 1000);
             info.setFinish_time(status.getFinishTime() / 1000);
             info.setState(status.getState().toString());
             info.setDatabase(ClusterNamespace.getNameFromFullName(status.getDbName()));
-            info.setDefinition(status.getDefinition());
+            try {
+                // NOTE: use task's definition to display task-run's definition here
+                Task task = taskManager.getTaskWithoutLock(taskName);
+                if (task != null) {
+                    info.setDefinition(task.getDefinition());
+                }
+            } catch (Exception e) {
+                LOG.warn("Get taskName {} definition failed: {}", taskName, e);
+            }
             info.setError_code(status.getErrorCode());
             info.setError_message(status.getErrorMessage());
             info.setExpire_time(status.getExpireTime() / 1000);
@@ -2187,9 +2207,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     Multimap<Replica, Long> bePathsMap =
                             localTablet.getNormalReplicaBackendPathMap(olapTable.getClusterId());
                     if (bePathsMap.keySet().size() < quorum) {
-                        throw new UserException(
-                                "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                        + tablet.getId() + ", replicas: " + localTablet.getReplicaInfos());
+                        throw new UserException(String.format("Tablet lost replicas. Check if any backend is down or not. " +
+                                        "tablet_id: %s, replicas: %s. Check quorum number failed(buildTablets): " +
+                                        "BeReplicaSize:%s, quorum:%s", tablet.getId(), localTablet.getReplicaInfos(),
+                                bePathsMap.size(), quorum));
                     }
                     // replicas[0] will be the primary replica
                     // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable
@@ -2209,14 +2230,26 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         TCreatePartitionResult result;
         try {
+            if (partitionRequestNum.incrementAndGet() >= Config.thrift_server_max_worker_threads / 4) {
+                result = new TCreatePartitionResult();
+                TStatus errorStatus = new TStatus(SERVICE_UNAVAILABLE);
+                errorStatus.setError_msgs(Lists.newArrayList(
+                        String.format("Too many create partition requests, please try again later txn_id=%d",
+                        request.getTxn_id())));
+                result.setStatus(errorStatus);
+                return result;
+            }
+
             result = createPartitionProcess(request);
-        } catch (Throwable t) {
-            LOG.warn(t);
+        } catch (Exception t) {
+            LOG.warn(DebugUtil.getStackTrace(t));
             result = new TCreatePartitionResult();
             TStatus errorStatus = new TStatus(RUNTIME_ERROR);
             errorStatus.setError_msgs(Lists.newArrayList(String.format("txn_id=%d failed. %s",
                     request.getTxn_id(), t.getMessage())));
             result.setStatus(errorStatus);
+        } finally {
+            partitionRequestNum.decrementAndGet();
         }
 
         return result;
@@ -2302,13 +2335,28 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
 
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
+        try {
+            return buildCreatePartitionResponse(olapTable, partitions, tablets, partitionColNames);
+        } finally {
+            locker.unLockDatabase(db, LockType.READ);
+        }
+    }
+
+    private static TCreatePartitionResult buildCreatePartitionResponse(OlapTable olapTable,
+                                                                       List<TOlapTablePartition> partitions,
+                                                                       List<TTabletLocation> tablets,
+                                                                       List<String> partitionColNames) {
+        TCreatePartitionResult result = new TCreatePartitionResult();
+        TStatus errorStatus = new TStatus(RUNTIME_ERROR);
         for (String partitionName : partitionColNames) {
-            Partition partition = table.getPartition(partitionName);
+            Partition partition = olapTable.getPartition(partitionName);
             TOlapTablePartition tPartition = new TOlapTablePartition();
             tPartition.setId(partition.getId());
             buildPartitionInfo(olapTable, partitions, partition, tPartition);
             // tablet
-            int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), ((OlapTable) table).writeQuorum());
+            int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), olapTable.writeQuorum());
             for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
                 if (olapTable.isCloudNativeTable()) {
                     for (Tablet tablet : index.getTablets()) {
@@ -2333,9 +2381,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         Multimap<Replica, Long> bePathsMap =
                                 localTablet.getNormalReplicaBackendPathMap(olapTable.getClusterId());
                         if (bePathsMap.keySet().size() < quorum) {
-                            errorStatus.setError_msgs(Lists.newArrayList(
-                                    "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
-                                            + tablet.getId() + ", replicas: " + localTablet.getReplicaInfos()));
+                            String errorMsg = String.format("Tablet lost replicas. Check if any backend is down or not. " +
+                                            "tablet_id: %s, replicas: %s. Check quorum number failed" +
+                                            "(buildCreatePartitionResponse): BeReplicaSize:%s, quorum:%s",
+                                    tablet.getId(), localTablet.getReplicaInfos(), bePathsMap.size(), quorum);
+                            errorStatus.setError_msgs(Lists.newArrayList(errorMsg));
                             result.setStatus(errorStatus);
                             return result;
                         }
@@ -2737,11 +2787,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         response.setSchema(OlapTableSink.createSchema(db.getId(), dictTable, tupleDescriptor));
         try {
             List<Long> allPartitions = dictTable.getAllPartitionIds();
-            response.setPartition(
-                    OlapTableSink.createPartition(db.getId(), dictTable, tupleDescriptor, dictTable.supportedAutomaticPartition(),
-                    dictTable.getAutomaticBucketSize(), allPartitions));
+            TOlapTablePartitionParam partitionParam = OlapTableSink.createPartition(
+                    db.getId(), dictTable, tupleDescriptor, dictTable.supportedAutomaticPartition(),
+                    dictTable.getAutomaticBucketSize(), allPartitions);
+            response.setPartition(partitionParam);
             response.setLocation(OlapTableSink.createLocation(
-                    dictTable, dictTable.getClusterId(), allPartitions, dictTable.enableReplicatedStorage()));
+                    dictTable, dictTable.getClusterId(), partitionParam, dictTable.enableReplicatedStorage()));
             response.setNodes_info(GlobalStateMgr.getCurrentState().createNodesInfo(dictTable.getClusterId()));
         } catch (UserException e) {
             SemanticException semanticException = new SemanticException("build DictQueryParams error in dict_query_expr.");
@@ -2749,5 +2800,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw semanticException;
         }
         return response;
+    }
+
+    @Override
+    public TTableReplicationResponse startTableReplication(TTableReplicationRequest request) throws TException {
+        return leaderImpl.startTableReplication(request);
     }
 }

@@ -115,3 +115,79 @@ SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${
 2023-12-03	4002
 2023-12-04	4002
 -- !result
+use mv_iceberg_${uuid0}.mv_ice_db_${uuid0};
+-- result:
+-- !result
+DROP TABLE mv_ice_tbl_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+ALTER MATERIALIZED VIEW test_mv1 ACTIVE;
+-- result:
+[REGEX].*Unknown table.*
+-- !result
+use mv_iceberg_${uuid0}.mv_ice_db_${uuid0};
+-- result:
+-- !result
+create table mv_ice_tbl_${uuid0} (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+insert into mv_ice_tbl_${uuid0} values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01'),
+  ('3e82e36e56718dc4abc1168d21ec91ab', 2000, '2023-12-01');
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 WITH SYNC MODE;
+select is_active, inactive_reason from information_schema.materialized_views
+  where TABLE_NAME = 'test_mv1' and table_schema = 'db_${uuid0}';
+-- result:
+true	
+-- !result
+select * from default_catalog.db_${uuid0}.test_mv1 order by 1, 2;
+-- result:
+2023-12-01	4000
+-- !result
+ALTER MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 INACTIVE;
+-- result:
+-- !result
+select is_active, inactive_reason from information_schema.materialized_views
+  where TABLE_NAME = 'test_mv1' and table_schema = 'db_${uuid0}';
+-- result:
+false	user use alter materialized view set status to inactive
+-- !result
+ALTER MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 ACTIVE;
+-- result:
+-- !result
+select is_active, inactive_reason from information_schema.materialized_views
+  where TABLE_NAME = 'test_mv1' and table_schema = 'db_${uuid0}';
+-- result:
+true	
+-- !result
+  
+REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 WITH SYNC MODE;
+-- result:
+c45fa9dd-ab93-11ee-9b00-5e4f71f202d3
+-- !result
+select * from default_catalog.db_${uuid0}.test_mv1 order by 1, 2;
+-- result:
+2023-12-01	4000
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result

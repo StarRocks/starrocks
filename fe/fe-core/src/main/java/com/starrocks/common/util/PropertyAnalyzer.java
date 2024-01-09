@@ -72,6 +72,7 @@ import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletType;
+import org.apache.commons.collections.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.threeten.extra.PeriodDuration;
@@ -172,6 +173,9 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE = "force_external_table_query_rewrite";
     public static final String PROPERTIES_QUERY_REWRITE_CONSISTENCY = "query_rewrite_consistency";
     public static final String PROPERTIES_RESOURCE_GROUP = "resource_group";
+
+    public static final String PROPERTIES_WAREHOUSE = "warehouse";
+    public static final String PROPERTIES_WAREHOUSE_ID = "warehouse_id";
 
     public static final String PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX = "session.";
 
@@ -539,12 +543,17 @@ public class PropertyAnalyzer {
                 tStorageType = TStorageType.ROW;
             } else if (olapTable.supportsUpdate() && storageType.equalsIgnoreCase(TStorageType.COLUMN_WITH_ROW.name())) {
                 tStorageType = TStorageType.COLUMN_WITH_ROW;
-                if (!olapTable.supportColumnWithRow()) {
-                    throw new AnalysisException("Column With Row Table must have more value columns exclude key columns "
-                            + "or column's type not supported");
+                if (olapTable.getColumns().stream().filter(column -> !column.isKey()).count() == 0) {
+                    throw new AnalysisException("column_with_row storage type must have some non-key columns");
+                }
+                for (Column column : olapTable.getColumns()) {
+                    if (!column.isKey() && column.getType().isComplexType()) {
+                        throw new AnalysisException(
+                                "column_with_row storage type does not support complex type. column: " + column.getName());
+                    }
                 }
             } else {
-                throw new AnalysisException("Invalid storage type: " + storageType + ", maybe row store need primary key");
+                throw new AnalysisException(storageType + " for " + olapTable.getKeysType() + " table not supported");
             }
 
             properties.remove(PROPERTIES_STORAGE_TYPE);
@@ -620,9 +629,8 @@ public class PropertyAnalyzer {
             return false;
         }
         throw new AnalysisException(PROPERTIES_USE_FAST_SCHEMA_EVOLUTION
-            + " must be `true` or `false`");
+                + " must be `true` or `false`");
     }
-
 
     public static Set<String> analyzeBloomFilterColumns(Map<String, String> properties, List<Column> columns,
                                                         boolean isPrimaryKey) throws AnalysisException {
@@ -945,7 +953,7 @@ public class PropertyAnalyzer {
         List<UniqueConstraint> mvUniqueConstraints = Lists.newArrayList();
         if (analyzedTable.isMaterializedView() && analyzedTable.hasUniqueConstraints()) {
             mvUniqueConstraints = analyzedTable.getUniqueConstraints().stream().filter(
-                    uniqueConstraint -> StringUtils.areTableNamesEqual(parentTable, uniqueConstraint.getTableName()))
+                            uniqueConstraint -> StringUtils.areTableNamesEqual(parentTable, uniqueConstraint.getTableName()))
                     .collect(Collectors.toList());
         }
 
@@ -1134,5 +1142,25 @@ public class PropertyAnalyzer {
             throw new AnalysisException(ex.getMessage());
         }
         return periodDuration;
+    }
+
+    /**
+     * Generate a string representation of properties like ('a'='1', 'b'='2')
+     */
+    public static String stringifyProperties(Map<String, String> properties) {
+        if (MapUtils.isEmpty(properties)) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder("(");
+        boolean first = true;
+        for (var entry : properties.entrySet()) {
+            if (!first) {
+                sb.append(",");
+            }
+            first = false;
+            sb.append("'").append(entry.getKey()).append("'=").append("'").append(entry.getValue()).append("'");
+        }
+        sb.append(")");
+        return sb.toString();
     }
 }

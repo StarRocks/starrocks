@@ -25,16 +25,13 @@
 #include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
-#include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
-#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/test_util.h"
-#include "storage/rowset/segment.h"
 #include "storage/rowset/segment_iterator.h"
 #include "storage/rowset/segment_options.h"
 #include "storage/tablet_schema.h"
@@ -189,7 +186,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
     txn_log->set_txn_id(txn_id);
     auto op_write = txn_log->mutable_op_write();
     for (auto& f : writer->files()) {
-        op_write->mutable_rowset()->add_segments(std::move(f));
+        op_write->mutable_rowset()->add_segments(std::move(f.path));
     }
     op_write->mutable_rowset()->set_num_rows(writer->num_rows());
     op_write->mutable_rowset()->set_data_size(writer->data_size());
@@ -309,8 +306,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
         new_metadata->set_version(version + 1);
         std::unique_ptr<MetaFileBuilder> builder = std::make_unique<MetaFileBuilder>(tablet, new_metadata);
         // update primary table state, such as primary index
-        ASSIGN_OR_ABORT(auto index_entry, tablet.update_mgr()->prepare_primary_index(
-                                                  *new_metadata, &tablet, builder.get(), version, version + 1));
+        std::unique_ptr<std::lock_guard<std::mutex>> lock = nullptr;
+        ASSIGN_OR_ABORT(auto index_entry, tablet.update_mgr()->prepare_primary_index(new_metadata, builder.get(),
+                                                                                     version, version + 1, lock));
         ASSERT_OK(tablet.update_mgr()->publish_primary_key_tablet(txn_log->op_write(), txn_log->txn_id(), *new_metadata,
                                                                   &tablet, index_entry, builder.get(), version));
         // if builder.finalize fail, remove primary index cache and retry
@@ -626,6 +624,90 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover) {
         check_local_persistent_index_meta(tablet_id, version);
     }
     config::enable_primary_key_recover = false;
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
+    if (!GetParam().enable_persistent_index) {
+        // only test persistent index
+        return;
+    }
+    auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true);
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        int64_t txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        EXPECT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+        version++;
+        // clear persistent index path
+        EXPECT_TRUE(_update_mgr->try_remove_primary_index_cache(tablet_id));
+        std::string path = strings::Substitute(
+                "$0/$1/", StorageEngine::instance()->get_persistent_index_store(tablet_id)->get_persistent_index_path(),
+                tablet_id);
+        ASSERT_OK(fs::remove_all(path));
+    }
+    ASSERT_EQ(kChunkSize, read_rows(tablet_id, version));
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
+    EXPECT_EQ(new_tablet_metadata->rowsets(1).num_dels(), kChunkSize);
+    EXPECT_EQ(new_tablet_metadata->rowsets(2).num_dels(), 0);
+    if (GetParam().enable_persistent_index) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
+}
+
+TEST_P(LakePrimaryKeyPublishTest, test_abort_txn) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->LoadDependency(
+            {{"UpdateManager::preload_update_state:return", "transactions::abort_txn:enter"}});
+
+    auto tablet_id = _tablet_metadata->id();
+    auto txn_id = next_id();
+    std::thread t1([&]() {
+        auto [chunk0, indexes] = gen_data_and_index(kChunkSize, 0, true);
+        auto tablet_id = _tablet_metadata->id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_index_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+    });
+
+    std::thread t2([&]() {
+        lake::AbortTxnRequest request;
+        request.add_tablet_ids(tablet_id);
+        request.add_txn_ids(txn_id);
+        request.set_skip_cleanup(false);
+        lake::AbortTxnResponse response;
+        auto lake_service = LakeServiceImpl(ExecEnv::GetInstance(), _tablet_mgr.get());
+        lake_service.abort_txn(nullptr, &request, &response, nullptr);
+    });
+
+    t1.join();
+    t2.join();
+    ASSERT_TRUE(_update_mgr->TEST_check_update_state_cache_absent(tablet_id, txn_id));
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyPublishTest, LakePrimaryKeyPublishTest,

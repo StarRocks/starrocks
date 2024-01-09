@@ -25,6 +25,7 @@
 #include "testutil/assert.h"
 #include "testutil/sync_point.h"
 #include "util/defer_op.h"
+#include "util/uid_util.h"
 
 namespace starrocks {
 
@@ -32,13 +33,15 @@ template <class T>
 class ProtobufFileTest : public ::testing::Test {
 public:
     using ProtobufFileType = T;
+
+    static std::string gen_test_file_name() { return generate_uuid_string() + ".bin"; }
 };
 
 using MyTypes = ::testing::Types<ProtobufFile, ProtobufFileWithHeader>;
 TYPED_TEST_SUITE(ProtobufFileTest, MyTypes);
 
 TYPED_TEST(ProtobufFileTest, test_save_load_tablet_meta) {
-    const std::string kFileName = "ProtobufFileTest_test_save_load_tablet_meta.bin";
+    const std::string kFileName = TestFixture::gen_test_file_name();
     DeferOp defer([&]() { std::filesystem::remove(kFileName); });
 
     TabletMetaPB tablet_meta;
@@ -70,8 +73,9 @@ TYPED_TEST(ProtobufFileTest, test_save_load_tablet_meta) {
 }
 
 TYPED_TEST(ProtobufFileTest, test_serialize_failed) {
-    typename TestFixture::ProtobufFileType file("ProtobufFileTest_test_save_load_tablet_meta.bin");
-    DeferOp defer([&]() { std::filesystem::remove("ProtobufFileTest_test_save_load_tablet_meta.bin"); });
+    const std::string kFileName = TestFixture::gen_test_file_name();
+    typename TestFixture::ProtobufFileType file(kFileName);
+    DeferOp defer([&]() { std::filesystem::remove(kFileName); });
 
     TabletMetaPB tablet_meta;
     tablet_meta.set_table_id(10001);
@@ -107,7 +111,7 @@ TYPED_TEST(ProtobufFileTest, test_serialize_failed) {
 }
 
 TYPED_TEST(ProtobufFileTest, test_corrupted_file0) {
-    const std::string kFileName = "ProtobufFileTest_test_corruption.bin";
+    const std::string kFileName = TestFixture::gen_test_file_name();
     DeferOp defer([&]() { std::filesystem::remove(kFileName); });
 
     TabletMetaPB tablet_meta;
@@ -127,7 +131,7 @@ TYPED_TEST(ProtobufFileTest, test_corrupted_file0) {
     {
         std::unique_ptr<WritableFile> f;
         WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN};
-        f = *FileSystem::Default()->new_writable_file(opts, "ProtobufFileTest_test_corruption.bin");
+        f = *FileSystem::Default()->new_writable_file(opts, kFileName);
         EXPECT_TRUE(f->append("xx").ok());
         EXPECT_TRUE(f->close().ok());
     }
