@@ -95,6 +95,7 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                     ctx->number_filtered_rows = executor->runtime_state()->num_rows_load_filtered();
                     ctx->number_unselected_rows = executor->runtime_state()->num_rows_load_unselected();
                     ctx->loaded_bytes = executor->runtime_state()->num_bytes_load_sink();
+                    ctx->partition_num_rows = executor->runtime_state()->partition_rows();
 
                     int64_t num_selected_rows = ctx->number_total_rows - ctx->number_unselected_rows;
                     if ((double)ctx->number_filtered_rows / num_selected_rows > ctx->max_filter_ratio) {
@@ -420,6 +421,7 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         manual_load_attach.__set_receivedBytes(ctx->receive_bytes);
         manual_load_attach.__set_loadedBytes(ctx->loaded_bytes);
         manual_load_attach.__set_unselectedRows(ctx->number_unselected_rows);
+        manual_load_attach.__set_partitionRows(ctx->get_partition_num_rows());
         if (!ctx->error_url.empty()) {
             manual_load_attach.__set_errorLogUrl(ctx->error_url);
         }
@@ -440,6 +442,7 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
         rl_attach.__set_receivedBytes(ctx->receive_bytes);
         rl_attach.__set_loadedBytes(ctx->loaded_bytes);
         rl_attach.__set_loadCostMs(ctx->load_cost_nanos / 1000 / 1000);
+        rl_attach.__set_partitionRows(ctx->get_partition_num_rows());
 
         attach->rlTaskTxnCommitAttachment = rl_attach;
         attach->__isset.rlTaskTxnCommitAttachment = true;

@@ -931,6 +931,7 @@ struct TRLTaskTxnCommitAttachment {
     10: optional TKafkaRLTaskProgress kafkaRLTaskProgress
     11: optional string errorLogUrl
     12: optional TPulsarRLTaskProgress pulsarRLTaskProgress
+    13: optional map<i64,i64> partitionRows
 }
 
 struct TMiniLoadTxnCommitAttachment {
@@ -946,6 +947,7 @@ struct TManualLoadTxnCommitAttachment {
     4: optional i64 receivedBytes
     5: optional i64 loadedBytes
     6: optional i64 unselectedRows
+    7: optional map<i64,i64> partitionRows
 }
 
 struct TTxnCommitAttachment {

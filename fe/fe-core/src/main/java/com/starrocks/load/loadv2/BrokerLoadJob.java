@@ -455,6 +455,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 increaseCounter(DPP_NORMAL_ALL, attachment.getCounter(DPP_NORMAL_ALL)));
         loadingStatus.replaceCounter(UNSELECTED_ROWS,
                 increaseCounter(UNSELECTED_ROWS, attachment.getCounter(UNSELECTED_ROWS)));
+        loadingStatus.replaceCounter(PARTITION_LOADED_ROWS, attachment.getCounter(PARTITION_LOADED_ROWS));
         if (attachment.getTrackingUrl() != null) {
             loadingStatus.setTrackingUrl(attachment.getTrackingUrl());
         }

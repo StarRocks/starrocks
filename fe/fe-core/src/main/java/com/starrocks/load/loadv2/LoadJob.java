@@ -105,6 +105,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     public static final String DPP_ABNORMAL_ALL = "dpp.abnorm.ALL";
     public static final String UNSELECTED_ROWS = "unselected.rows";
     public static final String LOADED_BYTES = "loaded.bytes";
+    public static final String PARTITION_LOADED_ROWS = "partition.load.rows";
 
     private static final int TASK_SUBMIT_RETRY_NUM = 2;
 

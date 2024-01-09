@@ -45,6 +45,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.dpp.DppResult;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.persist.gson.GsonUtils;
@@ -382,6 +383,8 @@ public class EtlStatus implements Writable {
         @SerializedName("sinkBytesCounterTbl")
         private Table<String, String, Long> sinkBytesCounterTbl = HashBasedTable.create();
 
+        private Table<String, String, String> sinkPartitionRows = HashBasedTable.create();
+
         @SerializedName("sourceRowsCounterTbl")
         private Table<String, String, Long> sourceRowsCounterTbl = HashBasedTable.create();
 
@@ -520,6 +523,9 @@ public class EtlStatus implements Writable {
                 unselectedRowsCounterTbl.put(loadStr, fragmentStr, params.unselected_rows);
                 sourceScanBytesCounterTbl.put(loadStr, fragmentStr, params.source_scan_bytes);
             }
+            if (params.isSetLoad_counters() && params.load_counters.containsKey(LoadJob.PARTITION_LOADED_ROWS)) {
+                sinkPartitionRows.put(loadStr, fragmentStr, params.load_counters.get(LoadJob.PARTITION_LOADED_ROWS));
+            }
 
             if (params.done && unfinishedBackendIds.containsKey(loadStr)) {
                 unfinishedBackendIds.get(loadStr).remove(params.backend_id);
@@ -531,6 +537,11 @@ public class EtlStatus implements Writable {
             long totalSinkRows = 0;
             for (long rows : counterTbl.values()) {
                 totalSinkRows += rows;
+            }
+
+            StringBuilder sinkPartitonRows = new StringBuilder();
+            for (String partitionRows : sinkPartitionRows.values()) {
+                sinkPartitonRows.append(partitionRows);
             }
 
             long totalSourceRows = 0;
@@ -557,6 +568,7 @@ public class EtlStatus implements Writable {
             details.put("ScanBytes", totalSourceBytes);
             details.put("InternalTableLoadRows", totalSinkRows);
             details.put("InternalTableLoadBytes", totalSinkBytes);
+            details.put("InternalTablePartitionRows", sinkPartitonRows);
             details.put("FileNumber", fileNum);
             details.put("FileSize", totalFileSizeB);
             details.put("TaskNumber", counterTbl.rowMap().size());

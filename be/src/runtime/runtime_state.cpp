@@ -511,6 +511,7 @@ Status RuntimeState::reset_epoch() {
     std::lock_guard<std::mutex> l(_tablet_infos_lock);
     _tablet_commit_infos.clear();
     _tablet_fail_infos.clear();
+    _partition_to_num_rows.clear();
     return Status::OK();
 }
 

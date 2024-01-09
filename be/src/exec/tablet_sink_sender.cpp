@@ -58,6 +58,7 @@ Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
                 uint16_t selection = validate_select_idx[j];
                 index_id_partition_id[index->index_id].emplace(partitions[selection]->id);
                 _tablet_ids[selection] = partitions[selection]->indexes[i].tablets[tablet_indexes[selection]];
+                _update_partition_rows(partitions[selection]->id);
             }
             RETURN_IF_ERROR(_send_chunk_by_node(chunk, _channels[i], validate_select_idx));
         }
@@ -68,6 +69,7 @@ Status TabletSinkSender::send_chunk(const OlapTableSchemaParam* schema,
             for (size_t j = 0; j < num_rows; ++j) {
                 index_id_partition_id[index->index_id].emplace(partitions[j]->id);
                 _tablet_ids[j] = partitions[j]->indexes[i].tablets[tablet_indexes[j]];
+                _update_partition_rows(partitions[j]->id);
             }
             RETURN_IF_ERROR(_send_chunk_by_node(chunk, _channels[i], validate_select_idx));
         }
@@ -326,6 +328,9 @@ Status TabletSinkSender::close_wait(RuntimeState* state, Status close_status, Ta
     } else {
         for_each_index_channel([&status](NodeChannel* ch) { ch->cancel(status); });
     }
+
+    // update the info of partition num rows
+    state->update_partition_num_rows(_partition_to_num_rows);
 
     Expr::close(_output_expr_ctxs, state);
     if (_vectorized_partition) {

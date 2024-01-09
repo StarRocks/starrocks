@@ -277,6 +277,25 @@ public:
 
     int64_t num_bytes_scan_from_source() const noexcept { return _num_bytes_scan_from_source.load(); }
 
+    const std::map<int64_t, int64_t> partition_rows() const noexcept { return _partition_to_num_rows; };
+
+    std::string partition_rows_string() {
+        LOG(INFO) << "partition_rows_string";
+        std::ostringstream oss;
+        for (const auto& pair : _partition_to_num_rows) {
+            oss << pair.first << ": " << pair.second << ", ";
+        }
+
+        std::string result = oss.str();
+        LOG(INFO) << "result" << result;
+        if (!result.empty()) {
+            result.pop_back(); // remove colon
+            result.pop_back(); // remove comma
+        }
+
+        return result;
+    }
+
     void update_num_bytes_load_from_source(int64_t bytes_load) { _num_bytes_load_from_source.fetch_add(bytes_load); }
 
     void update_num_rows_load_from_source(int64_t num_rows) { _num_rows_load_total_from_source.fetch_add(num_rows); }
@@ -369,6 +388,13 @@ public:
         std::lock_guard<std::mutex> l(_tablet_infos_lock);
         _tablet_commit_infos.insert(_tablet_commit_infos.end(), std::make_move_iterator(commit_info.begin()),
                                     std::make_move_iterator(commit_info.end()));
+    }
+
+    void update_partition_num_rows(std::unordered_map<int64_t, int64_t> partition_to_rows) {
+        std::lock_guard<std::mutex> l(_partition_rows_lock);
+        for (auto pair : partition_to_rows) {
+            _partition_to_num_rows[pair.first] += pair.second;
+        }
     }
 
     const std::vector<TTabletFailInfo>& tablet_fail_infos() const { return _tablet_fail_infos; }
@@ -546,6 +572,9 @@ private:
     std::mutex _tablet_infos_lock;
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
     std::vector<TTabletFailInfo> _tablet_fail_infos;
+
+    std::mutex _partition_rows_lock;
+    std::map<int64_t, int64_t> _partition_to_num_rows;
 
     std::mutex _sink_commit_infos_lock;
     std::vector<TSinkCommitInfo> _sink_commit_infos;
