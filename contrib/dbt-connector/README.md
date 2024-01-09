@@ -85,6 +85,8 @@ models:
   buckets: 3                // default 10
   partition_by: ['some_date']
   partition_by_init: ["PARTITION p1 VALUES [('1971-01-01 00:00:00'), ('1991-01-01 00:00:00')),PARTITION p1972 VALUES [('1991-01-01 00:00:00'), ('1999-01-01 00:00:00'))"]
+  // RANGE, LIST, or Expr partition types should be used in conjunction with partition_by configuration
+  // Expr partition type requires an expression (e.g., date_trunc) specified in partition_by
   partition_type: 'RANGE'   // RANGE or LIST or Expr Need to be used in combination with partition_by configuration
   properties: [{"replication_num":"1", "in_memory": "true"}]
   refresh_method: 'async' // only for materialized view default manual
