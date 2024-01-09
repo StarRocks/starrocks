@@ -1079,12 +1079,15 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
             LOG(WARNING) << "failed to build rowset: " << new_rowset.status() << ". exit alter process";
             break;
         }
+<<<<<<< HEAD
         LOG(INFO) << "new rowset has " << (*new_rowset)->num_segments() << " segments";
         if (sc_params.rowsets_to_change[i]->rowset_meta()->has_delete_predicate()) {
             (*new_rowset)
                     ->mutable_delete_predicate()
                     ->CopyFrom(sc_params.rowsets_to_change[i]->rowset_meta()->delete_predicate());
         }
+=======
+>>>>>>> 6b63d3d266 ([BugFix] Use delete predicates to filter data when creating sync mv (#38652))
         status = sc_params.new_tablet->add_rowset(*new_rowset, false);
         if (status.is_already_exist()) {
             LOG(WARNING) << "version already exist, version revert occurred. "
