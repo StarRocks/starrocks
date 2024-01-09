@@ -76,7 +76,7 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs,
                                                  uint32_t segment_id, const TabletSchema* tablet_schema,
                                                  size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer) {
-    auto segment = std::make_shared<Segment>(std::move(fs), std::move(segment_file_info) /, segment_id, tablet_schema);
+    auto segment = std::make_shared<Segment>(std::move(fs), std::move(segment_file_info), segment_id, tablet_schema);
     RETURN_IF_ERROR(segment->_open(footer_length_hint, partial_rowset_footer, true));
     return std::move(segment);
 }
