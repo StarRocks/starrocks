@@ -706,6 +706,19 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
                 *sc_directly = true;
                 return Status::OK();
             }
+
+            std::shared_ptr<TabletIndex> new_index_meta = nullptr;
+            RETURN_IF_ERROR(new_schema->get_indexes_for_column(new_column.unique_id(), GIN, new_index_meta));
+            bool new_column_has_inverted_index = (new_index_meta != nullptr);
+
+            std::shared_ptr<TabletIndex> old_index_meta = nullptr;
+            RETURN_IF_ERROR(base_schema->get_indexes_for_column(ref_column.unique_id(), GIN, old_index_meta));
+            bool old_column_has_inverted_index = (old_index_meta != nullptr);
+
+            if (new_column_has_inverted_index != old_column_has_inverted_index) {
+                *sc_directly = true;
+                return Status::OK();
+            }
         }
     }
 
