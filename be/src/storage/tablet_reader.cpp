@@ -28,6 +28,7 @@
 
 namespace starrocks::vectorized {
 
+<<<<<<< HEAD
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema)
         : ChunkIterator(std::move(schema)),
           _tablet(std::move(tablet)),
@@ -41,6 +42,26 @@ TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schem
           _version(version),
           _delete_predicates_version(version),
           _rowsets(captured_rowsets) {}
+=======
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
+                           const TabletSchemaCSPtr& tablet_schema)
+        : ChunkIterator(std::move(schema)),
+          _tablet(std::move(tablet)),
+          _version(version),
+          _delete_predicates_version(version) {
+    _tablet_schema = !tablet_schema ? _tablet->tablet_schema() : tablet_schema;
+}
+
+TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema,
+                           std::vector<RowsetSharedPtr> captured_rowsets, const TabletSchemaSPtr* tablet_schema)
+        : ChunkIterator(std::move(schema)),
+          _tablet(std::move(tablet)),
+          _version(version),
+          _delete_predicates_version(version),
+          _rowsets(std::move(captured_rowsets)) {
+    _tablet_schema = tablet_schema ? *tablet_schema : _tablet->tablet_schema();
+}
+>>>>>>> 6b63d3d266 ([BugFix] Use delete predicates to filter data when creating sync mv (#38652))
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
                            RowSourceMaskBuffer* mask_buffer)
@@ -440,15 +461,10 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
     PredicateParser pred_parser(_tablet->tablet_schema());
 
     std::shared_lock header_lock(_tablet->get_header_lock());
-    // here we can not use DeletePredicatePB from  _tablet->delete_predicates() because
-    // _rowsets maybe stale rowset, and stale rowset's delete predicates may be removed
-    // from _tablet->delete_predicates() after compation
-    for (const RowsetSharedPtr& rowset : _rowsets) {
-        const RowsetMetaSharedPtr& rowset_meta = rowset->rowset_meta();
-        if (!rowset_meta->has_delete_predicate()) {
+    for (const DeletePredicatePB& pred_pb : _tablet->delete_predicates()) {
+        if (pred_pb.version() > _delete_predicates_version.second) {
             continue;
         }
-        const DeletePredicatePB& pred_pb = rowset_meta->delete_predicate();
 
         ConjunctivePredicates conjunctions;
         for (int i = 0; i != pred_pb.sub_predicates_size(); ++i) {
@@ -496,6 +512,10 @@ Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, D
             conjunctions.add(pred);
             // save for memory release.
             _predicate_free_list.emplace_back(pred);
+        }
+
+        if (conjunctions.empty()) {
+            continue;
         }
 
         dels->add(pred_pb.version(), conjunctions);
