@@ -45,7 +45,7 @@ public:
         uint64_t file_size, index_size, footer_pos;
         EXPECT_OK(writer.finalize(&file_size, &index_size, &footer_pos));
 
-        ASSIGN_OR_ABORT(_segment, Segment::open(fs, segment_name, 0, _tablet_schema));
+        ASSIGN_OR_ABORT(_segment, Segment::open(fs, FileInfo{segment_name}, 0, _tablet_schema));
     }
 
 protected:

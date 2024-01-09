@@ -430,9 +430,11 @@ Status DeltaWriterImpl::finish(DeltaWriter::FinishMode mode) {
     txn_log->set_tablet_id(_tablet_id);
     txn_log->set_txn_id(_txn_id);
     auto op_write = txn_log->mutable_op_write();
+
     for (auto& f : _tablet_writer->files()) {
         if (is_segment(f.path)) {
             op_write->mutable_rowset()->add_segments(std::move(f.path));
+            op_write->mutable_rowset()->add_segment_size(f.size.value());
         } else if (is_del(f.path)) {
             op_write->add_dels(std::move(f.path));
         } else {
