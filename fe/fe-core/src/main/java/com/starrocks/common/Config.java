@@ -553,12 +553,13 @@ public class Config extends ConfigBase {
 
     /**
      * If true, FE will reset bdbje replication group(that is, to remove all electable nodes' info)
-     * and is supposed to start as Leader.
+     * and is supposed to start as Leader. After reset, this node will be the only member in this cluster,
+     * and the others node should be rejoin to this cluster by `Alter system add/drop follower/observer 'xxx'`;
      * If all the electable nodes can not start, we can copy the metadata
      * to another node and set this config to true to try to restart the FE.
      */
     @ConfField
-    public static String metadata_failure_recovery = "false";
+    public static String reset_election_group = "false";
 
     /**
      * If the bdb data is corrupted, and you want to start the cluster only with image, set this param to true
@@ -2469,6 +2470,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_sync_publish = true;
+
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
      * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.
@@ -2476,6 +2478,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String metadata_journal_skip_bad_journal_ids = "";
+
+    /**
+     * Set this configuration to true to ignore specific operation (with RecoverableOnReplayFailed annotation) replay failures.
+     */
+    @ConfField
+    public static boolean recover_on_load_journal_failed = false;
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.

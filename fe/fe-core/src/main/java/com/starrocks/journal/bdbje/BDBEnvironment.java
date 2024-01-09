@@ -174,7 +174,7 @@ public class BDBEnvironment {
 
     protected void initConfigs(boolean isElectable) throws JournalException {
         // Almost never used, just in case the master can not restart
-        if (Config.metadata_failure_recovery.equals("true")) {
+        if (Config.reset_election_group.equals("true")) {
             if (!isElectable) {
                 String errMsg = "Current node is not in the electable_nodes list. will exit";
                 LOG.error(errMsg);
@@ -338,7 +338,7 @@ public class BDBEnvironment {
         }
 
         // Almost never used, just in case the master can not restart
-        if (Config.metadata_failure_recovery.equals("true")) {
+        if (Config.reset_election_group.equals("true")) {
             LOG.info("skip check local environment because metadata_failure_recovery = true");
             return;
         }

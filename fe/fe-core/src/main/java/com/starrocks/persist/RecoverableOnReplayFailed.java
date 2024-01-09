@@ -12,27 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.persist;
 
-package com.starrocks.journal;
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
 
-import com.starrocks.persist.OperationType;
-
-/**
- * exception on journals
- */
-public class JournalException extends Exception {
-    private short opCode = OperationType.OP_INVALID;
-
-    public JournalException(String errMsg) {
-        super(errMsg);
-    }
-
-    public JournalException(short opCode, String errMsg) {
-        super(errMsg);
-        this.opCode = opCode;
-    }
-
-    public short getOpCode() {
-        return opCode;
-    }
+@Retention(RetentionPolicy.RUNTIME)
+@Target(ElementType.FIELD)
+public @interface RecoverableOnReplayFailed {
 }
