@@ -9,10 +9,12 @@ import Clients from '../assets/quick-start/_clientsCompose.mdx'
 
 # 基于 Apache Iceberg 的数据湖分析
 
-## 简介
+## 概述
+
+当前教程包含以下内容：
 
 - 使用 Docker Compose 部署对象存储、Apache Spark、Iceberg Catalog 和 StarRocks。
-- 将 2023 年 5 月份的纽约市绿色出租车数据导入 Iceberg 数据湖。
+- 向 Iceberg 数据湖导入数据。
 - 配置 StarRocks 以访问 Iceberg Catalog。
 - 使用 StarRocks 查询数据湖中的数据。
 
@@ -28,11 +30,11 @@ import Clients from '../assets/quick-start/_clientsCompose.mdx'
 
 ### SQL 客户端
 
-您可以使用 Docker 环境提供的 SQL 客户端，也可以使用系统上的客户端。多数与 MySQL 兼容的客户端都可以使用，包括本教程中涵盖的 DBeaver 和 MySQL Workbench。
+您可以使用 Docker 环境中提供的 MySQL Client，也可以使用其他兼容 MySQL 的客户端，包括本教程中涉及的 DBeaver 和 MySQL Workbench。
 
 ### curl
 
-`curl` 命令用于下载数据集。您可以通过在操作系统的终端运行 `curl` 或 `curl.exe` 来检查是否已安装 curl。如果未安装 curl，[点击此处获取 curl](https://curl.se/dlwiz/?type=bin)。
+`curl` 命令用于下载数据集。您可以通过在终端运行 `curl` 或 `curl.exe` 来检查您的操作系统是否已安装 curl。如果未安装 curl，[请点击此处获取 curl](https://curl.se/dlwiz/?type=bin)。
 
 ---
 
@@ -40,7 +42,7 @@ import Clients from '../assets/quick-start/_clientsCompose.mdx'
 
 ### FE
 
-FE 节点负责元数据管理、客户端连接管理、查询计划和查询调度。每个 FE 在其内存中存储和维护完整的元数据副本，确保每个 FE 都能提供无差别的服务。
+FE 节点负责元数据管理、客户端连接管理、查询计划和查询调度。每个 FE 节点在内存中存储和维护完整的元数据副本，确保每个 FE 都能提供无差别的服务。
 
 ### CN
 
@@ -48,35 +50,39 @@ CN 节点负责在**存算分离**或**存算一体**集群中执行查询。
 
 ### BE
 
-BE 节点在**存算一体**集群中负责数据存储和执行查询。使用 External Catalog（例如本指南中使用的 Iceberg Catalog）时，BE 仅存储本地数据。
+BE 节点在**存算一体**集群中负责数据存储和执行查询。使用 External Catalog（例如本指南中使用的 Iceberg Catalog）时，BE 仅用于存储本地数据。
 
 ---
 
 ## 环境
 
-本教程使用了六个容器（服务），并且全部使用 Docker Compose 部署。这些服务及其职责如下：
+本教程使用了六个 Docker 容器（服务），均使用 Docker Compose 部署。这些服务及其职责如下：
 
-| 服务                | 职责                                                                |
+| 服务                 | 职责                                                                |
 |---------------------|---------------------------------------------------------------------|
-| **`starrocks-fe`**  | 负责元数据管理、客户端连接、查询规划和调度                                |
-| **`starrocks-be`**  | 负责执行查询计划                                                      |
-| **`rest`**          | 提供 Iceberg Catalog（元数据服务）                                        |
-| **`spark-iceberg`** | 用于运行 PySpark 的 Apache Spark 环境                               |
-| **`mc`**            | MinIO 配置（MinIO 命令行客户端）                                     |
-| **`minio`**         | MinIO 对象存储                                                     |
+| **`starrocks-fe`**  | 负责元数据管理、客户端连接、查询规划和调度。                               |
+| **`starrocks-be`**  | 负责执行查询计划。                                                     |
+| **`rest`**          | 提供 Iceberg Catalog（元数据服务）。                                   |
+| **`spark-iceberg`** | 用于运行 PySpark 的 Apache Spark 环境。                               |
+| **`mc`**            | MinIO Client 客户端。                                                |
+| **`minio`**         | MinIO 对象存储。                                                     |
 
-## 下载 Docker 配置和纽约市绿色出租车数据
+## 下载 Docker Compose 文件和数据集
 
-StarRocks 提供了一个 Docker Compose 文件，用于搭建包含以上必要容器的环境。请使用 curl 下载 Compose 文件和数据集。
+StarRocks 提供了包含以上必要容器的环境的 Docker Compose 文件和教程中需要使用数据集。
 
-Docker Compose 文件：
+本教程中使用的数据集为纽约市绿色出租车行程记录，为 Parquet 格式。
+
+下载 Docker Compose 文件。
+
 ```bash
 mkdir iceberg
 cd iceberg
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/iceberg/docker-compose.yml
 ```
 
-数据集：
+下载数据集。
+
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/iceberg/datasets/green_tripdata_2023-05.parquet
 ```
@@ -84,12 +90,14 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 ## 在 Docker 中启动环境
 
 :::tip
-请从包含 `docker-compose.yml` 文件的路径运行所有 `docker compose` 命令。
+所有 `docker compose` 命令必须从包含 `docker-compose.yml` 文件的目录中运行。
 :::
 
 ```bash
 docker compose up -d
 ```
+
+返回：
 
 ```plaintext
 [+] Building 0.0s (0/0)                     docker:desktop-linux
@@ -104,22 +112,13 @@ docker compose up -d
 
 ## 检查环境状态
 
-启动完成后，您还需要检查服务的进度。FE 和 CN 大约需要 30 秒才能变为 `healthy` 状态。
-
-请运行 `docker compose ps` 命令，直到 FE 和 BE 的状态变为 `healthy`。其他服务没有健康检查配置，但您需要与它们进行交互，以了解它们的工作状态是否正常：
-
-:::tip
-如果您已安装了 `jq` 并希望通过 `docker compose ps` 命令得到更加简短的返回，可以尝试以下命令：
-
-```bash
-docker compose ps --format json | jq '{Service: .Service, State: .State, Status: .Status}'
-```
-
-:::
+成功启动后，FE 和 BE 节点大约需要 30 秒才能部署完成。您需要通过 `docker compose ps` 命令检查服务的运行状态，直到 `starrocks-fe` 和 `starrocks-be` 的状态变为 `healthy`。
 
 ```bash
 docker compose ps
 ```
+
+返回：
 
 ```bash
 SERVICE         CREATED         STATUS                   PORTS
@@ -135,11 +134,13 @@ starrocks-fe    4 minutes ago   Up 4 minutes (healthy)   0.0.0.0:8030->8030/tcp,
 
 ## PySpark
 
-Iceberg 有多种交互方式，本教程使用 PySpark。如果您对 PySpark 不熟悉，可以从“更多信息”部分找到相关文档。以下步骤提供了您需要运行的所有命令。
+本教程使用 PySpark 与 Iceberg 交互。如果您不熟悉 PySpark，您可以参考[更多信息](#更多信息)部分。
 
 ### 拷贝数据集
 
-将数据复制到 `spark-iceberg` 容器中。以下命令将数据集文件复制到 `spark-iceberg` 服务中的 `/opt/spark/` 路径：
+在将数据导入至 Iceberg 之前，需要将其拷贝到 `spark-iceberg` 容器中。
+
+运行以下命令将数据集文件复制到 `spark-iceberg` 容器中的 `/opt/spark/` 路径。
 
 ```bash
 docker compose \
@@ -148,11 +149,13 @@ cp green_tripdata_2023-05.parquet spark-iceberg:/opt/spark/
 
 ### 启动 PySpark
 
-此命令将连接到 `spark-iceberg` 服务并启动 PySpark：
+运行以下命令连接 `spark-iceberg` 服务并启动 PySpark。
 
 ```bash
 docker compose exec -it spark-iceberg pyspark
 ```
+
+返回：
 
 ```plain
 Welcome to
@@ -169,19 +172,22 @@ SparkSession available as 'spark'.
 >>>
 ```
 
-### 将数据集读取到 DataFrame 中
+### 导入数据集至 DataFrame 中
 
-DataFrame 是 Spark SQL 的一部分，提供了类似于数据库表或电子表格的数据结构。
+DataFrame 是 Spark SQL 的一部分，提供了类似于数据库表的数据结构。
 
-纽约市绿色出租车数据为 Parquet 格式，由纽约出租车和豪华轿车委员会提供。您需要从 `/opt/spark` 路径导入文件，并通过查询前三行数据的前几列来检查前几行数据。这些命令需要在 `pyspark` Session 中运行。这些命令会完成以下目标：
+您需要从 `/opt/spark` 路径导入数据集文件导入至 DataFrame 中，并通过查询其中部分数据检查数据导入是否成功。
 
-- 从磁盘读取数据集文件到名为 `df` 的 DataFrame 中
-- 显示 Parquet 文件的 Schema
+在 PySpark Session 运行以下命令：
 
 ```py
+# 读取数据集文件到名为 `df` 的 DataFrame 中。
 df = spark.read.parquet("/opt/spark/green_tripdata_2023-05.parquet")
+# 显示数据集文件的 Schema。
 df.printSchema()
 ```
+
+输出：
 
 ```plaintext
 root
@@ -208,9 +214,11 @@ root
 
 >>>
 ```
-检查前三行数据的前七列：
+
+通过查询 DataFrame 中的部分数据验证导入是否成功。
 
 ```python
+# 检查前三行数据的前七列
 df.select(df.columns[:7]).show(3)
 ```
 ```plaintext
@@ -223,9 +231,9 @@ df.select(df.columns[:7]).show(3)
 +--------+--------------------+---------------------+------------------+----------+------------+------------+
 only showing top 3 rows
 ```
-### 将数据写入 Iceberg 表
+### 创建 Iceberg 表并导入数据
 
-在此步骤中创建的 Iceberg 表将在下一步中的 StarRocks External Catalog 中使用。
+根据以下信息创建 Iceberg 表并将上一步中的数据导入其中：
 
 - Catalog 名：`demo`
 - 数据库名：`nyc`
@@ -235,9 +243,11 @@ only showing top 3 rows
 df.writeTo("demo.nyc.greentaxis").create()
 ```
 
+在此步骤中创建的 Iceberg 表将在下一步中用于 StarRocks External Catalog。
+
 ## 配置 StarRocks 访问 Iceberg Catalog
 
-现在您可以退出 PySpark，或者您可以打开一个新的终端来运行 SQL 命令。如果您打开了一个新的终端，请重新进入包含 `docker-compose.yml` 文件的 `quickstart` 路径。
+现在您可以退出 PySpark，并通过您的 SQL 客户端运行 SQL 命令。
 
 ### 使用 SQL 客户端连接到 StarRocks
 
@@ -247,24 +257,18 @@ df.writeTo("demo.nyc.greentaxis").create()
 
 ---
 
-您现在可以退出 PySpark 会话并连接到 StarRocks。
+- 如果您使用 StarRocks 容器中的 MySQL Client，则需要从包含 `docker-compose.yml` 文件的路径运行以下命令。
 
-:::tip
+  ```bash
+  docker compose exec starrocks-fe \
+    mysql -P 9030 -h 127.0.0.1 -u root --prompt="StarRocks > "
+  ```
 
-从包含 `docker-compose.yml` 文件的路径运行此命令。
+  ```plaintext
+  StarRocks >
+  ```
 
-如果您使用的是 mysql CLI 之外的客户端，请现在打开该客户端。
-:::
-
-
-```bash
-docker compose exec starrocks-fe \
-  mysql -P 9030 -h 127.0.0.1 -u root --prompt="StarRocks > "
-```
-
-```plaintext
-StarRocks >
-```
+- 如果您使用其他客户端，请现在打开客户端。
 
 ### 创建 External Catalog
 
@@ -290,19 +294,23 @@ PROPERTIES
 
 | 属性                              | 描述                                                                                   |
 |:---------------------------------|:----------------------------------------------------------------------------------------|
-| `type`                           | 在此示例中，类型为 `iceberg`。其他选项包括 Hive、Hudi、Delta Lake 和 JDBC。                    |
-| `iceberg.catalog.type`           | 在此示例中使用了 `rest`。Tabular 提供了所使用的 Docker 镜像，并使用 REST。                      |
-| `iceberg.catalog.uri`            | REST 服务器端点。                                                                         |
-| `iceberg.catalog.warehouse`      | Iceberg Catalog 的标识符。在此示例中，Compose 文件中指定的 Warehouse 名称为 `warehouse`。      |
+| `type`                           | 数据源的类型，此示例中为 `iceberg`。                                                        |
+| `iceberg.catalog.type`           | Iceberg 集群所使用的元数据服务的类型，此示例中为 `rest`。                                     |
+| `iceberg.catalog.uri`            | REST 服务器的 URI。                                                                      |
+| `iceberg.catalog.warehouse`      | Catalog 的仓库位置或标志符。在此示例中，Compose 文件中指定的仓库名称为 `warehouse`。             |
 | `aws.s3.access_key`              | MinIO Access Key。在此示例中，Compose 文件中设置 Access Key 为 `admin`。                     |
 | `aws.s3.secret_key`              | MinIO Secret Key。在此示例中，Compose 文件中设置 Secret Key 为 `password`。                  |
 | `aws.s3.endpoint`                | MinIO 端点。                                                                             |
-| `aws.s3.enable_path_style_access`| 使用 MinIO 作为对象存储时，该项为必需。格式：`http://host:port/<bucket_name>/<key_name>`。     |
+| `aws.s3.enable_path_style_access`| 是否开启路径类型访问 (Path-Style Access)。使用 MinIO 作为对象存储时，该项为必须。                |
 | `client.factory`                 | 此示例中使用 `iceberg.IcebergAwsClientFactory`。`aws.s3.access_key` 和 `aws.s3.secret_key` 参数用于身份验证。|
+
+创建成功后，运行以下命令查看创建的 Catalog。
 
 ```sql
 SHOW CATALOGS;
 ```
+
+返回：
 
 ```plaintext
 +-----------------+----------+------------------------------------------------------------------+
@@ -314,16 +322,19 @@ SHOW CATALOGS;
 2 rows in set (0.03 sec)
 ```
 
+其中 `default_catalog` 为 StarRocks 的 Internal Catalog，用于存储内部数据。
+
+设置当前使用的 Catalog 为 `iceberg`。
+
 ```sql
 SET CATALOG iceberg;
 ```
 
+查看 `iceberg` 中的数据库。
+
 ```sql
 SHOW DATABASES;
 ```
-:::tip
-此时返回的数据库是您在 PySpark 会话中创建的。当您添加了 `iceberg` Catalog 后，便可以在 StarRocks 中看到 `nyc` 数据库。
-:::
 
 ```plaintext
 +----------+
@@ -334,9 +345,17 @@ SHOW DATABASES;
 1 row in set (0.07 sec)
 ```
 
+:::tip
+此时返回的数据库即为先前在 PySpark Session 中创建的数据库。当您添加了 `iceberg` Catalog 后，便可以在 StarRocks 中看到 `nyc` 数据库。
+:::
+
+切换至 `nyc` 数据库。
+
 ```sql
 USE nyc;
 ```
+
+返回：
 
 ```plaintext
 Reading table information for completion of table and column names
@@ -345,9 +364,13 @@ You can turn off this feature to get a quicker startup with -A
 Database changed
 ```
 
+查看 `nyc` 数据库中的表。
+
 ```sql
 SHOW TABLES;
 ```
+
+返回：
 
 ```plaintext
 +---------------+
@@ -358,13 +381,13 @@ SHOW TABLES;
 1 rows in set (0.05 sec)
 ```
 
+查看 `greentaxis` 表的 Schema。
+
 ```sql
 DESCRIBE greentaxis;
 ```
 
-:::tip
-通过比较 StarRocks 使用的 Schema 与之前 PySpark 会话中的 `df.printSchema()` 的输出，你可以发现 Spark 的 `timestamp_ntz` 数据类型在 StarRocks 中表示为 `DATETIME`，以及其他 Schema 转换。
-:::
+返回：
 
 ```plaintext
 +-----------------------+------------------+------+-------+---------+-------+
@@ -394,19 +417,19 @@ DESCRIBE greentaxis;
 20 rows in set (0.04 sec)
 ```
 
-:::tip
-StarRocks 的许多文档使用 `\G` 而不是分号 `;` 结束语句。`\G` 用于指示 mysql CLI 在垂直方向上呈现查询结果。
+通过比较 StarRocks 返回的 Schema 与之前 PySpark 会话中的 `df.printSchema()` 的 Schema，可以发现 Spark 中的 `timestamp_ntz` 数据类型在 StarRocks 中表示为 DATETIME。除此之外还有其他 Schema 转换。
 
-但由于许多 SQL 客户端不支持垂直格式输出，因此您需要将 `\G` 替换为 `;`。
-:::
+## 使用 StarRocks 查询 Iceberg
 
-## 使用 StarRocks 查询
+### 查询接单时间
 
-### 验证接单时间数据格式
+以下语句查询出租车接单时间，仅返回前十行数据。
 
 ```sql
 SELECT lpep_pickup_datetime FROM greentaxis LIMIT 10;
 ```
+
+返回：
 
 ```plaintext
 +----------------------+
@@ -426,9 +449,9 @@ SELECT lpep_pickup_datetime FROM greentaxis LIMIT 10;
 10 rows in set (0.07 sec)
 ```
 
-#### 查询高峰时期
+#### 查询接单高峰时期
 
-此查询按每小时聚合行程数据，并显示一天中最繁忙的时间段是 18:00。
+以下查询按每小时聚合行程数据，计算每小时接单的数量。
 
 ```sql
 SELECT COUNT(*) AS trips,
@@ -437,6 +460,8 @@ FROM greentaxis
 GROUP BY hour_of_day
 ORDER BY trips DESC;
 ```
+
+结果显示一天中最繁忙的时间段是 18:00。
 
 ```plaintext
 +-------+-------------+
@@ -474,19 +499,17 @@ ORDER BY trips DESC;
 
 ## 总结
 
-本教程向您展示了如何使用 StarRocks External Catalog，以查询 Iceberg REST Catalog 中的数据。除 Iceberg 外，您还可以集成 Hive、Hudi、Delta Lake 和 JDBC 等其他数据源。
+本教程旨在展示如何使用 StarRocks External Catalog，并查询 Iceberg Catalog 中的数据。除 Iceberg 外，您还可以通过 StarRocks 集成 Hive、Hudi、Delta Lake 和 JDBC 等其他数据源。
 
 在本教程中，您：
 
 - 在 Docker 中部署了 StarRocks、Iceberg、PySpark 和 MinIO 环境
-- 配置了 StarRocks External Catalog，以访问 Iceberg 中的数据
 - 将纽约市出租车数据导入至 Iceberg 数据湖中
-- 在 StarRocks 中直接查询数据湖中的数据，无需复制数据湖至本地
+- 配置了 StarRocks External Catalog，以访问 Iceberg 中的数据
+- 在 StarRocks 中查询数据湖中的数据
 
 ## 更多信息
 
-[StarRocks Catalog](../data_source/catalog/catalog_overview.md)
-
-[Apache Iceberg 文档](https://iceberg.apache.org/docs/latest/) 和 [快速入门（包括 PySpark）](https://iceberg.apache.org/spark-quickstart/)
-
-[绿色出租车行程记录](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page)数据集由纽约市提供，受到以下[使用条款](https://www.nyc.gov/home/terms-of-use.page)和[隐私政策](https://www.nyc.gov/home/privacy-policy.page)的约束。
+- [StarRocks Catalog](../data_source/catalog/catalog_overview.md)
+- [Apache Iceberg 文档](https://iceberg.apache.org/docs/latest/) 和 [快速入门（包括 PySpark）](https://iceberg.apache.org/spark-quickstart/)
+- [绿色出租车行程记录](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page)数据集由纽约市提供，受到以下[使用条款](https://www.nyc.gov/home/terms-of-use.page)和[隐私政策](https://www.nyc.gov/home/privacy-policy.page)的约束。
