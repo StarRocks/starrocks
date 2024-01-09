@@ -732,6 +732,70 @@ TEST_P(LakePrimaryKeyCompactionTest, test_remove_compaction_state) {
     ASSERT_EQ(kChunkSize, read(version));
 }
 
+TEST_P(LakePrimaryKeyCompactionTest, test_abort_txn) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->LoadDependency(
+            {{"UpdateManager::preload_compaction_state:return", "transactions::abort_txn:enter"}});
+    // Prepare data for writing
+    auto chunk0 = generate_data(kChunkSize, 0);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        auto delta_writer =
+                DeltaWriter::create(_tablet_mgr.get(), tablet_id, txn_id, _partition_id, nullptr, _mem_tracker.get());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, read(version));
+    ASSIGN_OR_ABORT(auto new_tablet_metadata1, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata1->rowsets_size(), 3);
+
+    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
+    // make sure delvecs have been generated
+    for (int i = 0; i < 2; i++) {
+        auto itr = new_tablet_metadata1->delvec_meta().version_to_file().find(version - i);
+        EXPECT_TRUE(itr != new_tablet_metadata1->delvec_meta().version_to_file().end());
+        auto delvec_file = itr->second;
+        EXPECT_TRUE(fs::path_exist(_lp->delvec_location(tablet_id, delvec_file.name())));
+    }
+
+    auto txn_id = next_id();
+    std::thread t1([&]() {
+        ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
+        check_task(task);
+        CompactionTask::Progress progress;
+        ASSERT_OK(task->execute(&progress, CompactionTask::kNoCancelFn));
+        EXPECT_EQ(100, progress.value());
+    });
+
+    std::thread t2([&]() {
+        lake::AbortTxnRequest request;
+        request.add_tablet_ids(tablet_id);
+        request.add_txn_ids(txn_id);
+        request.set_skip_cleanup(false);
+        lake::AbortTxnResponse response;
+        auto lake_service = LakeServiceImpl(ExecEnv::GetInstance(), _tablet_mgr.get());
+        lake_service.abort_txn(nullptr, &request, &response, nullptr);
+    });
+
+    t1.join();
+    t2.join();
+
+    ASSERT_TRUE(_update_mgr->TEST_check_compaction_cache_absent(tablet_id, txn_id));
+    SyncPoint::GetInstance()->DisableProcessing();
+}
+
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,
                          ::testing::Values(CompactionParam{HORIZONTAL_COMPACTION, 5, false},
                                            CompactionParam{VERTICAL_COMPACTION, 1, false},

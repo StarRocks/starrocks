@@ -96,6 +96,7 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.ParsingException;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -455,6 +456,13 @@ public class MvUtils {
         List<ScalarOperator> predicates = Lists.newArrayList();
         getAllValidPredicates(root, predicates);
         return predicates;
+    }
+
+    public static List<ColumnRefOperator> getPredicateColumns(OptExpression root) {
+        List<ColumnRefOperator> res = Lists.newArrayList();
+        List<ScalarOperator> predicates = getAllValidPredicates(root);
+        ListUtils.emptyIfNull(predicates).forEach(x -> x.getColumnRefs(res));
+        return res;
     }
 
     // get all predicates within and below root

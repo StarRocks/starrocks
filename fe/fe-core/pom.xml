@@ -819,6 +819,13 @@ under the License.
             <artifactId>ranger-plugins-common</artifactId>
             <version>2.4.0</version>
         </dependency>
+
+        <dependency>
+            <groupId>com.carrotsearch</groupId>
+            <artifactId>junit-benchmarks</artifactId>
+            <version>0.7.2</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>

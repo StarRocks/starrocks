@@ -22,7 +22,9 @@ import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -40,6 +42,15 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 return true;
             }
         };
+    }
+
+    @Before
+    public void before() throws Exception {
+        super.before();
+    }
+
+    @After
+    public void after() {
     }
 
     @Test
