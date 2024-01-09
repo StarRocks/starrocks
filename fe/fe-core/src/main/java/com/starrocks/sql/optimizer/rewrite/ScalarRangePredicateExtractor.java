@@ -85,6 +85,7 @@ public class ScalarRangePredicateExtractor {
             }
         }
 
+        result.removeAll(conjuncts);
         ScalarOperator extractExpr = Utils.compoundAnd(Lists.newArrayList(result));
         if (extractExpr == null) {
             return predicate;
