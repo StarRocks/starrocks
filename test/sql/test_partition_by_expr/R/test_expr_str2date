@@ -97,7 +97,7 @@ show create table partition_str2date;
 partition_str2date	CREATE TABLE `partition_str2date` (
   `create_time` varchar(100) NULL COMMENT "",
   `sku_id` varchar(100) NULL COMMENT "",
-  `total_amount` decimal64(10, 0) NULL COMMENT "",
+  `total_amount` decimal(10, 0) NULL COMMENT "",
   `id` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`create_time`)
@@ -159,7 +159,8 @@ select * from partition_str2date where '2021-01-05'=create_time;
 -- result:
 2021-01-05	1	1	1
 -- !result
-select * from partition_str2date where create_time>'2021-01-05';
+select * from partition_str2date where create_time>='2021-01-05';
 -- result:
+2021-01-05	1	1	1
 2021-01-06	1	1	1
 -- !result
