@@ -230,8 +230,7 @@ public interface ConnectorMetadata {
     }
 
     default void alterTable(AlterTableStmt stmt) throws UserException {
-        ConnectorAlterTableExecutor executor = new ConnectorAlterTableExecutor(stmt);
-        executor.execute();
+        throw new StarRocksConnectorException("This connector doesn't support alter table");
     }
 
     default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {
