@@ -1036,7 +1036,7 @@ TEST_P(CSVScannerTest, test_get_schema) {
 
     std::vector<TBrokerRangeDesc> ranges;
     TBrokerRangeDesc range;
-    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file22");
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file23");
     range.__set_num_of_columns_from_file(0);
     ranges.push_back(range);
 
