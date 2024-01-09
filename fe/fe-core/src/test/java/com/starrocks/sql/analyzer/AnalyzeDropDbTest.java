@@ -25,6 +25,7 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getStarRocksAssert;
 
@@ -71,5 +72,11 @@ public class AnalyzeDropDbTest {
             Assert.assertTrue(e instanceof DdlException);
             Assert.assertTrue(e.getMessage().contains("Can't drop database"));
         }
+    }
+
+    @Test
+    public void testDropSystem() throws Exception {
+        analyzeFail("DROP database `information_schema`", "Access denied;");
+        analyzeFail("DROP Database `sys`", "Access denied;");
     }
 }
