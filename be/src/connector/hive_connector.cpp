@@ -281,6 +281,7 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
     // 1. can_use_any_column = true
     // 2. only one materialized slot
     // 3. besides that, all slots are partition slots.
+    // 4. scan iceberg data file without equality delete files.
     auto check_opt_on_iceberg = [&]() {
         if (!_can_use_any_column) {
             return false;
@@ -289,6 +290,9 @@ void HiveDataSource::_init_tuples_and_slots(RuntimeState* state) {
             return false;
         }
         if (_materialize_slots.size() != 1) {
+            return false;
+        }
+        if (!_scan_range.delete_column_slot_ids.empty()) {
             return false;
         }
         return true;
