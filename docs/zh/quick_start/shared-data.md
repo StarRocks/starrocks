@@ -11,26 +11,15 @@ import SQL from '../assets/quick-start/_SQL.mdx'
 import Curl from '../assets/quick-start/_curl.mdx'
 
 
-在存算分离架构中，数据存储在成本更低且更可靠的远程存储系统中，例如 Amazon S3、Google Cloud Storage、Azure Blob Storage 以及其他支持 S3 协议的存储，如 MinIO。热数据被缓存到本地，当缓存命中时，查询性能与存算一体架构相当。计算节点（CN）可以在几秒内根据需要实现扩缩容。存算分离架构降低了存储成本，确保更好的资源隔离，并提供了弹性和可扩展性。
+在 StarRocks 存算分离架构中，数据存储在成本更低且更可靠的远程存储系统中，例如 Amazon S3、Google Cloud Storage、Azure Blob Storage 以及其他支持 S3 协议的存储，如 MinIO。热数据会被缓存到本地，在查询命中缓存的前提下，存算分离集群的查询性能与存算一体集群相当。同时，在存算分离架构下，计算节点（CN）可以在几秒内根据需要实现扩缩容。因此，StarRocks 的存算分离架构不仅降低了存储成本，保证了资源隔离性能，还提供了计算资源的弹性和可扩展性。
 
 本教程涵盖以下内容：
 
-- 在 Docker 容器中运行 StarRocks
-- 使用 MinIO 作为对象存储
-- 配置 StarRocks 存算分离集群
-- 导入两个公共数据集
-- 使用 SELECT 和 JOIN 分析数据
-- 基本数据转换（ETL 中的 **T**）
+- 使用 Docker Compose 部署部署 StarRocks 存算分离集群以及 MinIO 作为对象存储。
+- 导入数据集，并在导入过程中进行基本的数据转换。
+- 查询分析数据。
 
-以下使用的数据由 NYC OpenData 和 NOAA 的 National Centers for Environmental Information 提供。
-
-由于这两个数据集都非常庞大，而本教程旨在帮助您熟悉使用 StarRocks，因此只会使用数据集中的部分数据。您可以在分配了 4GB RAM 的机器上运行 Docker 镜像并导入这些数据。关于高可用和可扩展的部署，请参考部署章节。
-
-本文档包含大量信息，将以操作步骤开始，技术细节在最后呈现。此举是为了按顺序实现以下目的：
-
-1. 指导读者在存算分离部署中导入数据并分析该数据。
-2. 提供存算分离部署的配置详细信息。
-3. 解释导入期间数据转换的基础知识。
+本教程中使用的数据由 NYC OpenData 和 NOAA 的 National Centers for Environmental Information 提供。教程仅截取了数据集的部分字段。
 
 ---
 
@@ -38,30 +27,33 @@ import Curl from '../assets/quick-start/_curl.mdx'
 
 ### Docker
 
-- [Docker](https://docs.docker.com/engine/install/)
-- 为 Docker 分配 4 GB RAM
-- 为 Docker 分配 10 GB 空闲磁盘空间
+- [安装 Docker](https://docs.docker.com/engine/install/)。
+- 为 Docker 分配 4 GB RAM。
+- 为 Docker 分配 10 GB 的空闲磁盘空间。
 
 ### SQL 客户端
 
-您可以使用 Docker 环境中提供的 SQL 客户端，也可以使用系统上的客户端。多数与 MySQL 兼容的客户端都可以使用，包括本教程中涵盖的 DBeaver 和 MySQL WorkBench。
+您可以使用 Docker 环境中提供的 MySQL Client，也可以使用其他兼容 MySQL 的客户端，包括本教程中涉及的 DBeaver 和 MySQL Workbench。
 
 ### curl
 
-`curl` 命令用于向 StarRocks 发起数据导入作业，也将用于下载数据集。您可以通过在操作系统的终端运行 `curl` 或 `curl.exe` 来检查是否已安装 curl。如果未安装 curl，[点击此处获取 curl](https://curl.se/dlwiz/?type=bin)。
+`curl` 命令用于向 StarRocks 中导入数据以及下载数据集。您可以通过在终端运行 `curl` 或 `curl.exe` 来检查您的操作系统是否已安装 curl。如果未安装 curl，[请点击此处获取 curl](https://curl.se/dlwiz/?type=bin)。
 
 ---
 
 ## 术语
 
 ### FE
-前端引擎（Frontend Engine）。FE 节点负责元数据管理、客户端连接管理、查询计划和查询调度。每个 FE 在其内存中存储和维护完整的元数据副本，这确保了每个 FE 都能提供无差别的服务。
+
+FE 节点负责元数据管理、客户端连接管理、查询计划和查询调度。每个 FE 在其内存中存储和维护完整的元数据副本，这确保了每个 FE 都能提供无差别的服务。
 
 ### CN
-计算节点（Compute Node）。CN 节点负责在**存算分离**或**存算一体**集群中负责执行查询。
+
+CN 节点负责在**存算分离**或**存算一体**集群中负责执行查询。
 
 ### BE
-后端引擎（Backend Engine）。BE 节点在**存算一体**集群中负责数据存储和执行查询。
+
+BE 节点在**存算一体**集群中负责数据存储和执行查询。
 
 :::note
 当前教程不包含 BE 节点，以上内容仅供您了解 BE 和 CN 之间的区别。
@@ -71,15 +63,17 @@ import Curl from '../assets/quick-start/_curl.mdx'
 
 ## 启动 StarRocks
 
-要基于对象存储搭建 StarRocks 存算分离集群，您需要：
+要基于对象存储部署 StarRocks 存算分离集群，您需要部署以下服务：
 
-- 一个前端引擎（FE）
-- 一个计算节点（CN）
+- 一个 FE 节点
+- 一个 CN 节点
 - 对象存储
 
-本教程使用 MinIO 作为对象存储。MinIO 是在 GNU Affero 通用公共许可证下提供的与 S3 兼容的对象存储。
+本教程使用 MinIO 作为对象存储。
 
-StarRocks 提供了一个 Docker Compose 文件，用以搭建包含以上三个必要容器的环境。
+StarRocks 提供了一个 Docker Compose 文件，用于搭建包含以上三个必要容器的环境。
+
+下载 Docker Compose 文件。
 
 ```bash
 mkdir quickstart
@@ -87,17 +81,21 @@ cd quickstart
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/docker-compose.yml
 ```
 
+启动容器。
+
 ```bash
 docker compose up -d
 ```
 
-运行成功后，需要检查服务的进度。FE 和 CN 大约需要 30 秒才能变为 `healthy` 状态。MinIO 容器不会显示健康状态，您可以使用 MinIO Web UI 验证其健康状态。
+## 检查环境状态
 
-运行 `docker compose ps`，直到 FE 和 CN 显示 `healthy` 状态：
+成功启动后，FE 和 CN 节点大约需要 30 秒才能部署完成。需要通过 `docker compose ps` 命令检查服务的运行状态，直到 `starrocks-fe` 和 `starrocks-cn` 的状态变为 `healthy`。
 
 ```bash
 docker compose ps
 ```
+
+返回：
 
 ```plaintext
 SERVICE        CREATED          STATUS                    PORTS
@@ -106,22 +104,24 @@ starrocks-fe   25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:8030->8030/tcp
 minio          25 seconds ago   Up 24 seconds             0.0.0.0:9000-9001->9000-9001/tcp
 ```
 
+以上返回不会显示 MinIO 容器的健康状态，您需要在下一步中通过使用 MinIO Web UI 验证其健康状态。
+
 ---
 
-## 生成 MinIO 凭据
+## 生成 MinIO 认证凭证
 
-为了在 StarRocks 中使用 MinIO 作为对象存储，您需要生成一个 **访问密钥**。
+为了允许 StarRocks 访问 MinIO，您需要生成一个 **访问密钥**。
 
 ### 打开 MinIO Web UI
 
-从浏览器中进入 `http://localhost:9001/access-keys`。登录用的用户名和密码在 Docker Compose 文件中已经指定，分别为 `minioadmin` 和 `minioadmin`。此时您会发现尚无访问密钥。点击 **Create access key +**。
+从浏览器进入 `http://localhost:9001/access-keys`。登录用的用户名和密码已经在 Docker Compose 文件中指定，分别为 `minioadmin` 和 `minioadmin`。成功登录后，点击 **Create access key +** 创建密钥。
 
-MinIO 将生成一个密钥，点击 **Create** 并下载该密钥。
+MinIO 将生成一对密钥，点击 **Create** 生成并下载密钥。
 
 ![点击 Create](../assets/quick-start/MinIO-create.png)
 
 :::note
-在点击 **Create** 之前，系统不会保存访问密钥，所以请不要仅仅复制密钥然后离开页面。
+系统不会自动保存密钥，所以请确认保存密钥后再离开页面。
 :::
 
 ---
@@ -134,28 +134,28 @@ MinIO 将生成一个密钥，点击 **Create** 并下载该密钥。
 
 ## 下载数据
 
-下载教程所需的数据集到您的 FE 容器中。
+将教程所需的数据集下载到 FE 容器中。
 
-### 在 FE 容器上打开一个 shell
-
-打开一个 shell 并创建一个用于下载文件的路径：
+在容器中启动 Shell。
 
 ```bash
 docker compose exec starrocks-fe bash
 ```
+
+创建用于存放数据集文件的路径。
 
 ```bash
 mkdir quickstart
 cd quickstart
 ```
 
-### 下载纽约市交通事故数据
+下载交通事故数据集。
 
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/NYPD_Crash_Data.csv
 ```
 
-### 下载天气数据
+下载天气数据集。
 
 ```bash
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/quickstart/datasets/72505394728.csv
@@ -165,38 +165,33 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 
 ## 配置 StarRocks 存算分离集群
 
-此时，StarRocks 已启动，并且 MinIO 也在运行。MinIO 访问密钥将用于连接 StarRocks 和 MinIo。
+启动 StarRocks 以及 MinIO 后，您需要连接并配置 StarRocks 存算分离集群。
 
 ### 使用 SQL 客户端连接到 StarRocks
 
-:::tip
+- 如果您使用 StarRocks 容器中的 MySQL Client，需要从包含 `docker-compose.yml` 文件的路径运行以下命令。
 
-从包含 `docker-compose.yml` 文件的路径运行以下命令。
+  ```sql
+  docker compose exec starrocks-fe \
+  mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
+  ```
 
-如果您使用的是 mysql CLI 以外的客户端，请打开该客户端。
-:::
+- 如果您使用其他客户端，请打开客户端并连接至 StarRocks。
 
-```sql
-docker compose exec starrocks-fe \
-mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
-```
+### 创建存储卷
 
-### 创建 Storage Volume
+StarRocks 存算分离集群需要通过存储卷将数据持久化到对象存储中。
 
-以下是所示配置的详细信息：
+以下为创建存储卷时需要用到的信息：
 
-- MinIO 服务器可通过 URL `http://minio:9000` 访问。
-- 该 Storage Volume 创建了名为 `starrocks` 的存储桶。
-- 写入当前 Storage Volume 的数据将存储在 `starrocks` 桶中名为 `shared` 的文件夹中。
-:::tip
-`shared` 文件夹将在数据第一次写入当前 Storage Volume 时自动创建。
-:::
+- MinIO 服务器 URL 为 `http://minio:9000`。
+- 集群中的数据将通过存储卷持久化在 `starrocks` 存储桶中的 `shared` 的文件夹下。请注意，`shared` 文件夹将在数据第一次导入集群时自动创建。
 - MinIO 服务器未使用 SSL。
-- MinIO 密钥和密码分别用于 `aws.s3.access_key` 和 `aws.s3.secret_key` 项。请使用您在 MinIO Web UI 中创建的访问密钥。
-- 设置 `shared` 为默认 Storage Volume。
+- 连接 MinIO 需要 Access Key 和 Secret Key 即为 MinIO Web UI 中创建的访问密钥。
+- 您需要将该存储卷设置为默认存储卷。
 
 :::tip
-您需要在运行之前编辑以下命令，并将突出显示的访问密钥信息替换为您在 MinIO 中创建的访问密钥和密码。
+运行以下命令之前，您需要将 `aws.s3.access_key` 和 `aws.s3.secret_key` 配置项的值替换为您在 MinIO 中创建的 Access Key 和 Secret Key。
 :::
 
 ```bash
@@ -211,22 +206,24 @@ PROPERTIES
     "aws.s3.enable_ssl" = "false",
     "aws.s3.use_instance_profile" = "false",
     # highlight-start
-    "aws.s3.access_key" = "IA2UYcx3Wakpm6sHoFcl",
-    "aws.s3.secret_key" = "E33cdRM9MfWpP2FiRpc056Zclg6CntXWa3WPBNMy"
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
     # highlight-end
 );
 SET shared AS DEFAULT STORAGE VOLUME;
 ```
+
+创建成功后，查看该存储卷。
 
 ```sql
 DESC STORAGE VOLUME shared\G
 ```
 
 :::tip
-本文档中的一些 SQL 语句，以及 StarRocks 的许多其他文档，使用 `\G` 而不是分号 `;` 结束语句。`\G` 用于指示 mysql CLI 在垂直方向上呈现查询结果。
-
-但由于许多 SQL 客户端不支持垂直格式输出，因此您需要将 `\G` 替换为 `;`。
+`\G` 表示将查询结果进行按列打印。如果您的 SQL 客户端不支持垂直格式输出，则需要将 `\G` 替换为 `;`。
 :::
+
+返回：
 
 ```plaintext
 *************************** 1. row ***************************
@@ -242,10 +239,6 @@ IsDefault: true
 1 row in set (0.03 sec)
 ```
 
-:::note
-在将数据写入存储桶之前，`shared` 文件夹在 MinIO 对象列表中不可见。
-:::
-
 ---
 
 ## 建表
@@ -256,19 +249,13 @@ IsDefault: true
 
 ## 导入数据集
 
-StarRocks 有多种数据导入方法。对于本教程，最简单的方法是使用 curl 命令发起 Stream Load 任务导入数据。
+StarRocks 有多种数据导入方法。本教程使用 curl 命令发起 Stream Load 任务导入数据。
 
-:::tip
-
-在存储数据集的路径中，通过 FE shell 运行以下 curl 命令。
-
-系统会提示您输入密码。由于您尚未为 `root` 用户分配密码，所以只需按 **Enter** 键。
-
-:::
-
-以下 curl 命令虽然看起来复杂，但在本教程最后部分提供了详细解释。当前，建议您先运行该命令并导入数据，然后在教程结束后了解有关数据导入的详细内容。
+Stream Load 使用的 curl 命令虽然看起来复杂，但本教程在最后部分提供了详细解释。当前，建议您先运行该命令并导入数据，然后在教程结束后了解有关数据导入的详细内容。
 
 ### 导入纽约市交通事故数据
+
+通过 FE 容器的 Shell Session 进入数据集文件所在的路径，然后运行以下命令。
 
 ```bash
 curl --location-trusted -u root             \
@@ -282,7 +269,7 @@ curl --location-trusted -u root             \
     -XPUT http://localhost:8030/api/quickstart/crashdata/_stream_load
 ```
 
-以下是上述命令的输出。第一个突出显示的部分显示了您应看到的内容（OK 和除一行之外的所有行都已插入）。由于其中一行包含不正确数据，该行在导入过程中被过滤。
+以下是上述命令的返回。其中 `Status` 为 `Success`，表示导入成功。`NumberFilteredRows` 为 1，表示数据集中包含一行错误数据，StarRocks 在导入过程将该行过滤。
 
 ```bash
 Enter host password for user 'root':
@@ -310,13 +297,13 @@ Enter host password for user 'root':
 }%
 ```
 
-如果发生错误，StarRocks 会返回一个 URL 来帮助您查看错误消息。由于容器具有私有 IP 地址，您必须通过从容器运行 curl 来查看。
+当 Stream Load 发生错误时，StarRocks 会返回一个包含错误信息的 URL。由于容器具有私有 IP 地址，您必须通过容器中的 Shell Session 运行 curl 命令查看。
 
 ```bash
-curl http://10.5.0.3:8040/api/_load_error_log<details from ErrorURL>
+curl http://10.5.0.3:8040/api/_load_error_log?file=error_log_da41dd88276a7bfc_739087c94262ae9f
 ```
 
-点击展开查看 URL 中包含的错误内容：
+点击下方 **错误信息** 查看 URL 中包含的错误信息。
 
 <details>
 
@@ -332,7 +319,7 @@ Column delimiter: 44,Row delimiter: 10.. Row: 09/06/2015,14:15,,,40.6722269,-74.
 
 ### 导入天气数据
 
-按照上述方式导入天气数据：
+一朝同样的方式导入天气数据。
 
 ```bash
 curl --location-trusted -u root             \
@@ -353,7 +340,7 @@ curl --location-trusted -u root             \
 打开 [MinIO Web UI](http://localhost:9001/browser/starrocks/) 并验证在 `starrocks/shared/` 下的每个路径中是否有 `data`、`metadata` 和 `schema` 路径。
 
 :::tip
-在导入数据时，`starrocks/shared/` 下的文件夹名称是动态生成的。您会在 `shared` 下面看到一个路径，然后在该路径下看到另外两个路径。在每个路径内，您将找到 `data`、`metadata` 和 `schema` 路径。
+在导入数据时，`starrocks/shared/` 下的文件夹名称是动态生成的。您会在 `shared` 下面看到一个路径，然后在该路径下看到另外两个路径。在每个路径内，您都能看到 `data`、`metadata` 和 `schema` 路径。
 
 ![MinIO Web UI](../assets/quick-start/MinIO-data.png)
 :::
@@ -368,7 +355,7 @@ curl --location-trusted -u root             \
 
 ## 存算分离集群配置细节
 
-现在您已经体验了使用 StarRocks 存算分离集群，所以理解其配置是非常重要的。
+本小节介绍 StarRocks 存算分离集群的配置信息。
 
 ### CN 配置
 
@@ -385,9 +372,9 @@ brpc_port = 8060
 
 ### FE 配置
 
-FE 配置与默认配置略有不同，因为必须配置 FE 以使其将数据存储在对象存储中，而不是 BE 节点的本地磁盘上。
+FE 配置与默认配置略有不同，需要额外添加与对象存储相关的配置项。
 
-`docker-compose.yml` 文件在 `command` 中生成 FE 配置。
+以下为 `docker-compose.yml` 文件中用于生成 FE 配置的命令。
 
 ```yml
     command: >
@@ -401,7 +388,7 @@ FE 配置与默认配置略有不同，因为必须配置 FE 以使其将数据�
       sh /opt/starrocks/fe/bin/start_fe.sh"
 ```
 
-以上命令生成了以下配置文件：
+以上命令会生成以下 FE 配置文件 **fe.conf**：
 
 ```bash title='fe/fe.conf'
 LOG_DIR = ${STARROCKS_HOME}/log
@@ -429,19 +416,11 @@ aws_s3_use_aws_sdk_default_behavior=false
 # highlight-end
 ```
 
-:::note
-此配置文件包含默认部署参数以及存算分离集群部署的附加参数，其中存算分离集群部署的参数已经突出显示。
-:::
-
 这些参数的具体解释如下：
-
-:::note
-以下许多配置参数都以 `aws_s3_` 为前缀。该前缀用于所有兼容 Amazon S3 存储类型（例如：S3、GCS 和 MinIO）。在使用 Azure Blob Storage 时，前缀是 `azure_`。
-:::
 
 #### `run_mode=shared_data`
 
-该参数用于启用存算分离。
+该参数用于启用存算分离模式。
 
 #### `aws_s3_path=starrocks`
 
@@ -453,15 +432,15 @@ MinIO 端点，包括端口号。
 
 #### `aws_s3_use_instance_profile=false`
 
-在使用 MinIO 时，使用访问密钥，因此不使用 Instance Profile 文件。
+是否使用 Instance Profile 作为凭证。因为您需要使用访问密钥连接 MinIO ，需要该项设置为 false。
 
 #### `cloud_native_storage_type=S3`
 
-指定使用 S3 兼容存储或者 Azure Blob 存储。对于 MinIO，该项需要设置为 S3。
+用于指定对象存储类型。对于 MinIO，需要将该项设置为 S3。
 
 #### `aws_s3_use_aws_sdk_default_behavior=false`
 
-在使用 MinIO 时，此参数始终设置为 false。
+是否使用 AWS S3 默认 SDK 认证方式。在使用 MinIO 时，始终将此参数设置为 false。
 
 ---
 
@@ -471,11 +450,9 @@ MinIO 端点，包括端口号。
 
 - 在 Docker 中部署了 StarRocks 和 MinIO
 - 创建了 MinIO 访问密钥
-- 配置了使用 MinIO 的 StarRocks Storage Volume
-- 向 StarRocks 导入了由纽约市提供的交通事故数据和由 NOAA 提供的天气数据
-- 使用 SQL JOIN 分析了数据，并得出以下结论：能见度低或路面结冰时，驾驶机动车较平时更加危险。
-
-除以上内容外，本教程有意地略过了在 Stream Load 过程中进行的数据转换。关于此内容的详细信息在下一小节中提供。
+- 配置了使用 MinIO 的 StarRocks 存储卷
+- 向 StarRocks 导入了纽约市的交通事故数据和天气数据
+- 使用 JOIN 查询分析数据
 
 ## 关于 curl 命令的注释
 
@@ -483,12 +460,8 @@ MinIO 端点，包括端口号。
 
 ## 更多信息
 
-[StarRocks 表设计](../table_design/StarRocks_table_design.md)
-
-[物化视图](../cover_pages/mv_use_cases.mdx)
-
-[Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
-
-[纽约市交通事故数据](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) 数据集由纽约市提供，受到这些[使用条款](https://www.nyc.gov/home/terms-of-use.page)和[隐私政策](https://www.nyc.gov/home/privacy-policy.page)的约束。
-
-[气象数据](https://www.ncdc.noaa.gov/cdo-web/datatools/lcd)(LCD)由 NOAA 提供，附带此[免责声明](https://www.noaa.gov/disclaimer)和此[隐私政策](https://www.noaa.gov/protecting-your-privacy)。
+- [StarRocks 表设计](../table_design/StarRocks_table_design.md)
+- [物化视图](../cover_pages/mv_use_cases.mdx)
+- [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)
+- [纽约市交通事故数据](https://data.cityofnewyork.us/Public-Safety/Motor-Vehicle-Collisions-Crashes/h9gi-nx95) 数据集由纽约市提供，受到以下[使用条款](https://www.nyc.gov/home/terms-of-use.page)和[隐私政策](https://www.nyc.gov/home/privacy-policy.page)的约束。
+- [气象数据](https://www.ncdc.noaa.gov/cdo-web/datatools/lcd)(LCD)由 NOAA 提供，附带[免责声明](https://www.noaa.gov/disclaimer)和[隐私政策](https://www.noaa.gov/protecting-your-privacy)。
