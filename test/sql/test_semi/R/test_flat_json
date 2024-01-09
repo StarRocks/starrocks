@@ -1,0 +1,375 @@
+-- name: test_normal_flat_json @system
+CREATE TABLE `js1` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `j1` json NULL COMMENT "",
+  `j2` json NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `ajs1` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` int(11) SUM NULL COMMENT "",
+  `j1` json REPLACE NULL COMMENT "",
+  `j2` json REPLACE  NULL COMMENT ""
+) ENGINE=OLAP 
+AGGREGATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `ujs1` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT "",
+  `j1` json NULL COMMENT "",
+  `j2` json NULL COMMENT ""
+) ENGINE=OLAP 
+UNIQUE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"fast_schema_evolution" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO `js1` (`v1`, `v2`, `j1`, `j2`) VALUES
+(1, 28, parse_json('{"key1": "value11", "key2": "value12", "key3": "value13", "key4": "value14", "key5": "value15", "key6": "value16", "key7": "value17", "key8": "value18"}'), parse_json('{"key1": "value11", "key2": "value12", "key3": "value13", "key4": "value14", "key5": "value15", "key6": "value16"}')),
+(2, 29, parse_json('{"key1": "value21", "key2": "value22", "key3": "value23", "key4": "value24", "key5": "value25", "key6": "value26", "key7": "value27"}'), parse_json('{"key1": "value21", "key2": "value22", "key3": "value23", "key4": "value24", "key5": "value25", "key6": "value26", "key7": "value27", "key8": "value28"}')),
+(3, 67, parse_json('{"key1": "value31", "key2": "value32", "key3": "value33", "key4": "value34", "key5": "value35", "key6": "value36"}'), parse_json('{"key1": "value31", "key2": "value32", "key3": "value33", "key4": "value34", "key5": "value35", "key6": "value36"}')),
+(4, 20, parse_json('{"key1": "value41", "key2": "value42", "key3": "value43", "key4": "value44", "key5": "value45"}'), parse_json('{"key1": "value41", "key2": "value42", "key3": "value43", "key4": "value44", "key5": "value45", "key6": "value46", "key7": "value47"}')),
+(5, 86, parse_json('{"key1": "value51", "key2": "value52", "key3": "value53", "key4": "value54", "key5": "value55", "key6": "value56"}'), parse_json('{"key1": "value51", "key2": "value52", "key3": "value53", "key4": "value54", "key5": "value55", "key6": "value56", "key7": "value57", "key8": "value58", "key9": "value59"}')),
+(6, 66, parse_json('{"key1": "value61", "key2": "value62", "key3": "value63", "key4": "value64", "key5": "value65", "key6": "value66", "key7": "value67", "key8": "value68"}'), parse_json('{"key1": "value61", "key2": "value62", "key3": "value63", "key4": "value64", "key5": "value65", "key6": "value66", "key7": "value67"}')),
+(7, 14, parse_json('{"key1": "value71", "key2": "value72", "key3": "value73", "key4": "value74", "key5": "value75", "key6": "value76"}'), parse_json('{"key1": "value71", "key2": "value72", "key3": "value73", "key4": "value74", "key5": "value75", "key6": "value76", "key7": "value77", "key8": "value78", "key9": "value79"}')),
+(8, 54, parse_json('{"key1": "value81", "key2": "value82", "key3": "value83", "key4": "value84", "key5": "value85", "key6": "value86"}'), parse_json('{"key1": "value81", "key2": "value82", "key3": "value83", "key4": "value84", "key5": "value85", "key6": "value86", "key7": "value87", "key8": "value88"}')),
+(9, 67, parse_json('{"key1": "value91", "key2": "value92", "key3": "value93", "key4": "value94", "key5": "value95", "key6": "value96"}'), parse_json('{"key1": "value91", "key2": "value92", "key3": "value93", "key4": "value94", "key5": "value95", "key6": "value96", "key7": "value97", "key8": "value98", "key9": "value99"}')),
+(10, 79, parse_json('{"key1": "value101", "key2": "value102", "key3": "value103", "key4": "value104", "key5": "value105", "key6": "value106", "key7": "value107"}'), parse_json('{"key1": "value101", "key2": "value102", "key3": "value103", "key4": "value104", "key5": "value105", "key6": "value106", "key7": "value107"}')),
+(11, 13, parse_json('{"key1": "value111", "key2": "value112", "key3": "value113", "key4": "value114", "key5": "value115", "key6": "value116", "key7": "value117", "key8": "value118"}'), parse_json('{"key1": "value111", "key2": "value112", "key3": "value113", "key4": "value114", "key5": "value115", "key6": "value116", "key7": "value117"}')),
+(12, 25, parse_json('{"key1": "value121", "key2": "value122", "key3": "value123", "key4": "value124", "key5": "value125"}'), parse_json('{"key1": "value121", "key2": "value122", "key3": "value123", "key4": "value124", "key5": "value125", "key6": "value126", "key7": "value127"}')),
+(13, 2, parse_json('{"key1": "value131", "key2": "value132", "key3": "value133", "key4": "value134", "key5": "value135"}'), parse_json('{"key1": "value131", "key2": "value132", "key3": "value133", "key4": "value134", "key5": "value135"}')),
+(14, 82, parse_json('{"key1": "value141", "key2": "value142", "key3": "value143", "key4": "value144", "key5": "value145", "key6": "value146", "key7": "value147", "key8": "value148"}'), parse_json('{"key1": "value141", "key2": "value142", "key3": "value143", "key4": "value144", "key5": "value145", "key6": "value146"}')),
+(15, 54, parse_json('{"key1": "value151", "key2": "value152", "key3": "value153", "key4": "value154", "key5": "value155", "key6": "value156", "key7": "value157", "key8": "value158", "key9": "value159"}'), parse_json('{"key1": "value151", "key2": "value152", "key3": "value153", "key4": "value154", "key5": "value155", "key6": "value156", "key7": "value157", "key8": "value158", "key9": "value159"}')),
+(16, 3, parse_json('{"key1": "value161", "key2": "value162", "key3": "value163", "key4": "value164", "key5": "value165", "key6": "value166"}'), parse_json('{"key1": "value161", "key2": "value162", "key3": "value163", "key4": "value164", "key5": "value165", "key6": "value166", "key7": "value167"}')),
+(17, 53, parse_json('{"key1": "value171", "key2": "value172", "key3": "value173", "key4": "value174", "key5": "value175", "key6": "value176", "key7": "value177"}'), parse_json('{"key1": "value171", "key2": "value172", "key3": "value173", "key4": "value174", "key5": "value175", "key6": "value176", "key7": "value177"}')),
+(18, 19, parse_json('{"key1": "value181", "key2": "value182", "key3": "value183", "key4": "value184", "key5": "value185", "key6": "value186", "key7": "value187", "key8": "value188"}'), parse_json('{"key1": "value181", "key2": "value182", "key3": "value183", "key4": "value184", "key5": "value185", "key6": "value186", "key7": "value187", "key8": "value188", "key9": "value189"}')),
+(19, 35, parse_json('{"key1": "value191", "key2": "value192", "key3": "value193", "key4": "value194", "key5": "value195", "key6": "value196", "key7": "value197"}'), parse_json('{"key1": "value191", "key2": "value192", "key3": "value193", "key4": "value194", "key5": "value195", "key6": "value196", "key7": "value197", "key8": "value198", "key9": "value199"}')),
+(20, 96, parse_json('{"key1": "value201", "key2": "value202", "key3": "value203", "key4": "value204", "key5": "value205", "key6": "value206", "key7": "value207", "key8": "value208", "key9": "value209"}'), parse_json('{"key1": "value201", "key2": "value202", "key3": "value203", "key4": "value204", "key5": "value205", "key6": "value206", "key7": "value207", "key8": "value208", "key9": "value209"}')),
+(21, 33, parse_json('{"key1": "value211", "key2": "value212", "key3": "value213", "key4": "value214", "key5": "value215", "key6": "value216", "key7": "value217", "key8": "value218", "key9": "value219"}'), parse_json('{"key1": "value211", "key2": "value212", "key3": "value213", "key4": "value214", "key5": "value215", "key6": "value216", "key7": "value217"}')),
+(22, 16, parse_json('{"key1": "value221", "key2": "value222", "key3": "value223", "key4": "value224", "key5": "value225", "key6": "value226", "key7": "value227"}'), parse_json('{"key1": "value221", "key2": "value222", "key3": "value223", "key4": "value224", "key5": "value225", "key6": "value226", "key7": "value227"}')),
+(23, 25, parse_json('{"key1": "value231", "key2": "value232", "key3": "value233", "key4": "value234", "key5": "value235", "key6": "value236", "key7": "value237", "key8": "value238"}'), parse_json('{"key1": "value231", "key2": "value232", "key3": "value233", "key4": "value234", "key5": "value235", "key6": "value236", "key7": "value237", "key8": "value238"}')),
+(24, 53, parse_json('{"key1": "value241", "key2": "value242", "key3": "value243", "key4": "value244", "key5": "value245", "key6": "value246"}'), parse_json('{"key1": "value241", "key2": "value242", "key3": "value243", "key4": "value244", "key5": "value245", "key6": "value246", "key7": "value247", "key8": "value248", "key9": "value249"}')),
+(25, 39, parse_json('{"key1": "value251", "key2": "value252", "key3": "value253", "key4": "value254", "key5": "value255", "key6": "value256", "key7": "value257", "key8": "value258"}'), parse_json('{"key1": "value251", "key2": "value252", "key3": "value253", "key4": "value254", "key5": "value255", "key6": "value256", "key7": "value257"}')),
+(26, 28, parse_json('{"key1": "value261", "key2": "value262", "key3": "value263", "key4": "value264", "key5": "value265", "key6": "value266", "key7": "value267", "key8": "value268", "key9": "value269"}'), parse_json('{"key1": "value261", "key2": "value262", "key3": "value263", "key4": "value264", "key5": "value265", "key6": "value266"}')),
+(27, 45, parse_json('{"key1": "value271", "key2": "value272", "key3": "value273", "key4": "value274", "key5": "value275"}'), parse_json('{"key1": "value271", "key2": "value272", "key3": "value273", "key4": "value274", "key5": "value275", "key6": "value276"}')),
+(28, 20, parse_json('{"key1": "value281", "key2": "value282", "key3": "value283", "key4": "value284", "key5": "value285", "key6": "value286", "key7": "value287", "key8": "value288"}'), parse_json('{"key1": "value281", "key2": "value282", "key3": "value283", "key4": "value284", "key5": "value285", "key6": "value286", "key7": "value287", "key8": "value288", "key9": "value289"}')),
+(29, 3, parse_json('{"key1": "value291", "key2": "value292", "key3": "value293", "key4": "value294", "key5": "value295", "key6": "value296", "key7": "value297"}'), parse_json('{"key1": "value291", "key2": "value292", "key3": "value293", "key4": "value294", "key5": "value295"}')),
+(30, 95, parse_json('{"key1": "value301", "key2": "value302", "key3": "value303", "key4": "value304", "key5": "value305", "key6": "value306", "key7": "value307", "key8": "value308", "key9": "value309"}'), parse_json('{"key1": "value301", "key2": "value302", "key3": "value303", "key4": "value304", "key5": "value305", "key6": "value306"}')),
+(31, 76, parse_json('{"key1": "value311", "key2": "value312", "key3": "value313", "key4": "value314", "key5": "value315", "key6": "value316", "key7": "value317", "key8": "value318", "key9": "value319"}'), parse_json('{"key1": "value311", "key2": "value312", "key3": "value313", "key4": "value314", "key5": "value315"}')),
+(32, 5, parse_json('{"key1": "value321", "key2": "value322", "key3": "value323", "key4": "value324", "key5": "value325", "key6": "value326", "key7": "value327"}'), parse_json('{"key1": "value321", "key2": "value322", "key3": "value323", "key4": "value324", "key5": "value325", "key6": "value326"}')),
+(33, 33, parse_json('{"key1": "value331", "key2": "value332", "key3": "value333", "key4": "value334", "key5": "value335", "key6": "value336", "key7": "value337", "key8": "value338"}'), parse_json('{"key1": "value331", "key2": "value332", "key3": "value333", "key4": "value334", "key5": "value335", "key6": "value336", "key7": "value337"}')),
+(34, 21, parse_json('{"key1": "value341", "key2": "value342", "key3": "value343", "key4": "value344", "key5": "value345", "key6": "value346", "key7": "value347", "key8": "value348"}'), parse_json('{"key1": "value341", "key2": "value342", "key3": "value343", "key4": "value344", "key5": "value345", "key6": "value346", "key7": "value347"}')),
+(35, 6, parse_json('{"key1": "value351", "key2": "value352", "key3": "value353", "key4": "value354", "key5": "value355", "key6": "value356", "key7": "value357"}'), parse_json('{"key1": "value351", "key2": "value352", "key3": "value353", "key4": "value354", "key5": "value355", "key6": "value356", "key7": "value357", "key8": "value358"}')),
+(36, 11, parse_json('{"key1": "value361", "key2": "value362", "key3": "value363", "key4": "value364", "key5": "value365", "key6": "value366", "key7": "value367", "key8": "value368"}'), parse_json('{"key1": "value361", "key2": "value362", "key3": "value363", "key4": "value364", "key5": "value365", "key6": "value366", "key7": "value367", "key8": "value368", "key9": "value369"}')),
+(37, 30, parse_json('{"key1": "value371", "key2": "value372", "key3": "value373", "key4": "value374", "key5": "value375"}'), parse_json('{"key1": "value371", "key2": "value372", "key3": "value373", "key4": "value374", "key5": "value375", "key6": "value376", "key7": "value377", "key8": "value378"}')),
+(38, 78, parse_json('{"key1": "value381", "key2": "value382", "key3": "value383", "key4": "value384", "key5": "value385", "key6": "value386", "key7": "value387", "key8": "value388"}'), parse_json('{"key1": "value381", "key2": "value382", "key3": "value383", "key4": "value384", "key5": "value385", "key6": "value386", "key7": "value387", "key8": "value388", "key9": "value389"}')),
+(39, 9, parse_json('{"key1": "value391", "key2": "value392", "key3": "value393", "key4": "value394", "key5": "value395", "key6": "value396", "key7": "value397"}'), parse_json('{"key1": "value391", "key2": "value392", "key3": "value393", "key4": "value394", "key5": "value395", "key6": "value396", "key7": "value397"}')),
+(40, 65, parse_json('{"key1": "value401", "key2": "value402", "key3": "value403", "key4": "value404", "key5": "value405", "key6": "value406"}'), parse_json('{"key1": "value401", "key2": "value402", "key3": "value403", "key4": "value404", "key5": "value405", "key6": "value406", "key7": "value407", "key8": "value408"}')),
+(41, 85, parse_json('{"key1": "value411", "key2": "value412", "key3": "value413", "key4": "value414", "key5": "value415", "key6": "value416", "key7": "value417", "key8": "value418", "key9": "value419"}'), parse_json('{"key1": "value411", "key2": "value412", "key3": "value413", "key4": "value414", "key5": "value415"}')),
+(42, 59, parse_json('{"key1": "value421", "key2": "value422", "key3": "value423", "key4": "value424", "key5": "value425", "key6": "value426", "key7": "value427", "key8": "value428"}'), parse_json('{"key1": "value421", "key2": "value422", "key3": "value423", "key4": "value424", "key5": "value425", "key6": "value426"}')),
+(43, 66, parse_json('{"key1": "value431", "key2": "value432", "key3": "value433", "key4": "value434", "key5": "value435"}'), parse_json('{"key1": "value431", "key2": "value432", "key3": "value433", "key4": "value434", "key5": "value435"}')),
+(44, 70, parse_json('{"key1": "value441", "key2": "value442", "key3": "value443", "key4": "value444", "key5": "value445", "key6": "value446", "key7": "value447", "key8": "value448", "key9": "value449"}'), parse_json('{"key1": "value441", "key2": "value442", "key3": "value443", "key4": "value444", "key5": "value445", "key6": "value446", "key7": "value447", "key8": "value448", "key9": "value449"}')),
+(45, 26, parse_json('{"key1": "value451", "key2": "value452", "key3": "value453", "key4": "value454", "key5": "value455"}'), parse_json('{"key1": "value451", "key2": "value452", "key3": "value453", "key4": "value454", "key5": "value455", "key6": "value456", "key7": "value457"}')),
+(46, 87, parse_json('{"key1": "value461", "key2": "value462", "key3": "value463", "key4": "value464", "key5": "value465", "key6": "value466", "key7": "value467", "key8": "value468", "key9": "value469"}'), parse_json('{"key1": "value461", "key2": "value462", "key3": "value463", "key4": "value464", "key5": "value465", "key6": "value466", "key7": "value467"}')),
+(47, 23, parse_json('{"key1": "value471", "key2": "value472", "key3": "value473", "key4": "value474", "key5": "value475", "key6": "value476", "key7": "value477", "key8": "value478"}'), parse_json('{"key1": "value471", "key2": "value472", "key3": "value473", "key4": "value474", "key5": "value475", "key6": "value476"}')),
+(48, 44, parse_json('{"key1": "value481", "key2": "value482", "key3": "value483", "key4": "value484", "key5": "value485", "key6": "value486", "key7": "value487", "key8": "value488", "key9": "value489"}'), parse_json('{"key1": "value481", "key2": "value482", "key3": "value483", "key4": "value484", "key5": "value485", "key6": "value486", "key7": "value487"}')),
+(49, 5, parse_json('{"key1": "value491", "key2": "value492", "key3": "value493", "key4": "value494", "key5": "value495", "key6": "value496", "key7": "value497"}'), parse_json('{"key1": "value491", "key2": "value492", "key3": "value493", "key4": "value494", "key5": "value495", "key6": "value496", "key7": "value497"}')),
+(50, 76, parse_json('{"key1": "value501", "key2": "value502", "key3": "value503", "key4": "value504", "key5": "value505", "key6": "value506", "key7": "value507", "key8": "value508"}'), parse_json('{"key1": "value501", "key2": "value502", "key3": "value503", "key4": "value504", "key5": "value505", "key6": "value506", "key7": "value507"}'));
+-- result:
+-- !result
+insert into ajs1 select * from js1;
+-- result:
+-- !result
+insert into ajs1 select * from js1;
+-- result:
+-- !result
+insert into ajs1 select * from js1;
+-- result:
+-- !result
+insert into ajs1 select * from js1;
+-- result:
+-- !result
+insert into ujs1 select * from js1;
+-- result:
+-- !result
+insert into ujs1 select * from js1;
+-- result:
+-- !result
+insert into ujs1 select * from js1;
+-- result:
+-- !result
+insert into ujs1 select * from js1;
+-- result:
+-- !result
+select get_json_int(j1, "$.key2"), get_json_double(j2, "$.key3"), get_json_string(j2, "$.key4") from js1 order by v1 limit 2;
+-- result:
+None	None	value14
+None	None	value24
+-- !result
+select get_json_int(j1, "$.key8"), get_json_double(j2, "$.key9"), get_json_string(j2, "$.key10") from js1 order by v1 limit 2;
+-- result:
+None	None	None
+None	None	None
+-- !result
+select get_json_int(j1, "$.key12"), get_json_double(j2, "$.key13"), get_json_string(j2, "$") from js1 order by v1 limit 2;
+-- result:
+None	None	{"key1": "value11", "key2": "value12", "key3": "value13", "key4": "value14", "key5": "value15", "key6": "value16"}
+None	None	{"key1": "value21", "key2": "value22", "key3": "value23", "key4": "value24", "key5": "value25", "key6": "value26", "key7": "value27", "key8": "value28"}
+-- !result
+select get_json_int(j1, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from js1 order by v1 limit 2;
+-- result:
+None	None	value13
+None	None	value23
+-- !result
+select get_json_int(j1, "$.key2"), get_json_double(j2, "$.key2.key3") from js1 order by v1 limit 2;
+-- result:
+None	None
+None	None
+-- !result
+select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j2, "$.key2.key3") from js1 order by v1 limit 2;
+-- result:
+1	0
+1	0
+-- !result
+select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j2, "$.key3"), JSON_EXISTS(j2, "$.key4") from js1 order by v1 limit 2;
+-- result:
+1	1	1
+1	1	1
+-- !result
+select JSON_EXISTS(j1, "$.key8"), JSON_EXISTS(j2, "$.key9"), JSON_EXISTS(j2, "$.key10") from js1 order by v1 limit 2;
+-- result:
+1	0	0
+0	0	0
+-- !result
+select JSON_EXISTS(j1, "$.key12"), JSON_EXISTS(j2, "$.key13"), JSON_EXISTS(j2, "$") from js1 order by v1 limit 2;
+-- result:
+0	0	1
+0	0	1
+-- !result
+select JSON_EXISTS(j1, "asdf"), JSON_EXISTS(j2, "$13"), JSON_EXISTS(j2, "$.key3") from js1 order by v1 limit 2;
+-- result:
+0	0	1
+0	0	1
+-- !result
+select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j2, "$.key2.key3") from js1 order by v1 limit 2;
+-- result:
+1	0
+1	0
+-- !result
+select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j2, "$.key2.key3") from js1 order by v1 limit 2;
+-- result:
+1	0
+1	0
+-- !result
+select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j2, "$.key3"), JSON_LENGTH(j2, "$.key4") from js1 order by v1 limit 2;
+-- result:
+1	1	1
+1	1	1
+-- !result
+select JSON_LENGTH(j1, "$.key8"), JSON_LENGTH(j2, "$.key9"), JSON_LENGTH(j2, "$.key10") from js1 order by v1 limit 2;
+-- result:
+1	0	0
+0	0	0
+-- !result
+select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j2, "$") from js1 order by v1 limit 2;
+-- result:
+0	0	6
+0	0	8
+-- !result
+select JSON_LENGTH(j1, "asdf"), JSON_LENGTH(j2, "$13"), JSON_LENGTH(j2, "$.key3") from js1 order by v1 limit 2;
+-- result:
+0	0	1
+0	0	1
+-- !result
+select get_json_int(j1, "$.key2"), get_json_double(j2, "$.key3"), get_json_string(j2, "$.key4") from ujs1 order by v1 limit 2;
+-- result:
+None	None	value14
+None	None	value24
+-- !result
+select get_json_int(j1, "$.key8"), get_json_double(j2, "$.key9"), get_json_string(j2, "$.key10") from ujs1 order by v1 limit 2;
+-- result:
+None	None	None
+None	None	None
+-- !result
+select get_json_int(j1, "$.key12"), get_json_double(j2, "$.key13"), get_json_string(j2, "$") from ujs1 order by v1 limit 2;
+-- result:
+None	None	{"key1": "value11", "key2": "value12", "key3": "value13", "key4": "value14", "key5": "value15", "key6": "value16"}
+None	None	{"key1": "value21", "key2": "value22", "key3": "value23", "key4": "value24", "key5": "value25", "key6": "value26", "key7": "value27", "key8": "value28"}
+-- !result
+select get_json_int(j1, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from ujs1 order by v1 limit 2;
+-- result:
+None	None	value13
+None	None	value23
+-- !result
+select get_json_int(j1, "$.key2"), get_json_double(j2, "$.key2.key3") from ujs1 order by v1 limit 2;
+-- result:
+None	None
+None	None
+-- !result
+select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j2, "$.key2.key3") from ujs1 order by v1 limit 2;
+-- result:
+1	0
+1	0
+-- !result
+select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j2, "$.key3"), JSON_EXISTS(j2, "$.key4") from ujs1 order by v1 limit 2;
+-- result:
+1	1	1
+1	1	1
+-- !result
+select JSON_EXISTS(j1, "$.key8"), JSON_EXISTS(j2, "$.key9"), JSON_EXISTS(j2, "$.key10") from ujs1 order by v1 limit 2;
+-- result:
+1	0	0
+0	0	0
+-- !result
+select JSON_EXISTS(j1, "$.key12"), JSON_EXISTS(j2, "$.key13"), JSON_EXISTS(j2, "$") from ujs1 order by v1 limit 2;
+-- result:
+0	0	1
+0	0	1
+-- !result
+select JSON_EXISTS(j1, "asdf"), JSON_EXISTS(j2, "$13"), JSON_EXISTS(j2, "$.key3") from ujs1 order by v1 limit 2;
+-- result:
+0	0	1
+0	0	1
+-- !result
+select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j2, "$.key2.key3") from ujs1 order by v1 limit 2;
+-- result:
+1	0
+1	0
+-- !result
+select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j2, "$.key2.key3") from ujs1 order by v1 limit 2;
+-- result:
+1	0
+1	0
+-- !result
+select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j2, "$.key3"), JSON_LENGTH(j2, "$.key4") from ujs1 order by v1 limit 2;
+-- result:
+1	1	1
+1	1	1
+-- !result
+select JSON_LENGTH(j1, "$.key8"), JSON_LENGTH(j2, "$.key9"), JSON_LENGTH(j2, "$.key10") from ujs1 order by v1 limit 2;
+-- result:
+1	0	0
+0	0	0
+-- !result
+select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j2, "$") from ujs1 order by v1 limit 2;
+-- result:
+0	0	6
+0	0	8
+-- !result
+select JSON_LENGTH(j1, "asdf"), JSON_LENGTH(j2, "$13"), JSON_LENGTH(j2, "$.key3") from ujs1 order by v1 limit 2;
+-- result:
+0	0	1
+0	0	1
+-- !result
+select get_json_int(j1, "$.key2"), get_json_double(j2, "$.key3"), get_json_string(j2, "$.key4") from ajs1 order by v1 limit 2;
+-- result:
+None	None	value14
+None	None	value24
+-- !result
+select get_json_int(j1, "$.key8"), get_json_double(j2, "$.key9"), get_json_string(j2, "$.key10") from ajs1 order by v1 limit 2;
+-- result:
+None	None	None
+None	None	None
+-- !result
+select get_json_int(j1, "$.key12"), get_json_double(j2, "$.key13"), get_json_string(j2, "$") from ajs1 order by v1 limit 2;
+-- result:
+None	None	{"key1": "value11", "key2": "value12", "key3": "value13", "key4": "value14", "key5": "value15", "key6": "value16"}
+None	None	{"key1": "value21", "key2": "value22", "key3": "value23", "key4": "value24", "key5": "value25", "key6": "value26", "key7": "value27", "key8": "value28"}
+-- !result
+select get_json_int(j1, "asdf"), get_json_double(j2, "$13"), get_json_string(j2, "$.key3") from ajs1 order by v1 limit 2;
+-- result:
+None	None	value13
+None	None	value23
+-- !result
+select get_json_int(j1, "$.key2"), get_json_double(j2, "$.key2.key3") from ajs1 order by v1 limit 2;
+-- result:
+None	None
+None	None
+-- !result
+select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j2, "$.key2.key3") from ajs1 order by v1 limit 2;
+-- result:
+1	0
+1	0
+-- !result
+select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j2, "$.key3"), JSON_EXISTS(j2, "$.key4") from ajs1 order by v1 limit 2;
+-- result:
+1	1	1
+1	1	1
+-- !result
+select JSON_EXISTS(j1, "$.key8"), JSON_EXISTS(j2, "$.key9"), JSON_EXISTS(j2, "$.key10") from ajs1 order by v1 limit 2;
+-- result:
+1	0	0
+0	0	0
+-- !result
+select JSON_EXISTS(j1, "$.key12"), JSON_EXISTS(j2, "$.key13"), JSON_EXISTS(j2, "$") from ajs1 order by v1 limit 2;
+-- result:
+0	0	1
+0	0	1
+-- !result
+select JSON_EXISTS(j1, "asdf"), JSON_EXISTS(j2, "$13"), JSON_EXISTS(j2, "$.key3") from ajs1 order by v1 limit 2;
+-- result:
+0	0	1
+0	0	1
+-- !result
+select JSON_EXISTS(j1, "$.key2"), JSON_EXISTS(j2, "$.key2.key3") from ajs1 order by v1 limit 2;
+-- result:
+1	0
+1	0
+-- !result
+select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j2, "$.key2.key3") from ajs1 order by v1 limit 2;
+-- result:
+1	0
+1	0
+-- !result
+select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j2, "$.key3"), JSON_LENGTH(j2, "$.key4") from ajs1 order by v1 limit 2;
+-- result:
+1	1	1
+1	1	1
+-- !result
+select JSON_LENGTH(j1, "$.key8"), JSON_LENGTH(j2, "$.key9"), JSON_LENGTH(j2, "$.key10") from ajs1 order by v1 limit 2;
+-- result:
+1	0	0
+0	0	0
+-- !result
+select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j2, "$") from ajs1 order by v1 limit 2;
+-- result:
+0	0	6
+0	0	8
+-- !result
+select JSON_LENGTH(j1, "asdf"), JSON_LENGTH(j2, "$13"), JSON_LENGTH(j2, "$.key3") from ajs1 order by v1 limit 2;
+-- result:
+0	0	1
+0	0	1
+-- !result

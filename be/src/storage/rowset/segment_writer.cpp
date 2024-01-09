@@ -42,6 +42,7 @@
 #include "column/datum_tuple.h"
 #include "column/nullable_column.h"
 #include "column/schema.h"
+#include "column/vectorized_fwd.h"
 #include "common/logging.h" // LOG
 #include "fs/fs.h"          // FileSystem
 #include "gen_cpp/segment.pb.h"
@@ -185,6 +186,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
             }
         }
 
+        opts.need_flat = config::enable_json_flat;
         ASSIGN_OR_RETURN(auto writer, ColumnWriter::create(opts, &column, _wfile.get()));
         RETURN_IF_ERROR(writer->init());
         _column_writers.push_back(std::move(writer));
@@ -350,8 +352,8 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
     size_t chunk_num_rows = chunk.num_rows();
     size_t chunk_num_columns = chunk.num_columns();
     for (size_t i = 0; i < chunk_num_columns; ++i) {
-        const Column* col = chunk.get_column_by_index(i).get();
-        RETURN_IF_ERROR(_column_writers[i]->append(*col));
+        const ColumnPtr col = chunk.get_column_by_index(i);
+        RETURN_IF_ERROR(_column_writers[i]->append(col));
     }
 
     // TODO(cbl): put the fill full row column logic here is a bit hacky, this segment writer is used in many other
