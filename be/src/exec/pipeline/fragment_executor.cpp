@@ -358,7 +358,8 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
                                                          ? scan_ranges_per_driver
                                                          : request.per_driver_seq_scan_ranges_of_node(scan_node->id());
 
-        _fragment_ctx->cache_param().num_lanes = scan_node->io_tasks_per_scan_operator();
+        // num_lanes ranges in [1,16] in default 4.
+        _fragment_ctx->cache_param().num_lanes = std::min(16, std::max(1, config::query_cache_num_lanes_per_driver));
 
         for (auto& [driver_seq, scan_ranges] : scan_ranges_per_driver_seq) {
             for (auto& scan_range : scan_ranges) {
