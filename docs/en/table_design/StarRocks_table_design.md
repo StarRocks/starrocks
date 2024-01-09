@@ -82,11 +82,11 @@ PROPERTIES (
 1 row in set (0.00 sec)
 ```
 
-## **Understand comprehensive table** **structure**
+## Understand comprehensive table structure
 
 A deep dive into StarRocks table structures helps you design efficient data management structure tailored  to your business needs.
 
-### [Table types](./table_types.md)
+### [Table types](./table_types/table_types.md)
 
 StarRocks provides four types of tables which are Duplicate Key tables, Primary Key tables, Aggregate tables, and Unique Key tables, to store data for various business scenarios, such as raw data, frequently updated realtime data, and aggregated data.
 
@@ -120,7 +120,7 @@ StarRocks provides two bucketing methods:
 
 In addition to basic data types such as NUMERIC, DATE, and STRING, StarRocks supports complex semi-structured data types, including ARRAY, JSON, MAP, and STRUCT.
 
-### [Index](../using_starrocks/index.md)
+### Index
 
 An index is a special data structure and is used as a pointer to data in a table. When the conditional columns in queries are indexed columns, StarRocks can swiftly locate the data that meets the conditions.
 

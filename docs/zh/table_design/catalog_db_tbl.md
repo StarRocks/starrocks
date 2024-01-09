@@ -18,7 +18,7 @@ External catalog 是外部数据目录，用于连接数据湖中的数据。您
 
 数据库是包含表、视图、物化视图等对象的集合，用于存储、管理和操作数据。
 
-## [表](./table_types.md)
+## [表](./table_types/table_types.md)
 
 StarRocks 中的表分为两类：内部表和外部表。
 

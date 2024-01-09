@@ -18,7 +18,7 @@ An external catalog, on the other hand, allows access to external data in your d
 
 A database is a collection of data objects, such as tables, views, and materialized views, to store, manage, and manipulate data.
 
-## [Tables](../table_types.md)
+## [Tables](./table_types/table_types.md)
 
 Tables are categorized into internal tables and external tables.
 
