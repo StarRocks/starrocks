@@ -80,11 +80,11 @@ TEST_F(EncodingInfoTest, no_encoding) {
 
 TEST_F(EncodingInfoTest, number_types_supports_dict_encoding) {
     for (auto logicType : _number_types_supports_dict_encoding) {
-        EXPECT_EQ(true, number_types_supports_dict_encoding(logicType));
+        EXPECT_EQ(true, numeric_types_support_dict_encoding(logicType));
         EXPECT_EQ(true, supports_dict_encoding(logicType));
     }
-    EXPECT_EQ(false, number_types_supports_dict_encoding(TYPE_CHAR));
-    EXPECT_EQ(false, number_types_supports_dict_encoding(TYPE_VARCHAR));
+    EXPECT_EQ(false, numeric_types_support_dict_encoding(TYPE_CHAR));
+    EXPECT_EQ(false, numeric_types_support_dict_encoding(TYPE_VARCHAR));
     EXPECT_EQ(true, supports_dict_encoding(TYPE_CHAR));
     EXPECT_EQ(true, supports_dict_encoding(TYPE_VARCHAR));
 }
