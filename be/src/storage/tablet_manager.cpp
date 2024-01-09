@@ -1333,8 +1333,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
         column.__set_column_name(Schema::FULL_ROW_COLUMN);
         TColumnType ctype;
         ctype.__set_type(TPrimitiveType::VARCHAR);
-        //TODO
-        ctype.__set_len(65535);
+        ctype.__set_len(TypeDescriptor::MAX_VARCHAR_LENGTH);
         column.__set_column_type(ctype);
         column.__set_aggregation_type(TAggregationType::REPLACE);
         column.__set_is_allow_null(false);
