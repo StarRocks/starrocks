@@ -54,7 +54,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     public void applyClauses() throws DdlException {
         transaction = table.newTransaction();
         updateSchema = this.transaction.updateSchema();
-        super.execute();
+        super.applyClauses();
         updateSchema.commit();
         transaction.commitTransaction();
     }
