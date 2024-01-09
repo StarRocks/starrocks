@@ -257,7 +257,7 @@ df.writeTo("demo.nyc.greentaxis").create()
 
 ---
 
-- 如果您使用 StarRocks 容器中的 MySQL Client，则需要从包含 `docker-compose.yml` 文件的路径运行以下命令。
+- 如果您使用 StarRocks 容器中的 MySQL Client，需要从包含 `docker-compose.yml` 文件的路径运行以下命令。
 
   ```bash
   docker compose exec starrocks-fe \
@@ -268,7 +268,7 @@ df.writeTo("demo.nyc.greentaxis").create()
   StarRocks >
   ```
 
-- 如果您使用其他客户端，请现在打开客户端。
+- 如果您使用其他客户端，请打开客户端并连接至 StarRocks。
 
 ### 创建 External Catalog
 
