@@ -680,6 +680,24 @@ int32_t UpdateManager::_get_condition_column(const TxnLogPB_OpWrite& op_write, c
     return -1;
 }
 
+std::pair<int64_t, int64_t> UpdateManager::primary_index_mem_disk_size(uint32_t tablet_id) {
+    int64_t memory_size = 0;
+    int64_t disk_size = 0;
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry != nullptr) {
+        DeferOp release_index_entry([&] { _index_cache.release(index_entry); });
+        auto& index = index_entry->value();
+        memory_size = index.memory_usage();
+    }
+    auto file_size_st = LakePrimaryIndex::get_disk_size(tablet_id);
+    if (!file_size_st.ok()) {
+        LOG(ERROR) << "lake primary index get disk size failed, " << file_size_st.status();
+    } else {
+        disk_size = *file_size_st;
+    }
+    return {memory_size, disk_size};
+}
+
 bool UpdateManager::TEST_check_primary_index_cache_ref(uint32_t tablet_id, uint32_t ref_cnt) {
     auto index_entry = _index_cache.get(tablet_id);
     if (index_entry != nullptr) {

@@ -152,6 +152,8 @@ public:
 
     void try_remove_cache(uint32_t tablet_id, int64_t txn_id);
 
+    std::pair<int64_t, int64_t> primary_index_mem_disk_size(uint32_t tablet_id);
+
 private:
     // print memory tracker state
     void _print_memory_stats();

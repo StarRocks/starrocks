@@ -42,7 +42,8 @@ import static com.starrocks.catalog.Replica.ReplicaState.NORMAL;
 /**
  * This class represents the StarRocks lake tablet related metadata.
  * LakeTablet is based on cloud object storage, such as S3, OSS.
- * Data replicas are managed by object storage and compute replicas are managed by StarOS through Shard.
+ * Data replicas are managed by object storage and compute replicas are managed
+ * by StarOS through Shard.
  * Tablet id is same as StarOS Shard id.
  */
 public class LakeTablet extends Tablet {
@@ -55,6 +56,8 @@ public class LakeTablet extends Tablet {
     private static final String JSON_KEY_DATA_SIZE = "dataSize";
     private static final String JSON_KEY_ROW_COUNT = "rowCount";
     private static final String JSON_KEY_DATA_SIZE_UPDATE_TIME = "dataSizeUpdateTime";
+    private static final String JSON_KEY_PK_INDEX_MEM_SIZE = "primaryIndexMem";
+    private static final String JSON_KEY_PK_INDEX_DISK_SIZE = "primaryIndexDisk";
 
     @SerializedName(value = JSON_KEY_DATA_SIZE)
     private volatile long dataSize = 0L;
@@ -62,6 +65,10 @@ public class LakeTablet extends Tablet {
     private volatile long rowCount = 0L;
     @SerializedName(value = JSON_KEY_DATA_SIZE_UPDATE_TIME)
     private volatile long dataSizeUpdateTime = 0L;
+    @SerializedName(value = JSON_KEY_PK_INDEX_MEM_SIZE)
+    private volatile long primaryIndexMemSize = 0L;
+    @SerializedName(value = JSON_KEY_PK_INDEX_DISK_SIZE)
+    private volatile long primaryIndexDiskSize = 0L;
 
     public LakeTablet(long id) {
         super(id);
@@ -97,6 +104,22 @@ public class LakeTablet extends Tablet {
 
     public void setRowCount(long rowCount) {
         this.rowCount = rowCount;
+    }
+
+    public void setPrimaryIndexMemSize(long primaryIndexMemSize) {
+        this.primaryIndexMemSize = primaryIndexMemSize;
+    }
+
+    public long getPrimaryIndexMemSize() {
+        return primaryIndexMemSize;
+    }
+
+    public void setPrimaryIndexDiskSize(long primaryIndexDiskSize) {
+        this.primaryIndexDiskSize = primaryIndexDiskSize;
+    }
+
+    public long getPrimaryIndexDiskSize() {
+        return primaryIndexDiskSize;
     }
 
     public long getPrimaryComputeNodeId() throws UserException {

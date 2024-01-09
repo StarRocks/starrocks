@@ -58,6 +58,8 @@ public:
         return nullptr;
     }
 
+    static StatusOr<int64_t> get_disk_size(uint32_t tablet_id);
+
 private:
     Status _do_lake_load(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                          const MetaFileBuilder* builder);

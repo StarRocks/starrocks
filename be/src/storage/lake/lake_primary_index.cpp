@@ -16,6 +16,8 @@
 
 #include <bvar/bvar.h>
 
+#include <filesystem>
+
 #include "storage/chunk_helper.h"
 #include "storage/lake/lake_local_persistent_index.h"
 #include "storage/lake/rowset.h"
@@ -159,6 +161,30 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
     LOG_IF(INFO, cost_ns >= /*10ms=*/10 * 1000 * 1000)
             << "LakePrimaryIndex load cost(ms): " << watch.elapsed_time() / 1000000;
     return Status::OK();
+}
+
+StatusOr<int64_t> LakePrimaryIndex::get_disk_size(uint32_t tablet_id) {
+    std::string index_path = strings::Substitute(
+            "$0/$1/", StorageEngine::instance()->get_persistent_index_store(tablet_id)->get_persistent_index_path(),
+            tablet_id);
+    int64_t total_file_size = 0;
+    try {
+        for (const auto& entry : std::filesystem::directory_iterator(index_path)) {
+            if (entry.is_regular_file()) {
+                total_file_size += std::filesystem::file_size(entry);
+            }
+        }
+    } catch (const std::filesystem::filesystem_error& ex) {
+        std::string err_msg = "Iterate dir " + index_path + " Filesystem error: " + ex.what();
+        return Status::InternalError(err_msg);
+    } catch (const std::exception& ex) {
+        std::string err_msg = "Iterate dir " + index_path + " Standard error: " + ex.what();
+        return Status::InternalError(err_msg);
+    } catch (...) {
+        std::string err_msg = "Iterate dir " + index_path + " Unknown exception occurred.";
+        return Status::InternalError(err_msg);
+    }
+    return total_file_size;
 }
 
 } // namespace starrocks::lake

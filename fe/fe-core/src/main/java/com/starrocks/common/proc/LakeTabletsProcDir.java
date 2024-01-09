@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.common.proc;
 
 import com.google.common.base.Preconditions;
@@ -42,6 +41,7 @@ import java.util.List;
 public class LakeTabletsProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES = new ImmutableList.Builder<String>()
             .add("TabletId").add("BackendId").add("DataSize").add("RowCount")
+            .add("PrimaryIndexMem").add("PrimaryIndexDisk")
             .build();
 
     private final Database db;
@@ -81,6 +81,8 @@ public class LakeTabletsProcDir implements ProcDirInterface {
                 tabletInfo.add(new Gson().toJson(lakeTablet.getBackendIds()));
                 tabletInfo.add(new ByteSizeValue(lakeTablet.getDataSize(true)));
                 tabletInfo.add(lakeTablet.getRowCount(0L));
+                tabletInfo.add(new ByteSizeValue(lakeTablet.getPrimaryIndexMemSize()));
+                tabletInfo.add(new ByteSizeValue(lakeTablet.getPrimaryIndexDiskSize()));
                 tabletInfos.add(tabletInfo);
             }
         } finally {
@@ -147,6 +149,7 @@ public class LakeTabletsProcDir implements ProcDirInterface {
     // Handle showing single tablet info
     public static class LakeTabletProcNode implements ProcNodeInterface {
         private final LakeTablet tablet;
+
         public LakeTabletProcNode(LakeTablet tablet) {
             this.tablet = tablet;
         }
@@ -159,8 +162,9 @@ public class LakeTabletsProcDir implements ProcDirInterface {
                     String.valueOf(tablet.getId()),
                     new Gson().toJson(tablet.getBackendIds()),
                     new ByteSizeValue(tablet.getDataSize(true)).toString(),
-                    String.valueOf(tablet.getRowCount(0L))
-            );
+                    String.valueOf(tablet.getRowCount(0L)),
+                    new ByteSizeValue(tablet.getPrimaryIndexMemSize()).toString(),
+                    new ByteSizeValue(tablet.getPrimaryIndexDiskSize()).toString());
             result.addRow(row);
             return result;
         }

@@ -214,6 +214,9 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
         EXPECT_EQ(k0[i], read_chunk_ptr->get(i)[0].get_int32());
         EXPECT_EQ(v0[i], read_chunk_ptr->get(i)[1].get_int32());
     }
+
+    auto primary_index_size_pair = _update_mgr->primary_index_mem_disk_size(_tablet_metadata->id());
+    EXPECT_TRUE(primary_index_size_pair.first > 0);
 }
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
@@ -574,8 +577,13 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_largedata) {
     for (int i = 0; i < N; i++) {
         EXPECT_EQ(new_tablet_metadata->rowsets(i).num_dels(), 0);
     }
+    auto primary_index_size_pair = _update_mgr->primary_index_mem_disk_size(_tablet_metadata->id());
     if (GetParam().enable_persistent_index) {
         check_local_persistent_index_meta(tablet_id, version);
+        EXPECT_TRUE(primary_index_size_pair.first > 0);
+        EXPECT_TRUE(primary_index_size_pair.second > 0);
+    } else {
+        EXPECT_TRUE(primary_index_size_pair.first > 0);
     }
     config::l0_max_mem_usage = old_config;
 }

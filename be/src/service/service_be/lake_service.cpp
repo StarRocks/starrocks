@@ -32,6 +32,7 @@
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/transactions.h"
+#include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
 #include "testutil/sync_point.h"
 #include "util/bthreads/semaphore.h"
@@ -620,7 +621,17 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
             auto tablet_stat = response->add_tablet_stats();
             tablet_stat->set_tablet_id(tablet_id);
             tablet_stat->set_num_rows(num_rows);
-            tablet_stat->set_data_size(data_size);
+            if ((*tablet_metadata)->schema().keys_type() == KeysType::PRIMARY_KEYS) {
+                auto primary_index_size_pair = _tablet_mgr->update_mgr()->primary_index_mem_disk_size(tablet_id);
+                // Primary key table's data size contains persistent index disk size
+                tablet_stat->set_data_size(data_size + primary_index_size_pair.second);
+                tablet_stat->set_primary_index_mem_size(primary_index_size_pair.first);
+                tablet_stat->set_primary_index_disk_size(primary_index_size_pair.second);
+            } else {
+                tablet_stat->set_data_size(data_size);
+                tablet_stat->set_primary_index_mem_size(0);
+                tablet_stat->set_primary_index_disk_size(0);
+            }
         };
         TEST_SYNC_POINT_CALLBACK("LakeServiceImpl::get_tablet_stats:before_submit", nullptr);
         if (auto st = thread_pool_token.submit_func(std::move(task), timeout_deadline); !st.ok()) {
