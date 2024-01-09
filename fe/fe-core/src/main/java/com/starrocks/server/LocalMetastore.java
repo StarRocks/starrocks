@@ -3879,20 +3879,21 @@ public class LocalMetastore implements ConnectorMetadata {
 
         db.dropTable(oldTableName);
         db.createTable(olapTable);
-        inactiveRelatedMaterializedView(db, olapTable);
+        inactiveRelatedMaterializedView(db, olapTable, "base-table renamed: " + table.getName());
 
         TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), olapTable.getId(), newTableName);
         editLog.logTableRename(tableInfo);
         LOG.info("rename table[{}] to {}, tableId: {}", oldTableName, newTableName, olapTable.getId());
     }
 
-    public static void inactiveRelatedMaterializedView(Database db, Table olapTable) {
+    public static void inactiveRelatedMaterializedView(Database db, Table olapTable, String reason) {
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
             if (mv != null) {
                 LOG.warn("Setting the materialized view {}({}) to invalid because " +
                                 "the table {} was renamed.", mv.getName(), mv.getId(), olapTable.getName());
-                mv.setInactiveAndReason("base-table renamed: " + olapTable.getName());
+                mv.setInactiveAndReason(reason);
+                inactiveRelatedMaterializedView(db, mv, "base-mv inactive: " + mv.getName());
             } else {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
             }
@@ -3912,7 +3913,7 @@ public class LocalMetastore implements ConnectorMetadata {
             db.dropTable(tableName);
             table.setName(newTableName);
             db.createTable(table);
-            inactiveRelatedMaterializedView(db, table);
+            inactiveRelatedMaterializedView(db, table, "base-table renamed: " + tableName);
 
             LOG.info("replay rename table[{}] to {}, tableId: {}", tableName, newTableName, table.getId());
         } finally {

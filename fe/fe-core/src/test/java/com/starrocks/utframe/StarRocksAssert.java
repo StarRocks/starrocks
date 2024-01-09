@@ -254,6 +254,13 @@ public class StarRocksAssert {
         return this;
     }
 
+    public void refreshMV(String sql) throws Exception {
+        if (!sql.toLowerCase().endsWith("with sync mode")) {
+            sql += " with sync mode";
+        }
+        ddl(sql);
+    }
+
     private void waitingTaskFinish(TaskRun taskRun) {
         MvTaskRunContext mvContext = ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
         int retryCount = 0;
