@@ -1071,7 +1071,7 @@ public class UtFrameUtils {
     }
 
     public static void setDefaultConfigForAsyncMVTest(ConnectContext connectContext) {
-        Config.dynamic_partition_check_interval_seconds = 10000;
+        Config.dynamic_partition_check_interval_seconds = 10;
         Config.bdbje_heartbeat_timeout_second = 60;
         Config.bdbje_replica_ack_timeout_second = 60;
         Config.bdbje_lock_timeout_second = 60;
@@ -1098,9 +1098,9 @@ public class UtFrameUtils {
 
         if (connectContext != null) {
             // 300s: 5min
-            connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000 * 100);
+            connectContext.getSessionVariable().setOptimizerExecuteTimeout(300 * 1000);
             // 300s: 5min
-            connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000 * 100);
+            connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(300 * 1000);
             connectContext.getSessionVariable().setEnableShortCircuit(false);
         }
     }

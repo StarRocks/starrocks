@@ -17,6 +17,7 @@ package com.starrocks.analysis;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -48,6 +49,8 @@ public class ShowCreateMaterializedViewStmtTest {
 
         // set default config for async mvs
         UtFrameUtils.setDefaultConfigForAsyncMVTest(ctx);
+        // NOTE: no set it because we need to check the defined sql.
+        Config.default_mv_refresh_immediate = true;
 
         ConnectorPlanTestBase.mockHiveCatalog(ctx);
         starRocksAssert = new StarRocksAssert(ctx);
