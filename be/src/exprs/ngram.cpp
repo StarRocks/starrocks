@@ -20,7 +20,7 @@
 namespace starrocks {
 static constexpr size_t MAX_STRING_SIZE = 1 << 15;
 // uint16[2^16] can almost fit into L2
-static constexpr size_t map_size = 1 << 16;
+static constexpr size_t MAP_SIZE = 1 << 16;
 // we restrict needle's size smaller than 2^16, so even if every gram in needle is the same as each other
 // we still only need one uint16 to store its frequency
 using NgramHash = uint16;
@@ -40,8 +40,7 @@ struct Ngramstate {
         int32_t driver_id = CurrentThread::current().get_driver_id();
 
         if (UNLIKELY(!driver_maps.contains(driver_id))) {
-            std::vector<NgramHash> per_driver_map(map_size);
-            strings::memcpy_inlined(per_driver_map.data(), publicHashMap.data(), map_size * sizeof(NgramHash));
+            std::vector<NgramHash> per_driver_map(publicHashMap);
             driver_maps.lazy_emplace(driver_id, [&](auto build) { build(driver_id, std::move(per_driver_map)); });
         }
 
@@ -92,7 +91,7 @@ public:
             return Status::OK();
         }
 
-        auto* state = new Ngramstate(map_size);
+        auto* state = new Ngramstate(MAP_SIZE);
 
         context->set_function_state(scope, state);
 
