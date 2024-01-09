@@ -105,7 +105,6 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.parser.ParsingException;
-import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -1286,7 +1285,7 @@ public class MvUtils {
 
     public static List<ScalarOperator> getMVPrunedPartitionPredicates(MaterializedView mv,
                                                                       OptExpression mvPlan) {
-        Pair<Table, Column> partitionTableAndColumns = mv.getDirectTableAndPartitionColumn();
+        Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
         if (partitionTableAndColumns == null) {
             return null;
         }
