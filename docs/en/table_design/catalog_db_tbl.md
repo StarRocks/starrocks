@@ -24,11 +24,13 @@ Tables are categorized into internal tables and external tables.
 
 **Internal tables**
 
-Internal tables are maintained in internal catalogs. The data of internal tables is in StarRocks. Internal tables are maintained in databases under the internal catalog. An internal table consists of rows and columns, where each row represents a record and each column represents an attribute or field of a data row.
+Internal tables are maintained in internal catalogs. The data of internal tables is stored in StarRocks. Internal tables are maintained in databases under the internal catalog. An internal table consists of rows and columns, where each row represents a record and each column represents an attribute or field of a data row.
 
-> Tip (this tip can be hidden/displayed):
->
-> The rows and columns of internal tables here are logical concepts. StarRocks uses columnar storage for tables. Physically, the data in a column is segregated into data blocks, encoded, compressed, and then persistently stored on disk. 
+:::note
+
+The rows and columns of internal tables here are logical concepts. StarRocks uses columnar storage for tables. Physically, the data in a column is segregated into data blocks, encoded, compressed, and then persistently stored on disk. 
+
+:::
 
 StarRocks provides four types of internal tables, Primary Key tables, Duplicate Key tables, Aggregate tables, and Unique Key tables, to store various data, such as raw logs, realtime data, and aggregated data, to meet your varying business needs.
 
@@ -46,12 +48,10 @@ Materialized views are special physical tables that hold precomputed query resul
 
 Views, or logical views, are virtual tables that do not hold any data. Views only display data that is the results of queries against other existing physical tables. The query that defines a view is run every time the view is referenced in a query.
 
-## [Permission system](../administration/privilege_overview.md)
+## [Privileges](../administration/privilege_overview.md)
 
-Privileges determine which users can perform which operations on which objects. StarRocks adopts two types of permission models: identity-based access control and role-based access control. You can first assign privileges to roles, and then assign roles to users. In this case, privileges are passed to users through roles. Or, you can directly assign privileges to user identities.
+Privileges determine which users can perform which operations on which objects. StarRocks adopts two types of privilege models: identity-based access control and role-based access control. You can first assign privileges to roles, and then assign roles to users. In this case, privileges are passed to users through roles. Or, you can directly assign privileges to user identities.
 
 ## [Data storage in storage-compute separation architecture](../introduction/Architecture.md#storage-compute-separation)
 
 Since v3.0, StarRocks introduces the new storage-compute separation (shared-data) architecture. Data storage is separated from BEs. Data is persistently stored in remote object storage or HDFS, while local disks are used for caching hot data to accelerate queries. 
-
-The usage of cloud-native tables is compatible with that of internal tables in the storage-compute coupled architecture. A storage volume consists of the properties and credential information of the remote data storage, enabling access to data stored remotely.

@@ -86,7 +86,7 @@ PROPERTIES (
 
 ## 全面了解表结构
 
-本节详细介绍 StarRocks 表结构，帮助您深入了解表结构，根据场景设计高效的数据管理结构。。
+本节详细介绍 StarRocks 表结构，帮助您深入了解表结构，根据场景设计高效的数据管理结构。
 
 ### [表类型](./table_types/table_types.md)
 
@@ -128,7 +128,7 @@ StarRocks 提供两种分桶方式：
 
 StarRocks 内置一级索引，是根据组成排序键的列的前缀组成的前缀索引。也支持用户手动创建二级索引，以提高查询效率，包括 Bitmap 和 Bloom Filter 索引。
 
-### **约束**
+### 约束
 
 约束用于确保数据的完整性、一致性和准确性。主键表的 Primary Key 列具有唯一非空约束，聚合表的 Aggregate Key 列和更新表的 Unique Key 列具有唯一约束。 
 
