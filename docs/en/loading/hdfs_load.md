@@ -88,10 +88,10 @@ This is a continuation of the previous example. The previous query is wrapped in
 
 > **NOTE**
 >
-> The syntax of CREATE TABLE when using schema inference does not allow setting the number of replicas, so set it before creating the table. The example below is for a system with a single replica:
+> The syntax of CREATE TABLE when using schema inference does not allow setting the number of replicas, so set it before creating the table. The example below is for a system with three replicas:
 >
 > ```SQL
-> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "1");
+> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "3");
 > ```
 
 Create a database and switch to it:
@@ -199,11 +199,7 @@ CREATE TABLE user_behavior_declared
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 After creating the table, you can load it with INSERT INTO SELECT FROM FILES():
@@ -328,11 +324,7 @@ CREATE TABLE user_behavior
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 #### Start a Broker Load
@@ -471,11 +463,7 @@ CREATE TABLE user_behavior_replica
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 #### Start a Pipe job
