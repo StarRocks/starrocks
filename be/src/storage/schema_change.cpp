@@ -1016,11 +1016,6 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
                          << ". exit alter process";
             break;
         }
-        if (sc_params.rowsets_to_change[i]->rowset_meta()->has_delete_predicate()) {
-            (*new_rowset)
-                    ->mutable_delete_predicate()
-                    ->CopyFrom(sc_params.rowsets_to_change[i]->rowset_meta()->delete_predicate());
-        }
         status = sc_params.new_tablet->add_rowset(*new_rowset, false);
         if (status.is_already_exist()) {
             LOG(WARNING) << _alter_msg_header << "version already exist, version revert occurred. "
