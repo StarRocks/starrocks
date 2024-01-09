@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# Kafka connector
+# Releases of StarRocks Connector for Kafka
 
 ## Notifications
 
@@ -22,7 +22,7 @@ displayed_sidebar: "English"
 
 ### 1.0
 
-**1.0.0**
+#### 1.0.0
 
 Release date: June 25, 2023
 

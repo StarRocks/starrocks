@@ -44,20 +44,11 @@ import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AddColumnClause;
-import com.starrocks.sql.ast.AddColumnsClause;
-import com.starrocks.sql.ast.AlterClause;
-import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
-import com.starrocks.sql.ast.ModifyColumnClause;
-import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -231,28 +222,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                     "Failed to load iceberg table: " + stmt.getTbl().toString());
         }
 
-        List<AlterClause> alterClauses = stmt.getOps();
-        List<AlterClause> tableChanges = Lists.newArrayList();
-        List<AlterClause> schemaChanges = Lists.newArrayList();
-        for (AlterClause clause : alterClauses) {
-            if (clause instanceof AddColumnClause
-                    || clause instanceof AddColumnsClause
-                    || clause instanceof DropColumnClause
-                    || clause instanceof ColumnRenameClause
-                    || clause instanceof ModifyColumnClause) {
-                schemaChanges.add(clause);
-            } else if (clause instanceof ModifyTablePropertiesClause
-                    || clause instanceof TableRenameClause
-                    || clause instanceof AlterTableCommentClause
-            ) {
-                tableChanges.add(clause);
-            } else {
-                throw new StarRocksConnectorException(
-                        "Unsupported alter operation for iceberg connector: " + clause.toString());
-            }
-        }
-
-        commitAlterTable(table, schemaChanges, tableChanges);
+        IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(stmt, table);
+        executor.execute();
 
         synchronized (this) {
             try {
@@ -263,24 +234,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             }
             asyncRefreshOthersFeMetadataCache(dbName, tableName);
         }
-    }
-
-    private void commitAlterTable(org.apache.iceberg.Table table,
-                                  List<AlterClause> schemaChanges,
-                                  List<AlterClause> tableChanges) {
-        Transaction transaction = table.newTransaction();
-
-        // todo apply table changes like rename/set properties/modify comment
-        if (!tableChanges.isEmpty()) {
-            throw new StarRocksConnectorException(
-                    "Unsupported alter operation for iceberg connector");
-        }
-
-        if (!schemaChanges.isEmpty()) {
-            IcebergApiConverter.applySchemaChanges(transaction.updateSchema(), schemaChanges);
-        }
-
-        transaction.commitTransaction();
     }
 
     @Override

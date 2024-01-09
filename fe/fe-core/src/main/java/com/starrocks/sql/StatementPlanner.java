@@ -69,6 +69,8 @@ import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.RemoteTransactionMgr;
+import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 
 import java.util.ArrayList;
@@ -96,7 +98,8 @@ public class StatementPlanner {
         } else if (stmt instanceof DmlStmt) {
             try {
                 beginTransaction((DmlStmt) stmt, session);
-            } catch (BeginTransactionException | LabelAlreadyUsedException | DuplicatedRequestException | AnalysisException e) {
+            } catch (RunningTxnExceedException | LabelAlreadyUsedException | DuplicatedRequestException | AnalysisException |
+                     BeginTransactionException e) {
                 throw new SemanticException("fail to begin transaction. " + e.getMessage());
             }
         }
@@ -359,7 +362,8 @@ public class StatementPlanner {
     }
 
     private static void beginTransaction(DmlStmt stmt, ConnectContext session)
-            throws BeginTransactionException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
+            throws BeginTransactionException, RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException,
+            DuplicatedRequestException {
         // not need begin transaction here
         // 1. explain (exclude explain analyze)
         // 2. insert into files
@@ -414,10 +418,16 @@ public class StatementPlanner {
             authenticateParams.setHost(session.getRemoteIP());
             authenticateParams.setDb_name(tbl.getSourceTableDbName());
             authenticateParams.setTable_names(Lists.newArrayList(tbl.getSourceTableName()));
-            txnId = transactionMgr.beginRemoteTransaction(tbl.getSourceTableDbId(), Lists.newArrayList(tbl.getSourceTableId()),
-                    label, tbl.getSourceTableHost(), tbl.getSourceTablePort(),
-                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                    sourceType, session.getSessionVariable().getQueryTimeoutS(), authenticateParams);
+            txnId = RemoteTransactionMgr.beginTransaction(
+                    tbl.getSourceTableDbId(),
+                    Lists.newArrayList(tbl.getSourceTableId()),
+                    label,
+                    sourceType,
+                    session.getSessionVariable().getQueryTimeoutS(),
+                    tbl.getSourceTableHost(),
+                    tbl.getSourceTablePort(),
+                    authenticateParams);
+
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
                 || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
             // schema table and iceberg and hive table does not need txn
