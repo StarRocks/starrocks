@@ -86,10 +86,10 @@ LIMIT 3;
 
 > **说明**
 >
-> 使用表结构推断功能时，CREATE TABLE 语句不支持设置副本数，因此您需要在建表前把副本数设置好。例如，您可以通过如下命令设置副本数为 `1`：
+> 使用表结构推断功能时，CREATE TABLE 语句不支持设置副本数，因此您需要在建表前把副本数设置好。例如，您可以通过如下命令设置副本数为 `3`：
 >
 > ```SQL
-> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "1");
+> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "3");
 > ```
 
 通过如下语句创建数据库、并切换至该数据库：
@@ -197,11 +197,7 @@ CREATE TABLE user_behavior_declared
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 建表完成后，您可以通过 INSERT INTO SELECT FROM FILES() 向表内导入数据：
@@ -326,11 +322,7 @@ CREATE TABLE user_behavior
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 #### 提交导入作业
@@ -467,11 +459,7 @@ CREATE TABLE user_behavior_replica
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 #### 提交导入作业
