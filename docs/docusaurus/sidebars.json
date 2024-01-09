@@ -70,22 +70,22 @@
           "items": [
             {
               "type": "link",
-              "label": "StarRocks Flink Connector",
+              "label": "Flink Connector",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/ecosystem_release/flink_connector.md"
             },
             {
               "type": "link",
-              "label": "StarRocks Kafka Connector",
+              "label": "Kafka Connector",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/ecosystem_release/kafka_connector.md"
             },
             {
               "type": "link",
-              "label": "StarRocks Spark Connector",
+              "label": "Spark Connector",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/ecosystem_release/spark_connector.md"
             },
             {
               "type": "link",
-              "label": "starrocks-kubernetes-operator",
+              "label": "Kubernetes Operator",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/ecosystem_release/starrocks-kubernetes-operator.md"
             }
           ]
@@ -911,22 +911,22 @@
           "items": [
             {
               "type": "link",
-              "label": "StarRocks Flink Connector",
+              "label": "Flink Connector",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/ecosystem_release/flink_connector.md"
             },
             {
               "type": "link",
-              "label": "StarRocks Kafka Connector",
+              "label": "Kafka Connector",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/ecosystem_release/kafka_connector.md"
             },
             {
               "type": "link",
-              "label": "StarRocks Spark Connector",
+              "label": "Spark Connector",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/ecosystem_release/spark_connector.md"
             },
             {
               "type": "link",
-              "label": "starrocks-kubernetes-operator",
+              "label": "Kubernetes Operator",
               "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/ecosystem_release/starrocks-kubernetes-operator.md"
             }
           ]
