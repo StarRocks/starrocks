@@ -66,6 +66,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     public void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
             List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
+        txnState.clearAutomaticPartitionSnapshot();
         if (table.getState() == OlapTable.OlapTableState.RESTORE) {
             throw new TransactionCommitFailedException("Cannot write RESTORE state table \"" + table.getName() + "\"");
         }
@@ -189,6 +190,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         if (db == null) {
             return;
         }
+        txnState.clearAutomaticPartitionSnapshot();
 
         db.readLock();
         try {

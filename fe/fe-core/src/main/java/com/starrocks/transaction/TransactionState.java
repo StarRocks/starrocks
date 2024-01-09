@@ -55,7 +55,9 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.task.PublishVersionTask;
+import com.starrocks.thrift.TOlapTablePartition;
 import com.starrocks.thrift.TPartitionVersionInfo;
+import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
@@ -73,6 +75,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import javax.validation.constraints.NotNull;
@@ -302,6 +305,12 @@ public class TransactionState implements Writable {
     private Span txnSpan = null;
     private String traceParent = null;
     private Set<TabletCommitInfo> tabletCommitInfos = null;
+
+    // For a transaction, we need to ensure that different clients obtain consistent partition information,
+    // to avoid inconsistencies caused by replica migration and other operations during the transaction process.
+    // Therefore, a snapshot of this information is maintained here.
+    private ConcurrentMap<String, TOlapTablePartition> partitionNameToTPartition = Maps.newConcurrentMap();
+    private ConcurrentMap<Long, TTabletLocation> tabletIdToTTabletLocation = Maps.newConcurrentMap();
 
     public TransactionState() {
         this.dbId = -1;
@@ -1023,4 +1032,18 @@ public class TransactionState implements Writable {
     public String getTraceParent() {
         return traceParent;
     }
+
+    public ConcurrentMap<String, TOlapTablePartition> getPartitionNameToTPartition() {
+        return partitionNameToTPartition;
+    }
+
+    public ConcurrentMap<Long, TTabletLocation> getTabletIdToTTabletLocation() {
+        return tabletIdToTTabletLocation;
+    }
+
+    public void clearAutomaticPartitionSnapshot() {
+        partitionNameToTPartition.clear();
+        tabletIdToTTabletLocation.clear();
+    }
+
 }
