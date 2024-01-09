@@ -36,11 +36,11 @@ Phase 1: for the most common case, subfield expr only exists in one on the Colum
 public class SubfieldExprNoCopyRule implements TreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        SubFiledCopyVisitor visitor = new SubFiledCopyVisitor();
+        SubfiledCopyVisitor visitor = new SubfiledCopyVisitor();
         return visitor.visit(root, null);
     }
 
-    private static class SubFiledCopyVisitor extends OptExpressionVisitor<OptExpression, Void> {
+    private static class SubfiledCopyVisitor extends OptExpressionVisitor<OptExpression, Void> {
         @Override
         public OptExpression visit(OptExpression optExpression, Void context) {
             if (optExpression.getOp().getProjection() != null) {
