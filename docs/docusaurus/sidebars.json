@@ -1,8 +1,9 @@
- {
+{
   "English": [
     "introduction/StarRocks_intro",
     {
       "type": "category",
+<<<<<<< HEAD
       "label": "Release Notes",
       "link": { "type": "doc", "id": "cover_pages/release_notes_overview" },
       "items": [
@@ -94,6 +95,8 @@
     },
     {
       "type": "category",
+=======
+>>>>>>> c76d232277 ([Doc] move releasenotes to top nav (#38754))
       "label": "Introduction to StarRocks",
       "link": {"type": "doc", "id": "introduction/introduction"},
       "items": ["introduction/what_is_starrocks", "introduction/Architecture", "introduction/Features"]
@@ -845,6 +848,7 @@
     "introduction/StarRocks_intro",
     {
       "type": "category",
+<<<<<<< HEAD
       "label": "Release Notes",
       "link": { "type": "doc", "id": "cover_pages/release_notes_overview" },
       "items": [
@@ -936,6 +940,8 @@
     },
     {
       "type": "category",
+=======
+>>>>>>> c76d232277 ([Doc] move releasenotes to top nav (#38754))
       "label": "产品简介",
       "link": {"type": "doc", "id": "introduction/introduction"},
       "items": ["introduction/what_is_starrocks", "introduction/Architecture", "introduction/Features"]
