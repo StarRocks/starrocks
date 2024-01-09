@@ -61,6 +61,13 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     public void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
             List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
+<<<<<<< HEAD
+=======
+        txnState.clearAutomaticPartitionSnapshot();
+        if (!finishedTablets.isEmpty()) {
+            txnState.setTabletCommitInfos(finishedTablets);
+        }
+>>>>>>> c99d52304d ([BugFix] Fix automatic create partition return inconsistency result when tablet rebalance (#38598))
         if (table.getState() == OlapTable.OlapTableState.RESTORE) {
             throw new TransactionCommitFailedException("Cannot write RESTORE state table \"" + table.getName() + "\"");
         }
@@ -184,6 +191,11 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         if (db == null) {
             return;
         }
+<<<<<<< HEAD
+=======
+        txnState.clearAutomaticPartitionSnapshot();
+    }
+>>>>>>> c99d52304d ([BugFix] Fix automatic create partition return inconsistency result when tablet rebalance (#38598))
 
         db.readLock();
         try {
