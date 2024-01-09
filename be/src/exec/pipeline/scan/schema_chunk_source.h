@@ -39,9 +39,6 @@ public:
 
     void close(RuntimeState* state) override;
 
-protected:
-    Status _prepare_slot(RuntimeState* state);
-
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
