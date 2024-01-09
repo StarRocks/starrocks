@@ -41,7 +41,7 @@ struct Ngramstate {
 
         if (UNLIKELY(!driver_maps.contains(driver_id))) {
             std::vector<NgramHash> per_driver_map(map_size);
-            strings::memcpy_inlined(per_driver_map.data(), publicHashMap.get(), map_size * sizeof(NgramHash));
+            strings::memcpy_inlined(per_driver_map.data(), publicHashMap.data(), map_size * sizeof(NgramHash));
             driver_maps.lazy_emplace(driver_id, [&](auto build) { build(driver_id, std::move(per_driver_map)); });
         }
 
