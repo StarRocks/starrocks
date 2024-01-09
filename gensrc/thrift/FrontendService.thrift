@@ -364,9 +364,6 @@ struct TTableStatus {
     5: optional i64 last_check_time
     6: optional i64 create_time
     20: optional string ddl_sql
-
-    21: optional string id
-    22: optional string rows
 }
 
 struct TListTableStatusResult {
