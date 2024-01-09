@@ -156,9 +156,8 @@ void PipelineBuilderContext::maybe_interpolate_local_key_partition_exchange_for_
         const std::vector<ExprContext*>& partition_expr_ctxs, int32_t source_operator_dop, int32_t desired_sink_dop) {
     auto* source_operator =
             down_cast<SourceOperatorFactory*>(_fragment_context->pipelines().back()->source_operator_factory());
-    auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(
-            source_operator_dop * state->chunk_size() * localExchangeBufferChunks(),
-            config::local_exchange_buffer_mem_limit_per_driver);
+    auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(source_operator_dop,
+                                                              config::local_exchange_buffer_mem_limit_per_driver);
     auto local_shuffle_source =
             std::make_shared<LocalExchangeSourceOperatorFactory>(next_operator_id(), plan_node_id, mem_mgr);
     auto local_exchanger = std::make_shared<KeyPartitionExchanger>(mem_mgr, local_shuffle_source.get(),
