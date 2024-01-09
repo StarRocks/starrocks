@@ -99,7 +99,7 @@ StarRocks provides four types of tables which are Duplicate Key tables, Primary 
 
 StarRocks uses a partitioning+bucketing two-tier data distribution strategy, to evenly distribute data across BEs. A well-designed data distribution strategy can effectively reduce the amount of data scanned and maximize StarRocks' concurrent processing capabilities, thereby increasing query performance.
 
-![img](https://starrocks.feishu.cn/space/api/box/stream/download/asynccode/?code=ZjljZDBmYzBlYjdjMTM5YTc1YTJlMzM1MTY5NmVlNjVfaWI3RzVNYUtqaXYxeHo2RWtTRkVvZWdQVFUxQmtKaTRfVG9rZW46WmwwdmJZRjdDb0U3SmF4aGt6dWNEckZ5bmpoXzE3MDQ3ODQxMDQ6MTcwNDc4NzcwNF9WNA)
+![img](../assets/table_design/table_overview.png)
 
 #### Partitioning
 
@@ -132,4 +132,4 @@ Constraints help ensure data integrity, consistency, and accuracy. The primary k
 
 ### More features
 
-Apart from the above features, you can adopt more features based on your business requirements to design a more robust table structure. For example, using [Bitmap](../) and [HLL](../) columns to accelerate deduplication counting, specifying [generated columns](../) or [auto-increment columns](../) to speed up some queries, configuring flexible and automatic mechanism for [storage cooldown](../) to reduce maintainance costs, and configuring [Colocate Join](../) to speed up multi-table JOIN queries. For more details, see [CREATE TABLE](../)
+Apart from the above features, you can adopt more features based on your business requirements to design a more robust table structure. For example, using Bitmap and HLL columns to accelerate deduplication counting, specifying generated columns or auto-increment columns to speed up some queries, configuring flexible and automatic mechanism for storage cooldown to reduce maintainance costs, and configuring Colocate Join to speed up multi-table JOIN queries. For more details, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md).
