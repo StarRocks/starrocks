@@ -220,14 +220,9 @@ Status publish_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t
     }
 }
 
-<<<<<<< HEAD
 void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, const int64_t* txn_ids, const int32_t* txn_types,
                size_t txn_size) {
-=======
-void abort_txn(TabletManager* tablet_mgr, int64_t tablet_id, std::span<const int64_t> txn_ids,
-               std::span<const int32_t> txn_types) {
     TEST_SYNC_POINT("transactions::abort_txn:enter");
->>>>>>> c035777156 ([BugFix] Release pk state cache when txn is aborted (#38499))
     std::vector<std::string> files_to_delete;
     for (size_t i = 0; i < txn_size; ++i) {
         auto txn_id = txn_ids[i];
