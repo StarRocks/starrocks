@@ -151,8 +151,8 @@ DROP TEMPORARY PARTITION <partition_name>
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-    MODIFY PARTITION { <partition_name> | partition_name_list | (*) }
-        SET ("key" = "value", ...);
+MODIFY PARTITION { <partition_name> | ( <partition1_name> [, <partition2_name> ...] ) | (*) }
+SET ("key" = "value", ...);
 ```
 
 **Usages**
@@ -393,7 +393,7 @@ Bitmap index supports the following modifications:
 Syntax:
 
 ```sql
- ALTER TABLE [<db_name>.]<tbl_name>
+ALTER TABLE [<db_name>.]<tbl_name>
 ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
 ```
 
@@ -423,6 +423,46 @@ ALTER TABLE [<db_name>.]<tbl_name>
 SWAP WITH <tbl_name>;
 ```
 
+<<<<<<< HEAD
+=======
+### Manual compaction (from 3.1)
+
+StarRocks uses a compaction mechanism to merge different versions of loaded data. This feature can combine small files into large files, which effectively improves query performance.
+
+Before v3.1, compaction is performed in two ways:
+
+- Automatic compaction by system: Compaction is performed at the BE level in the background. Users cannot specify database or table for compaction.
+- Users can perform compaction by calling an HTTP interface.
+
+Starting from v3.1, StarRocks offers a SQL interface for users to manually perform compaction by running SQL commands. They can choose a specific table or partition for compaction. This provides more flexibility and control over the compaction process.
+
+Syntax:
+```SQL
+ALTER TABLE <tbl_name> [ BASE | COMULATIVE ] COMPACT [ <partition_name> | ( <partition1_name> [, <partition2_name> ...] ) ]
+```
+
+That is:
+
+```SQL
+-- Perform compaction on the entire table.
+ALTER TABLE <tbl_name> COMPACT
+
+-- Perform compaction on a single partition.
+ALTER TABLE <tbl_name> COMPACT <partition_name>
+
+-- Perform compaction on multiple partitions.
+ALTER TABLE <tbl_name> COMPACT (<partition1_name>[,<partition2_name>,...])
+
+-- Perform cumulative compaction.
+ALTER TABLE <tbl_name> CUMULATIVE COMPACT (<partition1_name>[,<partition2_name>,...])
+
+-- Perform base compaction.
+ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
+```
+
+The `be_compactions` table in the `information_schema` database records compaction results. You can run `SELECT * FROM information_schema.be_compactions;` to query data versions after compaction.
+
+>>>>>>> 23121a8289 ([Doc] optimize the syntax of ALTER TABLE MODIFY PARTITION. Update ALTER_TABLE.md (#37145))
 ## Examples
 
 ### Table
