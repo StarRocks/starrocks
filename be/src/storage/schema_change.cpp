@@ -910,6 +910,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
 
     // open tablet readers out of lock for open is heavy because of io
     for (auto& tablet_reader : readers) {
+        tablet_reader->set_delete_predicates_version(delete_predicates_version);
         RETURN_IF_ERROR(tablet_reader->open(read_params));
     }
 
@@ -1050,11 +1051,6 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
             LOG(WARNING) << _alter_msg_header << "failed to build rowset: " << new_rowset.status()
                          << ". exit alter process";
             break;
-        }
-        if (sc_params.rowsets_to_change[i]->rowset_meta()->has_delete_predicate()) {
-            (*new_rowset)
-                    ->mutable_delete_predicate()
-                    ->CopyFrom(sc_params.rowsets_to_change[i]->rowset_meta()->delete_predicate());
         }
         status = sc_params.new_tablet->add_rowset(*new_rowset, false);
         if (status.is_already_exist()) {
