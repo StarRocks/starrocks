@@ -16,8 +16,9 @@
 
 #include "column/column_hash.h"
 #include "exprs/string_functions.h"
+#include "gutil/strings/fastmem.h"
 namespace starrocks {
-static constexpr size_t max_string_size = 1 << 15;
+static constexpr size_t MAX_STRING_SIZE = 1 << 15;
 // uint16[2^16] can almost fit into L2
 static constexpr size_t map_size = 1 << 16;
 // we restrict needle's size smaller than 2^16, so even if every gram in needle is the same as each other
@@ -25,28 +26,27 @@ static constexpr size_t map_size = 1 << 16;
 using NgramHash = uint16;
 
 struct Ngramstate {
-    using DriverMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<NgramHash[]>, phmap::Hash<int32_t>,
+    using DriverMap = phmap::parallel_flat_hash_map<int32_t, std::vector<NgramHash>, phmap::Hash<int32_t>,
                                                     phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>,
                                                     NUM_LOCK_SHARD_LOG, std::mutex>;
-    std::unique_ptr<NgramHash[]> publicHashMap;
+    Ngramstate(size_t hash_map_len) : publicHashMap(hash_map_len, 0){};
+    // unmodified map, only used for driver to copy
+    std::vector<NgramHash> publicHashMap;
     DriverMap driver_maps; // hashMap for each pipeline_driver, to make it driver-local
 
     size_t needle_gram_count = 0;
 
-    NgramHash* get_or_create_driver_hashmap() {
+    std::vector<NgramHash>& get_or_create_driver_hashmap() {
         int32_t driver_id = CurrentThread::current().get_driver_id();
-        NgramHash* res = nullptr;
-        if (LIKELY(driver_maps.contains(driver_id))) {
-            res = driver_maps[driver_id].get();
-        } else {
-            auto per_driver_map = std::make_unique<NgramHash[]>(map_size);
-            std::memcpy(per_driver_map.get(), publicHashMap.get(), map_size * sizeof(NgramHash));
-            res = per_driver_map.get();
+
+        if (UNLIKELY(!driver_maps.contains(driver_id))) {
+            std::vector<NgramHash> per_driver_map(map_size);
+            strings::memcpy_inlined(per_driver_map.data(), publicHashMap.get(), map_size * sizeof(NgramHash));
             driver_maps.lazy_emplace(driver_id, [&](auto build) { build(driver_id, std::move(per_driver_map)); });
         }
 
-        DCHECK(!!res);
-        return res;
+        DCHECK(driver_maps.contains(driver_id));
+        return driver_maps[driver_id];
     }
 };
 
@@ -55,30 +55,30 @@ class NgramFunctionImpl {
 public:
     StatusOr<ColumnPtr> static ngram_search_impl(FunctionContext* context, const Columns& columns) {
         RETURN_IF_COLUMNS_ONLY_NULL(columns);
-        const ColumnPtr& haystack_ptr = columns[0];
+        const auto& haystack_column = columns[0];
 
-        const ColumnPtr& needle_ptr = columns[1];
+        const auto& needle_column = columns[1];
 
-        if (!needle_ptr->is_constant()) {
+        if (!needle_column->is_constant()) {
             return Status::NotSupported("ngram function's second parameter must be const");
         }
 
-        const Slice& needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_ptr);
-        if (needle.get_size() >= max_string_size) {
+        const Slice& needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
+        if (needle.get_size() >= MAX_STRING_SIZE) {
             return Status::NotSupported("ngram function's second parameter is larger than 2^15");
         }
 
         // needle is too small so we can not get even single Ngram, so they are not similar at all
         if (needle.get_size() < N) {
-            return ColumnHelper::create_const_column<TYPE_FLOAT>(0, haystack_ptr->size());
+            return ColumnHelper::create_const_column<TYPE_FLOAT>(0, haystack_column->size());
         }
 
         auto state = reinterpret_cast<Ngramstate*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
-        NgramHash* map = state->get_or_create_driver_hashmap();
-        if (haystack_ptr->is_constant()) {
-            return haystack_const_and_needle_const(haystack_ptr, map, context);
+        std::vector<NgramHash>& map = state->get_or_create_driver_hashmap();
+        if (haystack_column->is_constant()) {
+            return haystack_const_and_needle_const(haystack_column, map, context);
         } else {
-            return haystack_vector_and_needle_const(haystack_ptr, map, context);
+            return haystack_vector_and_needle_const(haystack_column, map, context);
         }
     }
 
@@ -92,69 +92,67 @@ public:
             return Status::OK();
         }
 
-        auto* state = new Ngramstate();
-        state->publicHashMap = std::make_unique<NgramHash[]>(map_size);
-        std::memset(state->publicHashMap.get(), 0, map_size * sizeof(NgramHash));
+        auto* state = new Ngramstate(map_size);
+
         context->set_function_state(scope, state);
 
         if (!context->is_notnull_constant_column(1)) {
             return Status::OK();
         }
 
-        auto const& needle_ptr = context->get_constant_column(1);
+        auto const& needle_column = context->get_constant_column(1);
 
-        const Slice& needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_ptr);
-        if (needle.get_size() >= max_string_size) {
+        const Slice& needle = ColumnHelper::get_const_value<TYPE_VARCHAR>(needle_column);
+        if (needle.get_size() >= MAX_STRING_SIZE) {
             return Status::OK();
         }
 
         // only calculate needle's hashmap once
-        state->needle_gram_count = calculateMapWithNeedle(state->publicHashMap.get(), needle);
+        state->needle_gram_count = calculateMapWithNeedle(state->publicHashMap, needle);
         return Status::OK();
     }
 
 private:
     // for every gram of needle, we calculate its' hash value and store its' frequency in map, and return the number of gram in needle
-    size_t static calculateMapWithNeedle(NgramHash* map, const Slice& needle) {
+    size_t static calculateMapWithNeedle(std::vector<NgramHash>& map, const Slice& needle) {
         size_t needle_length = needle.get_size();
         NgramHash cur_hash;
         size_t i;
         Slice cur_needle(needle.get_data(), needle_length);
-        const char* ptr;
+        const char* cur_char_ptr;
         std::string buf;
         if constexpr (case_insensitive) {
             tolower(needle, buf);
             cur_needle = Slice(buf.c_str(), buf.size());
         }
-        ptr = cur_needle.get_data();
+        cur_char_ptr = cur_needle.get_data();
 
         for (i = 0; i + N <= needle_length; i++) {
-            cur_hash = getAsciiHash(ptr + i);
+            cur_hash = getAsciiHash(cur_char_ptr + i);
             map[cur_hash]++;
         }
 
         return i;
     }
 
-    ColumnPtr static haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, NgramHash* map,
+    ColumnPtr static haystack_vector_and_needle_const(const ColumnPtr& haystack_column, std::vector<NgramHash>& map,
                                                       FunctionContext* context) {
-        std::unique_ptr<NgramHash[]> memo(new NgramHash[max_string_size]);
-        std::memset(memo.get(), 0, sizeof(NgramHash) * max_string_size);
+        std::vector<NgramHash> map_restore_helper(MAX_STRING_SIZE, 0);
 
         NullColumnPtr res_null = nullptr;
         BinaryColumn* haystack = nullptr;
         // used in case_insensitive
         StatusOr<ColumnPtr> lower;
-        if (haystack_ptr->is_nullable()) {
-            auto haystack_nullable = ColumnHelper::as_column<NullableColumn>(haystack_ptr);
+        if (haystack_column->is_nullable()) {
+            auto haystack_nullable = ColumnHelper::as_column<NullableColumn>(haystack_column);
             res_null = haystack_nullable->null_column();
             haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystack_nullable->data_column());
         } else {
-            haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystack_ptr);
+            haystack = ColumnHelper::as_raw_column<BinaryColumn>(haystack_column);
         }
         if constexpr (case_insensitive) {
             Columns temp;
-            temp.emplace_back(haystack_ptr);
+            temp.emplace_back(haystack_column);
             lower = StringFunctions::lower(nullptr, temp);
             haystack = ColumnHelper::as_raw_column<BinaryColumn>(lower.value());
         }
@@ -169,13 +167,13 @@ private:
         for (size_t i = 0; i < chunk_size; i++) {
             const Slice& cur_haystack_str = haystack->get_slice(i);
             // if haystack is too large, we can say they are not similar at all
-            if (cur_haystack_str.get_size() >= max_string_size) {
+            if (cur_haystack_str.get_size() >= MAX_STRING_SIZE) {
                 res->get_data()[i] = 0;
                 continue;
             }
 
             size_t needle_not_overlap_with_haystack =
-                    calculateDistanceWithHaystack<true>(map, cur_haystack_str, memo.get(), needle_gram_count);
+                    calculateDistanceWithHaystack<true>(map, cur_haystack_str, map_restore_helper, needle_gram_count);
             DCHECK(needle_not_overlap_with_haystack <= needle_gram_count);
 
             // now get the result
@@ -184,19 +182,20 @@ private:
             res->get_data()[i] = row_result;
         }
 
-        if (haystack_ptr->is_nullable()) {
+        if (haystack_column->is_nullable()) {
             return NullableColumn::create(res, res_null);
         } else {
             return res;
         }
     }
 
-    ColumnPtr static haystack_const_and_needle_const(const ColumnPtr& haystack_ptr, NgramHash* map,
+    ColumnPtr static haystack_const_and_needle_const(const ColumnPtr& haystack_column, std::vector<NgramHash>& map,
                                                      FunctionContext* context) {
-        const Slice& haystack = ColumnHelper::get_const_value<TYPE_VARCHAR>(haystack_ptr);
+        const Slice& haystack = ColumnHelper::get_const_value<TYPE_VARCHAR>(haystack_column);
+        std::vector<NgramHash> map_restore_helper{};
         // if haystack is too large, we can say they are not similar at all
-        if (haystack.get_size() >= max_string_size) {
-            return ColumnHelper::create_const_column<TYPE_FLOAT>(0, haystack_ptr->size());
+        if (haystack.get_size() >= MAX_STRING_SIZE) {
+            return ColumnHelper::create_const_column<TYPE_FLOAT>(0, haystack_column->size());
         }
 
         Slice cur_haystack(haystack.get_data(), haystack.get_size());
@@ -212,18 +211,19 @@ private:
         // needle_gram_count may be zero because needle is empty or N is too large for needle
         size_t needle_gram_count = state->needle_gram_count;
         size_t needle_not_overlap_with_haystack =
-                calculateDistanceWithHaystack<false>(map, cur_haystack, nullptr, needle_gram_count);
+                calculateDistanceWithHaystack<false>(map, cur_haystack, map_restore_helper, needle_gram_count);
         float result = 1.0f - (needle_not_overlap_with_haystack)*1.0f / std::max(needle_gram_count, (size_t)1);
         DCHECK(needle_not_overlap_with_haystack <= needle_gram_count);
-        return ColumnHelper::create_const_column<TYPE_FLOAT>(result, haystack_ptr->size());
+        return ColumnHelper::create_const_column<TYPE_FLOAT>(result, haystack_column->size());
     }
 
     // traverse haystack‘s every gram, find whether this gram is in needle or not using gram's hash
     // 16bit hash value may cause hash collision, but because we just calculate the similarity of two string
     // so don't need to be so accurate.
     template <bool need_recovery_map>
-    size_t static calculateDistanceWithHaystack(NgramHash* map, const Slice& haystack,
-                                                [[maybe_unused]] NgramHash* map_memo, size_t needle_gram_count) {
+    size_t static calculateDistanceWithHaystack(std::vector<NgramHash>& map, const Slice& haystack,
+                                                [[maybe_unused]] std::vector<NgramHash>& map_restore_helper,
+                                                size_t needle_gram_count) {
         size_t haystack_length = haystack.get_size();
         NgramHash cur_hash;
         size_t i;
@@ -236,17 +236,17 @@ private:
                 needle_gram_count--;
                 map[cur_hash]--;
                 if constexpr (need_recovery_map) {
-                    map_memo[i] = cur_hash;
+                    map_restore_helper[i] = cur_hash;
                 }
             }
         }
 
         if constexpr (need_recovery_map) {
             for (int j = 0; j < i; j++) {
-                if (map_memo[j]) {
-                    map[map_memo[j]]++;
-                    // reset map_memo
-                    map_memo[j] = 0;
+                if (map_restore_helper[j]) {
+                    map[map_restore_helper[j]]++;
+                    // reset map_restore_helper
+                    map_restore_helper[j] = 0;
                 }
             }
         }
