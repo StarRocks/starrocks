@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# Flink connector
+# Releases of StarRocks Connector for Flink
 
 ## Notifications
 
@@ -42,7 +42,7 @@ displayed_sidebar: "English"
 
 #### 1.2.9
 
-This release includes some features and bug fixes. The notable change is that the Flink connector is integrated with [Flink CDC 3.0](https://ververica.github.io/flink-cdc-connectors/master/content/overview/cdc-pipeline.html) to easily build a streaming ELT pipeline from CDC sources (such as MySQL and Kafka) to StarRocks. You can see [Flink CDC Synchronization](../loading/Flink-connector-starrocks.md#flink-cdc-synchronization-schema-change-supported) for details.
+This release includes some features and bug fixes. The notable change is that the Flink connector is integrated with [Flink CDC 3.0](https://ververica.github.io/flink-cdc-connectors/master/content/overview/cdc-pipeline.html) to easily build a streaming ELT pipeline from CDC sources (such as MySQL and Kafka) to StarRocks. You can see [Flink CDC Synchronization](../loading/Flink-connector-starrocks.md#flink-cdc-synchronization-with-schema-change-supported) for details.
 
 **Features**
 

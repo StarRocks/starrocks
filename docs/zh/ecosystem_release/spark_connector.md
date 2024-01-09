@@ -34,7 +34,7 @@ displayed_sidebar: "Chinese"
 
 ### 1.1
 
-**1.1.1**
+#### 1.1.1
 
 本版本发布主要包括如下新增特性和功能优化，涉及导入数据到 StarRocks。
 
@@ -73,7 +73,7 @@ displayed_sidebar: "Chinese"
 - 新增导入 ARRAY 类型数据的示例。[#75](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/75)
 - 新增示例说明如何实现主键模型表的部分更新和条件更新。[#80](https://github.com/StarRocks/starrocks-connector-for-apache-spark/pull/80)
 
-**1.1.0**
+#### 1.1.0
 
 **新增特性**
 
@@ -81,7 +81,7 @@ displayed_sidebar: "Chinese"
 
 ### 1.0
 
-**1.0.0**
+#### 1.0.0
 
 **新增特性**
 
