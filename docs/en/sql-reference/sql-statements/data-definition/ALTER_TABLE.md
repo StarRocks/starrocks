@@ -151,8 +151,8 @@ DROP TEMPORARY PARTITION <partition_name>
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-    MODIFY PARTITION { <partition_name> | partition_name_list | (*) }
-        SET ("key" = "value", ...);
+MODIFY PARTITION { <partition_name> | ( <partition1_name> [, <partition2_name> ...] ) | (*) }
+SET ("key" = "value", ...);
 ```
 
 **Usages**
@@ -393,7 +393,7 @@ Bitmap index supports the following modifications:
 Syntax:
 
 ```sql
- ALTER TABLE [<db_name>.]<tbl_name>
+ALTER TABLE [<db_name>.]<tbl_name>
 ADD INDEX index_name (column [, ...],) [USING BITMAP] [COMMENT 'balabala'];
 ```
 
