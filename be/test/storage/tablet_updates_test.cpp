@@ -2548,11 +2548,18 @@ TEST_F(TabletUpdatesTest, get_missing_version_ranges) {
 TEST_F(TabletUpdatesTest, column_with_row_update) {
     auto tablet = create_tablet_column_with_row(rand(), rand());
     std::vector<int64_t> keys;
-    int N = 100;
+    int N = 20;
     for (int i = 0; i < N; i++) {
         keys.push_back(i);
     }
-    ASSERT_TRUE(tablet->rowset_commit(1, create_rowset_column_with_row(tablet, keys)).ok());
+    auto old_enable_check_string_lengths = config::enable_check_string_lengths;
+    config::enable_check_string_lengths = true;
+    auto rs_err = create_rowset_column_with_row(tablet, keys, true);
+    ASSERT_FALSE(rs_err.ok());
+    config::enable_check_string_lengths = old_enable_check_string_lengths;
+    auto rs = create_rowset_column_with_row(tablet, keys, false);
+    ASSERT_TRUE(rs.ok());
+    ASSERT_TRUE(tablet->rowset_commit(1, rs.value()).ok());
 }
 
 void TabletUpdatesTest::test_get_rowsets_for_incremental_snapshot(const std::vector<int64_t>& versions,
