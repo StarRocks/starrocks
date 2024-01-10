@@ -393,7 +393,8 @@ public class GlobalTransactionMgr {
             @Nullable TxnCommitAttachment attachment, long timeoutMs) throws UserException {
         Locker locker = new Locker();
         if (!locker.tryLockDatabase(db, LockType.WRITE, timeoutMs)) {
-            throw new LockTimeoutException("get database write lock timeout, database=" + db.getFullName());
+            throw new LockTimeoutException(
+                    "get database write lock timeout, database=" + db.getFullName() + ", timeout=" + timeoutMs + "ms");
         }
         try {
             return commitTransaction(db.getId(), transactionId, tabletCommitInfos, tabletFailInfos, attachment);

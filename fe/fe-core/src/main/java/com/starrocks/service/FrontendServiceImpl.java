@@ -1769,7 +1769,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         Locker locker = new Locker();
         if (!locker.tryLockDatabase(db, LockType.READ, timeoutMs)) {
-            throw new LockTimeoutException("get database read lock timeout, database=" + dbName);
+            throw new LockTimeoutException(
+                    "get database read lock timeout, database=" + dbName + ", timeout=" + timeoutMs + "ms");
         }
         try {
             Table table = db.getTable(request.getTbl());
