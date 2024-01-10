@@ -6,7 +6,9 @@ displayed_sidebar: "English"
 
 ## Description
 
-Aggregates distinct values (including `NULL`) in an array column into an array (multiple rows to one row).
+Aggregates distinct values (including `NULL`) in an ARRAY column into an array (from multiple rows to one row).
+
+This function is supported from v3.2.
 
 ## Syntax
 
@@ -16,7 +18,7 @@ ARRAY_UNIQUE_AGG(col)
 
 ## Parameters
 
-- `col`: the column whose values you want to aggregate. Supported data types is ARRAY.
+- `col`: the column whose values you want to aggregate. Supported data type is ARRAY.
 
 ## Return value
 
@@ -26,14 +28,14 @@ Returns a value of the ARRAY type.
 
 - The order of the elements in an array is random.
 - The data type of the elements in the returned array is the same as the data type of the elements in the input column.
-- Returns `NULL` if the input is empty and without group-by columns.
+- Returns `NULL` if there is no matched value.
 
 ## Examples
 
 Take the following data table as an example:
 
 ```plaintext
-mysql> select * from array_unique_agg_example;
+mysql > select * from array_unique_agg_example;
 +------+--------------+
 | a    | b            |
 +------+--------------+
@@ -47,7 +49,7 @@ mysql> select * from array_unique_agg_example;
 Example 1: Group the values in column `a` and aggregate distinct values in column `b` into an array.
 
 ```plaintext
-mysql> select a, array_unique_agg(b) from array_unique_agg_example group by a;
+mysql > select a, array_unique_agg(b) from array_unique_agg_example group by a;
 +------+---------------------+
 | a    | array_unique_agg(b) |
 +------+---------------------+
@@ -59,7 +61,7 @@ mysql> select a, array_unique_agg(b) from array_unique_agg_example group by a;
 Example 2: Aggregate values in column `b` using the WHERE clause. If no data meets the filter condition, a `NULL` value is returned.
 
 ```plaintext
-mysql> select array_unique_agg(b) from array_unique_agg_example where a < 0;
+mysql > select array_unique_agg(b) from array_unique_agg_example where a < 0;
 +---------------------+
 | array_unique_agg(b) |
 +---------------------+
