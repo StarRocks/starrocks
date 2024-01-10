@@ -55,13 +55,13 @@ FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
 -- result:
 -- !result
 refresh materialized view test_iceberg_mv0_${uuid0};
-function: wait_async_materialized_view_finish("test_iceberg_mv0_${uuid0}", 2)
+function: wait_async_materialized_view_finish("test_iceberg_mv0_${uuid0}")
 -- result:
 None
 -- !result
-select count(*) > 1 from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv0_${uuid0}%";
+select count(*) from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv0_${uuid0}%";
 -- result:
-1
+4
 -- !result
 SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
 -- result:
@@ -83,13 +83,13 @@ FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
 -- result:
 -- !result
 refresh materialized view test_iceberg_mv1_${uuid0};
-function: wait_async_materialized_view_finish("test_iceberg_mv1_${uuid0}", 2)
+function: wait_async_materialized_view_finish("test_iceberg_mv1_${uuid0}")
 -- result:
 None
 -- !result
-select count(*) > 1 from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv1_${uuid0}%";
+select count(*) from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv1_${uuid0}%";
 -- result:
-1
+4
 -- !result
 SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
 -- result:
@@ -116,9 +116,9 @@ function: wait_async_materialized_view_finish("test_iceberg_mv2_${uuid0}")
 -- result:
 None
 -- !result
-select count(*) == 1 from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv2_${uuid0}%";
+select count(*) from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv2_${uuid0}%";
 -- result:
-E: (1064, "Getting syntax error at line 1, column 16. Detail message: Unexpected input '=', the most similar input is {<EOF>, ';'}.")
+1
 -- !result
 SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
 -- result:
@@ -130,6 +130,67 @@ SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_$
 drop materialized view test_iceberg_mv2_${uuid0};
 -- result:
 -- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
+-- !result
 drop database test_create_mv_with_params;
+-- result:
+-- !result
+-- name: test_create_olap_mv_with_params
+create database db_mv_with_params_${uuid0};
+-- result:
+-- !result
+use db_mv_with_params_${uuid0};
+-- result:
+-- !result
+create table test_tbl_with_params (
+ k1 INT,
+  k2 string,
+  v1 INT,
+  v2 INT
+) ENGINE=OLAP
+PARTITION BY RANGE(`k1`)
+(
+  PARTITION `p1` VALUES LESS THAN ('3'),
+  PARTITION `p2` VALUES LESS THAN ('6'),
+  PARTITION `p3` VALUES LESS THAN ('9')
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into test_tbl_with_params values (1,'a',1,1), (4,'aa',1,1), (8,'aa',1,1);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_tbl_with_params_mv 
+PARTITION BY k1
+REFRESH DEFERRED MANUAL 
+properties (
+    "partition_refresh_number" = "1"
+)
+AS SELECT * from test_tbl_with_params;
+-- result:
+-- !result
+refresh materialized view test_tbl_with_params_mv;
+function: wait_async_materialized_view_finish("test_tbl_with_params_mv")
+-- result:
+None
+-- !result
+select count(*) from information_schema.task_runs where `database`="db_mv_with_params_${uuid0}" and `DEFINITION` like "%test_tbl_with_params%";
+-- result:
+3
+-- !result
+select * from test_tbl_with_params_mv order by 1;
+-- result:
+1	a	1	1
+4	aa	1	1
+8	aa	1	1
+-- !result
+drop database db_mv_with_params_${uuid0};
 -- result:
 -- !result

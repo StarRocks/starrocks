@@ -179,9 +179,15 @@ true
   
 REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 WITH SYNC MODE;
 -- result:
-0910c516-a54e-11ee-a82f-5e4f71f202d3
+c45fa9dd-ab93-11ee-9b00-5e4f71f202d3
 -- !result
 select * from default_catalog.db_${uuid0}.test_mv1 order by 1, 2;
 -- result:
 2023-12-01	4000
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
+-- result:
+-- !result
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;
+-- result:
 -- !result

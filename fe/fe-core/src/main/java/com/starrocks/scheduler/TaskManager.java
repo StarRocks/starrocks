@@ -47,6 +47,7 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -60,6 +61,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -634,43 +636,54 @@ public class TaskManager {
      * PendingTaskRunMap > RunningTaskRunMap > TaskRunHistory
      * TODO: Maybe only return needed MVs rather than all MVs.
      */
-    public Map<String, TaskRunStatus> showMVLastRefreshTaskRunStatus(String dbName) {
-        Map<String, TaskRunStatus> mvNameRunStatusMap = Maps.newHashMap();
-        if (dbName == null) {
-            for (Queue<TaskRun> pTaskRunQueue : taskRunManager.getPendingTaskRunMap().values()) {
-                pTaskRunQueue.stream()
-                        .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
-                        .map(TaskRun::getStatus)
-                        .filter(Objects::nonNull)
-                        .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
-            }
-            taskRunManager.getTaskRunHistory().getAllHistory()
-                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
-            // use Map::put to make running task status overwrite the pending task
-            taskRunManager.getRunningTaskRunMap().values().stream()
+    public Map<String, List<TaskRunStatus>> listMVRefreshedTaskRunStatus(String dbName,
+                                                                         Set<String> taskNames) {
+        Map<String, List<TaskRunStatus>> mvNameRunStatusMap = Maps.newHashMap();
+        for (Queue<TaskRun> pTaskRunQueue : taskRunManager.getPendingTaskRunMap().values()) {
+            pTaskRunQueue.stream()
                     .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
                     .map(TaskRun::getStatus)
                     .filter(Objects::nonNull)
-                    .forEach(task -> mvNameRunStatusMap.put(task.getTaskName(), task));
-        } else {
-            for (Queue<TaskRun> pTaskRunQueue : taskRunManager.getPendingTaskRunMap().values()) {
-                pTaskRunQueue.stream()
-                        .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
-                        .map(TaskRun::getStatus)
-                        .filter(Objects::nonNull)
-                        .filter(u -> u.getDbName().equals(dbName))
-                        .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
-            }
-            taskRunManager.getTaskRunHistory().getAllHistory().stream()
-                    .filter(u -> u.getDbName().equals(dbName))
-                    .forEach(task -> mvNameRunStatusMap.putIfAbsent(task.getTaskName(), task));
-            taskRunManager.getRunningTaskRunMap().values().stream()
-                    .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
-                    .map(TaskRun::getStatus)
-                    .filter(u -> u != null && u.getDbName().equals(dbName))
-                    .forEach(task -> mvNameRunStatusMap.put(task.getTaskName(), task));
+                    .filter(u -> dbName == null || u.getDbName().equals(dbName))
+                    .filter(task -> taskNames == null || taskNames.contains(task.getTaskName()))
+                    .forEach(task -> mvNameRunStatusMap.computeIfAbsent(task.getTaskName(), x -> Lists.newArrayList()).add(task));
         }
+
+        // Add a batch of task runs with the same job id
+        taskRunManager.getTaskRunHistory().getAllHistory().stream()
+                .filter(u -> dbName == null || u.getDbName().equals(dbName))
+                .filter(task -> taskNames == null || taskNames.contains(task.getTaskName()))
+                .filter(task -> isSameTaskRunJob(task, mvNameRunStatusMap))
+                .forEach(task -> mvNameRunStatusMap
+                        .computeIfAbsent(task.getTaskName(), x -> Lists.newArrayList())
+                        .add(task));
+
+        taskRunManager.getRunningTaskRunMap().values().stream()
+                .filter(task -> task.getTask().getSource() == Constants.TaskSource.MV)
+                .map(TaskRun::getStatus)
+                .filter(u -> dbName == null || u != null && u.getDbName().equals(dbName))
+                .filter(task -> taskNames == null || taskNames.contains(task.getTaskName()))
+                .filter(task -> isSameTaskRunJob(task, mvNameRunStatusMap))
+                .forEach(task -> mvNameRunStatusMap.computeIfAbsent(task.getTaskName(), x -> Lists.newArrayList()).add(task));
         return mvNameRunStatusMap;
+    }
+
+    private boolean isSameTaskRunJob(TaskRunStatus taskRunStatus,
+                                     Map<String, List<TaskRunStatus>> mvNameRunStatusMap) {
+        // 1. if task status has already existed, existed task run status's job id is not null, find the same job id.
+        // 2. otherwise, add it to the result.
+        if (!mvNameRunStatusMap.containsKey(taskRunStatus.getTaskName())) {
+            return true;
+        }
+        List<TaskRunStatus> existedTaskRuns = mvNameRunStatusMap.get(taskRunStatus.getTaskName());
+        if (existedTaskRuns == null || existedTaskRuns.isEmpty()) {
+            return true;
+        }
+        if (!Config.enable_show_materialized_views_include_all_task_runs) {
+            return false;
+        }
+        String jobId = taskRunStatus.getStartTaskRunId();
+        return !Strings.isNullOrEmpty(jobId) && jobId.equals(existedTaskRuns.get(0).getStartTaskRunId());
     }
 
     public void replayCreateTaskRun(TaskRunStatus status) {
@@ -691,7 +704,14 @@ public class TaskManager {
                     LOG.warn("fail to obtain task name {} because task is null", taskName);
                     return;
                 }
-                TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+                ExecuteOption executeOption = new ExecuteOption();
+                executeOption.setReplay(true);
+                TaskRun taskRun = TaskRunBuilder
+                        .newBuilder(task)
+                        .setExecuteOption(executeOption)
+                        .build();
+
+                // TODO: To avoid the same query id collision, use a new query id instead of an old query id
                 taskRun.initStatus(status.getQueryId(), status.getCreateTime());
                 taskRunManager.arrangeTaskRun(taskRun);
                 break;
@@ -905,6 +925,10 @@ public class TaskManager {
         } finally {
             taskUnlock();
         }
+    }
+
+    public Task getTaskWithoutLock(String taskName) {
+        return nameToTaskMap.get(taskName);
     }
 
     public long getTaskCount() {

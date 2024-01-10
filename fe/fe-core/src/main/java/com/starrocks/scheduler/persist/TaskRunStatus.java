@@ -15,6 +15,7 @@
 
 package com.starrocks.scheduler.persist;
 
+import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
@@ -30,6 +31,11 @@ import java.util.Map;
 
 public class TaskRunStatus implements Writable {
 
+    // A refresh may contain a batch of task runs, startTaskRunId is to mark the unique id of the batch task run status.
+    // You can use the startTaskRunId to find the batch of task runs.
+    @SerializedName("startTaskRunId")
+    private String startTaskRunId;
+
     @SerializedName("queryId")
     private String queryId;
 
@@ -39,11 +45,20 @@ public class TaskRunStatus implements Writable {
     @SerializedName("taskName")
     private String taskName;
 
+    // task run submit/created time
     @SerializedName("createTime")
     private long createTime;
 
+    // task run success/fail time which this task run is finished
+    // NOTE: finishTime - createTime =
+    //          pending time in task queue  + process task time + other time
     @SerializedName("finishTime")
     private long finishTime;
+
+    // task run starts to process time
+    // NOTE: finishTime - processStartTime = process task run time(exclude pending time)
+    @SerializedName("processStartTime")
+    private long processStartTime;
 
     @SerializedName("state")
     private Constants.TaskRunState state = Constants.TaskRunState.PENDING;
@@ -54,6 +69,7 @@ public class TaskRunStatus implements Writable {
     @SerializedName("dbName")
     private String dbName;
 
+    @Deprecated
     @SerializedName("definition")
     private String definition;
 
@@ -89,6 +105,14 @@ public class TaskRunStatus implements Writable {
     private Map<String, String> properties;
 
     public TaskRunStatus() {
+    }
+
+    public String getStartTaskRunId() {
+        return startTaskRunId;
+    }
+
+    public void setStartTaskRunId(String startTaskRunId) {
+        this.startTaskRunId = startTaskRunId;
     }
 
     public String getQueryId() {
@@ -162,14 +186,6 @@ public class TaskRunStatus implements Writable {
 
     public void setUser(String user) {
         this.user = user;
-    }
-
-    public String getDefinition() {
-        return definition;
-    }
-
-    public void setDefinition(String definition) {
-        this.definition = definition;
     }
 
     public String getPostRun() {
@@ -256,6 +272,14 @@ public class TaskRunStatus implements Writable {
         }
     }
 
+    public long getProcessStartTime() {
+        return processStartTime;
+    }
+
+    public void setProcessStartTime(long processStartTime) {
+        this.processStartTime = processStartTime;
+    }
+
     public Map<String, String> getProperties() {
         return properties;
     }
@@ -269,6 +293,48 @@ public class TaskRunStatus implements Writable {
 
     public void setProperties(Map<String, String> properties) {
         this.properties = properties;
+    }
+
+    public Constants.TaskRunState getLastRefreshState() {
+        if (isRefreshFinished()) {
+            return Constants.TaskRunState.SUCCESS;
+        }
+
+        if (!state.equals(Constants.TaskRunState.FAILED)) {
+            return Constants.TaskRunState.RUNNING;
+        } else {
+            return state;
+        }
+    }
+
+    public boolean isRefreshFinished() {
+        if (state.equals(Constants.TaskRunState.FAILED)) {
+            return true;
+        }
+        if (!state.equals(Constants.TaskRunState.SUCCESS)) {
+            return false;
+        }
+        if (!Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionEnd()) ||
+                !Strings.isNullOrEmpty(mvTaskRunExtraMessage.getNextPartitionStart())) {
+            return false;
+        }
+        return true;
+    }
+
+    public long calculateRefreshProcessDuration() {
+        if (finishTime > processStartTime) {
+            return finishTime - processStartTime;
+        } else {
+            return 0L;
+        }
+    }
+
+    public long calculateRefreshDuration() {
+        if (finishTime > createTime) {
+            return finishTime - createTime;
+        } else {
+            return 0L;
+        }
     }
 
     public static TaskRunStatus read(DataInput in) throws IOException {
@@ -287,8 +353,10 @@ public class TaskRunStatus implements Writable {
         return "TaskRunStatus{" +
                 "queryId='" + queryId + '\'' +
                 ", taskName='" + taskName + '\'' +
+                ", startTaskRunId='" + startTaskRunId + '\'' +
                 ", createTime=" + createTime +
                 ", finishTime=" + finishTime +
+                ", processStartTime=" + processStartTime +
                 ", state=" + state +
                 ", progress=" + progress + "%" +
                 ", dbName='" + getDbName() + '\'' +
