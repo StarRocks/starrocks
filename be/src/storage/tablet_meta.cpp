@@ -357,10 +357,10 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
     }
 
     for (auto& rs : _rs_metas) {
-        rs->to_rowset_pb(tablet_meta_pb->add_rs_metas());
+        rs->get_full_meta_pb(tablet_meta_pb->add_rs_metas());
     }
     for (const auto& rs : _inc_rs_metas) {
-        rs->to_rowset_pb(tablet_meta_pb->add_inc_rs_metas());
+        rs->get_full_meta_pb(tablet_meta_pb->add_inc_rs_metas());
     }
     if (_schema != nullptr) {
         _schema->to_schema_pb(tablet_meta_pb->mutable_schema());
