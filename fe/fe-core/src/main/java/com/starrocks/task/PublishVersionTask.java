@@ -69,12 +69,14 @@ public class PublishVersionTask extends AgentTask {
     private Span span;
     private boolean enableSyncPublish;
     private TTxnType txnType;
+    private final long globalTransactionId;
 
-    public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,
+    public PublishVersionTask(long backendId, long transactionId, long globalTransactionId, long dbId, long commitTimestamp,
                               List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
                               long createTime, TransactionState state, boolean enableSyncPublish, TTxnType txnType) {
         super(null, backendId, TTaskType.PUBLISH_VERSION, dbId, -1L, -1L, -1L, -1L, transactionId, createTime, traceParent);
         this.transactionId = transactionId;
+        this.globalTransactionId = globalTransactionId;
         this.partitionVersionInfos = partitionVersionInfos;
         this.errorTablets = new ArrayList<>();
         this.isFinished = false;
@@ -98,11 +100,16 @@ public class PublishVersionTask extends AgentTask {
         publishVersionRequest.setTxn_trace_parent(traceParent);
         publishVersionRequest.setEnable_sync_publish(enableSyncPublish);
         publishVersionRequest.setTxn_type(txnType);
+        publishVersionRequest.setGtid(globalTransactionId);
         return publishVersionRequest;
     }
 
     public long getTransactionId() {
         return transactionId;
+    }
+
+    public long getGlobalTransactionId() {
+        return globalTransactionId;
     }
 
     public TransactionState getTxnState() {

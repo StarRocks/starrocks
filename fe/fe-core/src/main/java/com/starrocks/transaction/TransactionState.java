@@ -248,6 +248,8 @@ public class TransactionState implements Writable {
     private long finishTime;
     @SerializedName("rs")
     private String reason = "";
+    @SerializedName("gtid")
+    private long globalTransactionId;
 
     // whether this txn is finished using new mechanism
     // this field needs to be persisted, so we shared the serialization field with `reason`.
@@ -472,6 +474,10 @@ public class TransactionState implements Writable {
         return transactionId;
     }
 
+    public long getGlobalTransactionId() {
+        return globalTransactionId;
+    }
+
     public String getLabel() {
         return this.label;
     }
@@ -633,6 +639,10 @@ public class TransactionState implements Writable {
 
     public boolean waitTransactionVisible(long timeout, @NotNull TimeUnit unit) throws InterruptedException {
         return this.latch.await(timeout, unit);
+    }
+
+    public void setGlobalTransactionId(long globalTransactionId) {
+        this.globalTransactionId = globalTransactionId;
     }
 
     public void setPrepareTime(long prepareTime) {
@@ -856,6 +866,7 @@ public class TransactionState implements Writable {
         for (long backendId : publishBackends) {
             PublishVersionTask task = new PublishVersionTask(backendId,
                     this.getTransactionId(),
+                    this.getGlobalTransactionId(),
                     this.getDbId(),
                     commitTime,
                     partitionVersions,

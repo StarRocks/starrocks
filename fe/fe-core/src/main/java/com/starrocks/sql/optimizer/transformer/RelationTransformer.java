@@ -533,6 +533,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
                         .setColumnMetaToColRefMap(columnMetaToColRefMap)
                         .setDistributionSpec(distributionSpec)
                         .setSelectedIndexId(((OlapTable) node.getTable()).getBaseIndexId())
+                        .setGtid(node.getGtid())
                         .setPartitionNames(node.getPartitionNames())
                         .setSelectedTabletId(Lists.newArrayList())
                         .setHintsTabletIds(node.getTabletIds())

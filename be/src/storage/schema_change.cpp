@@ -856,6 +856,9 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
 
         for (auto& version : versions_to_be_changed) {
             rowsets_to_change.push_back(base_tablet->get_rowset_by_version(version));
+            if (rowsets_to_change.back()->rowset_meta()->gtid() > sc_params.gtid) {
+                sc_params.gtid = rowsets_to_change.back()->rowset_meta()->gtid();
+            }
             if (rowsets_to_change.back() == nullptr) {
                 std::vector<Version> base_tablet_versions;
                 base_tablet->list_versions(&base_tablet_versions);
