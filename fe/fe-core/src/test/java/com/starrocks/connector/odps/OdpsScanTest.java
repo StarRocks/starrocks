@@ -56,7 +56,7 @@ public class OdpsScanTest extends MockedBase {
     static ColumnRefOperator intColumnOperator = new ColumnRefOperator(1, Type.INT, "id", true);
     static ColumnRefOperator strColumnOperator = new ColumnRefOperator(2, Type.STRING, "name", true);
 
-    static Map<ColumnRefOperator, Column> scanColumnMap = new HashMap<>() {
+    static Map<ColumnRefOperator, Column> scanColumnMap = new HashMap<ColumnRefOperator, Column>() {
         {
             put(intColumnOperator, new Column("id", Type.INT));
             put(strColumnOperator, new Column("name", Type.STRING));

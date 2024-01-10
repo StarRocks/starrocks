@@ -124,7 +124,7 @@ public class EntityConvertUtilsTest {
     public void testConvertTypeCaseStringAndJson() {
         TypeInfo typeInfo = TypeInfoFactory.STRING;
         Type result = EntityConvertUtils.convertType(typeInfo);
-        Type expectedType = ScalarType.createDefaultCatalogString();
+        Type expectedType = ScalarType.createDefaultExternalTableString();
         assertEquals(expectedType, result);
     }
 
@@ -162,7 +162,7 @@ public class EntityConvertUtilsTest {
         TypeInfo valueTypeInfo = TypeInfoFactory.INT;
         MapTypeInfo mapTypeInfo = TypeInfoFactory.getMapTypeInfo(keyTypeInfo, valueTypeInfo);
         Type result = EntityConvertUtils.convertType(mapTypeInfo);
-        Type expectedType = new MapType(ScalarType.createDefaultCatalogString(), Type.INT);
+        Type expectedType = new MapType(ScalarType.createDefaultExternalTableString(), Type.INT);
         assertEquals(expectedType, result);
     }
 
@@ -183,7 +183,7 @@ public class EntityConvertUtilsTest {
                 TypeInfoFactory.getStructTypeInfo(ImmutableList.of("fieldTypeInfo1", "fieldTypeInfo2"),
                         ImmutableList.of(fieldTypeInfo1, fieldTypeInfo2));
         Type result = EntityConvertUtils.convertType(structTypeInfo);
-        Type expectedType1 = ScalarType.createDefaultCatalogString();
+        Type expectedType1 = ScalarType.createDefaultExternalTableString();
         Type expectedType2 = Type.INT;
         Type expectedType = new StructType(ImmutableList.of(expectedType1, expectedType2));
         assertEquals(expectedType, result);

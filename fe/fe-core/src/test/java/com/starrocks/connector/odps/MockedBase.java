@@ -26,6 +26,7 @@ import com.aliyun.odps.TableSchema;
 import com.aliyun.odps.Tables;
 import com.aliyun.odps.account.Account;
 import com.aliyun.odps.account.AliyunAccount;
+import com.aliyun.odps.security.SecurityManager;
 import com.aliyun.odps.table.read.TableBatchReadSession;
 import com.aliyun.odps.table.read.TableReadSessionBuilder;
 import com.aliyun.odps.table.read.impl.batch.TableBatchReadSessionImpl;
