@@ -175,7 +175,7 @@ public class CTASAnalyzer {
             String currentGranularity = null;
             RangePartitionDesc rangePartitionDesc = expressionPartitionDesc.getRangePartitionDesc();
             if (!rangePartitionDesc.getSingleRangePartitionDescs().isEmpty()) {
-                throw new ParsingException("Expression partition table creation only supports " +
+                throw new ParsingException("Automatic partition table creation only supports " +
                         "batch create partition syntax", rangePartitionDesc.getPos());
             }
             List<MultiRangePartitionDesc> multiRangePartitionDescs = rangePartitionDesc.getMultiRangePartitionDescs();
@@ -184,7 +184,7 @@ public class CTASAnalyzer {
                 if (currentGranularity == null) {
                     currentGranularity = descGranularity;
                 } else if (!currentGranularity.equals(descGranularity)) {
-                    throw new ParsingException("The partition granularity of expression partition table " +
+                    throw new ParsingException("The partition granularity of automatic partition table " +
                             "batch creation in advance should be consistent", rangePartitionDesc.getPos());
                 }
             }
