@@ -14,6 +14,8 @@
 
 package com.starrocks.storagevolume;
 
+import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
@@ -34,7 +36,6 @@ import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import org.apache.parquet.Strings;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -189,10 +190,10 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         Map<String, String> p = new HashMap<>(params);
         addMaskForCredential(p);
         result.addRow(Lists.newArrayList(name,
-                String.valueOf(svt.name()),
+                svt.name(),
                 String.valueOf(GlobalStateMgr.getCurrentState().getStorageVolumeMgr()
                         .getDefaultStorageVolumeId().equals(id)),
-                String.valueOf(Strings.join(locations, ", ")),
+                Joiner.on(", ").join(locations),
                 String.valueOf(gson.toJson(p)),
                 String.valueOf(enabled),
                 String.valueOf(comment)));
