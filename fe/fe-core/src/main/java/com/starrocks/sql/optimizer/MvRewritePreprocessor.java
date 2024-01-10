@@ -61,6 +61,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -321,7 +322,11 @@ public class MvRewritePreprocessor {
             if (!partitionNamesToRefresh.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
                 for (BaseTableInfo base : mv.getBaseTableInfos()) {
-                    String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
+                    Optional<Table> baseTable = base.mayGetTable();
+                    if (!baseTable.isPresent() || baseTable.get().isView()) {
+                        continue;
+                    }
+                    String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(baseTable.get()));
                     sb.append(String.format("base table %s version: %s; ", base, versionInfo));
                 }
                 logMVPrepare(connectContext, mv, "MV {} is outdated, stale partitions {}, detailed version info: {}",
@@ -334,7 +339,11 @@ public class MvRewritePreprocessor {
 
             StringBuilder sb = new StringBuilder();
             for (BaseTableInfo base : mv.getBaseTableInfos()) {
-                String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
+                Optional<Table> baseTable = base.mayGetTable();
+                if (!baseTable.isPresent()) {
+                    continue;
+                }
+                String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(baseTable.get()));
                 sb.append(String.format("base table %s version: %s; ", base, versionInfo));
             }
             logMVPrepare(connectContext, mv, "MV {} is outdated and all its partitions need to be " +

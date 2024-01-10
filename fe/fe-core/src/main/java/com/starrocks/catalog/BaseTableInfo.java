@@ -19,9 +19,12 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.Optional;
 
 import static com.starrocks.server.CatalogMgr.isInternalCatalog;
 
@@ -120,6 +123,29 @@ public class BaseTableInfo {
         return this.tableId;
     }
 
+    /**
+     * A checked version of getTable, which enforce checking existence of table
+     *
+     * @return the table if exists
+     */
+    public Optional<Table> mayGetTable() {
+        return Optional.ofNullable(getTable());
+    }
+
+    /**
+     * A checked version of getTable, which enforce checking the existence of table
+     *
+     * @return the table if exists
+     */
+    public Table getTableChecked() {
+        Table table = getTable();
+        if (table != null) {
+            return table;
+        }
+        throw MaterializedViewExceptions.reportBaseTableNotExists(this);
+    }
+
+    @Deprecated
     public Table getTable() {
         if (isInternalCatalog(catalogName)) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
