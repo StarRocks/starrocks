@@ -24,6 +24,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <fast_float/fast_float.h>
 #include <limits>
 #include <string>
 #include <type_traits>
@@ -111,12 +112,7 @@ public:
     template <typename T>
     static inline T string_to_float(const char* s, int len, ParseResult* result) {
         T ans = string_to_float_internal<T>(s, len, result);
-        if (LIKELY(*result == PARSE_SUCCESS)) {
-            return ans;
-        }
-
-        int i = skip_leading_whitespace(s, len);
-        return string_to_float_internal<T>(s + i, len - i, result);
+        return ans;
     }
 
     // Parses a string for 'true' or 'false', case insensitive.
@@ -188,13 +184,6 @@ private:
     template <typename T>
     static inline T string_to_int_no_overflow(const char* s, int len, ParseResult* result);
 
-    // This is considerably faster than glibc's implementation (>100x why???)
-    // No special case handling needs to be done for overflows, the floating point spec
-    // already does it and will cap the values to -inf/inf
-    // To avoid inaccurate conversions this function falls back to strtod for
-    // scientific notation.
-    // Return PARSE_FAILURE on leading whitespace. Trailing whitespace is allowed.
-    // TODO: Investigate using intrinsics to speed up the slow strtod path.
     template <typename T>
     static inline T string_to_float_internal(const char* s, int len, ParseResult* result);
 
@@ -429,66 +418,61 @@ inline T StringParser::string_to_float_internal(const char* s, int len, ParseRes
         *result = PARSE_FAILURE;
         return 0;
     }
-
-    // Use double here to not lose precision while accumulating the result
-    double val = 0;
-    bool negative = false;
     int i = 0;
-    double divide = 1;
-    bool decimal = false;
-    int64_t remainder = 0;
-    // The number of 'significant figures' we've encountered so far (i.e., digits excluding
-    // leading 0s). This technically shouldn't count trailing 0s either, but for us it
-    // doesn't matter if we count them based on the implementation below.
-    int sig_figs = 0;
-
-    switch (*s) {
-    case '-':
-        negative = true;
-    case '+':
-        i = 1;
+    // skip leading spaces
+    for (; i < len; ++i) {
+        if (!is_whitespace(s[i])) {
+            break;
+        }
     }
 
-    int first = i;
-    for (; i < len; ++i) {
-        if (LIKELY(s[i] >= '0' && s[i] <= '9')) {
-            if (s[i] != '0' || sig_figs > 0) {
-                ++sig_figs;
-            }
-            if (decimal) {
-                // According to the IEEE floating-point spec, a double has up to 15-17
-                // significant decimal digits (see
-                // http://en.wikipedia.org/wiki/Double-precision_floating-point_format). We stop
-                // processing digits after we've already seen at least 18 sig figs to avoid
-                // overflowing 'remainder' (we stop after 18 instead of 17 to get the rounding
-                // right).
-                if (sig_figs <= 18) {
-                    remainder = remainder * 10 + s[i] - '0';
-                    divide *= 10;
-                }
-            } else {
-                val = val * 10 + s[i] - '0';
-            }
-        } else if (s[i] == '.') {
-            decimal = true;
-        } else if (s[i] == 'e' || s[i] == 'E') {
+    // skip back spaces
+    int j = len - 1;
+    for (; j >= i; j--) {
+        if (!is_whitespace(s[j])) {
             break;
-        } else if (s[i] == 'i' || s[i] == 'I') {
-            if (len > i + 2 && (s[i + 1] == 'n' || s[i + 1] == 'N') &&
-                (s[i + 2] == 'f' || s[i + 2] == 'F')) {
+        }
+    }
+
+     if (i > j) {
+        *result = PARSE_FAILURE;
+        return 0;
+    }
+
+    bool negative = false;
+    // skip leading +/-
+    switch (s[i]) {
+        case '-':
+            negative = true;
+            i = i + 1;
+            break;
+        case '+':
+            i = i + 1;
+    }
+
+    if (i > j) {
+        *result = PARSE_FAILURE;
+        return 0;
+    }
+
+    // check int/-inf and nan
+    for (int k = i; k <= j; ++k) {
+        if (s[k] == 'i' || s[k] == 'I') {
+            if (len > k + 2 && (s[k + 1] == 'n' || s[k + 1] == 'N') &&
+                (s[k + 2] == 'f' || s[k + 2] == 'F')) {
                 // Note: Hive writes inf as Infinity, at least for text. We'll be a little loose
                 // here and interpret any column with inf as a prefix as infinity rather than
                 // checking every remaining byte.
                 *result = PARSE_SUCCESS;
                 return negative ? -INFINITY : INFINITY;
             } else {
-                // Starts with 'i', but isn't inf...
+                // Starts with 'i   ', but isn't inf...
                 *result = PARSE_FAILURE;
                 return 0;
             }
-        } else if (s[i] == 'n' || s[i] == 'N') {
-            if (len > i + 2 && (s[i + 1] == 'a' || s[i + 1] == 'A') &&
-                (s[i + 2] == 'n' || s[i + 2] == 'N')) {
+        } else if (s[k] == 'n' || s[k] == 'N') {
+            if (len > k + 2 && (s[k + 1] == 'a' || s[k + 1] == 'A') &&
+                (s[k + 2] == 'n' || s[k + 2] == 'N')) {
                 *result = PARSE_SUCCESS;
                 return negative ? -NAN : NAN;
             } else {
@@ -496,47 +480,48 @@ inline T StringParser::string_to_float_internal(const char* s, int len, ParseRes
                 *result = PARSE_FAILURE;
                 return 0;
             }
-        } else {
-            if ((UNLIKELY(i == first || !is_all_whitespace(s + i, len - i)))) {
-                // Reject the string because either the first char was not a digit, "," or "e",
-                // or the remaining chars are not all whitespace
+        }
+    }
+
+    // check invalid char
+    bool exponential = false;
+    for (int k = i; k <= j; ++k) {
+        if ((s[k] >= '0' && s[k] <= '9') || s[k] == '.') {
+            continue;
+        } else if (s[k] == 'e' || s[k] == 'E') {
+            if (LIKELY(!exponential)) {
+                exponential = true;
+            } else {
                 *result = PARSE_FAILURE;
                 return 0;
             }
-            // skip trailing whitespace.
-            break;
-        }
-    }
-
-    val += remainder / divide;
-
-    if (i < len && (s[i] == 'e' || s[i] == 'E')) {
-        // Create a C-string from s starting after the optional '-' sign and fall back to
-        // strtod to avoid conversion inaccuracy for scientific notation.
-        // Do not use boost::lexical_cast because it causes codegen to crash for an
-        // unknown reason (exception handling?).
-        char c_str[len - negative + 1];
-        memcpy(c_str, s + negative, len - negative);
-        c_str[len - negative] = '\0';
-        char* s_end;
-        val = strtod(c_str, &s_end);
-        if (s_end != c_str + len - negative) {
-            // skip trailing whitespace
-            int trailing_len = len - negative - (int)(s_end - c_str);
-            if (UNLIKELY(!is_all_whitespace(s_end, trailing_len))) {
+        } else if (s[k] == '-' || s[k] == '+') {
+            if (LIKELY(k > i && (s[k-1] == 'e' || s[k-1] == 'E'))) {
+                continue;
+            } else {
                 *result = PARSE_FAILURE;
-                return val;
+                return 0;
             }
+        } else {
+            *result = PARSE_FAILURE;
+            return 0;
         }
     }
 
-    // Determine if it is an overflow case and update the result
-    if (UNLIKELY(val == std::numeric_limits<T>::infinity())) {
-        *result = PARSE_OVERFLOW;
-    } else {
-        *result = PARSE_SUCCESS;
+    double val;
+    auto res = fast_float::from_chars(s + i, s + j + 1, val);
+
+    if (LIKELY(res.ec == std::errc())) {
+        if (UNLIKELY(val == std::numeric_limits<T>::infinity())) {
+            *result = PARSE_OVERFLOW;
+        } else {
+            *result = PARSE_SUCCESS;
+        }
+        return negative ? (T)-val: (T)val;
     }
-    return (T)(negative ? -val : val);
+
+    *result = PARSE_FAILURE;
+    return 0;
 }
 
 inline bool StringParser::string_to_bool_internal(const char* s, int len, ParseResult* result) {
