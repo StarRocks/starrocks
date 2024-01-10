@@ -1183,9 +1183,9 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
     }
     EditVersion latest_applied_version;
     st = get_latest_applied_version(&latest_applied_version);
-    InsertDuplicatePolicy index_type = InsertDuplicatePolicy::UPSERT;
+    bool is_insert_ignore_policy = false;
     if (rowset->rowset_meta()->get_meta_pb().is_ignore()) {
-        index_type = InsertDuplicatePolicy::IGNORE;
+        is_insert_ignore_policy = true;
     }
 
     int64_t full_row_size = 0;
@@ -1214,7 +1214,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                     return;
                 }
                 st = _do_update(rowset_id, i, conditional_column, latest_applied_version.major_number(), upserts, index,
-                                tablet_id, &new_deletes, apply_tschema, index_type);
+                                tablet_id, &new_deletes, apply_tschema, is_insert_ignore_policy);
                 if (!st.ok()) {
                     std::string msg =
                             strings::Substitute("_apply_rowset_commit error: apply rowset update state failed: $0 $1",
@@ -1294,7 +1294,7 @@ void TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version_i
                         return;
                     }
                     st = _do_update(rowset_id, loaded_upsert, conditional_column, latest_applied_version.major_number(),
-                                    upserts, index, tablet_id, &new_deletes, apply_tschema, index_type);
+                                    upserts, index, tablet_id, &new_deletes, apply_tschema, is_insert_ignore_policy);
                     if (!st.ok()) {
                         std::string msg = strings::Substitute(
                                 "_apply_rowset_commit error: apply rowset update state failed: $0 $1", st.to_string(),
@@ -1611,7 +1611,7 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
 Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
                                  const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
                                  DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema,
-                                 const InsertDuplicatePolicy& index_type) {
+                                 bool is_insert_ignore_policy) {
     if (condition_column >= 0) {
         auto tablet_column = tablet_schema->column(condition_column);
         std::vector<uint32_t> read_column_ids;
@@ -1656,7 +1656,7 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
                     int r = old_column->compare_at(j, j, *new_columns[0].get(), -1);
                     if (r > 0) {
                         RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
-                                                     idx_begin + upsert_idx_step, new_deletes, index_type));
+                                                     idx_begin + upsert_idx_step, new_deletes, is_insert_ignore_policy));
 
                         idx_begin = j + 1;
                         upsert_idx_step = 0;
@@ -1671,16 +1671,16 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
 
             if (idx_begin < old_column->size()) {
                 RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], idx_begin,
-                                             idx_begin + upsert_idx_step, new_deletes, index_type));
+                                             idx_begin + upsert_idx_step, new_deletes, is_insert_ignore_policy));
             }
         } else {
-            RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, nullptr, index_type));
+            RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, nullptr, is_insert_ignore_policy));
         }
     } else {
         std::unique_ptr<IOStat> iostat = std::make_unique<IOStat>();
         MonotonicStopWatch watch;
         watch.start();
-        RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, iostat.get(), index_type));
+        RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, 0, *upserts[upsert_idx], new_deletes, iostat.get(), is_insert_ignore_policy));
         LOG(INFO) << "primary index upsert tid: " << tablet_id << ", cost: " << watch.elapsed_time() << ", "
                   << iostat->print_str();
     }

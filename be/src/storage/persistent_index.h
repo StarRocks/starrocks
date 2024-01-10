@@ -163,7 +163,7 @@ public:
     // |num_found|: add the number of keys found to this argument
     // |idxes|: the target indexes of keys
     virtual Status upsert(const Slice* keys, const IndexValue* values, IndexValue* old_values, KeysInfo* not_found,
-                          size_t* num_found, const std::vector<size_t>& idxes, const InsertDuplicatePolicy& type) = 0;
+                          size_t* num_found, const std::vector<size_t>& idxes, const bool is_insert_ignore_policy) = 0;
 
     // batch upsert
     // |keys|: key array as raw buffer
@@ -172,7 +172,7 @@ public:
     // |num_found|: add the number of keys found(or already exist) to this argument
     // |idxes|: the target indexes of keys
     virtual Status upsert(const Slice* keys, const IndexValue* values, KeysInfo* not_found, size_t* num_found,
-                          const std::vector<size_t>& idxes, const InsertDuplicatePolicy& type) = 0;
+                          const std::vector<size_t>& idxes, const bool is_insert_ignore_policy) = 0;
 
     // batch insert
     // |keys|: key array as raw buffer
@@ -288,7 +288,7 @@ public:
     // |num_found|: add the number of keys found to this argument
     // |not_found_keys_info_by_key_size|: a map maintain the key size as key, and keys infos there're not found as value
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values, size_t* num_found,
-                  std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size, const InsertDuplicatePolicy& type);
+                  std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size, const bool is_insert_ignore_policy);
 
     // batch upsert
     // |n|: size of key/value array
@@ -297,7 +297,7 @@ public:
     // |num_found|: add the number of keys found(or already exist) to this argument
     // |not_found_keys_info_by_key_size|: a map maintain the key size as key, and keys infos there're not found as value
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, size_t* num_found,
-                  std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size, const InsertDuplicatePolicy& type);
+                  std::map<size_t, KeysInfo>& not_found_keys_info_by_key_size, const bool is_insert_ignore_policy);
 
     // batch insert
     // |n|: size of key/value array
@@ -681,7 +681,7 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
     virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                          IOStat* stat = nullptr, const InsertDuplicatePolicy& type = InsertDuplicatePolicy::UPSERT);
+                          IOStat* stat = nullptr, const bool is_insert_ignore_policy = false);
 
     // batch insert, return error if key already exists
     // |n|: size of key/value array

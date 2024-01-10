@@ -139,7 +139,7 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index) {
     KeysInfo upsert_not_found;
     size_t upsert_num_found = 0;
     ASSERT_TRUE(idx->upsert(upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(), &upsert_not_found,
-                            &upsert_num_found, idxes, InsertDuplicatePolicy::UPSERT)
+                            &upsert_num_found, idxes, false)
                         .ok());
     ASSERT_EQ(upsert_num_found, expect_exists);
     ASSERT_EQ(upsert_not_found.size(), expect_not_found);
@@ -167,7 +167,7 @@ TEST_P(PersistentIndexTest, test_fixlen_mutable_index) {
     KeysInfo ignore_not_found;
     size_t ignore_num_found = 0;
     ASSERT_TRUE(idx->upsert(ignore_key_slices.data(), ignore_values.data(), ignore_old_values.data(), &ignore_not_found,
-                            &ignore_num_found, idxes, InsertDuplicatePolicy::IGNORE)
+                            &ignore_num_found, idxes, true)
                         .ok());
     ASSERT_EQ(ignore_num_found, expect_exists);
     ASSERT_EQ(ignore_not_found.size(), expect_not_found);
@@ -268,7 +268,7 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index) {
     KeysInfo upsert_not_found;
     size_t upsert_num_found = 0;
     ASSERT_TRUE(idx->upsert(upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(), &upsert_not_found,
-                            &upsert_num_found, idxes, InsertDuplicatePolicy::UPSERT)
+                            &upsert_num_found, idxes, false)
                         .ok());
     ASSERT_EQ(upsert_num_found, expect_exists);
     ASSERT_EQ(upsert_not_found.size(), expect_not_found);
@@ -296,7 +296,7 @@ TEST_P(PersistentIndexTest, test_small_varlen_mutable_index) {
     KeysInfo ignore_not_found;
     size_t ignore_num_found = 0;
     ASSERT_TRUE(idx->upsert(ignore_key_slices.data(), ignore_values.data(), ignore_old_values.data(), &ignore_not_found,
-                            &ignore_num_found, idxes, InsertDuplicatePolicy::IGNORE)
+                            &ignore_num_found, idxes, true)
                         .ok());
     ASSERT_EQ(ignore_num_found, expect_exists);
     ASSERT_EQ(ignore_not_found.size(), expect_not_found);
@@ -426,7 +426,7 @@ TEST_P(PersistentIndexTest, test_large_varlen_mutable_index) {
     KeysInfo upsert_not_found;
     size_t upsert_num_found = 0;
     ASSERT_TRUE(idx->upsert(upsert_key_slices.data(), upsert_values.data(), upsert_old_values.data(), &upsert_not_found,
-                            &upsert_num_found, idxes, InsertDuplicatePolicy::UPSERT)
+                            &upsert_num_found, idxes, false)
                         .ok());
     ASSERT_EQ(upsert_num_found, expect_exists);
     ASSERT_EQ(upsert_not_found.size(), expect_not_found);

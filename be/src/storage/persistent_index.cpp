@@ -746,13 +746,13 @@ public:
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, IndexValue* old_values, KeysInfo* not_found,
-                  size_t* num_found, const std::vector<size_t>& idxes, const InsertDuplicatePolicy& type) override {
+                  size_t* num_found, const std::vector<size_t>& idxes, const bool is_insert_ignore_policy) override {
         size_t nfound = 0;
         for (const auto idx : idxes) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
             const auto value = values[idx];
             uint64_t hash = FixedKeyHash<KeySize>()(key);
-            if (type == InsertDuplicatePolicy::IGNORE) {
+            if (is_insert_ignore_policy) {
                 auto it = _map.find(key, hash);
                 if (it != _map.end() && it->second.get_value() != NullIndexValue) {
                     old_values[idx] = value;
@@ -775,13 +775,13 @@ public:
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, KeysInfo* not_found, size_t* num_found,
-                  const std::vector<size_t>& idxes, const InsertDuplicatePolicy& type) override {
+                  const std::vector<size_t>& idxes, bool is_insert_ignore_policy) override {
         size_t nfound = 0;
         for (const auto idx : idxes) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
             const auto value = values[idx];
             uint64_t hash = FixedKeyHash<KeySize>()(key);
-            if (type == InsertDuplicatePolicy::IGNORE) {
+            if (is_insert_ignore_policy) {
                 auto it = _map.find(key, hash);
                 if (it != _map.end() && it->second.get_value() != NullIndexValue) {
                     nfound++;
@@ -1048,7 +1048,7 @@ public:
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, IndexValue* old_values, KeysInfo* not_found,
-                  size_t* num_found, const std::vector<size_t>& idxes, const InsertDuplicatePolicy& type) override {
+                  size_t* num_found, const std::vector<size_t>& idxes, const bool is_insert_ignore_policy) override {
         size_t nfound = 0;
         for (const auto idx : idxes) {
             std::string composite_key;
@@ -1058,7 +1058,7 @@ public:
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
             uint64_t hash = StringHasher2()(composite_key);
-            if (type == InsertDuplicatePolicy::IGNORE) {
+            if (is_insert_ignore_policy) {
                 auto it = _set.find(composite_key, hash);
                 if (it != _set.end()) {
                     const auto& old_compose_key = *it;
@@ -1089,7 +1089,7 @@ public:
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, KeysInfo* not_found, size_t* num_found,
-                  const std::vector<size_t>& idxes, const InsertDuplicatePolicy& type) override {
+                  const std::vector<size_t>& idxes, const bool is_insert_ignore_policy) override {
         size_t nfound = 0;
         for (const auto idx : idxes) {
             std::string composite_key;
@@ -1099,7 +1099,7 @@ public:
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
             uint64_t hash = StringHasher2()(composite_key);
-            if (type == InsertDuplicatePolicy::IGNORE) {
+            if (is_insert_ignore_policy) {
                 auto it = _set.find(composite_key, hash);
                 if (it != _set.end()) {
                     const auto& old_compose_key = *it;
@@ -1642,7 +1642,7 @@ Status ShardByLengthMutableIndex::get(size_t n, const Slice* keys, IndexValue* v
 
 Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                                          size_t* num_found, std::map<size_t, KeysInfo>& not_founds_by_key_size,
-                                         const InsertDuplicatePolicy& type) {
+                                         const bool is_insert_ignore_policy) {
     DCHECK(_fixed_key_size != -1);
     if (_fixed_key_size > 0) {
         const auto [shard_offset, shard_size] = _shard_info_by_key_size[_fixed_key_size];
@@ -1650,7 +1650,7 @@ Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const Inde
         auto& keys_info = not_founds_by_key_size[_fixed_key_size];
         for (auto i = 0; i < shard_size; ++i) {
             RETURN_IF_ERROR(_shards[shard_offset + i]->upsert(keys, values, old_values, &keys_info, num_found,
-                                                              idxes_by_shard[i], type));
+                                                              idxes_by_shard[i], is_insert_ignore_policy));
         }
     } else {
         DCHECK(_fixed_key_size == 0);
@@ -1669,7 +1669,7 @@ Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const Inde
             auto& not_found = not_founds_by_key_size[key_size];
             for (auto i = 0; i < shard_size; ++i) {
                 RETURN_IF_ERROR(_shards[shard_offset + i]->upsert(keys, values, old_values, &not_found, num_found,
-                                                                  idxes_by_shard[i], type));
+                                                                  idxes_by_shard[i], is_insert_ignore_policy));
             }
         }
     }
@@ -1677,14 +1677,14 @@ Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const Inde
 }
 
 Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, size_t* num_found,
-                                         std::map<size_t, KeysInfo>& not_founds_by_key_size, const InsertDuplicatePolicy& type) {
+                                         std::map<size_t, KeysInfo>& not_founds_by_key_size, const bool is_insert_ignore_policy) {
     DCHECK(_fixed_key_size != -1);
     if (_fixed_key_size > 0) {
         const auto [shard_offset, shard_size] = _shard_info_by_key_size[_fixed_key_size];
         const auto idxes_by_shard = split_keys_by_shard(shard_size, keys, 0, n);
         auto& keys_info = not_founds_by_key_size[_fixed_key_size];
         for (size_t i = 0; i < shard_size; ++i) {
-            RETURN_IF_ERROR(_shards[shard_offset + i]->upsert(keys, values, &keys_info, num_found, idxes_by_shard[i], type));
+            RETURN_IF_ERROR(_shards[shard_offset + i]->upsert(keys, values, &keys_info, num_found, idxes_by_shard[i], is_insert_ignore_policy));
         }
     } else {
         DCHECK(_fixed_key_size == 0);
@@ -1703,7 +1703,7 @@ Status ShardByLengthMutableIndex::upsert(size_t n, const Slice* keys, const Inde
             auto& not_found = not_founds_by_key_size[key_size];
             for (size_t i = 0; i < shard_size; ++i) {
                 RETURN_IF_ERROR(
-                        _shards[shard_offset + i]->upsert(keys, values, &not_found, num_found, idxes_by_shard[i], type));
+                        _shards[shard_offset + i]->upsert(keys, values, &not_found, num_found, idxes_by_shard[i], is_insert_ignore_policy));
             }
         }
     }
@@ -3877,12 +3877,12 @@ Status PersistentIndex::_update_usage_and_size_by_key_length(
 }
 
 Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                               IOStat* stat, const InsertDuplicatePolicy& type) {
+                               IOStat* stat, const bool is_insert_ignore_policy) {
     std::map<size_t, KeysInfo> not_founds_by_key_size;
     size_t num_found = 0;
     MonotonicStopWatch watch;
     watch.start();
-    RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &num_found, not_founds_by_key_size, type));
+    RETURN_IF_ERROR(_l0->upsert(n, keys, values, old_values, &num_found, not_founds_by_key_size, is_insert_ignore_policy));
     if (stat != nullptr) {
         stat->l0_write_cost += watch.elapsed_time();
         watch.reset();

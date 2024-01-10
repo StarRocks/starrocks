@@ -17,7 +17,7 @@
 namespace starrocks::lake {
 
 Status PersistentIndexMemtable::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                                       KeyIndexesInfo* not_found, size_t* num_found, const InsertDuplicatePolicy& type) {
+                                       KeyIndexesInfo* not_found, size_t* num_found, const bool is_insert_ignore_policy) {
     size_t nfound = 0;
     for (size_t i = 0; i < n; ++i) {
         auto key = keys[i].to_string();

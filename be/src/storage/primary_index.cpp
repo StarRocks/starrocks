@@ -54,7 +54,7 @@ public:
                           uint32_t idx_end) = 0;
     // batch upsert a range [idx_begin, idx_end) of keys
     virtual void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                        DeletesMap* deletes, const InsertDuplicatePolicy& type) = 0;
+                        DeletesMap* deletes, const bool is_insert_ignore_policy) = 0;
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // batch try_replace a range [idx_begin, idx_end) of keys
     [[maybe_unused]] virtual void try_replace(uint32_t rssid, uint32_t rowid_start, const Column& pks,
@@ -138,14 +138,14 @@ public:
     }
 
     void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                DeletesMap* deletes, const InsertDuplicatePolicy& type) override {
+                DeletesMap* deletes, const bool is_insert_ignore_policy) override {
         auto* keys = reinterpret_cast<const Key*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
             uint32_t prefetch_i = i + PREFETCHN;
             if (LIKELY(prefetch_i < idx_end)) _map.prefetch(keys[prefetch_i]);
             RowIdPack4 v(base + i);
-            if (type == InsertDuplicatePolicy::IGNORE && _map.contains(keys[i])) {
+            if (is_insert_ignore_policy && _map.contains(keys[i])) {
                 (*deletes)[rssid].push_back(i);
             } else {
                 auto p = _map.insert({keys[i], v});
@@ -324,7 +324,7 @@ public:
     }
 
     void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                DeletesMap* deletes, const InsertDuplicatePolicy& type) override {
+                DeletesMap* deletes, const bool is_insert_ignore_policy) override {
         const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
@@ -339,7 +339,7 @@ public:
             for (uint32_t i = idx_begin; i < idx_end; i++) {
                 uint64_t v = base + i;
                 uint32_t pslot = (i - idx_begin) % PREFETCHN;
-                if (type == InsertDuplicatePolicy::IGNORE && _map.contains(prefetch_keys[pslot], prefetch_hashes[pslot])) {
+                if (is_insert_ignore_policy && _map.contains(prefetch_keys[pslot], prefetch_hashes[pslot])) {
                     (*deletes)[rssid].push_back(i);
                 } else {
                     auto p = _map.emplace_with_hash(prefetch_hashes[pslot], prefetch_keys[pslot], v);
@@ -362,7 +362,7 @@ public:
             }
         } else {
             for (uint32_t i = idx_begin; i < idx_end; i++) {
-                if (type == InsertDuplicatePolicy::IGNORE && _map.contains(FixSlice<S>(keys[i]))) {
+                if (is_insert_ignore_policy && _map.contains(FixSlice<S>(keys[i]))) {
                     (*deletes)[rssid].push_back(i);
                 } else {
                     uint64_t v = base + i;
@@ -594,11 +594,11 @@ public:
     }
 
     void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                DeletesMap* deletes, const InsertDuplicatePolicy& type) override {
+                DeletesMap* deletes, const bool is_insert_ignore_policy) override {
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
-            if (type == InsertDuplicatePolicy::IGNORE && _map.contains(prefetch_keys[pslot], prefetch_hashes[pslot])) {
+            if (is_insert_ignore_policy && _map.contains(prefetch_keys[pslot], prefetch_hashes[pslot])) {
                 (*deletes)[rssid].push_back(i);
             } else {
                 uint64_t v = base + i;
@@ -797,16 +797,16 @@ public:
     }
 
     void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                DeletesMap* delete, const InsertDuplicatePolicy& type) override {
+                DeletesMap* delete, const bool is_insert_ignore_policy) override {
         if (idx_begin < idx_end) {
             auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
             for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
                 if (keys[i].size != keys[idx_begin].size) {
-                    get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, i, delete, type);
+                    get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, i, delete, is_insert_ignore_policy);
                     idx_begin = i;
                 }
             }
-            get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, idx_end, delete, type);
+            get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, idx_end, delete, is_insert_ignore_policy);
         }
     }
 
@@ -1211,7 +1211,7 @@ Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<
 
 Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                                    uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes,
-                                                   IOStat* stat, const InsertDuplicatePolicy& type) {
+                                                   IOStat* stat, const bool is_insert_ignore_policy) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     Status st;
     uint32_t n = idx_end - idx_begin;
@@ -1222,14 +1222,14 @@ Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowi
     const Slice* vkeys = _build_persistent_keys(pks, idx_begin, idx_end, &keys);
     RETURN_IF_ERROR(_build_persistent_values(rssid, rowid_start, idx_begin, idx_end, &values));
     RETURN_IF_ERROR(_persistent_index->upsert(n, vkeys, reinterpret_cast<IndexValue*>(values.data()),
-                                              reinterpret_cast<IndexValue*>(old_values.data()), stat, type));
+                                              reinterpret_cast<IndexValue*>(old_values.data()), stat, is_insert_ignore_policy));
     for (unsigned long old : old_values) {
         if ((old != NullIndexValue) && (old >> 32) == rssid) {
             LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid;
             st = Status::InternalError("found duplicate in upsert data");
         }
         if (old != NullIndexValue) {
-            if (type == InsertDuplicatePolicy::IGNORE) {
+            if (is_insert_ignore_policy) {
                 (*deletes)[rssid].push_back(rowid_start + idx_begin + old);
             } else {
                 (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
@@ -1315,25 +1315,25 @@ Status PrimaryIndex::insert(uint32_t rssid, uint32_t rowid_start, const Column& 
 }
 
 Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, DeletesMap* deletes,
-                            IOStat* stat, const InsertDuplicatePolicy& type) {
+                            IOStat* stat, const bool is_insert_ignore_policy) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
-        st = _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes, stat, type);
+        st = _upsert_into_persistent_index(rssid, rowid_start, pks, 0, pks.size(), deletes, stat, is_insert_ignore_policy);
     } else {
-        _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes, type);
+        _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, 0, pks.size(), deletes, is_insert_ignore_policy);
     }
     return st;
 }
 
 Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
-                            uint32_t idx_end, DeletesMap* delete, const InsertDuplicatePolicy& type) {
+                            uint32_t idx_end, DeletesMap* delete, const bool is_insert_ignore_policy) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
-        st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, delete, nullptr, type);
+        st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, delete, nullptr, is_insert_ignore_policy);
     } else {
-        _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, delete, type);
+        _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, delete, is_insert_ignore_policy);
     }
     return st;
 }

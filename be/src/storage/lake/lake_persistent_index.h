@@ -41,7 +41,7 @@ public:
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                  IOStat* stat = nullptr,  const InsertDuplicatePolicy& type = InsertDuplicatePolicy::UPSERT) override;
+                  IOStat* stat = nullptr,  const bool is_insert_ignore_policy = false) override;
 
     // batch insert, return error if key already exists
     // |n|: size of key/value array

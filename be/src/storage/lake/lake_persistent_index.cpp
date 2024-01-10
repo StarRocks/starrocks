@@ -33,10 +33,10 @@ Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values)
 }
 
 Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                                   IOStat* stat, const InsertDuplicatePolicy& type) {
+                                   IOStat* stat, const bool is_insert_ignore_policy) {
     KeyIndexesInfo not_founds;
     size_t num_found;
-    return _memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, type);
+    return _memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, is_insert_ignore_policy);
 }
 
 Status LakePersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
