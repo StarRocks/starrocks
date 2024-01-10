@@ -86,7 +86,11 @@ struct AgentTaskRequestWithoutReqBody {
     int64_t recv_time;
 };
 
+<<<<<<< HEAD
 const int MIN_TRANSACTION_PUBLISH_WORKER_COUNT = 8;
+=======
+const int MIN_TRANSACTION_PUBLISH_WORKER_COUNT = 1;
+>>>>>>> d865238e36 ([Enhancement] reduce min publish version thread number (#38790))
 
 using CreateTabletAgentTaskRequest = AgentTaskRequestWithReqBody<TCreateTabletReq>;
 using DropTabletAgentTaskRequest = AgentTaskRequestWithReqBody<TDropTabletReq>;
