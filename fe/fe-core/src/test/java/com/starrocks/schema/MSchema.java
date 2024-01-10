@@ -277,6 +277,34 @@ public class MSchema {
     public static final MTable TABLE_WITH_DAY_PARTITION1 = TABLE_WITH_DAY_PARTITION.copyWithName("table_with_day_partition1");
     public static final MTable TABLE_WITH_DAY_PARTITION2 = TABLE_WITH_DAY_PARTITION.copyWithName("table_with_day_partition2");
 
+    public static final MTable TEST10 = new MTable("test10", "event_id",
+            List.of(
+                    "  `event_id` int NULL",
+                    "  `event_type` varchar(65533) NULL ",
+                    "  `event_time` datetime NULL "
+            ),
+            "event_time",
+            List.of(
+                    "PARTITION p20230105 VALUES [(\"2023-01-05 00:00:00\"), (\"2023-01-06 00:00:00\"))",
+                    "PARTITION p20230106 VALUES [(\"2023-01-06 00:00:00\"), (\"2023-01-07 00:00:00\"))"
+            )
+    ).withValues("(1, 'a', '2023-01-05 10:20:22'),(2, 'b', '2023-01-05 10:20:22')," +
+            "(11, 'aa', '2023-01-06 10:20:22'),(22, 'bb', '2023-01-06 10:20:22')");
+
+    public static final MTable TEST11 = new MTable("test11", "event_id1",
+            List.of(
+                    "  `event_id1` int NULL",
+                    "  `event_type1` varchar(65533) NULL ",
+                    "  `event_time1` datetime NULL "
+            ),
+            "event_time1",
+            List.of(
+                    "PARTITION p20230105 VALUES [(\"2023-01-05 00:00:00\"), (\"2023-01-06 00:00:00\"))",
+                    "PARTITION p20230106 VALUES [(\"2023-01-06 00:00:00\"), (\"2023-01-07 00:00:00\"))"
+            )
+    ).withValues("(1, 'a', '2023-01-05 10:20:22'),(2, 'b', '2023-01-05 10:20:23')," +
+            "(11, 'aa', '2023-01-06 10:20:22'),(22, 'bbx', '2023-01-06 10:20:22')");
+
     public static final List<MTable>  TABLE_MARKETING = List.of(
             EMPS,
             EMPS_NULL,
@@ -297,7 +325,9 @@ public class MSchema {
             TEST_BASE_PART,
             T1,
             JSON_TBL,
-            T_METRICS
+            T_METRICS,
+            TEST10,
+            TEST11
     );
     public static final Map<String, MTable> TABLE_MAP = Maps.newHashMap();
 
