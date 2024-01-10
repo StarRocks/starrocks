@@ -36,13 +36,15 @@ public class CompactionJob {
     private volatile long finishTs;
     private VisibleStateWaiter visibleStateWaiter;
     private List<CompactionTask> tasks;
+    private String warehouse;
 
-    public CompactionJob(Database db, Table table, Partition partition, long txnId) {
+    public CompactionJob(Database db, Table table, Partition partition, long txnId, String warehouse) {
         this.db = Objects.requireNonNull(db, "db is null");
         this.table = Objects.requireNonNull(table, "table is null");
         this.partition = Objects.requireNonNull(partition, "partition is null");
         this.txnId = txnId;
         this.startTs = System.currentTimeMillis();
+        this.warehouse = warehouse;
     }
 
     public long getTxnId() {
@@ -60,6 +62,10 @@ public class CompactionJob {
     public String getFailMessage() {
         CompactionTask task = tasks.stream().filter(CompactionTask::isFailed).findAny().orElse(null);
         return task != null ? task.getFailMessage() : null;
+    }
+
+    public String getWarehouse() {
+        return warehouse;
     }
 
     public void setVisibleStateWaiter(VisibleStateWaiter visibleStateWaiter) {

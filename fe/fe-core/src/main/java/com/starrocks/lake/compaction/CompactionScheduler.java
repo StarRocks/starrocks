@@ -301,7 +301,8 @@ public class CompactionScheduler extends Daemon {
         }
 
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
-        CompactionJob job = new CompactionJob(db, table, partition, txnId);
+        String warehouseName = Config.lake_compaction_warehouse;
+        CompactionJob job = new CompactionJob(db, table, partition, txnId, warehouseName);
         try {
             List<CompactionTask> tasks = createCompactionTasks(currentVersion, beToTablets, txnId);
             for (CompactionTask task : tasks) {

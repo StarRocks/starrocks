@@ -24,6 +24,7 @@ public class CompactionRecord {
     private final long finishTs;
     private final String partitionName;
     private final String errorMessage;
+    private final String warehouse;
 
     private CompactionRecord(CompactionJob context, String errorMessage) {
         Objects.requireNonNull(context.getFullPartitionName());
@@ -33,6 +34,7 @@ public class CompactionRecord {
         this.finishTs = context.getFinishTs();
         this.partitionName = context.getFullPartitionName();
         this.errorMessage = errorMessage;
+        this.warehouse = context.getWarehouse();
     }
 
     static CompactionRecord build(CompactionJob context) {
@@ -65,5 +67,9 @@ public class CompactionRecord {
 
     public Optional<String> getErrorMessage() {
         return errorMessage != null ? Optional.of(errorMessage) : Optional.empty();
+    }
+
+    public String getWarehouse() {
+        return warehouse;
     }
 }
