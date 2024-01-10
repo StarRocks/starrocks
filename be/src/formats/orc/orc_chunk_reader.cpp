@@ -2219,4 +2219,48 @@ int OrcChunkReader::get_column_id_by_name(const std::string& name) const {
     return -1;
 }
 
+void ORCHdfsFileStream::prepareCache(orc::InputStream::PrepareCacheScope scope, uint64_t offset, uint64_t length) {
+    const size_t cache_max_size = config::orc_file_cache_max_size;
+    if (length > cache_max_size) return;
+    if (canUseCacheBuffer(offset, length)) return;
+
+    // If this stripe is small, probably other stripes are also small
+    // we combine those reads into one, and try to read several stripes in one shot.
+    if (scope == orc::InputStream::PrepareCacheScope::READ_FULL_STRIPE) {
+        length = std::min(_length - offset, cache_max_size);
+    }
+
+    _cache_buffer.resize(length);
+    _cache_offset = offset;
+    doRead(_cache_buffer.data(), length, offset);
+}
+
+bool ORCHdfsFileStream::canUseCacheBuffer(uint64_t offset, uint64_t length) {
+    if ((_cache_buffer.size() != 0) && (offset >= _cache_offset) &&
+        ((offset + length) <= (_cache_offset + _cache_buffer.size()))) {
+        return true;
+    }
+    return false;
+}
+
+void ORCHdfsFileStream::read(void* buf, uint64_t length, uint64_t offset) {
+    if (canUseCacheBuffer(offset, length)) {
+        size_t idx = offset - _cache_offset;
+        memcpy(buf, _cache_buffer.data() + idx, length);
+    } else {
+        doRead(buf, length, offset);
+    }
+}
+
+void ORCHdfsFileStream::doRead(void* buf, uint64_t length, uint64_t offset) {
+    if (buf == nullptr) {
+        throw orc::ParseError("Buffer is null");
+    }
+    Status status = _file->read_at_fully(offset, buf, length);
+    if (!status.ok()) {
+        auto msg = strings::Substitute("Failed to read $0: $1", _file->filename(), status.to_string());
+        throw orc::ParseError(msg);
+    }
+}
+
 } // namespace starrocks::vectorized
