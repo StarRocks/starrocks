@@ -277,7 +277,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [array_sortby](./array-functions/array_sortby.md)| 对数组中的元素根据另外一个键值数组元素或者 Lambda 函数生成的键值数组元素进行升序排列。 |
 |  [array_sum](./array-functions/array_sum.md)| 对数组中的所有元素求和。 |
 |  [array_to_bitmap](./array-functions/array_to_bitmap.md)| 将 array 类型转化为 bitmap 类型。 |
-|  [array_unique_agg](./array-functions/array_unique_agg.md) | 将一列中的 distinct 值（包括空值 null）串联成一个数组（多行转一行）。  |
 |  [cardinality](./array-functions/cardinality.md)| 计算数组中的元素个数， |
 |  [element_at](./array-functions/element_at.md)| 获取 Array 数组中指定位置的元素。 |
 |  [reverse](./string-functions/reverse.md)| 将字符串或数组反转，返回的字符串或数组的顺序和源字符串或数组的顺序相反。 |
@@ -415,7 +414,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [like](./like-predicate-functions/like.md) | 判断字符串是否**模糊匹配**给定的模式 `pattern`。 |
 |  [regexp](./like-predicate-functions/regexp.md) | 判断字符串是否匹配给定的正则表达式 `pattern`。 |
 |  [regexp_extract](./like-predicate-functions/regexp_extract.md) | 对字符串进行正则匹配，抽取符合 pattern 的第 pos 个匹配部分，需要 pattern 完全匹配 str 中的某部分，才能返回 pattern 部分中需匹配部分，如果没有匹配就返回空字符串。 |
-|  [regexp_extract_all](./like-predicate-functions/regexp_extract_all.md) |  |
 |  [regexp_replace](./like-predicate-functions/regexp_replace.md) | 对字符串进行正则匹配，将命中 pattern 的部分使用 repl 来进行替换。 |
 
 ## 条件函数
