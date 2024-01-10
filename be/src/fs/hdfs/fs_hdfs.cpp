@@ -24,6 +24,7 @@
 #include "fs/hdfs/hdfs_fs_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/file_result_writer.h"
+#include "testutil/sync_point.h"
 #include "udf/java/utils.h"
 #include "util/hdfs_util.h"
 
@@ -341,16 +342,17 @@ Status HDFSWritableFile::close() {
     FileSystem::on_file_write_close(this);
     auto ret = call_hdfs_scan_function_in_pthread([this]() {
         int r = hdfsHSync(_fs, _file);
+        TEST_SYNC_POINT_CALLBACK("HDFSWritableFile::close", &r);
+        auto st = Status::OK();
         if (r != 0) {
-            return Status::IOError(fmt::format("sync error, file: {}", _path));
+            st.update(Status::IOError(fmt::format("sync error, file: {}", _path)));
         }
 
         r = hdfsCloseFile(_fs, _file);
-        if (r == 0) {
-            return Status::OK();
-        } else {
-            return Status::IOError(fmt::format("close error, file: {}", _path));
+        if (r != 0) {
+            st.update(Status::IOError(fmt::format("close error, file: {}", _path)));
         }
+        return st;
     });
     Status st = ret->get_future().get();
     PLOG_IF(ERROR, !st.ok()) << "close " << _path << " failed";
