@@ -60,12 +60,12 @@ select count(*) from ( select * from (select t0.c0 as c0, t1.c1 as c1 from t0 jo
 set query_timeout=5;
 -- result:
 -- !result
-select count(*), count(rn) from (select c0, c0, row_number() over (partition by c0) as rn from TABLE(generate_series(1, 1000000000)) t(c0)) tb;
+[UC] select count(*), count(rn) from (select c0, c0, row_number() over (partition by c0) as rn from TABLE(generate_series(1, 1000000000)) t(c0)) tb;
 -- result:
 -- !result
-select count(*), count(c0), count(mc0) from (select max(c0) mc0, c0 from TABLE(generate_series(1, 1000000000)) t(c0) group by c0) tb;
+[UC] select count(*), count(c0), count(mc0) from (select max(c0) mc0, c0 from TABLE(generate_series(1, 1000000000)) t(c0) group by c0) tb;
 -- result:
 -- !result
-select count(*) from ( select * from (select c0 from TABLE(generate_series(1, 1000000000)) t(c0)) l join [broadcast] (select c1 from TABLE(generate_series(1, 1000000000)) t(c1)) r on l.c0 = r.c1 )tb;
+[UC] select count(*) from ( select * from (select c0 from TABLE(generate_series(1, 1000000000)) t(c0)) l join [broadcast] (select c1 from TABLE(generate_series(1, 1000000000)) t(c1)) r on l.c0 = r.c1 )tb;
 -- result:
 -- !result
