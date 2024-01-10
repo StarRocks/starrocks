@@ -117,7 +117,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
 
 // only unregister once
 JITExpr::~JITExpr() {
-    if (_is_prepared) {
+    if (_is_prepared && _jit_function != nullptr) {
         auto* jit_engine = JITEngine::get_instance();
         if (jit_engine->initialized()) {
             auto status = jit_engine->remove_function(_expr->debug_string());
