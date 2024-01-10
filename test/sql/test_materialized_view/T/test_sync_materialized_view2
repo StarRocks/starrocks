@@ -1,0 +1,10 @@
+-- name: test_sync_materialized_view2
+
+-- base table with delete
+create table sync_mv_base_table_with_delete (k1 bigint, k2 bigint, k3 bigint) duplicate key(k1) distributed by hash(k1) buckets 1 properties ("replication_num" = "1");
+insert into sync_mv_base_table_with_delete values (1, 1, 1), (2, 2, 2);
+delete from sync_mv_base_table_with_delete where k1 = 1;
+create materialized view sync_mv_base_table_with_delete_mv1 as select k2, k3 from sync_mv_base_table_with_delete;
+function: wait_materialized_view_finish()
+select k2 from sync_mv_base_table_with_delete_mv1 [_SYNC_MV_];
+drop materialized view sync_mv_base_table_with_delete_mv1;
