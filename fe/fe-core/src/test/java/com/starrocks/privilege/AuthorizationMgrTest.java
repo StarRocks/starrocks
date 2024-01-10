@@ -114,7 +114,6 @@ public class AuthorizationMgrTest {
     }
 
     private static void createMaterializedView(String sql, ConnectContext connectContext) throws Exception {
-        Config.enable_experimental_mv = true;
         CreateMaterializedViewStatement createMaterializedViewStatement =
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);

@@ -151,8 +151,6 @@ public class MSchema {
             )
     ).withValues("('value1', 1, 2, 3, 4.0, 5.0, 6, '2022-11-11 10:00:01', '2022-11-11', 10.12)");
 
-
-
     public static final MTable TABLE_WITH_PARTITION = new MTable("table_with_partition", "t1a",
             ImmutableList.of(
                     "  `t1a` varchar(20) NULL",

@@ -89,6 +89,56 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         mockDeltaLakeCatalog(metadataMgr);
     }
 
+<<<<<<< HEAD
+=======
+    public static void mockCatalog(ConnectContext ctx, String catalogName) throws Exception {
+        mockCatalog(ctx, catalogName, "");
+    }
+
+    public static void mockCatalog(ConnectContext ctx, String catalogName, String warehouse) throws Exception {
+        GlobalStateMgr gsmMgr = ctx.getGlobalStateMgr();
+        MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
+        gsmMgr.setMetadataMgr(metadataMgr);
+        switch (catalogName) {
+            case MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME:
+                mockHiveCatalogImpl(metadataMgr);
+                break;
+            case MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME:
+                mockJDBCCatalogImpl(metadataMgr);
+                break;
+            case MOCK_PAIMON_CATALOG_NAME:
+                Preconditions.checkState(!Strings.isNullOrEmpty(warehouse));
+                mockPaimonCatalogImpl(metadataMgr, warehouse);
+                break;
+            case MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME:
+                mockIcebergCatalogImpl(metadataMgr);
+                break;
+            case MockedDeltaLakeMetadata.MOCKED_CATALOG_NAME:
+                mockDeltaLakeCatalog(metadataMgr);
+                break;
+            default:
+                throw new SemanticException("Unsupported catalog type:" + catalogName);
+        }
+    }
+
+    public static void dropAllCatalogs() {
+        try {
+            dropCatalog(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME);
+            dropCatalog(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
+            dropCatalog(MOCK_PAIMON_CATALOG_NAME);
+            dropCatalog(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
+            dropCatalog(MockedDeltaLakeMetadata.MOCKED_CATALOG_NAME);
+        } catch (Exception e) {
+            // ignore error
+            e.printStackTrace();
+        }
+    }
+
+    public static void dropCatalog(String catalog) {
+        GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(new DropCatalogStmt(catalog));
+    }
+
+>>>>>>> bb08f8cbcf ([UT] Fix mv related unstable tests (#38731))
     public static void mockHiveCatalog(ConnectContext ctx) throws DdlException {
         GlobalStateMgr gsmMgr = ctx.getGlobalStateMgr();
         MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
