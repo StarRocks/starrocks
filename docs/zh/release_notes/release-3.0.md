@@ -259,7 +259,7 @@ displayed_sidebar: "Chinese"
 ### 功能优化
 
 - Union 查询在被物化视图改写后，谓词也可以下推。 [#23312](https://github.com/StarRocks/starrocks/pull/23312)
-- 优化表的[自动分桶策略](../table_design/Data_distribution.md#确定分桶数量)。 [#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- 优化表的[自动分桶策略](https://docs.starrocks.io/zh/docs/3.0/table_design/Data_distribution/#determine-the-number-of-buckets)。 [#24543](https://github.com/StarRocks/starrocks/pull/24543)
 - 解除 NetworkTime 对系统时钟的依赖，以解决系统时钟误差导致 Exchange 网络耗时估算异常的问题。 [#24858](https://github.com/StarRocks/starrocks/pull/24858)
 
 ### 问题修复
