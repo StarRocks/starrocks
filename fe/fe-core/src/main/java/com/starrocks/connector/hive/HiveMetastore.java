@@ -44,8 +44,6 @@ import java.util.stream.Collectors;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.google.common.collect.Iterables.getOnlyElement;
-import static com.starrocks.connector.AvroUtils.getAvroFields;
-import static com.starrocks.connector.AvroUtils.isHiveTableWithAvroSchemas;
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toHiveCommonStats;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toMetastoreApiTable;
@@ -119,17 +117,6 @@ public class HiveMetastore implements IHiveMetastore {
             if (table.getTableType().equalsIgnoreCase("VIRTUAL_VIEW")) {
                 return HiveMetastoreApiConverter.toHiveView(table, catalogName);
             } else {
-                if (isHiveTableWithAvroSchemas(table)) {
-                    HashMap<String, String> tableProperties = new HashMap<>();
-                    // directly copied from Hive's commit Hive-1712
-                    for (Map.Entry<String, String> param : table.getSd().getSerdeInfo().getParameters().entrySet()) {
-                        tableProperties.put(param.getKey(), param.getValue() != null ? param.getValue() : "");
-                    }
-                    tableProperties.putAll(table.getParameters());
-
-                    return HiveMetastoreApiConverter.toHiveTable(table, catalogName,
-                            getAvroFields(catalogName, table.getDbName(), table.getTableName(), tableProperties));
-                }
                 return HiveMetastoreApiConverter.toHiveTable(table, catalogName);
             }
         } else {

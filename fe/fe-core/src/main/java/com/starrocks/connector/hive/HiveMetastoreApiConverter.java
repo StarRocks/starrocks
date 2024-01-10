@@ -56,6 +56,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -75,6 +76,8 @@ import static com.starrocks.catalog.HudiTable.HUDI_TABLE_COLUMN_TYPES;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_INPUT_FOAMT;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_SERDE_LIB;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_TYPE;
+import static com.starrocks.connector.AvroUtils.getAvroFields;
+import static com.starrocks.connector.AvroUtils.isHiveTableWithAvroSchemas;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiType;
 import static com.starrocks.connector.ColumnTypeConverter.fromHudiTypeToHiveTypeString;
 import static com.starrocks.connector.hive.HiveMetadata.STARROCKS_QUERY_ID;
@@ -134,10 +137,22 @@ public class HiveMetastoreApiConverter {
      *                column info.
      * @return HiveTable
      */
-    public static HiveTable toHiveTable(Table table, String catalogName, List<FieldSchema> schemas) {
+    public static HiveTable toHiveTable(Table table, String catalogName) {
         validateHiveTableType(table.getTableType());
 
-        List<FieldSchema> fieldSchemas = schemas.isEmpty() ? table.getSd().getCols() : schemas;
+        List<FieldSchema> fieldSchemas = table.getSd().getCols();
+
+        if (isHiveTableWithAvroSchemas(table)) {
+            HashMap<String, String> tableProperties = new HashMap<>();
+            table.getSd().getSerdeInfo().getParameters().forEach((key, value) ->
+                    tableProperties.put(key, value != null ? value : ""));
+            tableProperties.putAll(table.getParameters());
+            List<FieldSchema> avroFields = getAvroFields(catalogName, table.getDbName(), table.getTableName(),
+                    tableProperties);
+            if (!avroFields.isEmpty()) {
+                fieldSchemas = avroFields;
+            }
+        }
 
         HiveTable.Builder tableBuilder = HiveTable.builder()
                 .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
@@ -163,10 +178,6 @@ public class HiveMetastoreApiConverter {
                 .setHiveTableType(HiveTable.HiveTableType.fromString(table.getTableType()));
 
         return tableBuilder.build();
-    }
-
-    public static HiveTable toHiveTable(Table table, String catalogName) {
-        return toHiveTable(table, catalogName, ImmutableList.of());
     }
 
     public static Table toMetastoreApiTable(HiveTable table) {

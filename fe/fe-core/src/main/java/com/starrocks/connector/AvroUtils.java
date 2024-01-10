@@ -16,6 +16,7 @@ package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.avro.Schema;
@@ -67,13 +68,13 @@ public class AvroUtils {
     }
 
     public static boolean isHiveTableWithAvroSchemas(org.apache.hadoop.hive.metastore.api.Table table) {
+        if (!HiveStorageFormat.AVRO.getInputFormat().equals(table.getSd().getInputFormat())) {
+            return false;
+        }
         if (table.getParameters() == null) {
             return false;
         }
         StorageDescriptor sd = table.getSd();
-        if (sd == null) {
-            throw new StarRocksConnectorException("Table is missing storage descriptor");
-        }
         SerDeInfo serdeInfo = sd.getSerdeInfo();
         if (serdeInfo == null) {
             throw new StarRocksConnectorException("Table storage descriptor is missing SerDe info");
