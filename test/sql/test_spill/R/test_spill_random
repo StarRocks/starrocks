@@ -15,13 +15,19 @@ DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1');
 insert into t1 values (1,"1");
 -- result:
 -- !result
-create table t2 as select sum(k1),k2 from t1 group by k2;
+CREATE TABLE t2 (
+    k1 INT,
+    k2 VARCHAR(20))
+DUPLICATE KEY(k1)
+DISTRIBUTED BY HASH(k1) PROPERTIES('replication_num'='1');
 -- result:
-E: (1064, 'Table replication num should be less than of equal to the number of available BE nodes. You can change this default by setting the replication_num table properties. Current alive backend is [10004]. table=t2, properties.replication_num=3')
+-- !result
+insert into t2 select sum(k1),k2 from t1 group by k2;
+-- result:
 -- !result
 select * from t2;
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Unknown table 'test_db_6b74f34caebe11eeaab22586a6fea491.t2'.")
+1	1
 -- !result
 create table t0 (
     c0 INT,
@@ -147,7 +153,6 @@ PROPERTIES (
 -- !result
 insert into t2 select * from t1;
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Table t2 is not found.')
 -- !result
 select distinct c0, c1 from t4 order by 1, 2 limit 2;
 -- result:
@@ -196,4 +201,12 @@ select distinct c0, c1 from t5 order by 1, 2 limit 1;
 select count(*) from (select distinct c0, c1 from t5 limit 10) tb;
 -- result:
 10
+-- !result
+select count(*), sum(rn) from (select row_number() over (partition by c0, c1) as rn from t0) tb;
+-- result:
+16384	40960
+-- !result
+select count(*), sum(rk) from (select rank() over (partition by c0, c1) as rk from t0) tb;
+-- result:
+16384	16384
 -- !result
