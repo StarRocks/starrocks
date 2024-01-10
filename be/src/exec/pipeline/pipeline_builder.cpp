@@ -439,7 +439,7 @@ void PipelineBuilderContext::inherit_upstream_source_properties(SourceOperatorFa
         downstream_source->set_partition_exprs(upstream_source->partition_exprs());
     }
 
-    if (downstream_source->adaptive_state() != SourceOperatorFactory::AdaptiveState::NONE) {
+    if (downstream_source->adaptive_initial_state() != SourceOperatorFactory::AdaptiveState::NONE) {
         downstream_source->set_group_leader(downstream_source);
     } else {
         downstream_source->set_group_leader(upstream_source);
