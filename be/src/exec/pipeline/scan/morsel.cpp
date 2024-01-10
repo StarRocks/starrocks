@@ -142,7 +142,7 @@ size_t BucketSequenceMorselQueueFactory::num_original_morsels() const {
 }
 
 /// MorselQueue.
-std::vector<TInternalScanRange*> _convert_morsels_to_olap_scan_ranges(const Morsels& morsels) {
+static std::vector<TInternalScanRange*> convert_morsels_to_olap_scan_ranges(const Morsels& morsels) {
     std::vector<TInternalScanRange*> scan_ranges;
     scan_ranges.reserve(morsels.size());
     for (const auto& morsel : morsels) {
@@ -153,8 +153,8 @@ std::vector<TInternalScanRange*> _convert_morsels_to_olap_scan_ranges(const Mors
     return scan_ranges;
 }
 
-std::vector<TInternalScanRange*> FixedMorselQueue::olap_scan_ranges() const {
-    return _convert_morsels_to_olap_scan_ranges(_morsels);
+std::vector<TInternalScanRange*> MorselQueue::prepare_olap_scan_ranges() const {
+    return convert_morsels_to_olap_scan_ranges(_morsels);
 }
 
 void MorselQueue::unget(MorselPtr&& morsel) {
@@ -184,8 +184,8 @@ StatusOr<MorselPtr> FixedMorselQueue::try_get() {
 BucketSequenceMorselQueue::BucketSequenceMorselQueue(MorselQueuePtr&& morsel_queue)
         : _morsel_queue(std::move(morsel_queue)) {}
 
-std::vector<TInternalScanRange*> BucketSequenceMorselQueue::olap_scan_ranges() const {
-    return _morsel_queue->olap_scan_ranges();
+std::vector<TInternalScanRange*> BucketSequenceMorselQueue::prepare_olap_scan_ranges() const {
+    return _morsel_queue->prepare_olap_scan_ranges();
 }
 
 bool BucketSequenceMorselQueue::empty() const {
@@ -239,10 +239,6 @@ StatusOr<int64_t> BucketSequenceMorselQueue::_peek_sequence_id() const {
         }
     }
     return next_owner_id;
-}
-
-std::vector<TInternalScanRange*> PhysicalSplitMorselQueue::olap_scan_ranges() const {
-    return _convert_morsels_to_olap_scan_ranges(_morsels);
 }
 
 void PhysicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) {
@@ -493,10 +489,6 @@ Status PhysicalSplitMorselQueue::_init_segment() {
     _num_segment_rest_rows = _segment_scan_range.span_size();
 
     return Status::OK();
-}
-
-std::vector<TInternalScanRange*> LogicalSplitMorselQueue::olap_scan_ranges() const {
-    return _convert_morsels_to_olap_scan_ranges(_morsels);
 }
 
 void LogicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) {

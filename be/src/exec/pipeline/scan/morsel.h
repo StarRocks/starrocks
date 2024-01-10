@@ -228,16 +228,17 @@ public:
     MorselQueue() = default;
     virtual ~MorselQueue() = default;
 
-    virtual std::vector<TInternalScanRange*> olap_scan_ranges() const = 0;
-
+    virtual std::vector<TInternalScanRange*> prepare_olap_scan_ranges() const;
     virtual void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) {}
-    virtual void set_tablets(const std::vector<TabletSharedPtr>& tablets) {}
-    virtual void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) {}
+    virtual void set_tablets(const std::vector<TabletSharedPtr>& tablets) { _tablets = tablets; }
+    virtual void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) {
+        _tablet_rowsets = tablet_rowsets;
+    }
     virtual void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) {}
     virtual bool could_attch_ticket_checker() { return false; }
 
-    virtual size_t num_original_morsels() const = 0;
-    virtual size_t max_degree_of_parallelism() const = 0;
+    virtual size_t num_original_morsels() const { return _morsels.size(); }
+    virtual size_t max_degree_of_parallelism() const { return _morsels.size(); }
     virtual bool empty() const = 0;
     virtual StatusOr<MorselPtr> try_get() = 0;
     void unget(MorselPtr&& morsel);
@@ -245,40 +246,33 @@ public:
     virtual StatusOr<bool> ready_for_next() const { return true; }
 
 protected:
+    Morsels _morsels;
     MorselPtr _unget_morsel = nullptr;
+    std::vector<TabletSharedPtr> _tablets;
+    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 };
 
 // The morsel queue with a fixed number of morsels, which is determined in the constructor.
 class FixedMorselQueue final : public MorselQueue {
 public:
-    explicit FixedMorselQueue(Morsels&& morsels)
-            : _morsels(std::move(morsels)), _num_morsels(_morsels.size()), _pop_index(0) {}
-    ~FixedMorselQueue() override = default;
-
-    std::vector<TInternalScanRange*> olap_scan_ranges() const override;
-
-    void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) override {
-        _tablet_rowsets = tablet_rowsets;
+    explicit FixedMorselQueue(Morsels&& morsels) : _num_morsels(_morsels.size()), _pop_index(0) {
+        _morsels = std::move(morsels);
     }
-
-    size_t num_original_morsels() const override { return _num_morsels; }
-    size_t max_degree_of_parallelism() const override { return _num_morsels; }
+    ~FixedMorselQueue() override = default;
     bool empty() const override { return _unget_morsel == nullptr && _pop_index >= _num_morsels; }
     StatusOr<MorselPtr> try_get() override;
 
     std::string name() const override { return "fixed_morsel_queue"; }
 
 private:
-    Morsels _morsels;
     const size_t _num_morsels;
     std::atomic<size_t> _pop_index;
-    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 };
 
 class BucketSequenceMorselQueue : public MorselQueue {
 public:
     BucketSequenceMorselQueue(MorselQueuePtr&& morsel_queue);
-    std::vector<TInternalScanRange*> olap_scan_ranges() const override;
+    std::vector<TInternalScanRange*> prepare_olap_scan_ranges() const override;
 
     void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) override {
         _morsel_queue->set_key_ranges(key_ranges);
@@ -313,16 +307,14 @@ private:
 class SplitMorselQueue : public MorselQueue {
 public:
     SplitMorselQueue(Morsels&& morsels, int64_t degree_of_parallelism, int64_t splitted_scan_rows)
-            : _morsels(std::move(morsels)),
-              _num_original_morsels(_morsels.size()),
-              _degree_of_parallelism(degree_of_parallelism),
-              _splitted_scan_rows(splitted_scan_rows) {}
-    void set_tablets(const std::vector<TabletSharedPtr>& tablets) override { _tablets = tablets; }
-
+            : _degree_of_parallelism(degree_of_parallelism), _splitted_scan_rows(splitted_scan_rows) {
+        _morsels = std::move(morsels);
+    }
     void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) override {
         _ticket_checker = ticket_checker;
     }
     bool could_attch_ticket_checker() override { return true; }
+    size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
 
 protected:
     void _inc_num_splits(bool is_last) {
@@ -336,14 +328,11 @@ protected:
 
     ScanMorsel* _cur_scan_morsel() { return down_cast<ScanMorsel*>(_morsels[_tablet_idx].get()); }
 
-    const Morsels _morsels;
     // The number of the morsels before split them to pieces.
-    const size_t _num_original_morsels;
     const int64_t _degree_of_parallelism;
     // The minimum number of rows picked up from a segment at one time.
     const int64_t _splitted_scan_rows;
 
-    std::vector<TabletSharedPtr> _tablets;
     std::atomic<size_t> _tablet_idx = 0;
     query_cache::TicketCheckerPtr _ticket_checker;
 };
@@ -351,17 +340,7 @@ protected:
 class PhysicalSplitMorselQueue final : public SplitMorselQueue {
 public:
     using SplitMorselQueue::SplitMorselQueue;
-    ~PhysicalSplitMorselQueue() override = default;
-
-    std::vector<TInternalScanRange*> olap_scan_ranges() const override;
-
     void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) override;
-    void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) override {
-        _tablet_rowsets = tablet_rowsets;
-    }
-
-    size_t num_original_morsels() const override { return _morsels.size(); }
-    size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
     bool empty() const override { return _unget_morsel == nullptr && _tablet_idx >= _tablets.size(); }
     StatusOr<MorselPtr> try_get() override;
 
@@ -395,9 +374,6 @@ private:
     std::vector<OlapTuple> _range_end_key;
 
     // _tablets[i] and _tablet_rowsets[i] represent the i-th tablet and its rowsets.
-
-    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
-
     bool _has_init_any_segment = false;
     bool _is_first_split_of_segment = true;
 
@@ -417,16 +393,7 @@ public:
     using SplitMorselQueue::SplitMorselQueue;
     ~LogicalSplitMorselQueue() override = default;
 
-    std::vector<TInternalScanRange*> olap_scan_ranges() const override;
-
     void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) override;
-    void set_tablets(const std::vector<TabletSharedPtr>& tablets) override { _tablets = tablets; }
-    void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) override {
-        _tablet_rowsets = tablet_rowsets;
-    }
-
-    size_t num_original_morsels() const override { return _morsels.size(); }
-    size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
     bool empty() const override { return _unget_morsel == nullptr && _tablet_idx >= _tablets.size(); }
     StatusOr<MorselPtr> try_get() override;
 
@@ -458,9 +425,6 @@ private:
     std::vector<OlapTuple> _range_start_key;
     std::vector<OlapTuple> _range_end_key;
 
-    // _tablets[i] and _tablet_rowsets[i] represent the i-th tablet and its rowsets.
-    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
-
     bool _has_init_any_tablet = false;
     bool _is_first_split_of_tablet = true;
 
@@ -476,6 +440,23 @@ private:
     std::vector<size_t> _num_rest_blocks_per_seek_range;
     size_t _range_idx = 0;
     ShortKeyIndexGroupIterator _next_lower_block_iter;
+};
+
+class DynamicMorselQueue final : public MorselQueue {
+public:
+    explicit DynamicMorselQueue(Morsels&& morsels) : _num_morsels(_morsels.size()), _pop_index(0) {
+        _morsels = std::move(morsels);
+    }
+    ~DynamicMorselQueue() override = default;
+    bool empty() const override { return _unget_morsel == nullptr && _pop_index >= _num_morsels; }
+    StatusOr<MorselPtr> try_get() override;
+
+    std::string name() const override { return "dynamic_morsel_queue"; }
+
+private:
+    std::mutex _mutex;
+    std::atomic<size_t> _pop_index;
+    const size_t _num_morsels;
 };
 
 MorselQueuePtr create_empty_morsel_queue();
