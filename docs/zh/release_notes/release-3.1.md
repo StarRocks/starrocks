@@ -97,9 +97,9 @@ displayed_sidebar: "Chinese"
 - 当 `recover_with_empty_tablet` 设置为 `true` 时可能会引起 FE Crash。[#33071](https://github.com/StarRocks/starrocks/pull/33071)
 - 副本操作重放失败可能会引起 FE Crash。[#32295](https://github.com/StarRocks/starrocks/pull/32295)
 
-### 兼容性变更
+### 参数变更
 
-#### 配置参数
+#### 配置项
 
 - 新增 FE 配置项 [`enable_statistics_collect_profile`](../administration/FE_configuration.md#enable_statistics_collect_profile) 用于控制统计信息查询时是否生成 Profile，默认值是 `false`。[#33815](https://github.com/StarRocks/starrocks/pull/33815)
 - FE 配置项 [`mysql_server_version`](../administration/FE_configuration.md#mysql_server_version) 从静态变为动态（`mutable`），修改配置项设置后，无需重启 FE 即可在当前会话动态生效。[#34033](https://github.com/StarRocks/starrocks/pull/34033)

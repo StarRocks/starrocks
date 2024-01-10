@@ -17,7 +17,7 @@ Release date: December 18, 2023
 - Added the following bitmap functions: [subdivide_bitmap](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/subdivide_bitmap/), [bitmap_from_binary](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/bitmap_from_binary/), and [bitmap_to_binary](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/bitmap_to_binary/). [#35817](https://github.com/StarRocks/starrocks/pull/35817) [#35621](https://github.com/StarRocks/starrocks/pull/35621)
 - Optimized the logic used to compute compaction scores for Primary Key tables, thereby aligning the compaction scores for Primary Key tables within a more consistent range with the other three table types. [#36534](https://github.com/StarRocks/starrocks/pull/36534)
 
-### Parameter Changes
+### Parameter Change
 
 - The default retention period of trash files is changed to 1 day from the original 3 days. [#37113](https://github.com/StarRocks/starrocks/pull/37113)
 - A new BE configuration item `enable_stream_load_verbose_log` is added. The default value is `false`. With this parameter set to `true`, StarRocks can record the HTTP requests and responses for Stream Load jobs, making troubleshooting easier. [#36113](https://github.com/StarRocks/starrocks/pull/36113)
@@ -97,9 +97,9 @@ Fixed the following issues:
 - Setting the FE parameter `recover_with_empty_tablet` to `true` may cause FEs to crash. [#33071](https://github.com/StarRocks/starrocks/pull/33071)
 - Failures in replaying replica operations may cause FEs to crash. [#32295](https://github.com/StarRocks/starrocks/pull/32295)
 
-### Compatibility Changes
+### Parameter Change
 
-#### Parameters
+#### FE/BE Parameters
 
 - Added an FE configuration item [`enable_statistics_collect_profile`](../administration/FE_configuration.md#enable_statistics_collect_profile), which controls whether to generate profiles for statistics queries. The default value is `false`. [#33815](https://github.com/StarRocks/starrocks/pull/33815)
 - The FE configuration item [`mysql_server_version`](../administration/FE_configuration.md#mysql_server_version) is now mutable. The new setting can take effect for the current session without requiring an FE restart. [#34033](https://github.com/StarRocks/starrocks/pull/34033)
