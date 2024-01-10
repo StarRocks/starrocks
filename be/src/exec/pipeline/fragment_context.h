@@ -45,6 +45,13 @@ namespace pipeline {
 using RuntimeFilterPort = starrocks::RuntimeFilterPort;
 using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
 
+// clang-format off
+template <typename T>
+concept DriverPtrCallable = std::invocable<T, const DriverPtr&> &&
+        (std::same_as<std::invoke_result_t<T, const DriverPtr&>, void> ||
+         std::same_as<std::invoke_result_t<T, const DriverPtr&>, Status>);
+// clang-format on
+
 class FragmentContext {
     friend FragmentContextManager;
 
@@ -101,7 +108,25 @@ public:
         }
         return Status::OK();
     }
-    [[nodiscard]] Status iterate_drivers(const std::function<Status(const DriverPtr&)>& call);
+
+    template <DriverPtrCallable Func>
+    [[nodiscard]] auto iterate_drivers(Func call) {
+        using ReturnType = std::invoke_result_t<Func, const DriverPtr&>;
+
+        for (const auto& pipeline : _pipelines) {
+            for (const auto& driver : pipeline->drivers()) {
+                if constexpr (std::is_same_v<ReturnType, Status>) {
+                    RETURN_IF_ERROR(call(driver));
+                } else {
+                    call(driver);
+                }
+            }
+        }
+        if constexpr (std::is_same_v<ReturnType, Status>) {
+            return Status::OK();
+        }
+    }
+
     void clear_all_drivers();
     void close_all_pipelines();
 

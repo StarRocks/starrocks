@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "exec/pipeline/adaptive/adaptive_fwd.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/scan/chunk_source.h"
 #include "exec/workgroup/work_group_fwd.h"
@@ -72,7 +73,7 @@ public:
     ///   and the operators with multiple children, such as HashJoin, NLJoin, Except, and Intersect.
     /// - The group leader is the source operator of the most downstream pipeline in the group,
     ///   including CsSource, Scan, and Exchange.
-    /// - The adaptive_state of group leader is ACTIVE or INACTIVE,
+    /// - The adaptive_initial_state of group leader is ACTIVE or INACTIVE,
     ///   and that of the other pipelines is NONE.
     ///
     /// Dependent relations between groups.
@@ -80,8 +81,8 @@ public:
     ///   the group of this operator also depends on the group of the dependent operators.
     ///
     /// A group cannot instantiate drivers until three conditions satisfy:
-    /// 1. The adaptive_state of leader source operator is READY.
-    /// 2. The adaptive_state of dependent pipelines is READY.
+    /// 1. The adaptive_initial_state of leader source operator is READY.
+    /// 2. The adaptive_initial_state of dependent pipelines is READY.
     /// 3. All the drivers of dependent pipelines are finished.
     ///
     /// For example, the following fragment contains three pipeline groups: [pipe#1], [pipe#2, pipe#3], [pipe#4],
@@ -99,15 +100,19 @@ public:
     ///          CsSink
     ///  pipe#1     |
     ///          ScanNode(ACTIVE)
-    enum class AdaptiveState { ACTIVE, INACTIVE, NONE };
-    virtual AdaptiveState adaptive_state() const { return AdaptiveState::NONE; }
-    bool is_adaptive_group_active() const;
+    enum class AdaptiveState : uint8_t { ACTIVE, INACTIVE, NONE };
+    virtual AdaptiveState adaptive_initial_state() const { return AdaptiveState::NONE; }
+    bool is_adaptive_group_initial_active() const;
+
+    EventPtr adaptive_blocking_event() const { return _adaptive_blocking_event; }
+    void set_adaptive_blocking_event(EventPtr event) { _adaptive_blocking_event = std::move(event); }
+    void set_group_initialize_event(EventPtr event) { _group_initialize_event = std::move(event); }
 
     void add_group_dependent_pipeline(const Pipeline* dependent_op);
     const std::vector<const Pipeline*>& group_dependent_pipelines() const;
 
     void set_group_leader(SourceOperatorFactory* parent);
-    SourceOperatorFactory* group_leader();
+    SourceOperatorFactory* group_leader() const;
 
 protected:
     size_t _degree_of_parallelism = 1;
@@ -120,8 +125,8 @@ protected:
 
     SourceOperatorFactory* _group_leader = this;
     std::vector<const Pipeline*> _group_dependent_pipelines;
-    mutable bool _group_dependent_pipelines_ready = false;
-    mutable bool _group_dependent_pipelines_finished = false;
+    EventPtr _group_initialize_event = nullptr;
+    EventPtr _adaptive_blocking_event = nullptr;
 };
 
 class SourceOperator : public Operator {
