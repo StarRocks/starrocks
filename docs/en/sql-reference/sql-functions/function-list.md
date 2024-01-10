@@ -69,6 +69,7 @@ You can find a function based on the following categories:
 
 ## Array functions
 
+<<<<<<< HEAD
 - [all_match](../sql-functions/array-functions/all_match.md)
 - [any_match](../sql-functions/array-functions/any_match.md)
 - [array_agg](../sql-functions/array-functions/array_agg.md)
@@ -100,6 +101,40 @@ You can find a function based on the following categories:
 - [element_at](../sql-functions/array-functions/element_at.md)
 - [reverse](../sql-functions/array-functions/reverse.md)
 - [unnest](../sql-functions/array-functions/unnest.md)
+=======
+- [all_match](./array-functions/all_match.md)
+- [any_match](./array-functions/any_match.md)
+- [array_agg](./array-functions/array_agg.md)
+- [array_append](./array-functions/array_append.md)
+- [array_avg](./array-functions/array_avg.md)
+- [array_concat](./array-functions/array_concat.md)
+- [array_contains](./array-functions/array_contains.md)
+- [array_contains_all](./array-functions/array_contains_all.md)
+- [array_cum_sum](./array-functions/array_cum_sum.md)
+- [array_difference](./array-functions/array_difference.md)
+- [array_distinct](./array-functions/array_distinct.md)
+- [array_filter](./array-functions/array_filter.md)
+- [array_generate](./array-functions/array_generate.md)
+- [array_intersect](./array-functions/array_intersect.md)
+- [array_join](./array-functions/array_join.md)
+- [array_length](./array-functions/array_length.md)
+- [array_map](./array-functions/array_map.md)
+- [array_max](./array-functions/array_max.md)
+- [array_min](./array-functions/array_min.md)
+- [array_position](./array-functions/array_position.md)
+- [array_remove](./array-functions/array_remove.md)
+- [array_slice](./array-functions/array_slice.md)
+- [array_sort](./array-functions/array_sort.md)
+- [array_sortby](./array-functions/array_sortby.md)
+- [array_sum](./array-functions/array_sum.md)
+- [arrays_overlap](./array-functions/arrays_overlap.md)
+- [array_to_bitmap](./array-functions/array_to_bitmap.md)
+- [array_unique_agg](./array-functions/array_unique_agg.md)
+- [cardinality](./array-functions/cardinality.md)
+- [element_at](./array-functions/element_at.md)
+- [reverse](./array-functions/reverse.md)
+- [unnest](./array-functions/unnest.md)
+>>>>>>> 562d67fe76 ([Doc] add func regexp_extract_all, update get_json_string, and sidebar (backport #38739) (#38794))
 
 ## Binary functions
 
@@ -269,6 +304,7 @@ You can find a function based on the following categories:
 
 ## JSON functions
 
+<<<<<<< HEAD
 - [json_array](../sql-functions/json-functions/json-constructor-functions/json_array.md)
 - [json_object](../sql-functions/json-functions/json-constructor-functions/json_object.md)
 - [parse_json](../sql-functions/json-functions/json-constructor-functions/parse_json.md)
@@ -284,6 +320,23 @@ You can find a function based on the following categories:
 - [json_query](../sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
 - [json_string](../sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
 - [to_json](../sql-functions/json-functions/json-query-and-processing-functions/to_json.md)
+=======
+- [json_array](./json-functions/json-constructor-functions/json_array.md)
+- [json_object](./json-functions/json-constructor-functions/json_object.md)
+- [parse_json](./json-functions/json-constructor-functions/parse_json.md)
+- [Arrow function](./json-functions/json-query-and-processing-functions/arrow-function.md)
+- [cast](./json-functions/json-query-and-processing-functions/cast.md)
+- [get_json_double](./json-functions/json-query-and-processing-functions/get_json_double.md)
+- [get_json_int](./json-functions/json-query-and-processing-functions/get_json_int.md)
+- [get_json_string, get_json_object](./json-functions/json-query-and-processing-functions/get_json_string.md)
+- [json_each](./json-functions/json-query-and-processing-functions/json_each.md)
+- [json_exists](./json-functions/json-query-and-processing-functions/json_exists.md)
+- [json_length](./json-functions/json-query-and-processing-functions/json_length.md)
+- [json_keys](./json-functions/json-query-and-processing-functions/json_keys.md)
+- [json_query](./json-functions/json-query-and-processing-functions/json_query.md)
+- [json_string](./json-functions/json-query-and-processing-functions/json_string.md)
+- [to_json](./json-functions/json-query-and-processing-functions/to_json.md)
+>>>>>>> 562d67fe76 ([Doc] add func regexp_extract_all, update get_json_string, and sidebar (backport #38739) (#38794))
 
 ## String functions
 
@@ -399,6 +452,7 @@ You can find a function based on the following categories:
 - [like](./like-predicate-functions/like.md)
 - [regexp](./like-predicate-functions/regexp.md)
 - [regexp_extract](./like-predicate-functions/regexp_extract.md)
+- [regexp_extract_all](./like-predicate-functions/regexp_extract_all.md)
 - [regexp_replace](./like-predicate-functions/regexp_replace.md)
 
 ## Percentile functions
