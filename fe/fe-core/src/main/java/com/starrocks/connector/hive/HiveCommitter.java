@@ -334,7 +334,13 @@ public class HiveCommitter {
             Joiner.on("; ").appendTo(message, failedUpdateStatsTaskDescs);
             StarRocksConnectorException exception = new StarRocksConnectorException(message.toString());
             suppressedExceptions.forEach(exception::addSuppressed);
-            throw exception;
+            // Insert into Hive4 table occur failure caused by compatibility issue between Hive3 and Hive4 thrift HMS client.
+            // Check https://github.com/StarRocks/starrocks/issues/38620 and HIVE-27984 for more details.
+            if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().enableHiveColumnStats()) {
+                throw exception;
+            } else {
+                LOG.error(exception);
+            }
         }
     }
 
