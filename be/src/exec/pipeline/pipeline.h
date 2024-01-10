@@ -17,6 +17,7 @@
 #include <ctime>
 #include <utility>
 
+#include "exec/pipeline/adaptive/adaptive_fwd.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/source_operator.h"
@@ -31,9 +32,7 @@ namespace pipeline {
 class Pipeline {
 public:
     Pipeline() = delete;
-    Pipeline(uint32_t id, OpFactories op_factories) : _id(id), _op_factories(std::move(op_factories)) {
-        _runtime_profile = std::make_shared<RuntimeProfile>(strings::Substitute("Pipeline (id=$0)", _id));
-    }
+    Pipeline(uint32_t id, OpFactories op_factories);
 
     uint32_t get_id() const { return _id; }
 
@@ -102,6 +101,7 @@ public:
     void count_down_epoch_finished_driver(RuntimeState* state);
 
     size_t output_amplification_factor() const;
+    Event* pipeline_event() const { return _pipeline_event.get(); }
 
 private:
     uint32_t _id = 0;
@@ -109,6 +109,8 @@ private:
     OpFactories _op_factories;
     Drivers _drivers;
     std::atomic<size_t> _num_finished_drivers = 0;
+
+    EventPtr _pipeline_event;
 
     // STREAM MV
     std::atomic<size_t> _num_epoch_finished_drivers = 0;

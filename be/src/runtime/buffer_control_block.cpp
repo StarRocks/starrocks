@@ -292,6 +292,9 @@ void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
 
 Status BufferControlBlock::close(Status exec_status) {
     std::unique_lock<std::mutex> l(_lock);
+    if (_is_close) {
+        return Status::OK();
+    }
     _is_close = true;
     _status = std::move(exec_status);
     // notify blocked get thread
