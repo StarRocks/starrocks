@@ -406,10 +406,10 @@ Release date: July 29, 2022
   - TopN and sort operators
   - Equivalence comparison operators that contain functions can use Zone Map indexes when these operators are pushed down to scan operators.
 - Optimized Apache Hive™ external tables.
-  - When Apache Hive™ tables are stored in Parquet, ORC, or CSV format, schema changes caused by ADD COLUMN or REPLACE COLUMN on Hive can be synchronized to StarRocks when you execute the REFRESH statement on the corresponding Hive external table. For more information, see [Hive external table](../data_source/External_table.md#hive-external-table).
+  - When Apache Hive™ tables are stored in Parquet, ORC, or CSV format, schema changes caused by ADD COLUMN or REPLACE COLUMN on Hive can be synchronized to StarRocks when you execute the REFRESH statement on the corresponding Hive external table. For more information, see [Hive external table](https://docs.starrocks.io/docs/2.3/data_source/External_table/#hive-external-table).
   - `hive.metastore.uris` can be modified for Hive resources. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md).
-- Optimized the performance of Apache Iceberg external tables. A custom catalog can be used to create an Iceberg resource. For more information, see [Apache Iceberg external table](../data_source/External_table.md#apache-iceberg-external-table).
-- Optimized the performance of Elasticsearch external tables. Sniffing the addresses of the data nodes in an Elasticsearch cluster can be disabled. For more information, see [Elasticsearch external table](../data_source/External_table.md#elasticsearch-external-table).
+- Optimized the performance of Apache Iceberg external tables. A custom catalog can be used to create an Iceberg resource. For more information, see [Apache Iceberg external table](https://docs.starrocks.io/docs/2.3/data_source/External_table/#deprecated-iceberg-external-table).
+- Optimized the performance of Elasticsearch external tables. Sniffing the addresses of the data nodes in an Elasticsearch cluster can be disabled. For more information, see [Elasticsearch external table](https://docs.starrocks.io/docs/2.3/data_source/External_table/#elasticsearch-external-table).
 - When the sum() function accepts a numeric string, it implicitly converts the numeric string.
 - The year(), month(), and day() functions support the DATE data type.
 
