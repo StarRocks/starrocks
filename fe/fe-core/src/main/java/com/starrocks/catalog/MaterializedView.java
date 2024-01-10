@@ -522,7 +522,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return Lists.newArrayList();
         }
         List<TableType> baseTableTypes = Lists.newArrayList();
-        baseTableInfos.forEach(tableInfo -> baseTableTypes.add(tableInfo.getTable().getType()));
+        baseTableInfos.forEach(tableInfo -> baseTableTypes.add(tableInfo.getTableChecked().getType()));
         return baseTableTypes;
     }
 
@@ -622,7 +622,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     public Optional<Long> maxBaseTableRefreshTimestamp() {
         long maxRefreshTimestamp = -1;
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            Table baseTable = baseTableInfo.getTable();
+            Table baseTable = baseTableInfo.getTableChecked();
 
             if (baseTable instanceof View) {
                 continue;
@@ -861,13 +861,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 // fill table name for base table info.
                 List<BaseTableInfo> newBaseTableInfos = Lists.newArrayList();
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                    Table table = baseTableInfo.getTable();
-                    if (table == null) {
+                    Optional<Table> table = baseTableInfo.mayGetTable();
+                    if (!table.isPresent()) {
                         setInactiveAndReason(String.format("mv's base table %s does not exist ",
                                 baseTableInfo.getTableId()));
                         return false;
                     }
-                    newBaseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), table.getName(), table.getId()));
+                    newBaseTableInfos.add(
+                            new BaseTableInfo(dbId, db.getFullName(), table.get().getName(), table.get().getId()));
                 }
                 this.baseTableInfos = newBaseTableInfos;
             }
@@ -948,11 +949,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 }
             }
 
+            TableName tableName =
+                    new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, db.getFullName(), this.name);
             ExpressionAnalyzer.analyzeExpression(partitionExpr, new AnalyzeState(),
                     new Scope(RelationId.anonymous(),
                             new RelationFields(this.getBaseSchema().stream()
-                                    .map(col -> new Field(col.getName(), col.getType(),
-                                            new TableName(db.getFullName(), this.name), null))
+                                    .map(col -> new Field(col.getName(), col.getType(), tableName, null))
                                     .collect(Collectors.toList()))), connectContext);
         }
     }
@@ -1260,7 +1262,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                                                          boolean isQueryRewrite) {
         Preconditions.checkState(partitionInfo instanceof SinglePartitionInfo);
         for (BaseTableInfo tableInfo : baseTableInfos) {
-            Table table = tableInfo.getTable();
+            Table table = tableInfo.getTableChecked();
             // skip check freshness of view
             if (table.isView()) {
                 continue;
@@ -1319,7 +1321,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         Table refBaseTable = partitionInfo.first;
         Column refBasePartitionCol = partitionInfo.second;
         for (BaseTableInfo tableInfo : baseTableInfos) {
-            Table baseTable = tableInfo.getTable();
+            Table baseTable = tableInfo.getTableChecked();
             // skip view
             if (baseTable.isView()) {
                 continue;
@@ -1416,13 +1418,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         Preconditions.checkState(slotRefs.size() == 1);
         SlotRef partitionSlotRef = slotRefs.get(0);
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            Table table = baseTableInfo.getTable();
+            Table table = baseTableInfo.getTableChecked();
             if (partitionSlotRef.getTblNameWithoutAnalyzed().getTbl().equals(table.getName())) {
                 return Pair.create(table, table.getColumn(partitionSlotRef.getColumnName()));
             }
         }
         String baseTableNames = baseTableInfos.stream()
-                .map(tableInfo -> tableInfo.getTable().getName()).collect(Collectors.joining(","));
+                .map(tableInfo -> tableInfo.getTableChecked().getName()).collect(Collectors.joining(","));
         throw new RuntimeException(
                 String.format("can not find partition info for mv:%s on base tables:%s", name, baseTableNames));
     }
@@ -1445,7 +1447,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (info.getBucketNum() == 0) {
             int inferredBucketNum = 0;
             for (BaseTableInfo base : getBaseTableInfos()) {
-                if (base.getTable().isNativeTableOrMaterializedView()) {
+                if (base.getTableChecked().isNativeTableOrMaterializedView()) {
                     OlapTable olapTable = (OlapTable) base.getTable();
                     DistributionInfo dist = olapTable.getDefaultDistributionInfo();
                     inferredBucketNum = Math.max(inferredBucketNum, dist.getBucketNum());
