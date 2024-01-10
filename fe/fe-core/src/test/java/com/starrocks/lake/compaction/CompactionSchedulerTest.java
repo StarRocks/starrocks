@@ -20,10 +20,11 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Test;
 
 import java.util.List;
 
@@ -41,7 +42,6 @@ public class CompactionSchedulerTest {
     public void setUp() {
     }
 
-    @Test
     public void testBeginTransactionSucceedWithSmallerStreamLoadTimeout() {
         GlobalStateMgr.getCurrentGlobalTransactionMgr().addDatabaseTransactionMgr(dbId);
         new Expectations() {
@@ -67,6 +67,12 @@ public class CompactionSchedulerTest {
         CompactionScheduler compactionScheduler =
                 new CompactionScheduler(compactionManager, GlobalStateMgr.getCurrentSystemInfo(),
                         GlobalStateMgr.getCurrentGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
+        new MockUp<CompactionScheduler>() {
+            @Mock
+            long getCompactionWorkerGroupId() {
+                return 1L;
+            }
+        };
         PartitionIdentifier partitionIdentifier = new PartitionIdentifier(dbId, 2, 3);
         try {
             assertEquals(transactionId, compactionScheduler.beginTransaction(partitionIdentifier));

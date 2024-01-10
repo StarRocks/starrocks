@@ -347,7 +347,7 @@ public class CompactionScheduler extends Daemon {
         return tasks;
     }
 
-    private long getCompactionWorkerGroupId() throws BeginTransactionException {
+    static long getCompactionWorkerGroupId() throws BeginTransactionException {
         String warehouseName = Config.lake_compaction_warehouse;
         Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
         if (warehouse == null) {
