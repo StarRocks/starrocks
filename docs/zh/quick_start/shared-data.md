@@ -269,6 +269,8 @@ curl --location-trusted -u root             \
     -XPUT http://localhost:8030/api/quickstart/crashdata/_stream_load
 ```
 
+运行命令后，系统会提示您输入密码。由于您尚未为 `root` 用户分配密码，所以只需按 **Enter** 键跳过。
+
 以下是上述命令的返回。其中 `Status` 为 `Success`，表示导入成功。`NumberFilteredRows` 为 1，表示数据集中包含一行错误数据，StarRocks 在导入过程将该行过滤。
 
 ```bash
@@ -319,7 +321,7 @@ Column delimiter: 44,Row delimiter: 10.. Row: 09/06/2015,14:15,,,40.6722269,-74.
 
 ### 导入天气数据
 
-一朝同样的方式导入天气数据。
+依照同样的方式导入天气数据。
 
 ```bash
 curl --location-trusted -u root             \
