@@ -997,7 +997,7 @@ public abstract class AstVisitor<R, C> {
     }
 
     // -------------------------------------------- Failover Group Statement -----------------------------------------------------
-    
+
     public R visitCreatePrimaryFailoverGroupStatement(CreatePrimaryFailoverGroupStmt statement, C context) {
         return visitStatement(statement, context);
     }

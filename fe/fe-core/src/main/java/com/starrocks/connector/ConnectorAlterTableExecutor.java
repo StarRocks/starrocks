@@ -14,12 +14,18 @@
 
 package com.starrocks.connector;
 
+import com.starrocks.alter.AlterOpType;
 import com.starrocks.alter.AlterOperations;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.epack.sql.ast.ApplyMaskingPolicyClause;
+import com.starrocks.epack.sql.ast.ApplyRowAccessPolicyClause;
+import com.starrocks.epack.sql.ast.RevokeMaskingPolicyClause;
+import com.starrocks.epack.sql.ast.RevokeRowAccessPolicyClause;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AstVisitor;
@@ -73,5 +79,56 @@ public class ConnectorAlterTableExecutor extends AstVisitor<Void, ConnectContext
     public Void visitNode(ParseNode node, ConnectContext context) {
         throw new StarRocksConnectorException(
                 "This connector doesn't support alter table: " + tableName + " with operation: " + node.toString());
+    }
+
+    @Override
+    public Void visitApplyMaskingPolicyClause(ApplyMaskingPolicyClause clause, ConnectContext context) {
+        actions.add(() -> {
+            ApplyMaskingPolicyClause applyMaskingPolicyClause = (ApplyMaskingPolicyClause) clause;
+            GlobalStateMgr.getCurrentState().getSecurityPolicyManager().applyMaskingPolicyContext(
+                    tableName,
+                    applyMaskingPolicyClause.getMaskingColumn(),
+                    applyMaskingPolicyClause.getWithColumnMaskingPolicy());
+        });
+        return null;
+    }
+
+    @Override
+    public Void visitRevokeMaskingPolicyClause(RevokeMaskingPolicyClause clause, ConnectContext context) {
+        actions.add(() -> {
+            RevokeMaskingPolicyClause revokeMaskingPolicyClause = (RevokeMaskingPolicyClause) clause;
+            GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeMaskingPolicyContext(
+                    tableName.getCatalog(), tableName.getDb(), tableName.getTbl(),
+                    revokeMaskingPolicyClause.getMaskingColumn());
+        });
+        return null;
+    }
+
+    @Override
+    public Void visitApplyRowAccessPolicyClause(ApplyRowAccessPolicyClause clause, ConnectContext context) {
+        actions.add(() -> {
+            ApplyRowAccessPolicyClause modifyRowAccessPolicyClause = (ApplyRowAccessPolicyClause) clause;
+            GlobalStateMgr.getCurrentState().getSecurityPolicyManager().applyRowAccessPolicyContext(
+                    tableName, modifyRowAccessPolicyClause.getRowAccessPolicyContext());
+        });
+        return null;
+    }
+
+    @Override
+    public Void visitRevokeRowAccessPolicyClause(RevokeRowAccessPolicyClause clause, ConnectContext context) {
+        actions.add(() -> {
+            RevokeRowAccessPolicyClause revokeRowAccessPolicyClause = (RevokeRowAccessPolicyClause) clause;
+            AlterOpType opType = revokeRowAccessPolicyClause.getOpType();
+
+            if (opType == AlterOpType.REVOKE_ROW_ACCESS_POLICY) {
+                GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeRowAccessPolicyContext(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl(),
+                        revokeRowAccessPolicyClause.getPolicyName());
+            } else if (opType == AlterOpType.REVOKE_ALL_ROW_ACCESS_POLICY) {
+                GlobalStateMgr.getCurrentState().getSecurityPolicyManager().revokeALLRowAccessPolicyContext(
+                        tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+            }
+        });
+        return null;
     }
 }

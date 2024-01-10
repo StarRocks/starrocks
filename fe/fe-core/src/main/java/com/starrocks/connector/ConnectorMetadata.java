@@ -15,9 +15,6 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
-import com.starrocks.alter.AlterOpType;
-import com.starrocks.alter.AlterOperations;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -34,9 +31,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddPartitionClause;
-import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -60,12 +55,10 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.thrift.TSinkCommitInfo;
 
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 
 public interface ConnectorMetadata {
     /**
@@ -245,22 +238,8 @@ public interface ConnectorMetadata {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
 
-        List<AlterClause> alterClauses = stmt.getOps();
-        AlterOperations currentAlterOps = new AlterOperations();
-        currentAlterOps.checkConflict(alterClauses);
-
-        Set<AlterOpType> currentOps = new HashSet<>(currentAlterOps.getCurrentOps());
-        currentOps.retainAll(Sets.newHashSet(AlterOpType.APPLY_COLUMN_MASKING_POLICY,
-                AlterOpType.REVOKE_COLUMN_MASKING_POLICY,
-                AlterOpType.APPLY_ROW_ACCESS_POLICY,
-                AlterOpType.REVOKE_ROW_ACCESS_POLICY,
-                AlterOpType.REVOKE_ALL_ROW_ACCESS_POLICY));
-
-        if (!currentOps.isEmpty()) {
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processPolicy(dbTableName, alterClauses);
-        } else {
-            throw new DdlException("Do not support alter non-native table[" + dbTableName + "]");
-        }
+        ConnectorAlterTableExecutor executor = new ConnectorAlterTableExecutor(stmt);
+        executor.execute();
     }
 
     default void renameTable(Database db, Table table, TableRenameClause tableRenameClause) throws DdlException {
