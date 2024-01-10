@@ -34,6 +34,8 @@
 
 #include "runtime/mem_tracker.h"
 
+#include <fmt/format.h>
+
 #include <utility>
 
 #include "gutil/strings/substitute.h"
@@ -150,9 +152,21 @@ std::string MemTracker::err_msg(const std::string& msg) const {
         str << "Mem usage has exceed the limit of single query, You can change the limit by "
                "set session variable query_mem_limit.";
         break;
-    case MemTracker::PROCESS:
+    case MemTracker::PROCESS: {
         str << "Mem usage has exceed the limit of BE";
+        auto* mem_metrics = StarRocksMetrics::instance()->system_metrics()->memory_metrics();
+        str << fmt::format(
+                " Current memory statistics: process({}), query_pool({}), load({}), "
+                "metadata({}), compaction({}), schema_change({}), column_pool({}), "
+                "page_cache({}), update({}), chunk_allocator({}), clone({}), consistency({})",
+                mem_metrics->process_mem_bytes.value(), mem_metrics->query_mem_bytes.value(),
+                mem_metrics->load_mem_bytes.value(), mem_metrics->metadata_mem_bytes.value(),
+                mem_metrics->compaction_mem_bytes.value(), mem_metrics->schema_change_mem_bytes.value(),
+                mem_metrics->column_pool_mem_bytes.value(), mem_metrics->storage_page_cache_mem_bytes.value(),
+                mem_metrics->update_mem_bytes.value(), mem_metrics->chunk_allocator_mem_bytes.value(),
+                mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value());
         break;
+    }
     case MemTracker::QUERY_POOL:
         str << "Mem usage has exceed the limit of query pool";
         break;
