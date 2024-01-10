@@ -145,6 +145,7 @@ public:
     MemTracker* clone_mem_tracker() { return _clone_mem_tracker.get(); }
     MemTracker* consistency_mem_tracker() { return _consistency_mem_tracker.get(); }
     MemTracker* replication_mem_tracker() { return _replication_mem_tracker.get(); }
+    MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
     std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
 
     int64_t get_storage_page_cache_size();
@@ -212,6 +213,9 @@ private:
     std::shared_ptr<MemTracker> _consistency_mem_tracker;
 
     std::shared_ptr<MemTracker> _replication_mem_tracker;
+
+    // The memory used for datacache
+    std::shared_ptr<MemTracker> _datacache_mem_tracker;
 
     std::vector<std::shared_ptr<MemTracker>> _mem_trackers;
 };
