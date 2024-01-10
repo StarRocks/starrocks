@@ -2797,6 +2797,6 @@ public class JoinTest extends PlanTestBase {
                 "                                 FROM t0 AS t0_6\n" +
                 "                                 WHERE (t0_6.v1) = (subt0.v1)))))";
         String plan = getFragmentPlan(query);
-        assertContainsIgnoreColRefs(plan, "other join predicates: 4: v1 = 1: v1");
+        assertContains(plan, "other join predicates: 4: v1 = 1: v1");
     }
 }
