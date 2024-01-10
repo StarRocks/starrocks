@@ -546,6 +546,10 @@ public:
 
     DEFINE_VECTORIZED_FN(crc32);
 
+    DEFINE_VECTORIZED_FN(ngram_search);
+
+    DEFINE_VECTORIZED_FN(ngram_search_case_insensitive);
+
 private:
     static int index_of(const char* source, int source_count, const char* target, int target_count, int from_index);
 
