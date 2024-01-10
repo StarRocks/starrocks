@@ -38,10 +38,21 @@ public class ShortCircuitTest extends PlanTestBase {
     public void testShortcircuit() throws Exception {
         connectContext.getSessionVariable().setEnableShortCircuit(true);
 
-        // support short circuit
+        // project support short circuit
         String sql = "select pk1 || v3 from tprimary1 where pk1=20";
         String planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+
+        // boolean filter
+        sql = "select pk1 || v3 from tprimary_bool where pk1=20 and pk2=false";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+
+        // boolean filter
+        sql = "select pk1 || v3 from tprimary_bool where pk1=33 and pk2=true";
+        planFragment = getFragmentPlan(sql);
+        Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+
         //  support short circuit
         sql = "select * from tprimary1 where pk1 in (20)";
         planFragment = getFragmentPlan(sql);
