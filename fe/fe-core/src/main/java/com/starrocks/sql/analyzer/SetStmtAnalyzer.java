@@ -188,7 +188,8 @@ public class SetStmtAnalyzer {
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ)) {
-            checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L, null);
+            checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L,
+                    null);
         }
 
         // materialized_view_rewrite_mode
@@ -205,16 +206,18 @@ public class SetStmtAnalyzer {
         if (variable.equalsIgnoreCase(SessionVariable.CBO_EQ_BASE_TYPE)) {
             String baseType = resolvedExpression.getStringValue();
             if (!baseType.equalsIgnoreCase(SessionVariableConstants.VARCHAR) &&
-                    !baseType.equalsIgnoreCase(SessionVariableConstants.DECIMAL)) {
+                    !baseType.equalsIgnoreCase(SessionVariableConstants.DECIMAL) &&
+                    !baseType.equalsIgnoreCase(SessionVariableConstants.DOUBLE)) {
                 throw new SemanticException(String.format("Unsupported cbo_eq_base_type: %s, " +
-                        "supported list is {varchar, decimal}", baseType));
+                        "supported list is {varchar, decimal, double}", baseType));
             }
         }
 
         // follower_query_forward_mode
         if (variable.equalsIgnoreCase(SessionVariable.FOLLOWER_QUERY_FORWARD_MODE)) {
             String queryFollowerForwardMode = resolvedExpression.getStringValue();
-            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.FollowerQueryForwardMode.class, queryFollowerForwardMode)) {
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.FollowerQueryForwardMode.class,
+                    queryFollowerForwardMode)) {
                 String supportedList = StringUtils.join(
                         EnumUtils.getEnumList(SessionVariable.FollowerQueryForwardMode.class), ",");
                 throw new SemanticException(String.format("Unsupported follower query forward mode: %s, " +

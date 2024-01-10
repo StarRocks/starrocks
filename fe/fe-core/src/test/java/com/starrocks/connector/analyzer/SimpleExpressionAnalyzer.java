@@ -369,7 +369,7 @@ public class SimpleExpressionAnalyzer {
             predicateBaseAndCheck(node);
 
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
-            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
+            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, true);
 
             for (Type type : list) {
                 if (!Type.canCastTo(type, compatibleType)) {
@@ -557,7 +557,7 @@ public class SimpleExpressionAnalyzer {
 
             // check compatible type
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
-            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
+            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, false);
 
             for (Type type : list) {
                 // TODO(mofei) support it

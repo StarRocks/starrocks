@@ -637,7 +637,7 @@ public class ExpressionAnalyzer {
             predicateBaseAndCheck(node);
 
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
-            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
+            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, true);
 
             for (Type type : list) {
                 if (!Type.canCastTo(type, compatibleType)) {
@@ -846,7 +846,7 @@ public class ExpressionAnalyzer {
 
             // check compatible type
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
-            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
+            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, false);
 
             if (compatibleType == Type.INVALID) {
                 throw new SemanticException("The input types (" + list.stream().map(Type::toSql).collect(
