@@ -91,6 +91,11 @@ import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rule.tree.SubfieldExprNoCopyRule;
+import com.starrocks.sql.optimizer.rule.tree.lowcardinality.LowCardinalityRewriteRule;
+>>>>>>> 533962e314 ([BugFix] move SubfieldExprNoCopyRule from logical rule to physical rule (#38756))
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
@@ -447,6 +452,10 @@ public class Optimizer {
         }
 
         tree = pruneSubfield(tree, rootTaskContext, requiredColumns);
+<<<<<<< HEAD
+=======
+
+>>>>>>> 533962e314 ([BugFix] move SubfieldExprNoCopyRule from logical rule to physical rule (#38756))
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_PROJECT);
 
@@ -755,6 +764,11 @@ public class Optimizer {
         // This must be put at last of the optimization. Because wrapping reused ColumnRefOperator with CloneOperator
         // too early will prevent it from certain optimizations that depend on the equivalence of the ColumnRefOperator.
         result = new CloneDuplicateColRefRule().rewrite(result, rootTaskContext);
+
+        // set subfield expr copy flag
+        if (rootTaskContext.getOptimizerContext().getSessionVariable().getEnableSubfieldNoCopy()) {
+            result = new SubfieldExprNoCopyRule().rewrite(result, rootTaskContext);
+        }
 
         result.setPlanCount(planCount);
         return result;
