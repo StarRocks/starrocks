@@ -26,6 +26,7 @@
 #include "gutil/casts.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
+#include "types/bitmap_value.h"
 #include "util/phmap/phmap.h"
 #include "util/string_parser.hpp"
 
@@ -183,6 +184,8 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_and(FunctionContext* context, const 
     for (const ColumnPtr& col : columns) {
         list.emplace_back(col);
     }
+    std::vector<BitmapValue> values;
+    values.reserve(columns.size());
     size_t size = columns[0]->size();
     ColumnBuilder<TYPE_OBJECT> builder(size);
     for (int row = 0; row < size; ++row) {
@@ -197,10 +200,16 @@ StatusOr<ColumnPtr> BitmapFunctions::bitmap_and(FunctionContext* context, const 
             builder.append_null();
             continue;
         }
+        values.clear();
+        for (int i = 0; i < list.size(); i++) {
+            values.emplace_back(*(list[i].value(row)));
+        }
+        std::sort(values.begin(), values.end(),
+                  [](const BitmapValue& a, const BitmapValue& b) -> bool { return a.cardinality() > b.cardinality(); });
         BitmapValue bitmap;
-        bitmap |= *(list[0].value(row));
+        bitmap |= values[0];
         for (int i = 1; i < list.size(); i++) {
-            bitmap &= *(list[i].value(row));
+            bitmap &= values[i];
         }
         builder.append(&bitmap);
     }
