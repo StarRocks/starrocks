@@ -598,7 +598,28 @@ The SQL dialect that is used. For example, you can run the `set sql_dialect = 't
 
 ### sql_mode
 
-Used to specify the SQL mode to accommodate certain SQL dialects.
+Used to specify the SQL mode to accommodate certain SQL dialects. Valid values include:
+
+* `PIPES_AS_CONCAT`: The pipe symbol `|` is used for string concatenation. For example: `select 'hello ' || 'world'`.
+* `ONLY_FULL_GROUP_BY`: The SELECT LIST can only contain GROUP BY columns or aggregate functions.
+* `ALLOW_THROW_EXCEPTION`: Type conversion errors instead of returning NULL.
+* `FORBID_INVALID_DATE`: Prohibit invalid dates.
+* `MODE_DOUBLE_LITERAL`: Interpret floating-point types as Double rather than Decimal.
+* `SORT_NULLS_LAST`: After sorting, place NULL values at the end.
+* `ERROR_IF_OVERFLOW`: On arithmetic overflow, report an error instead of returning NULL, currently only Decimal supports this behavior.
+* `GROUP_CONCAT_LEGACY`: Use the `group_concat` syntax of version 2.5 and earlier.
+
+Different modes can be set independently. You can enable a particular mode individually, for example:
+
+```SQL
+set sql_mode = 'PIPES_AS_CONCAT';
+```
+
+Or, you can set multiple modes at the same time, for example:
+
+```SQL
+set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
+```
 
 ### sql_safe_updates
 
