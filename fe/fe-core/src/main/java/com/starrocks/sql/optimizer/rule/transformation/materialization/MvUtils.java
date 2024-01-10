@@ -408,7 +408,7 @@ public class MvUtils {
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
         TransformerContext transformerContext =
                 new TransformerContext(columnRefFactory, connectContext, inlineView);
-        LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
+        LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transform(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
                 connectContext,
