@@ -68,6 +68,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MarkedCountDownLatch;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
@@ -80,6 +81,7 @@ import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -2439,17 +2441,8 @@ public class OlapTable extends Table {
         // drop all temp partitions of this table, so that there is no temp partitions in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
-        for (MvId mvId : getRelatedMaterializedViews()) {
-            Table tmpTable = db.getTable(mvId.getId());
-            if (tmpTable != null) {
-                MaterializedView mv = (MaterializedView) tmpTable;
-                mv.setInactiveAndReason("base-table dropped: " + getName());
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                        "the table {} was dropped.", mv.getName(), mv.getId(), getName());
-            } else {
-                LOG.warn("Ignore materialized view {} does not exists", mvId);
-            }
-        }
+        LocalMetastore.inactiveRelatedMaterializedView(db, this,
+                MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()));
     }
 
     @Override

@@ -18,6 +18,7 @@ package com.starrocks.scheduler;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Database;
@@ -364,7 +365,7 @@ public class PartitionBasedMvRefreshProcessorTest {
     public void testInactive() {
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_inactive"));
-        materializedView.setActive(false);
+        materializedView.setInactiveAndReason(AlterJobMgr.MANUAL_INACTIVE_MV_REASON);
         Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
 
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();

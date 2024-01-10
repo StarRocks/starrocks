@@ -241,7 +241,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // 4. Analyze and prepare partition
         Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(ctx, insertStmt);
         ExecPlan execPlan = null;
-        try {
+        try (ConnectContext.ScopeGuard guard = ctx.bindScope()) {
             StatementPlanner.lock(dbs);
 
             insertStmt =

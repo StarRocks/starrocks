@@ -92,6 +92,8 @@ public:
     // factory function
     static std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type);
 
+    void set_runtime_state(RuntimeState* state);
+
     static void set_starrocks_server(StarRocksServer* starrocks_server) { _s_starrocks_server = starrocks_server; }
 
     const std::vector<SlotDescriptor*>& get_slot_descs() { return _slot_descs; }

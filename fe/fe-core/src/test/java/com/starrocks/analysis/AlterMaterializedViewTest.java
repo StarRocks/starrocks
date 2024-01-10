@@ -58,7 +58,7 @@ public class AlterMaterializedViewTest {
 
     @Before
     public void before() {
-        connectContext.setThreadLocalInfo();
+        starRocksAssert.getCtx().setThreadLocalInfo();
     }
 
     @Test
@@ -147,6 +147,73 @@ public class AlterMaterializedViewTest {
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
             Assert.assertThrows(DdlException.class, () -> currentState.alterMaterializedView(stmt));
         }
+    }
+
+    /**
+     * Reload procedure should work for hierarchical MV
+     */
+    @Test
+    public void testMVOnMVReload() throws Exception {
+        PlanTestBase.mockDml();
+        MVActiveChecker checker = GlobalStateMgr.getCurrentState().getMvActiveChecker();
+        checker.setStop();
+
+        String createBaseTable = "create table treload_1 (c1 int) distributed by hash(c1) " +
+                "properties('replication_num'='1')";
+        starRocksAssert.withTable(createBaseTable);
+        starRocksAssert.withMaterializedView("create materialized view mvreload_1 " +
+                "distributed by hash(c1) refresh async " +
+                "as select * from treload_1");
+        starRocksAssert.withMaterializedView("create materialized view mvreload_2 " +
+                "distributed by hash(c1) refresh async " +
+                "as select * from treload_1");
+        starRocksAssert.withMaterializedView("create materialized view mvreload_3 " +
+                "distributed by hash(c1) refresh async " +
+                "as select a.c1, b.c1 as bc1 from mvreload_1 a join mvreload_2 b");
+
+        // drop base table would inactive all related MV
+        starRocksAssert.dropTable("treload_1");
+        Assert.assertThrows(DdlException.class, () ->
+                starRocksAssert.refreshMV("refresh materialized view mvreload_3"));
+        Assert.assertFalse(starRocksAssert.getMv("test", "mvreload_1").isActive());
+        Assert.assertFalse(starRocksAssert.getMv("test", "mvreload_2").isActive());
+        Assert.assertFalse(starRocksAssert.getMv("test", "mvreload_3").isActive());
+
+        // create the table and run the AutoActive
+        starRocksAssert.withTable(createBaseTable);
+        checker.runForTest();
+        checker.runForTest();
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_1").isActive());
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_2").isActive());
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_3").isActive());
+
+        // create the table and refresh
+        starRocksAssert.dropTable("treload_1");
+        starRocksAssert.withTable(createBaseTable);
+        starRocksAssert.refreshMV("refresh materialized view mvreload_1");
+        starRocksAssert.refreshMV("refresh materialized view mvreload_2");
+        starRocksAssert.refreshMV("refresh materialized view mvreload_3");
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_1").isActive());
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_2").isActive());
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_3").isActive());
+
+        // create the table and manually active, top-down active
+        starRocksAssert.dropTable("treload_1");
+        starRocksAssert.withTable(createBaseTable);
+        starRocksAssert.ddl("alter materialized view mvreload_1 active");
+        starRocksAssert.ddl("alter materialized view mvreload_2 active");
+        starRocksAssert.ddl("alter materialized view mvreload_3 active");
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_1").isActive());
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_2").isActive());
+        Assert.assertTrue(starRocksAssert.getMv("test", "mvreload_3").isActive());
+
+        // cleanup
+        starRocksAssert.getCtx().setThreadLocalInfoIfNotExists();
+        starRocksAssert.dropTable("treload_1");
+        starRocksAssert.dropMaterializedView("mvreload_1");
+        starRocksAssert.dropMaterializedView("mvreload_2");
+        starRocksAssert.dropMaterializedView("mvreload_3");
+        checker.start();
     }
 
     @Test

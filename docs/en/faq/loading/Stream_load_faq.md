@@ -34,4 +34,4 @@ In the preceding example, `DATE_1` can be considered to be a temporarily named c
 The size of the source data file exceeds 10 GB, which is the maximum file size supported by Stream Load. Take one of the following actions:
 
 - Use `seq -w 0 n` to split the source data file into smaller files.
-- Use `curl -XPOST http:///be_host:http_port/api/update_config?streaming_load_max_mb=<file_size>` to adjust the value of the [BE configuration item](../../administration/Configuration.md#configure-be-dynamic-parameters) `streaming_load_max_mb` to increase the maximum file size.
+- Use `curl -XPOST http://be_host:http_port/api/update_config?streaming_load_max_mb=<file_size>` to adjust the value of the [BE configuration item](../../administration/Configuration.md#configure-be-dynamic-parameters) `streaming_load_max_mb` to increase the maximum file size.
