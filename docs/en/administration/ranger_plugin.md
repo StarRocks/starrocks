@@ -169,15 +169,10 @@ For External Catalog, you can reuse external services (such as Hive Service) for
       ```SQL
         CREATE EXTERNAL CATALOG hive_catalog_1
         PROPERTIES (
-<<<<<<< HEAD
-            "hive.metastore.uris" = "thrift://172.26.195.10:9083",
-            "ranger.plugin.hive.service.name" = "hive_catalog_1"
-=======
             "type" = "hive",
             "hive.metastore.type" = "hive",
             "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
             "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>"
->>>>>>> 66985c8999 ([Doc]Improve the External Catalog Ranger configuration document (#38785))
         )
       ```
 
