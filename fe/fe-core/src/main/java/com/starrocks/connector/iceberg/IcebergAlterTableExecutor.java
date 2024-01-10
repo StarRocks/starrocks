@@ -79,7 +79,9 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             Column column = clause.getColumnDef().toColumn();
 
             // All non-partition columns must use NULL as the default value.
-            Preconditions.checkArgument(column.isAllowNull(), "column in iceberg table must be nullable.");
+            if (!column.isAllowNull()) {
+                throw new StarRocksConnectorException("column in iceberg table must be nullable.");
+            }
             updateSchema.addColumn(
                     column.getName(),
                     toIcebergColumnType(column.getType()),
@@ -112,7 +114,9 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                     .collect(Collectors.toList());
 
             for (Column column : columns) {
-                Preconditions.checkArgument(column.isAllowNull(), "column in iceberg table must be nullable.");
+                if (!column.isAllowNull()) {
+                    throw new StarRocksConnectorException("column in iceberg table must be nullable.");
+                }
                 updateSchema.addColumn(
                         column.getName(),
                         toIcebergColumnType(column.getType()),
@@ -152,8 +156,10 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             org.apache.iceberg.types.Type colType = toIcebergColumnType(column.getType());
 
             // UPDATE column type
-            Preconditions.checkArgument(colType.isPrimitiveType(),
-                    "Cannot modify " + column.getName() + ", not a primitive type");
+            if (!colType.isPrimitiveType()) {
+                throw new StarRocksConnectorException(
+                        "Cannot modify " + column.getName() + ", not a primitive type");
+            }
             updateSchema.updateColumn(column.getName(), colType.asPrimitiveType());
 
             // UPDATE comment
@@ -162,8 +168,12 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
             }
 
             // NOT NULL / NULL
-            Preconditions.checkArgument(column.isAllowNull(), "column in iceberg table must be nullable.");
-            updateSchema.makeColumnOptional(column.getName());
+            if (column.isAllowNull()) {
+                updateSchema.makeColumnOptional(column.getName());
+            } else {
+                throw new StarRocksConnectorException(
+                        "column in iceberg table must be nullable.");
+            }
 
             // AFTER column / FIRST
             if (colPos != null) {
@@ -186,10 +196,12 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
         actions.add(() -> {
             UpdateProperties updateProperties = this.transaction.updateProperties();
             Map<String, String> pendingUpdate = clause.getProperties();
-            Preconditions.checkArgument(pendingUpdate.size() > 0, "Modified property is empty");
+            if (pendingUpdate.isEmpty()) {
+                throw new StarRocksConnectorException("Modified property is empty");
+            }
 
             for (Map.Entry<String, String> entry : pendingUpdate.entrySet()) {
-                Preconditions.checkNotNull(entry.getValue(), new StarRocksConnectorException("property value cannot be null"));
+                Preconditions.checkNotNull(entry.getValue(), "property value cannot be null");
                 switch (entry.getKey().toLowerCase()) {
                     case FILE_FORMAT:
                         updateProperties.defaultFormat(FileFormat.fromString(entry.getValue()));
@@ -199,9 +211,10 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                         transaction.updateLocation().setLocation(entry.getValue()).commit();
                         break;
                     case COMPRESSION_CODEC:
-                        Preconditions.checkArgument(
-                                PARQUET_COMPRESSION_TYPE_MAP.containsKey(entry.getValue().toLowerCase(Locale.ROOT)),
-                                "Unsupported compression codec for iceberg connector: " + entry.getValue());
+                        if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(entry.getValue().toLowerCase(Locale.ROOT))) {
+                            throw new StarRocksConnectorException(
+                                    "Unsupported compression codec for iceberg connector: " + entry.getValue());
+                        }
 
                         String fileFormat = pendingUpdate.get(FILE_FORMAT);
                         // only modify compression_codec or modify both file_format and compression_codec.
