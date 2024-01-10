@@ -107,7 +107,7 @@ public:
     bool set_tablet_schema_into_rowset_meta() {
         bool flag = false;
         for (const RowsetMetaSharedPtr& rowset_meta : _tablet_meta->all_rs_metas()) {
-            if (!rowset_meta->get_meta_pb().has_tablet_schema()) {
+            if (!rowset_meta->has_tablet_schema_pb()) {
                 rowset_meta->set_tablet_schema(tablet_schema());
                 flag = true;
             }

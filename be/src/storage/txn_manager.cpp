@@ -268,7 +268,7 @@ Status TxnManager::commit_txn(KVStore* meta, TPartitionId partition_id, TTransac
     // it is under a single txn lock
     if (!is_recovery) {
         RowsetMetaPB rowset_meta_pb;
-        rowset_ptr->rowset_meta()->to_rowset_pb(&rowset_meta_pb);
+        rowset_ptr->rowset_meta()->get_full_meta_pb(&rowset_meta_pb);
         Status st = RowsetMetaManager::save(meta, tablet_uid, rowset_meta_pb);
         if (!st.ok()) {
             LOG(WARNING) << "Fail to save committed rowset. "

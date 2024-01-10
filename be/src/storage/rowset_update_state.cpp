@@ -162,7 +162,8 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
     }
     // if rowset is partial rowset, we need to load rowset totally because we don't support load multiple load
     // for partial update so far
-    bool ignore_mem_limit = rowset->rowset_meta()->get_meta_pb().has_txn_meta() && rowset->num_segments() != 0;
+    bool ignore_mem_limit =
+            rowset->rowset_meta()->get_meta_pb_without_schema().has_txn_meta() && rowset->num_segments() != 0;
 
     if (ignore_mem_limit) {
         for (size_t i = 0; i < rowset->num_delete_files(); i++) {
@@ -363,7 +364,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
     }
 
     int64_t t_start = MonotonicMillis();
-    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
+    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb_without_schema().txn_meta();
 
     std::vector<uint32_t> update_column_uids(txn_meta.partial_update_column_unique_ids().begin(),
                                              txn_meta.partial_update_column_unique_ids().end());
@@ -445,7 +446,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
         _auto_increment_partial_update_states.resize(rowset->num_segments());
     }
     DCHECK_EQ(column_id.size(), 1);
-    const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
+    const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
     auto read_column_schema = ChunkHelper::convert_schema(tablet_schema, column_id);
     std::vector<std::unique_ptr<Column>> read_column;
     read_column.resize(1);
@@ -544,12 +545,12 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(Tablet* 
 }
 
 bool RowsetUpdateState::_check_partial_update(Rowset* rowset) {
-    if (!rowset->rowset_meta()->get_meta_pb().has_txn_meta() || rowset->num_segments() == 0) {
+    if (!rowset->rowset_meta()->get_meta_pb_without_schema().has_txn_meta() || rowset->num_segments() == 0) {
         return false;
     }
     // Merge condition and auto-increment-column-only partial update will also set txn_meta
     // but will not set partial_update_column_ids
-    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb().txn_meta();
+    const auto& txn_meta = rowset->rowset_meta()->get_meta_pb_without_schema().txn_meta();
     return !txn_meta.partial_update_column_ids().empty();
 }
 
@@ -693,7 +694,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, const TabletSchemaCSPtr& tablet_
                                 uint32_t rowset_id, uint32_t segment_id, EditVersion latest_applied_version,
                                 const PrimaryIndex& index, std::unique_ptr<Column>& delete_pks,
                                 int64_t* append_column_size) {
-    const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
+    const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb_without_schema();
     if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0) {
         return Status::OK();
     }
