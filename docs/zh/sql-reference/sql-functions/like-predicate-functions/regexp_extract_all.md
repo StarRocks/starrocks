@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-从 `str` 中提取与正则表达式 `pattern` 相匹配的子字符串，字符串必须对应 `pos` 指定的正则分组。该函数返回一个字符串数组。
+从 `str` 中提取与正则表达式 `pattern` 相匹配的子字符串并返回一个字符串数组。字符串必须匹配 `pos` 指定的正则分组。
 
 在正则表达式中，分组是用括号 `()` 包裹起来的。一个 `pattern` 可能包含多个组，按照括号从左到右进行编号，起始数为 1。比如 `([[:lower:]]+)C([[:lower:]]+)` 包含两个分组，`C` 左边的 `([[:lower:]]+)` 为第一个分组，右边的 `([[:lower:]]+)` 为第二个分组。该正则表达式匹配大写字母 `C` 左边和右边的小写字母。
 
@@ -24,7 +24,7 @@ ARRAY<VARCHAR> regexp_extract_all(VARCHAR str, VARCHAR pattern, BIGINT pos)
 
 - `pattern`: 待匹配的正则模式。
 
-- `pos`: `pattern` 中可能包含多个分组，`pos` 用于指定组编号。
+- `pos`: `pattern` 中可能包含多个分组，`pos` 用于指定第几个组，从 1 开始。
 
 ## 返回值说明
 
@@ -33,7 +33,7 @@ ARRAY<VARCHAR> regexp_extract_all(VARCHAR str, VARCHAR pattern, BIGINT pos)
 ## 示例
 
 ```Plain Text
--- 匹配 pattern 中第一个分组对应的所有字符。
+-- 返回 pattern 中第一个分组匹配到的所有字符。
 MySQL > SELECT regexp_extract_all('AbCdE', '([[:lower:]]+)C([[:lower:]]+)', 1);
 +-------------------------------------------------------------------+
 | regexp_extract_all('AbCdE', '([[:lower:]]+)C([[:lower:]]+)', 1)   |
@@ -41,7 +41,7 @@ MySQL > SELECT regexp_extract_all('AbCdE', '([[:lower:]]+)C([[:lower:]]+)', 1);
 | ['b']                                                             |
 +-------------------------------------------------------------------+
 
--- 匹配 pattern 中第二个分组对应的所有字符。
+-- 返回 pattern 中第二个分组匹配的所有字符。
 MySQL > SELECT regexp_extract_all('AbCdExCeF', '([[:lower:]]+)C([[:lower:]]+)', 2);
 +---------------------------------------------------------------------+
 | regexp_extract_all('AbCdExCeF', '([[:lower:]]+)C([[:lower:]]+)', 2) |

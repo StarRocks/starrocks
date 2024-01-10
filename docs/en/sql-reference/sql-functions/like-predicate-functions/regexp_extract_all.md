@@ -33,7 +33,7 @@ Returns an ARRAY that consists of VARCHAR elements.
 ## Examples
 
 ```Plain Text
--- Return all the letters that correspond to group 1 in the pattern.
+-- Return all the letters that match group 1 in the pattern.
 MySQL > SELECT regexp_extract_all('AbCdE', '([[:lower:]]+)C([[:lower:]]+)', 1);
 +-------------------------------------------------------------------+
 | regexp_extract_all('AbCdE', '([[:lower:]]+)C([[:lower:]]+)', 1)   |
@@ -41,7 +41,7 @@ MySQL > SELECT regexp_extract_all('AbCdE', '([[:lower:]]+)C([[:lower:]]+)', 1);
 | ['b']                                                             |
 +-------------------------------------------------------------------+
 
--- Return all the letters that correspond to group 2 in the pattern.
+-- Return all the letters that match group 2 in the pattern.
 MySQL > SELECT regexp_extract_all('AbCdExCeF', '([[:lower:]]+)C([[:lower:]]+)', 2);
 +---------------------------------------------------------------------+
 | regexp_extract_all('AbCdExCeF', '([[:lower:]]+)C([[:lower:]]+)', 2) |
