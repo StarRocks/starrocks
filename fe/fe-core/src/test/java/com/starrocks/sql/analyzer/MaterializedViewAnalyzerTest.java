@@ -25,7 +25,6 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ShowExecutor;
@@ -33,15 +32,18 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.util.Lists;
 import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.RepeatedTest;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.io.File;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.IntStream;
@@ -51,8 +53,43 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class MaterializedViewAnalyzerTest {
     static StarRocksAssert starRocksAssert;
-    @ClassRule
-    public static TemporaryFolder temp = new TemporaryFolder();
+    @TempDir
+    public static File temp;
+
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        AnalyzeTestUtil.init();
+        starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
+        ConnectorPlanTestBase.mockAllCatalogs(starRocksAssert.getCtx(), temp.toURI().toString());
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(starRocksAssert.getCtx());
+
+        starRocksAssert.useDatabase("test")
+                .withTable("CREATE TABLE test.tbl1\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withMaterializedView("create materialized view mv\n" +
+                        "PARTITION BY k1\n" +
+                        "distributed by hash(k2) buckets 3\n" +
+                        "refresh async\n" +
+                        "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
+    }
+
+    @AfterAll
+    public static void afterClass() {
+        ConnectorPlanTestBase.dropAllCatalogs();
+    }
 
     @Test
     public void testMaterializedAnalyPaimonTable(@Mocked SlotRef slotRef, @Mocked PaimonTable table) {
@@ -126,7 +163,7 @@ public class MaterializedViewAnalyzerTest {
         }
     }
 
-    @Test
+    @RepeatedTest(value = 1)
     public void testReplacePaimonTableAlias(@Mocked SlotRef slotRef, @Mocked PaimonTable table) {
         MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor materializedViewAnalyzerVisitor =
                 new MaterializedViewAnalyzer.MaterializedViewAnalyzerVisitor();
@@ -156,36 +193,7 @@ public class MaterializedViewAnalyzerTest {
                 }
             };
             Assert.assertFalse(materializedViewAnalyzerVisitor.replacePaimonTableAlias(slotRef, table, baseTableInfo));
-
         }
-
-    }
-
-    @BeforeClass
-    public static void beforeClass() throws Exception {
-        AnalyzeTestUtil.init();
-        Config.enable_experimental_mv = true;
-        starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
-        ConnectorPlanTestBase.mockAllCatalogs(starRocksAssert.getCtx(), temp.newFolder().toURI().toString());
-        starRocksAssert.useDatabase("test")
-                .withTable("CREATE TABLE test.tbl1\n" +
-                        "(\n" +
-                        "    k1 date,\n" +
-                        "    k2 int,\n" +
-                        "    v1 int sum\n" +
-                        ")\n" +
-                        "PARTITION BY RANGE(k1)\n" +
-                        "(\n" +
-                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
-                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
-                        ")\n" +
-                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                        "PROPERTIES('replication_num' = '1');")
-                .withMaterializedView("create materialized view mv\n" +
-                        "PARTITION BY k1\n" +
-                        "distributed by hash(k2) buckets 3\n" +
-                        "refresh async\n" +
-                        "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
     }
 
     @Test
@@ -353,6 +361,5 @@ public class MaterializedViewAnalyzerTest {
         Assert.assertEquals(Joiner.on(",").join(queryOutputIndices), expect);
         Assert.assertEquals(IntStream.range(0, queryOutputIndices.size()).anyMatch(i -> i != queryOutputIndices.get(i)),
                 isChanged);
-
     }
 }

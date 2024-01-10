@@ -50,6 +50,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
@@ -1067,5 +1068,40 @@ public class UtFrameUtils {
             System.out.println(trimedActual);
         }
         return ret;
+    }
+
+    public static void setDefaultConfigForAsyncMVTest(ConnectContext connectContext) {
+        Config.dynamic_partition_check_interval_seconds = 10;
+        Config.bdbje_heartbeat_timeout_second = 60;
+        Config.bdbje_replica_ack_timeout_second = 60;
+        Config.bdbje_lock_timeout_second = 60;
+
+        // set some parameters to speedup test
+        Config.tablet_sched_checker_interval_seconds = 1;
+        Config.tablet_sched_repair_delay_factor_second = 1;
+        Config.enable_new_publish_mechanism = true;
+        Config.alter_scheduler_interval_millisecond = 100;
+
+        // Use sync analyze
+        Config.mv_auto_analyze_async = false;
+
+        // Default REFRESH DEFERRED
+        Config.default_mv_refresh_immediate = false;
+        // default replication num: 1
+        Config.default_replication_num = 1;
+
+        // build a small cache for test
+        Config.mv_plan_cache_max_size = 10;
+
+        FeConstants.enablePruneEmptyOutputScan = false;
+        FeConstants.runningUnitTest = true;
+
+        if (connectContext != null) {
+            // 300s: 5min
+            connectContext.getSessionVariable().setOptimizerExecuteTimeout(300 * 1000);
+            // 300s: 5min
+            connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(300 * 1000);
+            connectContext.getSessionVariable().setEnableShortCircuit(false);
+        }
     }
 }
