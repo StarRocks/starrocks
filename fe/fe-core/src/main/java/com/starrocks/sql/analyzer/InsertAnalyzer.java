@@ -32,10 +32,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.connector.hive.HiveWriteUtils;
-<<<<<<< HEAD
-import com.starrocks.external.starrocks.TableMetaSyncer;
-=======
->>>>>>> ca0c990c58 ([BugFix] Fix external OLAP table load failed bug (#38542))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -291,28 +287,6 @@ public class InsertAnalyzer {
             }
         }
     }
-<<<<<<< HEAD
-  
-    private static ExternalOlapTable getOLAPExternalTableMeta(Database database, ExternalOlapTable externalOlapTable) {
-        // copy the table, and release database lock when synchronize table meta
-        ExternalOlapTable copiedTable = new ExternalOlapTable();
-        externalOlapTable.copyOnlyForQuery(copiedTable);
-        int lockTimes = 0;
-        while (database.isReadLockHeldByCurrentThread()) {
-            database.readUnlock();
-            lockTimes++;
-        }
-        try {
-            new TableMetaSyncer().syncTable(copiedTable);
-        } finally {
-            while (lockTimes-- > 0) {
-                database.readLock();
-            }
-        }
-        return copiedTable;
-    }
-=======
->>>>>>> ca0c990c58 ([BugFix] Fix external OLAP table load failed bug (#38542))
 
     private static Table getTargetTable(InsertStmt insertStmt, ConnectContext session) {
         if (insertStmt.useTableFunctionAsTargetTable()) {
