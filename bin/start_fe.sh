@@ -70,8 +70,6 @@ if [ -e $STARROCKS_HOME/conf/hadoop_env.sh ]; then
     source $STARROCKS_HOME/conf/hadoop_env.sh
 fi
 
-check_os_env
-
 # java
 if [[ -z ${JAVA_HOME} ]]; then
     if command -v javac &> /dev/null; then
@@ -199,6 +197,8 @@ else
     # redirect all subsequent commands' stdout/stderr into $LOG_FILE
     exec &>> $LOG_FILE
 fi
+
+check_and_update_max_processes
 
 echo "using java version $JAVA_VERSION"
 echo $final_java_opt
