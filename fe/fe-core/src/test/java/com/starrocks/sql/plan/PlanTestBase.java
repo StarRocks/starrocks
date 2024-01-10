@@ -897,6 +897,19 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `tprimary_bool` (\n" +
+                "  `pk1` bigint NOT NULL COMMENT \"\",\n" +
+                "  `pk2` BOOLEAN NOT NULL COMMENT \"\",\n" +
+                "  `v3` string NOT NULL COMMENT \"\",\n" +
+                "  `v4` int NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(pk1, pk2)\n" +
+                "DISTRIBUTED BY HASH(pk1, pk2) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
         starRocksAssert.withTable("CREATE TABLE `tjson` (\n" +
                 "  `v_int`  bigint NULL COMMENT \"\",\n" +
                 "  `v_json` json NULL COMMENT \"\" \n" +
