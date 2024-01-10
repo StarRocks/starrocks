@@ -26,9 +26,11 @@ static constexpr size_t MAP_SIZE = 1 << 16;
 using NgramHash = uint16;
 
 struct Ngramstate {
-    using DriverMap = phmap::parallel_flat_hash_map<int32_t, std::vector<NgramHash>, phmap::Hash<int32_t>,
-                                                    phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>,
-                                                    NUM_LOCK_SHARD_LOG, std::mutex>;
+    // use std::unique_ptr<std::vector<NgramHash>> instead  of vector as key
+    // to prevent vector use after free when hash map resize
+    using DriverMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<std::vector<NgramHash>>,
+                                                    phmap::Hash<int32_t>, phmap::EqualTo<int32_t>,
+                                                    phmap::Allocator<int32_t>, NUM_LOCK_SHARD_LOG, std::mutex>;
     Ngramstate(size_t hash_map_len) : publicHashMap(hash_map_len, 0){};
     // unmodified map, only used for driver to copy
     std::vector<NgramHash> publicHashMap;
@@ -36,16 +38,22 @@ struct Ngramstate {
 
     size_t needle_gram_count = 0;
 
-    std::vector<NgramHash>& get_or_create_driver_hashmap() {
+    std::vector<NgramHash>* get_or_create_driver_hashmap() {
         int32_t driver_id = CurrentThread::current().get_driver_id();
 
-        if (UNLIKELY(!driver_maps.contains(driver_id))) {
-            std::vector<NgramHash> per_driver_map(publicHashMap);
-            driver_maps.lazy_emplace(driver_id, [&](auto build) { build(driver_id, std::move(per_driver_map)); });
+        std::vector<NgramHash>* result = nullptr;
+        driver_maps.if_contains(driver_id, [&](const auto& value) { result = value.get(); });
+        // create the dirver map when one driver first call this function
+        if (UNLIKELY(result == nullptr)) {
+            std::unique_ptr<std::vector<NgramHash>> result_ptr =
+                    std::make_unique<std::vector<NgramHash>>(publicHashMap);
+            result = result_ptr.get();
+            driver_maps.lazy_emplace(driver_id, [&](auto build) { build(driver_id, std::move(result_ptr)); });
         }
 
-        DCHECK(driver_maps.contains(driver_id));
-        return driver_maps[driver_id];
+        DCHECK(result != nullptr);
+
+        return result;
     }
 };
 
@@ -73,11 +81,11 @@ public:
         }
 
         auto state = reinterpret_cast<Ngramstate*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
-        std::vector<NgramHash>& map = state->get_or_create_driver_hashmap();
+        std::vector<NgramHash>* map = state->get_or_create_driver_hashmap();
         if (haystack_column->is_constant()) {
-            return haystack_const_and_needle_const(haystack_column, map, context);
+            return haystack_const_and_needle_const(haystack_column, *map, context);
         } else {
-            return haystack_vector_and_needle_const(haystack_column, map, context);
+            return haystack_vector_and_needle_const(haystack_column, *map, context);
         }
     }
 
