@@ -93,10 +93,13 @@ public class LakeMaterializedViewTest {
 
     @BeforeClass
     public static void setUp() throws Exception {
-        Config.enable_experimental_mv = true;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         cluster = PseudoCluster.getInstance();
         connectContext = UtFrameUtils.createDefaultCtx();
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB).useDatabase(DB);
 

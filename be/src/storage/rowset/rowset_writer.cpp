@@ -664,7 +664,8 @@ Status HorizontalRowsetWriter::_final_merge() {
         }
         std::string tmp_segment_file =
                 Rowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
-        auto segment_ptr = Segment::open(_fs, tmp_segment_file, seg_id, _context.tablet_schema);
+        FileInfo tmp_segment_info{.path = tmp_segment_file};
+        auto segment_ptr = Segment::open(_fs, tmp_segment_info, seg_id, _context.tablet_schema);
         if (!segment_ptr.ok()) {
             LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
             return segment_ptr.status();

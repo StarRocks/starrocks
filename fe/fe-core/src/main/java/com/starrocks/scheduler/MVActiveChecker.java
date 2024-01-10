@@ -88,7 +88,7 @@ public class MVActiveChecker extends FrontendDaemon {
                 if (table.isMaterializedView()) {
                     MaterializedView mv = (MaterializedView) table;
                     if (!mv.isActive()) {
-                        tryToActivate(mv);
+                        tryToActivate(mv, true);
                     }
                 }
             }
@@ -96,6 +96,15 @@ public class MVActiveChecker extends FrontendDaemon {
     }
 
     public static void tryToActivate(MaterializedView mv) {
+        tryToActivate(mv, false);
+    }
+
+    /**
+     * @param mv
+     * @param checkGracePeriod whether check the grace period, usually background active would check it, but foreground
+     *                         job doesn't
+     */
+    public static void tryToActivate(MaterializedView mv, boolean checkGracePeriod) {
         // if the mv is set to inactive manually, we don't activate it
         String reason = mv.getInactiveReason();
         if (mv.isActive() || AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(reason)) {
@@ -110,7 +119,8 @@ public class MVActiveChecker extends FrontendDaemon {
         }
 
         MvActiveInfo activeInfo = MV_ACTIVE_INFO.get(mv.getMvId());
-        if (activeInfo != null && activeInfo.isInGracePeriod()) {
+        if (checkGracePeriod && activeInfo != null && activeInfo.isInGracePeriod()) {
+            LOG.warn("[MVActiveChecker] skip active MV {} since it's in grace-period", mv);
             return;
         }
 

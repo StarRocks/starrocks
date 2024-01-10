@@ -888,7 +888,7 @@ public class IcebergMetadataTest extends TableTestBase {
         Snapshot snapshotBeforeRefresh = table.getSnapshot().get();
 
         mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
-        Assert.assertEquals(snapshotBeforeRefresh.snapshotId(),
+        Assert.assertEquals(snapshotBeforeRefresh.snapshotId() + 1,
                 ((IcebergTable) metadata.getTable("db", "table")).getSnapshot().get().snapshotId());
 
         metadata.refreshTable("db", icebergTable, new ArrayList<>(), true);
@@ -961,10 +961,10 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
                 "table_name", columns, mockedNativeTableD, Maps.newHashMap());
 
-        org.apache.iceberg.PartitionKey partitionKey = new org.apache.iceberg.PartitionKey(SPEC_D, SCHEMA_D);
+        org.apache.iceberg.PartitionKey partitionKey = new org.apache.iceberg.PartitionKey(SPEC_D_5, SCHEMA_D);
         partitionKey.set(0, 438292);
         DataFile tsDataFiles =
-                DataFiles.builder(SPEC_D)
+                DataFiles.builder(SPEC_D_5)
                         .withPath("/path/to/data-d.parquet")
                         .withFileSizeInBytes(20)
                         .withPartition(partitionKey)
@@ -1129,7 +1129,7 @@ public class IcebergMetadataTest extends TableTestBase {
         AddColumnClause addC4 = new AddColumnClause(c4, null, null, new HashMap<>());
         clauses.add(addC4);
         AlterTableStmt stmtC4 = new AlterTableStmt(tableName, clauses);
-        Assert.assertThrows(StarRocksConnectorException.class, () -> metadata.alterTable(stmtC4));
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(stmtC4));
         clauses.clear();
 
         // drop/rename/modify column
@@ -1148,7 +1148,7 @@ public class IcebergMetadataTest extends TableTestBase {
         clauses.clear();
         TableRenameClause tableRenameClause = new TableRenameClause("newTbl");
         clauses.add(tableRenameClause);
-        Assert.assertThrows(StarRocksConnectorException.class,
+        Assert.assertThrows(DdlException.class,
                 () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
     }
 }

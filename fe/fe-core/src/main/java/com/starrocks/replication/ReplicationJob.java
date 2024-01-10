@@ -53,7 +53,7 @@ import com.starrocks.thrift.TTableReplicationRequest;
 import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTabletReplicationInfo;
 import com.starrocks.thrift.TTabletType;
-import com.starrocks.transaction.BeginTransactionException;
+import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionState;
@@ -64,6 +64,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 public class ReplicationJob implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(ReplicationJob.class);
@@ -626,10 +627,10 @@ public class ReplicationJob implements GsonPostProcessable {
     }
 
     private void beginTransaction()
-            throws LabelAlreadyUsedException, DuplicatedRequestException, AnalysisException, BeginTransactionException {
+            throws LabelAlreadyUsedException, DuplicatedRequestException, AnalysisException, RunningTxnExceedException {
         TransactionState.LoadJobSourceType loadJobSourceType = TransactionState.LoadJobSourceType.REPLICATION;
         TransactionState.TxnCoordinator coordinator = TransactionState.TxnCoordinator.fromThisFE();
-        String label = String.format("REPLICATION_%d-%d-%d", databaseId, tableId, System.currentTimeMillis());
+        String label = String.format("REPLICATION_%d_%d_%s", databaseId, tableId, UUID.randomUUID().toString());
         transactionId = GlobalStateMgr.getServingState().getGlobalTransactionMgr().beginTransaction(databaseId,
                 Lists.newArrayList(tableId), label, coordinator, loadJobSourceType,
                 Config.replication_transaction_timeout_sec);

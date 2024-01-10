@@ -257,8 +257,8 @@ StarRocks 访问文件存储的相关参数配置。
 - 基于 Shared Key 进行认证和鉴权
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.shared_key" = "<storage_account_shared_key>"
   ```
 
   `StorageCredentialParams` 包含如下参数。
@@ -271,9 +271,9 @@ StarRocks 访问文件存储的相关参数配置。
 - 基于 SAS Token 进行认证和鉴权
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.container" = "<blob_container_name>",
-  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.container" = "<container_name>",
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
   `StorageCredentialParams` 包含如下参数。
@@ -283,6 +283,56 @@ StarRocks 访问文件存储的相关参数配置。
   | azure.blob.storage_account| 是           | Blob Storage 账号的用户名。              |
   | azure.blob.container      | 是           | 数据所在 Blob 容器的名称。               |
   | azure.blob.sas_token      | 是           | 用于访问 Blob Storage 账号的 SAS Token。 |
+
+###### Azure Data Lake Storage Gen2
+
+如果选择 Data Lake Storage Gen2 作为文件存储，请按如下配置 `StorageCredentialParams`：
+
+- 基于 Managed Identity 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                                | **是否必须** | **说明**                                                |
+  | --------------------------------------- | ------------ | ------------------------------------------------------- |
+  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
+  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属 Tenant 的 ID。                                 |
+  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
+
+- 基于 Shared Key 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>",
+  "azure.adls2.shared_key" = "<storage_account_shared_key>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                    | **是否必须** | **说明**                                   |
+  | --------------------------- | ------------ | ------------------------------------------ |
+  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
+  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
+
+- 基于 Service Principal 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                           | **是否必须** | **说明**                                                     |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
+  | azure.adls2.oauth2_client_secret   | 是           | 新建的 Client (Application) Secret。                         |
+  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
 
 ###### Azure Data Lake Storage Gen1
 
@@ -315,56 +365,6 @@ StarRocks 访问文件存储的相关参数配置。
   | azure.adls1.oauth2_client_id  | 是           | Service Principal 的 Client (Application) ID。               |
   | azure.adls1.oauth2_credential | 是           | 新建的 Client (Application) Secret。                         |
   | azure.adls1.oauth2_endpoint   | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
-
-###### Azure Data Lake Storage Gen2
-
-如果选择 Data Lake Storage Gen2 作为文件存储，请按如下配置 `StorageCredentialParams`：
-
-- 基于 Managed Identity 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.oauth2_use_managed_identity" = "true",
-  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                                | **是否必须** | **说明**                                                |
-  | --------------------------------------- | ------------ | ------------------------------------------------------- |
-  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
-  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属 Tenant 的 ID。                                 |
-  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
-
-- 基于 Shared Key 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.storage_account" = "<storage_account_name>",
-  "azure.adls2.shared_key" = "<shared_key>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                    | **是否必须** | **说明**                                   |
-  | --------------------------- | ------------ | ------------------------------------------ |
-  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
-  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
-
-- 基于 Service Principal 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.oauth2_client_id" = "<service_client_id>",
-  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                           | **是否必须** | **说明**                                                     |
-  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
-  | azure.adls2.oauth2_client_secret   | 是           | 新建的 Client (Application) Secret。                         |
-  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
 
 ##### Google GCS
 

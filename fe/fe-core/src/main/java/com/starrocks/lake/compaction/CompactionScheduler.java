@@ -20,7 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -41,8 +41,8 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.VisibleStateWaiter;
@@ -66,7 +66,6 @@ public class CompactionScheduler extends Daemon {
     private static final Logger LOG = LogManager.getLogger(CompactionScheduler.class);
     private static final String HOST_NAME = FrontendOptions.getLocalHostAddress();
     private static final long LOOP_INTERVAL_MS = 200L;
-    private static final long TXN_TIMEOUT_SECOND = 86400L;
     private static final long MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS = LOOP_INTERVAL_MS * 2;
     private static final long MIN_COMPACTION_INTERVAL_MS_ON_FAILURE = LOOP_INTERVAL_MS * 10;
     private static final long PARTITION_CLEAN_INTERVAL_SECOND = 30;
@@ -239,7 +238,7 @@ public class CompactionScheduler extends Daemon {
         try {
             // lake table or lake materialized view
             OlapTable table = (OlapTable) db.getTable(partition.getTableId());
-            return table != null && table.getPartition(partition.getPartitionId()) != null;
+            return table != null && table.getPhysicalPartition(partition.getPartitionId()) != null;
         } finally {
             locker.unLockDatabase(db, LockType.READ);
         }
@@ -255,7 +254,7 @@ public class CompactionScheduler extends Daemon {
         long txnId;
         long currentVersion;
         OlapTable table;
-        Partition partition;
+        PhysicalPartition partition;
         Map<Long, List<Long>> beToTablets;
 
         Locker locker = new Locker();
@@ -270,7 +269,7 @@ public class CompactionScheduler extends Daemon {
                 compactionManager.enableCompactionAfter(partitionIdentifier, MIN_COMPACTION_INTERVAL_MS_ON_FAILURE);
                 return null;
             }
-            partition = (table != null) ? table.getPartition(partitionIdentifier.getPartitionId()) : null;
+            partition = (table != null) ? table.getPhysicalPartition(partitionIdentifier.getPartitionId()) : null;
             if (partition == null) {
                 compactionManager.removePartition(partitionIdentifier);
                 return null;
@@ -290,7 +289,7 @@ public class CompactionScheduler extends Daemon {
 
             partition.setMinRetainVersion(currentVersion);
 
-        } catch (BeginTransactionException | AnalysisException | LabelAlreadyUsedException | DuplicatedRequestException e) {
+        } catch (RunningTxnExceedException | AnalysisException | LabelAlreadyUsedException | DuplicatedRequestException e) {
             LOG.error("Fail to create transaction for compaction job. {}", e.getMessage());
             return null;
         } catch (Throwable e) {
@@ -347,7 +346,7 @@ public class CompactionScheduler extends Daemon {
     }
 
     @NotNull
-    private Map<Long, List<Long>> collectPartitionTablets(Partition partition) {
+    private Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition) {
         List<MaterializedIndex> visibleIndexes = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (MaterializedIndex index : visibleIndexes) {
@@ -364,8 +363,8 @@ public class CompactionScheduler extends Daemon {
     }
 
     // REQUIRE: has acquired the exclusive lock of Database.
-    private long beginTransaction(PartitionIdentifier partition)
-            throws BeginTransactionException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
+    protected long beginTransaction(PartitionIdentifier partition)
+            throws RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
         long dbId = partition.getDbId();
         long tableId = partition.getTableId();
         long partitionId = partition.getPartitionId();
@@ -375,7 +374,7 @@ public class CompactionScheduler extends Daemon {
         TransactionState.TxnCoordinator coordinator = new TransactionState.TxnCoordinator(txnSourceType, HOST_NAME);
         String label = String.format("COMPACTION_%d-%d-%d-%d", dbId, tableId, partitionId, currentTs);
         return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
-                loadJobSourceType, TXN_TIMEOUT_SECOND);
+                loadJobSourceType, Config.lake_compaction_default_timeout_second);
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job)

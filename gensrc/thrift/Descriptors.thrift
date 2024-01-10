@@ -269,11 +269,12 @@ struct TOlapTableColumnParam {
 }
 
 struct TOlapTableIndexSchema {
-    1: required i64 id
+    1: required i64 id // index id
     2: required list<string> columns
     3: required i32 schema_hash
     4: optional TOlapTableColumnParam column_param
     5: optional Exprs.TExpr where_clause
+    6: optional i64 schema_id // schema id
 }
 
 struct TOlapTableSchemaParam {
@@ -407,6 +408,9 @@ struct THdfsTable {
 
     // hive table serde properties
     10: optional map<string, string> serde_properties
+
+    // timezone
+    11: optional string time_zone
 }
 
 struct TFileTable {
@@ -423,6 +427,9 @@ struct TFileTable {
     5: optional string input_format
 
     6: optional string serde_lib
+
+    // timezone
+    7: optional string time_zone
 }
 
 struct TTableFunctionTable {
@@ -523,6 +530,9 @@ struct THudiTable {
 
     // hudi table serde_lib
     10: optional string serde_lib
+
+    // timezone
+    11: optional string time_zone
 }
 
 struct TPaimonTable {
@@ -530,6 +540,9 @@ struct TPaimonTable {
     1: optional string paimon_options
     // paimon table
     2: optional string paimon_native_table
+
+    // timezone
+    3: optional string time_zone
 }
 
 struct TDeltaLakeTable {

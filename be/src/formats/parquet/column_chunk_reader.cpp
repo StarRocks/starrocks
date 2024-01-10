@@ -17,8 +17,6 @@
 #include <memory>
 
 #include "common/status.h"
-#include "exec/hdfs_scanner.h"
-#include "formats/parquet/column_reader.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
@@ -90,7 +88,7 @@ Status ColumnChunkReader::skip_page() {
 }
 
 Status ColumnChunkReader::next_page() {
-    if (_page_parse_state != PAGE_DATA_PARSED) {
+    if (_page_parse_state != PAGE_DATA_PARSED && _page_parse_state == PAGE_HEADER_PARSED) {
         _opts.stats->page_skip += 1;
     }
     _page_parse_state = PAGE_DATA_PARSED;
@@ -98,6 +96,7 @@ Status ColumnChunkReader::next_page() {
 }
 
 Status ColumnChunkReader::_parse_page_header() {
+    SCOPED_RAW_TIMER(&_opts.stats->page_read_ns);
     DCHECK(_page_parse_state == INITIALIZED || _page_parse_state == PAGE_DATA_PARSED);
     size_t off = _page_reader->get_offset();
     RETURN_IF_ERROR(_page_reader->next_header());
@@ -120,6 +119,7 @@ Status ColumnChunkReader::_parse_page_header() {
 }
 
 Status ColumnChunkReader::_parse_page_data() {
+    SCOPED_RAW_TIMER(&_opts.stats->page_read_ns);
     switch (_page_reader->current_header()->type) {
     case tparquet::PageType::DATA_PAGE:
         RETURN_IF_ERROR(_parse_data_page());
@@ -263,7 +263,7 @@ Status ColumnChunkReader::_parse_dict_page() {
     return Status::OK();
 }
 
-Status ColumnChunkReader::_try_load_dictionary() {
+Status ColumnChunkReader::try_load_dictionary() {
     if (_dict_page_parsed) {
         return Status::OK();
     }

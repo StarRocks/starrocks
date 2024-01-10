@@ -41,7 +41,7 @@ FE memory leak caused by blocked LabelCleaner threads. [#28311](https://github.c
 
 Release date: July 31, 2023
 
-## Improvements
+### Improvements
 
 - Optimized tablet scheduling logic to prevent tablets remaining pending for a long period or an FE crashing under certain circumstances. [#21647](https://github.com/StarRocks/starrocks/pull/21647) [#23062](https://github.com/StarRocks/starrocks/pull/23062) [#25785](https://github.com/StarRocks/starrocks/pull/25785)
 - Optimized the scheduling logic of TabletChecker to prevent the checker from repeatedly scheduling tablets that are not repaired. [#27648](https://github.com/StarRocks/starrocks/pull/27648)

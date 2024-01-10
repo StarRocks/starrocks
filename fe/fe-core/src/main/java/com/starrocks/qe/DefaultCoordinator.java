@@ -595,7 +595,7 @@ public class DefaultCoordinator extends Coordinator {
             case TIMEOUT:
                 throw new UserException("query timeout. backend id: " + execution.getWorker().getId());
             case THRIFT_RPC_ERROR:
-                SimpleScheduler.addToBlacklist(execution.getWorker().getId());
+                SimpleScheduler.addToBlocklist(execution.getWorker().getId());
                 throw new RpcException(execution.getWorker().getHost(), "rpc failed");
             default:
                 throw new UserException(status.getErrorMsg());

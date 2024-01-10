@@ -424,7 +424,7 @@ Status ScalarColumnIterator::_do_next_batch_dict_codes(const SparseRange<>& rang
     size_t end_ord = _page->first_ordinal() + _page->num_rows();
     SparseRange<> read_range;
 
-    DCHECK_EQ(range.begin(), _current_ordinal);
+    DCHECK(range.empty() || range.begin() == _current_ordinal);
     // similar to ScalarColumnIterator::next_batch
     while (iter.has_more()) {
         if (_page->remaining() == 0 && iter.begin() == end_ord) {

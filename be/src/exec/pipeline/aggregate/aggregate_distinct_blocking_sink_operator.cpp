@@ -33,8 +33,11 @@ void AggregateDistinctBlockingSinkOperator::close(RuntimeState* state) {
 
 Status AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
     if (_is_finished) return Status::OK();
-
-    _is_finished = true;
+    auto defer = DeferOp([this]() {
+        COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
+        _aggregator->sink_complete();
+        _is_finished = true;
+    });
 
     // skip processing if cancelled
     if (state->is_cancelled()) {
@@ -51,9 +54,6 @@ Status AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state)
     _aggregator->hash_set_variant().visit(
             [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
 
-    COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
-
-    _aggregator->sink_complete();
     return Status::OK();
 }
 

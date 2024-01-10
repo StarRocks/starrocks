@@ -275,7 +275,8 @@ public:
         return *writer->build();
     }
 
-    RowsetSharedPtr create_rowset_column_with_row(const TabletSharedPtr& tablet, const vector<int64_t>& keys) {
+    StatusOr<RowsetSharedPtr> create_rowset_column_with_row(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
+                                                            bool large_var_column = false) {
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.rowset_id = rowset_id;
@@ -294,20 +295,26 @@ public:
         const auto nkeys = keys.size();
         const auto& column = tablet->thread_safe_get_tablet_schema()->columns().back();
         std::vector<ColumnId> cids(tablet->thread_safe_get_tablet_schema()->num_columns() - 1);
-        if (column.name() == "__row") {
+        if (column.name() == Schema::FULL_ROW_COLUMN) {
             for (int i = 0; i < tablet->thread_safe_get_tablet_schema()->num_columns() - 1; i++) {
                 cids[i] = i;
             }
         }
         auto schema_without_full_row_column = std::make_unique<Schema>(&schema, cids);
         auto chunk = ChunkHelper::new_chunk(*schema_without_full_row_column, nkeys);
+        string varchar_value;
+        if (large_var_column) {
+            varchar_value = std::string(1024 * 1024, 'a');
+        } else {
+            varchar_value = std::string(1024, 'a');
+        }
         auto& cols = chunk->columns();
         for (int64_t key : keys) {
             cols[0]->append_datum(Datum(key));
             cols[1]->append_datum(Datum((int16_t)(nkeys - 1 - key)));
-            cols[2]->append_datum(Datum((int32_t)(key)));
+            cols[2]->append_datum(Datum(Slice(varchar_value)));
         }
-        CHECK_OK(writer->flush_chunk(*chunk));
+        RETURN_IF_ERROR(writer->flush_chunk(*chunk));
         return *writer->build();
     }
 
@@ -534,14 +541,15 @@ public:
         TColumn k3;
         k3.column_name = "v2";
         k3.__set_is_key(false);
-        k3.column_type.type = TPrimitiveType::INT;
+        k3.column_type.type = TPrimitiveType::VARCHAR;
+        k3.column_type.len = TypeDescriptor::MAX_VARCHAR_LENGTH;
         request.tablet_schema.columns.push_back(k3);
 
         TColumn row;
-        row.column_name = "__row";
+        row.column_name = Schema::FULL_ROW_COLUMN;
         TColumnType ctype;
         ctype.__set_type(TPrimitiveType::VARCHAR);
-        ctype.__set_len(65535);
+        ctype.__set_len(TypeDescriptor::MAX_VARCHAR_LENGTH);
         row.__set_column_type(ctype);
         row.__set_aggregation_type(TAggregationType::REPLACE);
         row.__set_is_allow_null(false);

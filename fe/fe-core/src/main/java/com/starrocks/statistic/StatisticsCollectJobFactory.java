@@ -292,8 +292,11 @@ public class StatisticsCollectJobFactory {
 
                 Preconditions.checkState(partitions.size() == partitionNames.size());
                 for (int index = 0; index < partitions.size(); index++) {
+                    // for external table, we get last modified time from other system, there may be a time inconsistency
+                    // between the two systems, so we add 60 seconds to make sure table update time is later than
+                    // statistics update time
                     LocalDateTime partitionUpdateTime = LocalDateTime.ofInstant(
-                            Instant.ofEpochSecond(partitions.get(index).getModifiedTime()),
+                            Instant.ofEpochSecond(partitions.get(index).getModifiedTime()).plusSeconds(60),
                             Clock.systemDefaultZone().getZone());
                     if (partitionUpdateTime.isAfter(statisticsUpdateTime)) {
                         updatedPartitions.add(partitionNames.get(index));
@@ -304,7 +307,8 @@ public class StatisticsCollectJobFactory {
             IcebergTable icebergTable = (IcebergTable) table;
             if (statisticsUpdateTime != LocalDateTime.MIN && !icebergTable.isUnPartitioned()) {
                 updatedPartitions.addAll(IcebergPartitionUtils.getChangedPartitionNames(icebergTable.getNativeTable(),
-                        statisticsUpdateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                        statisticsUpdateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                                - 60 * 1000L,
                         icebergTable.getNativeTable().currentSnapshot()));
             }
         }

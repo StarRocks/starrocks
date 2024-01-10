@@ -415,7 +415,6 @@ public class MetadataMgr {
         return statistics.build();
     }
 
-
     public Statistics getTableStatistics(OptimizerContext session,
                                          String catalogName,
                                          Table table,
@@ -494,6 +493,18 @@ public class MetadataMgr {
                 metadata.finishSink(dbName, tableName, sinkCommitInfos);
             } catch (StarRocksConnectorException e) {
                 LOG.error("table sink commit failed", e);
+                throw new StarRocksConnectorException(e.getMessage());
+            }
+        });
+    }
+
+    public void abortSink(String catalogName, String dbName, String tableName, List<TSinkCommitInfo> sinkCommitInfos) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> {
+            try {
+                metadata.abortSink(dbName, tableName, sinkCommitInfos);
+            } catch (StarRocksConnectorException e) {
+                LOG.error("table sink abort failed", e);
                 throw new StarRocksConnectorException(e.getMessage());
             }
         });

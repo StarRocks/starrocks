@@ -435,9 +435,9 @@ public class PartitionsProcDir implements ProcDirInterface {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
-            Partition partition;
+            PhysicalPartition partition;
             try {
-                partition = table.getPartition(Long.parseLong(partitionIdOrName));
+                partition = table.getPhysicalPartition(Long.parseLong(partitionIdOrName));
             } catch (NumberFormatException e) {
                 partition = table.getPartition(partitionIdOrName, false);
                 if (partition == null) {

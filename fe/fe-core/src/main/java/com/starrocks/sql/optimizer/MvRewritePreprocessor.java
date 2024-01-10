@@ -107,7 +107,7 @@ public class MvRewritePreprocessor {
 
             Set<Table> queryTables = MvUtils.getAllTables(optExpression).stream().collect(Collectors.toSet());
             logMVParams(connectContext, queryTables);
-;
+
             try {
                 Set<MaterializedView> relatedMVs =
                         getRelatedMVs(connectContext, queryTables, context.getOptimizerConfig().isRuleBased());
@@ -151,6 +151,8 @@ public class MvRewritePreprocessor {
                 Config.enable_mv_automatic_active_check);
         logMVPrepare(connectContext, "  enable_sync_materialized_view_rewrite: {}",
                 sessionVariable.isEnableSyncMaterializedViewRewrite());
+        logMVPrepare(connectContext, "  enable_view_based_mv_rewrite: {}",
+                sessionVariable.isEnableViewBasedMvRewrite());
 
         // limit
         logMVPrepare(connectContext, "---------------------------------");

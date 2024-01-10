@@ -31,7 +31,6 @@ class ClientConnection;
 // this class is a helper for jni call. easy for unit test
 class ThriftRpcHelper {
 public:
-    static const char* KInvalidMethodName;
     static void setup(ExecEnv* exec_env);
 
     // for default timeout

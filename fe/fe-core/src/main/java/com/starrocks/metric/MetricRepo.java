@@ -55,6 +55,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.JobState;
@@ -131,12 +132,15 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_RECEIVED_BYTES;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ERROR_ROWS;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_PAUSED;
+    public static LongCounterMetric COUNTER_SHORTCIRCUIT_QUERY;
+    public static LongCounterMetric COUNTER_SHORTCIRCUIT_RPC;
 
     public static Histogram HISTO_QUERY_LATENCY;
     public static Histogram HISTO_EDIT_LOG_WRITE_LATENCY;
     public static Histogram HISTO_JOURNAL_WRITE_LATENCY;
     public static Histogram HISTO_JOURNAL_WRITE_BATCH;
     public static Histogram HISTO_JOURNAL_WRITE_BYTES;
+    public static Histogram HISTO_SHORTCIRCUIT_RPC_LATENCY;
 
     // following metrics will be updated by metric calculator
     public static GaugeMetricImpl<Double> GAUGE_QUERY_PER_SECOND;
@@ -403,6 +407,11 @@ public final class MetricRepo {
                 "counter of image succeeded in pushing to other frontends");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_IMAGE_PUSH);
 
+        COUNTER_SHORTCIRCUIT_QUERY = new LongCounterMetric("shortcircuit_query", MetricUnit.REQUESTS, "total shortcircuit query");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_QUERY);
+        COUNTER_SHORTCIRCUIT_RPC = new LongCounterMetric("shortcircuit_rpc", MetricUnit.REQUESTS, "total shortcircuit rpc");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_RPC);
+
         COUNTER_TXN_REJECT =
                 new LongCounterMetric("txn_reject", MetricUnit.REQUESTS, "counter of rejected transactions");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_REJECT);
@@ -457,6 +466,7 @@ public final class MetricRepo {
                 METRIC_REGISTER.histogram(MetricRegistry.name("journal", "write", "batch"));
         HISTO_JOURNAL_WRITE_BYTES =
                 METRIC_REGISTER.histogram(MetricRegistry.name("journal", "write", "bytes"));
+        HISTO_SHORTCIRCUIT_RPC_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("shortcircuit", "latency", "ms"));
 
         // init system metrics
         initSystemMetrics();
@@ -910,6 +920,9 @@ public final class MetricRepo {
         if (Config.enable_routine_load_lag_metrics) {
             collectRoutineLoadProcessMetrics(visitor);
         }
+
+        // collect http metrics
+        HttpMetricRegistry.getInstance().visit(visitor);
 
         // collect starmgr related metrics as well
         StarMgrServer.getCurrentState().visitMetrics(visitor);

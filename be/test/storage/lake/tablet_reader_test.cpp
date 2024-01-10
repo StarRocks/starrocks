@@ -134,8 +134,10 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
         rowset->set_overlapped(true);
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
+            segs_size->Add(std::move(file.size.value()));
         }
 
         writer->close();
@@ -273,8 +275,10 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         rowset->set_overlapped(true);
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
+            segs_size->Add(std::move(file.size.value()));
         }
 
         writer->close();
@@ -300,8 +304,10 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         rowset->set_overlapped(false);
         rowset->set_id(2);
         auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
+            segs_size->Add(std::move(file.size.value()));
         }
 
         writer->close();
@@ -435,8 +441,10 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
         rowset->set_overlapped(true);
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
+            segs_size->Add(std::move(file.size.value()));
         }
 
         writer->close();
@@ -582,8 +590,10 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
         rowset->set_overlapped(true);
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
+            segs_size->Add(std::move(file.size.value()));
         }
 
         writer->close();

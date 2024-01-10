@@ -41,6 +41,7 @@ public:
                                const TScanRange& scan_range, RuntimeProfile* runtime_profile,
                                TExecShortCircuitParams& common_request)
             : ScanNode(pool, tnode, descs),
+              _tnode(tnode),
               _runtime_profile(runtime_profile),
               _common_request(common_request),
               _tuple_id(tnode.olap_scan_node.tuple_id) {}
@@ -53,7 +54,7 @@ public:
     Status _process_value_chunk(std::vector<bool>& found);
 
 private:
-    std::vector<ExprContext*> _conjunct_ctxs;
+    const TPlanNode& _tnode;
     TableReaderPtr _table_reader;
     RuntimeProfile* _runtime_profile;
     TExecShortCircuitParams& _common_request;

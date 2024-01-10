@@ -441,6 +441,7 @@ void RuntimeProfile::copy_all_info_strings_from(RuntimeProfile* src_profile) {
     }
 
 ADD_COUNTER_IMPL(AddHighWaterMarkCounter, HighWaterMarkCounter)
+ADD_COUNTER_IMPL(AddLowWaterMarkCounter, LowWaterMarkCounter)
 
 RuntimeProfile::Counter* RuntimeProfile::add_child_counter(const std::string& name, TUnit::type type,
                                                            const TCounterStrategy& strategy,

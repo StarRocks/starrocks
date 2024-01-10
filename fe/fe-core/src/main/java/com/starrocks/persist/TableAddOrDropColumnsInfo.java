@@ -72,10 +72,13 @@ public class TableAddOrDropColumnsInfo implements Writable {
     private long startTime;
     @SerializedName(value = "addColumnsName")
     private Set<String> addColumnsName;
+    @SerializedName(value = "indexToNewSchemaId")
+    private Map<Long, Long> indexToNewSchemaId;
 
     public TableAddOrDropColumnsInfo(long dbId, long tableId,
             Map<Long, LinkedList<Column>> indexSchemaMap, List<Index> indexes, long jobId,
-            long txnId, long startTime, Set<String> addColumnsName) {
+            long txnId, long startTime, Set<String> addColumnsName,
+            Map<Long, Long> indexToNewSchemaId) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.indexSchemaMap = indexSchemaMap;
@@ -84,6 +87,7 @@ public class TableAddOrDropColumnsInfo implements Writable {
         this.txnId = txnId;
         this.startTime = startTime;
         this.addColumnsName = addColumnsName;
+        this.indexToNewSchemaId = indexToNewSchemaId;
     }
 
     public long getDbId() {
@@ -108,6 +112,10 @@ public class TableAddOrDropColumnsInfo implements Writable {
 
     public long getTxnId() {
         return txnId;
+    }
+    
+    public Map<Long, Long> getIndexToNewSchemaId() {
+        return indexToNewSchemaId;
     }
 
     public long getStartTime() {
@@ -160,6 +168,7 @@ public class TableAddOrDropColumnsInfo implements Writable {
         sb.append(" txnId: ").append(txnId);
         sb.append(" startTime: ").append(startTime);
         sb.append(" addColumnsName: ").append(addColumnsName);
+        sb.append(" indexToNewSchemaId: ").append(indexToNewSchemaId);
         return sb.toString();
     }
 }

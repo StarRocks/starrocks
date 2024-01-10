@@ -56,10 +56,12 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.StructLike;
 import org.apache.iceberg.types.Types;
@@ -83,14 +85,15 @@ public class IcebergScanNode extends ScanNode {
     private final IcebergTable icebergTable;
     private final HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private final List<TScanRangeLocations> result = new ArrayList<>();
-
-    // Scalar operators to filter iceberg metadata during plan files
     private ScalarOperator predicate = null;
     private CloudConfiguration cloudConfiguration = null;
+    private final List<Integer> deleteColumnSlotIds = new ArrayList<>();
+    private final TupleDescriptor equalityDeleteTupleDesc;
 
-    public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
+    public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName, TupleDescriptor equalityDeleteTupleDesc) {
         super(id, desc, planNodeName);
-        icebergTable = (IcebergTable) desc.getTable();
+        this.icebergTable = (IcebergTable) desc.getTable();
+        this.equalityDeleteTupleDesc = equalityDeleteTupleDesc;
         setupCloudCredential();
     }
 
@@ -170,7 +173,7 @@ public class IcebergScanNode extends ScanNode {
 
     public void setupScanRangeLocations(DescriptorTable descTbl) throws UserException {
         Optional<Snapshot> snapshot = Optional.ofNullable(icebergTable.getNativeTable().currentSnapshot());
-        if (!snapshot.isPresent()) {
+        if (snapshot.isEmpty()) {
             LOG.warn(String.format("Table %s has no snapshot!", icebergTable.getRemoteTableName()));
             return;
         }
@@ -196,6 +199,7 @@ public class IcebergScanNode extends ScanNode {
 
         Map<StructLike, Long> partitionKeyToId = Maps.newHashMap();
         Map<Long, List<Integer>> idToPartitionSlots = Maps.newHashMap();
+        List<Integer> currentEqualityIds = new ArrayList<>();
         for (FileScanTask task : remoteFileDesc.getIcebergScanTasks()) {
             DataFile file = task.file();
             LOG.debug("Scan with file " + file.path() + ", file record count " + file.recordCount());
@@ -254,20 +258,40 @@ public class IcebergScanNode extends ScanNode {
             hdfsScanRange.setModification_time(0);
             hdfsScanRange.setFile_format(IcebergApiConverter.getHdfsFileFormat(file.format()).toThrift());
 
-            hdfsScanRange.setDelete_files(task.deletes().stream().map(source -> {
-                TIcebergDeleteFile target = new TIcebergDeleteFile();
-                target.setFull_path(source.path().toString());
-                target.setFile_content(
-                        source.content() == FileContent.EQUALITY_DELETES ? TIcebergFileContent.EQUALITY_DELETES :
-                                TIcebergFileContent.POSITION_DELETES);
-                target.setLength(source.fileSizeInBytes());
+            List<TIcebergDeleteFile> deleteFiles = new ArrayList<>();
+            for (DeleteFile deleteFile : task.deletes()) {
+                FileContent content = deleteFile.content();
+                if (content == FileContent.EQUALITY_DELETES) {
+                    List<Integer> taskEqualityFieldIds = deleteFile.equalityFieldIds();
+                    if (taskEqualityFieldIds.isEmpty()) {
+                        continue;
+                    }
+                    if (!currentEqualityIds.isEmpty() && !currentEqualityIds.equals(taskEqualityFieldIds)) {
+                        throw new StarRocksConnectorException("Schema change of equality columns changed is not supported");
+                    }
 
-                if (source.content() == FileContent.EQUALITY_DELETES) {
-                    throw new StarRocksConnectorException("iceberg equality is not supported");
+                    if (currentEqualityIds.isEmpty()) {
+                        currentEqualityIds = taskEqualityFieldIds;
+                        prepareRequiredColumnsForDeletes(currentEqualityIds);
+                    }
                 }
 
-                return target;
-            }).collect(Collectors.toList()));
+                TIcebergDeleteFile target = new TIcebergDeleteFile();
+                target.setFull_path(deleteFile.path().toString());
+                target.setFile_content(content == FileContent.EQUALITY_DELETES ? TIcebergFileContent.EQUALITY_DELETES :
+                        TIcebergFileContent.POSITION_DELETES);
+                target.setLength(deleteFile.fileSizeInBytes());
+                deleteFiles.add(target);
+            }
+
+            if (!deleteFiles.isEmpty()) {
+                hdfsScanRange.setDelete_files(deleteFiles);
+            }
+
+            if (!deleteColumnSlotIds.isEmpty()) {
+                hdfsScanRange.setDelete_column_slot_ids(deleteColumnSlotIds);
+            }
+
             TScanRange scanRange = new TScanRange();
             scanRange.setHdfs_scan_range(hdfsScanRange);
             scanRangeLocations.setScan_range(scanRange);
@@ -279,6 +303,31 @@ public class IcebergScanNode extends ScanNode {
         }
 
         scanNodePredicates.setSelectedPartitionIds(partitionKeyToId.values());
+    }
+
+    private void prepareRequiredColumnsForDeletes(List<Integer> equalityIds) {
+        Schema schema = icebergTable.getNativeTable().schema();
+        List<String> equalityColNames = equalityIds.stream().map(schema::findColumnName).collect(Collectors.toList());
+        int startSlotId = Integer.MAX_VALUE - 10000;
+        for (String eqColName : equalityColNames) {
+            SlotDescriptor slotDesc = desc.getColumnSlot(eqColName);
+            if (slotDesc != null) {
+                slotDesc = new SlotDescriptor(slotDesc.getId(), equalityDeleteTupleDesc, slotDesc);
+                slotDesc.setIsOutputColumn(false);
+            } else {
+                int slotId = startSlotId++;
+                SlotDescriptor slotDescriptor = new SlotDescriptor(new SlotId(slotId), equalityDeleteTupleDesc);
+                Column column = icebergTable.getColumn(eqColName);
+                slotDescriptor.setType(column.getType());
+                slotDescriptor.setIsNullable(true);
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setIsOutputColumn(false);
+                slotDescriptor.setColumn(column);
+                slotDesc = slotDescriptor;
+            }
+            deleteColumnSlotIds.add(slotDesc.getId().asInt());
+            equalityDeleteTupleDesc.addSlot(slotDesc);
+        }
     }
 
     public HDFSScanNodePredicates getScanNodePredicates() {
@@ -356,6 +405,9 @@ public class IcebergScanNode extends ScanNode {
         msg.hdfs_scan_node.setSql_predicates(sqlPredicates);
 
         msg.hdfs_scan_node.setTable_name(icebergTable.getRemoteTableName());
+        if (!deleteColumnSlotIds.isEmpty()) {
+            msg.hdfs_scan_node.setMor_tuple_id(equalityDeleteTupleDesc.getId().asInt());
+        }
 
         HdfsScanNode.setScanOptimizeOptionToThrift(tHdfsScanNode, this);
         HdfsScanNode.setCloudConfigurationToThrift(tHdfsScanNode, cloudConfiguration);

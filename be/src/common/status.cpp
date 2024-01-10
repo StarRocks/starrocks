@@ -255,6 +255,8 @@ std::string Status::code_as_string() const {
         return "Transaction in processing";
     case TStatusCode::YIELD:
         return "Task yield";
+    case TStatusCode::JIT_COMPILE_ERROR:
+        return "JIT compile error";
     }
     return {};
 }

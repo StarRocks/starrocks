@@ -82,4 +82,11 @@ public interface PhysicalPartition {
     public boolean hasStorageData();
     public boolean hasMaterializedView();
     public boolean isFirstLoad();
+
+    // for lake partition
+    public long getMinRetainVersion();
+    public void setMinRetainVersion(long minRetainVersion);
+    public long getLastVacuumTime();
+    public void setLastVacuumTime(long lastVacuumTime);
+
 }

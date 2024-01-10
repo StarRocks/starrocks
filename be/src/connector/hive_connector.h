@@ -75,6 +75,7 @@ public:
     int64_t cpu_time_spent() const override;
     int64_t io_time_spent() const override;
     int64_t estimated_mem_usage() const override;
+    bool can_estimate_mem_usage() const override { return true; }
 
 private:
     const HiveDataSourceProvider* _provider;
@@ -138,6 +139,9 @@ private:
 
     // partition columns.
     std::vector<SlotDescriptor*> _partition_slots;
+
+    // iceberg equality delete column slots.
+    std::vector<SlotDescriptor*> _equality_delete_slots;
 
     // partition column index in `tuple_desc`
     std::vector<int> _partition_index_in_chunk;

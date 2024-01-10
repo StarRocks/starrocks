@@ -42,3 +42,7 @@
 /be/src/storage/storage_engine.cpp @StarRocks/thread-committer
 /be/src/service/starrocks_main.cpp @StarRocks/thread-committer
 /be/src/service/service_be/starrocks_be.cpp @StarRocks/thread-committer
+
+# restful
+/fe/fe-core/src/main/java/com/starrocks/http @StarRocks/restful-maintainer
+/be/src/http @StarRocks/restful-maintainer

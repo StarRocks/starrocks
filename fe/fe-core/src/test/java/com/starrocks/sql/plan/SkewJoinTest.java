@@ -148,9 +148,9 @@ public class SkewJoinTest extends PlanTestBase {
         String sqlPlan = getFragmentPlan(sql);
         assertCContains(sqlPlan, "  1:Project\n" +
                 "  |  <slot 1> : 1: c0\n" +
-                "  |  <slot 10> : CASE WHEN 2: c1.a[false] IS NULL THEN round(rand() * 1000.0) WHEN 2: c1.a[false] " +
+                "  |  <slot 10> : CASE WHEN 2: c1.a[true] IS NULL THEN round(rand() * 1000.0) WHEN 2: c1.a[true] " +
                 "IN (1, 2) THEN round(rand() * 1000.0) ELSE 0 END\n" +
-                "  |  <slot 19> : 2: c1.a[false]\n" +
+                "  |  <slot 19> : 2: c1.a[true]\n" +
                 "  |  <slot 21> : 3: c2.a[false]");
     }
 

@@ -467,7 +467,6 @@ void ChunkHelper::reorder_chunk(const TupleDescriptor& tuple_desc, Chunk* chunk)
 }
 
 void ChunkHelper::reorder_chunk(const std::vector<SlotDescriptor*>& slots, Chunk* chunk) {
-    DCHECK(chunk->columns().size() == slots.size());
     auto reordered_chunk = Chunk();
     auto& original_chunk = (*chunk);
     for (auto slot : slots) {
@@ -544,26 +543,33 @@ void ChunkPipelineAccumulator::push(const ChunkPtr& chunk) {
     DCHECK(_out_chunk == nullptr);
     if (_in_chunk == nullptr) {
         _in_chunk = chunk;
-    } else if (_in_chunk->num_rows() + chunk->num_rows() > _max_size) {
+        _mem_usage = chunk->memory_usage();
+    } else if (_in_chunk->num_rows() + chunk->num_rows() > _max_size ||
+               _in_chunk->owner_info() != chunk->owner_info()) {
         _out_chunk = std::move(_in_chunk);
         _in_chunk = chunk;
+        _mem_usage = chunk->memory_usage();
     } else {
         _in_chunk->append(*chunk);
+        _mem_usage += chunk->memory_usage();
     }
 
     if (_out_chunk == nullptr && (_in_chunk->num_rows() >= _max_size * LOW_WATERMARK_ROWS_RATE ||
-                                  _in_chunk->memory_usage() >= LOW_WATERMARK_BYTES)) {
+                                  _mem_usage >= LOW_WATERMARK_BYTES || _in_chunk->owner_info().is_last_chunk())) {
         _out_chunk = std::move(_in_chunk);
+        _mem_usage = 0;
     }
 }
 
 void ChunkPipelineAccumulator::reset() {
     _in_chunk.reset();
     _out_chunk.reset();
+    _mem_usage = 0;
 }
 
 void ChunkPipelineAccumulator::finalize() {
     _finalized = true;
+    _mem_usage = 0;
 }
 
 void ChunkPipelineAccumulator::reset_state() {

@@ -182,6 +182,8 @@ set(EXEC_FILES_PART1
         ./formats/parquet/parquet_footer_test.cpp
         ./formats/parquet/parquet_cli_reader.h
         ./formats/parquet/parquet_cli_reader_test.cpp
+        ./formats/parquet/parquet_ut_base.cpp
+        ./formats/parquet/page_index_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
         ./http/http_client_test.cpp
@@ -297,6 +299,7 @@ endif ()
 
 set(EXEC_FILES_PART2
         ./fs/fs_broker_test.cpp
+        ./fs/fs_hdfs_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
         ./fs/fs_s3_test.cpp
@@ -317,6 +320,7 @@ set(EXEC_FILES_PART2
         ./storage/del_vector_test.cpp
         ./storage/delete_handler_test.cpp
         ./storage/delta_column_group_test.cpp
+        ./storage/fast_schema_evolution_test.cpp
         ./storage/file_utils_test.cpp
         ./storage/tablet_schema_map_test.cpp
         ./storage/hll_test.cpp
@@ -413,6 +417,7 @@ set(EXEC_FILES_PART2
         ./storage/rowset_merger_test.cpp
         ./storage/schema_change_test.cpp
         ./storage/row_store_encoder_test.cpp
+        ./storage/segment_flush_executor_test.cpp
         ./storage/storage_engine_test.cpp
         ./storage/binlog_test_base.cpp
         ./storage/binlog_file_test.cpp

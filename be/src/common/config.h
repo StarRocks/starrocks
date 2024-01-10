@@ -809,6 +809,7 @@ CONF_mBool(orc_coalesce_read_enable, "true");
 CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_Bool(parquet_late_materialization_enable, "true");
 CONF_Bool(parquet_late_materialization_v2_enable, "true");
+CONF_Bool(parquet_page_index_enable, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
@@ -894,10 +895,14 @@ CONF_mDouble(starlet_cache_evict_low_water, "0.1");
 CONF_mDouble(starlet_cache_evict_high_water, "0.2");
 // type:Integer. cache directory allocation policy. (0:default, 1:random, 2:round-robin)
 CONF_Int32(starlet_cache_dir_allocate_policy, "0");
+// Cache will evict file cache at this percent if star cache is turned on
+CONF_mDouble(starlet_cache_evict_percent, "0.1");
+// Cache will evict file cache at this speed if star cache is turned on
+CONF_mInt32(starlet_cache_evict_throughput_mb, "200");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 // Only support in S3/HDFS currently.
 CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "131072");
-CONF_mBool(starlet_use_star_cache, "false");
+CONF_mBool(starlet_use_star_cache, "true");
 // TODO: support runtime change
 CONF_Int32(starlet_star_cache_mem_size_percent, "0");
 CONF_Int32(starlet_star_cache_disk_size_percent, "80");
@@ -1078,6 +1083,12 @@ CONF_mBool(enable_pindex_rebuild_in_compaction, "true");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
+
+// When query cache enabled, the operators in the drivers contains cache operator are multilane
+// operators, if the number of lanes is big, Fragment Instance would spend too much time to prepare
+// operators since the number of operators scale up with the number of lanes.
+// ranges in [1,16], default value is 4.
+CONF_mInt32(query_cache_num_lanes_per_driver, "4");
 
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");

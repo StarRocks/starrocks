@@ -136,12 +136,12 @@ public class TypeManager {
         }
     }
 
-    public static Type getCompatibleTypeForBetweenAndIn(List<Type> types) {
+    public static Type getCompatibleTypeForBetweenAndIn(List<Type> types, boolean isBetween) {
         Preconditions.checkState(types.size() > 0);
         Type compatibleType = types.get(0);
 
         for (int i = 1; i < types.size(); i++) {
-            compatibleType = Type.getCmpType(compatibleType, types.get(i));
+            compatibleType = Type.getCmpType(compatibleType, types.get(i), isBetween);
         }
 
         if (Type.VARCHAR.equals(compatibleType)) {

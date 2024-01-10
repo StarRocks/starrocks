@@ -14,7 +14,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -353,8 +352,6 @@ public class SelectAnalyzer {
                 }
 
                 if (!aggregations.isEmpty()) {
-                    // use parent scope to analyze agg func firstly
-                    Preconditions.checkState(orderByScope.getParent() != null, "parent scope not be set");
                     aggregations.forEach(e -> analyzeExpression(e, analyzeState, orderByScope.getParent()));
                 }
                 analyzeExpression(expression, analyzeState, orderByScope);
@@ -675,10 +672,10 @@ public class SelectAnalyzer {
                                              boolean isDistinct) {
 
         List<Field> allFields = Lists.newArrayList();
-        // order by can only "see" fields from distinct output
         if (isDistinct) {
             allFields = removeDuplicateField(outputScope.getRelationFields().getAllFields());
             Scope orderScope = new Scope(outputScope.getRelationId(), new RelationFields(allFields));
+            orderScope.setParent(sourceScope);
             analyzeState.setOrderScope(orderScope);
             return orderScope;
         }

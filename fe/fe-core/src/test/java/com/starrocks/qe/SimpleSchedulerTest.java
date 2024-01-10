@@ -71,7 +71,7 @@ public class SimpleSchedulerTest {
     @Before
     public void setUp() {
         // disable updateBlackListThread
-        SimpleScheduler.disableUpdateBlacklistThread();
+        SimpleScheduler.disableUpdateBlocklistThread();
     }
 
     // Comment out these code temporatily.
@@ -244,12 +244,12 @@ public class SimpleSchedulerTest {
         threeBackends.put((long) 102, backendC);
         ImmutableMap<Long, ComputeNode> immutableThreeBackends = ImmutableMap.copyOf(threeBackends);
 
-        SimpleScheduler.addToBlacklist(Long.valueOf(100));
-        SimpleScheduler.addToBlacklist(Long.valueOf(101));
+        SimpleScheduler.addToBlocklist(Long.valueOf(100));
+        SimpleScheduler.addToBlocklist(Long.valueOf(101));
         address = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
         // only backendc can work
         Assert.assertEquals(address.hostname, "addressC");
-        SimpleScheduler.addToBlacklist(Long.valueOf(102));
+        SimpleScheduler.addToBlocklist(Long.valueOf(102));
         // no backend can work
         address = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
         Assert.assertNull(address);
@@ -267,7 +267,7 @@ public class SimpleSchedulerTest {
         backends.put((long) 100, backendA);
         ImmutableMap<Long, ComputeNode> immutableBackends = ImmutableMap.copyOf(backends);
 
-        SimpleScheduler.addToBlacklist(Long.valueOf(100));
+        SimpleScheduler.addToBlocklist(Long.valueOf(100));
         address = SimpleScheduler.getBackendHost(immutableBackends, ref);
         Assert.assertNull(address);
 
@@ -277,7 +277,7 @@ public class SimpleSchedulerTest {
         boolean accessible = NetUtils.checkAccessibleForAllPorts(host, ports);
         Assert.assertFalse(accessible);
 
-        SimpleScheduler.removeFromBlacklist(Long.valueOf(100));
+        SimpleScheduler.removeFromBlocklist(Long.valueOf(100));
         address = SimpleScheduler.getBackendHost(immutableBackends, ref);
         Assert.assertEquals(address.hostname, "addressA");
     }
@@ -310,9 +310,9 @@ public class SimpleSchedulerTest {
                                     @Mocked NetUtils utils) {
         Config.heartbeat_timeout_second = 1;
 
-        SimpleScheduler.addToBlacklist(10001L);
-        SimpleScheduler.addToBlacklist(10002L);
-        SimpleScheduler.addToBlacklist(10003L);
+        SimpleScheduler.addToBlocklist(10001L);
+        SimpleScheduler.addToBlocklist(10002L);
+        SimpleScheduler.addToBlocklist(10003L);
         new Expectations() {
             {
                 globalStateMgr.getCurrentSystemInfo();
@@ -357,15 +357,15 @@ public class SimpleSchedulerTest {
                 times = 2;
             }
         };
-        SimpleScheduler.updateBlacklist();
+        SimpleScheduler.updateBlocklist();
 
-        Assert.assertFalse(SimpleScheduler.isInBlacklist(10001L));
-        Assert.assertFalse(SimpleScheduler.isInBlacklist(10002L));
-        Assert.assertTrue(SimpleScheduler.isInBlacklist(10003L));
+        Assert.assertFalse(SimpleScheduler.isInBlocklist(10001L));
+        Assert.assertFalse(SimpleScheduler.isInBlocklist(10002L));
+        Assert.assertTrue(SimpleScheduler.isInBlocklist(10003L));
 
         //Having retried for Config.heartbeat_timeout_second + 1 times, backend 10003 will be removed.
-        SimpleScheduler.updateBlacklist();
-        Assert.assertFalse(SimpleScheduler.isInBlacklist(10003L));
+        SimpleScheduler.updateBlocklist();
+        Assert.assertFalse(SimpleScheduler.isInBlocklist(10003L));
     }
 
     @Test

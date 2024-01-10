@@ -19,21 +19,17 @@ import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -48,8 +44,6 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class MaterializedViewTestBase extends PlanTestBase {
     protected static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
@@ -71,8 +65,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
 
-        FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
 
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
@@ -83,9 +77,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
-        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
-        FeConstants.runningUnitTest = true;
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         new MockUp<MaterializedView>() {
             @Mock
@@ -116,7 +109,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
-
     }
 
     @AfterClass
@@ -240,35 +232,20 @@ public class MaterializedViewTestBase extends PlanTestBase {
             return this;
         }
 
-        private MVRewriteChecker contains(String expect, boolean isIgnoreColRef) {
+        public MVRewriteChecker contains(String expect) {
             Assert.assertTrue(this.rewritePlan != null);
-            boolean contained = false;
-            if (isIgnoreColRef) {
-                expect = Stream.of(expect.split("\n")).filter(s -> !s.contains("tabletList"))
-                        .map(str -> str.replaceAll("\\d+", "").trim())
-                        .collect(Collectors.joining("\n"));
-                String actual = Stream.of(this.rewritePlan.split("\n")).filter(s -> !s.contains("tabletList"))
-                        .map(str -> str.replaceAll("\\d+", "").trim())
-                        .collect(Collectors.joining("\n"));
-                contained = actual.contains(expect);
-            } else {
-                contained = this.rewritePlan.contains(expect);
-            }
+            String normalizedExpect = normalizeNormalPlan(expect);
+            String actual = normalizeNormalPlan(this.rewritePlan);
+            boolean contained = actual.contains(normalizedExpect);
 
             if (!contained) {
                 LOG.warn("rewritePlan: \n{}", rewritePlan);
                 LOG.warn("expect: \n{}", expect);
+                LOG.warn("normalized rewritePlan: \n{}", actual);
+                LOG.warn("normalized expect: \n{}", normalizedExpect);
             }
             Assert.assertTrue(contained);
             return this;
-        }
-
-        public MVRewriteChecker containsIgnoreColRefs(String expect) {
-            return contains(expect, true);
-        }
-
-        public MVRewriteChecker contains(String expect) {
-            return contains(expect, false);
         }
 
         public MVRewriteChecker notContain(String expect) {
@@ -379,13 +356,5 @@ public class MaterializedViewTestBase extends PlanTestBase {
         String tableName = matcher.group(1);
         starRocksAssert.withMaterializedView(sql);
         refreshMaterializedView(db, tableName);
-    }
-
-    public void runFileUnitTestWithNormalizedResult(String fileName) {
-        QueryDebugOptions debugOptions = new QueryDebugOptions();
-        debugOptions.setEnableNormalizePredicateAfterMVRewrite(true);
-        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
-        runFileUnitTest(fileName);
-        connectContext.getSessionVariable().setQueryDebugOptions("");
     }
 }

@@ -55,6 +55,7 @@ public:
     virtual int64_t cpu_time_spent() const = 0;
     // IO time of this data source
     virtual int64_t io_time_spent() const { return 0; }
+    virtual bool can_estimate_mem_usage() const { return false; }
     virtual int64_t estimated_mem_usage() const { return 0; }
 
     // following fields are set by framework
@@ -88,7 +89,7 @@ protected:
     RuntimeFilterProbeCollector* _runtime_filters = nullptr;
     RuntimeBloomFilterEvalContext runtime_bloom_filter_eval_context;
     RuntimeProfile* _runtime_profile = nullptr;
-    const TupleDescriptor* _tuple_desc = nullptr;
+    TupleDescriptor* _tuple_desc = nullptr;
     void _init_chunk(ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
 };
 

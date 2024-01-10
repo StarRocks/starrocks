@@ -124,6 +124,7 @@ struct JoinHashTableItems {
     float keys_per_bucket = 0;
     size_t used_buckets = 0;
     bool cache_miss_serious = false;
+    bool mor_reader_mode = false;
 
     float get_keys_per_bucket() const { return keys_per_bucket; }
     bool ht_cache_miss_serious() const { return cache_miss_serious; }
@@ -257,13 +258,15 @@ struct HashTableParam {
     const RowDescriptor* row_desc = nullptr;
     const RowDescriptor* build_row_desc = nullptr;
     const RowDescriptor* probe_row_desc = nullptr;
-    std::set<SlotId> output_slots;
+    std::set<SlotId> build_output_slots;
+    std::set<SlotId> probe_output_slots;
     std::set<SlotId> predicate_slots;
     std::vector<JoinKeyDesc> join_keys;
 
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_build_column_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
+    bool mor_reader_mode = false;
 };
 
 template <class T>
@@ -558,7 +561,12 @@ private:
     }
     void _build_output(ChunkPtr* chunk) {
         SCOPED_TIMER(_probe_state->output_build_column_timer);
+
+        if (_table_items->mor_reader_mode) {
+            return;
+        }
         bool to_nullable = _table_items->right_to_nullable;
+
         for (size_t i = 0; i < _table_items->build_column_count; i++) {
             HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
             SlotDescriptor* slot = hash_table_slot.slot;

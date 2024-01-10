@@ -55,8 +55,8 @@ StarRocks 的降级流程与 [升级流程](../deployment/upgrade.md#升级流�
 降级前，请关闭 Tablet Clone。
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "0");
-ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_balancing_tablets" = "0");
 ADMIN SET FRONTEND CONFIG ("disable_balance"="true");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
 ```
@@ -64,8 +64,8 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
 完成降级，并且所有 BE 节点状态变为 `Alive` 后，您可以重新开启 Tablet Clone。
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "2000");
-ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "100");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "10000");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_balancing_tablets" = "500");
 ADMIN SET FRONTEND CONFIG ("disable_balance"="false");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 ```

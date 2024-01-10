@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -136,7 +135,6 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
 
     @Test
     public void testPreprocessMvNonPartitionMv() throws Exception {
-        Config.enable_experimental_mv = true;
         executeInsertSql(connectContext, "insert into t0 values(10, 20, 30)");
         starRocksAssert.withMaterializedView("create materialized view mv_1 distributed by hash(`v1`) " +
                 "as select v1, v2, sum(v3) as total from t0 group by v1, v2");

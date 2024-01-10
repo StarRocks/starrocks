@@ -24,7 +24,6 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
@@ -189,7 +188,8 @@ public class SetStmtAnalyzer {
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ)) {
-            checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L, null);
+            checkRangeLongVariable(resolvedExpression, SessionVariable.ADAPTIVE_DOP_MAX_BLOCK_ROWS_PER_DRIVER_SEQ, 1L,
+                    null);
         }
 
         // materialized_view_rewrite_mode
@@ -199,23 +199,25 @@ public class SetStmtAnalyzer {
                 String supportedList = StringUtils.join(
                         EnumUtils.getEnumList(SessionVariable.MaterializedViewRewriteMode.class), ",");
                 throw new SemanticException(String.format("Unsupported materialized view rewrite mode: %s, " +
-                                "supported list is %s", rewriteModeName, supportedList));
+                        "supported list is %s", rewriteModeName, supportedList));
             }
         }
 
         if (variable.equalsIgnoreCase(SessionVariable.CBO_EQ_BASE_TYPE)) {
             String baseType = resolvedExpression.getStringValue();
             if (!baseType.equalsIgnoreCase(SessionVariableConstants.VARCHAR) &&
-                    !baseType.equalsIgnoreCase(SessionVariableConstants.DECIMAL)) {
+                    !baseType.equalsIgnoreCase(SessionVariableConstants.DECIMAL) &&
+                    !baseType.equalsIgnoreCase(SessionVariableConstants.DOUBLE)) {
                 throw new SemanticException(String.format("Unsupported cbo_eq_base_type: %s, " +
-                        "supported list is {varchar, decimal}", baseType));
+                        "supported list is {varchar, decimal, double}", baseType));
             }
         }
 
         // follower_query_forward_mode
         if (variable.equalsIgnoreCase(SessionVariable.FOLLOWER_QUERY_FORWARD_MODE)) {
             String queryFollowerForwardMode = resolvedExpression.getStringValue();
-            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.FollowerQueryForwardMode.class, queryFollowerForwardMode)) {
+            if (!EnumUtils.isValidEnumIgnoreCase(SessionVariable.FollowerQueryForwardMode.class,
+                    queryFollowerForwardMode)) {
                 String supportedList = StringUtils.join(
                         EnumUtils.getEnumList(SessionVariable.FollowerQueryForwardMode.class), ",");
                 throw new SemanticException(String.format("Unsupported follower query forward mode: %s, " +
@@ -343,17 +345,12 @@ public class SetStmtAnalyzer {
     }
 
     private static void analyzeSetPassVar(SetPassVar var, ConnectContext session) {
-        try {
-            UserIdentity userIdentity = var.getUserIdent();
-            if (userIdentity == null) {
-                userIdentity = session.getCurrentUserIdentity();
-            }
-            userIdentity.analyze();
-            var.setUserIdent(userIdentity);
-            var.setPasswdBytes(MysqlPassword.checkPassword(var.getPasswdParam()));
-
-        } catch (AnalysisException e) {
-            throw new SemanticException(e.getMessage());
+        UserIdentity userIdentity = var.getUserIdent();
+        if (userIdentity == null) {
+            userIdentity = session.getCurrentUserIdentity();
         }
+        userIdentity.analyze();
+        var.setUserIdent(userIdentity);
+        var.setPasswdBytes(MysqlPassword.checkPassword(var.getPasswdParam()));
     }
 }

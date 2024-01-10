@@ -12,23 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.transaction;
 
-package com.starrocks.connector.jdbc;
+public class RunningTxnExceedException extends TransactionException {
 
-import java.util.concurrent.ConcurrentHashMap;
+    private static final long serialVersionUID = 1L;
 
-public class JDBCTableIdCache {
-    private static ConcurrentHashMap<JDBCTableName, Integer> tableIdCache = new ConcurrentHashMap();
-
-    public static Boolean containsTableId(JDBCTableName tableKey) {
-        return tableIdCache.containsKey(tableKey);
+    public RunningTxnExceedException(String msg) {
+        super(msg);
     }
 
-    public static void putTableId(JDBCTableName tableKey, Integer tableId) {
-        tableIdCache.put(tableKey, tableId);
-    }
-
-    public static Integer getTableId(JDBCTableName tableKey) {
-        return tableIdCache.get(tableKey);
+    public RunningTxnExceedException(String msg, Throwable e) {
+        super(msg, e);
     }
 }

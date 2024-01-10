@@ -181,7 +181,7 @@ public:
                     std::string partition_location, std::shared_ptr<::parquet::WriterProperties> properties,
                     std::shared_ptr<::parquet::schema::GroupNode> schema,
                     const std::vector<ExprContext*>& output_expr_ctxs, PriorityThreadPool* executor_pool,
-                    RuntimeProfile* parent_profile, int64_t max_file_size);
+                    RuntimeProfile* parent_profile, int64_t max_file_size, RuntimeState* state);
 
     ~AsyncFileWriter() override = default;
 
@@ -225,6 +225,8 @@ private:
 
     RuntimeProfile* _parent_profile = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
+
+    RuntimeState* _state;
 
     std::condition_variable _cv;
     bool _rg_writer_closing = false;

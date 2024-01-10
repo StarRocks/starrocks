@@ -694,6 +694,9 @@ class OrderByTest extends PlanTestBase {
         list.add(Arguments.of("select v1, * from t0  order by abs(v1)", "order by: <slot 4> 4: abs ASC"));
         list.add(Arguments.of("select distinct * from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
         list.add(Arguments.of("select distinct *, v1 from t0  order by abs(v1)", "order by: <slot 4> 4: abs ASC"));
+        list.add(Arguments.of("select distinct abs(v1) v1 from t0 order by v1", "order by: <slot 4> 4: abs ASC"));
+        list.add(Arguments.of("select distinct abs(v1) from t0 order by abs(v1)", "order by: <slot 4> 4: abs ASC"));
+        list.add(Arguments.of("select distinct abs(v1) v1 from t0 order by abs(v1)", "order by: <slot 5> 5: abs ASC"));
         return list.stream();
     }
 
@@ -711,6 +714,7 @@ class OrderByTest extends PlanTestBase {
         list.add(Arguments.of("select *, v1, upper(v1) v1 from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
         list.add(Arguments.of("select distinct upper(v1) v1, *, v1 from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
         list.add(Arguments.of("select distinct *, v1, upper(v1) v1 from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select distinct abs(v1) v1, v1 from t0 order by v1", "order by: <slot 4> 4: abs ASC"));
 
         return list.stream();
     }

@@ -1285,7 +1285,6 @@ public class OlapScanNode extends ScanNode {
 
         if (points.isPresent()) {
             rowStoreKeyLiterals = points.get();
-            return;
         }
     }
 

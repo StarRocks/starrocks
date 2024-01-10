@@ -129,6 +129,10 @@ void LevelBuilder::_write_column_chunk(const LevelBuilderContext& ctx, const Typ
         _write_struct_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
         break;
     }
+    case TYPE_TIME: {
+        _write_time_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
+        break;
+    }
     default: {
     }
     }
@@ -260,6 +264,32 @@ void LevelBuilder::_write_date_column_chunk(const LevelBuilderContext& ctx, cons
 
     for (size_t i = 0; i < col->size(); i++) {
         values[i] = data_col[i]._julian - unix_epoch_date._julian;
+    }
+
+    write_leaf_callback(LevelBuilderResult{
+            .num_levels = ctx._num_levels,
+            .def_levels = def_levels ? def_levels->data() : nullptr,
+            .rep_levels = rep_levels ? rep_levels->data() : nullptr,
+            .values = reinterpret_cast<uint8_t*>(values),
+            .null_bitset = null_bitset ? null_bitset->data() : nullptr,
+    });
+}
+
+void LevelBuilder::_write_time_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                            const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                            const CallbackFunction& write_leaf_callback) {
+    const auto* data_col = get_raw_data_column<TYPE_TIME>(col);
+    const auto* null_col = get_raw_null_column(col);
+
+    // Use the rep_levels in the context from caller since node is primitive.
+    auto& rep_levels = ctx._rep_levels;
+    auto def_levels = _make_def_levels(ctx, node, null_col, col->size());
+    auto null_bitset = _make_null_bitset(ctx, null_col, col->size());
+
+    auto values = new int64_t[col->size()];
+    DeferOp defer([&] { delete[] values; });
+    for (size_t i = 0; i < col->size(); i++) {
+        values[i] = data_col[i] * 1000000;
     }
 
     write_leaf_callback(LevelBuilderResult{

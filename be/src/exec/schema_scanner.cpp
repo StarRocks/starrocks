@@ -50,6 +50,7 @@
 #include "exec/schema_scanner/schema_views_scanner.h"
 #include "exec/schema_scanner/starrocks_grants_to_scanner.h"
 #include "exec/schema_scanner/starrocks_role_edges_scanner.h"
+#include "exec/schema_scanner/sys_fe_locks.h"
 #include "exec/schema_scanner/sys_object_dependencies.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/FrontendService_types.h"
@@ -70,10 +71,6 @@ Status SchemaScanner::start(RuntimeState* state) {
     _runtime_state = state;
 
     return Status::OK();
-}
-
-void SchemaScanner::set_runtime_state(RuntimeState* state) {
-    _runtime_state = state;
 }
 
 Status SchemaScanner::get_next(ChunkPtr* chunk, bool* eos) {
@@ -183,6 +180,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaTablePipeFiles>();
     case TSchemaTableType::SCH_PIPES:
         return std::make_unique<SchemaTablePipes>();
+    case TSchemaTableType::SYS_FE_LOCKS:
+        return std::make_unique<SysFeLocks>();
     case TSchemaTableType::SCH_BE_DATACACHE_METRICS:
         return std::make_unique<SchemaBeDataCacheMetricsScanner>();
     default:
@@ -203,7 +202,6 @@ Status SchemaScanner::_create_slot_descs(ObjectPool* pool) {
     int null_byte = 0;
     int null_bit = 0;
 
-    _slot_descs.clear();
     for (int i = 0; i < _column_num; ++i) {
         TSlotDescriptor t_slot_desc;
         auto type_desc = TypeDescriptor(_columns[i].type);

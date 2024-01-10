@@ -65,7 +65,7 @@ public class MysqlProto {
         String usePasswd = scramble.length == 0 ? "NO" : "YES";
 
         if (user == null || user.isEmpty()) {
-            ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, "", usePasswd);
+            ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_FAIL, "", usePasswd);
             return false;
         }
 
@@ -76,7 +76,7 @@ public class MysqlProto {
         if (Config.enable_auth_check) {
             currentUser = authenticationManager.checkPassword(user, remoteIp, scramble, randomString);
             if (currentUser == null) {
-                ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
+                ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePasswd);
                 return false;
             }
         } else {
@@ -84,7 +84,7 @@ public class MysqlProto {
                     authenticationManager.getBestMatchedUserIdentity(user, remoteIp);
             if (matchedUserIdentity == null) {
                 LOG.info("enable_auth_check is false, but cannot find user '{}'@'{}'", user, remoteIp);
-                ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
+                ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePasswd);
                 return false;
             } else {
                 currentUser = matchedUserIdentity.getKey();

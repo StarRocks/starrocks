@@ -33,6 +33,31 @@ class Tablet;
 class Schema;
 class Column;
 
+class TabletLoader {
+public:
+    virtual ~TabletLoader() = default;
+    virtual starrocks::Schema generate_pkey_schema() = 0;
+    virtual DataDir* data_dir() = 0;
+    virtual TTabletId tablet_id() = 0;
+    // return latest applied (publish in cloud native) version
+    virtual StatusOr<EditVersion> applied_version() = 0;
+    // Do some special setting if need
+    virtual void setting() = 0;
+    // iterator all rowset and get their iterator and basic stat
+    virtual Status rowset_iterator(
+            const Schema& pkey_schema,
+            const std::function<Status(const std::vector<ChunkIteratorPtr>&, uint32_t)>& handler) = 0;
+
+    size_t total_data_size() const { return _total_data_size; }
+    size_t total_segments() const { return _total_segments; }
+    size_t rowset_num() const { return _rowset_num; };
+
+protected:
+    size_t _total_data_size = 0;
+    size_t _total_segments = 0;
+    size_t _rowset_num = 0;
+};
+
 namespace lake {
 class LakeLocalPersistentIndex;
 }
@@ -760,6 +785,8 @@ protected:
 
     uint64_t _l2_file_size() const;
 
+    Status _load_by_loader(TabletLoader* loader);
+
 private:
     size_t _dump_bound();
 
@@ -789,11 +816,10 @@ private:
     Status _reload(const PersistentIndexMetaPB& index_meta);
 
     // commit index meta
-    Status _build_commit(Tablet* tablet, PersistentIndexMetaPB& index_meta);
+    Status _build_commit(TabletLoader* loader, PersistentIndexMetaPB& index_meta);
 
     // insert rowset data into persistent index
-    Status _insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets, const Schema& pkey_schema,
-                           int64_t apply_version, std::unique_ptr<Column> pk_column);
+    Status _insert_rowsets(TabletLoader* loader, const Schema& pkey_schema, std::unique_ptr<Column> pk_column);
 
     Status _get_from_immutable_index(size_t n, const Slice* keys, IndexValue* values,
                                      std::map<size_t, KeysInfo>& keys_info_by_key_size, IOStat* stat);

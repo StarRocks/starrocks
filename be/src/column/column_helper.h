@@ -15,6 +15,8 @@
 #pragma once
 
 #include <utility>
+
+#include "column/nullable_column.h"
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
@@ -165,6 +167,17 @@ public:
         }
 
         return dst_column;
+    }
+
+    static std::tuple<Column*, NullColumn*> unpack_nullable_column(ColumnPtr col) {
+        if (col->is_nullable()) {
+            auto nullable = down_cast<NullableColumn*>(col.get());
+            auto* data = nullable->data_column().get();
+            auto* nulls = nullable->null_column().get();
+            return {data, nulls};
+        } else {
+            return {col.get(), nullptr};
+        }
     }
 
     // Update column according to whether the dest column and source column are nullable or not.

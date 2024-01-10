@@ -79,7 +79,6 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -109,39 +108,48 @@ import javax.validation.constraints.NotNull;
  */
 
 public class DatabaseTransactionMgr {
-
     public static final String TXN_TIMEOUT_BY_MANAGER = "timeout by txn manager";
     private static final Logger LOG = LogManager.getLogger(DatabaseTransactionMgr.class);
     private final TransactionStateListenerFactory stateListenerFactory = new TransactionStateListenerFactory();
     private final TransactionLogApplierFactory txnLogApplierFactory = new TransactionLogApplierFactory();
-    private long dbId;
-    // the lock is used to control the access to transaction states
-    // no other locks should be inside this lock
-    private ReentrantReadWriteLock transactionLock = new ReentrantReadWriteLock(true);
-    // transactionId -> running TransactionState
-    private Map<Long, TransactionState> idToRunningTransactionState = Maps.newHashMap();
-    // transactionId -> final status TransactionState
-    private Map<Long, TransactionState> idToFinalStatusTransactionState = Maps.newHashMap();
-    // to store transtactionStates with final status
-    private ArrayDeque<TransactionState> finalStatusTransactionStateDeque = new ArrayDeque<>();
-    // store committed transactions' dependency relationships
-    private TransactionGraph transactionGraph = new TransactionGraph();
+    private final GlobalStateMgr globalStateMgr;
+    private final EditLog editLog;
 
-    // label -> txn ids
-    // this is used for checking if label already used. a label may correspond to multiple txns,
-    // and only one is success.
-    // this member should be consistent with idToTransactionState,
-    // which means if a txn exist in idToRunningTransactionState or idToFinalStatusTransactionState
-    // it must exists in dbIdToTxnLabels, and vice versa
-    private Map<String, Set<Long>> labelToTxnIds = Maps.newHashMap();
-    // count the number of running txns of database, except for the routine load txn
-    private int runningTxnNums = 0;
-    // count only the number of running routine load txns of database
-    private int runningRoutineLoadTxnNums = 0;
-    private GlobalStateMgr globalStateMgr;
-    private EditLog editLog;
+    // The id of the database that shapeless.the current transaction manager is responsible for
+    private final long dbId;
+
     // not realtime usedQuota value to make a fast check for database data quota
     private volatile long usedQuotaDataBytes = -1;
+
+    /*
+     * transactionLock is used to control the access to database transaction manager data
+     * Modifications to the following multiple data structures must be protected by this lock
+     * */
+    private final ReentrantReadWriteLock transactionLock = new ReentrantReadWriteLock(true);
+
+    // count the number of running transactions of database, except for shapeless.the routine load txn
+    private int runningTxnNums = 0;
+
+    // count only the number of running routine load transactions of database
+    private int runningRoutineLoadTxnNums = 0;
+
+    /*
+     * idToRunningTransactionState: transactionId -> running TransactionState
+     * idToFinalStatusTransactionState: transactionId -> final status TransactionState
+     * finalStatusTransactionStateDeque: to store transactionStates with final status
+     * */
+    private final Map<Long, TransactionState> idToRunningTransactionState = Maps.newHashMap();
+    private final Map<Long, TransactionState> idToFinalStatusTransactionState = Maps.newHashMap();
+    private final ArrayDeque<TransactionState> finalStatusTransactionStateDeque = new ArrayDeque<>();
+
+    // store committed transactions' dependency relationships
+    private final TransactionGraph transactionGraph = new TransactionGraph();
+
+    /*
+     * `labelToTxnIds` is used for checking if label already used. map label to transaction id
+     * One label may correspond to multiple transactions, and only one is success.
+     */
+    private final Map<String, Set<Long>> labelToTxnIds = Maps.newHashMap();
     private long maxCommitTs = 0;
 
     public DatabaseTransactionMgr(long dbId, GlobalStateMgr globalStateMgr) {
@@ -275,7 +283,7 @@ public class DatabaseTransactionMgr {
     public long beginTransaction(List<Long> tableIdList, String label, TUniqueId requestId,
                                  TransactionState.TxnCoordinator coordinator,
                                  TransactionState.LoadJobSourceType sourceType, long listenerId, long timeoutSecond)
-            throws DuplicatedRequestException, LabelAlreadyUsedException, BeginTransactionException, AnalysisException {
+            throws DuplicatedRequestException, LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException {
         checkDatabaseDataQuota();
         writeLock();
         try {
@@ -355,8 +363,7 @@ public class DatabaseTransactionMgr {
         long dataQuotaBytes = db.getDataQuota();
         if (usedQuotaDataBytes >= dataQuotaBytes) {
             Pair<Double, String> quotaUnitPair = DebugUtil.getByteUint(dataQuotaBytes);
-            String readableQuota = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(quotaUnitPair.first) + " "
-                    + quotaUnitPair.second;
+            String readableQuota = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(quotaUnitPair.first) + " " + quotaUnitPair.second;
             throw new AnalysisException("Database[" + db.getOriginName()
                     + "] data size exceeds quota[" + readableQuota + "]");
         }
@@ -1535,8 +1542,7 @@ public class DatabaseTransactionMgr {
         return infos;
     }
 
-    protected void checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType sourceType)
-            throws BeginTransactionException {
+    protected void checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType sourceType) throws RunningTxnExceedException {
         switch (sourceType) {
             case ROUTINE_LOAD_TASK:
                 // no need to check limit for routine load task:
@@ -1550,7 +1556,7 @@ public class DatabaseTransactionMgr {
                 break;
             default:
                 if (runningTxnNums >= Config.max_running_txn_num_per_db) {
-                    throw new BeginTransactionException("current running txns on db " + dbId + " is "
+                    throw new RunningTxnExceedException("current running txns on db " + dbId + " is "
                             + runningTxnNums + ", larger than limit " + Config.max_running_txn_num_per_db);
                 }
                 break;
@@ -1718,16 +1724,6 @@ public class DatabaseTransactionMgr {
             readUnlock();
         }
         return infos;
-    }
-
-    public void unprotectWriteAllTransactionStates(DataOutput out) throws IOException {
-        for (TransactionState transactionState : idToRunningTransactionState.values()) {
-            transactionState.write(out);
-        }
-
-        for (TransactionState transactionState : finalStatusTransactionStateDeque) {
-            transactionState.write(out);
-        }
     }
 
     public void unprotectWriteAllTransactionStatesV2(SRMetaBlockWriter writer)

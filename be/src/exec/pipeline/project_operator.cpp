@@ -38,6 +38,11 @@ StatusOr<ChunkPtr> ProjectOperator::pull_chunk(RuntimeState* state) {
 }
 
 Status ProjectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    if (chunk->is_empty()) {
+        DCHECK(chunk->owner_info().is_last_chunk());
+        _cur_chunk = chunk;
+        return Status::OK();
+    }
     TRY_CATCH_ALLOC_SCOPE_START();
     {
         SCOPED_TIMER(_common_sub_expr_compute_timer);
@@ -80,6 +85,7 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     for (size_t i = 0; i < result_columns.size(); ++i) {
         _cur_chunk->append_column(result_columns[i], _column_ids[i]);
     }
+    _cur_chunk->owner_info() = chunk->owner_info();
     TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }

@@ -117,6 +117,11 @@ public class PhysicalPartitionImplTest {
 
         p.setParentId(3);
         Assert.assertEquals(3, p.getParentId());
+
+        p.setMinRetainVersion(1);
+        Assert.assertEquals(1, p.getMinRetainVersion());
+        p.setLastVacuumTime(1);
+        Assert.assertEquals(1, p.getLastVacuumTime());
     }
 
     @Test

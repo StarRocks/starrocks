@@ -43,8 +43,8 @@ typedef unsigned __int128 uint128_t;
 class Datum;
 using DatumArray = std::vector<Datum>;
 
-using DatumKey = std::variant<int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t, uint64_t,
-                              int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float, double>;
+using DatumKey = std::variant<std::monostate, int8_t, uint8_t, int16_t, uint16_t, uint24_t, int32_t, uint32_t, int64_t,
+                              uint64_t, int96_t, int128_t, Slice, decimal12_t, DecimalV2Value, float, double>;
 using DatumMap = std::map<DatumKey, Datum>;
 using DatumStruct = std::vector<Datum>;
 
@@ -161,6 +161,9 @@ public:
     }
 
     DatumKey convert2DatumKey() const {
+        if (is_null()) {
+            return std::monostate();
+        }
         return std::visit(
                 overloaded{[](const int8_t& arg) { return DatumKey(arg); },
                            [](const uint8_t& arg) { return DatumKey(arg); },

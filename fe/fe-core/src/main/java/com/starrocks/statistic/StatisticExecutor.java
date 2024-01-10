@@ -311,7 +311,7 @@ public class StatisticExecutor {
                 // for external table
                 ExternalBasicStatsMeta externalBasicStatsMeta = new ExternalBasicStatsMeta(statsJob.getCatalogName(),
                         db.getFullName(), table.getName(), statsJob.getColumns(), statsJob.getType(),
-                        analyzeStatus.getEndTime(), statsJob.getProperties());
+                        analyzeStatus.getStartTime(), statsJob.getProperties());
                 GlobalStateMgr.getCurrentAnalyzeMgr().addExternalBasicStatsMeta(externalBasicStatsMeta);
                 GlobalStateMgr.getCurrentAnalyzeMgr().refreshConnectorTableBasicStatisticsCache(statsJob.getCatalogName(),
                         db.getFullName(), table.getName(), statsJob.getColumns(), refreshAsync);

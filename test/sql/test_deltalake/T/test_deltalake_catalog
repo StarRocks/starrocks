@@ -1,0 +1,8 @@
+-- name: testDeltaLakeCatalog
+
+create external catalog delta_test_${uuid0} PROPERTIES ("type"="deltalake", "hive.metastore.uris"="${deltalake_catalog_hive_metastore_uris}");
+
+-- only partition column Predicate with runtime filter
+select * from delta_test_${uuid0}.delta_oss_db.string_col_dict_encode where c3='a' order by c1;;
+
+drop catalog delta_test_${uuid0}

@@ -134,7 +134,7 @@ public class GlobalTransactionMgrTest {
 
     @Test
     public void testBeginTransaction() throws LabelAlreadyUsedException, AnalysisException,
-            BeginTransactionException, DuplicatedRequestException {
+            RunningTxnExceedException, DuplicatedRequestException {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long transactionId = masterTransMgr
                 .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
@@ -152,7 +152,7 @@ public class GlobalTransactionMgrTest {
 
     @Test
     public void testBeginTransactionWithSameLabel() throws LabelAlreadyUsedException, AnalysisException,
-            BeginTransactionException, DuplicatedRequestException {
+            RunningTxnExceedException, DuplicatedRequestException {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long transactionId = 0;
         try {
@@ -758,7 +758,7 @@ public class GlobalTransactionMgrTest {
         File tempFile = File.createTempFile("GlobalTransactionMgrTest", ".image");
         System.err.println("write image " + tempFile.getAbsolutePath());
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(tempFile));
-        masterTransMgr.write(dos);
+        masterTransMgr.saveTransactionStateV2(dos);
         dos.close();
 
         masterTransMgr.removeDatabaseTransactionMgr(dbId);
@@ -767,7 +767,8 @@ public class GlobalTransactionMgrTest {
         // 4. read & check if expired
         DataInputStream dis = new DataInputStream(new FileInputStream(tempFile));
         Assert.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
-        masterTransMgr.readFields(dis);
+        SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReader(dis);
+        masterTransMgr.loadTransactionStateV2(srMetaBlockReader);
         dis.close();
         Assert.assertEquals(1, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
         tempFile.delete();
@@ -903,7 +904,7 @@ public class GlobalTransactionMgrTest {
 
     @Test
     public void testGetTransactionNumByCoordinateBe() throws LabelAlreadyUsedException, AnalysisException,
-            BeginTransactionException, DuplicatedRequestException {
+            RunningTxnExceedException, DuplicatedRequestException {
         masterTransMgr
                 .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
                         GlobalStateMgrTestUtil.testTxnLable1,

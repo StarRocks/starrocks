@@ -28,6 +28,7 @@
 #include "exec/pipeline/operator.h"
 #include "exec/spill/spiller.hpp"
 #include "exprs/anyval_util.h"
+#include "exprs/jit/jit_engine.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -418,6 +419,23 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
             Expr* expr = nullptr;
             ExprContext* ctx = nullptr;
             RETURN_IF_ERROR(Expr::create_tree_from_thrift(_pool, desc.nodes, nullptr, &node_idx, &expr, &ctx, state));
+
+            if (state->is_jit_enabled()) {
+                auto* jit_engine = JITEngine::get_instance();
+                if (jit_engine->support_jit()) {
+                    const auto* prev_e = expr;
+                    auto status = expr->replace_compilable_exprs(&expr, _pool);
+                    if (!status.ok()) {
+                        LOG(ERROR) << "Can't replace compilable exprs.\n" << status.message() << "\n";
+                        continue;
+                    }
+
+                    if (expr != prev_e) {
+                        // The root node was replaced, so we need to update the context.
+                        ctx = _pool->add(new ExprContext(expr));
+                    }
+                }
+            }
             _agg_expr_ctxs[i].emplace_back(ctx);
         }
 

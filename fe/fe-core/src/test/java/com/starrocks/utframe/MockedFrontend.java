@@ -34,6 +34,7 @@
 
 package com.starrocks.utframe;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
@@ -44,9 +45,13 @@ import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalFactory;
+import com.starrocks.journal.bdbje.BDBEnvironment;
+import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.staros.StarMgrServer;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
@@ -110,6 +115,7 @@ public class MockedFrontend {
         MIN_FE_CONF.put("edit_log_port", "9010");
         MIN_FE_CONF.put("priority_networks", "127.0.0.1/24");
         MIN_FE_CONF.put("sys_log_verbose_modules", "org");
+        MIN_FE_CONF.put("cloud_native_meta_port", "6090");
 
         // UT don't need log
         LoggerContext context = (LoggerContext) LogManager.getContext(false);
@@ -205,10 +211,12 @@ public class MockedFrontend {
         private final MockedFrontend frontend;
         private final String[] args;
         private final boolean startBDB;
+        private final RunMode runMode;
 
-        public FERunnable(MockedFrontend frontend, boolean startBDB, String[] args) {
+        public FERunnable(MockedFrontend frontend, boolean startBDB, RunMode runMode, String[] args) {
             this.frontend = frontend;
             this.startBDB = startBDB;
+            this.runMode = runMode;
             this.args = args;
         }
 
@@ -251,6 +259,19 @@ public class MockedFrontend {
                 GlobalStateMgr.getCurrentState().initialize(args);
                 StateChangeExecutor.getInstance().setMetaContext(
                         GlobalStateMgr.getCurrentState().getMetaContext());
+
+                if (RunMode.isSharedDataMode()) {
+                    // setup and start StarManager service
+                    Journal journal = GlobalStateMgr.getCurrentState().getJournal();
+                    // TODO: support MockJournal in StarMgrServer
+                    Preconditions.checkState(journal instanceof BDBJEJournal);
+                    BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
+                    StarMgrServer.getCurrentState()
+                            .initialize(bdbEnvironment, GlobalStateMgr.getCurrentState().getImageDir());
+                    StateChangeExecutor.getInstance().registerStateChangeExecution(
+                            StarMgrServer.getCurrentState().getStateChangeExecution());
+                }
+
                 StateChangeExecutor.getInstance().registerStateChangeExecution(
                         GlobalStateMgr.getCurrentState().getStateChangeExecution());
                 StateChangeExecutor.getInstance().start();
@@ -268,13 +289,14 @@ public class MockedFrontend {
     }
 
     // must call init() before start.
-    public void start(boolean startBDB, String[] args) throws FeStartException, NotInitException, InterruptedException {
+    public void start(boolean startBDB, RunMode runMode, String[] args)
+            throws FeStartException, NotInitException, InterruptedException {
         initLock.lock();
         if (!isInit) {
             throw new NotInitException("fe process is not initialized");
         }
         initLock.unlock();
-        Thread feThread = new Thread(new FERunnable(this, startBDB, args), FE_PROCESS);
+        Thread feThread = new Thread(new FERunnable(this, startBDB, runMode, args), FE_PROCESS);
         feThread.start();
         waitForCatalogReady();
         System.out.println("Fe process is started");

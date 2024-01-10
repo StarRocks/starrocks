@@ -76,6 +76,30 @@ public class KafkaTaskInfoTest {
     }
 
     @Test
+    public void testCheckReadyToExecuteFast() {
+        KafkaRoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob();
+        kafkaRoutineLoadJob.setPartitionOffset(0, 101);
+
+        new MockUp<RoutineLoadMgr>() {
+            @Mock
+            public RoutineLoadJob getJob(long jobId) {
+                return kafkaRoutineLoadJob;
+            }
+        };
+
+        Map<Integer, Long> offset1 = Maps.newHashMap();
+        offset1.put(0, 100L);
+        KafkaTaskInfo kafkaTaskInfo = new KafkaTaskInfo(UUID.randomUUID(),
+                1L,
+                System.currentTimeMillis(),
+                System.currentTimeMillis(),
+                offset1,
+                Config.routine_load_task_timeout_second * 1000);
+
+        Assert.assertTrue(kafkaTaskInfo.checkReadyToExecuteFast());
+    }
+
+    @Test
     public void testProgressKeepUp(@Injectable KafkaRoutineLoadJob kafkaRoutineLoadJob) throws Exception {
         new MockUp<RoutineLoadMgr>() {
             @Mock

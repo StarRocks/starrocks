@@ -86,6 +86,7 @@ enum TExprOpcode {
     BIT_SHIFT_LEFT,
     BIT_SHIFT_RIGHT,
     BIT_SHIFT_RIGHT_LOGICAL,
+    JIT,
 }
 
 // Stream Operation Types

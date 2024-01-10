@@ -127,17 +127,22 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
 
     auto files = writer->files();
     ASSERT_EQ(2, files.size());
-    ASSERT_NE(files[0], files[1]);
+    ASSERT_NE(files[0].path, files[1].path);
+    ASSERT_GT(files[0].size.value(), 0);
+    ASSERT_GT(files[1].size.value(), 0);
     ASSERT_EQ(2 * segment_rows, writer->num_rows());
     ASSERT_GT(writer->data_size(), 0);
+    ASSERT_EQ(files[1].size.value() + files[1].size.value(), writer->data_size());
 
     writer->close();
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0]), 0,
-                                             _tablet_schema));
-    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1]), 1,
-                                             _tablet_schema));
+    ASSIGN_OR_ABORT(auto seg0,
+                    Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[0].path)}, 0,
+                                  _tablet_schema));
+    ASSIGN_OR_ABORT(auto seg1,
+                    Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[1].path)}, 1,
+                                  _tablet_schema));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -213,17 +218,22 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
 
     auto files = writer->files();
     ASSERT_EQ(2, files.size());
-    ASSERT_NE(files[0], files[1]);
+    ASSERT_NE(files[0].path, files[1].path);
+    ASSERT_GT(files[0].size.value(), 0);
+    ASSERT_GT(files[1].size.value(), 0);
+    ASSERT_EQ(files[1].size.value() + files[1].size.value(), writer->data_size());
     ASSERT_EQ(2 * segment_rows, writer->num_rows());
     ASSERT_GT(writer->data_size(), 0);
 
     writer->close();
 
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[0]), 0,
-                                             _tablet_schema));
-    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, _tablet_mgr->segment_location(_tablet_metadata->id(), files[1]), 1,
-                                             _tablet_schema));
+    ASSIGN_OR_ABORT(auto seg0,
+                    Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[0].path)}, 0,
+                                  _tablet_schema));
+    ASSIGN_OR_ABORT(auto seg1,
+                    Segment::open(fs, FileInfo{_tablet_mgr->segment_location(_tablet_metadata->id(), files[1].path)}, 1,
+                                  _tablet_schema));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -293,7 +303,7 @@ TEST_P(LakeTabletWriterTest, test_close_without_finish) {
     ASSERT_OK(writer->flush());
 
     ASSERT_EQ(1, writer->files().size());
-    auto seg_path = _tablet_mgr->segment_location(_tablet_metadata->id(), writer->files()[0]);
+    auto seg_path = _tablet_mgr->segment_location(_tablet_metadata->id(), writer->files()[0].path);
     ASSERT_OK(fs->path_exists(seg_path));
 
     // `close()` directly without calling `finish()`
@@ -349,21 +359,10 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_close_without_finish) {
     ASSERT_OK(writer->flush_columns());
 
     auto files = writer->files();
-    ASSERT_EQ(2, files.size());
-    ASSERT_NE(files[0], files[1]);
-    for (const auto& f : files) {
-        ASSERT_TRUE(fs->path_exists(_tablet_mgr->segment_location(_tablet_metadata->id(), f)).ok());
-    }
+    ASSERT_EQ(0, files.size());
 
     // `close()` directly without calling `finish()`
     writer->close();
-
-    ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
-
-    // segment file should be deleted
-    for (const auto& f : files) {
-        ASSERT_TRUE(fs->path_exists(_tablet_mgr->segment_location(_tablet_metadata->id(), f)).is_not_found());
-    }
 }
 
 INSTANTIATE_TEST_SUITE_P(LakeTabletWriterTest, LakeTabletWriterTest,

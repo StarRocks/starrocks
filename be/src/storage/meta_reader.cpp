@@ -235,6 +235,11 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
         return Status::GlobalDictError("global dict greater than DICT_DECODE_MAX_SIZE");
     }
 
+    // array<string> has none dict, return directly
+    if (words.size() < 1) {
+        return Status::OK();
+    }
+
     [[maybe_unused]] NullableColumn* nullable_column = nullptr;
     ArrayColumn* array_column = nullptr;
 

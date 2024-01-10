@@ -48,15 +48,13 @@ public class UseMaterializedViewTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-
-        FeConstants.runningUnitTest = true;
-        Config.alter_scheduler_interval_millisecond = 100;
-        Config.dynamic_partition_enable = true;
-        Config.dynamic_partition_check_interval_seconds = 1;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +

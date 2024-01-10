@@ -171,4 +171,8 @@ inline std::tuple<int64_t, int64_t, int64_t> parse_tablet_metadata_lock_filename
     return std::make_tuple(tablet_id, version, expire_time);
 }
 
+inline std::string_view basename(std::string_view path) {
+    return path.substr(path.find_last_of('/') + 1);
+}
+
 } // namespace starrocks::lake

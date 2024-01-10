@@ -123,7 +123,7 @@ public:
             rowset->set_id(1);
             auto* segs = rowset->mutable_segments();
             for (auto& file : writer->files()) {
-                segs->Add(std::move(file));
+                segs->Add(std::move(file.path));
             }
 
             writer->close();
@@ -190,12 +190,14 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
         // clean the cache
         cache->prune();
         //create the dummy segment and put it into metacache
-        auto dummy_segment = std::make_shared<Segment>(fs, path, sample_segment->id(), schema, _tablet_mgr.get());
+        auto dummy_segment =
+                std::make_shared<Segment>(fs, FileInfo{path}, sample_segment->id(), schema, _tablet_mgr.get());
         cache->cache_segment(path, dummy_segment);
         EXPECT_EQ(dummy_segment, cache->lookup_segment(path));
         auto sz1 = cache->memory_usage();
 
-        auto mirror_segment = std::make_shared<Segment>(fs, path, sample_segment->id(), schema, _tablet_mgr.get());
+        auto mirror_segment =
+                std::make_shared<Segment>(fs, FileInfo{path}, sample_segment->id(), schema, _tablet_mgr.get());
         auto st = mirror_segment->open(nullptr, nullptr, true);
         EXPECT_TRUE(st.ok());
         auto sz2 = cache->memory_usage();
@@ -208,7 +210,8 @@ TEST_F(LakeRowsetTest, test_segment_update_cache_size) {
         // clean the cache
         cache->prune();
         //create the dummy segment and put it into metacache
-        auto mirror_segment = std::make_shared<Segment>(fs, path, sample_segment->id(), schema, _tablet_mgr.get());
+        auto mirror_segment =
+                std::make_shared<Segment>(fs, FileInfo{path}, sample_segment->id(), schema, _tablet_mgr.get());
         cache->cache_segment(path, mirror_segment);
         auto sz1 = cache->memory_usage();
         auto ssz1 = mirror_segment->mem_usage();

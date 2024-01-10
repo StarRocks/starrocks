@@ -269,4 +269,31 @@ TEST_F(CacheInputStreamTest, test_read_zero_copy) {
     ASSERT_TRUE(check_data_content(buffer + block_size - 10, 1024, 'b'));
 }
 
+TEST_F(CacheInputStreamTest, test_read_with_zero_range) {
+    const int64_t block_count = 1;
+    int64_t data_size = block_size * block_count;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    const std::string file_name = "test_file4";
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
+            new io::SharedBufferedInputStream(stream, file_name, data_size));
+    io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000);
+    cache_stream.set_enable_populate_cache(true);
+    cache_stream.set_enable_block_buffer(true);
+    auto& stats = cache_stream.stats();
+
+    // read from backend, cache the data
+    char buffer[block_size];
+    read_stream_data(&cache_stream, 0, block_size, buffer);
+    ASSERT_TRUE(check_data_content(buffer, block_size, 'a'));
+    ASSERT_EQ(stats.read_cache_count, 0);
+    ASSERT_EQ(stats.write_cache_count, 1);
+
+    // try read zero length data, expect no crash
+    read_stream_data(&cache_stream, 0, 0, nullptr);
+    ASSERT_EQ(stats.read_cache_count, 0);
+}
+
 } // namespace starrocks::io
