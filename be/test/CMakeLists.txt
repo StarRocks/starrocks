@@ -23,6 +23,7 @@ set(EXEC_FILES
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
         ./fs/fs_broker_test.cpp
+        ./fs/fs_hdfs_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
         ./fs/fs_s3_test.cpp

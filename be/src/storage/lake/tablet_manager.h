@@ -27,6 +27,7 @@
 #include "storage/lake/types_fwd.h"
 
 namespace starrocks {
+struct FileInfo;
 class Segment;
 class TabletSchemaPB;
 class TCreateTabletReq;

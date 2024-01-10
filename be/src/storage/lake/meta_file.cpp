@@ -55,15 +55,28 @@ void MetaFileBuilder::append_delvec(DelVectorPtr delvec, uint32_t segment_id) {
     }
 }
 
-void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write,
-                                    const std::map<int, std::string>& replace_segments,
+void MetaFileBuilder::apply_opwrite(const TxnLogPB_OpWrite& op_write, const std::map<int, FileInfo>& replace_segments,
                                     const std::vector<std::string>& orphan_files) {
     auto rowset = _tablet_meta->add_rowsets();
     rowset->CopyFrom(op_write.rowset());
+
+    auto segment_size_size = rowset->segment_size_size();
+    auto segment_file_size = rowset->segments_size();
+    bool upgrage_from_old_version = (segment_size_size != segment_file_size);
+    LOG_IF(ERROR, segment_size_size > 0 && segment_size_size != segment_file_size)
+            << "segment_size size != segment file size, tablet: " << _tablet.id() << ", rowset: " << rowset->id()
+            << ", segment file size: " << segment_file_size << ", segment_size size: " << segment_size_size;
+
     for (const auto& replace_seg : replace_segments) {
         // when handle partial update, replace old segments with new rewrite segments
-        rowset->set_segments(replace_seg.first, replace_seg.second);
+        rowset->set_segments(replace_seg.first, replace_seg.second.path);
+
+        // update new rewrite segments size
+        if (LIKELY(!upgrage_from_old_version)) {
+            rowset->set_segment_size(replace_seg.first, replace_seg.second.size.value());
+        }
     }
+
     rowset->set_id(_tablet_meta->next_rowset_id());
     // if rowset don't contain segment files, still inc next_rowset_id
     _tablet_meta->set_next_rowset_id(_tablet_meta->next_rowset_id() + std::max(1, rowset->segments_size()));
@@ -319,15 +332,24 @@ bool is_primary_key(const TabletMetadata& metadata) {
 }
 
 void rowset_rssid_to_path(const TabletMetadata& metadata, const TxnLogPB_OpWrite& op_write,
-                          std::unordered_map<uint32_t, std::string>& rssid_to_path) {
-    for (auto& rs : metadata.rowsets()) {
-        for (int i = 0; i < rs.segments_size(); i++) {
-            rssid_to_path[rs.id() + i] = rs.segments(i);
+                          std::unordered_map<uint32_t, FileInfo>& rssid_to_file_info) {
+    auto get_file_info_from_rowset = [&](const RowsetMetadataPB& meta, const uint32_t rowset_id) -> void {
+        bool has_segment_size = (meta.segments_size() == meta.segment_size_size());
+        for (int i = 0; i < meta.segments_size(); i++) {
+            FileInfo segment_info{.path = meta.segments(i)};
+            if (LIKELY(has_segment_size)) {
+                segment_info.size = meta.segment_size(i);
+            }
+            rssid_to_file_info[rowset_id + i] = segment_info;
         }
+    };
+
+    for (auto& rs : metadata.rowsets()) {
+        get_file_info_from_rowset(rs, rs.id());
     }
     const uint32_t rowset_id = metadata.next_rowset_id();
     for (int i = 0; i < op_write.rowset().segments_size(); i++) {
-        rssid_to_path[rowset_id + i] = op_write.rowset().segments(i);
+        get_file_info_from_rowset(op_write.rowset(), rowset_id);
     }
 }
 
