@@ -15,13 +15,13 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Strings;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import org.apache.commons.collections.MapUtils;
-import org.apache.parquet.Strings;
 
 import java.util.Map;
 

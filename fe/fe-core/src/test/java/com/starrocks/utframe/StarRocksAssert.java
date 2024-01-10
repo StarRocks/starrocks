@@ -35,6 +35,7 @@
 package com.starrocks.utframe;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.TableName;
@@ -110,7 +111,6 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 import org.junit.Assert;
 import org.junit.jupiter.params.provider.Arguments;
 
