@@ -44,7 +44,7 @@ void Event::finish(RuntimeState* state) {
 
 void Event::finish_dependency(RuntimeState* state) {
     if (_num_finished_dependencies.fetch_add(1) + 1 == _num_dependencies) {
-        schedule(state);
+        process(state);
     }
 }
 
@@ -71,7 +71,7 @@ public:
 
     ~CollectStatsSourceInitializeEvent() override = default;
 
-    void schedule(RuntimeState* state) override;
+    void process(RuntimeState* state) override;
 
     std::string name() const override { return "collect_stats_source_initialize_event"; }
 
@@ -93,7 +93,7 @@ CollectStatsSourceInitializeEvent::CollectStatsSourceInitializeEvent(DriverExecu
 
 DEFINE_FAIL_POINT(collect_stats_source_initialize_prepare_failed);
 
-void CollectStatsSourceInitializeEvent::schedule(RuntimeState* state) {
+void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
     DeferOp defer_op([this, state] { finish(state); });
 
     _leader_source_op->adjust_dop();

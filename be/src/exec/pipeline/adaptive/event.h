@@ -25,14 +25,14 @@
 namespace starrocks::pipeline {
 
 /// Event is used to drive the execution of pipelines.
-/// Event::schedule is invoked when its dependencies are all finished.
+/// Event::process is invoked when its dependencies are all finished.
 class Event : public std::enable_shared_from_this<Event> {
 public:
     Event() = default;
     virtual ~Event() = default;
 
     /// This is not thread-safe.
-    virtual void schedule(RuntimeState* state) {}
+    virtual void process(RuntimeState* state) {}
 
     /// This is thread-safe.
     void finish(RuntimeState* state);
