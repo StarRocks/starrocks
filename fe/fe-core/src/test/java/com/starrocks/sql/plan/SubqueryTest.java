@@ -1170,7 +1170,7 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  join op: NULL AWARE LEFT ANTI JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 2: v2 = 12: v8\n" +
-                    "  |  equal join conjunct: 2: v2 = 13: v9");
+                    "  |  other join predicates: 13: v9 = 2: v2");
             assertContains(plan, "3:HASH JOIN\n" +
                     "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
