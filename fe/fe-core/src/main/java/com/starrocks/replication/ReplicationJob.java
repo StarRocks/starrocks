@@ -491,6 +491,15 @@ public class ReplicationJob implements GsonPostProcessable {
                     throw new MetaNotFoundException("Partition " + tPartitionInfo.partition_id + " in table "
                             + table.getName() + " in database " + db.getFullName() + " not found");
                 }
+                Preconditions.checkState(partition.getCommittedVersion() == partition.getVisibleVersion(),
+                        "Partition " + tPartitionInfo.partition_id + " in table " + table.getName()
+                                + " in database " + db.getFullName() + " publish version not finished");
+                Preconditions.checkState(partition.getVisibleVersion() <= tPartitionInfo.src_version,
+                        "Target visible version: " + partition.getVisibleVersion()
+                                + " is larger than source visible version: " + tPartitionInfo.src_version);
+                if (partition.getVisibleVersion() == tPartitionInfo.src_version) {
+                    continue;
+                }
                 PartitionInfo partitionInfo = initPartitionInfo(olapTable, tPartitionInfo, partition);
                 partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
             }
@@ -529,9 +538,7 @@ public class ReplicationJob implements GsonPostProcessable {
             tabletInfos.put(tabletInfo.getTabletId(), tabletInfo);
         }
         int schemaHash = olapTable.getSchemaHashByIndexId(tIndexInfo.index_id);
-        // If src schema hash is 0, use target schema hash
-        int srcSchemaHash = tIndexInfo.src_schema_hash != 0 ? tIndexInfo.src_schema_hash : schemaHash;
-        return new IndexInfo(tIndexInfo.index_id, schemaHash, srcSchemaHash, tabletInfos);
+        return new IndexInfo(tIndexInfo.index_id, schemaHash, tIndexInfo.src_schema_hash, tabletInfos);
     }
 
     private TabletInfo initTabletInfo(TTabletReplicationInfo tTabletInfo, Tablet tablet)
@@ -557,7 +564,13 @@ public class ReplicationJob implements GsonPostProcessable {
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
         for (Partition partition : table.getPartitions()) {
             Partition srcPartition = srcTable.getPartition(partition.getName());
-            if (partition.getCommittedVersion() >= srcPartition.getVisibleVersion()) {
+            Preconditions.checkState(partition.getCommittedVersion() == partition.getVisibleVersion(),
+                    "Partition " + partition.getName() + " in table " + table.getName()
+                            + " publish version not finished");
+            Preconditions.checkState(partition.getVisibleVersion() <= srcPartition.getVisibleVersion(),
+                    "Target visible version: " + partition.getVisibleVersion()
+                            + " is larger than source visible version: " + srcPartition.getVisibleVersion());
+            if (partition.getVisibleVersion() == srcPartition.getVisibleVersion()) {
                 continue;
             }
             PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, partition, srcPartition,
