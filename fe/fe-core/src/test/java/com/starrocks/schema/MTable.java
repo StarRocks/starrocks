@@ -15,8 +15,8 @@
 package com.starrocks.schema;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import org.apache.parquet.Strings;
 
 import java.util.List;
 import java.util.stream.Collectors;

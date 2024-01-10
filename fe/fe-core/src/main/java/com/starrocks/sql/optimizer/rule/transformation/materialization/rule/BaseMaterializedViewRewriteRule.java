@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.github.benmanes.caffeine.cache.Cache;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -40,7 +41,6 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MVPartiti
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
-import org.apache.arrow.util.Preconditions;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;

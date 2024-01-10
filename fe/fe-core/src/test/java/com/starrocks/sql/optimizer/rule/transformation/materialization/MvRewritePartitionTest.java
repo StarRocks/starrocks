@@ -15,11 +15,11 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.sql.plan.PlanTestBase;
-import org.apache.parquet.Strings;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;

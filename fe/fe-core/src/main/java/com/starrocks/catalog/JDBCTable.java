@@ -15,6 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.base.Splitter;
+import com.google.common.base.Strings;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
@@ -31,7 +32,6 @@ import org.apache.commons.lang3.EnumUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 
 import java.io.DataInput;
 import java.io.DataOutput;

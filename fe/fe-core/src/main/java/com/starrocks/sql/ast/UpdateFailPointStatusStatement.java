@@ -14,11 +14,11 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.base.Joiner;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.proto.FailPointTriggerModeType;
 import com.starrocks.proto.PFailPointTriggerMode;
 import com.starrocks.sql.parser.NodePosition;
-import org.apache.parquet.Strings;
 
 import java.util.List;
 
@@ -97,7 +97,7 @@ public class UpdateFailPointStatusStatement extends StatementBase {
             sb.append(" WITH ").append(probability).append(" PROBABILITY");
         }
         if (backends != null) {
-            sb.append(" ON BACKEND '").append(Strings.join(backends, ",")).append("'");
+            sb.append(" ON BACKEND '").append(Joiner.on(",").join(backends)).append("'");
         }
         return sb.toString();
     }

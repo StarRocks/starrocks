@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
@@ -58,7 +59,6 @@ import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
