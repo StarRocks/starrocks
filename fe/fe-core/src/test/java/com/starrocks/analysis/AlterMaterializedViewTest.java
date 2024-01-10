@@ -185,7 +185,7 @@ public class AlterMaterializedViewTest {
         // alter the view to a different type, cause MV inactive
         connectContext.executeSql("alter view view1 as select v1, avg(v2) as k2 from t0 group by v1");
         Assert.assertFalse(mv.isActive());
-        Assert.assertEquals("base view view1 changed", mv.getInactiveReason());
+        Assert.assertEquals("base-view changed: view1", mv.getInactiveReason());
 
         // try to active the mv
         connectContext.executeSql(String.format("alter materialized view %s active", mvName));

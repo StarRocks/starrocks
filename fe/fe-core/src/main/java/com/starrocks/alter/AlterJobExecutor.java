@@ -23,6 +23,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.AlterViewInfo;
@@ -144,9 +145,9 @@ public class AlterJobExecutor extends AstVisitor<Void, ConnectContext> {
 
             // inactive the related MVs
             LocalMetastore.inactiveRelatedMaterializedView(db, origTable,
-                    String.format("based table %s swapped", origTblName));
+                    MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName));
             LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl,
-                    String.format("based table %s swapped", newTblName));
+                    MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName));
 
             SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), origTable.getId(), olapNewTbl.getId());
             GlobalStateMgr.getCurrentState().getAlterJobMgr().swapTableInternal(log);

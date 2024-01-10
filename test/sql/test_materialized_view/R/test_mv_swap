@@ -115,11 +115,11 @@ ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
 -- !result
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
 -- result:
-false	based table mv1 swapped
+false	base-table swapped: mv1
 -- !result
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
 -- result:
-false	base table mv_on_mv_1 inactive
+false	base-mv inactive: mv_on_mv_1
 -- !result
 ALTER MATERIALIZED VIEW mv_on_mv_1 ACTIVE;
 -- result:
@@ -131,7 +131,7 @@ E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: Can no
 -- !result
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
 -- result:
-false	based table mv1 swapped
+false	base-table swapped: mv1
 -- !result
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
 -- result:
@@ -166,7 +166,7 @@ ALTER TABLE ss SWAP WITH jj;
 -- !result
 SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1';
 -- result:
-false	based table jj swapped
+false	base-table swapped: jj
 -- !result
 ALTER MATERIALIZED VIEW mv_on_table_1 ACTIVE;
 -- result:
