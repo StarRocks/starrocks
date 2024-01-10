@@ -1842,7 +1842,12 @@ public class StmtExecutor {
         long transactionId = stmt.getTxnId();
         TransactionState txnState = null;
         String label = DebugUtil.printId(context.getExecutionId());
-        if (targetTable instanceof OlapTable) {
+        if (targetTable instanceof ExternalOlapTable) {
+            Preconditions.checkState(stmt instanceof InsertStmt,
+                    "External OLAP table only supports insert statement");
+            String stmtLabel = ((InsertStmt) stmt).getLabel();
+            label = Strings.isNullOrEmpty(stmtLabel) ? MetaUtils.genInsertLabel(context.getExecutionId()) : stmtLabel;
+        } else if (targetTable instanceof OlapTable) {
             txnState = transactionMgr.getTransactionState(database.getId(), transactionId);
             if (txnState == null) {
                 throw new DdlException("txn does not exist: " + transactionId);

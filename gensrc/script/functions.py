@@ -328,6 +328,9 @@ vectorized_functions = [
      'StringFunctions::translate_prepare', 'StringFunctions::translate_close'],
     [30431, 'crc32', 'BIGINT', ['VARCHAR'], 'StringFunctions::crc32'],
 
+    [30440, 'ngram_search', 'FLOAT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::ngram_search','StringFunctions::ngram_search_prepare','StringFunctions::ngram_search_close'],
+    [30441, 'ngram_search_case_insensitive', 'FLOAT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::ngram_search_case_insensitive','StringFunctions::ngram_search_case_insensitive_prepare','StringFunctions::ngram_search_close'],
+
     # Binary Functions
     # to_binary
     [30600, 'to_binary', 'VARBINARY', ['VARCHAR', 'VARCHAR'], 'BinaryFunctions::to_binary',
