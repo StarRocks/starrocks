@@ -12,6 +12,8 @@ displayed_sidebar: "Chinese"
 
 `pattern` 必须完全匹配 `str` 的一部分。如果没有匹配的字符串，返回空字符串。
 
+该函数从 3.2 版本开始支持。
+
 ## 语法
 
 ```Haskell

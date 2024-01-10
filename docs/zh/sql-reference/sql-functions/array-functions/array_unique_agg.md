@@ -8,6 +8,8 @@ displayed_sidebar: "Chinese"
 
 将一列中的 distinct 值（包括空值 null）串联成一个数组（多行转一行）。
 
+该函数从 3.2 版本开始支持。
+
 ## 语法
 
 ```Haskell
