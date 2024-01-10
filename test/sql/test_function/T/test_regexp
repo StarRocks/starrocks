@@ -1,0 +1,6 @@
+-- name: test_regexp
+
+SELECT regexp_extract_all('AbCdExCeF', '([[:lower:]]+)C([[:lower:]]+)', 3);
+
+SELECT regexp_extract_all('AbCdExCeF', '([[:lower:]]+)C([[:lower:]]+)', 0); 
+

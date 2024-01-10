@@ -3383,7 +3383,7 @@ static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& col
 
     uint64_t index = 0;
     int max_matches = 1 + const_re->NumberOfCapturingGroups();
-    if (group < 0 || group >= max_matches) {
+    if (group <= 0 || group >= max_matches) {
         offset_col->append_value_multiple_times(&index, size);
         auto array = ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(0, 0)), offset_col);
 
