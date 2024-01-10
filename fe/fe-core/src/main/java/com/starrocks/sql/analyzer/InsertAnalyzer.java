@@ -67,6 +67,8 @@ public class InsertAnalyzer {
          */
         Table table;
         if (insertStmt.getTargetTable() != null) {
+            // For the OLAP external table,
+            // the target table is synchronized from another cluster and saved into InsertStmt during beginTransaction.
             table = insertStmt.getTargetTable();
         } else {
             table = getTargetTable(insertStmt, session);
