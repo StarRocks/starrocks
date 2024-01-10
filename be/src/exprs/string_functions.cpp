@@ -3271,7 +3271,7 @@ static ColumnPtr regexp_extract_all_general(FunctionContext* context, re2::RE2::
 
         nl_col->append(0);
         auto group = group_viewer.value(row);
-        if (group < 0) {
+        if (group <= 0) {
             offset_col->append(index);
             continue;
         }
@@ -3326,7 +3326,7 @@ static ColumnPtr regexp_extract_all_const_pattern(re2::RE2* const_re, const Colu
 
         nl_col->append(0);
         auto group = group_viewer.value(row);
-        if (group < 0) {
+        if (group <= 0) {
             offset_col->append(index);
             continue;
         }
