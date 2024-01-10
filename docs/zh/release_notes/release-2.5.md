@@ -23,9 +23,7 @@ displayed_sidebar: "Chinese"
 - Spark Load 增加了 bitmap_from_binary 函数，支持导入 Binary Bitmap。 [#36050](https://github.com/StarRocks/starrocks/pull/36050)
 - bRPC 的超时时间从 1 小时改为等于 Session 变量 `query_timeout` 所设置的时间，避免 RPC 超时过久引起查询失败。 [#36778](https://github.com/StarRocks/starrocks/pull/36778)
 
-### 兼容性变更
-
-#### 参数变更
+### 参数变更
 
 - 新增 BE 配置项 `enable_stream_load_verbose_log`，默认取值是 `false`，打开后日志中可以记录 Stream Load 的 HTTP 请求和响应信息，方便出现问题后的定位调试。[#36113](https://github.com/StarRocks/starrocks/pull/36113)
 - BE 配置项 `update_compaction_per_tablet_min_interval_seconds` 从静态参数改为动态参数。 [#36819](https://github.com/StarRocks/starrocks/pull/36819)
@@ -65,9 +63,7 @@ displayed_sidebar: "Chinese"
   - 优化 `bitmap_xor` 函数性能。 [#34069](https://github.com/StarRocks/starrocks/pull/34069)
   - 支持 Copy on Write（简称 COW），优化性能，并减少内存使用。 [#34047](https://github.com/StarRocks/starrocks/pull/34047)
 
-### 兼容性变更
-
-#### 参数变更
+### 参数变更
 
 - 将 FE 配置项 `enable_new_publish_mechanism` 改为静态参数，修改后必须重启 FE 才可以生效。 [#35338](https://github.com/StarRocks/starrocks/pull/35338)
 
@@ -96,7 +92,7 @@ displayed_sidebar: "Chinese"
 
 - `INFORMATION_SCHEMA.COLUMNS` 表支持显示 ARRAY、MAP、STRUCT 类型的字段。 [#33431](https://github.com/StarRocks/starrocks/pull/33431)
 
-### 兼容性变更
+### 参数变更
 
 #### 系统变量
 
