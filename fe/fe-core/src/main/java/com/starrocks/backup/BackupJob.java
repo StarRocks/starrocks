@@ -165,6 +165,10 @@ public class BackupJob extends AbstractJob {
         testPrimaryKey = true;
     }
 
+    public Path getLocalJobDirPath() {
+        return localJobDirPath;
+    }
+
     public BackupJobState getState() {
         return state;
     }
