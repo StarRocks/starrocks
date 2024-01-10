@@ -64,6 +64,8 @@ public class MvRewriteTest extends MvRewriteTestBase {
         starRocksAssert.withTable(cluster, "test_all_type");
         starRocksAssert.withTable(cluster, "t0");
         starRocksAssert.withTable(cluster, "t1");
+        starRocksAssert.withTable(cluster, "test10");
+        starRocksAssert.withTable(cluster, "test11");
 
         prepareDatas();
     }
@@ -2065,4 +2067,32 @@ public class MvRewriteTest extends MvRewriteTestBase {
         }
     }
 
+    @Test
+    public void testOuterJoinRewrite() throws Exception {
+        starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW `mv1` (`event_id`, `event_time`, `event_time1`)\n" +
+                "PARTITION BY (`event_time`)\n" +
+                "DISTRIBUTED BY HASH(`event_id`) BUCKETS 1\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"partition_refresh_number\" = \"2\",\n" +
+                "\"force_external_table_query_rewrite\" = \"CHECKED\",\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"HDD\"\n" +
+                ")\n" +
+                "AS SELECT `a`.`event_id`, `a`.`event_time`, `b`.`event_time1`\n" +
+                "FROM `test`.`test10` AS `a` LEFT OUTER JOIN `test`.`test11` AS `b`" +
+                " ON (`a`.`event_id` = `b`.`event_id1`) AND (`a`.`event_time` = `b`.`event_time1`);");
+
+        connectContext.executeSql("refresh materialized view mv1 with sync mode");
+        {
+            String query = "select * from (select event_id, event_time, event_time1" +
+                    " from test10 a left outer join test11 b" +
+                    " on a.event_id = b.event_id1 and a.event_time = b.event_time1 ) xx" +
+                    " where xx.event_time >= \"2023-01-05 00:00:00\" and xx.event_time < \"2023-01-06 00:00:00\";";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "mv1");
+            PlanTestBase.assertNotContains(plan, "event_time1 >= '2023-01-05 00:00:00'");
+        }
+    }
 }
