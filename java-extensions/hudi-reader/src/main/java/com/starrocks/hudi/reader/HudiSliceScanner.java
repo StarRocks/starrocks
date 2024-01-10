@@ -78,6 +78,7 @@ public class HudiSliceScanner extends ConnectorScanner {
     private final int fetchSize;
     private final ClassLoader classLoader;
     private final String fsOptionsProps;
+    private final String timeZone;
 
     public HudiSliceScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
@@ -103,6 +104,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         for (Map.Entry<String, String> kv : params.entrySet()) {
             LOG.debug("key = " + kv.getKey() + ", value = " + kv.getValue());
         }
+        this.timeZone = params.get("time_zone");
     }
 
     private JobConf makeJobConf(Properties properties) {
@@ -248,7 +250,7 @@ public class HudiSliceScanner extends ConnectorScanner {
                     if (fieldData == null) {
                         appendData(i, null);
                     } else {
-                        ColumnValue fieldValue = new HudiColumnValue(fieldInspectors[i], fieldData);
+                        ColumnValue fieldValue = new HudiColumnValue(fieldInspectors[i], fieldData, timeZone);
                         appendData(i, fieldValue);
                     }
                 }
