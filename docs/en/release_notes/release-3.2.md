@@ -62,7 +62,7 @@ Fixed the following issues:
 - After the DISTINCT window operator pushdown feature is enabled, errors are reported if SELECT DISTINCT operations are performed on the complex expressions of the columns computed by window functions.  [#36357](https://github.com/StarRocks/starrocks/pull/36357)
 - Some S3-compatible object storage returns duplicate files, causing the BEs to crash. [#36103](https://github.com/StarRocks/starrocks/pull/36103)
 
-## 3.2.0 
+## 3.2.0
 
 Release date: December 1, 2023
 
