@@ -157,11 +157,11 @@ Enter host password for user 'root':
 }%
 ```
 
-当 Stream Load 发生错误时，StarRocks 会返回一个包含错误信息的 URL。由于容器具有私有 IP 地址，您必须通过容器中的 Shell Session 运行 curl 命令查看。
+当 Stream Load 发生错误时，StarRocks 会返回一个包含错误信息的 URL您可以通过 curl 命令查看。
 
 
 ```bash
-curl http://10.5.0.3:8040/api/_load_error_log?file=error_log_da41dd88276a7bfc_739087c94262ae9f
+curl http://127.0.0.1:8040/api/_load_error_log?file=error_log_da41dd88276a7bfc_739087c94262ae9f
 ```
 
 <details>
