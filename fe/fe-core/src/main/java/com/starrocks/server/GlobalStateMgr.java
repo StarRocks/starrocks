@@ -219,6 +219,7 @@ import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import org.apache.commons.lang3.StringUtils;
@@ -466,7 +467,10 @@ public class GlobalStateMgr {
     private MemoryUsageTracker memoryUsageTracker;
 
     private final MetaRecoveryDaemon metaRecoveryDaemon = new MetaRecoveryDaemon();
+
     private TemporaryTableMgr temporaryTableMgr;
+
+    private final GtidGenerator gtidGenerator;
 
     private final SqlParser sqlParser;
     private final Analyzer analyzer;
@@ -708,6 +712,8 @@ public class GlobalStateMgr {
         }
 
         this.lockManager = new LockManager();
+
+        this.gtidGenerator = new GtidGenerator();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -973,6 +979,10 @@ public class GlobalStateMgr {
 
     public ShowExecutor getShowExecutor() {
         return showExecutor;
+    }
+
+    public GtidGenerator getGtidGenerator() {
+        return gtidGenerator;
     }
 
     // Use tryLock to avoid potential deadlock

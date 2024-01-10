@@ -58,6 +58,8 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
     // Rewriting the scan column ref also needs to rewrite the pruned predicate at the same time.
     private List<ScalarOperator> prunedPartitionPredicates = Lists.newArrayList();
 
+    private long gtid = 0;
+
     private PhysicalOlapScanOperator() {
         super(OperatorType.PHYSICAL_OLAP_SCAN);
     }
@@ -88,6 +90,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         super(OperatorType.PHYSICAL_OLAP_SCAN, scanOperator);
         this.distributionSpec = scanOperator.getDistributionSpec();
         this.selectedIndexId = scanOperator.getSelectedIndexId();
+        this.gtid = scanOperator.getGtid();
         this.selectedPartitionId = scanOperator.getSelectedPartitionId();
         this.selectedTabletId = scanOperator.getSelectedTabletId();
         this.hintsReplicaId = scanOperator.getHintsReplicaIds();
@@ -97,6 +100,10 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     public long getSelectedIndexId() {
         return selectedIndexId;
+    }
+
+    public long getGtid() {
+        return gtid;
     }
 
     public List<Long> getSelectedPartitionId() {
@@ -212,6 +219,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         }
         PhysicalOlapScanOperator that = (PhysicalOlapScanOperator) o;
         return selectedIndexId == that.selectedIndexId &&
+                gtid == that.gtid &&
                 Objects.equals(distributionSpec, that.distributionSpec) &&
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
                 Objects.equals(selectedTabletId, that.selectedTabletId);
@@ -249,6 +257,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
             super.withOperator(operator);
             builder.distributionSpec = operator.distributionSpec;
             builder.selectedIndexId = operator.selectedIndexId;
+            builder.gtid = operator.gtid;
             builder.selectedTabletId = operator.selectedTabletId;
             builder.hintsReplicaId = operator.hintsReplicaId;
             builder.selectedPartitionId = operator.selectedPartitionId;

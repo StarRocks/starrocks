@@ -49,6 +49,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     // record if this scan is derived from SplitScanORToUnionRule
     private boolean fromSplitOR;
 
+    private long gtid = 0;
+
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
         this(table, Maps.newHashMap(), Maps.newHashMap(), null, Operator.DEFAULT_LIMIT, null);
@@ -128,6 +130,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return selectedTabletId;
     }
 
+    public long getGtid() {
+        return gtid;
+    }
+
     @Override
     public boolean isEmptyOutputRows() {
         return selectedTabletId == null || selectedTabletId.isEmpty() ||
@@ -175,6 +181,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
         LogicalOlapScanOperator that = (LogicalOlapScanOperator) o;
         return selectedIndexId == that.selectedIndexId &&
+                gtid == that.gtid &&
                 Objects.equals(distributionSpec, that.distributionSpec) &&
                 Objects.equals(selectedPartitionId, that.selectedPartitionId) &&
                 Objects.equals(partitionNames, that.partitionNames) &&
@@ -185,7 +192,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), selectedIndexId, selectedPartitionId,
+        return Objects.hash(super.hashCode(), selectedIndexId, gtid, selectedPartitionId,
                 selectedTabletId, hintsTabletIds, hintsReplicaIds);
     }
 
@@ -206,6 +213,7 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
             builder.distributionSpec = scanOperator.distributionSpec;
             builder.selectedIndexId = scanOperator.selectedIndexId;
+            builder.gtid = scanOperator.gtid;
             builder.selectedPartitionId = scanOperator.selectedPartitionId;
             builder.partitionNames = scanOperator.partitionNames;
             builder.hasTableHints = scanOperator.hasTableHints;
@@ -219,6 +227,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
 
         public Builder setSelectedIndexId(long selectedIndexId) {
             builder.selectedIndexId = selectedIndexId;
+            return this;
+        }
+
+        public Builder setGtid(long gtid) {
+            builder.gtid = gtid;
             return this;
         }
 

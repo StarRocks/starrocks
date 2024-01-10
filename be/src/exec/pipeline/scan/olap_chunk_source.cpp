@@ -443,6 +443,7 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 
     _reader = std::make_shared<TabletReader>(_tablet, Version(_morsel->from_version(), _version),
                                              std::move(child_schema), std::move(rowsets), &_tablet_schema);
+    _reader->set_use_gtid(_morsel->get_olap_scan_range()->__isset.gtid);
     if (reader_columns.size() == scanner_columns.size()) {
         _prj_iter = _reader;
     } else {
