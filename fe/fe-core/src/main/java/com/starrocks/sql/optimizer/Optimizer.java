@@ -76,10 +76,10 @@ import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
+import com.starrocks.sql.optimizer.rule.tree.SubfieldExprNoCopyRule;
 import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
-import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExprNoCopyRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -359,10 +359,7 @@ public class Optimizer {
         }
 
         tree = pruneSubfield(tree, rootTaskContext, requiredColumns);
-        // after pruneSubfield which will push down subfield expr
-        if (sessionVariable.getEnableSubfieldNoCopy()) {
-            ruleRewriteOnlyOnce(tree, rootTaskContext, new SubfieldExprNoCopyRule());
-        }
+
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_PROJECT);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_SET_OPERATOR);
@@ -659,6 +656,11 @@ public class Optimizer {
         // This must be put at last of the optimization. Because wrapping reused ColumnRefOperator with CloneOperator
         // too early will prevent it from certain optimizations that depend on the equivalence of the ColumnRefOperator.
         result = new CloneDuplicateColRefRule().rewrite(result, rootTaskContext);
+
+        // set subfield expr copy flag
+        if (rootTaskContext.getOptimizerContext().getSessionVariable().getEnableSubfieldNoCopy()) {
+            result = new SubfieldExprNoCopyRule().rewrite(result, rootTaskContext);
+        }
 
         result.setPlanCount(planCount);
         return result;
