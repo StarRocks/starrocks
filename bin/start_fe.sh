@@ -55,6 +55,8 @@ export DORIS_HOME="$STARROCKS_HOME"
 
 source $STARROCKS_HOME/bin/common.sh
 
+check_and_update_max_processes
+
 # export env variables from fe.conf
 #
 # JAVA_OPTS
@@ -197,8 +199,6 @@ else
     # redirect all subsequent commands' stdout/stderr into $LOG_FILE
     exec &>> $LOG_FILE
 fi
-
-check_and_update_max_processes
 
 echo "using java version $JAVA_VERSION"
 echo $final_java_opt

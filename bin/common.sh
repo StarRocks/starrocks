@@ -140,9 +140,9 @@ detect_jvm_xmx() {
 check_and_update_max_processes() {
     max_processes=$(ulimit -u)
     if [ $max_processes -lt 65535 ]; then
-        ret=`ulimit -u 65535`
-        if [ $? -ne 0]; then
-            echo "Warn: update max user processes failed, error: ${ret}, please refer to https://docs.starrocks.io/docs/deployment/environment_configurations/#max-user-processes"
+        ulimit -u 65535
+        if [ $? -ne 0 ]; then
+            echo "Warn: update max user processes failed, please refer to https://docs.starrocks.io/docs/deployment/environment_configurations/#max-user-processes"
         fi
     fi
 }
