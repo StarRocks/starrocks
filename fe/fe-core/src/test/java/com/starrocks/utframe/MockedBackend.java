@@ -125,6 +125,7 @@ public class MockedBackend {
     private final int heartBeatPort;
     private final int beThriftPort;
     private final int httpPort;
+    private final int starletPort;
 
     final MockHeatBeatClient heatBeatClient;
 
@@ -143,8 +144,9 @@ public class MockedBackend {
         brpcPort = BASE_PORT.getAndIncrement();
         heartBeatPort = BASE_PORT.getAndIncrement();
         httpPort = BASE_PORT.getAndIncrement();
+        starletPort = BASE_PORT.getAndIncrement();
 
-        heatBeatClient = new MockHeatBeatClient(beThriftPort, httpPort, brpcPort);
+        heatBeatClient = new MockHeatBeatClient(beThriftPort, httpPort, brpcPort, starletPort);
         thriftClient = new MockBeThriftClient(this);
         pbService = new MockPBackendService();
 
@@ -189,16 +191,22 @@ public class MockedBackend {
         return httpPort;
     }
 
+    public int getStarletPort() {
+        return starletPort;
+    }
+
     private static class MockHeatBeatClient extends HeartbeatService.Client {
         private final int brpcPort;
         private final int beThriftPort;
         private final int httpPort;
+        private final int starletPort;
 
-        public MockHeatBeatClient(int beThriftPort, int beHttpPort, int beBrpcPort) {
+        public MockHeatBeatClient(int beThriftPort, int beHttpPort, int beBrpcPort, int starletPort) {
             super(null);
             this.brpcPort = beBrpcPort;
             this.beThriftPort = beThriftPort;
             this.httpPort = beHttpPort;
+            this.starletPort = starletPort;
         }
 
         @Override
@@ -216,6 +224,7 @@ public class MockedBackend {
         public THeartbeatResult recv_heartbeat() {
             TBackendInfo backendInfo = new TBackendInfo(beThriftPort, httpPort);
             backendInfo.setBrpc_port(brpcPort);
+            backendInfo.setStarlet_port(starletPort);
             return new THeartbeatResult(new TStatus(TStatusCode.OK), backendInfo);
         }
     }
