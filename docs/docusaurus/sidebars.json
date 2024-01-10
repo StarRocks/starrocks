@@ -194,8 +194,6 @@
         "loading/Flink-connector-starrocks",
         "loading/Load_to_Primary_Key_tables",
         "loading/Etl_in_loading",
-        "loading/CloudCanal",
-        "loading/DataX-starrocks-writer",
         {
           "type": "category",
           "label": "Concepts",
@@ -359,13 +357,14 @@
           "description": "Integrations with more loading tools",
           "link": {"type": "doc", "id": "cover_pages/loading_tools_integration"},
           "items": [
-             "integrations/loading_tools/CloudCanal",
-             "integrations/loading_tools/DataX",
-             {
+            "integrations/loading_tools/SMT",
+            "integrations/loading_tools/DataX-starrocks-writer",
+            "integrations/loading_tools/CloudCanal",
+            {
               "type": "link",
-              "label": "DBT",
-              "description": "Modeling and transformation with DBT",
-              "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
+              "label": "Kettle connector",
+              "description": "with DBT",
+              "href": "https://github.com/StarRocks/starrocks-connector-for-kettle"
              }
            ]
         },
@@ -397,7 +396,13 @@
         {
           "type": "doc",
           "id": "integrations/other_integrations/datadog_support"
-        }
+        },
+        {
+          "type": "link",
+          "label": "DBT",
+          "description": "Modeling and transformation with DBT",
+          "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
+         }
       ]
     },
     {
