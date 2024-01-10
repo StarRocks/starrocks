@@ -363,7 +363,7 @@
             {
               "type": "link",
               "label": "Kettle connector",
-              "description": "with DBT",
+              "description": "Integrations with Kettle",
               "href": "https://github.com/StarRocks/starrocks-connector-for-kettle"
              }
            ]
@@ -1202,14 +1202,16 @@
           "label": "导入工具",
           "description": "更多导入工具集成",
           "link": {"type": "doc", "id": "cover_pages/loading_tools_integration"},
-          "items": [
-             "integrations/loading_tools/CloudCanal",
-             "integrations/loading_tools/DataX",
-             {
+          "items": 
+          [
+            "integrations/loading_tools/SMT",
+            "integrations/loading_tools/DataX-starrocks-writer",
+            "integrations/loading_tools/CloudCanal",
+            {
               "type": "link",
-              "label": "DBT",
-              "description": "通过 DBT 实现数据建模与转换",
-              "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
+              "label": "Kettle connector",
+              "description": "Integrations with Kettle",
+              "href": "https://github.com/StarRocks/starrocks-connector-for-kettle"
              }
            ]
         },
@@ -1241,7 +1243,13 @@
         {
           "type": "doc",
           "id": "integrations/other_integrations/datadog_support"
-        }
+        },
+        {
+          "type": "link",
+          "label": "DBT",
+          "description": "通过 DBT 实现数据建模与转换",
+          "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
+         }
       ]
     },
     {
