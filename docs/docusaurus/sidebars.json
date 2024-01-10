@@ -371,6 +371,7 @@
                   "items": [
                     "sql-reference/sql-statements/data-types/TINYINT",
                     "sql-reference/sql-statements/data-types/SMALLINT",
+                    "sql-reference/sql-statements/data-types/INT",
                     "sql-reference/sql-statements/data-types/BIGINT",
                     "sql-reference/sql-statements/data-types/LARGEINT",
                     "sql-reference/sql-statements/data-types/DECIMAL",
@@ -998,6 +999,7 @@
                   "label": "数值类型",
                   "link": {"type": "doc", "id": "sql-reference/sql-statements/data-types/INT"},
                   "items": [
+                    "sql-reference/sql-statements/data-types/TINYINT",
                     "sql-reference/sql-statements/data-types/SMALLINT",
                     "sql-reference/sql-statements/data-types/INT",
                     "sql-reference/sql-statements/data-types/BIGINT",
