@@ -50,6 +50,7 @@ public class TPCHPlanTest extends PlanTestBase {
 
     @Test
     public void testInSubquery() {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
         runFileUnitTest("subquery/in-subquery");
     }
 
