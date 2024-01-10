@@ -256,7 +256,7 @@ displayed_sidebar: "Chinese"
 ### 功能优化
 
 - 优化了非分区表增加分区时的报错信息。 [#25266](https://github.com/StarRocks/starrocks/pull/25266)
-- 优化表的[自动分桶策略](../table_design/Data_distribution.md#确定分桶数量)。 [#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- 优化表的[自动分桶策略](https://docs.starrocks.io/zh/docs/2.5/table_design/Data_distribution/#%E7%A1%AE%E5%AE%9A%E5%88%86%E6%A1%B6%E6%95%B0%E9%87%8F)。 [#24543](https://github.com/StarRocks/starrocks/pull/24543)
 - 优化建表时 Comment 中的默认值。[#24803](https://github.com/StarRocks/starrocks/pull/24803)
 - 优化异步物化视图的手动刷新策略。支持通过 REFRESH MATERIALIZED VIEW WITH SYNC MODE 同步调用物化视图刷新任务。[#25910](https://github.com/StarRocks/starrocks/pull/25910)
 
@@ -276,7 +276,7 @@ displayed_sidebar: "Chinese"
 
 - 失效物化视图支持通过 `ALTER MATERIALIZED VIEW <mv_name> ACTIVE` 手动激活，可用于激活因基表 (base table) 被删除而失效的物化视图。更多信息，参见 [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md)。[#24001](https://github.com/StarRocks/starrocks/pull/24001)
 
-- 支持在建表和新增分区时自动设置适当的分桶数量。更多信息，参见[确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。[#10614](https://github.com/StarRocks/starrocks/pull/10614)
+- 支持在建表和新增分区时自动设置适当的分桶数量。更多信息，参见[确定分桶数量](https://docs.starrocks.io/zh/docs/2.5/table_design/Data_distribution/#%E7%A1%AE%E5%AE%9A%E5%88%86%E6%A1%B6%E6%95%B0%E9%87%8F)。[#10614](https://github.com/StarRocks/starrocks/pull/10614)
 
 ### 功能优化
 

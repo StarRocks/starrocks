@@ -197,11 +197,11 @@ To be updated.
 - Added the following FE configuration items:
   - `catalog_metadata_cache_size`
   - `enable_backup_materialized_view`
-  - `enable_colocate_mv_index` 
+  - `enable_colocate_mv_index`
   - `enable_fast_schema_evolution`
   - `json_file_size_limit`
-  - `lake_enable_ingest_slowdown` 
-  - `lake_ingest_slowdown_threshold` 
+  - `lake_enable_ingest_slowdown`
+  - `lake_ingest_slowdown_threshold`
   - `lake_ingest_slowdown_ratio`
   - `lake_compaction_score_upper_bound`
   - `mv_auto_analyze_async`
@@ -275,7 +275,7 @@ Fixed the following issues:
 
 - BEs crash when libcurl is invoked. [#31667](https://github.com/StarRocks/starrocks/pull/31667)
 - Schema Change may fail if it takes an excessively long period of time, because the specified tablet version is handled by garbage collection. [#31376](https://github.com/StarRocks/starrocks/pull/31376)
-- Failed to access the Parquet files in MinIO via file external tables. [#29873] (https://github.com/StarRocks/starrocks/pull/29873)
+- Failed to access the Parquet files in MinIO via file external tables. [#29873](https://github.com/StarRocks/starrocks/pull/29873)
 - The ARRAY, MAP, and STRUCT type columns are not correctly displayed in  `information_schema.columns`. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
 - An error is reported if specific path formats are used during data loading via Broker Load: `msg:Fail to parse columnsFromPath, expected: [rec_dt]`. [#32720](https://github.com/StarRocks/starrocks/pull/32720)
 - `DATA_TYPE` and `COLUMN_TYPE` for BINARY or VARBINARY data types are displayed as `unknown` in the `information_schema.columns` view. [#32678](https://github.com/StarRocks/starrocks/pull/32678)

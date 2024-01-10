@@ -256,7 +256,7 @@ Release date: June 30, 2023
 ### Improvements
 
 - Optimized the error message reported when partitions are added to a non-partitioned table. [#25266](https://github.com/StarRocks/starrocks/pull/25266)
-- Optimized the [auto tablet distribution policy](../table_design/Data_distribution.md#determine-the-number-of-buckets) for tables. [#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- Optimized the [auto tablet distribution policy](https://docs.starrocks.io/docs/2.5/table_design/Data_distribution/#determine-the-number-of-tablets) for tables. [#24543](https://github.com/StarRocks/starrocks/pull/24543)
 - Optimized the default comments in the CREATE TABLE statement. [#24803](https://github.com/StarRocks/starrocks/pull/24803)
 - Optimized the manual refreshing of asynchronous materialized views. Supports using the REFRESH MATERIALIZED VIEW WITH SYNC MODE syntax to synchronously invoke materialized view refresh tasks. [#25910](https://github.com/StarRocks/starrocks/pull/25910)
 
@@ -275,7 +275,7 @@ Release date: June 14, 2023
 ### New features
 
 - Inactive materialized views can be manually activated using `ALTER MATERIALIZED VIEW <mv_name> ACTIVE`. You can use this SQL command to activate materialized views whose base tables were dropped and then recreated. For more information, see [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md). [#24001](https://github.com/StarRocks/starrocks/pull/24001)
-- StarRocks can automatically set an appropriate number of tablets when you create a table or add a partition, eliminating the need for manual operations. For more information, see [Determine the number of tablets](../table_design/Data_distribution.md#determine-the-number-of-buckets). [#10614](https://github.com/StarRocks/starrocks/pull/10614)
+- StarRocks can automatically set an appropriate number of tablets when you create a table or add a partition, eliminating the need for manual operations. For more information, see [Determine the number of tablets](https://docs.starrocks.io/docs/2.5/table_design/Data_distribution/#determine-the-number-of-tablets). [#10614](https://github.com/StarRocks/starrocks/pull/10614)
 
 ### Improvements
 
