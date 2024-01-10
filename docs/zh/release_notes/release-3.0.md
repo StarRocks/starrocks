@@ -4,16 +4,16 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.0
 
-# 3.0.9
+## 3.0.9
 
 发布日期：2024 年 1 月 2 日
 
-## 新增特性
+### 新增特性
 
 - 新增聚合函数 [percentile_disc](../sql-reference/sql-functions/aggregate-functions/percentile_disc.md)。[#36352](https://github.com/StarRocks/starrocks/pull/36352)
 - 新增监控指标 `max_tablet_rowset_num`（用于设置 Rowset 的最大数量），可以协助提前发现 Compaction 是否会出问题并及时干预，减少报错信息“too many versions”的出现。[#36539](https://github.com/StarRocks/starrocks/pull/36539)
 
-## 功能优化
+### 功能优化
 
 - 系统变量 [sql_mode](../reference/System_variable.md#sql_mode) 增加 `GROUP_CONCAT_LEGACY` 选项，用以兼容 [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) 函数在 2.5（不含）版本之前的实现逻辑。[#36150](https://github.com/StarRocks/starrocks/pull/36150)
 - 使用 JDK 时 GC 算法默认采用 G1。[#37386](https://github.com/StarRocks/starrocks/pull/37386)
@@ -29,8 +29,6 @@ displayed_sidebar: "Chinese"
   - 优化 Nested Loop Join 性能。[#340804](https://github.com/StarRocks/starrocks/pull/34804)  [#35003](https://github.com/StarRocks/starrocks/pull/35003)
   - 优化 `bitmap_xor` 函数性能。[#34069](https://github.com/StarRocks/starrocks/pull/34069)
   - 支持 Copy on Write（简称 COW），优化性能，并减少内存使用。[#34047](https://github.com/StarRocks/starrocks/pull/34047)
-
-## 兼容性变更
 
 ### 行为变更
 
@@ -59,7 +57,7 @@ displayed_sidebar: "Chinese"
   - `object_storage_connect_timeout_ms`，对象存储 socket 连接的超时时间，默认取值 `-1`，表示使用 SDK 中的默认时间。
   - `object_storage_request_timeout_ms`，对象存储 http 连接的超时时间，默认取值 `-1`，表示使用 SDK 中的默认时间。
 
-## 问题修复
+### 问题修复
 
 修复了如下问题：
 
