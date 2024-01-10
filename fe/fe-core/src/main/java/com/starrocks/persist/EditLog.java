@@ -373,6 +373,12 @@ public class EditLog {
                     globalStateMgr.replayAlterMaterializedViewStatus(log);
                     break;
                 }
+                case OperationType.OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS: {
+                    AlterMaterializedViewBaseTableInfosLog log =
+                            (AlterMaterializedViewBaseTableInfosLog) journal.getData();
+                    globalStateMgr.replayAlterMaterializedViewBaseTableInfos(log);
+                    break;
+                }
                 case OperationType.OP_RENAME_MATERIALIZED_VIEW: {
                     RenameMaterializedViewLog log = (RenameMaterializedViewLog) journal.getData();
                     globalStateMgr.replayRenameMaterializedView(log);
@@ -2085,6 +2091,10 @@ public class EditLog {
 
     public void logAlterMvStatus(AlterMaterializedViewStatusLog log) {
         logEdit(OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS, log);
+    }
+
+    public void logAlterMvBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log) {
+        logEdit(OperationType.OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS, log);
     }
 
     public void logMvRename(RenameMaterializedViewLog log) {
