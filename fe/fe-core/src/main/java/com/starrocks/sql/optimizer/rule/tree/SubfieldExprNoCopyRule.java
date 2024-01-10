@@ -26,8 +26,10 @@ import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNor
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExpressionCollector;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
-import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /*
 Phase 1: for the most common case, subfield expr only exists in one on the ColumnRefMap's value of projection.
@@ -54,7 +56,10 @@ public class SubfieldExprNoCopyRule implements TreeRewriteRule {
 
         public void rewriteProject(OptExpression optExpression) {
             Projection projection = optExpression.getOp().getProjection();
-            List<ScalarOperator> projectMapValues = new ArrayList<>(projection.getColumnRefMap().values());
+            List<ScalarOperator> projectMapValues = Stream.of(projection.getColumnRefMap().values(),
+                            projection.getCommonSubOperatorMap().values()).
+                    flatMap(Collection::stream)
+                    .collect(Collectors.toList());
             for (int i = 0; i < projectMapValues.size(); i++) {
                 ScalarOperator value = projectMapValues.get(i);
                 // only deal with subfield expr of slotRef
