@@ -57,6 +57,7 @@ import org.apache.paimon.table.source.StreamTableScan;
 import org.apache.paimon.table.source.TableRead;
 import org.apache.paimon.table.source.TableScan;
 import org.apache.paimon.table.system.FileMonitorTable;
+import org.apache.paimon.table.system.ReadOptimizedTable;
 import org.apache.paimon.table.system.SchemasTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
@@ -179,6 +180,10 @@ public class PaimonMetadata implements ConnectorMetadata {
             LOG.error("Get paimon table {}.{} createtime failed, error: {}", dbName, tblName, e);
         }
         PaimonTable table = new PaimonTable(this.catalogName, dbName, tblName, fullSchema, paimonNativeTable, createTime);
+        if (!(paimonNativeTable instanceof AbstractFileStoreTable ||
+                paimonNativeTable instanceof ReadOptimizedTable)) {
+            table.setSystemTable(true);
+        }
         tables.put(identifier, table);
         return table;
     }
@@ -244,8 +249,12 @@ public class PaimonMetadata implements ConnectorMetadata {
     public static long getRowCount(List<? extends Split> splits) {
         long rowCount = 0;
         for (Split split : splits) {
-            DataSplit dataSplit = (DataSplit) split;
-            rowCount += dataSplit.dataFiles().stream().map(DataFileMeta::rowCount).reduce(0L, Long::sum);
+            if (split instanceof DataSplit) {
+                DataSplit dataSplit = (DataSplit) split;
+                rowCount += dataSplit.dataFiles().stream().map(DataFileMeta::rowCount).reduce(0L, Long::sum);
+            } else {
+                rowCount += split.rowCount();
+            }
         }
         return rowCount;
     }
@@ -320,7 +329,7 @@ public class PaimonMetadata implements ConnectorMetadata {
 
     private Map<String, Long> fetchChangedPartitionWithVersion(PaimonTable paimonTable, long mvSnapshotId) {
         Map<String, Long> partitionToSnapshotId = new HashMap<>();
-        FileMonitorTable fileMonitorTable = new FileMonitorTable(paimonTable.getNativeTable());
+        FileMonitorTable fileMonitorTable = new FileMonitorTable((AbstractFileStoreTable) paimonTable.getNativeTable());
         Long latestId = fileMonitorTable.snapshotManager().latestSnapshotId();
         long latestSnapshotId = latestId == null ? Long.MIN_VALUE : latestId;
         LOG.debug("Paimon table {} latest snapshotId {}, currentId {}",
@@ -368,7 +377,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                 public void accept(InternalRow row) {
                     try {
                         FileMonitorTable.FileChange fileChange = FileMonitorTable.toFileChange(row);
-                        RowDataConverter converter = new RowDataConverter(paimonTable.getNativeTable().
+                        RowDataConverter converter = new RowDataConverter(((AbstractFileStoreTable) paimonTable.getNativeTable()).
                                 schema().logicalPartitionType());
                         List<String> partitionValues = converter.convert(fileChange.partition(),
                                 paimonTable.getPartitionColumnNames());
@@ -395,7 +404,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     @Override
     public List<com.starrocks.connector.PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
         PaimonTable paimonTable = (PaimonTable) table;
-        FileMonitorTable fileMonitorTable = new FileMonitorTable(paimonTable.getNativeTable());
+        FileMonitorTable fileMonitorTable = new FileMonitorTable((AbstractFileStoreTable) paimonTable.getNativeTable());
         Long latestSnapshotId = fileMonitorTable.snapshotManager().latestSnapshotId();
         long latestId = latestSnapshotId == null ? Long.MIN_VALUE : latestSnapshotId;
         return partitionNames.stream().map(

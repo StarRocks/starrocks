@@ -35,10 +35,11 @@ public class PaimonTable extends Table {
     private final String catalogName;
     private final String databaseName;
     private final String tableName;
-    private final AbstractFileStoreTable paimonNativeTable;
+    private final org.apache.paimon.table.Table paimonNativeTable;
     private final List<String> partColumnNames;
     private final List<String> paimonFieldNames;
     private long latestSnapshotId;
+    private boolean isSystemTable = false;
 
     public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
                        org.apache.paimon.table.Table paimonNativeTable, long createTime) {
@@ -46,12 +47,20 @@ public class PaimonTable extends Table {
         this.catalogName = catalogName;
         this.databaseName = dbName;
         this.tableName = tblName;
-        this.paimonNativeTable = (AbstractFileStoreTable) paimonNativeTable;
+        this.paimonNativeTable = paimonNativeTable;
         this.partColumnNames = paimonNativeTable.partitionKeys();
         this.paimonFieldNames = paimonNativeTable.rowType().getFields().stream()
                 .map(DataField::name)
                 .collect(Collectors.toList());
         this.createTime = createTime;
+    }
+
+    public boolean isSystemTable() {
+        return isSystemTable;
+    }
+
+    public void setSystemTable(boolean systemTable) {
+        isSystemTable = systemTable;
     }
 
     @Override
@@ -67,7 +76,7 @@ public class PaimonTable extends Table {
         return tableName;
     }
 
-    public AbstractFileStoreTable getNativeTable() {
+    public org.apache.paimon.table.Table getNativeTable() {
         return paimonNativeTable;
     }
 
@@ -78,7 +87,11 @@ public class PaimonTable extends Table {
 
     @Override
     public String getTableLocation() {
-        return paimonNativeTable.location().toString();
+        if (paimonNativeTable instanceof AbstractFileStoreTable) {
+            return ((AbstractFileStoreTable) paimonNativeTable).location().toString();
+        } else {
+            return paimonNativeTable.name().toString();
+        }
     }
 
     @Override
