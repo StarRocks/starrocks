@@ -79,6 +79,9 @@ bool HiveTableSinkOperator::pending_finish() const {
 }
 
 Status HiveTableSinkOperator::set_cancelled(RuntimeState* state) {
+    for (const auto& writer : _partition_writers) {
+        RETURN_IF_ERROR(writer.second->cancel(state));
+    }
     return Status::OK();
 }
 
