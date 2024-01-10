@@ -90,8 +90,7 @@ public class CompactionMgr {
             v.setCurrentVersion(currentVersion);
             v.setCompactionScore(compactionScore);
             if (v.getCompactionVersion() == null) {
-                // Set version-1 as last compaction version
-                v.setCompactionVersion(new PartitionVersion(version - 1, versionTime));
+                v.setCompactionVersion(new PartitionVersion(0, versionTime));
             }
             return v;
         });
