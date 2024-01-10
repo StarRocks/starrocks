@@ -52,7 +52,8 @@ public:
     // iterator all rowset and get their iterator and basic stat
     virtual Status rowset_iterator(
             const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
-            const std::function<Status(const std::vector<ChunkIteratorPtr>&, uint32_t)>& handler) = 0;
+            const std::function<Status(const std::vector<ChunkIteratorPtr>&,
+                                       const std::vector<std::unique_ptr<RandomAccessFile>>&, uint32_t)>& handler) = 0;
 
     // generate delvec and save
     virtual Status finalize_delvec(const PrimaryIndex::DeletesMap& new_deletes) = 0;

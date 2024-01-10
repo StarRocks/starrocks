@@ -309,10 +309,22 @@ public:
             return "tablet not found";
         }
         if (tablet->updates() == nullptr) {
-            return "non-pk tablet no support set error";
+            return "not support set error state";
         }
         tablet->updates()->set_error("error by script");
         return "set error state success";
+    }
+
+    static std::string recover_tablet(int64_t tablet_id) {
+        auto tablet = get_tablet(tablet_id);
+        if (!tablet) {
+            return "tablet not found";
+        }
+        if (tablet->updates() == nullptr) {
+            return "not support recover";
+        }
+        Status st = tablet->updates()->recover();
+        return strings::Substitute("recover tablet:$0 status:$1", std::to_string(tablet_id), st.message());
     }
 
     static std::string get_tablet_meta_json(int64_t tablet_id) {
@@ -536,6 +548,7 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, print_primary_key_dump);
             REG_STATIC_METHOD(StorageEngineRef, ls_tablet_dir);
             REG_STATIC_METHOD(StorageEngineRef, set_error_state);
+            REG_STATIC_METHOD(StorageEngineRef, recover_tablet);
         }
     }
 };

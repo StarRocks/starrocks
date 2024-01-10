@@ -14,6 +14,7 @@
 
 #include "storage/primary_key_recover.h"
 
+#include "serde/column_array_serde.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
 
@@ -27,12 +28,8 @@ Status PrimaryKeyRecover::recover() {
     // 2. generate primary key schema
     std::unique_ptr<Column> pk_column;
     auto pkey_schema = generate_pkey_schema();
-
-    if (pkey_schema.num_fields() > 1) {
-        // more than one key column
-        if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
-            CHECK(false) << "create column for primary key encoder failed";
-        }
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+        CHECK(false) << "create column for primary key encoder failed";
     }
 
     // For simplicity, we use temp pk index for generate delvec, and then rebuild real pk index when retry publish
@@ -45,8 +42,11 @@ Status PrimaryKeyRecover::recover() {
     auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, DEFAULT_CHUNK_SIZE);
     auto chunk = chunk_shared_ptr.get();
     // 3. scan all rowsets and segments to build primary index
-    RETURN_IF_ERROR(
-            rowset_iterator(pkey_schema, stats, [&](const std::vector<ChunkIteratorPtr>& itrs, uint32_t rowset_id) {
+    RETURN_IF_ERROR(rowset_iterator(
+            pkey_schema, stats,
+            [&](const std::vector<ChunkIteratorPtr>& itrs,
+                const std::vector<std::unique_ptr<RandomAccessFile>>& del_rfs, uint32_t rowset_id) {
+                // handle upsert
                 for (size_t i = 0; i < itrs.size(); i++) {
                     auto itr = itrs[i].get();
                     if (itr == nullptr) {
@@ -64,20 +64,26 @@ Status PrimaryKeyRecover::recover() {
                         } else if (!st.ok()) {
                             return st;
                         } else {
-                            Column* pkc = nullptr;
-                            if (pk_column) {
-                                pk_column->reset_column();
-                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
-                                pkc = pk_column.get();
-                            } else {
-                                pkc = chunk->columns()[0].get();
-                            }
+                            pk_column->reset_column();
+                            PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
                             // upsert and generate new deletes
-                            RETURN_IF_ERROR(index.upsert(rssid, row_id_start, *pkc, &new_deletes));
-                            row_id_start += pkc->size();
+                            RETURN_IF_ERROR(index.upsert(rssid, row_id_start, *pk_column, &new_deletes));
+                            row_id_start += pk_column->size();
                         }
                     }
                     itr->close();
+                }
+                // handle delete
+                pk_column->reset_column();
+                for (const auto& read_file : del_rfs) {
+                    ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
+                    std::vector<uint8_t> read_buffer(file_size);
+                    RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
+                    auto col = pk_column->clone();
+                    if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
+                        return Status::InternalError("column deserialization failed");
+                    }
+                    RETURN_IF_ERROR(index.erase(*col, &new_deletes));
                 }
                 return Status::OK();
             }));

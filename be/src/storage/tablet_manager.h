@@ -196,8 +196,6 @@ public:
 
     std::vector<TabletAndScore> pick_tablets_to_do_pk_index_major_compaction();
 
-    void primary_key_tablets_recover();
-
 private:
     using TabletMap = std::unordered_map<int64_t, TabletSharedPtr>;
     using TabletSet = std::unordered_set<int64_t>;

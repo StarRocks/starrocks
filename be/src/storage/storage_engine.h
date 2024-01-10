@@ -350,9 +350,6 @@ private:
     // pk index major compaction function
     void* _pk_index_major_compaction_thread_callback(void* arg);
 
-    // pk tablet recover function
-    void* _pk_tablet_recover_callback(void* arg);
-
 #ifdef USE_STAROS
     // local pk index of SHARED_DATA gc/evict function
     void* _local_pk_index_shared_data_gc_evict_thread_callback(void* arg);
@@ -451,9 +448,6 @@ private:
 
     std::mutex _finish_publish_version_mutex;
     std::condition_variable _finish_publish_version_cv;
-
-    // thread to recover pk tablet in error state
-    std::thread _pk_tablet_recover_thread;
 
     // For tablet and disk-stat report
     std::mutex _report_mtx;

@@ -61,7 +61,8 @@ Status LocalPrimaryKeyRecover::sort_rowsets(std::vector<RowsetSharedPtr>* rowset
 
 Status LocalPrimaryKeyRecover::rowset_iterator(
         const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
-        const std::function<Status(const std::vector<ChunkIteratorPtr>&, uint32_t)>& handler) {
+        const std::function<Status(const std::vector<ChunkIteratorPtr>&,
+                                   const std::vector<std::unique_ptr<RandomAccessFile>>&, uint32_t)>& handler) {
     std::vector<RowsetSharedPtr> rowsets;
     std::vector<uint32_t> rowset_ids;
     int64_t latest_applied_major_version;
@@ -75,15 +76,23 @@ Status LocalPrimaryKeyRecover::rowset_iterator(
     for (auto& rowset : rowsets) {
         // NOT acquire rowset reference because tbalet already in error state, rowset reclaim should stop
         // NOT apply delvec when create segment iterator
+        // 1. get iterator for each segment
         auto res = rowset->get_segment_iterators2(pkey_schema, _tablet->tablet_schema(), nullptr,
                                                   latest_applied_major_version, &stats);
         if (!res.ok()) {
             return res.status();
         }
         auto& itrs = res.value();
-        // TODO(cbl): auto close iterators on failure
+        // 2. get delete read files
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
-        RETURN_IF_ERROR(handler(itrs, rowset->rowset_meta()->get_rowset_seg_id()));
+        std::vector<std::unique_ptr<RandomAccessFile>> del_rfs;
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
+        for (int idx = 0; idx < rowset->num_delete_files(); idx++) {
+            auto path = Rowset::segment_del_file_path(rowset->rowset_path(), rowset->rowset_id(), idx);
+            ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(path));
+            del_rfs.push_back(std::move(read_file));
+        }
+        RETURN_IF_ERROR(handler(itrs, del_rfs, rowset->rowset_meta()->get_rowset_seg_id()));
     }
     return Status::OK();
 }

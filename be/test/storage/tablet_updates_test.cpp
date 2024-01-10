@@ -2941,9 +2941,18 @@ void TabletUpdatesTest::update_and_recover(bool enable_persistent_index) {
         version++;
     }
     ASSERT_EQ(N, read_tablet(_tablet, version - 1));
+    {
+        // Delete [0, 1, 2 ... N/2)
+        Int64Column deletes;
+        deletes.append_numbers(keys.data(), sizeof(int64_t) * keys.size() / 2);
+        ASSERT_TRUE(_tablet->rowset_commit(version, create_rowset(_tablet, {}, &deletes)).ok());
+        version++;
+    }
+    ASSERT_EQ(N / 2, read_tablet(_tablet, version - 1));
+
     _tablet->updates()->set_error("ut_test");
     ASSERT_OK(_tablet->updates()->recover());
-    ASSERT_EQ(N, read_tablet(_tablet, version - 1));
+    ASSERT_EQ(N / 2, read_tablet(_tablet, version - 1));
     int64_t old_version = version - 1;
     // upsert again
     std::vector<RowsetSharedPtr> rowsets2;
@@ -2961,7 +2970,7 @@ void TabletUpdatesTest::update_and_recover(bool enable_persistent_index) {
         version++;
     }
     ASSERT_EQ(N, read_tablet(_tablet, version - 1));
-    ASSERT_EQ(N, read_tablet(_tablet, old_version));
+    ASSERT_EQ(N / 2, read_tablet(_tablet, old_version));
 }
 
 TEST_F(TabletUpdatesTest, test_update_and_recover) {
