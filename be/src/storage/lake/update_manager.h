@@ -101,6 +101,8 @@ public:
 
     bool try_remove_primary_index_cache(uint32_t tablet_id);
 
+    void unload_primary_index(int64_t tablet_id);
+
     // if base version != index.data_version, need to clear index cache
     Status check_meta_version(const Tablet& tablet, int64_t base_version);
 

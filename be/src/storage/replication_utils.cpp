@@ -277,15 +277,13 @@ Status ReplicationUtils::download_remote_snapshot(
         }
     } // Clone files from remote backend
 
-    uint64_t total_time_ms = watch.elapsed_time() / 1000 / 1000;
-    total_time_ms = total_time_ms > 0 ? total_time_ms : 0;
+    double total_time_sec = watch.elapsed_time() / 1000. / 1000. / 1000.;
     double copy_rate = 0.0;
-    if (total_time_ms > 0) {
-        copy_rate = total_file_size / ((double)total_time_ms) / 1000;
+    if (total_time_sec > 0) {
+        copy_rate = (total_file_size / 1024. / 1024.) / total_time_sec;
     }
-    LOG(INFO) << "Copied tablet file count: " << (file_name_list.size() - skipped_file_count)
-              << ", skipped: " << skipped_file_count << ", bytes: " << total_file_size << ", cost: " << total_time_ms
-              << " ms, rate: " << copy_rate << " MB/s";
+    LOG(INFO) << "Copied tablet file count: " << file_name_list.size() << ", total bytes: " << total_file_size
+              << ", cost: " << total_time_sec << " s, rate: " << copy_rate << " MB/s";
     return Status::OK();
 #endif
 }
@@ -306,11 +304,12 @@ StatusOr<std::string> ReplicationUtils::download_remote_snapshot_file(
             remote_snapshot_path, remote_tablet_id, remote_schema_hash, file_name);
 
     std::string file_content;
+    file_content.reserve(4 * 1024 * 1024);
     auto download_cb = [&remote_file_url, timeout_sec, &file_content](HttpClient* client) {
         RETURN_IF_ERROR(client->init(remote_file_url));
         client->set_timeout_ms(timeout_sec * 1000);
-        ASSIGN_OR_RETURN(file_content, client->download());
-        return Status::OK();
+        file_content.clear();
+        return client->execute(&file_content);
     };
     RETURN_IF_ERROR(HttpClient::execute_with_retry(DOWNLOAD_FILE_MAX_RETRY, 1, download_cb));
     return file_content;

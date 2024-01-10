@@ -21,6 +21,12 @@ import "types.proto";
 import "tablet_schema.proto";
 import "olap_file.proto";
 
+message DelvecDataPB {
+    optional int64 version = 1;
+    // serialized data
+    optional bytes data = 2;
+}
+
 message DelvecPagePB {
     optional int64 version = 1;
     // position in file
@@ -134,6 +140,7 @@ message TxnLogPB {
     message OpReplication {
         optional ReplicationTxnMetaPB txn_meta = 1;
         repeated OpWrite op_writes = 2;
+        map<uint32, DelvecDataPB> delvecs = 3;
     }
 
     optional int64 tablet_id = 1;

@@ -14,9 +14,6 @@
 
 #pragma once
 
-#include "common/status.h"
-#include "storage/olap_common.h"
-#include "storage/olap_define.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks {
