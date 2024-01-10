@@ -20,7 +20,7 @@ displayed_sidebar: "Chinese"
 
 ### 新增特性
 
-#### 数据湖分析 
+#### 数据湖分析
 
 - 支持通过 Java Native Interface（JNI）读取 Avro、SequenceFile 以及 RCFile 格式的 [Hive Catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/hive_catalog/) 表和文件外部表。
 
@@ -80,7 +80,7 @@ displayed_sidebar: "Chinese"
 - 物化视图支持 Query Dump。
 - 物化视图的刷新默认开启中间结果落盘，降低刷新的内存消耗。
 
-#### 数据湖分析 
+#### 数据湖分析
 
 - 支持在 [Hive Catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/hive_catalog/) 中创建、删除数据库以及 Managed Table，支持使用 INSERT 或 INSERT OVERWRITE 导出数据到 Hive 的 Managed Table。
 - 支持 [Unified Catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/unified_catalog/)。如果同一个 Hive Metastore 或 AWS Glue 元数据服务包含多种表格式（Hive、Iceberg、Hudi、Delta Lake 等），则可以通过 Unified Catalog 进行统一访问。
@@ -145,7 +145,7 @@ displayed_sidebar: "Chinese"
   - 支持分区裁剪。
   - 优化 Iceberg 元数据内存占用，提升在元数据量过大或查询并发较高时的稳定性。
 
-#### 物化视图 
+#### 物化视图
 
 **异步物化视图**
 
@@ -153,7 +153,7 @@ displayed_sidebar: "Chinese"
 - 数据一致性：
   - 创建物化视图时，添加了 `query_rewrite_consistency` 属性。该属性允许用户基于一致性检查结果定义查询改写规则。
   - 创建物化视图时，添加了 `force_external_table_query_rewrite` 属性。该属性用于定义是否为外表物化视图强制开启查询重写。
-  -  有关详细信息，请参见[CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md)。
+  - 有关详细信息，请参见[CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md)。
 - 增加分区列一致性检查：当创建分区物化视图时，如物化视图的查询中涉及带分区的窗口函数，则窗口函数的分区列需要与物化视图的分区列一致。
 
 #### 导入、导出和存储  
@@ -182,15 +182,13 @@ displayed_sidebar: "Chinese"
 
 - 异步物化视图支持 Trace Query Profile，用于分析物化视图透明改写的场景。
 
-### 兼容性变更
-
-#### 行为变更
+### 行为变更
 
 待更新。
 
-#### 配置参数
+### 参数变更
 
-##### FE
+#### FE 配置项
 
 - 新增以下 FE 配置项：
   - `catalog_metadata_cache_size`
@@ -212,7 +210,7 @@ displayed_sidebar: "Chinese"
   - `enable_sync_publish` 默认值从 `false` 变为 `true`。
   - `enable_persistent_index_by_default` 默认值从 `false` 变为 `true`。
 
-##### BE
+#### BE 配置项
 
 - Data Cache 相关配置项变更。 
   - 新增 `datacache_enable` 以取代 `block_cache_enable`。

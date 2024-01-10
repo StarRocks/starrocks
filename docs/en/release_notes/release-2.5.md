@@ -23,9 +23,7 @@ Release date: December 19, 2023
 - Added the bitmap_from_binary function to Spark Load to support loading Binary data. [#36050](https://github.com/StarRocks/starrocks/pull/36050)
 - The bRPC expiration time is shortened from 1 hour to the duration specified by the session variable [`query_timeout`](https://docs.starrocks.io/zh/docs/3.2/reference/System_variable/#query_timeout).  This prevents query failures caused by RPC request expiration. [#36778](https://github.com/StarRocks/starrocks/pull/36778)
 
-### Compatibility Changes
-
-#### Parameters
+### Parameter Change
 
 - A new BE configuration item `enable_stream_load_verbose_log` is added. The default value is `false`. With this parameter set to `true`, StarRocks can record the HTTP requests and responses for Stream Load jobs, making troubleshooting easier. [#36113](https://github.com/StarRocks/starrocks/pull/36113)
 - The BE static parameter `update_compaction_per_tablet_min_interval_seconds` becomes mutable. [#36819](https://github.com/StarRocks/starrocks/pull/36819)
@@ -65,9 +63,7 @@ Release date: November 29, 2023
   - Optimized the `bitmap_xor` function. [#34069](https://github.com/StarRocks/starrocks/pull/34069)
   - Supports Copy on Write to optimize Bitmap performance and reduce memory consumption. [#34047](https://github.com/StarRocks/starrocks/pull/34047)
 
-### Compatibility Changes
-
-#### Parameters
+### Parameter Change
 
 - The FE dynamic parameter `enable_new_publish_mechanism` is changed to a static parameter. You must restart the FE after you modify the parameter settings. [#35338](https://github.com/StarRocks/starrocks/pull/35338)
 
@@ -94,7 +90,7 @@ Release date: November 14, 2023
 
 - The `COLUMNS` table in the system database `INFORMATION_SCHEMA` can display ARRAY, MAP, and STRUCT columns. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
 
-### Compatibility changes
+### Parameter change
 
 #### System variables
 
