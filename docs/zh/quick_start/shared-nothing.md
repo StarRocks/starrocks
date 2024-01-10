@@ -8,7 +8,7 @@ import Clients from '../assets/quick-start/_clientsAllin1.mdx'
 import SQL from '../assets/quick-start/_SQL.mdx'
 import Curl from '../assets/quick-start/_curl.mdx'
 
-# StarRocks 存算一体集群
+# 存算一体
 
 本教程涵盖了以下内容：
 
