@@ -261,22 +261,6 @@ You can find a function based on the following categories:
 
 ## JSON functions
 
-<<<<<<< HEAD
-- [json_array](../sql-functions/json-functions/json-constructor-functions/json_array.md)
-- [json_object](../sql-functions/json-functions/json-constructor-functions/json_object.md)
-- [parse_json](../sql-functions/json-functions/json-constructor-functions/parse_json.md)
-- [Arrow function](../sql-functions/json-functions/json-query-and-processing-functions/arrow-function.md)
-- [cast](../sql-functions/json-functions/json-query-and-processing-functions/cast.md)
-- [get_json_double](../sql-functions/json-functions/json-query-and-processing-functions/get_json_double.md)
-- [get_json_int](../sql-functions/json-functions/json-query-and-processing-functions/get_json_int.md)
-- [get_json_string](../sql-functions/json-functions/json-query-and-processing-functions/get_json_string.md)
-- [json_each](../sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
-- [json_exists](../sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)
-- [json_length](../sql-functions/json-functions/json-query-and-processing-functions/json_length.md)
-- [json_keys](../sql-functions/json-functions/json-query-and-processing-functions/json_keys.md)
-- [json_query](../sql-functions/json-functions/json-query-and-processing-functions/json_query.md)
-- [json_string](../sql-functions/json-functions/json-query-and-processing-functions/json_string.md)
-=======
 - [json_array](./json-functions/json-constructor-functions/json_array.md)
 - [json_object](./json-functions/json-constructor-functions/json_object.md)
 - [parse_json](./json-functions/json-constructor-functions/parse_json.md)
@@ -291,8 +275,6 @@ You can find a function based on the following categories:
 - [json_keys](./json-functions/json-query-and-processing-functions/json_keys.md)
 - [json_query](./json-functions/json-query-and-processing-functions/json_query.md)
 - [json_string](./json-functions/json-query-and-processing-functions/json_string.md)
-- [to_json](./json-functions/json-query-and-processing-functions/to_json.md)
->>>>>>> 290c703902 ([Doc] add func regexp_extract_all, update get_json_string, and sidebar (backport #38739) (backport #38794) (#38798))
 
 ## String functions
 
