@@ -47,15 +47,20 @@ public class UpdateSchemaTask extends AgentTask implements Runnable {
     private static final Logger LOG = LogManager.getLogger(UpdateSchemaTask.class);
 
     private Long jobId;
+    private Long schemaId;
+    private Long schemaVersion;
     private List<Long> tablets;
     private TOlapTableColumnParam columnParam;
 
     public UpdateSchemaTask(TResourceInfo resourceInfo, long backendId, long dbId,
                             long tableId, long indexId, long jobId, List<Long> tablets,
+                            long schemaId, long schemaVersion,
                             TOlapTableColumnParam columnParam) {
         super(resourceInfo, backendId, TTaskType.UPDATE_SCHEMA, dbId, tableId, -1, indexId, -1);
 
         this.jobId = jobId;
+        this.schemaId = schemaId;
+        this.schemaVersion = schemaVersion;
         this.tablets = tablets;
         this.columnParam = columnParam;
     }
@@ -76,7 +81,9 @@ public class UpdateSchemaTask extends AgentTask implements Runnable {
     public TUpdateSchemaReq toThrift() {
         TUpdateSchemaReq req = new TUpdateSchemaReq();
         req.setIndex_id(indexId);
-        req.setTablets(tablets);
+        req.setSchema_id(schemaId);
+        req.setSchema_version(schemaVersion);
+        req.setTablet_ids(tablets);
         req.setColumn_param(columnParam);
         return req;
     }

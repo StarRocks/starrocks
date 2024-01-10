@@ -2603,6 +2603,10 @@ public class SchemaChangeHandler extends AlterHandler {
             olapTable.lastSchemaUpdateTime.set(System.nanoTime());
             LOG.info("finished modify table's add or drop columns. table: {}, is replay: {}", olapTable.getName(),
                     isReplay);
+
+            AlterJobV2 updateSchemaJob = new UpdateSchemaJob(jobId, db.getId(), olapTable.getId(), olapTable.getName(),
+                                                             86400000);
+            GlobalStateMgr.getCurrentState().getUpdateSchemaHandler().addUpdateSchemaJob(updateSchemaJob);
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }

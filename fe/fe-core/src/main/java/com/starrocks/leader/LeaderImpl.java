@@ -101,6 +101,7 @@ import com.starrocks.task.PushTask;
 import com.starrocks.task.RemoteSnapshotTask;
 import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.task.SnapshotTask;
+import com.starrocks.task.UpdateSchemaTask;
 import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.task.UploadTask;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
@@ -331,6 +332,9 @@ public class LeaderImpl {
                 case REPLICATE_SNAPSHOT:
                     finishReplicateSnapshotTask(task, request);
                     break;
+                case UPDATE_SCHEMA:
+                    finishUpdateSchemaTask(task, request);
+                    break;
                 default:
                     break;
             }
@@ -450,6 +454,12 @@ public class LeaderImpl {
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
         }
+    }
+
+    private void finishUpdateSchemaTask(AgentTask task, TFinishTaskRequest request) {
+        UpdateSchemaTask updateSchemaTask = (UpdateSchemaTask) task;
+        GlobalStateMgr.getCurrentState().getUpdateSchemaHandler().handleFinishUpdateSchemaTask(updateSchemaTask);
+        AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.UPDATE_SCHEMA, task.getSignature());
     }
 
     private void finishRealtimePush(AgentTask task, TFinishTaskRequest request) {

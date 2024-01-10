@@ -50,8 +50,10 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.io.Text;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -64,6 +66,8 @@ import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataOutput;
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -83,6 +87,7 @@ public class UpdateSchemaJob extends AlterJobV2 {
 
     @Override
     protected void runPendingJob() throws AlterCancelException {
+        LOG.info("start run update schema job: {}", jobId);
         Preconditions.checkState(jobState == JobState.PENDING, jobState);
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
@@ -152,8 +157,10 @@ public class UpdateSchemaJob extends AlterJobV2 {
                 if (!indexToColumnParam.containsKey(indexId)) {
                     // throw exception
                 }
+                MaterializedIndexMeta meta = tbl.getIndexMetaByIndexId(indexId);
                 UpdateSchemaTask task = new UpdateSchemaTask(null, backendId, db.getId(), tbl.getId(),
-                            indexId, jobId, tablets, indexToColumnParam.get(indexId));
+                            indexId, jobId, tablets, meta.getSchemaId(), meta.getSchemaVersion(),
+                            indexToColumnParam.get(indexId));
                 // add task to send
                 updateSchemaBatchTask.addTask(task);
             }
@@ -163,7 +170,7 @@ public class UpdateSchemaJob extends AlterJobV2 {
                     AgentTaskQueue.addTask(task);
                 }
                 AgentTaskExecutor.submit(updateSchemaBatchTask);
-                LOG.debug("table[{}] send update scheam task. num: {}", tbl.getName(), updateSchemaBatchTask.getTaskNum());
+                LOG.info("table[{}] send update scheam task. num: {}", tbl.getName(), updateSchemaBatchTask.getTaskNum());
             }
             this.jobState = JobState.RUNNING;
             tbl.setState(OlapTableState.UPDATE_SCHEMA);
@@ -182,6 +189,7 @@ public class UpdateSchemaJob extends AlterJobV2 {
 
     @Override
     protected void runRunningJob() throws AlterCancelException {
+        LOG.info("waitting update schema job {} to be finished", jobId);
         Preconditions.checkState(jobState == JobState.RUNNING, jobState);
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
@@ -288,8 +296,16 @@ public class UpdateSchemaJob extends AlterJobV2 {
 
 
     @Override
+    public void write(DataOutput out) throws IOException {
+        String json = GsonUtils.GSON.toJson(this, UpdateSchemaJob.class);
+        Text.writeString(out, json);
+    }
+
+    @Override
     public Optional<Long> getTransactionId() {
         return Optional.of(Long.valueOf(-1));
     }
+
+
 
 } 

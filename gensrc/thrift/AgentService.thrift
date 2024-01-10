@@ -255,9 +255,10 @@ struct TCompactionReq {
 
 struct TUpdateSchemaReq {
     1: optional i64 index_id
-    2: optional i64 schema_version
-    3: optional list<i64> tablets
-    4: optional Descriptors.TOlapTableColumnParam column_param
+    2: optional i64 schema_id
+    3: optional i64 schema_version
+    4: optional list<i64> tablet_ids
+    5: optional Descriptors.TOlapTableColumnParam column_param
 }
 
 struct TUploadReq {

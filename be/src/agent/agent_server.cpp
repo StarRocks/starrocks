@@ -349,7 +349,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TYPE(TTaskType::STORAGE_MEDIUM_MIGRATE, storage_medium_migrate_req);
             HANDLE_TYPE(TTaskType::CHECK_CONSISTENCY, check_consistency_req);
             HANDLE_TYPE(TTaskType::COMPACTION, compaction_req);
-            HANDLE_TYPE(TTaskType::UPDATE_SHEMA, update_schema_req);
+            HANDLE_TYPE(TTaskType::UPDATE_SCHEMA, update_schema_req);
             HANDLE_TYPE(TTaskType::UPLOAD, upload_req);
             HANDLE_TYPE(TTaskType::DOWNLOAD, download_req);
             HANDLE_TYPE(TTaskType::MAKE_SNAPSHOT, snapshot_req);
@@ -461,9 +461,9 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TASK(TTaskType::COMPACTION, all_tasks, run_compaction_task, CompactionTaskRequest, compaction_req,
                         _exec_env);
             break;
-        case TTaskType::UPDATE_SHEMA:
-            HANDLE_TASK(TTaskType::UPDATE_SHEMA, all_tasks, run_update_schema_task, UpdateSchemaTaskRequest, update_schema_req,
-                        _exec_env);
+        case TTaskType::UPDATE_SCHEMA:
+            HANDLE_TASK(TTaskType::UPDATE_SCHEMA, all_tasks, run_update_schema_task, UpdateSchemaTaskRequest,
+                        update_schema_req, _exec_env);
             break;
         case TTaskType::UPLOAD:
             HANDLE_TASK(TTaskType::UPLOAD, all_tasks, run_upload_task, UploadAgentTaskRequest, upload_req, _exec_env);
@@ -617,7 +617,7 @@ ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
     case TTaskType::COMPACTION:
         ret = _thread_pool_compaction.get();
         break;
-    cast TTaskType::UPDATE_SHEMA:
+    case TTaskType::UPDATE_SCHEMA:
         ret = _thread_pool_update_schema.get();
         break;
     case TTaskType::UPLOAD:

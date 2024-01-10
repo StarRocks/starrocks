@@ -51,7 +51,8 @@ SchemaScanner::ColumnDesc SchemaTablesScanner::_s_tbls_columns[] = {
 
 SchemaTablesScanner::SchemaTablesScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {
-    LOG(INFO) << "sizeof(_s_tbls):" << sizeof(_s_tbls_columns) << ", sizeof(columnDesc):" << sizeof(SchemaScanner::ColumnDesc);
+    LOG(INFO) << "sizeof(_s_tbls):" << sizeof(_s_tbls_columns)
+              << ", sizeof(columnDesc):" << sizeof(SchemaScanner::ColumnDesc);
 }
 
 SchemaTablesScanner::~SchemaTablesScanner() = default;
@@ -371,8 +372,7 @@ Status SchemaTablesScanner::fill_chunk(ChunkPtr* chunk) {
             // enable_fast_schema_evolution
             {
                 ColumnPtr column = (*chunk)->get_column_by_slot_id(22);
-                fill_column_with_slot<TYPE_BOOLEAN>(column.get(), 
-                                                    (void*)&table_info.enable_fast_schema_evolution);
+                fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&table_info.enable_fast_schema_evolution);
             }
             break;
         }
