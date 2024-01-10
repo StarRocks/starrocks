@@ -284,14 +284,12 @@ public class AlterTest {
     }
 
     private static void createMaterializedView(String sql) throws Exception {
-        Config.enable_experimental_mv = true;
         CreateMaterializedViewStatement createMaterializedViewStatement =
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
     }
 
     private static void dropMaterializedView(String sql) throws Exception {
-        Config.enable_experimental_mv = true;
         DropMaterializedViewStmt dropMaterializedViewStmt =
                 (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().dropMaterializedView(dropMaterializedViewStmt);

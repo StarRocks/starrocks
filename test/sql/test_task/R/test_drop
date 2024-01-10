@@ -33,7 +33,7 @@ select TASK_NAME, SCHEDULE from information_schema.tasks where `DATABASE`='test_
 -- !result
 select TASK_NAME, STATE, ERROR_MESSAGE from information_schema.task_runs where `DATABASE`='test_drop_task_${uuid0}';
 -- result:
-test_kill	FAILED	CANCELLED
+test_kill	FAILED	kill TaskRun
 -- !result
 drop task not_exist_task;
 -- result:

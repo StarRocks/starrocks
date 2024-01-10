@@ -58,7 +58,6 @@ public class InsertOverwriteJobRunnerTest {
         Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
-        Config.enable_experimental_mv = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);

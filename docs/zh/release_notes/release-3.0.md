@@ -4,16 +4,16 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.0
 
-# 3.0.9
+## 3.0.9
 
 发布日期：2024 年 1 月 2 日
 
-## 新增特性
+### 新增特性
 
 - 新增聚合函数 [percentile_disc](../sql-reference/sql-functions/aggregate-functions/percentile_disc.md)。[#36352](https://github.com/StarRocks/starrocks/pull/36352)
 - 新增监控指标 `max_tablet_rowset_num`（用于设置 Rowset 的最大数量），可以协助提前发现 Compaction 是否会出问题并及时干预，减少报错信息“too many versions”的出现。[#36539](https://github.com/StarRocks/starrocks/pull/36539)
 
-## 功能优化
+### 功能优化
 
 - 系统变量 [sql_mode](../reference/System_variable.md#sql_mode) 增加 `GROUP_CONCAT_LEGACY` 选项，用以兼容 [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) 函数在 2.5（不含）版本之前的实现逻辑。[#36150](https://github.com/StarRocks/starrocks/pull/36150)
 - 使用 JDK 时 GC 算法默认采用 G1。[#37386](https://github.com/StarRocks/starrocks/pull/37386)
@@ -30,8 +30,6 @@ displayed_sidebar: "Chinese"
   - 优化 `bitmap_xor` 函数性能。[#34069](https://github.com/StarRocks/starrocks/pull/34069)
   - 支持 Copy on Write（简称 COW），优化性能，并减少内存使用。[#34047](https://github.com/StarRocks/starrocks/pull/34047)
 
-## 兼容性变更
-
 ### 行为变更
 
 - 新增 Session 变量 `enable_materialized_view_for_insert`，默认值为 `FALSE`，即物化视图默认不改写 INSERT INTO SELECT 语句中的查询。[#37505](https://github.com/StarRocks/starrocks/pull/37505)
@@ -40,7 +38,7 @@ displayed_sidebar: "Chinese"
 
 ### 参数变更
 
-#### 会话变量
+#### 系统变量
 
 - 新增 Session 变量 `cbo_decimal_cast_string_strict`，用于优化器控制 DECIMAL 类型转为 STRING 类型的行为。当取值为 `true` 时，使用 v2.5.x 及之后版本的处理逻辑，执行严格转换（即，按 Scale 截断补 `0`）；当取值为 `false` 时，保留 v2.5.x 之前版本的处理逻辑（即，按有效数字处理）。默认值是 `true`。[#34208](https://github.com/StarRocks/starrocks/pull/34208)
 - 新增 Session 变量 `transaction_read_only`和`tx_read_only` ，设置事务的访问模式并且兼容 MySQL 5.7.20 以上的版本。[#37249](https://github.com/StarRocks/starrocks/pull/37249)
@@ -59,7 +57,7 @@ displayed_sidebar: "Chinese"
   - `object_storage_connect_timeout_ms`，对象存储 socket 连接的超时时间，默认取值 `-1`，表示使用 SDK 中的默认时间。
   - `object_storage_request_timeout_ms`，对象存储 http 连接的超时时间，默认取值 `-1`，表示使用 SDK 中的默认时间。
 
-## 问题修复
+### 问题修复
 
 修复了如下问题：
 
@@ -261,7 +259,7 @@ displayed_sidebar: "Chinese"
 ### 功能优化
 
 - Union 查询在被物化视图改写后，谓词也可以下推。 [#23312](https://github.com/StarRocks/starrocks/pull/23312)
-- 优化表的[自动分桶策略](../table_design/Data_distribution.md#确定分桶数量)。 [#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- 优化表的[自动分桶策略](https://docs.starrocks.io/zh/docs/3.0/table_design/Data_distribution/#determine-the-number-of-buckets)。 [#24543](https://github.com/StarRocks/starrocks/pull/24543)
 - 解除 NetworkTime 对系统时钟的依赖，以解决系统时钟误差导致 Exchange 网络耗时估算异常的问题。 [#24858](https://github.com/StarRocks/starrocks/pull/24858)
 
 ### 问题修复

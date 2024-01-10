@@ -502,6 +502,14 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testInStringCast() throws Exception {
+        // v1 is bigint, bigint in varchar will cast bigint as varchar
+        String sql = "select *  from t0 where v1 in ('a','b')";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan.contains("CAST(1: v1 AS VARCHAR(1048576)) IN ('a', 'b')\n"));
+    }
+
+    @Test
     public void testConstantNullable() throws Exception {
         String sql = "SELECT MICROSECONDS_SUB(\"1969-12-25\", NULL) FROM t1";
         ExecPlan plan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;

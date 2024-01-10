@@ -86,6 +86,8 @@ public class HiveScanner extends ConnectorScanner {
     // The value buffer used to store the value data.
     private Writable value;
 
+    private final String timeZone;
+
     public HiveScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.hiveColumnNames = params.get("hive_column_names");
@@ -107,6 +109,7 @@ public class HiveScanner extends ConnectorScanner {
             }
             LOG.debug("key = " + kv.getKey() + ", value = " + kv.getValue());
         }
+        this.timeZone = params.get("time_zone");
     }
 
     private JobConf makeJobConf(Properties properties) {
@@ -242,7 +245,7 @@ public class HiveScanner extends ConnectorScanner {
                     if (fieldData == null) {
                         appendData(i, null);
                     } else {
-                        ColumnValue fieldValue = new HiveColumnValue(fieldInspectors[i], fieldData);
+                        ColumnValue fieldValue = new HiveColumnValue(fieldInspectors[i], fieldData, timeZone);
                         appendData(i, fieldValue);
                     }
                 }

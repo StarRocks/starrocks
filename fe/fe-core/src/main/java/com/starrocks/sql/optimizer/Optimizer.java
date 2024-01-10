@@ -81,10 +81,10 @@ import com.starrocks.sql.optimizer.rule.tree.PruneSubfieldsForComplexType;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
+import com.starrocks.sql.optimizer.rule.tree.SubfieldExprNoCopyRule;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.LowCardinalityRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PushDownSubfieldRule;
-import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExprNoCopyRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -318,6 +318,7 @@ public class Optimizer {
     private OptExpression logicalRuleRewrite(
             OptExpression tree,
             TaskContext rootTaskContext) {
+        rootTaskContext.getOptimizerContext().setShortCircuit(tree.getShortCircuit());
         tree = OptExpression.createForShortCircuit(new LogicalTreeAnchorOperator(), tree, tree.getShortCircuit());
         // for short circuit
         Optional<OptExpression> result = ruleRewriteForShortCircuit(tree, rootTaskContext);
@@ -385,10 +386,7 @@ public class Optimizer {
         }
 
         tree = pruneSubfield(tree, rootTaskContext, requiredColumns);
-        // after pruneSubfield which will push down subfield expr
-        if (sessionVariable.getEnableSubfieldNoCopy()) {
-            ruleRewriteOnlyOnce(tree, rootTaskContext, new SubfieldExprNoCopyRule());
-        }
+
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_ASSERT_ROW);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_PROJECT);
 
@@ -483,6 +481,7 @@ public class Optimizer {
         if (isShortCircuit) {
             deriveLogicalProperty(tree);
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SHORT_CIRCUIT_SET);
+            ruleRewriteOnlyOnce(tree, rootTaskContext, new MergeProjectWithChildRule());
             OptExpression result = tree.getInputs().get(0);
             result.setShortCircuit(true);
             return Optional.of(result);
@@ -493,6 +492,7 @@ public class Optimizer {
     // for single scan node, to make sure we can rewrite
     private void viewBasedMvRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
         try {
+            OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "try VIEW_BASED_MV_REWRITE");
             OptExpression treeWithView = context.getLogicalTreeWithView();
             // should add a LogicalTreeAnchorOperator for rewrite
             treeWithView = OptExpression.create(new LogicalTreeAnchorOperator(), treeWithView);
@@ -508,7 +508,11 @@ public class Optimizer {
                     // if there are view scan operator left, we should replace it back to original plans
                     MvUtils.replaceLogicalViewScanOperator(tree, context.getViewScans());
                 }
+                OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE",
+                        "original view scans size: {}, left view scans size: {}",
+                        context.getViewScans().size(), viewScanOperators.size());
             }
+            OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE", "VIEW_BASED_MV_REWRITE applied");
         } catch (Exception e) {
             OptimizerTraceUtil.logMVRewriteRule("VIEW_BASED_MV_REWRITE",
                     "single table view based mv rule rewrite failed.", e);
@@ -739,6 +743,11 @@ public class Optimizer {
         // This must be put at last of the optimization. Because wrapping reused ColumnRefOperator with CloneOperator
         // too early will prevent it from certain optimizations that depend on the equivalence of the ColumnRefOperator.
         result = new CloneDuplicateColRefRule().rewrite(result, rootTaskContext);
+
+        // set subfield expr copy flag
+        if (rootTaskContext.getOptimizerContext().getSessionVariable().getEnableSubfieldNoCopy()) {
+            result = new SubfieldExprNoCopyRule().rewrite(result, rootTaskContext);
+        }
 
         result.setPlanCount(planCount);
         return result;

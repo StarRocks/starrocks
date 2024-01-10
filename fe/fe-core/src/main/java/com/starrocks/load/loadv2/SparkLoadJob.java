@@ -110,8 +110,8 @@ import com.starrocks.thrift.TPushType;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.CommitRateExceededException;
+import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletQuorumFailedException;
 import com.starrocks.transaction.TransactionState;
@@ -195,7 +195,7 @@ public class SparkLoadJob extends BulkLoadJob {
     protected void setJobProperties(Map<String, String> properties) throws DdlException {
         super.setJobProperties(properties);
 
-        if (properties.containsKey(LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT)) {
+        if (properties != null && properties.containsKey(LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT)) {
             try {
                 sparkLoadSubmitTimeoutSecond = Long.parseLong(properties.get(LoadStmt.SPARK_LOAD_SUBMIT_TIMEOUT));
             } catch (NumberFormatException e) {
@@ -231,7 +231,7 @@ public class SparkLoadJob extends BulkLoadJob {
 
     @Override
     public void beginTxn()
-            throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
+            throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
         transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
                         new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),

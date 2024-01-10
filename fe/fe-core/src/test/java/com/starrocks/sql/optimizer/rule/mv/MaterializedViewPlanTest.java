@@ -15,7 +15,6 @@
 
 package com.starrocks.sql.optimizer.rule.mv;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -31,19 +30,14 @@ import org.junit.Test;
 
 public class MaterializedViewPlanTest extends PlanTestBase {
 
-    private boolean enableExperimentMV = false;
-
     @Before
     public void before() {
         connectContext.getSessionVariable().setEnableIncrementalRefreshMv(true);
-        enableExperimentMV = Config.enable_experimental_mv;
-        Config.enable_experimental_mv = true;
     }
 
     @After
     public void after() {
         connectContext.getSessionVariable().setEnableIncrementalRefreshMv(false);
-        Config.enable_experimental_mv = enableExperimentMV;
     }
 
     @Test
