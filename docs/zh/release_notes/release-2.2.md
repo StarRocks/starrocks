@@ -13,7 +13,7 @@ displayed_sidebar: "Chinese"
 - 优化部分场景下 bitmap_contains() 函数消耗大量内存和性能慢的问题。([#20616](https://github.com/StarRocks/starrocks/issues/20616))
 - 减少 Compaction 框架对 CPU 资源的消耗。([#11746](https://github.com/StarRocks/starrocks/issues/11746))
 
-## 问题修复
+### 问题修复
 
 修复了以下问题：
 

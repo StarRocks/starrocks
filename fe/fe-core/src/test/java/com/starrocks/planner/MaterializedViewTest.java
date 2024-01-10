@@ -18,7 +18,6 @@ import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -38,7 +37,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         MaterializedViewTestBase.beforeClass();
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
-        Config.default_replication_num = 1;
 
         starRocksAssert.useTable("depts");
         starRocksAssert.useTable("depts_null");

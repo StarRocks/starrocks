@@ -18,7 +18,6 @@
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 #include "types/logical_type.h"
-#include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
 
@@ -50,15 +49,6 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"TABLE_ROWS", TYPE_VARCHAR, sizeof(StringValue), false},
         {"MATERIALIZED_VIEW_DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
         {"EXTRA_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), false},
-};
-
-SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns_v1[] = {
-        //   name,       type,          size,     is_null
-        {"MATERIALIZED_VIEW_ID", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"MATERIALIZED_VIEW_DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_ROWS", TYPE_VARCHAR, sizeof(StringValue), false},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()
@@ -94,34 +84,7 @@ Status SchemaMaterializedViewsScanner::start(RuntimeState* state) {
     return Status::OK();
 }
 
-Status SchemaMaterializedViewsScanner::_change_to_v1_schema(RuntimeState* state) {
-    if (_v1_schema) {
-        return {};
-    }
-    _columns = _s_tbls_columns_v1;
-    _column_num = sizeof(_s_tbls_columns_v1) / sizeof(SchemaScanner::ColumnDesc);
-    RETURN_IF_ERROR(_create_slot_descs(state->global_obj_pool()));
-    _v1_schema = true;
-    return Status::EAgain("chunk schema changed");
-}
-
-Status SchemaMaterializedViewsScanner::_fill_chunk_v1(ChunkPtr* chunk) {
-    auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
-    const TTableStatus& info = _table_result.tables[_table_index];
-    std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
-    DatumArray datum_array{
-            Slice(info.id), Slice(db_name), Slice(info.name), Slice(info.ddl_sql), Slice(info.rows),
-    };
-    for (const auto& [slot_id, index] : slot_id_map) {
-        Column* column = (*chunk)->get_column_by_slot_id(slot_id).get();
-        column->append_datum(datum_array[slot_id - 1]);
-    }
-
-    _table_index++;
-    return {};
-}
-
-Status SchemaMaterializedViewsScanner::_fill_chunk_v2(ChunkPtr* chunk) {
+Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
     auto& slot_id_map = (*chunk)->get_slot_id_to_index_map();
     const TMaterializedViewStatus& info = _mv_results.materialized_views[_table_index];
     std::string db_name = SchemaHelper::extract_db_name(_db_result.dbs[_db_index - 1]);
@@ -177,18 +140,8 @@ Status SchemaMaterializedViewsScanner::get_materialized_views() {
     table_params.__set_type(TTableType::MATERIALIZED_VIEW);
 
     if (nullptr != _param->ip && 0 != _param->port) {
-        Status st =
-                SchemaHelper::list_materialized_view_status(*(_param->ip), _param->port, table_params, &_mv_results);
-        if (!st.ok()) {
-            if (st.message().find(ThriftRpcHelper::KInvalidMethodName) == std::string::npos) {
-                return st;
-            }
-            LOG(WARNING) << "Frontend running in old version, needs to fallback to V1 interface";
-            _mv_results.materialized_views.clear();
-            RETURN_IF_ERROR(SchemaHelper::list_table_status(*(_param->ip), _param->port, table_params, &_table_result,
-                                                            config::thrift_rpc_timeout_ms));
-            RETURN_IF_ERROR(_change_to_v1_schema(_runtime_state));
-        }
+        RETURN_IF_ERROR(
+                SchemaHelper::list_materialized_view_status(*(_param->ip), _param->port, table_params, &_mv_results));
     } else {
         return Status::InternalError("IP or port doesn't exists");
     }
@@ -203,7 +156,7 @@ Status SchemaMaterializedViewsScanner::get_next(ChunkPtr* chunk, bool* eos) {
     if (nullptr == chunk || nullptr == eos) {
         return Status::InternalError("input pointer is nullptr.");
     }
-    while (_table_index >= _mv_results.materialized_views.size() && _table_index >= _table_result.tables.size()) {
+    while (_table_index >= _mv_results.materialized_views.size()) {
         if (_db_index < _db_result.dbs.size()) {
             RETURN_IF_ERROR(get_materialized_views());
         } else {
@@ -212,11 +165,7 @@ Status SchemaMaterializedViewsScanner::get_next(ChunkPtr* chunk, bool* eos) {
         }
     }
     *eos = false;
-    if (_mv_results.materialized_views.size() > 0) {
-        return _fill_chunk_v2(chunk);
-    } else {
-        return _fill_chunk_v1(chunk);
-    }
+    return fill_chunk(chunk);
 }
 
 } // namespace starrocks

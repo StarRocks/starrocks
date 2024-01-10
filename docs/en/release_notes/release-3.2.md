@@ -41,7 +41,7 @@ Release date: December 21, 2023
 
 - Added a new metric `max_tablet_rowset_num` for setting the maximum allowed number of rowsets. This metric helps detect possible compaction issues and thus reduces the occurrences of the error "too many versions". [#36539](https://github.com/StarRocks/starrocks/pull/36539)
 
-### Parameter changes
+### Parameter change
 
 - A new BE configuration item `enable_stream_load_verbose_log` is added. The default value is `false`. With this parameter set to `true`, StarRocks can record the HTTP requests and responses for Stream Load jobs, making troubleshooting easier. [#36113](https://github.com/StarRocks/starrocks/pull/36113)
 
@@ -62,7 +62,7 @@ Fixed the following issues:
 - After the DISTINCT window operator pushdown feature is enabled, errors are reported if SELECT DISTINCT operations are performed on the complex expressions of the columns computed by window functions.  [#36357](https://github.com/StarRocks/starrocks/pull/36357)
 - Some S3-compatible object storage returns duplicate files, causing the BEs to crash. [#36103](https://github.com/StarRocks/starrocks/pull/36103)
 
-## 3.2.0 
+## 3.2.0
 
 Release date: December 1, 2023
 
@@ -186,24 +186,22 @@ For more information, see [Manage permissions with Apache Ranger](../administrat
 
 - Supports Trace Query Profile for asynchronous materialized views, which can be used to analyze its transparent rewrite.
 
-### Compatibility Changes
-
-#### Behavior Changes
+### Behavior Change
 
 To be updated.
 
-#### Parameters
+### Parameter Change
 
-##### FE Configuration
+#### FE Parameters
 
 - Added the following FE configuration items:
   - `catalog_metadata_cache_size`
   - `enable_backup_materialized_view`
-  - `enable_colocate_mv_index` 
+  - `enable_colocate_mv_index`
   - `enable_fast_schema_evolution`
   - `json_file_size_limit`
-  - `lake_enable_ingest_slowdown` 
-  - `lake_ingest_slowdown_threshold` 
+  - `lake_enable_ingest_slowdown`
+  - `lake_ingest_slowdown_threshold`
   - `lake_ingest_slowdown_ratio`
   - `lake_compaction_score_upper_bound`
   - `mv_auto_analyze_async`
@@ -216,7 +214,7 @@ To be updated.
   - The default value of `enable_sync_publish` is changed from `false` to `true`.
   - The default value of `enable_persistent_index_by_default` is changed from `false` to `true`.
 
-##### BE Configuration
+#### BE Parameters
 
 - Data Cache-related configuration changes.
   - Added `datacache_enable` to replace `block_cache_enable`.
@@ -277,7 +275,7 @@ Fixed the following issues:
 
 - BEs crash when libcurl is invoked. [#31667](https://github.com/StarRocks/starrocks/pull/31667)
 - Schema Change may fail if it takes an excessively long period of time, because the specified tablet version is handled by garbage collection. [#31376](https://github.com/StarRocks/starrocks/pull/31376)
-- Failed to access the Parquet files in MinIO via file external tables. [#29873] (https://github.com/StarRocks/starrocks/pull/29873)
+- Failed to access the Parquet files in MinIO via file external tables. [#29873](https://github.com/StarRocks/starrocks/pull/29873)
 - The ARRAY, MAP, and STRUCT type columns are not correctly displayed in  `information_schema.columns`. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
 - An error is reported if specific path formats are used during data loading via Broker Load: `msg:Fail to parse columnsFromPath, expected: [rec_dt]`. [#32720](https://github.com/StarRocks/starrocks/pull/32720)
 - `DATA_TYPE` and `COLUMN_TYPE` for BINARY or VARBINARY data types are displayed as `unknown` in the `information_schema.columns` view. [#32678](https://github.com/StarRocks/starrocks/pull/32678)

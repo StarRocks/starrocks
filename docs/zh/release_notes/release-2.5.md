@@ -23,9 +23,7 @@ displayed_sidebar: "Chinese"
 - Spark Load 增加了 bitmap_from_binary 函数，支持导入 Binary Bitmap。 [#36050](https://github.com/StarRocks/starrocks/pull/36050)
 - bRPC 的超时时间从 1 小时改为等于 Session 变量 `query_timeout` 所设置的时间，避免 RPC 超时过久引起查询失败。 [#36778](https://github.com/StarRocks/starrocks/pull/36778)
 
-### 兼容性变更
-
-#### 参数变更
+### 参数变更
 
 - 新增 BE 配置项 `enable_stream_load_verbose_log`，默认取值是 `false`，打开后日志中可以记录 Stream Load 的 HTTP 请求和响应信息，方便出现问题后的定位调试。[#36113](https://github.com/StarRocks/starrocks/pull/36113)
 - BE 配置项 `update_compaction_per_tablet_min_interval_seconds` 从静态参数改为动态参数。 [#36819](https://github.com/StarRocks/starrocks/pull/36819)
@@ -65,9 +63,7 @@ displayed_sidebar: "Chinese"
   - 优化 `bitmap_xor` 函数性能。 [#34069](https://github.com/StarRocks/starrocks/pull/34069)
   - 支持 Copy on Write（简称 COW），优化性能，并减少内存使用。 [#34047](https://github.com/StarRocks/starrocks/pull/34047)
 
-### 兼容性变更
-
-#### 参数变更
+### 参数变更
 
 - 将 FE 配置项 `enable_new_publish_mechanism` 改为静态参数，修改后必须重启 FE 才可以生效。 [#35338](https://github.com/StarRocks/starrocks/pull/35338)
 
@@ -96,7 +92,7 @@ displayed_sidebar: "Chinese"
 
 - `INFORMATION_SCHEMA.COLUMNS` 表支持显示 ARRAY、MAP、STRUCT 类型的字段。 [#33431](https://github.com/StarRocks/starrocks/pull/33431)
 
-### 兼容性变更
+### 参数变更
 
 #### 系统变量
 
@@ -260,7 +256,7 @@ displayed_sidebar: "Chinese"
 ### 功能优化
 
 - 优化了非分区表增加分区时的报错信息。 [#25266](https://github.com/StarRocks/starrocks/pull/25266)
-- 优化表的[自动分桶策略](../table_design/Data_distribution.md#确定分桶数量)。 [#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- 优化表的[自动分桶策略](https://docs.starrocks.io/zh/docs/2.5/table_design/Data_distribution/#%E7%A1%AE%E5%AE%9A%E5%88%86%E6%A1%B6%E6%95%B0%E9%87%8F)。 [#24543](https://github.com/StarRocks/starrocks/pull/24543)
 - 优化建表时 Comment 中的默认值。[#24803](https://github.com/StarRocks/starrocks/pull/24803)
 - 优化异步物化视图的手动刷新策略。支持通过 REFRESH MATERIALIZED VIEW WITH SYNC MODE 同步调用物化视图刷新任务。[#25910](https://github.com/StarRocks/starrocks/pull/25910)
 
@@ -280,7 +276,7 @@ displayed_sidebar: "Chinese"
 
 - 失效物化视图支持通过 `ALTER MATERIALIZED VIEW <mv_name> ACTIVE` 手动激活，可用于激活因基表 (base table) 被删除而失效的物化视图。更多信息，参见 [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md)。[#24001](https://github.com/StarRocks/starrocks/pull/24001)
 
-- 支持在建表和新增分区时自动设置适当的分桶数量。更多信息，参见[确定分桶数量](../table_design/Data_distribution.md#确定分桶数量)。[#10614](https://github.com/StarRocks/starrocks/pull/10614)
+- 支持在建表和新增分区时自动设置适当的分桶数量。更多信息，参见[确定分桶数量](https://docs.starrocks.io/zh/docs/2.5/table_design/Data_distribution/#%E7%A1%AE%E5%AE%9A%E5%88%86%E6%A1%B6%E6%95%B0%E9%87%8F)。[#10614](https://github.com/StarRocks/starrocks/pull/10614)
 
 ### 功能优化
 
