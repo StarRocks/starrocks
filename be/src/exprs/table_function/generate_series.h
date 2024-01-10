@@ -83,8 +83,8 @@ public:
             if (arg_start.is_null(curr_row) || arg_stop.is_null(curr_row) || step_is_null(curr_row)) {
                 move_to_next_row();
             } else {
-                auto start = (SeriesRunTimeType)arg_start.value(curr_row);
-                auto stop = (SeriesRunTimeType)arg_stop.value(curr_row);
+                auto start = static_cast<SeriesRunTimeType>(arg_start.value(curr_row));
+                auto stop = static_cast<SeriesRunTimeType>(arg_stop.value(curr_row));
                 auto step = get_step(curr_row);
                 auto offset = state->get_offset();
                 auto current = start;
