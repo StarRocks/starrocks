@@ -352,7 +352,7 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
     size_t chunk_num_rows = chunk.num_rows();
     size_t chunk_num_columns = chunk.num_columns();
     for (size_t i = 0; i < chunk_num_columns; ++i) {
-        const ColumnPtr col = chunk.get_column_by_index(i);
+        const ColumnPtr& col = chunk.get_column_by_index(i);
         RETURN_IF_ERROR(_column_writers[i]->append(col));
     }
 

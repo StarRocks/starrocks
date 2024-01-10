@@ -158,6 +158,8 @@ public:
 
     Status append(const Column& column) override;
 
+    Status append(const ColumnPtr& column) override { return append(*column); }
+
     // Write offset column, it's only used in ArrayColumn
     Status append_array_offsets(const Column& column);
 
