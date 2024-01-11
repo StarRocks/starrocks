@@ -16,7 +16,6 @@ package com.starrocks.service;
 
 import com.google.gson.Gson;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.common.Config;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetTablesConfigRequest;
@@ -48,7 +47,6 @@ public class InformationSchemaDataSourceTest {
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
-        Config.enable_experimental_mv = true;
     }
 
     @Test

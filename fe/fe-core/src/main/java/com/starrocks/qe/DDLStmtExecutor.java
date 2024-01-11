@@ -14,6 +14,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
@@ -132,7 +133,6 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.parquet.Strings;
 
 import java.io.IOException;
 import java.time.LocalDateTime;

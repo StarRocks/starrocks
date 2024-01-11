@@ -435,7 +435,7 @@ jobs:
           ./bin/elastic-cluster.sh --renew 0.5
 
       - name: save unstable cases
-        if: always() && github.event_name == 'schedule'
+        if: always() && github.event_name == 'schedule' && steps.backup.outcome == 'success'
         run: |
           cd ci-tool && source lib/init.sh
           ./bin/save_unstable_cases.sh
