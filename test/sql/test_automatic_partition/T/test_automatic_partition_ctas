@@ -76,3 +76,16 @@ DISTRIBUTED BY HASH (`LO_ORDERKEY`)
 AS SELECT * FROM lineorder;
 select count(*) from lineorder_automatic;
 select count(*) from lineorder_automatic2;
+CREATE TABLE site_access(
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT DEFAULT '0'
+)
+DUPLICATE KEY(event_day, site_id, city_code, user_name)
+PARTITION BY RANGE(event_day)(
+    PARTITION p20200321 VALUES LESS THAN ("2020-03-22")
+)
+DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 1;
+create table test_column_expr_partition partition by (event_day) as select event_day from site_access;
