@@ -112,6 +112,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MarkedCountDownLatch;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
@@ -4186,7 +4187,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
         db.dropTable(oldTableName);
         db.createTable(olapTable);
-        inactiveRelatedMaterializedView(db, olapTable, "base-table renamed: " + oldTableName);
+        inactiveRelatedMaterializedView(db, olapTable,
+                MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(oldTableName));
 
         TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), olapTable.getId(), newTableName);
         GlobalStateMgr.getCurrentState().getEditLog().logTableRename(tableInfo);
@@ -4200,7 +4202,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 LOG.warn("Setting the materialized view {}({}) to invalid because " +
                         "the table {} was renamed.", mv.getName(), mv.getId(), olapTable.getName());
                 mv.setInactiveAndReason(reason);
-                inactiveRelatedMaterializedView(db, mv, "base-table inactive: " + mv.getName());
+                inactiveRelatedMaterializedView(db, mv,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableActive(mv.getName()));
             } else {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
             }
@@ -4220,7 +4223,8 @@ public class LocalMetastore implements ConnectorMetadata {
             db.dropTable(tableName);
             table.setName(newTableName);
             db.createTable(table);
-            inactiveRelatedMaterializedView(db, table, "base-table renamed: " + tableName);
+            inactiveRelatedMaterializedView(db, table,
+                    MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(tableName));
 
             LOG.info("replay rename table[{}] to {}, tableId: {}", tableName, newTableName, table.getId());
         } finally {

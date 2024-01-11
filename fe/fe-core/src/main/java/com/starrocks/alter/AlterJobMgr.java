@@ -72,6 +72,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
@@ -570,7 +571,7 @@ public class AlterJobMgr {
                     asyncRefreshContext.setTimeUnit(intervalLiteral.getUnitIdentifier().getDescription());
                 } else {
                     if (materializedView.getBaseTableInfos().stream().anyMatch(tableInfo ->
-                            !tableInfo.getTable().isNativeTableOrMaterializedView()
+                            !tableInfo.getTableChecked().isNativeTableOrMaterializedView()
                     )) {
                         throw new DdlException(
                                 "Materialized view which type is ASYNC need to specify refresh interval for " +
@@ -962,8 +963,10 @@ public class AlterJobMgr {
         origTable.checkAndSetName(newTblName, true);
 
         // inactive the related MVs
-        LocalMetastore.inactiveRelatedMaterializedView(db, origTable, "base-table-swapped: " + origTblName);
-        LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl, "base-table-swapped: " + newTblName);
+        LocalMetastore.inactiveRelatedMaterializedView(db, origTable,
+                MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName));
+        LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl,
+                MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName));
         swapTableInternal(db, origTable, olapNewTbl);
 
         // write edit log
@@ -1050,7 +1053,8 @@ public class AlterJobMgr {
                 throw new DdlException("failed to init view stmt", e);
             }
             view.setNewFullSchema(newFullSchema);
-            LocalMetastore.inactiveRelatedMaterializedView(db, view, "base-table changed: " + viewName);
+            LocalMetastore.inactiveRelatedMaterializedView(db, view,
+                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName));
 
             db.dropTable(viewName);
             db.createTable(view);
@@ -1082,7 +1086,8 @@ public class AlterJobMgr {
                 throw new DdlException("failed to init view stmt", e);
             }
             view.setNewFullSchema(newFullSchema);
-            LocalMetastore.inactiveRelatedMaterializedView(db, view, "base-table changed: " + viewName);
+            LocalMetastore.inactiveRelatedMaterializedView(db, view,
+                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName));
 
             db.dropTable(viewName);
             db.createTable(view);

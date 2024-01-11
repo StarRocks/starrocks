@@ -480,7 +480,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             currentTablePartitionInfo.putAll(partitionInfoMap);
 
             // remove partition info of not-exist partition for snapshot table from version map
-            Set<String> partitionNames = Sets.newHashSet(PartitionUtil.getPartitionNames(baseTableInfo.getTable()));
+            Set<String> partitionNames =
+                    Sets.newHashSet(PartitionUtil.getPartitionNames(baseTableInfo.getTableChecked()));
             currentTablePartitionInfo.keySet().removeIf(partitionName ->
                     !partitionNames.contains(partitionName));
         }
