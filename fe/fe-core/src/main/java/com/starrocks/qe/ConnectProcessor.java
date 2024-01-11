@@ -361,9 +361,16 @@ public class ConnectProcessor {
                     ctx.setQueryId(UUIDUtil.genUUID());
                 }
                 parsedStmt = stmts.get(i);
-                //JDBC has no prepared prefix, only
+                // from jdbc no params like that. COM_STMT_PREPARE + select 1
+                if (ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE && !(parsedStmt instanceof PrepareStmt)) {
+                    parsedStmt = new PrepareStmt("", parsedStmt, new ArrayList<>());
+                }
+                // only for JDBC, COM_STMT_PREPARE bundled with jdbc
                 if (ctx.getCommand() == MysqlCommand.COM_STMT_PREPARE && (parsedStmt instanceof PrepareStmt)) {
                     ((PrepareStmt) parsedStmt).setName(String.valueOf(ctx.getStmtId()));
+                    if (!(((PrepareStmt) parsedStmt).getInnerStmt() instanceof QueryStatement)) {
+                        throw new AnalysisException("prepare statement only support QueryStatement");
+                    }
                 }
                 parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
                 Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
@@ -544,6 +551,16 @@ public class ConnectProcessor {
         }
     }
 
+    private void handleStmtReset() {
+        ctx.getState().setOk();
+    }
+
+    private void handleStmtClose() {
+        int stmtId = packetBuf.getInt();
+        ctx.removePreparedStmt(String.valueOf(stmtId));
+        ctx.getState().setStateType(QueryState.MysqlStateType.NOOP);
+    }
+
     private static boolean isNull(byte[] bitmap, int position) {
         return (bitmap[position / 8] & (0xff & (1 << (position & 7)))) != 0;
     }
@@ -570,8 +587,15 @@ public class ConnectProcessor {
                 handleQuit();
                 break;
             case COM_QUERY:
+            case COM_STMT_PREPARE:
                 handleQuery();
                 ctx.setStartTime();
+                break;
+            case COM_STMT_RESET:
+                handleStmtReset();
+                break;
+            case COM_STMT_CLOSE:
+                handleStmtClose();
                 break;
             case COM_FIELD_LIST:
                 handleFieldList();
