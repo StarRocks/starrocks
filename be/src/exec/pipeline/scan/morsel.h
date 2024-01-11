@@ -226,6 +226,7 @@ private:
 class MorselQueue {
 public:
     MorselQueue() = default;
+    MorselQueue(Morsels&& morsels) : _morsels(std::move(morsels)), _num_morsels(_morsels.size()) {}
     virtual ~MorselQueue() = default;
 
     virtual std::vector<TInternalScanRange*> prepare_olap_scan_ranges() const;
@@ -237,8 +238,8 @@ public:
     virtual void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) {}
     virtual bool could_attch_ticket_checker() { return false; }
 
-    virtual size_t num_original_morsels() const { return _morsels.size(); }
-    virtual size_t max_degree_of_parallelism() const { return _morsels.size(); }
+    virtual size_t num_original_morsels() const { return _num_morsels; }
+    virtual size_t max_degree_of_parallelism() const { return _num_morsels; }
     virtual bool empty() const = 0;
     virtual StatusOr<MorselPtr> try_get() = 0;
     void unget(MorselPtr&& morsel);
@@ -247,6 +248,7 @@ public:
 
 protected:
     Morsels _morsels;
+    const size_t _num_morsels = 0;
     MorselPtr _unget_morsel = nullptr;
     std::vector<TabletSharedPtr> _tablets;
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
@@ -255,9 +257,7 @@ protected:
 // The morsel queue with a fixed number of morsels, which is determined in the constructor.
 class FixedMorselQueue final : public MorselQueue {
 public:
-    explicit FixedMorselQueue(Morsels&& morsels) : _num_morsels(_morsels.size()), _pop_index(0) {
-        _morsels = std::move(morsels);
-    }
+    explicit FixedMorselQueue(Morsels&& morsels) : MorselQueue(std::move(morsels)), _pop_index(0) {}
     ~FixedMorselQueue() override = default;
     bool empty() const override { return _unget_morsel == nullptr && _pop_index >= _num_morsels; }
     StatusOr<MorselPtr> try_get() override;
@@ -265,7 +265,6 @@ public:
     std::string name() const override { return "fixed_morsel_queue"; }
 
 private:
-    const size_t _num_morsels;
     std::atomic<size_t> _pop_index;
 };
 
@@ -307,9 +306,9 @@ private:
 class SplitMorselQueue : public MorselQueue {
 public:
     SplitMorselQueue(Morsels&& morsels, int64_t degree_of_parallelism, int64_t splitted_scan_rows)
-            : _degree_of_parallelism(degree_of_parallelism), _splitted_scan_rows(splitted_scan_rows) {
-        _morsels = std::move(morsels);
-    }
+            : MorselQueue(std::move(morsels)),
+              _degree_of_parallelism(degree_of_parallelism),
+              _splitted_scan_rows(splitted_scan_rows) {}
     void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) override {
         _ticket_checker = ticket_checker;
     }
@@ -444,9 +443,7 @@ private:
 
 class DynamicMorselQueue final : public MorselQueue {
 public:
-    explicit DynamicMorselQueue(Morsels&& morsels) : _num_morsels(_morsels.size()), _pop_index(0) {
-        _morsels = std::move(morsels);
-    }
+    explicit DynamicMorselQueue(Morsels&& morsels) : MorselQueue(std::move(morsels)), _pop_index(0) {}
     ~DynamicMorselQueue() override = default;
     bool empty() const override { return _unget_morsel == nullptr && _pop_index >= _num_morsels; }
     StatusOr<MorselPtr> try_get() override;
@@ -456,7 +453,6 @@ public:
 private:
     std::mutex _mutex;
     std::atomic<size_t> _pop_index;
-    const size_t _num_morsels;
 };
 
 MorselQueuePtr create_empty_morsel_queue();
