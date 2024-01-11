@@ -85,7 +85,7 @@ struct GetResultBatchCtx {
 };
 
 // buffer used for result customer and productor
-classBufferControlBlock {
+class BufferControlBlock {
 public:
     BufferControlBlock(const TUniqueId& id, int buffer_size);
     ~BufferControlBlock();
