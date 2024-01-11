@@ -62,8 +62,8 @@ Release date: November 28, 2023
 
 ### Improvements
 
-- The [`COLUMNS`]https://docs.starrocks.io/docs/reference/information_schema/columns/) view in the system database `INFORMATION_SCHEMA` can display ARRAY, MAP, and STRUCT columns. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
-- Supports queries against Parquet, ORC, and CSV formatted files that are compressed by using LZO and stored in [Hive]https://docs.starrocks.io/docs/data_source/catalog/hive_catalog/). [#30923](https://github.com/StarRocks/starrocks/pull/30923)  [#30721](https://github.com/StarRocks/starrocks/pull/30721)
+- The [`COLUMNS`](https://docs.starrocks.io/docs/reference/information_schema/columns/) view in the system database `INFORMATION_SCHEMA` can display ARRAY, MAP, and STRUCT columns. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
+- Supports queries against Parquet, ORC, and CSV formatted files that are compressed by using LZO and stored in [Hive](https://docs.starrocks.io/docs/data_source/catalog/hive_catalog/). [#30923](https://github.com/StarRocks/starrocks/pull/30923)  [#30721](https://github.com/StarRocks/starrocks/pull/30721)
 - Supports updates onto the specified partitions of an automatically partitioned table. If the specified partitions do not exist, an error is returned. [#34777](https://github.com/StarRocks/starrocks/pull/34777)
 - Supports automatic refresh of materialized views when Swap, Drop, or Schema Change operations are performed on the tables and views (including the other tables and materialized views associated with these views) on which these materialized views are created. [#32829](https://github.com/StarRocks/starrocks/pull/32829)
 - Optimized the performance of some Bitmap-related operations, including:
