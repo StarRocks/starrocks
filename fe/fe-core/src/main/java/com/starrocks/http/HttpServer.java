@@ -82,6 +82,7 @@ import com.starrocks.http.rest.ShowDataAction;
 import com.starrocks.http.rest.ShowMetaInfoAction;
 import com.starrocks.http.rest.ShowProcAction;
 import com.starrocks.http.rest.ShowRuntimeInfoAction;
+import com.starrocks.http.rest.StarManagerHttpServiceAction;
 import com.starrocks.http.rest.StopFeAction;
 import com.starrocks.http.rest.StorageTypeCheckAction;
 import com.starrocks.http.rest.SyncCloudTableMetaAction;
@@ -207,6 +208,9 @@ public class HttpServer {
         TableQueryPlanAction.registerAction(controller);
 
         BootstrapFinishAction.registerAction(controller);
+
+        // starmanager usage
+        StarManagerHttpServiceAction.registerAction(controller);
     }
 
     public void start() {

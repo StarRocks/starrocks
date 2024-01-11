@@ -15,6 +15,7 @@
 
 package com.starrocks.staros;
 
+import com.staros.manager.HttpService;
 import com.staros.manager.StarManager;
 import com.staros.manager.StarManagerServer;
 import com.starrocks.common.Config;
@@ -102,6 +103,10 @@ public class StarMgrServer {
 
     public StarManager getStarMgr() {
         return starMgrServer.getStarManager();
+    }
+
+    public HttpService getHttpService() {
+        return starMgrServer.getHttpService();
     }
 
     public BDBJEJournalSystem getJournalSystem() {

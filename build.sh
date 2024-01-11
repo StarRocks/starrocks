@@ -408,7 +408,7 @@ if [ ${BUILD_FE} -eq 1 ] || [ ${BUILD_SPARK_DPP} -eq 1 ] || [ ${BUILD_HIVE_UDF} 
         FE_MODULES="fe-common,hive-udf"
     fi
     if [ ${BUILD_FE} -eq 1 ]; then
-        FE_MODULES="hive-udf,fe-common,spark-dpp,fe-core"
+        FE_MODULES="staros/starclient,hive-udf,fe-common,spark-dpp,fe-core"
     fi
 fi
 
