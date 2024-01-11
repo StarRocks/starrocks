@@ -21,8 +21,9 @@
   {%- set table_type = config.get('table_type', 'DUPLICATE') -%}
   {%- set keys = config.get('keys') -%}
   {%- set partition_by = config.get('partition_by') -%}
-  {%- set partition_type = config.get('partition_type', 'RANGE') -%}
   {%- set partition_by_init = config.get('partition_by_init') -%}
+  {%- set order_by = config.get('order_by') -%}
+  {%- set partition_type = config.get('partition_type', 'RANGE') -%}
   {%- set buckets = config.get('buckets', 10) -%}
   {%- set distributed_by = config.get('distributed_by') -%}
   {%- set properties = config.get('properties') -%}
@@ -97,7 +98,16 @@
     {{ exceptions.raise_compiler_error(msg) }}
   {% endif -%}
 
-  {# 4. SET PROPERTIES #}
+  {# 5. SET ORDER BY #}
+  {%- if order_by is not none %}
+    ORDER BY (
+      {%- for item in order_by -%}
+        {{ item }} {%- if not loop.last -%}, {%- endif -%}
+      {%- endfor -%}
+    )
+  {% endif -%}
+
+  {# 6. SET PROPERTIES #}
   {%- if properties is not none %}
     PROPERTIES (
       {% for key, value in properties.items() -%}
