@@ -347,7 +347,7 @@ public:
     size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
 
 protected:
-    void _inc_split(MorselPtr&& morsel) {
+    void _inc_split(Morsel* morsel) {
         if (_ticket_checker == nullptr) {
             return;
         }
