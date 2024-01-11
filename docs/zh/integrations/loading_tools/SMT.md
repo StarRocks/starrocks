@@ -295,26 +295,26 @@ SMT 可以根据 PostgreSQL 和 StarRocks 的集群信息和表结构自动生�
 
 ### 注意事项
 
-1. 对于 9.* 版本的 PostgreSQL 需要特殊 flink-cdc 配置如下所示（建议使用10+版本，否则需要自行安装wal解析插件）：
+1. 对于 9.* 版本的 PostgreSQL 需要特殊 flink-cdc 配置如下所示（建议使用10+版本，否则需要自行安装 WAL 解析插件）：
 
-    ``Bash
+    ```Bash
     ############################################
     ############################################
     ### flink-cdc plugin configuration for `postgresql`
     ############################################
-    # # for `9.*` decoderbufs, wal2json, wal2json_rds, wal2json_streaming, wal2json_rds_streaming
-    # # refer to https://ververica.github.io/flink-cdc-connectors/master/content/connectors/postgres-cdc.html 
-    # # and https://debezium.io/documentation/reference/postgres-plugins.html
-    # flink.cdc.decoding.plugin.name = decoderbufs
+    ### for `9.*` decoderbufs, wal2json, wal2json_rds, wal2json_streaming, wal2json_rds_streaming
+    ### refer to https://ververica.github.io/flink-cdc-connectors/master/content/connectors/postgres-cdc.html 
+    ### and https://debezium.io/documentation/reference/postgres-plugins.html
+    ### flink.cdc.decoding.plugin.name = decoderbufs
     ```
-
+    <!--pending-->
 2. 如何开启 PostgreSQL WAL？
 
     ```Bash
     # 开启连接权限
     echo "host all all 0.0.0.0/32 trust" >> pg_hba.conf
     echo "host replication all 0.0.0.0/32 trust" >> pg_hba.conf
-    # 开启wal logical复制
+    # 开启 wal logical 复制
     echo "wal_level = logical" >> postgresql.conf
     echo "max_wal_senders = 2" >> postgresql.conf
     echo "max_replication_slots = 8" >> postgresql.conf
@@ -465,16 +465,12 @@ SMT 可以根据 Oracle 和 StarRocks 的集群信息和表结构自动生成 so
 
 ### 简介
 
-使用 SMT 可以同步各种外部数据库和 StarRocks 的元数据表结构，支持 MySQL，Hive 等数据源。这里介绍如何使用 SMT 同步 Hive 数据。
-
-这里有两种方式进行同步：
-
-- 一种是Hive外表同步，也就是仅仅创建Hive外表，然后可以通过外表直接查询Hive。<!--pending-->
-- 另一种是 Hive 数据同步，会创建 StarRocks 中的 民表，并且使用Flink任务来进行数据的同步。
+使用 SMT 可以同步各种外部数据库和 StarRocks 的元数据表结构，支持 MySQL，Hive 等数据源。这里介绍如何使用 SMT 同步 Hive 数据。会创建 StarRocks 中的明细表，并且使用Flink任务来进行数据的同步。
+<!--pending一种是Hive外表同步，也就是仅仅创建Hive外表，然后可以通过外表直接查询Hive。-->
 
 ### 操作步骤
 
-### 准备配置
+#### 准备配置
 
 ```SQL
 [db]
@@ -497,12 +493,13 @@ authentication = kerberos
   1. 在 Hive 集群执行 kadmin.local, 并查看 list_principals 找到对应的principal 名称，如：`hive/emr-header-1.cluster-49148@EMR.49148.COM`，那么 user 就需要设置为 `hive/emr-header-1.cluster-49148`，password 留空即可。
   2. 在执行 SMT 的机器上先执行 `kinit -kt  /path/to/keytab  principal` 并执行klist查看是否已有正确的token生成
 
+<!--pending
 #### Hive 外表同步
-<!--pending-->
 1. 执行 ./starrocks-migrate-tool 
 2. 在 StarRocks 中执行 result/starrocks-external-create.all.sql 即可。
+-->
 
-#### Hive 数据全量同步
+#### 同步 Hive 全量数据
 
 1. 执行 ./starrocks-migrate-tool。
 2. 在 StarRocks 中执行 result/starrocks-create.all.sql 创建 StarRocks 的同步表结构。
@@ -531,17 +528,17 @@ authentication = kerberos
 
 ### 简介
 
-通过Flink-cdc和StarRocks-migrate-tools（简称smt）可以实现SQLServer数据的秒级同步。
+通过 Flink CDC connector 和 SMT 可以实现 SQL Server 数据的秒级同步。
 
-Smt可以根据SQLServer和StarRocks的集群信息和表结构自动生成source table和sink table的建表语句。
+SMT 可以根据 SQL Server 和 StarRocks 的集群信息和表结构自动生成 source table 和 sink table 的建表语句。
 
-通过Flink-cdc-connector捕获并记录 SqlServer 数据库服务器中发生的行级变更，其原理是使用 SqlServer 自身提供的 CDC 特性，SqlServer自身提供的 CDC 能力可以将数据库中指定的变更存档到指定的 change tables 中。SqlServer CDC 连接器首先通过 JDBC 读取表中的历史数据，再从 change tables 中或缺增量变更数据，从而实现全增量同步。之后再经过Flink-connector-starrocks将变更数据写入StarRocks。
+通过 Flink CDC connector 捕获并记录 SQL Server 数据库服务器中发生的行级变更，其原理是使用 SQL Server 自身提供的 CDC 特性，SQL Server 自身提供的 CDC 能力可以将数据库中指定的变更存档到指定的 change tables 中。SQL Server CDC 连接器首先通过 JDBC 读取表中的历史数据，再从 change tables 中或缺增量变更数据，从而实现全增量同步。之后再经过Flink-connector-starrocks 将变更数据写入 StarRocks。<!--pending-->
 
 ### 操作步骤
 
 1. 下载 [Flink](https://flink.apache.org/downloads.html)，最低支持版本1.11。
 2. 下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)，请注意下载对应Flink版本的flink-sql-connector-sqlserver-cdc-xxx.jar。
-3. 下载 [Flink StarRocks connector](https://github.com/StarRocks/flink-connector-starrocks).
+3. 下载 [Flink StarRocks connector](https://github.com/StarRocks/flink-connector-starrocks)。
 4. 复制 `flink-sql-connector-sqlserver-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` 到 `flink-xxx/lib/`
 5. 下载 [smt.tar.gz](https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2)
 6. 解压并修改配置文件。
@@ -585,7 +582,7 @@ Smt可以根据SQLServer和StarRocks的集群信息和表结构自动生成sourc
     flink.starrocks.sink.properties.strip_outer_array=true
     ```
 
-7. 执行starrocks-migrate-tool，所有建表语句都生成在result目录下
+7. 执行 starrocks-migrate-tool，所有建表语句都生成在 result 目录下。
 
     ```Bash
     $./starrocks-migrate-tool
@@ -594,59 +591,59 @@ Smt可以根据SQLServer和StarRocks的集群信息和表结构自动生成sourc
     flink-create.all.sql  starrocks-create.1.sql  starrocks-external-create.all.sql
     ```
 
-8. 生成StarRocks的表结构
+8. 生成 StarRocks 的表结构。
 
     ```Bash
     mysql -hxx.xx.xx.x -P9030 -uroot -p < starrocks-create.all.sql
     ```
 
-9. 生成Flink table并开始同步
+9. 生成 Flink table 并开始同步。
 
     ```Bash
     bin/sql-client.sh embedded < flink-create.all.sql
     ```
 
-    这个执行以后同步任务会持续执行
+    这个执行以后同步任务会持续执行。
 
-10. 观察任务状况
+10. 观察任务状况。
 
     ```Bash
     bin/flink list 
     ```
 
-    如果有任务请查看log日志，或者调整conf中的系统配置中内存和slot。
+    如果有任务请查看 log 日志，或者调整 conf 中的系统配置中内存和 slot。
 
 ### 注意事项
 
-1. 确保Server Agent Service开启
+1. 确保 Server Agent Service 开启。
 
-    检查Server Agent Service是否正常启动
+    检查 Server Agent Service 是否正常启动。
 
     ```sql
     EXEC master.dbo.xp_servicecontrol N'QUERYSTATE', N'SQLSERVERAGENT'
     GO
     ```
 
-    开启Server Agent Service
+    开启 Server Agent Service。
 
     ```Bash
     /opt/mssql/bin/mssql-conf set sqlagent.enabled true
     ```
 
-2. 确保对应数据库开启CDC
+2. 确保对应数据库开启 CDC。
 
-    查看是否开启
+    查看是否开启。
 
     ```sql
     select is_cdc_enabled, name from sys.databases where name = 'XXX_databases'
     GO
     ```
 
-    开启cdc
+    开启 CDC。
 
     :::note
     
-    执行此操作时，需确保用户serverRole为sysadmin。
+    执行此操作时，需确保用户 serverRole 为 sysadmin。
     
     :::
 
@@ -657,7 +654,7 @@ Smt可以根据SQLServer和StarRocks的集群信息和表结构自动生成sourc
     GO
     ```
 
-3. 确保对应数据表开启CDC
+3. 确保对应数据表开启 CDC。
 
     ```SQL
     EXEC sys.sp_cdc_enable_table 
@@ -668,20 +665,20 @@ Smt可以根据SQLServer和StarRocks的集群信息和表结构自动生成sourc
     GO
     ```
 
-## 同步TiDB到StarRocks 
+## 同步 TiDB 到 StarRocks 
 
 ### 简介
 
-通过Flink-cdc和StarRocks-migrate-tools（简称smt）可以实现TiDB数据的秒级同步。
+通过 Flink CDC connector 和 SMT 可以实现 TiDB 数据的秒级同步。
 
-Smt可以根据TiDB和StarRocks的集群信息和表结构自动生成source table和sink table的建表语句。
+SMT 可以根据 TiDB 和 StarRocks 的集群信息和表结构自动生成 source table 和 sink table 的建表语句。
 
-通过Flink-cdc-connector直接读取其底层 TiKV 存储中的全量数据和增量数据实现数据捕获，其中全量部分是通过按 key 划分 range 读取，增量部分使用 TiDB 提供的 CDC Client 获取增量变更数据，之后再经过Flink-connector-starrocks写入StarRocks。
+通过 Flink-cdc-connector 直接读取其底层 TiKV 存储中的全量数据和增量数据实现数据捕获，其中全量部分是通过按 key 划分 range 读取，增量部分使用 TiDB 提供的 CDC Client 获取增量变更数据，之后再经过 Flink-connector-starrocks 写入 StarRocks。
 
 ### 操作步骤
 
-1. 下载 [Flink](https://flink.apache.org/downloads.html)，最低支持版本1.11。
-2. 下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)，请注意下载对应Flink版本的flink-sql-connector-tidb-cdc-xxx.jar。
+1. 下载 [Flink](https://flink.apache.org/downloads.html)，最低支持版本 1.11。
+2. 下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)，请注意下载对应 Flink 版本的 flink-sql-connector-tidb-cdc-xxx.jar。
 3. 下载 [Flink StarRocks connector](https://github.com/StarRocks/flink-connector-starrocks).
 4. 复制 `flink-sql-connector-tidb-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` 到 `flink-xxx/lib/`
 5. 下载 [smt.tar.gz](https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2)
@@ -735,7 +732,7 @@ Smt可以根据TiDB和StarRocks的集群信息和表结构自动生成source tab
     # flink.cdc.pd-addresses = 127.0.0.1:2379
     ```
 
-7. 执行starrocks-migrate-tool，所有建表语句都生成在result目录下
+7. 执行 starrocks-migrate-tool，所有建表语句都生成在 result 目录下。
 
     ```Bash
     $./starrocks-migrate-tool
@@ -744,31 +741,31 @@ Smt可以根据TiDB和StarRocks的集群信息和表结构自动生成source tab
     flink-create.all.sql  starrocks-create.1.sql  starrocks-external-create.all.sql
     ```
 
-8. 生成StarRocks的表结构
+8. 生成 StarRocks 的表结构。
 
     ```Bash
     mysql -hxx.xx.xx.x -P9030 -uroot -p < starrocks-create.all.sql
     ```
 
-9. 生成Flink table并开始同步
+9. 生成 Flink table 并开始同步。
 
     ```Bash
     bin/sql-client.sh embedded < flink-create.all.sql
     ```
 
-    这个执行以后同步任务会持续执行
+    这个执行以后同步任务会持续执行。
 
-10. 观察任务状况
+10. 观察任务状况。
 
     ```Bash
     bin/flink list 
     ```
 
-    如果有任务请查看log日志，或者调整conf中的系统配置中内存和slot。
+    如果有任务请查看 log 日志，或者调整 conf 中的系统配置中内存和 slot。
 
 ### 注意事项
 
-1. Tidb v4.0.0之前的版本需要额外配置flink.cdc.pd-addresses
+1. Tidb v4.0.0 之前的版本需要额外配置 flink.cdc.pd-addresses。
 
     ```Bash
     ############################################
