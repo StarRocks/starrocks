@@ -115,13 +115,12 @@ PLAN FRAGMENT 8(F01)
       BE: 10001
       SCAN RANGES
         1:OlapScanNode
-          1. partitionID=1001,tabletID=1004
-          2. partitionID=1001,tabletID=1010
-          3. partitionID=1001,tabletID=1016
-          4. partitionID=1001,tabletID=1022
-          5. partitionID=1001,tabletID=1028
-          6. partitionID=1001,tabletID=1034
-          7. partitionID=1001,tabletID=1040
+          1. partitionID=1001,tabletID=1008
+          2. partitionID=1001,tabletID=1014
+          3. partitionID=1001,tabletID=1020
+          4. partitionID=1001,tabletID=1026
+          5. partitionID=1001,tabletID=1032
+          6. partitionID=1001,tabletID=1038
     INSTANCE(23-F01#1)
       DESTINATIONS: 20-F02#1,8-F10#1
       BE: 10002
@@ -139,12 +138,13 @@ PLAN FRAGMENT 8(F01)
       BE: 10003
       SCAN RANGES
         1:OlapScanNode
-          1. partitionID=1001,tabletID=1008
-          2. partitionID=1001,tabletID=1014
-          3. partitionID=1001,tabletID=1020
-          4. partitionID=1001,tabletID=1026
-          5. partitionID=1001,tabletID=1032
-          6. partitionID=1001,tabletID=1038
+          1. partitionID=1001,tabletID=1004
+          2. partitionID=1001,tabletID=1010
+          3. partitionID=1001,tabletID=1016
+          4. partitionID=1001,tabletID=1022
+          5. partitionID=1001,tabletID=1028
+          6. partitionID=1001,tabletID=1034
+          7. partitionID=1001,tabletID=1040
 
 PLAN FRAGMENT 9(F00)
   DOP: 16
@@ -154,13 +154,12 @@ PLAN FRAGMENT 9(F00)
       BE: 10001
       SCAN RANGES
         0:OlapScanNode
-          1. partitionID=1001,tabletID=1004
-          2. partitionID=1001,tabletID=1010
-          3. partitionID=1001,tabletID=1016
-          4. partitionID=1001,tabletID=1022
-          5. partitionID=1001,tabletID=1028
-          6. partitionID=1001,tabletID=1034
-          7. partitionID=1001,tabletID=1040
+          1. partitionID=1001,tabletID=1008
+          2. partitionID=1001,tabletID=1014
+          3. partitionID=1001,tabletID=1020
+          4. partitionID=1001,tabletID=1026
+          5. partitionID=1001,tabletID=1032
+          6. partitionID=1001,tabletID=1038
     INSTANCE(26-F00#1)
       DESTINATIONS: 17-F04#1,14-F06#1
       BE: 10002
@@ -178,12 +177,13 @@ PLAN FRAGMENT 9(F00)
       BE: 10003
       SCAN RANGES
         0:OlapScanNode
-          1. partitionID=1001,tabletID=1008
-          2. partitionID=1001,tabletID=1014
-          3. partitionID=1001,tabletID=1020
-          4. partitionID=1001,tabletID=1026
-          5. partitionID=1001,tabletID=1032
-          6. partitionID=1001,tabletID=1038
+          1. partitionID=1001,tabletID=1004
+          2. partitionID=1001,tabletID=1010
+          3. partitionID=1001,tabletID=1016
+          4. partitionID=1001,tabletID=1022
+          5. partitionID=1001,tabletID=1028
+          6. partitionID=1001,tabletID=1034
+          7. partitionID=1001,tabletID=1040
 
 [fragment]
 PLAN FRAGMENT 0
