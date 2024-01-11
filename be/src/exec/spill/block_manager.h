@@ -62,6 +62,7 @@ struct AcquireBlockOptions {
     int32_t plan_node_id;
     std::string name;
     bool direct_io = false;
+    size_t block_size = 0;
 };
 
 // BlockManager is used to manage the life cycle of the Block.

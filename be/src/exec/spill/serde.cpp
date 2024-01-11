@@ -85,6 +85,7 @@ size_t ColumnarSerde::_max_serialized_size(const ChunkPtr& chunk) const {
 }
 
 Status ColumnarSerde::serialize_to_block(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) {
+    DCHECK(block != nullptr) << "block should not be null";
     const auto& columns = chunk->columns();
     size_t max_serialized_size = _max_serialized_size(chunk);
     auto& serialize_buffer = ctx.aligned_buffer;

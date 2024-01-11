@@ -144,10 +144,22 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
         return Status::OK();
     }
 
-    RETURN_IF_ERROR(captured_mem_table->done());
+    RETURN_IF_ERROR(captured_mem_table->finalize());
+    // RETURN_IF_ERROR(captured_mem_table->done());
+
+    ASSIGN_OR_RETURN(auto serialized_data, captured_mem_table->get_serialized_data());
+    spill::AcquireBlockOptions opts;
+    opts.query_id = state->query_id();
+    opts.plan_node_id = _spiller->options().plan_node_id;
+    ;
+    opts.name = _spiller->options().name;
+    opts.block_size = serialized_data.get_size();
+    ASSIGN_OR_RETURN(auto block, _spiller->block_manager()->acquire_block(opts));
+    LOG(INFO) << fmt::format("allocate block [{}]", block->debug_string());
+
     _running_flush_tasks++;
     // TODO: handle spill queue
-    auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table),
+    auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table), block = block,
                  trace = TraceInfo(state)](auto& yield_ctx) {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
         RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
@@ -156,6 +168,7 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
         DCHECK_GT(_running_flush_tasks, 0);
         DCHECK(has_pending_data());
         //
+        yield_ctx.task_context_data = std::make_shared<FlushContext>(block);
         auto defer = CancelableDefer([&]() {
             {
                 std::lock_guard _(_mutex);
@@ -296,6 +309,44 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
     DCHECK_EQ(_running_flush_tasks, 0);
     _running_flush_tasks++;
 
+    {
+        // @TODO we should allocate block here
+        // mark done for all partitiones need spill
+        for (auto partition : spilling_partitions) {
+            LOG(INFO) << "mark done for partition: " << partition->debug_string() << ", spiller:" << _spiller;
+            auto mem_table = partition->spill_writer->mem_table();
+            // RETURN_IF_ERROR(mem_table->done());
+            RETURN_IF_ERROR(mem_table->finalize());
+            // allocate block here
+            DCHECK(partition->spill_writer->block() == nullptr)
+                    << fmt::format("block should be null, partition[{}]", partition->debug_string());
+            ASSIGN_OR_RETURN(auto serialized_data, mem_table->get_serialized_data());
+            spill::AcquireBlockOptions opts;
+            opts.query_id = _runtime_state->query_id();
+            opts.plan_node_id = options().plan_node_id;
+            opts.name = options().name;
+            opts.direct_io = _runtime_state->spill_enable_direct_io();
+            opts.block_size = serialized_data.get_size();
+            ASSIGN_OR_RETURN(auto block, _spiller->block_manager()->acquire_block(opts));
+            // really need this mutex?
+            std::lock_guard<std::mutex> l(_mutex);
+            partition->spill_writer->block() = block;
+            LOG(INFO) << fmt::format("allocate block[{}]", block->debug_string());
+        }
+        // std::partition(spilling_partitions.begin(), spilling_partitions.end(), [](const SpilledPartition* arg) { return !arg->spill_writer->block()->is_remote();});
+        // std::ostringstream oss;
+        // oss << "final spilling partition [";
+        // for (auto partition: spilling_partitions) {
+        //     if (partition->spill_writer->block()->is_remote()) {
+        //         oss << partition->partition_id << ":remote,";
+        //     } else {
+        //         oss << partition->partition_id << ":local,";
+        //     }
+        // }
+        // oss << "]";
+        // LOG(INFO) << oss.str();
+    }
+
     auto task = [this, guard = guard, splitting_partitions = std::move(splitting_partitions),
                  spilling_partitions = std::move(spilling_partitions), trace = TraceInfo(state)](auto& yield_ctx) {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
@@ -310,6 +361,9 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
 
         if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
             return Status::OK();
+        }
+        if (!yield_ctx.task_context_data.has_value()) {
+            yield_ctx.task_context_data = std::make_shared<PartitionedFlushContext>();
         }
         int yield = false;
         _spiller->update_spilled_task_status(

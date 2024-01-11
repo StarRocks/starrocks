@@ -139,7 +139,18 @@ struct SyncTaskExecutor {
         *yield = true;                                                                          \
         return Status::Yield();                                                                 \
     }
-
+#define RETURN_OK_IF_NEED_YIELD(wg, yield, time_spent_ns)                                       \
+    if (time_spent_ns >= workgroup::WorkGroup::YIELD_MAX_TIME_SPENT) {                          \
+        LOG(INFO) << "yield";                                                                   \
+        *yield = true;                                                                          \
+        return Status::OK();                                                                    \
+    }                                                                                           \
+    if (wg != nullptr && time_spent_ns >= workgroup::WorkGroup::YIELD_PREEMPT_MAX_TIME_SPENT && \
+        wg->scan_sched_entity()->in_queue()->should_yield(wg, time_spent_ns)) {                 \
+        LOG(INFO) << "yield wg";                                                                \
+        *yield = true;                                                                          \
+        return Status::OK();                                                                    \
+    }
 #define RETURN_IF_ERROR_EXCEPT_YIELD(stmt)                                                            \
     do {                                                                                              \
         auto&& status__ = (stmt);                                                                     \

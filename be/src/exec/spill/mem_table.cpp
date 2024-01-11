@@ -22,9 +22,48 @@
 #include "column/vectorized_fwd.h"
 #include "exec/chunks_sorter.h"
 #include "exec/spill/input_stream.h"
+#include "exec/spill/serde.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks::spill {
+
+class MemoryBlock final : public Block {
+public:
+    MemoryBlock() = default;
+
+    ~MemoryBlock() override = default;
+
+    Status append(const std::vector<Slice>& data) override {
+        std::for_each(data.begin(), data.end(), [&](const Slice& slice) {
+            _buffer.append(slice.data, slice.size);
+            _size += slice.get_size();
+        });
+        return Status::OK();
+    }
+
+    Status flush() override {
+        DCHECK(false) << "MemoryBlock should not invoke flush";
+        return Status::NotSupported("MemoryBlock does not support flush");
+    }
+
+    std::shared_ptr<BlockReader> get_reader() override {
+        DCHECK(false) << "MemoryBlock should not invoke get_reader";
+        return nullptr;
+    }
+
+    std::string debug_string() const override { return fmt::format("MemoryBlock[len={}]", _size); }
+
+    Slice get_data() { return {_buffer.data(), _buffer.size()}; }
+
+private:
+    std::string _buffer;
+};
+
+StatusOr<Slice> SpillableMemTable::get_serialized_data() const {
+    DCHECK(_block != nullptr) << "block should not be null";
+    auto memory_block = dynamic_cast<MemoryBlock*>(_block.get());
+    return memory_block->get_data();
+}
 
 bool UnorderedMemTable::is_empty() {
     return _chunks.empty();
@@ -51,6 +90,25 @@ Status UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* ind
 
     _tracker->consume(mem_usage);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, mem_usage);
+    return Status::OK();
+}
+
+Status UnorderedMemTable::finalize() {
+    // if (_block == nullptr) {
+    _block = std::make_shared<MemoryBlock>();
+    // }
+    auto& serde = _spiller->serde();
+    SerdeContext serde_ctx;
+    for (const auto& chunk : _chunks) {
+        RETURN_IF_ERROR(serde->serialize_to_block(serde_ctx, chunk, _block));
+    }
+    LOG(INFO) << fmt::format("finalize unordered memtable done, rows[{}], size[{}]", num_rows(), _block->size());
+    // after serializing data, clear all chunks, only keep serialized data in _block
+    _chunks.clear();
+    int64_t old_consumption = _tracker->consumption();
+    int64_t new_consumption = _block->get_data().get_size();
+    _tracker->set(new_consumption);
+    COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, new_consumption - old_consumption);
     return Status::OK();
 }
 
@@ -102,6 +160,30 @@ Status OrderedMemTable::append_selective(const Chunk& src, const uint32_t* index
 
     _tracker->consume(mem_usage);
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, mem_usage);
+    return Status::OK();
+}
+
+Status OrderedMemTable::finalize() {
+    // do sort
+    ASSIGN_OR_RETURN(_chunk, _do_sort(_chunk));
+    _chunk_slice.reset(_chunk);
+
+    // seriealize data, store result into _block
+    auto& serde = _spiller->serde();
+    _block = std::make_shared<MemoryBlock>();
+    SerdeContext serde_ctx;
+    while (!_chunk_slice.empty()) {
+        auto chunk = _chunk_slice.cutoff(_runtime_state->chunk_size());
+        RETURN_IF_ERROR(serde->serialize_to_block(serde_ctx, chunk, _block));
+    }
+    LOG(INFO) << fmt::format("finalize ordered memtable done, rows[{}], size[{}]", num_rows(), _block->size());
+    // clear alldata
+    _chunk_slice.reset(nullptr);
+    int64_t old_consumption = _tracker->consumption();
+    int64_t new_consumption = _block->size();
+    _tracker->set(new_consumption);
+    COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, new_consumption - old_consumption);
+    _chunk.reset();
     return Status::OK();
 }
 

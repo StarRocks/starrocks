@@ -164,6 +164,11 @@ public:
 
     BlockPtr& block() { return _block; }
 
+    void reset_block() {
+        _block = nullptr;
+        // _block.reset();
+    }
+
     BlockGroup& block_group() { return _block_group; }
 
     Status acquire_stream(std::shared_ptr<SpillInputStream>* stream) override;
@@ -179,8 +184,10 @@ public:
 
 public:
     struct FlushContext {
+        FlushContext(BlockPtr b) : block(b) {}
         BlockPtr block;
     };
+    using FlushContextPtr = std::shared_ptr<FlushContext>;
 
 private:
     template <class Provider>
@@ -291,8 +298,10 @@ public:
 
     const auto& level_to_partitions() { return _level_to_partitions; }
 
-    template <class ChunkProvider>
-    Status spill_partition(SerdeContext& context, SpilledPartition* partition, ChunkProvider&& provider);
+    // template <class ChunkProvider>
+    // Status spill_partition(SerdeContext& context, SpilledPartition* partition, ChunkProvider&& provider);
+
+    Status spill_partition(SerdeContext& context, SpilledPartition* partition);
 
     int64_t mem_consumption() const { return _mem_tracker->consumption(); }
 

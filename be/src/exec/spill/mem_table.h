@@ -23,6 +23,7 @@
 #include "common/status.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
+#include "exec/spill/block_manager.h"
 #include "exprs/expr_context.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
@@ -31,7 +32,7 @@ namespace starrocks::spill {
 using FlushCallBack = std::function<Status(const ChunkPtr&)>;
 class SpillInputStream;
 class Spiller;
-
+class MemoryBlock;
 //  This component is the intermediate buffer for our spill data, which may be ordered or unordered,
 // depending on the requirements of the upper layer
 
@@ -62,6 +63,8 @@ public:
     [[nodiscard]] virtual Status append(ChunkPtr chunk) = 0;
     [[nodiscard]] virtual Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
                                                   uint32_t size) = 0;
+
+    virtual Status finalize() = 0;
     // all of data has been added
     // done will be called in pipeline executor threads
     virtual Status done() = 0;
@@ -74,11 +77,19 @@ public:
         return Status::NotSupported("unsupport to call as_input_stream");
     }
 
+    virtual StatusOr<Slice> get_serialized_data() const;
+    virtual void reset() = 0;
+
+    size_t num_rows() const { return _num_rows; }
+
 protected:
+    using MemoryBlockPtr = std::shared_ptr<MemoryBlock>;
     RuntimeState* _runtime_state;
     const size_t _max_buffer_size;
     std::unique_ptr<MemTracker> _tracker;
     Spiller* _spiller = nullptr;
+    size_t _num_rows = 0;
+    MemoryBlockPtr _block;
 };
 
 using MemTablePtr = std::shared_ptr<SpillableMemTable>;
@@ -93,8 +104,11 @@ public:
     [[nodiscard]] Status append(ChunkPtr chunk) override;
     [[nodiscard]] Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
                                           uint32_t size) override;
+
+    Status finalize() override;
     Status done() override { return Status::OK(); };
     Status flush(FlushCallBack callback) override;
+    void reset() override {}
 
     StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) override;
 
@@ -114,8 +128,11 @@ public:
     [[nodiscard]] Status append(ChunkPtr chunk) override;
     [[nodiscard]] Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
                                           uint32_t size) override;
+
+    Status finalize() override;
     Status done() override;
     Status flush(FlushCallBack callback) override;
+    void reset() override {}
 
 private:
     StatusOr<ChunkPtr> _do_sort(const ChunkPtr& chunk);
