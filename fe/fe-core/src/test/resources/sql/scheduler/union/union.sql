@@ -24,7 +24,7 @@ PLAN FRAGMENT 2(F02)
   INSTANCES
     INSTANCE(3-F02#0)
       DESTINATIONS: 1-F00#0,2-F00#1
-      BE: 10001
+      BE: 10003
       SCAN RANGES
         3:OlapScanNode
           1. partitionID=1479,tabletID=1482
@@ -34,7 +34,7 @@ PLAN FRAGMENT 3(F01)
   INSTANCES
     INSTANCE(4-F01#0)
       DESTINATIONS: 1-F00#0,2-F00#1
-      BE: 10003
+      BE: 10001
       SCAN RANGES
         1:OlapScanNode
           1. partitionID=1357,tabletID=1360
