@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Hybrid row/column-oriented tables
 
-As OLAP database, StarRocks originally stores data in tables in the columnar format, which can enhance the performance of complex queries, such as aggregate queries. Since v3.2.3, StarRocks also supports hybrid row/column-oriented tables whose data is stored in both row-by-row and column-by-column fashions. This hybrid row/column storage is well suited for various scenario such as primary key-based high-concurrency, low-latency point queries and partial column updates, while delivering efficient analytical capabilities comparable to columnar storage. Additionally, hybrid row/column-oriented tables support [prepared statements](../), which enhances query performance and security.
+As an OLAP database, StarRocks originally stores data in tables in the columnar format, which can enhance the performance of complex queries, such as aggregate queries. Since v3.2.3, StarRocks also supports hybrid row/column-oriented tables whose data is stored in both row-by-row and column-by-column fashions. This hybrid row/column storage is well suited for various scenario such as primary key-based high-concurrency, low-latency point queries and partial column updates, while delivering efficient analytical capabilities comparable to columnar storage. Additionally, hybrid row/column-oriented tables support [prepared statements](../), which enhances query performance and security.
 
 ## Comparisons between column-oriented tables and hybrid row/column-oriented tables 
 
@@ -72,7 +72,7 @@ Similar to column-oriented tables, you can insert, delete, and update data from 
 
 ### Query data
 
-This section uses a point query as an example. Point queries take a short path, directly querying data in row storage, which can improve query performance.
+This section uses a point query as an example. Point queries take a short circuit, directly querying data in row storage, which can improve query performance.
 
 The following example still uses the above hybrid row/column-oriented table. After the table creation and data modification operations mentioned above, the table stores the data as follows:
 
@@ -90,7 +90,7 @@ MySQL [example_db]> SELECT * FROM users ORDER BY id;
 5 rows in set (0.03 sec)
 ```
 
-1. Make sure that the system enables the short path for queries. Once the short path for queries is enabled, queries that meet certain criteria (to evaluate whether the query is a point query) take the short path to scan data in row storage.
+1. Make sure that the system enables short circuiting for queries. Once short circuiting for queries is enabled, queries that meet certain criteria (to evaluate whether the query is a point query) take the short circuiting to scan data in row storage.
 
    1. ```SQL
       SHOW VARIABLES LIKE '%enable_short_circuit%';
@@ -155,9 +155,9 @@ EXECUTE select_by_id_stmt USING @id2;
 ## Limits
 
 - Currently, the hybrid row/column-oriented tables cannot be altered by using [ALTER TABLE]().
-- The short path for queries is currently only suitable for queries after scheduled batch data loading. Because mutual exclusion of indexes may be incurred when the short path query happens at the apply stage of the data writing process, data writing may block short path queries, affecting the response time of point queries during data writing.
-- Hybrid row/column-oriented tables may significantly increase storage consumption because storage overhead. This is because data is stored in both row and column formats, and the data compression ratio of row storage may not be as high as that of column storage.
+- The short path for queries is currently only suitable for queries that happen after scheduled batch data loading. Because mutual exclusion of indexes may be incurred when the short path query happens at the apply stage of the data writing process, data writing may block short path queries, affecting the response time of point queries during data writing.
+- Hybrid row/column-oriented tables may significantly increase storage consumption. This is because data is stored in both row and column formats, and the data compression ratio of row storage may not be as high as that of column storage.
 - Hybrid row/column-oriented tables can increase the time and resource consumption during data loading.
-- Hybrid row/column-oriented tables can be a viable solution to online services, but the performance of this type of table may not compete with mature OLTP databases.
+- Hybrid row/column-oriented tables can be a viable solution for online services, but the performance of this type of table may not compete with mature OLTP databases.
 - Hybrid row/column-oriented tables do not support features that rely on columnar storage, such as partial updates in column mode.
-- Hybrid row/column-oriented tables need to be Primary Key tables.
+- Hybrid row/column-oriented tables must be Primary Key tables.
