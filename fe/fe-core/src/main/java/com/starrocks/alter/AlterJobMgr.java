@@ -73,6 +73,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
@@ -1073,9 +1074,9 @@ public class AlterJobMgr {
 
         // inactive the related MVs
         LocalMetastore.inactiveRelatedMaterializedView(db, origTable,
-                String.format("based table %s swapped", origTblName));
+                MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName));
         LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl,
-                String.format("based table %s swapped", newTblName));
+                MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName));
 
         swapTableInternal(db, origTable, olapNewTbl);
 
@@ -1174,7 +1175,8 @@ public class AlterJobMgr {
             }
             view.setNewFullSchema(newFullSchema);
             view.setComment(comment);
-            LocalMetastore.inactiveRelatedMaterializedView(db, view, String.format("base view %s changed", viewName));
+            LocalMetastore.inactiveRelatedMaterializedView(db, view,
+                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName));
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
 
@@ -1210,7 +1212,8 @@ public class AlterJobMgr {
                 view.setComment(comment);
             }
 
-            LocalMetastore.inactiveRelatedMaterializedView(db, view, String.format("base view %s changed", viewName));
+            LocalMetastore.inactiveRelatedMaterializedView(db, view,
+                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName));
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
 
