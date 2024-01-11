@@ -64,6 +64,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -72,6 +73,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -301,20 +303,15 @@ public class MvRewritePreprocessor {
 
                 List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv,
                         connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
-                if (mvPlanContexts == null) {
+                if (CollectionUtils.isEmpty(mvPlanContexts)) {
                     logMVPrepare(connectContext, mv, "MV plan is not valid: {}, cannot generate plan for rewrite",
                             mv.getName());
                     continue;
                 }
                 for (MvPlanContext mvPlanContext : mvPlanContexts) {
                     if (!mvPlanContext.isValidMvPlan()) {
-                        if (mvPlanContext.getLogicalPlan() != null) {
-                            logMVPrepare(connectContext, mv, "MV plan is not valid: {}, plan:\n {}",
-                                    mv.getName(), mvPlanContext.getLogicalPlan().debugString());
-                        } else {
-                            logMVPrepare(connectContext, mv, "MV plan is not valid: {}",
-                                    mv.getName());
-                        }
+                        logMVPrepare(connectContext, mv, "MV plan is not valid: "
+                                + mvPlanContext.getInvalidReason());
                         continue;
                     }
                     filteredMVs.add(Pair.create(mv, mvPlanContext));
@@ -472,11 +469,11 @@ public class MvRewritePreprocessor {
             if (!partitionNamesToRefresh.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
                 for (BaseTableInfo base : mv.getBaseTableInfos()) {
-                    Table baseTable = base.getTable();
-                    if (baseTable.isView()) {
+                    Optional<Table> baseTable = base.mayGetTable();
+                    if (!baseTable.isPresent() || baseTable.get().isView()) {
                         continue;
                     }
-                    String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(baseTable));
+                    String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(baseTable.get()));
                     sb.append(String.format("base table %s version: %s; ", base, versionInfo));
                 }
                 logMVPrepare(connectContext, mv, "MV {} is outdated, stale partitions {}, detailed version info: {}",
@@ -490,6 +487,9 @@ public class MvRewritePreprocessor {
             StringBuilder sb = new StringBuilder();
             try {
                 for (BaseTableInfo base : mv.getBaseTableInfos()) {
+                    if (!base.mayGetTable().isPresent()) {
+                        continue;
+                    }
                     String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
                     sb.append(String.format("base table %s version: %s; ", base, versionInfo));
                 }

@@ -823,6 +823,9 @@ public class StmtExecutor {
     }
 
     private void forwardToLeader() throws Exception {
+        if (parsedStmt instanceof ExecuteStmt) {
+            throw new AnalysisException("ExecuteStmt Statement don't support statement need to be forward to leader");
+        }
         leaderOpExecutor = new LeaderOpExecutor(parsedStmt, originStmt, context, redirectStatus);
         LOG.debug("need to transfer to Leader. stmt: {}", context.getStmtId());
         leaderOpExecutor.execute();
