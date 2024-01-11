@@ -194,11 +194,10 @@ ChunkUniquePtr AggregatorParams::create_result_chunk(bool is_serialize_fmt, cons
 Aggregator::Aggregator(AggregatorParamsPtr params) : _params(std::move(params)) {}
 
 Status Aggregator::open(RuntimeState* state) {
-    std::lock_guard stage_lock(_agg_run_stage_mutex);
-    if (_agg_run_stage >= AggregateRunStage::Opened) { // just do once
+    if (_is_opened) {
         return Status::OK();
     }
-    _agg_run_stage = AggregateRunStage::Opened;
+    _is_opened = true;
     RETURN_IF_ERROR(Expr::open(_group_by_expr_ctxs, state));
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
@@ -316,13 +315,11 @@ Status Aggregator::open(RuntimeState* state) {
 }
 
 Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
-    std::lock_guard stage_lock(_agg_run_stage_mutex);
-    if (_agg_run_stage >= AggregateRunStage::Prepared) { // just do once
+    if (_is_prepared) {
         return Status::OK();
     }
-    _agg_run_stage = AggregateRunStage::Prepared;
+    _is_prepared = true;
     _state = state;
-
     _pool = pool;
     _runtime_profile = runtime_profile;
 
