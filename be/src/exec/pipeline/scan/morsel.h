@@ -259,6 +259,14 @@ private:
 /// MorselQueue.
 class MorselQueue {
 public:
+    enum Type {
+        FIXED,
+        DYNAMIC,
+        SPLIT,
+        LOGICAL_SPLIT,
+        PHYSICAL_SPLIT,
+        BUCKET_SEQUENCE,
+    };
     MorselQueue() = default;
     MorselQueue(Morsels&& morsels) : _morsels(std::move(morsels)), _num_morsels(_morsels.size()) {}
     virtual ~MorselQueue() = default;
@@ -280,6 +288,7 @@ public:
     virtual std::string name() const = 0;
     virtual StatusOr<bool> ready_for_next() const { return true; }
     virtual void append_morsels(Morsels&& morsels) {}
+    virtual Type type() const = 0;
 
 protected:
     Morsels _morsels;
@@ -298,7 +307,7 @@ public:
     StatusOr<MorselPtr> try_get() override;
 
     std::string name() const override { return "fixed_morsel_queue"; }
-
+    Type type() const override { return FIXED; }
 private:
     std::atomic<size_t> _pop_index;
 };
@@ -330,6 +339,7 @@ public:
     std::string name() const override;
     StatusOr<bool> ready_for_next() const override;
     void append_morsels(Morsels&& morsels) override { _morsel_queue->append_morsels(std::move(morsels)); }
+    Type type() const override { return BUCKET_SEQUENCE; }
 
 private:
     StatusOr<int64_t> _peek_sequence_id() const;
@@ -350,6 +360,7 @@ public:
     }
     bool could_attch_ticket_checker() const override { return true; }
     size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
+    Type type() const override { return SPLIT; }
 
 protected:
     void _inc_split(bool is_last_split) {
@@ -381,6 +392,7 @@ public:
     StatusOr<MorselPtr> try_get() override;
 
     std::string name() const override { return "physical_split_morsel_queue"; }
+    Type type() const override { return PHYSICAL_SPLIT; }
 
 private:
     rowid_t _lower_bound_ordinal(Segment* segment, const SeekTuple& key, bool lower) const;
@@ -434,6 +446,7 @@ public:
     StatusOr<MorselPtr> try_get() override;
 
     std::string name() const override { return "logical_split_morsel_queue"; }
+    Type type() const override { return LOGICAL_SPLIT; }
 
 private:
     bool _cur_tablet_finished() const;
@@ -494,6 +507,7 @@ public:
         _ticket_checker = ticket_checker;
     }
     bool could_attch_ticket_checker() const override { return true; }
+    Type type() const override { return DYNAMIC; }
 
 private:
     size_t _size = 0;
