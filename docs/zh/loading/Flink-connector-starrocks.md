@@ -203,18 +203,6 @@ Flink connector 提供以下指标来监控导入情况。
 | totalFlushFailedTimes    | Counter | flush 数据的失败次数。                                   |
 | totalFilteredRows        | Counter | 已过滤的行数，这些行数也包含在 totalFlushRows 中。 |
 
-### Flink CDC 同步（支持 schema change）
-
-[Flink CDC 3.0 框架](https://github.com/ververica/flink-cdc-connectors/releases)可以轻松地从 CDC 数据源（如 MySQL、Kafka）到 StarRocks 构建[流式 ELT 管道](https://ververica.github.io/flink-cdc-connectors/master/content/overview/cdc-pipeline.html)。该管道能够将整个数据库、分库分表以及来自源端的 schema change 同步到 StarRocks。
-
-自 v1.2.9 起，StarRocks 提供的 Flink connector 已经集成至该框架中，并且被命名为 [StarRocks Pipeline Connector](https://ververica.github.io/flink-cdc-connectors/master/content/pipelines/starrocks-pipeline.html)。StarRocks Pipeline Connector 支持：
-
-- 自动创建数据库/表
-- 同步 schema change
-- 同步全量和增量数据
-
-快速上手教程可以参考[从 MySQL 到 StarRocks 的流式 ELT 管道](https://ververica.github.io/flink-cdc-connectors/master/content/quickstart/mysql-starrocks-pipeline-tutorial.html)。
-
 ## 使用示例
 
 ### 准备工作
@@ -426,6 +414,18 @@ DISTRIBUTED BY HASH(id);
         }
     }  
     ```
+
+### 使用 Flink CDC 3.0 同步数据（支持 schema change）
+
+[Flink CDC 3.0 框架](https://github.com/ververica/flink-cdc-connectors/releases)可以轻松地从 CDC 数据源（如 MySQL、Kafka）到 StarRocks 构建[流式 ELT 管道](https://ververica.github.io/flink-cdc-connectors/master/content/overview/cdc-pipeline.html)。该管道能够将整个数据库、分库分表以及来自源端的 schema change 同步到 StarRocks。
+
+自 v1.2.9 起，StarRocks 提供的 Flink connector 已经集成至该框架中，并且被命名为 [StarRocks Pipeline Connector](https://ververica.github.io/flink-cdc-connectors/master/content/pipelines/starrocks-pipeline.html)。StarRocks Pipeline Connector 支持：
+
+- 自动创建数据库/表
+- 同步 schema change
+- 同步全量和增量数据
+
+快速上手教程可以参考[从 MySQL 到 StarRocks 的流式 ELT 管道](https://ververica.github.io/flink-cdc-connectors/master/content/quickstart/mysql-starrocks-pipeline-tutorial.html)。
 
 ## 最佳实践
 
