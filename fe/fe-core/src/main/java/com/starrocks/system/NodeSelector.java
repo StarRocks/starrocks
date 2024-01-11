@@ -51,6 +51,8 @@ public class NodeSelector {
     private long lastNodeIdForCreation = -1;
     private long lastNodeIdForOther = -1;
 
+    private final Random locBackendRandSelector = new Random();
+
     public NodeSelector(SystemInfoService systemInfoService) {
         this.systemInfoService = systemInfoService;
     }
@@ -199,8 +201,7 @@ public class NodeSelector {
         }
 
         // At least we can choose `nodeNum` backends from different hosts (randomly).
-        Random random = new Random();
-        int startIdx = random.nextInt(Integer.MAX_VALUE) % locBackendIdList.size();
+        int startIdx = locBackendRandSelector.nextInt(Integer.MAX_VALUE) % locBackendIdList.size();
         Set<String> checkedHosts = Sets.newHashSet();
         while (nodeIds.size() < nodeNum) {
             List<Long> backendIdList = locBackendIdList.get(startIdx);
@@ -208,7 +209,7 @@ public class NodeSelector {
                 startIdx = (startIdx + 1) % locBackendIdList.size();
                 continue;
             }
-            int idx = random.nextInt(Integer.MAX_VALUE) % backendIdList.size();
+            int idx = locBackendRandSelector.nextInt(Integer.MAX_VALUE) % backendIdList.size();
             Long backendId = backendIdList.get(idx);
             Backend backend = systemInfoService.getBackend(backendId);
             if (backend != null && !nodeIds.contains(backendId) && !checkedHosts.contains(backend.getHost())) {
