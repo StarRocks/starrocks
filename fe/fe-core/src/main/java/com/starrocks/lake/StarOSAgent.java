@@ -713,4 +713,87 @@ public class StarOSAgent {
         Preconditions.checkState(shardInfos.size() == 1);
         return shardInfos.get(0);
     }
+
+    @NotNull
+    public ShardInfo getShardInfo(String service, long shardId) throws StarClientException {
+        // service is either serviceId or serviceName
+        try {
+            ServiceInfo serviceInfo = client.getServiceInfoByName(service);
+            serviceId = serviceInfo.getServiceId();
+        } catch (StarClientException e) {
+            serviceId = service;
+        }
+        List<ShardInfo> shardInfos = client.getShardInfo(serviceId, Collections.singletonList(shardId));
+        Preconditions.checkState(shardInfos.size() == 1);
+        return shardInfos.get(0);
+    }
+
+    @NotNull
+    public ShardGroupInfo getShardGroupInfo(String service, long shardGroupId) throws StarClientException {
+        // service is either serviceId or serviceName
+        try {
+            ServiceInfo serviceInfo = client.getServiceInfoByName(service);
+            serviceId = serviceInfo.getServiceId();
+        } catch (StarClientException e) {
+            serviceId = service;
+        }
+        List<ShardGroupInfo> shardGroupInfos =
+                client.getShardGroup(serviceId, Collections.singletonList(shardGroupId));
+        Preconditions.checkState(shardGroupInfos.size() == 1);
+        return shardGroupInfos.get(0);
+    }
+
+    @NotNull
+    public List<ShardGroupInfo> listShardGroupInfo(String service) throws StarClientException {
+        // service is either serviceId or serviceName
+        try {
+            ServiceInfo serviceInfo = client.getServiceInfoByName(service);
+            serviceId = serviceInfo.getServiceId();
+        } catch (StarClientException e) {
+            serviceId = service;
+        }
+        return client.listShardGroup(serviceId);
+    }
+
+    @NotNull
+    public WorkerInfo getWorkerInfo(String service, long workerId) throws StarClientException {
+        // service is either serviceId or serviceName
+        String serviceId;
+        try {
+            ServiceInfo serviceInfo = client.getServiceInfoByName(service);
+            serviceId = serviceInfo.getServiceId();
+        } catch (StarClientException e) {
+            serviceId = service;
+        }
+        return client.getWorkerInfo(serviceId, workerId);
+    }
+
+    @NotNull
+    public WorkerGroupDetailInfo getWorkerGroupInfo(String service, long workerGroupId) throws StarClientException {
+        // service is either serviceId or serviceName
+        String serviceId;
+        try {
+            ServiceInfo serviceInfo = client.getServiceInfoByName(service);
+            serviceId = serviceInfo.getServiceId();
+        } catch (StarClientException e) {
+            serviceId = service;
+        }
+        List<WorkerGroupDetailInfo> workerGroupDetailInfos =
+                client.listWorkerGroup(serviceId, Collections.singletonList(workerGroupId), true);
+        Preconditions.checkState(workerGroupDetailInfos.size() == 1);
+        return workerGroupDetailInfos.get(0);
+    }
+
+    @NotNull
+    public List<WorkerGroupDetailInfo> listWorkerGroupInfo(String service) throws StarClientException {
+        // service is either serviceId or serviceName
+        String serviceId;
+        try {
+            ServiceInfo serviceInfo = client.getServiceInfoByName(service);
+            serviceId = serviceInfo.getServiceId();
+        } catch (StarClientException e) {
+            serviceId = service;
+        }
+        return client.listWorkerGroup(serviceId, new ArrayList<>(), true);
+    }
 }
