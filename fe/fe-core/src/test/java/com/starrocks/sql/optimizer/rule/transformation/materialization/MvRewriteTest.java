@@ -40,7 +40,6 @@ import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.sql.SQLException;
@@ -2044,7 +2043,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
-    @Ignore
     public void testMVAggregateTable() throws Exception {
         starRocksAssert.withTable("CREATE TABLE `t1_agg` (\n" +
                 "  `c_1_0` datetime NULL COMMENT \"\",\n" +
@@ -2074,6 +2072,22 @@ public class MvRewriteTest extends MvRewriteTestBase {
 
         starRocksAssert.dropMaterializedView("mv_t1_v0");
         starRocksAssert.dropTable("t1_agg");
+    }
+
+    @Test
+    public void testWithSqlSelectLimit() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setSqlSelectLimit(1000);
+        createAndRefreshMv("CREATE MATERIALIZED VIEW mv_with_select_limit " +
+                " distributed by hash(empid) " +
+                "AS " +
+                "SELECT /*+set_var(sql_select_limit=1000)*/ empid, sum(salary) as total " +
+                "FROM emps " +
+                "GROUP BY empid");
+        starRocksAssert.query("SELECT empid, sum(salary) as total " +
+                "FROM emps " +
+                "GROUP BY empid").explainContains("mv_with_select_limit");
+        starRocksAssert.getCtx().getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        starRocksAssert.dropMaterializedView("mv_with_select_limit");
     }
 
     @Test
