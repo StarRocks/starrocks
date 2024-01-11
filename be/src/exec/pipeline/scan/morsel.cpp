@@ -342,7 +342,7 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(rowid_range));
     morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
     morsel->set_last_split(_is_last_split_of_current_morsel());
-    append_morsel(std::move(morsel));
+    _inc_split(std::move(morsel));
     return morsel;
 }
 
@@ -628,7 +628,7 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
     _is_first_split_of_tablet = false;
     morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
     morsel->set_last_split(_is_last_split_of_current_morsel());
-    append_morsel(morsel);
+    _inc_split(std::move(morsel));
     return morsel;
 }
 

@@ -345,7 +345,9 @@ public:
     }
     bool could_attch_ticket_checker() override { return true; }
     size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
-    void append_morsel(MorselPtr&& morsel) override {
+
+protected:
+    void _inc_split(MorselPtr&& morsel) {
         if (_ticket_checker == nullptr) {
             return;
         }
@@ -355,8 +357,6 @@ public:
         auto tablet_id = _tablets[_tablet_idx]->tablet_id();
         _ticket_checker->enter(tablet_id, morsel->is_last_split());
     }
-
-protected:
     ScanMorsel* _cur_scan_morsel() { return down_cast<ScanMorsel*>(_morsels[_tablet_idx].get()); }
 
     // The number of the morsels before split them to pieces.
