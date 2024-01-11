@@ -310,12 +310,9 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
     _running_flush_tasks++;
 
     {
-        // @TODO we should allocate block here
         // mark done for all partitiones need spill
         for (auto partition : spilling_partitions) {
-            LOG(INFO) << "mark done for partition: " << partition->debug_string() << ", spiller:" << _spiller;
             auto mem_table = partition->spill_writer->mem_table();
-            // RETURN_IF_ERROR(mem_table->done());
             RETURN_IF_ERROR(mem_table->finalize());
             // allocate block here
             DCHECK(partition->spill_writer->block() == nullptr)
@@ -328,23 +325,9 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
             opts.direct_io = _runtime_state->spill_enable_direct_io();
             opts.block_size = serialized_data.get_size();
             ASSIGN_OR_RETURN(auto block, _spiller->block_manager()->acquire_block(opts));
-            // really need this mutex?
             std::lock_guard<std::mutex> l(_mutex);
             partition->spill_writer->block() = block;
-            LOG(INFO) << fmt::format("allocate block[{}]", block->debug_string());
         }
-        // std::partition(spilling_partitions.begin(), spilling_partitions.end(), [](const SpilledPartition* arg) { return !arg->spill_writer->block()->is_remote();});
-        // std::ostringstream oss;
-        // oss << "final spilling partition [";
-        // for (auto partition: spilling_partitions) {
-        //     if (partition->spill_writer->block()->is_remote()) {
-        //         oss << partition->partition_id << ":remote,";
-        //     } else {
-        //         oss << partition->partition_id << ":local,";
-        //     }
-        // }
-        // oss << "]";
-        // LOG(INFO) << oss.str();
     }
 
     auto task = [this, guard = guard, splitting_partitions = std::move(splitting_partitions),

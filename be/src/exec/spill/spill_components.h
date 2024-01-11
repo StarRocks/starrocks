@@ -166,7 +166,6 @@ public:
 
     void reset_block() {
         _block = nullptr;
-        // _block.reset();
     }
 
     BlockGroup& block_group() { return _block_group; }
@@ -297,9 +296,6 @@ public:
     }
 
     const auto& level_to_partitions() { return _level_to_partitions; }
-
-    // template <class ChunkProvider>
-    // Status spill_partition(SerdeContext& context, SpilledPartition* partition, ChunkProvider&& provider);
 
     Status spill_partition(SerdeContext& context, SpilledPartition* partition);
 
