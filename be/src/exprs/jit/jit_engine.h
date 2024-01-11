@@ -110,6 +110,8 @@ private:
 
     inline void* lookup_function(const std::string& expr_name);
 
+    void* lookup_function_with_lock(const std::string& expr_name);
+
     std::mutex _mutex;
 
     bool _initialized = false;
