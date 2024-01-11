@@ -274,7 +274,7 @@ public:
     void unget(MorselPtr&& morsel);
     virtual std::string name() const = 0;
     virtual StatusOr<bool> ready_for_next() const { return true; }
-    virtual void append_morsel(MorselPtr&& morsel) {}
+    virtual void append_morsels(Morsels&& morsels) {}
 
 protected:
     Morsels _morsels;
@@ -324,7 +324,7 @@ public:
     StatusOr<MorselPtr> try_get() override;
     std::string name() const override;
     StatusOr<bool> ready_for_next() const override;
-    void append_morsel(MorselPtr&& morsel) { _morsel_queue->append_morsel(std::move(morsel)); }
+    void append_morsels(Morsels&& morsels) override { _morsel_queue->append_morsel(std::move(morsels)); }
 
 private:
     StatusOr<int64_t> _peek_sequence_id() const;
@@ -371,6 +371,8 @@ protected:
 class PhysicalSplitMorselQueue final : public SplitMorselQueue {
 public:
     using SplitMorselQueue::SplitMorselQueue;
+    ~PhysicalSplitMorselQueue() override = default;
+
     void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) override;
     bool empty() const override { return _unget_morsel == nullptr && _tablet_idx >= _tablets.size(); }
     StatusOr<MorselPtr> try_get() override;
