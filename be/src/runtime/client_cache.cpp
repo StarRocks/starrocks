@@ -98,7 +98,17 @@ Status ClientCacheHelper::reopen_client(const client_factory& factory_method, vo
         _opened_clients->increment(-1);
     }
 
+<<<<<<< HEAD
     RETURN_IF_ERROR(create_client(make_network_address(ipaddress, port), factory_method, client_key, timeout_ms));
+=======
+    Status status = create_client(make_network_address(ipaddress, port), factory_method, client_key, timeout_ms);
+    if (!status.ok()) {
+        if (_metrics_enabled) {
+            _used_clients->increment(-1);
+        }
+        return status;
+    }
+>>>>>>> e9db4c9456 ([Enhancement] thrift_used_clients counter performance  optimization  in thrift client reopen scene (#37726))
 
     _client_map[*client_key]->set_send_timeout(timeout_ms);
     _client_map[*client_key]->set_recv_timeout(timeout_ms);
