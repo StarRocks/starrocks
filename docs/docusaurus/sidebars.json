@@ -355,7 +355,7 @@
           "type": "category",
           "label": "Loading Tools",
           "description": "Integrations with more loading tools",
-          "link": {"type": "doc", "id": "integrations/loading_tools/loading_tools_integration/loading_tools_integration"},
+          "link": {"type": "doc", "id": "integrations/loading_tools/loading_tools_integration"},
           "items": [
             "integrations/loading_tools/SMT",
             "integrations/loading_tools/DataX-starrocks-writer",
