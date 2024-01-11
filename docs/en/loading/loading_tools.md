@@ -1,3 +1,7 @@
+---
+displayed_sidebar: English
+---
+
 # Load data using tools
 
 StarRocks and its ecosystem partners offer the following tools to help you seamlessly integrate StarRocks with external databases.
