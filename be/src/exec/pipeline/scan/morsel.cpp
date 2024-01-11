@@ -33,7 +33,7 @@ namespace starrocks::pipeline {
 
 /// Morsel.
 
-const std::vector<RowsetSharedPtr> Morsel::kEmptyRowsets;
+const std::vector<RowsetSharedPtr> ScanMorselX::kEmptyRowsets;
 
 class PhysicalSplitScanMorsel final : public ScanMorsel {
 public:
@@ -201,6 +201,7 @@ StatusOr<MorselPtr> BucketSequenceMorselQueue::try_get() {
     }
     ASSIGN_OR_RETURN(auto morsel, _morsel_queue->try_get());
     auto* m = down_cast<ScanMorsel*>(morsel.get());
+    DCHECK(m->has_owner_id());
     auto owner_id = m->owner_id();
     ASSIGN_OR_RETURN(int64_t next_owner_id, _peek_sequence_id());
     _ticket_checker->enter(owner_id, next_owner_id != owner_id);
@@ -340,7 +341,8 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
     MorselPtr morsel = std::make_unique<PhysicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(rowid_range));
     morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
-    _inc_num_splits(_is_last_split_of_current_morsel());
+    morsel->set_last_split(_is_last_split_of_current_morsel());
+    append_morsel(std::move(morsel));
     return morsel;
 }
 
@@ -625,7 +627,8 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
             std::make_shared<ShortKeyRangesOption>(std::move(short_key_ranges), _is_first_split_of_tablet));
     _is_first_split_of_tablet = false;
     morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
-    _inc_num_splits(_is_last_split_of_current_morsel());
+    morsel->set_last_split(_is_last_split_of_current_morsel());
+    append_morsel(morsel);
     return morsel;
 }
 

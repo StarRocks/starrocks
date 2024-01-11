@@ -50,9 +50,11 @@ using SchemaPtr = std::shared_ptr<Schema>;
 
 namespace pipeline {
 
-class Morsel;
+class ScanMorsel;
+using Morsel = ScanMorsel;
 using MorselPtr = std::unique_ptr<Morsel>;
 using Morsels = std::vector<MorselPtr>;
+
 class MorselQueue;
 using MorselQueuePtr = std::unique_ptr<MorselQueue>;
 using MorselQueueMap = std::unordered_map<int32_t, MorselQueuePtr>;
@@ -61,10 +63,10 @@ using MorselQueueFactoryPtr = std::unique_ptr<MorselQueueFactory>;
 using MorselQueueFactoryMap = std::unordered_map<int32_t, MorselQueueFactoryPtr>;
 
 /// Morsel.
-class Morsel {
+class ScanMorselX {
 public:
-    explicit Morsel(int32_t plan_node_id) : _plan_node_id(plan_node_id) {}
-    virtual ~Morsel() = default;
+    explicit ScanMorselX(int32_t plan_node_id) : _plan_node_id(plan_node_id) {}
+    virtual ~ScanMorselX() = default;
 
     int32_t get_plan_node_id() const { return _plan_node_id; }
 
@@ -106,10 +108,17 @@ private:
     std::optional<std::vector<RowsetSharedPtr>> _delta_rowsets;
 };
 
-class ScanMorsel : public Morsel {
+class ScanSplitContext {
+public:
+    virtual ~ScanSplitContext() = default;
+    bool is_last_split = false;
+};
+using ScanSplitContextPtr = std::unique_ptr<ScanSplitContext>;
+
+class ScanMorsel : public ScanMorselX {
 public:
     ScanMorsel(int32_t plan_node_id, const TScanRange& scan_range)
-            : Morsel(plan_node_id), _scan_range(std::make_unique<TScanRange>(scan_range)) {
+            : ScanMorselX(plan_node_id), _scan_range(std::make_unique<TScanRange>(scan_range)) {
         if (_scan_range->__isset.internal_scan_range) {
             _owner_id = _scan_range->internal_scan_range.tablet_id;
             auto str_version = _scan_range->internal_scan_range.version;
@@ -118,9 +127,11 @@ public:
                                 ? _scan_range->internal_scan_range.bucket_sequence
                                 : _owner_id;
             _partition_id = _scan_range->internal_scan_range.partition_id;
+            _has_owner_id = true;
         }
         if (_scan_range->__isset.binlog_scan_range) {
             _owner_id = _scan_range->binlog_scan_range.tablet_id;
+            _has_owner_id = true;
         }
     }
 
@@ -137,14 +148,32 @@ public:
         return std::tuple<int64_t, int64_t>{_owner_id, _version};
     }
 
+    void set_split_context(ScanSplitContextPtr&& split_context) {
+        if (split_context == nullptr) return;
+        _split_context = std::move(split_context);
+        _is_last_split = _split_context->is_last_split;
+    }
+    ScanSplitContext* get_split_context() {
+        if (_split_context != nullptr) {
+            return _split_context.get();
+        }
+        return nullptr;
+    }
+
+    bool has_owner_id() const { return _has_owner_id; }
     int32_t owner_id() const { return _owner_id; }
     int32_t partition_id() const { return _partition_id; }
+    bool is_last_split() const { return _is_last_split; }
+    void set_last_split(bool v) { _is_last_split = v; }
 
 private:
     std::unique_ptr<TScanRange> _scan_range;
+    ScanSplitContextPtr _split_context = nullptr;
+    bool _has_owner_id = false;
     int64_t _owner_id = 0;
     int64_t _version = 0;
     int64_t _partition_id = 0;
+    bool _is_last_split = true;
 };
 
 /// MorselQueueFactory.
@@ -245,6 +274,7 @@ public:
     void unget(MorselPtr&& morsel);
     virtual std::string name() const = 0;
     virtual StatusOr<bool> ready_for_next() const { return true; }
+    virtual void append_morsel(MorselPtr&& morsel) {}
 
 protected:
     Morsels _morsels;
@@ -294,6 +324,7 @@ public:
     StatusOr<MorselPtr> try_get() override;
     std::string name() const override;
     StatusOr<bool> ready_for_next() const override;
+    void append_morsel(MorselPtr&& morsel) { _morsel_queue->append_morsel(std::move(morsel)); }
 
 private:
     StatusOr<int64_t> _peek_sequence_id() const;
@@ -314,17 +345,18 @@ public:
     }
     bool could_attch_ticket_checker() override { return true; }
     size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
-
-protected:
-    void _inc_num_splits(bool is_last) {
+    void append_morsel(MorselPtr&& morsel) override {
         if (_ticket_checker == nullptr) {
             return;
         }
+        // TODO: can we get tablet_id from this morsel directly?
+        // and that should be morsel->owner_id()
         DCHECK(0 <= _tablet_idx && _tablet_idx < _tablets.size());
         auto tablet_id = _tablets[_tablet_idx]->tablet_id();
-        _ticket_checker->enter(tablet_id, is_last);
+        _ticket_checker->enter(tablet_id, morsel->is_last_split());
     }
 
+protected:
     ScanMorsel* _cur_scan_morsel() { return down_cast<ScanMorsel*>(_morsels[_tablet_idx].get()); }
 
     // The number of the morsels before split them to pieces.
