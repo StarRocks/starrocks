@@ -34,11 +34,11 @@ public class Delimiter {
                 throw new SemanticException("Invalid delimiter '" + originStr + ": empty hex string");
             }
             if (hexStr.length() % 2 != 0) {
-                throw new SemanticException("Invalid delimiter '" + originStr + ": hex length must be a even number");
+                throw new SemanticException("Invalid delimiter '" + originStr + ": hex length must be a even number. It will look like '\\x0102'");
             }
             for (char hexChar : hexStr.toUpperCase().toCharArray()) {
                 if (ParseUtil.HEX_STRING.indexOf(hexChar) == -1) {
-                    throw new SemanticException("Invalid delimiter '" + originStr + "': invalid hex format");
+                    throw new SemanticException("Invalid delimiter '" + originStr + "'. It will look like '\\x0102'");
                 }
             }
 
