@@ -300,7 +300,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                         asyncRefreshContext.setTimeUnit(intervalLiteral.getUnitIdentifier().getDescription());
                     } else {
                         if (materializedView.getBaseTableInfos().stream().anyMatch(tableInfo ->
-                                !tableInfo.getTable().isNativeTableOrMaterializedView()
+                                !tableInfo.getTableChecked().isNativeTableOrMaterializedView()
                         )) {
                             throw new DdlException("Materialized view which type is ASYNC need to specify refresh interval for " +
                                     "external table");
