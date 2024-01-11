@@ -91,7 +91,11 @@ public class UpdateSchemaJob extends AlterJobV2 {
         Preconditions.checkState(jobState == JobState.PENDING, jobState);
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
-            throw new AlterCancelException("Database " + dbId + " does not exist");
+            LOG.info("database does not exist when running update schema job {}", jobId);
+            this.jobState = JobState.FINISHED;
+            this.finishedTimeMs = System.currentTimeMillis();
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+            return;
         }
 
         if (!checkTableStable(db)) {
@@ -101,13 +105,18 @@ public class UpdateSchemaJob extends AlterJobV2 {
         // check table exist
         OlapTable tbl = (OlapTable) db.getTable(tableId);
         if (tbl == null) {
-            throw new AlterCancelException("Table " + tableId + " does not exist");
+            LOG.info("table does not exist when running update schema job {}", jobId);
+            this.jobState = JobState.FINISHED;
+            this.finishedTimeMs = System.currentTimeMillis();
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+            return;
         }
 
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
             // get index schema
+            indexToColumnParam.clear();
             for (Map.Entry<Long, MaterializedIndexMeta> pair : tbl.getIndexIdToMeta().entrySet()) {
                 MaterializedIndexMeta indexMeta = pair.getValue();
                 List<String> columns = Lists.newArrayList();
@@ -155,7 +164,12 @@ public class UpdateSchemaJob extends AlterJobV2 {
                 Long indexId = cell.getColumnKey();
                 List<Long> tablets = cell.getValue();
                 if (!indexToColumnParam.containsKey(indexId)) {
-                    // throw exception
+                    errMsg = "table[" + tbl.getName() + "] can not find index:" + indexId + " in MaterializedIndexMeta";
+                    failedTimes++;
+                    LOG.warn("execute update table {} schema job {} fail {} times", tbl.getName(), jobId, failedTimes);
+                    if (failedTimes > 3) {
+                        throw new AlterCancelException(errMsg);
+                    }
                 }
                 MaterializedIndexMeta meta = tbl.getIndexMetaByIndexId(indexId);
                 UpdateSchemaTask task = new UpdateSchemaTask(null, backendId, db.getId(), tbl.getId(),
@@ -194,7 +208,11 @@ public class UpdateSchemaJob extends AlterJobV2 {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
-            throw new AlterCancelException("Database " + dbId + " does not exist");
+            LOG.info("database does not exist when running update schema job {}", jobId);
+            this.jobState = JobState.FINISHED;
+            this.finishedTimeMs = System.currentTimeMillis();
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+            return;
         }
 
         Locker locker = new Locker();
@@ -202,7 +220,11 @@ public class UpdateSchemaJob extends AlterJobV2 {
         OlapTable tbl = (OlapTable) db.getTable(tableId);
         try {
             if (tbl == null) {
-                throw new AlterCancelException("Table " + tableId + " does not exist");
+                LOG.info("database does not exist when running update schema job {}", jobId);
+                this.jobState = JobState.FINISHED;
+                this.finishedTimeMs = System.currentTimeMillis();
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+                return;
             }
         } finally {
             locker.unLockDatabase(db, LockType.READ);
@@ -243,7 +265,7 @@ public class UpdateSchemaJob extends AlterJobV2 {
 
     private void cancelInternal() {
         // clear tasks if has
-        AgentTaskQueue.removeBatchTask(updateSchemaBatchTask, TTaskType.ALTER);
+        AgentTaskQueue.removeBatchTask(updateSchemaBatchTask, TTaskType.UPDATE_SCHEMA);
         jobState = JobState.CANCELLED;
     }
 

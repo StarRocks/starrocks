@@ -565,7 +565,7 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
 
     if (!st.ok()) {
         status_code = TStatusCode::RUNTIME_ERROR;
-        std::string msg = strings::Substitute("convert column fail: $0", st.to_string());
+        std::string msg = strings::Substitute("update schema fail because convert column fail: $0", st.to_string());
         LOG(WARNING) << msg;
         error_msgs.emplace_back(msg);
     } else {
@@ -579,11 +579,15 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
             new_schema->copy_from(ori_tablet_schema);
             st = new_schema->build_current_tablet_schema(schema_id, schema_version, pcolumn_param, ori_tablet_schema);
             if (!st.ok()) {
+                status_code = TStatusCode::RUNTIME_ERROR;
+                std::string msg = strings::Substitute("update schema fail because build tablet schema fail: $0", st.to_string());
+                LOG(WARNING) << msg;
+                error_msgs.emplace_back(msg);
                 break;
             }
+            tablet->update_max_version_schema(new_schema);
             LOG(INFO) << "update tablet:" << tablet_id << " schema version from " << ori_tablet_schema->schema_version()
                       << " to " << schema_version;
-            tablet->update_max_version_schema(new_schema);
         }
     }
 
