@@ -869,7 +869,7 @@ public:
     Status seek_inverted_index(const std::string& column_name, InvertedIndexIterator* iterator,
                                roaring::Roaring* row_bitmap) const override {
         Slice padded_value(Base::_zero_padded_str);
-        InvertedIndexQueryType query_type = InvertedIndexQueryType::LESS_EQUAL_QUERY;
+        InvertedIndexQueryType query_type = InvertedIndexQueryType::EQUAL_QUERY;
         roaring::Roaring roaring;
         RETURN_IF_ERROR(iterator->read_from_inverted_index(column_name, &padded_value, query_type, &roaring));
         *row_bitmap -= roaring;

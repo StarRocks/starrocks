@@ -250,76 +250,9 @@ Status CLuceneInvertedWriter::create(const TypeInfoPtr& typeinfo, const std::str
                                                                                       tablet_index);
         break;
     }
-    case LogicalType::TYPE_DATETIME: {
-        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_DATETIME>>(field_name, directory,
-                                                                                       tablet_index);
-        break;
-    }
-    case LogicalType::TYPE_DATE: {
-        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_DATE>>(field_name, directory, tablet_index);
-        break;
-    }
-    case LogicalType::TYPE_TINYINT: {
-        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_TINYINT>>(field_name, directory,
-                                                                                      tablet_index);
-        break;
-    }
-    case LogicalType::TYPE_SMALLINT: {
-        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_SMALLINT>>(field_name, directory,
-                                                                                       tablet_index);
-        break;
-    }
-    case LogicalType::TYPE_UNSIGNED_INT: {
-        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_UNSIGNED_INT>>(field_name, directory,
-                                                                                           tablet_index);
-        break;
-    }
-    case LogicalType::TYPE_INT: {
-        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_INT>>(field_name, directory, tablet_index);
-        break;
-    }
-    case LogicalType::TYPE_LARGEINT: {
-        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_LARGEINT>>(field_name, directory,
-                                                                                       tablet_index);
-        break;
-    }
-    case LogicalType::TYPE_DECIMAL: {
-        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_DECIMAL>>(field_name, directory,
-                                                                                      tablet_index);
-        break;
-    }
-    case LogicalType::TYPE_DECIMAL32: {
-        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_DECIMAL32>>(field_name, directory,
-                                                                                        tablet_index);
-        break;
-    }
-    case LogicalType::TYPE_DECIMAL64: {
-        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_DECIMAL64>>(field_name, directory,
-                                                                                        tablet_index);
-        break;
-    }
-    case LogicalType::TYPE_BOOLEAN: {
-        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_BOOLEAN>>(field_name, directory,
-                                                                                      tablet_index);
-        break;
-    }
-    case LogicalType::TYPE_DOUBLE: {
-        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_BOOLEAN>>(field_name, directory,
-                                                                                      tablet_index);
-        break;
-    }
-    case LogicalType::TYPE_FLOAT: {
-        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_BOOLEAN>>(field_name, directory,
-                                                                                      tablet_index);
-        break;
-    }
-    case LogicalType::TYPE_BIGINT: {
-        *res = std::make_unique<CLuceneInvertedWriterImpl<LogicalType::TYPE_BOOLEAN>>(field_name, directory,
-                                                                                      tablet_index);
-        break;
-    }
     default:
-        return Status::NotSupported("unsupported type for inverted index: " + std::to_string(int(type)));
+        return Status::NotSupported(
+                strings::Substitute("Unsupported type for inverted index: $0", type_to_string_v2(type)));
     }
     return Status::OK();
 }
