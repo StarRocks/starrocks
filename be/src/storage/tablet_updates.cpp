@@ -4131,7 +4131,8 @@ void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
     }
 }
 
-Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup) {
+Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup,
+                                    bool save_source_schema) {
 #define CHECK_FAIL(status)                                                                       \
     do {                                                                                         \
         Status st = (status);                                                                    \
@@ -4335,6 +4336,13 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
 
         _to_updates_pb_unlocked(new_tablet_meta_pb.mutable_updates());
         VLOG(2) << new_tablet_meta_pb.updates().DebugString();
+
+        // Save source schema in tablet meta
+        if (save_source_schema && snapshot_meta.tablet_meta().has_schema()) {
+            new_tablet_meta_pb.mutable_source_schema()->CopyFrom(snapshot_meta.tablet_meta().schema());
+            _tablet.tablet_meta()->set_source_schema(TabletSchema::create(new_tablet_meta_pb.source_schema()));
+        }
+
         CHECK_FAIL(TabletMetaManager::put_tablet_meta(data_store, &wb, new_tablet_meta_pb));
 
         if (auto st = meta_store->write_batch(&wb); !st.ok()) {
