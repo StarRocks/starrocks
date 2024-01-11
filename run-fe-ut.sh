@@ -73,12 +73,8 @@ RUN_SPECIFIED_TEST=0
 TEST_NAME=*
 FILTER_TEST=""
 COVERAGE=0
-<<<<<<< HEAD
-while true; do 
-=======
 DUMPCASE=0
 while true; do
->>>>>>> 64987b9f19 ([Tool] Filter cases in fe ut script (#38889))
     case "$1" in
         --coverage) COVERAGE=1 ; shift ;;
         --test) RUN_SPECIFIED_TEST=1; TEST_NAME=$2; shift 2;;
@@ -136,6 +132,8 @@ fi
 if [ ${COVERAGE} -eq 1 ]; then
     echo "Run coverage statistic tasks"
     ant cover-test
+elif [ ${DUMPCASE} -eq 1 ]; then
+    ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test=com.starrocks.sql.dump.QueryDumpRegressionTest -D dumpJsonConfig=$1
 else
     if [ $DRY_RUN -eq 0 ]; then
         if [ ${RUN_SPECIFIED_TEST} -eq 1 ]; then
