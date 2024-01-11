@@ -91,6 +91,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MarkedCountDownLatch;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
@@ -3879,7 +3880,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
         db.dropTable(oldTableName);
         db.createTable(olapTable);
-        inactiveRelatedMaterializedView(db, olapTable, "base-table renamed: " + table.getName());
+        inactiveRelatedMaterializedView(db, olapTable,
+                MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(table.getName()));
 
         TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), olapTable.getId(), newTableName);
         editLog.logTableRename(tableInfo);
@@ -3893,7 +3895,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 LOG.warn("Setting the materialized view {}({}) to invalid because " +
                                 "the table {} was renamed.", mv.getName(), mv.getId(), olapTable.getName());
                 mv.setInactiveAndReason(reason);
-                inactiveRelatedMaterializedView(db, mv, "base-mv inactive: " + mv.getName());
+                inactiveRelatedMaterializedView(db, mv,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableActive(mv.getName()));
             } else {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
             }

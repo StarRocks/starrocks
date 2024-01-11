@@ -814,7 +814,7 @@ public class MaterializedViewAnalyzer {
             List<BaseTableInfo> baseTableInfos = statement.getBaseTableInfos();
             for (BaseTableInfo baseTableInfo : baseTableInfos) {
                 if (table.isNativeTable()) {
-                    if (baseTableInfo.getTable().equals(table)) {
+                    if (baseTableInfo.getTableChecked().equals(table)) {
                         slotRef.setTblName(new TableName(baseTableInfo.getCatalogName(),
                                 baseTableInfo.getDbName(), table.getName()));
                         break;
