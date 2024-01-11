@@ -141,13 +141,13 @@ displayed_sidebar: "Chinese"
 ### 新功能
 
 - 外表
-  - [实验功能]支持S3上的Hive外表功能 [参考文档](../data_source/External_table.md#deprecated-hive-外部表)
+  - [实验功能]支持S3上的Hive外表功能 [参考文档](https://docs.starrocks.io/zh/docs/data_source/External_table#deprecated-hive-外部表)
   - DecimalV3支持外表查询 [#425](https://github.com/StarRocks/starrocks/pull/425)
 - 实现存储层复杂表达式下推计算，获得性能提升
 - Broker Load支持华为OBS [#1182](https://github.com/StarRocks/starrocks/pull/1182)
 - 支持国密算法sm3
 - 适配ARM类国产CPU：通过鲲鹏架构验证
-- 主键模型（Primary Key）正式发布，该模型支持Stream Load、Broker Load、Routine Load，同时提供了基于Flink-cdc的MySQL数据的秒级同步工具。[参考文档](../table_design/table_types/primary_key_table.md)
+- 主键模型（Primary Key）正式发布，该模型支持Stream Load、Broker Load、Routine Load，同时提供了基于Flink-cdc的MySQL数据的秒级同步工具。[参考文档](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)
 
 ### 功能优化
 

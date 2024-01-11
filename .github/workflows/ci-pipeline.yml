@@ -276,8 +276,6 @@ jobs:
               - 'java-extensions/**'
               - 'build.sh'
 
-      - run: echo ${{ steps.changes.outputs.fe }}
-
       - name: FE CHECK INFO
         id: fe-changes-info
         run: |
@@ -440,14 +438,6 @@ jobs:
           repo="${{ github.repository }}"
           bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
           echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
-
-      - uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
-
-      - name: Checkout PR
-        run: |
-          cd /var/lib/ci-tool/ && git pull && ./bin/checkout.sh
 
       - name: UPDATE ECI & RUN UT
         id: run_ut
@@ -760,11 +750,7 @@ jobs:
           ADMIT_RESULT: ${{ needs.admit.result }}
         run: |
           cd ci-tool && source lib/init.sh
-          if [[ "${SQL_TESTER_RESULT}" == 'success' && "${ADMIT_RESULT}" == 'success' ]]; then
-              ./bin/elastic-cluster.sh --delete
-          else
-              ./bin/elastic-cluster.sh --renew 0.5
-          fi
+          ./bin/elastic-cluster.sh --delete
 
       - name: clean ECI
         if: always() && needs.SQL-Tester.outputs.MYSQL_ECI_ID != ''
