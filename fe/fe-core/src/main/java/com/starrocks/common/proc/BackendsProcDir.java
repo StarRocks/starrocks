@@ -198,7 +198,6 @@ public class BackendsProcDir implements ProcDirInterface {
             double memUsedPct = backend.getMemUsedPct();
             backendInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
             backendInfo.add(String.format("%.1f", backend.getCpuUsedPermille() / 10.0) + " %");
-            backendInfo.add(PropertyAnalyzer.convertLocationMapToString(backend.getLocation()));
 
             Optional<DataCacheMetrics> dataCacheMetrics = backend.getDataCacheMetrics();
             if (dataCacheMetrics.isPresent()) {
@@ -216,6 +215,8 @@ public class BackendsProcDir implements ProcDirInterface {
                 // Didn't receive any datacache report from be
                 backendInfo.add("N/A");
             }
+
+            backendInfo.add(PropertyAnalyzer.convertLocationMapToString(backend.getLocation()));
 
             if (RunMode.isSharedDataMode()) {
                 backendInfo.add(String.valueOf(backend.getStarletPort()));

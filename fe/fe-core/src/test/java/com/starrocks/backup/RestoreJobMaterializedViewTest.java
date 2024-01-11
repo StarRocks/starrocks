@@ -185,7 +185,7 @@ public class RestoreJobMaterializedViewTest {
             }
 
             {
-                systemInfoService.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean);
+                systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
                 result = beIds;
 
