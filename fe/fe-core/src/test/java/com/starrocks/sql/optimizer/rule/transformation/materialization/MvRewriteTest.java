@@ -1778,6 +1778,21 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
+    public void testWithSqlSelectLimit() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setSqlSelectLimit(1000);
+        createAndRefreshMv("CREATE MATERIALIZED VIEW mv_with_select_limit " +
+                " distributed by hash(empid) " +
+                "AS " +
+                "SELECT /*+set_var(sql_select_limit=1000)*/ empid, sum(salary) as total " +
+                "FROM emps " +
+                "GROUP BY empid");
+        starRocksAssert.query("SELECT empid, sum(salary) as total " +
+                "FROM emps " +
+                "GROUP BY empid").explainContains("mv_with_select_limit");
+        starRocksAssert.getCtx().getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+    }
+
+    @Test
     public void testQueryIncludingExcludingMVNames() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setOptimizerExecuteTimeout(3000000);
         createAndRefreshMv("CREATE MATERIALIZED VIEW mv_agg_1 " +

@@ -280,13 +280,15 @@ public class CreateMaterializedViewStmt extends DdlStmt {
 
     public void analyze(ConnectContext context) {
         QueryStatement queryStatement = getQueryStatement();
+
         long originSelectLimit = context.getSessionVariable().getSqlSelectLimit();
-        // ignore limit in creating mv
-        context.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
-
-        Analyzer.analyze(queryStatement, context);
-
-        context.getSessionVariable().setSqlSelectLimit(originSelectLimit);
+        try {
+            // ignore limit in creating mv
+            context.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+            Analyzer.analyze(queryStatement, context);
+        } finally {
+            context.getSessionVariable().setSqlSelectLimit(originSelectLimit);
+        }
 
         // forbid explain query
         if (queryStatement.isExplain()) {
