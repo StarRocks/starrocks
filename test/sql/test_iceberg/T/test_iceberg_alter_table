@@ -7,6 +7,10 @@ create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 create table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} (
   id bigint,
   data string
+)
+comment "table comment"
+properties (
+"file_format"="parquet"
 );
 
 alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
@@ -29,7 +33,16 @@ modify column col4 BIGINT;
 alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
 drop column col4;
 
-drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+rename new_ice_tbl_${uuid0};
+
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.new_ice_tbl_${uuid0}
+comment = "new comment";
+
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.new_ice_tbl_${uuid0}
+set ('file_format'='orc');
+
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.new_ice_tbl_${uuid0} force;
 
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 drop catalog iceberg_sql_test_${uuid0};

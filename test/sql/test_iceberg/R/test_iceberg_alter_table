@@ -9,6 +9,10 @@ create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 create table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} (
   id bigint,
   data string
+)
+comment "table comment"
+properties (
+"file_format"="parquet"
 );
 -- result:
 -- !result
@@ -41,7 +45,19 @@ alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
 drop column col4;
 -- result:
 -- !result
-drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} force;
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}
+rename new_ice_tbl_${uuid0};
+-- result:
+-- !result
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.new_ice_tbl_${uuid0}
+comment = "new comment";
+-- result:
+-- !result
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.new_ice_tbl_${uuid0}
+set ('file_format'='orc');
+-- result:
+-- !result
+drop table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.new_ice_tbl_${uuid0} force;
 -- result:
 -- !result
 drop database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
