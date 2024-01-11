@@ -29,17 +29,17 @@ StarRocks migration tools（简称 SMT）是用来将外部数据库数据导入
 2. 执行 starrocks-migration-tool。
 3. 运行结果默认生成在 result 目录中。
 
-然后就可以执行result中的SQL脚本来进行元数据或者数据的同步了。
+然后就可以执行 result 中的 SQL 脚本来进行元数据或者数据的同步了。
 
 ## SMT 配置
 
-1. `[db]` 段为数据源的链接信息，根据type不同配置对应数据源的链接信息即可。
-2. `[other]` 段为一些其他配置，建议修改`be_num`为实际的个数即可
-3. `flink.starrocks.sink.*` 是flink-connector-starrocks的配置信息，参考[配置项说明](https://github.com/StarRocks/flink-connector-starrocks#sink-options)即可.
-4. `[table-rule.1]` 是数据源table匹配规则，可以根据正则表达式匹配数据库和表名生成建表的SQL，也可以配置多个规则。每个规则都会生成对应的结果如：
-   1. `[table-rule.1]` -> `result/starrocks-create.1.sql`
-   2. `[table-rule.2]` -> `result/starrocks-create.2.sql`
-5. 如果有多组规则，需要给每一组规则匹配database，table和 flink-connector的配置
+- `[db]` 段为数据源的连接信息，根据type不同配置对应数据源的链接信息即可。
+- `[other]` 段为一些其他配置，建议修改`be_num`为实际的个数即可
+- `flink.starrocks.sink.*` 是flink-connector-starrocks的配置信息，参考[配置项说明](https://github.com/StarRocks/flink-connector-starrocks#sink-options)即可.
+- `[table-rule.1]` 是数据源table匹配规则，可以根据正则表达式匹配数据库和表名生成建表的SQL，也可以配置多个规则。每个规则都会生成对应的结果如：
+   - `[table-rule.1]` -> `result/starrocks-create.1.sql`
+   - `[table-rule.2]` -> `result/starrocks-create.2.sql`
+- 如果有多组规则，需要给每一组规则匹配database，table和 flink-connector的配置
 
     ```Bash
     [table-rule.1]
@@ -81,19 +81,18 @@ StarRocks migration tools（简称 SMT）是用来将外部数据库数据导入
     flink.starrocks.sink.properties.strip_outer_array=true
     ```
 
-6. 针对分库分表的大表可以单独配置一个规则，比如：有两个数据库 edu_db_1，edu_db_2，每个数据库下面分别有course_1，course_2 两张表，并且所有表的数据结构都是相同的，通过如下配置把他们导入StarRocks的一张表中进行分析。
+- 针对分库分表的大表可以单独配置一个规则，比如：有两个数据库 edu_db_1，edu_db_2，每个数据库下面分别有 course_1，course_2 两张表，并且所有表的数据结构都是相同的，通过如下配置把他们导入 StarRocks 的一张表中进行分析。
 
-```Bash
-[table-rule.3]
-# pattern to match databases for setting properties
-database = ^edu_db_[0-9]*$
-# pattern to match tables for setting properties
-table = ^course_[0-9]*$
-schema = ^.*$
-```
+    ```Bash
+    [table-rule.3]
+    # pattern to match databases for setting properties
+    database = ^edu_db_[0-9]*$
+    # pattern to match tables for setting properties
+    table = ^course_[0-9]*$
+    schema = ^.*$
+    ```
 
-这样会自动生成一个多对一的导入关系，在StarRocks默认生成的表名是 course__auto_shard，也可以自行在生成的配置文件中修改。
-下面介绍使用SMT将各种数据源同步的StarRocks的步骤：
+    这样会自动生成一个多对一的导入关系，在 StarRocks 默认生成的表名是 `course__auto_shard`，也可以自行在生成的配置文件中修改。
 
 ## 同步 MySQL 到 StarRocks
 
@@ -103,13 +102,13 @@ schema = ^.*$
 
 ![img](../../assets/load_tools.png)
 
-如图所示，Smt可以根据MySQL和StarRocks的集群信息和表结构自动生成source table和sink table的建表语句。
+如图所示，SMT 可以根据 MySQ 和 StarRocks 的集群信息和表结构自动生成 source table 和 sink table 的建表语句。
 
 通过 Flink CDC connector 消费 MySQL 的 Binlog，经过 Flink-connector-starrocks 写入 StarRocks。
 
 ### 操作步骤
 
-1. 下载 [Flink](https://flink.apache.org/downloads.html)，最低支持版本1.11。
+1. 下载 [Flink](https://flink.apache.org/downloads.html)，最低支持版本 1.11。
 2. 下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)，请注意下载对应 Flink 版本的 flink-sql-connector-mysql-cdc-xxx.jar。
 3. 下载 [Flink StarRocks connector](https://github.com/StarRocks/flink-connector-starrocks).
 4. 复制 `flink-sql-connector-mysql-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` 到 `flink-xxx/lib/`
@@ -153,7 +152,7 @@ schema = ^.*$
     flink.starrocks.sink.properties.strip_outer_array=true
     ```
 
-7. 执行starrocks-migrate-tool，所有建表语句都生成在result目录下
+7. 执行 starrocks-migrate-tool，所有建表语句都生成在 result 目录下
 
     ```Bash
     $./starrocks-migrate-tool
@@ -162,7 +161,7 @@ schema = ^.*$
     flink-create.all.sql  starrocks-create.1.sql  starrocks-external-create.all.sql
     ```
 
-8. 生成StarRocks的表结构
+8. 生成 StarRocks 的表结构
 
     ```Bash
     mysql -hxx.xx.xx.x -P9030 -uroot -p < starrocks-create.all.sql
@@ -174,7 +173,7 @@ schema = ^.*$
     bin/sql-client.sh embedded < flink-create.all.sql
     ```
 
-    这个执行以后同步任务会持续执行
+    这个执行以后同步任务会持续执行。
 
 10. 观察任务状况
 
@@ -182,17 +181,15 @@ schema = ^.*$
     bin/flink list 
     ```
 
-    如果有任务请查看log日志，或者调整conf中的系统配置中内存和slot。
-
-
+    如果有任务请查看 log 日志，或者调整 conf 中的系统配置中内存和 slot。
 
 ### 注意事项
 
-- 如何开启MySQL binlog
+- 如何开启 MySQL binlog
 
-    修改/etc/my.cnf
+  1. 修改/etc/my.cnf
 
-    ```Bash
+    ```bash
     #开启binlog日志
     log-bin=/var/lib/mysql/mysql-bin
 
@@ -206,25 +203,25 @@ schema = ^.*$
     binlog_format = row
     ```
 
-    重启mysqld，然后可以通过 SHOW VARIABLES LIKE 'log_bin'; 确认是否已经打开。
+  2. 重启mysqld，然后可以通过 SHOW VARIABLES LIKE 'log_bin'; 确认是否已经打开。
 
-## 同步PostgreSQL到StarRocks
+## 同步 PostgreSQL 到 StarRocks
 
 ### 简介
 
-通过Flink-cdc和StarRocks-migrate-tools（简称smt）可以实现PostgresSQL数据的秒级同步。
+通过 Flink CDC connector 和 SMT 可以实现 PostgreSQL 数据的秒级同步。
 
-Smt可以根据PostgresSQL和StarRocks的集群信息和表结构自动生成source table和sink table的建表语句。
+SMT 可以根据 PostgreSQL 和 StarRocks 的集群信息和表结构自动生成 source table 和 sink table 的建表语句。
 
-通过Flink-cdc-connector消费PostgresSQL的*WAL*，经过Flink-connector-starrocks写入StarRocks。
+通过 Flink-cdc-connector 消费 PostgreSQL 的 WAL，经过 Flink-connector-starrocks 写入 StarRocks。
 
 ### 操作步骤
 
 1. 下载 [Flink](https://flink.apache.org/downloads.html)，最低支持版本1.11。
-2. 下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)，请注意下载对应Flink版本的flink-sql-connector-postgres-cdc-xxx.jar。
+2. 下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)，请注意下载对应 Flink 版本的flink-sql-connector-postgres-cdc-xxx.jar。
 3. 下载 [Flink StarRocks connector](https://github.com/StarRocks/flink-connector-starrocks).
-4. 复制 `flink-sql-connector-``postgres``-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` 到 `flink-xxx/lib/`
-5. 下载 [smt.tar.gz](https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2)
+4. 复制 `flink-sql-connector-postgres-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` 到 `flink-xxx/lib/`
+5. 下载 [smt.tar.gz](https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2)。
 6. 解压并修改配置文件。
 
     ```Bash
@@ -265,7 +262,7 @@ Smt可以根据PostgresSQL和StarRocks的集群信息和表结构自动生成sou
     flink.starrocks.sink.properties.strip_outer_array=true
     ```
 
-7. 执行starrocks-migrate-tool，所有建表语句都生成在result目录下
+7. 执行 starrocks-migrate-tool，所有建表语句都生成在 result 目录下。
 
     ```Bash
     $./starrocks-migrate-tool
@@ -274,31 +271,31 @@ Smt可以根据PostgresSQL和StarRocks的集群信息和表结构自动生成sou
     flink-create.all.sql  starrocks-create.1.sql 
     ```
 
-8. 生成StarRocks的表结构
+8. 生成 StarRocks 的表结构。
 
     ```Bash
     mysql -hxx.xx.xx.x -P9030 -uroot -p < starrocks-create.all.sql
     ```
 
-9. 生成Flink table并开始同步
+9. 生成 Flink table 并开始同步。
 
     ```Bash
     bin/sql-client.sh embedded < flink-create.all.sql
     ```
 
-    这个执行以后同步任务会持续执行
+    这个执行以后同步任务会持续执行。
 
-10. 观察任务状况
+10. 观察任务状况。
 
     ```Bash
     bin/flink list 
     ```
 
-    如果有任务请查看log日志，或者调整conf中的系统配置中内存和slot。
+    如果有任务请查看 log  日志，或者调整 conf 中的系统配置中内存和 slot。
 
 ### 注意事项
 
-1. 对于 9.* 版本的 pgsql 需要特殊flink-cdc配置如下所示（建议使用10+版本，否则需要自行安装wal解析插件）：
+1. 对于 9.* 版本的 PostgreSQL 需要特殊 flink-cdc 配置如下所示（建议使用10+版本，否则需要自行安装wal解析插件）：
 
     ``Bash
     ############################################
@@ -311,10 +308,10 @@ Smt可以根据PostgresSQL和StarRocks的集群信息和表结构自动生成sou
     # flink.cdc.decoding.plugin.name = decoderbufs
     ```
 
-2. 如何开启PostgreSQL WAL？
+2. 如何开启 PostgreSQL WAL？
 
     ```Bash
-    # 开启链接权限
+    # 开启连接权限
     echo "host all all 0.0.0.0/32 trust" >> pg_hba.conf
     echo "host replication all 0.0.0.0/32 trust" >> pg_hba.conf
     # 开启wal logical复制
@@ -329,22 +326,22 @@ Smt可以根据PostgresSQL和StarRocks的集群信息和表结构自动生成sou
     ALTER TABLE schema_name.table_name REPLICA IDENTITY FULL
     ```
 
-    重启pg即可
+    重启 PostgreSQL 即可。
 
-## 同步Oracle到StarRocks
+## 同步 Oracle 到 StarRocks
 
 ### 简介
 
-通过Flink-cdc和StarRocks-migrate-tools（简称smt）可以实现Oracle数据的秒级同步。
+通过 Flink CDC connector 和 SMT 可以实现 Oracle 数据的秒级同步。
 
-Smt可以根据Oracle和StarRocks的集群信息和表结构自动生成source table和sink table的建表语句。
+SMT 可以根据 Oracle 和 StarRocks 的集群信息和表结构自动生成 source table 和 sink table 的建表语句。
 
-通过flink-sql-connector-oracle-cdc的logminer，经过Flink-connector-starrocks写入StarRocks。
+通过 Flink-cdc-connector 消费 Oracle 的 logminer，经过 Flink-connector-starrocks 写入 StarRocks。
 
 ### 操作步骤
 
-1. 下载 [Flink](https://flink.apache.org/downloads.html)，最低支持版本1.11。
-2. 下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)，请注意下载对应Flink版本的flink-sql-connector-oracle-cdc-xxx.jar。
+1. 下载 [Flink](https://flink.apache.org/downloads.html)，最低支持版本 1.11。
+2. 下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)，请注意下载对应 Flink 版本的flink-sql-connector-oracle-cdc-xxx.jar。
 3. 下载 [Flink StarRocks connector](https://github.com/StarRocks/flink-connector-starrocks).
 4. 复制 `flink-sql-connector-oracle-cdc-xxx.jar`, `flink-connector-starrocks-xxx.jar` 到 `flink-xxx/lib/`
 5. 下载 [smt.tar.gz](https://cdn-thirdparty.starrocks.com/smt.tar.gz?r=2)
@@ -388,7 +385,7 @@ Smt可以根据Oracle和StarRocks的集群信息和表结构自动生成source t
     flink.starrocks.sink.properties.strip_outer_array=true
     ```
 
-7. 执行starrocks-migrate-tool，所有建表语句都生成在result目录下
+7. 执行 starrocks-migrate-tool，所有建表语句都生成在 result 目录下。
 
     ```Bash
     $./starrocks-migrate-tool
@@ -397,35 +394,33 @@ Smt可以根据Oracle和StarRocks的集群信息和表结构自动生成source t
     flink-create.all.sql  starrocks-create.1.sql 
     ```
 
-8. 生成StarRocks的表结构
+8. 生成 StarRocks 的表结构。 
 
     ```Bash
     mysql -hxx.xx.xx.x -P9030 -uroot -p < starrocks-create.all.sql
     ```
 
-9. 生成Flink table并开始同步
+9. 生成 Flink table 并开始同步。
 
     ```Bash
     bin/sql-client.sh embedded < flink-create.all.sql
     ```
 
-    这个执行以后同步任务会持续执行
+    这个执行以后同步任务会持续执行。
 
-10. 观察任务状况
+10. 观察任务状况。
 
     ```Bash
     bin/flink list 
     ```
 
-    如果有任务请查看log日志，或者调整conf中的系统配置中内存和slot。
-
-
+    如果有任务请查看 log 日志，或者调整 conf 中的系统配置中内存和 slot。
 
 ### 注意事项
 
-1. 通过logminer同步oracle：
+1. 通过 logminer 同步 Oracle：
 
-    ```bash
+    ```SQL
     # 开启日志
     alter system set db_recovery_file_dest = '/home/oracle/data' scope=spfile;
     alter system set db_recovery_file_dest_size = 10G;
@@ -463,19 +458,19 @@ Smt可以根据Oracle和StarRocks的集群信息和表结构自动生成source t
     GRANT SELECT ON V_$ARCHIVE_DEST_STATUS TO flinkuser;
     ```
 
-2. [table-rule.1] 中的db配置不支持正则，只可以写完整的db名称。
-3. 由于Oracle12c开始支持了CDB模式，smt内部会自动判断是否开启了CDB，并自动修改对应的flink-cdc配置项。但用户需要注意的是 [db].user 的配置需要注意是否添加 c## 前缀，防止无权限访问的问题发生。
+2. [table-rule.1] 中的db配置不支持正则，只可以写完整的db名称。<!--pending-->
+3. 由于 Oracle12c 开始支持了 CDB 模式，SMT 内部会自动判断是否开启了 CDB，并自动修改对应的 flink-cdc 配置项。但用户需要注意的是 [db].user 的配置需要注意是否添加 c## 前缀，防止无权限访问的问题发生。<!--pending-->
 
-## 同步Hive到StarRocks
+## 同步 Hive 到 StarRocks
 
 ### 简介
 
-使用 SMT 可以同步各种外部数据库和StarRocks的元数据表结构，支持MySQL，Hive等数据源。这里介绍如何使用SMT同步Hive数据。
+使用 SMT 可以同步各种外部数据库和 StarRocks 的元数据表结构，支持 MySQL，Hive 等数据源。这里介绍如何使用 SMT 同步 Hive 数据。
 
 这里有两种方式进行同步：
 
-- 一种是Hive外表同步，也就是仅仅创建Hive外表，然后可以通过外表直接查询Hive。
-- 另一种是Hive数据同步，会创建StarRocks中的Duplicate表，并且使用Flink任务来进行数据的同步。
+- 一种是Hive外表同步，也就是仅仅创建Hive外表，然后可以通过外表直接查询Hive。<!--pending-->
+- 另一种是 Hive 数据同步，会创建 StarRocks 中的 民表，并且使用Flink任务来进行数据的同步。
 
 ### 操作步骤
 
@@ -495,28 +490,28 @@ type = hive
 authentication = kerberos
 ```
 
-认证方式支持一下三种：
-- nosasl，zk： user password 留空即可
-- none，none_http ，ldap： 填入对应的 user password 即可
+支持以下三种认证方式：
+- nosasl，zk： user password 留空即可。
+- none，none_http ，ldap： 填入对应的 user password 即可。
 - kerberos，kerberos_http：此时需要如下操作
-  - 在hive集群执行 kadmin.local, 并查看 list_principals 找到对应的principal名称如：`hive/``emr-header-1.cluster-49148@EMR.49148.COM` 那么 user 就需要设置为 `hive/``emr-header-1.cluster-49148` password留空即可
-  - 在执行smt的机器上先执行 kinit -kt  /path/to/keytab  principal 并执行klist查看是否已有正确的token生成
+  1. 在 Hive 集群执行 kadmin.local, 并查看 list_principals 找到对应的principal 名称，如：`hive/emr-header-1.cluster-49148@EMR.49148.COM`，那么 user 就需要设置为 `hive/emr-header-1.cluster-49148`，password 留空即可。
+  2. 在执行 SMT 的机器上先执行 `kinit -kt  /path/to/keytab  principal` 并执行klist查看是否已有正确的token生成
 
-#### Hive外表同步
+#### Hive 外表同步
 <!--pending-->
 1. 执行 ./starrocks-migrate-tool 
-2. 在starrocks中执行 result/starrocks-external-create.all.sql 即可
+2. 在 StarRocks 中执行 result/starrocks-external-create.all.sql 即可。
 
-#### Hive数据全量同步
+#### Hive 数据全量同步
 
-1. 执行 ./starrocks-migrate-tool 
-2. 在starrocks中执行 result/starrocks-create.all.sql 创建 starrocks的同步表结构
+1. 执行 ./starrocks-migrate-tool。
+2. 在 StarRocks 中执行 result/starrocks-create.all.sql 创建 StarRocks 的同步表结构。
 
     ```bash
     mysql -hxx.xx.xx.x -P9030 -uroot -p < starrocks-create.all.sql
     ```
 
-3. 在flink/conf/中建立 sql-client-defaults.yaml 并编辑如下
+3. 在 flink/conf/ 中建立 sql-client-defaults.yaml 并编辑如下：
 
     ```YAML
     execution:
@@ -529,10 +524,10 @@ authentication = kerberos
     hive-conf-dir: /path/to/apache-hive-xxxx-bin/conf
     ```
 
-4. 在 flink 对应版本的hive界面下载[依赖包](https://nightlies.apache.org/flink/flink-docs-release-1.13/zh/docs/connectors/table/hive/overview/)(flink-sql-connector-hive-xxxx) 并放入 flink/lib 目录下
-5. 启动flink集群，并执行 flink/bin/sql-client.sh embedded < result/flink-create.all.sql 即可开始同步
+4. 在 Flink 对应版本的 Hive 界面下载[依赖包](https://nightlies.apache.org/flink/flink-docs-release-1.13/zh/docs/connectors/table/hive/overview/)(flink-sql-connector-hive-xxxx) 并放入 flink/lib 目录下。
+5. 启动 Flink 集群，并执行 `flink/bin/sql-client.sh embedded < result/flink-create.all.sql` 即可开始同步。
 
-## 同步SQLServer到StarRocks
+## 同步 SQL Server 到 StarRocks
 
 ### 简介
 
