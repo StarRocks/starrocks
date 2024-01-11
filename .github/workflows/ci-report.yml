@@ -231,7 +231,7 @@ jobs:
         env:
           bucket_prefix: ${{ steps.info.outputs.bucket_prefix }}
         run: |
-          oss_path=oss://${bucket_prefix}-ci-release/$BASE_REF/ASAN/pr/UT-Report/${PR_NUMBER}
+          oss_path=oss://${bucket_prefix}-ci-release/$BASE_REF/DEBUG/pr/UT-Report/${PR_NUMBER}
           size=$(ossutil64 --config-file ~/.ossutilconfig ls ${oss_path}/be_ut_coverage.xml | grep "Object Number is" | awk '{print $NF}')
           echo "size=${size}" >> $GITHUB_OUTPUT
           if [[ "$size" != "0" ]]; then
