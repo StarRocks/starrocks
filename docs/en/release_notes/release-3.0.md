@@ -15,7 +15,7 @@ Release date: January 2, 2024
 
 ### Improvements
 
-- A new value option `GROUP_CONCAT_LEGACY` is added to the session variable [sql_mode](https://docs.starrocks.io/docs/reference/System_variable.md#sql_mode) to provide compatibility with the implementation logic of the [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) function in versions earlier than v2.5. [#36150](https://github.com/StarRocks/starrocks/pull/36150)
+- A new value option `GROUP_CONCAT_LEGACY` is added to the session variable [sql_mode](https://docs.starrocks.io/docs/reference/System_variable#sql_mode) to provide compatibility with the implementation logic of the [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) function in versions earlier than v2.5. [#36150](https://github.com/StarRocks/starrocks/pull/36150)
 - When using JDK, the default GC algorithm is G1. [#37386](https://github.com/StarRocks/starrocks/pull/37386)
 - The `be_tablets` view in the `information_schema` database provides a new field `INDEX_DISK`, which records the disk usage (measured in bytes) of persistent indexes [#35615](https://github.com/StarRocks/starrocks/pull/35615)
 - Queries on MySQL external tables and the external tables within JDBC catalogs support including keywords in the WHERE clause. [#35917](https://github.com/StarRocks/starrocks/pull/35917)
@@ -181,7 +181,7 @@ Release date: August 16, 2023
 
 - Added more prompts in the error message `xxx too many versions xxx`. [#28397](https://github.com/StarRocks/starrocks/pull/28397)
 - Dynamic partitioning further supports the partitioning unit to be year. [#28386](https://github.com/StarRocks/starrocks/pull/28386)
-- The partitioning field is case-insensitive when expression partitioning is used at table creation and [INSERT OVERWRITE is used to overwrite data in a specific partition](https://docs.starrocks.io/docs/table_design/expression_partitioning.md#load-data-into-partitions). [#28309](https://github.com/StarRocks/starrocks/pull/28309)
+- The partitioning field is case-insensitive when expression partitioning is used at table creation and [INSERT OVERWRITE is used to overwrite data in a specific partition](https://docs.starrocks.io/docs/table_design/expression_partitioning#load-data-into-partitions). [#28309](https://github.com/StarRocks/starrocks/pull/28309)
 
 ### Bug Fixes
 
@@ -280,7 +280,7 @@ Release date: June 1, 2023
 ### New Features
 
 - [Preview] Supports spilling intermediate computation results of large operators to disks to reduce the memory consumption of large operators. For more information, see [Spill to disk](https://docs.starrocks.io/docs/administration/spill_to_disk/).
-- [Routine Load](https://docs.starrocks.io/docs/loading/RoutineLoad.md#load-avro-format-data) supports loading Avro data.
+- [Routine Load](https://docs.starrocks.io/docs/loading/RoutineLoad#load-avro-format-data) supports loading Avro data.
 - Supports [Microsoft Azure Storage](https://docs.starrocks.io/docs/integrations/authenticate_to_azure_storage/) (including Azure Blob Storage and Azure Data Lake Storage).
 
 ### Improvements
@@ -316,7 +316,7 @@ Release date: April 28, 2023
 
 - The [AUTO_INCREMENT](https://docs.starrocks.io/docs/sql-reference/sql-statements/auto_increment/) attribute is supported to provide globally unique IDs, which simplifies data management.
 - [Automatic partitioning and partitioning expressions](https://docs.starrocks.io/docs/3.0/table_design/automatic_partitioning/) are supported, which makes partition creation easier to use and more flexible.
-- Primary Key tables support more complete [UPDATE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/UPDATE/) and [DELETE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/DELETE.md#primary-key-tables) syntax, including the use of CTEs and references to multiple tables.
+- Primary Key tables support more complete [UPDATE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/UPDATE/) and [DELETE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/DELETE#primary-key-tables) syntax, including the use of CTEs and references to multiple tables.
 - Added Load Profile for Broker Load and INSERT INTO jobs. You can view the details of a load job by querying the load profile. The usage is the same as [Analyze query profile](https://docs.starrocks.io/docs/administration/query_profile/).
 
 #### Data Lake Analytics
@@ -342,7 +342,7 @@ Release date: April 28, 2023
 - Added the following privilege-related SQL statements: [SET DEFAULT ROLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/SET_DEFAULT_ROLE/), [SET ROLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/SET_ROLE/), [SHOW ROLES](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/SHOW_ROLES/), and [SHOW USERS](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/SHOW_USERS/).
 - Added the following semi-structured data analysis functions: [map_apply](https://docs.starrocks.io/docs/sql-reference/sql-functions/map-functions/map_apply/), [map_from_arrays](https://docs.starrocks.io/docs/sql-reference/sql-functions/map-functions/map_from_arrays/).
 - [array_agg](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_agg/) supports ORDER BY.
-- Window functions [lead](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function.md#lead) and [lag](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function.md#lag) support IGNORE NULLS.
+- Window functions [lead](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function#lead) and [lag](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function#lag) support IGNORE NULLS.
 - Added string functions [replace](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/replace/), [hex_decode_binary](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/hex_decode_binary/), and [hex_decode_string()](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/hex_decode_string/).
 - Added encryption functions [base64_decode_binary](https://docs.starrocks.io/docs/sql-reference/sql-functions/crytographic-functions/base64_decode_binary/) and [base64_decode_string](https://docs.starrocks.io/docs/sql-reference/sql-functions/crytographic-functions/base64_decode_string/).
 - Added math functions [sinh](https://docs.starrocks.io/docs/sql-reference/sql-functions/math-functions/sinh/), [cosh](https://docs.starrocks.io/docs/sql-reference/sql-functions/math-functions/cosh/), and [tanh](https://docs.starrocks.io/docs/sql-reference/sql-functions/math-functions/tanh/).
@@ -359,7 +359,7 @@ Release date: April 28, 2023
 - Supports more CSV parameters for data ingestion, including SKIP_HEADER, TRIM_SPACE, ENCLOSE, and ESCAPE. See [STREAM LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/STREAM_LOAD/), [BROKER LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/BROKER_LOAD/), and [ROUTINE LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD/).
 - The primary key and sort key are decoupled in [Primary Key tables](https://docs.starrocks.io/docs/table_design/table_types/primary_key_table/). The sort key can be separately specified in `ORDER BY` when you create a table.
 - Optimized the memory usage of data ingestion into Primary Key tables in scenarios such as large-volume ingestion, partial updates, and persistent primary indexes.
-- Supports creating asynchronous INSERT tasks. For more information, see [INSERT](https://docs.starrocks.io/docs/loading/InsertInto.md#load-data-asynchronously-using-insert) and [SUBMIT TASK](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SUBMIT_TASK/). [#20609](https://github.com/StarRocks/starrocks/issues/20609)
+- Supports creating asynchronous INSERT tasks. For more information, see [INSERT](https://docs.starrocks.io/docs/loading/InsertInto#load-data-asynchronously-using-insert) and [SUBMIT TASK](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SUBMIT_TASK/). [#20609](https://github.com/StarRocks/starrocks/issues/20609)
 
 #### Materialized view
 
@@ -392,7 +392,7 @@ Release date: April 28, 2023
 - Partition pruning causes MV rewrites to fail. [#14641](https://github.com/StarRocks/starrocks/issues/14641)
 - MV rewrite fails when the CREATE MATERIALIZED VIEW statement contains `count(distinct)` and `count(distinct)` is applied to the DISTRIBUTED BY column. [#16558](https://github.com/StarRocks/starrocks/issues/16558)
 - FEs fail to start when a VARCHAR column is used as the partitioning column of a materialized view. [#19366](https://github.com/StarRocks/starrocks/issues/19366)
-- Window functions [LEAD](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function.md#lead) and [LAG](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function.md#lag) incorrectly handle IGNORE NULLS. [#21001](https://github.com/StarRocks/starrocks/pull/21001)
+- Window functions [LEAD](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function#lead) and [LAG](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function#lag) incorrectly handle IGNORE NULLS. [#21001](https://github.com/StarRocks/starrocks/pull/21001)
 - Adding temporary partitions conflicts with automatic partition creation. [#21222](https://github.com/StarRocks/starrocks/issues/21222)
 
 ### Behavior Change
