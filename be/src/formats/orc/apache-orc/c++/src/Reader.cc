@@ -35,6 +35,8 @@
 
 #include "Reader.hh"
 
+#include <glog/logging.h>
+
 #include <algorithm>
 #include <iostream>
 #include <iterator>
@@ -43,8 +45,6 @@
 #include <sstream>
 #include <string>
 #include <vector>
-
-#include <glog/logging.h>
 
 #include "Adaptor.hh"
 #include "BloomFilter.hh"

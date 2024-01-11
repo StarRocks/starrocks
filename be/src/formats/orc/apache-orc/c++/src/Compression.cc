@@ -35,11 +35,11 @@
 
 #include "Compression.hh"
 
+#include <glog/logging.h>
+
 #include <algorithm>
 #include <iomanip>
 #include <iostream>
-
-#include <glog/logging.h>
 
 #include "Adaptor.hh"
 #include "LzoDecompressor.hh"
