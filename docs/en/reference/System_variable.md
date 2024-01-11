@@ -601,7 +601,7 @@ The SQL dialect that is used. For example, you can run the `set sql_dialect = 't
 Used to specify the SQL mode to accommodate certain SQL dialects. Valid values include:
 
 * `PIPES_AS_CONCAT`: The pipe symbol `|` is used to concatenate strings, for example, `select 'hello ' || 'world'`.
-* `ONLY_FULL_GROUP_BY`: The SELECT LIST can only contain GROUP BY columns or aggregate functions.
+* `ONLY_FULL_GROUP_BY` (Default): The SELECT LIST can only contain GROUP BY columns or aggregate functions.
 * `ALLOW_THROW_EXCEPTION`: returns an error instead of NULL when type conversion fails.
 * `FORBID_INVALID_DATE`: prohibits invalid dates.
 * `MODE_DOUBLE_LITERAL`: interprets floating-point types as DOUBLE rather than DECIMAL.
