@@ -37,6 +37,8 @@ public class ViewBasedMvRewritePerfTest extends MvRewriteTestBase {
         Config.mv_plan_cache_max_size = 1024;
         CachingMvPlanContextBuilder.getInstance().rebuildCache();
         starRocksAssert.getCtx().setDumpInfo(null);
+        connectContext.getSessionVariable().setCboMaterializedViewRewriteCandidateLimit(1000);
+        connectContext.getSessionVariable().setCboMaterializedViewRewriteRuleOutputLimit(1000);
 
         // Base tables
         starRocksAssert.withTable(cluster, "t0");
@@ -95,8 +97,8 @@ public class ViewBasedMvRewritePerfTest extends MvRewriteTestBase {
         connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
     }
 
-    // round: 0.02 [+- 0.01], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 1, GC.time: 0.01,
-    // time.total: 0.70, time.warmup: 0.27, time.bench: 0.43
+    // round: 0.02 [+- 0.00], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 1, GC.time: 0.01,
+    // time.total: 0.35, time.warmup: 0.05, time.bench: 0.30
     @Test
     @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = 20)
     public void testViewBaseRewrite_Basic() throws Exception {
@@ -104,8 +106,8 @@ public class ViewBasedMvRewritePerfTest extends MvRewriteTestBase {
         starRocksAssert.query(query).explainContains("mv_agg_join_1");
     }
 
-    // round: 0.03 [+- 0.00], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 0, GC.time: 0.00,
-    // time.total: 0.78, time.warmup: 0.28, time.bench: 0.50
+    // round: 0.01 [+- 0.00], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 0, GC.time: 0.00,
+    // time.total: 0.36, time.warmup: 0.06, time.bench: 0.30
     @Test
     @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = 20)
     public void testViewBaseRewrite_Basic_Disable() throws Exception {
@@ -115,8 +117,8 @@ public class ViewBasedMvRewritePerfTest extends MvRewriteTestBase {
     }
 
     // the following two tests test whether use view based mv rewrite or original SPJG mv rewrite
-    // round: 0.02 [+- 0.00], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 0, GC.time: 0.00,
-    // time.total: 0.56, time.warmup: 0.25, time.bench: 0.31
+    // round: 0.01 [+- 0.00], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 0, GC.time: 0.00,
+    // time.total: 0.29, time.warmup: 0.11, time.bench: 0.18
     @Test
     @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = 20)
     public void testViewBaseRewrite_ViewBased_VS_Spjg() throws Exception {
@@ -124,8 +126,8 @@ public class ViewBasedMvRewritePerfTest extends MvRewriteTestBase {
         starRocksAssert.query(query).explainContains("mv_agg_1");
     }
 
-    // round: 0.02 [+- 0.00], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 0, GC.time: 0.00,
-    // time.total: 0.55, time.warmup: 0.24, time.bench: 0.32
+    // round: 0.01 [+- 0.00], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 0, GC.time: 0.00,
+    // time.total: 0.19, time.warmup: 0.03, time.bench: 0.16
     @Test
     @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = 20)
     public void testViewBaseRewrite_ViewBased_VS_Spjg_DisableView() throws Exception {
@@ -134,8 +136,8 @@ public class ViewBasedMvRewritePerfTest extends MvRewriteTestBase {
         starRocksAssert.query(query).explainContains("mv_agg_1");
     }
 
-    // round: 0.02 [+- 0.00], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 1, GC.time: 0.01,
-    // time.total: 0.96, time.warmup: 0.58, time.bench: 0.38
+    // round: 0.03 [+- 0.01], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 1, GC.time: 0.01,
+    // time.total: 0.74, time.warmup: 0.12, time.bench: 0.62
     @Test
     @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = 20)
     public void testViewBaseRewrite_ViewBased_withManyMvs() throws Exception {
@@ -143,8 +145,8 @@ public class ViewBasedMvRewritePerfTest extends MvRewriteTestBase {
         starRocksAssert.query(query).explainContains("mv_candidate_join_");
     }
 
-    // round: 0.02 [+- 0.00], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 1, GC.time: 0.01,
-    // time.total: 0.84, time.warmup: 0.54, time.bench: 0.31
+    // round: 0.02 [+- 0.01], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 1, GC.time: 0.02,
+    // time.total: 1.05, time.warmup: 0.67, time.bench: 0.38
     @Test
     @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = 20)
     public void testViewBaseRewrite_ViewBased_withManyMvs_Disable() throws Exception {
@@ -153,8 +155,8 @@ public class ViewBasedMvRewritePerfTest extends MvRewriteTestBase {
         starRocksAssert.query(query).explainWithout("mv_candidate_join_");
     }
 
-    // round: 0.02 [+- 0.00], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 1, GC.time: 0.01,
-    // time.total: 0.95, time.warmup: 0.54, time.bench: 0.41
+    // round: 0.03 [+- 0.01], round.block: 0.00 [+- 0.00], round.gc: 0.00 [+- 0.00], GC.calls: 1, GC.time: 0.02,
+    // time.total: 1.08, time.warmup: 0.52, time.bench: 0.56
     @Test
     @BenchmarkOptions(warmupRounds = 3, benchmarkRounds = 20)
     public void testViewBaseRewrite_ViewBased_withManyMvs_join() throws Exception {
