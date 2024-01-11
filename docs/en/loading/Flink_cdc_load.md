@@ -16,7 +16,7 @@ This tutorial helps you learn how you can bring real-time analytics to your busi
 
 The following figure illustrates the entire synchronization process.
 
-![img](../assets/4.9.2.png)
+![img](../assets/load_tools.png)
 
 Real-time synchronization from MySQL is implemented in two stages: synchronizing database & table schema and synchronizing data. First, the SMT converts MySQL database & table schema into table creation statements for StarRocks. Then, the Flink cluster runs Flink jobs to synchronize full and incremental MySQL data to StarRocks.
 
