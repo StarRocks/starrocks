@@ -110,12 +110,12 @@ public:
     const tparquet::ColumnMetaData& metadata() const { return _chunk_metadata->meta_data; }
 
     Status get_dict_values(Column* column) {
-        RETURN_IF_ERROR(try_load_dictionary());
+        RETURN_IF_ERROR(_try_load_dictionary());
         return _cur_decoder->get_dict_values(column);
     }
 
     Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) {
-        RETURN_IF_ERROR(try_load_dictionary());
+        RETURN_IF_ERROR(_try_load_dictionary());
         return _cur_decoder->get_dict_values(dict_codes, nulls, column);
     }
 
@@ -129,7 +129,7 @@ public:
 
     void set_next_read_page_idx(size_t cur_page_idx) { _page_reader->set_next_read_page_idx(cur_page_idx); }
 
-    Status try_load_dictionary();
+    Status load_dictionary_page();
 
 private:
     Status _parse_page_header();
@@ -138,6 +138,8 @@ private:
     Status _read_and_decompress_page_data();
     Status _parse_data_page();
     Status _parse_dict_page();
+
+    Status _try_load_dictionary();
 
     Status _read_and_decompress_page_data(uint32_t compressed_size, uint32_t uncompressed_size, bool is_compressed);
 

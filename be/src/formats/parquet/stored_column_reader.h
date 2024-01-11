@@ -63,7 +63,7 @@ public:
     virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
                                    Column* column) = 0;
 
-    virtual Status try_load_dictionary() { return Status::InternalError("Not supported try_load_dictionary"); }
+    virtual Status load_dictionary_page() { return Status::InternalError("Not supported load_dictionary_page"); }
 
     virtual Status load_specific_page(size_t cur_page_idx, uint64_t offset, uint64_t first_row) {
         return Status::InternalError("Not supported load_specific_page");
@@ -99,13 +99,7 @@ public:
         return _reader->get_dict_values(dict_codes, nulls, column);
     }
 
-    Status try_load_dictionary() override {
-        RETURN_IF_ERROR(_reader->try_load_dictionary());
-        // maybe there is no dictionary page, try_load_dictionary just loaded header
-        _cur_page_loaded = false;
-        _num_values_left_in_cur_page = _reader->num_values();
-        return Status::OK();
-    }
+    Status load_dictionary_page() override { return _reader->load_dictionary_page(); }
 
     Status load_specific_page(size_t cur_page_idx, uint64_t offset, uint64_t first_row) override;
 
