@@ -138,7 +138,7 @@ public:
 
     ~DependsAllEvent() override = default;
 
-    void schedule(RuntimeState* state) override { finish(state); }
+    void process(RuntimeState* state) override { finish(state); }
 
     std::string name() const override { return "depends_all_event"; }
 
