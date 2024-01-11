@@ -246,6 +246,31 @@ public class MvUtils {
         return false;
     }
 
+    public static String getInvalidReason(OptExpression expr) {
+        List<Operator> operators = collectOperators(expr);
+        if (operators.stream().anyMatch(op -> !isLogicalSPJGOperator(op))) {
+            String nonSPJGOperators =
+                    operators.stream().filter(x -> !isLogicalSPJGOperator(x))
+                            .map(Operator::toString)
+                            .collect(Collectors.joining(","));
+            return "MV contains non-SPJG operators: " + nonSPJGOperators;
+        }
+        return "MV is not SPJG structure";
+    }
+
+    private static List<Operator> collectOperators(OptExpression expr) {
+        List<Operator> operators = Lists.newArrayList();
+        collectOperators(expr, operators);
+        return operators;
+    }
+
+    private static void collectOperators(OptExpression expr, List<Operator> result) {
+        result.add(expr.getOp());
+        for (OptExpression child : expr.getInputs()) {
+            collectOperators(child, result);
+        }
+    }
+
     public static boolean isLogicalSPJG(OptExpression root) {
         return isLogicalSPJG(root, 0);
     }
@@ -300,6 +325,14 @@ public class MvUtils {
         return true;
     }
 
+    public static boolean isLogicalSPJGOperator(Operator operator) {
+        return (operator instanceof LogicalScanOperator)
+                || (operator instanceof LogicalProjectOperator)
+                || (operator instanceof LogicalFilterOperator)
+                || (operator instanceof LogicalJoinOperator)
+                || (operator instanceof LogicalAggregationOperator);
+    }
+
     public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(MaterializedView mv,
                                                                                String sql,
                                                                                ColumnRefFactory columnRefFactory,
@@ -318,8 +351,7 @@ public class MvUtils {
         Preconditions.checkState(mvStmt instanceof QueryStatement);
         Analyzer.analyze(mvStmt, connectContext);
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
-        LogicalPlan logicalPlan =
-                new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
+        LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, connectContext).transform(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
                 connectContext,
