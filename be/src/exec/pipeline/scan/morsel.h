@@ -308,6 +308,7 @@ public:
 
     std::string name() const override { return "fixed_morsel_queue"; }
     Type type() const override { return FIXED; }
+
 private:
     std::atomic<size_t> _pop_index;
 };
