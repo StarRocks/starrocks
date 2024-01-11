@@ -39,6 +39,8 @@
 #include <iomanip>
 #include <iostream>
 
+#include <glog/logging.h>
+
 #include "Adaptor.hh"
 #include "LzoDecompressor.hh"
 #include "Utils.hh"
@@ -376,6 +378,7 @@ void DecompressionStream::readBuffer(bool failOnEof) {
     int length;
     if (!input->Next(reinterpret_cast<const void**>(&inputBuffer), &length)) {
         if (failOnEof) {
+            CHECK(false);
             throw ParseError("Read past EOF in DecompressionStream::readBuffer");
         }
         state = DECOMPRESS_EOF;
@@ -638,14 +641,17 @@ void ZlibDecompressionStream::NextDecompress(const void** data, int* size, size_
         case Z_STREAM_END:
             break;
         case Z_BUF_ERROR:
+            CHECK(false);
             throw std::logic_error(
                     "Buffer error in "
                     "ZlibDecompressionStream::NextDecompress");
         case Z_DATA_ERROR:
+            CHECK(false);
             throw std::logic_error(
                     "Data error in "
                     "ZlibDecompressionStream::NextDecompress");
         case Z_STREAM_ERROR:
+            CHECK(false);
             throw std::logic_error(
                     "Stream error in "
                     "ZlibDecompressionStream::NextDecompress");

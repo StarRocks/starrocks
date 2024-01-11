@@ -44,6 +44,8 @@
 #include <string>
 #include <vector>
 
+#include <glog/logging.h>
+
 #include "Adaptor.hh"
 #include "BloomFilter.hh"
 #include "Options.hh"
@@ -447,6 +449,7 @@ void RowReaderImpl::loadStripeIndex() {
             if (pbStream.kind() == proto::Stream_Kind_ROW_INDEX) {
                 proto::RowIndex rowIndex;
                 if (!rowIndex.ParseFromZeroCopyStream(inStream.get())) {
+                    CHECK(false);
                     throw ParseError("Failed to parse the row index");
                 }
                 rowIndexes[colId] = rowIndex;
@@ -521,6 +524,7 @@ proto::StripeFooter getStripeFooter(const proto::StripeInformation& info, const 
                                contents.blockSize, *contents.pool, contents.readerMetrics);
     proto::StripeFooter result;
     if (!result.ParseFromZeroCopyStream(pbStream.get())) {
+        CHECK(false);
         throw ParseError(std::string("bad StripeFooter from ") + pbStream->getName());
     }
     // Verify StripeFooter in case it's corrupt
@@ -802,6 +806,7 @@ void ReaderImpl::readMetadata() const {
                                    contents->blockSize, *contents->pool, contents->readerMetrics);
         contents->metadata.reset(new proto::Metadata());
         if (!contents->metadata->ParseFromZeroCopyStream(pbStream.get())) {
+            CHECK(false);
             throw ParseError("Failed to parse the metadata");
         }
     }
@@ -1346,6 +1351,7 @@ std::unique_ptr<proto::PostScript> readPostscript(InputStream* stream, DataBuffe
         throw ParseError(msg.str());
     }
     if (!postscript->ParseFromArray(ptr + readSize - 1 - postscriptSize, static_cast<int>(postscriptSize))) {
+        CHECK(false);
         throw ParseError("Failed to parse the postscript from " + stream->getName());
     }
     return REDUNDANT_MOVE(postscript);
