@@ -19,6 +19,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -139,13 +140,37 @@ public class BaseTableInfo {
         return this.tableId;
     }
 
+    /**
+     * A checked version of getTable, which enforce checking existence of table
+     *
+     * @return the table if exists
+     */
+    public Optional<Table> mayGetTable() {
+        return Optional.ofNullable(getTable());
+    }
+
+    /**
+     * A checked version of getTable, which enforce checking the existence of table
+     *
+     * @return the table if exists
+     */
+    public Table getTableChecked() {
+        Table table = getTable();
+        if (table != null) {
+            return table;
+        }
+        throw MaterializedViewExceptions.reportBaseTableNotExists(this);
+    }
+
+    @Deprecated
     public Table getTable() {
         if (isInternalCatalog(catalogName)) {
-            Table table = getTableById();
-            if (table == null) {
-                table = getTableByName();
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db == null) {
+                return null;
+            } else {
+                return db.getTable(tableId);
             }
-            return table;
         } else {
             if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
                 LOG.warn("catalog {} not exist", catalogName);
@@ -157,24 +182,10 @@ public class BaseTableInfo {
                 return null;
             }
 
-            if (tableIdentifier == null) {
-                this.tableIdentifier = table.getTableIdentifier();
-                return table;
-            }
-
             if (tableIdentifier != null && table.getTableIdentifier().equals(tableIdentifier)) {
                 return table;
             }
             return null;
-        }
-    }
-
-    public Table getTableById() {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            return null;
-        } else {
-            return db.getTable(tableId);
         }
     }
 

@@ -20,6 +20,7 @@ import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
 import com.starrocks.utframe.UtFrameUtils;
@@ -31,7 +32,7 @@ public class BDBHATest {
 
     @BeforeClass
     public static void beforeClass() {
-        UtFrameUtils.createMinStarRocksCluster(true);
+        UtFrameUtils.createMinStarRocksCluster(true, RunMode.SHARED_NOTHING);
         UtFrameUtils.PseudoImage.setUpImageVersion();
     }
 

@@ -227,8 +227,6 @@ public class OperationType {
     // light schema change for add and drop columns
     public static final short OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS = 107;
 
-    public static final short OP_UPSERT_TRANSACTION_STATE_BATCH = 108;
-
     // routine load 110~120
     @Deprecated
     public static final short OP_ROUTINE_LOAD_JOB = 110;
@@ -353,6 +351,7 @@ public class OperationType {
     public static final short OP_CREATE_INSERT_OVERWRITE = 10095;
     public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10096;
     public static final short OP_ALTER_MATERIALIZED_VIEW_STATUS = 10097;
+    public static final short OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS = 10098;
 
     // manage system node info 10101 ~ 10120
     @Deprecated
@@ -433,6 +432,7 @@ public class OperationType {
     //Txn json format log
     public static final short OP_UPSERT_TRANSACTION_STATE_V2 = 12110;
     public static final short OP_SAVE_TRANSACTION_ID_V2 = 12111;
+    public static final short OP_UPSERT_TRANSACTION_STATE_BATCH = 12112;
 
     //colocate table json format log
     public static final short OP_COLOCATE_ADD_TABLE_V2 = 12130;

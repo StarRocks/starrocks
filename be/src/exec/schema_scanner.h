@@ -95,7 +95,6 @@ public:
     static std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type);
 
     TAuthInfo build_auth_info();
-    void set_runtime_state(RuntimeState* state);
 
     static void set_starrocks_server(StarRocksServer* starrocks_server) { _s_starrocks_server = starrocks_server; }
 

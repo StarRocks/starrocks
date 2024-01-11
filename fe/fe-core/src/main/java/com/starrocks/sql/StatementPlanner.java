@@ -30,7 +30,6 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
@@ -69,6 +68,8 @@ import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.RemoteTransactionMgr;
+import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 
 import java.util.ArrayList;
@@ -96,7 +97,8 @@ public class StatementPlanner {
         } else if (stmt instanceof DmlStmt) {
             try {
                 beginTransaction((DmlStmt) stmt, session);
-            } catch (BeginTransactionException | LabelAlreadyUsedException | DuplicatedRequestException | AnalysisException e) {
+            } catch (RunningTxnExceedException | LabelAlreadyUsedException | DuplicatedRequestException | AnalysisException |
+                     BeginTransactionException e) {
                 throw new SemanticException("fail to begin transaction. " + e.getMessage());
             }
         }
@@ -359,7 +361,8 @@ public class StatementPlanner {
     }
 
     private static void beginTransaction(DmlStmt stmt, ConnectContext session)
-            throws BeginTransactionException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
+            throws BeginTransactionException, RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException,
+            DuplicatedRequestException {
         // not need begin transaction here
         // 1. explain (exclude explain analyze)
         // 2. insert into files
@@ -391,14 +394,14 @@ public class StatementPlanner {
             return;
         }
 
-        String label = DebugUtil.printId(session.getExecutionId());
+        String label;
         if (stmt instanceof InsertStmt) {
             String stmtLabel = ((InsertStmt) stmt).getLabel();
-            label = Strings.isNullOrEmpty(stmtLabel) ? "insert_" + label : stmtLabel;
+            label = Strings.isNullOrEmpty(stmtLabel) ? MetaUtils.genInsertLabel(session.getExecutionId()) : stmtLabel;
         } else if (stmt instanceof UpdateStmt) {
-            label = "update_" + label;
+            label = MetaUtils.genUpdateLabel(session.getExecutionId());
         } else if (stmt instanceof DeleteStmt) {
-            label = "delete_" + label;
+            label = MetaUtils.genDeleteLabel(session.getExecutionId());
         } else {
             throw UnsupportedException.unsupportedException("Unsupported dml statement " + stmt.getClass().getSimpleName());
         }
@@ -407,17 +410,29 @@ public class StatementPlanner {
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
         long txnId = -1L;
         if (targetTable instanceof ExternalOlapTable) {
-            ExternalOlapTable tbl = (ExternalOlapTable) targetTable;
+            if (!(stmt instanceof InsertStmt)) {
+                throw UnsupportedException.unsupportedException("External OLAP table only supports insert statement");
+            }
+            // sync OLAP external table meta here,
+            // because beginRemoteTransaction will use the dbId and tableId as request param.
+            ExternalOlapTable tbl = MetaUtils.syncOLAPExternalTableMeta((ExternalOlapTable) targetTable);
+            ((InsertStmt) stmt).setTargetTable(tbl);
             TAuthenticateParams authenticateParams = new TAuthenticateParams();
             authenticateParams.setUser(tbl.getSourceTableUser());
             authenticateParams.setPasswd(tbl.getSourceTablePassword());
             authenticateParams.setHost(session.getRemoteIP());
             authenticateParams.setDb_name(tbl.getSourceTableDbName());
             authenticateParams.setTable_names(Lists.newArrayList(tbl.getSourceTableName()));
-            txnId = transactionMgr.beginRemoteTransaction(tbl.getSourceTableDbId(), Lists.newArrayList(tbl.getSourceTableId()),
-                    label, tbl.getSourceTableHost(), tbl.getSourceTablePort(),
-                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                    sourceType, session.getSessionVariable().getQueryTimeoutS(), authenticateParams);
+            txnId = RemoteTransactionMgr.beginTransaction(
+                    tbl.getSourceTableDbId(),
+                    Lists.newArrayList(tbl.getSourceTableId()),
+                    label,
+                    sourceType,
+                    session.getSessionVariable().getQueryTimeoutS(),
+                    tbl.getSourceTableHost(),
+                    tbl.getSourceTablePort(),
+                    authenticateParams);
+
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
                 || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
             // schema table and iceberg and hive table does not need txn

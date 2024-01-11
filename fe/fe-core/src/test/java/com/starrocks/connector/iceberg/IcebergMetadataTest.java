@@ -84,6 +84,7 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.Namespace;
@@ -114,6 +115,7 @@ import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_UR
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
+import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.RESOURCE_MAPPING_CATALOG_PREFIX;
 
 public class IcebergMetadataTest extends TableTestBase {
@@ -1134,7 +1136,7 @@ public class IcebergMetadataTest extends TableTestBase {
         AddColumnClause addC4 = new AddColumnClause(c4, null, null, new HashMap<>());
         clauses.add(addC4);
         AlterTableStmt stmtC4 = new AlterTableStmt(tableName, clauses);
-        Assert.assertThrows(StarRocksConnectorException.class, () -> metadata.alterTable(stmtC4));
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(stmtC4));
         clauses.clear();
 
         // drop/rename/modify column
@@ -1159,11 +1161,21 @@ public class IcebergMetadataTest extends TableTestBase {
         clauses.clear();
         Map<String, String> newProperties = new HashMap<>();
         newProperties.put(FILE_FORMAT, "orc");
+        newProperties.put(LOCATION_PROPERTY, "new location");
+        newProperties.put(COMPRESSION_CODEC, "gzip");
+        newProperties.put(TableProperties.ORC_BATCH_SIZE, "10240");
         ModifyTablePropertiesClause modifyTablePropertiesClause = new ModifyTablePropertiesClause(newProperties);
         AlterTableCommentClause alterTableCommentClause = new AlterTableCommentClause("new comment", NodePosition.ZERO);
         clauses.add(modifyTablePropertiesClause);
         clauses.add(alterTableCommentClause);
         metadata.alterTable(new AlterTableStmt(tableName, clauses));
+
+        // modify empty properties
+        clauses.clear();
+        Map<String, String> emptyProperties = new HashMap<>();
+        ModifyTablePropertiesClause emptyPropertiesClause = new ModifyTablePropertiesClause(emptyProperties);
+        clauses.add(emptyPropertiesClause);
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
 
         // modify unsupported properties
         clauses.clear();
@@ -1172,6 +1184,6 @@ public class IcebergMetadataTest extends TableTestBase {
         invalidProperties.put(COMPRESSION_CODEC, "zzz");
         ModifyTablePropertiesClause invalidCompressionClause = new ModifyTablePropertiesClause(invalidProperties);
         clauses.add(invalidCompressionClause);
-        Assert.assertThrows(IllegalArgumentException.class, () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
     }
 }
