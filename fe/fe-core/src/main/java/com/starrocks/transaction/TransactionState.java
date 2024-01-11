@@ -1065,35 +1065,6 @@ public class TransactionState implements Writable {
     public String getTraceParent() {
         return traceParent;
     }
-<<<<<<< HEAD
-=======
-
-    // A value of -1 indicates this field is not set.
-    public long getWriteEndTimeMs() {
-        return writeEndTimeMs;
-    }
-
-    public void setWriteEndTimeMs(long writeEndTimeMs) {
-        this.writeEndTimeMs = writeEndTimeMs;
-    }
-
-    // A value of -1 indicates this field is not set.
-    public long getAllowCommitTimeMs() {
-        return allowCommitTimeMs;
-    }
-
-    public void setAllowCommitTimeMs(long allowCommitTimeMs) {
-        this.allowCommitTimeMs = allowCommitTimeMs;
-    }
-
-    // A value of -1 indicates this field is not set.
-    public long getWriteDurationMs() {
-        return writeDurationMs;
-    }
-
-    public void setWriteDurationMs(long writeDurationMs) {
-        this.writeDurationMs = writeDurationMs;
-    }
 
     public ConcurrentMap<String, TOlapTablePartition> getPartitionNameToTPartition() {
         return partitionNameToTPartition;
@@ -1108,5 +1079,4 @@ public class TransactionState implements Writable {
         tabletIdToTTabletLocation.clear();
     }
 
->>>>>>> c99d52304d ([BugFix] Fix automatic create partition return inconsistency result when tablet rebalance (#38598))
 }

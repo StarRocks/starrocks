@@ -56,11 +56,7 @@ import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUserIdentity;
-<<<<<<< HEAD
-=======
-import com.starrocks.transaction.CommitRateExceededException;
 import com.starrocks.transaction.GlobalTransactionMgr;
->>>>>>> c99d52304d ([BugFix] Fix automatic create partition return inconsistency result when tablet rebalance (#38598))
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
