@@ -52,9 +52,9 @@ SourceOperatorFactory* SourceOperatorFactory::group_leader() const {
 
 void SourceOperatorFactory::union_group(SourceOperatorFactory* other_group) {
     auto* group_leader = this->group_leader();
-    auto* other_group_parent = other_group->group_leader();
-    if (group_leader != other_group_parent) {
-        other_group_parent->_group_parent = group_leader;
+    auto* other_group_leader = other_group->group_leader();
+    if (group_leader != other_group_leader) {
+        other_group_leader->_group_parent = group_leader;
     }
 }
 
