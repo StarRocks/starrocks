@@ -151,6 +151,7 @@ import com.starrocks.epack.persist.SRMetaBlockIDEPack;
 import com.starrocks.epack.privilege.AuthenticationMgrEPack;
 import com.starrocks.epack.privilege.AuthorizationMgrEpack;
 import com.starrocks.epack.privilege.AuthorizerEPack;
+import com.starrocks.epack.privilege.ObjectTypeEPack;
 import com.starrocks.epack.privilege.SecurityPolicyMgr;
 import com.starrocks.epack.server.WarehouseManagerEpack;
 import com.starrocks.ha.FrontendNodeType;
@@ -236,7 +237,9 @@ import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
@@ -3397,7 +3400,10 @@ public class GlobalStateMgr {
             AuthorizerEPack.checkAnyActionOnWarehouse(ctx.getCurrentUserIdentity(),
                     ctx.getCurrentRoleIds(), newWarehouseName);
         } catch (AccessDeniedException e) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "SET WAREHOUSE");
+            AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(), PrivilegeType.ANY.name(),
+                    ObjectTypeEPack.WAREHOUSE.name(), newWarehouseName);
+            ErrorReport.reportDdlException(ErrorCode.ERR_ACCESS_DENIED, "SET WAREHOUSE");
         }
         ctx.setCurrentWarehouse(newWarehouseName);
     }
@@ -3413,7 +3419,8 @@ public class GlobalStateMgr {
                 Authorizer.checkAnyActionOnCatalog(ctx.getCurrentUserIdentity(),
                         ctx.getCurrentRoleIds(), newCatalogName);
             } catch (AccessDeniedException e) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+                AccessDeniedException.reportAccessDenied(newCatalogName, ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                        PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), newCatalogName);
             }
         }
         ctx.setCurrentCatalog(newCatalogName);
@@ -3444,7 +3451,9 @@ public class GlobalStateMgr {
                     Authorizer.checkAnyActionOnCatalog(ctx.getCurrentUserIdentity(),
                             ctx.getCurrentRoleIds(), newCatalogName);
                 } catch (AccessDeniedException e) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+                    AccessDeniedException.reportAccessDenied(newCatalogName,
+                            ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                            PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), newCatalogName);
                 }
             }
             ctx.setCurrentCatalog(newCatalogName);
@@ -3462,8 +3471,9 @@ public class GlobalStateMgr {
             Authorizer.checkAnyActionOnOrInDb(ctx.getCurrentUserIdentity(),
                     ctx.getCurrentRoleIds(), ctx.getCurrentCatalog(), dbName);
         } catch (AccessDeniedException e) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                    ctx.getCurrentUserIdentity().getUser(), dbName);
+            AccessDeniedException.reportAccessDenied(ctx.getCurrentCatalog(),
+                    ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                    PrivilegeType.ANY.name(), ObjectType.DATABASE.name(), dbName);
         }
 
         ctx.setDatabase(dbName);

@@ -24,7 +24,6 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
@@ -199,7 +198,7 @@ public class SetStmtAnalyzer {
                 String supportedList = StringUtils.join(
                         EnumUtils.getEnumList(SessionVariable.MaterializedViewRewriteMode.class), ",");
                 throw new SemanticException(String.format("Unsupported materialized view rewrite mode: %s, " +
-                                "supported list is %s", rewriteModeName, supportedList));
+                        "supported list is %s", rewriteModeName, supportedList));
             }
         }
 
@@ -343,17 +342,12 @@ public class SetStmtAnalyzer {
     }
 
     private static void analyzeSetPassVar(SetPassVar var, ConnectContext session) {
-        try {
-            UserIdentity userIdentity = var.getUserIdent();
-            if (userIdentity == null) {
-                userIdentity = session.getCurrentUserIdentity();
-            }
-            userIdentity.analyze();
-            var.setUserIdent(userIdentity);
-            var.setPasswdBytes(MysqlPassword.checkPassword(var.getPasswdParam()));
-
-        } catch (AnalysisException e) {
-            throw new SemanticException(e.getMessage());
+        UserIdentity userIdentity = var.getUserIdent();
+        if (userIdentity == null) {
+            userIdentity = session.getCurrentUserIdentity();
         }
+        userIdentity.analyze();
+        var.setUserIdent(userIdentity);
+        var.setPasswdBytes(MysqlPassword.checkPassword(var.getPasswdParam()));
     }
 }

@@ -17,6 +17,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -129,7 +130,7 @@ public class AlterUserStmtTest {
         Assert.fail("No exception throws.");
     }
 
-    @Test(expected = AnalysisException.class)
+    @Test(expected = ErrorReportException.class)
     public void testBadPass() throws Exception {
         String sql = "ALTER USER 'user' IDENTIFIED BY PASSWORD 'passwd12345'";
         UtFrameUtils.parseStmtWithNewParser(sql, ConnectContext.get());
