@@ -24,6 +24,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
@@ -275,7 +276,7 @@ public class InsertStmt extends DmlStmt {
         return tableFunctionProperties;
     }
 
-    public Table makeTableFunctionTable() {
+    public Table makeTableFunctionTable(SessionVariable sessionVariable) {
         checkState(tableFunctionAsTargetTable, "tableFunctionAsTargetTable is false");
         // fetch schema from query
         QueryRelation query = getQueryStatement().getQueryRelation();
@@ -324,10 +325,9 @@ public class InsertStmt extends DmlStmt {
             throw new SemanticException("use \"path\" = \"parquet\", as only parquet format is supported now");
         }
 
+        // if compression codec is not specified, use compression codec from session
         if (compressionType == null) {
-            throw new SemanticException("compression is a mandatory property. " +
-                    "Use \"compression\" = \"your_chosen_compression_type\". Supported compression types are" +
-                    "(uncompressed, gzip, brotli, zstd, lz4).");
+            compressionType = sessionVariable.getConnectorSinkCompressionCodec();
         }
 
         if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(compressionType)) {
