@@ -69,6 +69,7 @@ import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AddSubPartitionsInfoV2;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.AlterLoadJobOperationLog;
+import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterUserInfo;
@@ -385,6 +386,10 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS:
                 data = AlterMaterializedViewStatusLog.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS:
+                data = AlterMaterializedViewBaseTableInfosLog.read(in);
                 isRead = true;
                 break;
             case OperationType.OP_BACKUP_JOB: {
