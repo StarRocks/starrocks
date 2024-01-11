@@ -587,7 +587,7 @@ GRF 成功下推跨过 Exchange 算子后，是否在 Exchange Node 上放置 GR
 用于指定 SQL 模式，以适应某些 SQL 方言。有效值包括：
 
 * `PIPES_AS_CONCAT`：管道符号 `|` 用于连接字符串。例如：`select 'hello ' || 'world'`。
-* `ONLY_FULL_GROUP_BY`：SELECT LIST 中只能包含 GROUP BY 列或者聚合函数。
+* `ONLY_FULL_GROUP_BY` (默认值)：SELECT LIST 中只能包含 GROUP BY 列或者聚合函数。
 * `ALLOW_THROW_EXCEPTION`：类型转换报错而不是返回 NULL。
 * `FORBID_INVALID_DATE`：禁止非法的日期。
 * `MODE_DOUBLE_LITERAL`：将浮点类型解释为 DOUBLE 而非 DECIMAL。
