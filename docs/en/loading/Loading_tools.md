@@ -11,7 +11,7 @@ SMT (StarRocks Migration Tool) is a data migration tool provided by StarRocks, d
 
 The following flowchart illustrates the process of loading data from the source database MySQL through Flink into StarRocks.
 
-![img](https://starrocks.feishu.cn/space/api/box/stream/download/asynccode/?code=NjIzZDBmNDZjZjIyMWFhODRjYjU2ZjY5ODk4ZTc1MWZfSnhRdmh4ZjlabEZPcGRCMExlVDJRQkZjSnM2U2FUalJfVG9rZW46WTV5aGIyTm5EbzJuY3F4MkJIR2NPVjdJbmNZXzE3MDQ4Nzg0NjI6MTcwNDg4MjA2Ml9WNA)
+![img](../assets/load_tools.png)
 
 ## [DataX](../integrations/loading_tools/DataX-starrocks-writer.md)
 
