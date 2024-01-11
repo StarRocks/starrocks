@@ -1042,8 +1042,6 @@
         "loading/Flink-connector-starrocks",
         "loading/Load_to_Primary_Key_tables",
         "loading/Etl_in_loading",
-        "loading/CloudCanal",
-        "loading/DataX-starrocks-writer",
         {
           "type": "category",
           "label": "概念介绍",
