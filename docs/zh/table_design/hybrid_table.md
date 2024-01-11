@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # 行列混存表
 
-StarRocks 属于 OLAP 数据库，原先数据是按列存储的方式，能够提高复杂查询（例如聚合查询）的性能。自 3.2.3 开始，StarRocks 还支持行列混存的表存储格式，能够支撑基于主键的高并发、低延时点查，以及数据部分列更新等场景，同时还保留了原有列存的高效分析能力。此外，行列混存表还支持支持[预准备语句](../sql-reference/sql-statements/prepared_statement.md)，能够提高查询的性能和安全性。
+StarRocks 属于 OLAP 数据库，原先数据是按列存储的方式，能够提高复杂查询（例如聚合查询）的性能。自 3.2.3 开始，StarRocks 还支持行列混存的表存储格式，能够支撑基于主键的高并发、低延时点查，以及数据部分列更新等场景，同时还保留了原有列存的高效分析能力。此外，行列混存表还支持[预准备语句](../sql-reference/sql-statements/prepared_statement.md)，能够提高查询的性能和安全性。
 
 ## 列存和行列混存对比
 
@@ -28,15 +28,15 @@ StarRocks 属于 OLAP 数据库，原先数据是按列存储的方式，能够�
 :::
 
 ```SQL
-create table users (
+CREATE TABLE users (
   id bigint not null,
   country string,
   city string,
   revenue bigint
 )
-primary key (id)
-distributed by hash(id)
-properties ("storage_type" = "column_with_row");
+PRIMARY KEY (id)
+DISTRIBUTED BY HASH(id)
+PROPERTIES ("storage_type" = "column_with_row");
 ```
 
 ### 增删改数据
@@ -45,28 +45,28 @@ properties ("storage_type" = "column_with_row");
 
 1. 插入数据。
 
-```SQL
-INSERT INTO users (id, country, city, revenue)
-VALUES 
-  (1, 'USA', 'New York', 5000),
-  (2, 'UK', 'London', 4500),
-  (3, 'France', 'Paris', 6000),
-  (4, 'Germany', 'Berlin', 4000),
-  (5, 'Japan', 'Tokyo', 7000),
-  (6, 'Australia', 'Sydney', 7500);
-```
+   ```SQL
+   INSERT INTO users (id, country, city, revenue)
+   VALUES 
+   (1, 'USA', 'New York', 5000),
+   (2, 'UK', 'London', 4500),
+   (3, 'France', 'Paris', 6000),
+   (4, 'Germany', 'Berlin', 4000),
+   (5, 'Japan', 'Tokyo', 7000),
+   (6, 'Australia', 'Sydney', 7500);
+   ```
 
-1. 删除一行数据。
+2. 删除一行数据。
 
-```SQL
-DELETE FROM users WHERE id = 6;
-```
+   ```SQL
+   DELETE FROM users WHERE id = 6;
+   ```
 
-1. 修改一行数据。
+3. 修改一行数据。
 
-```SQL
-UPDATE users SET revenue = 6500 WHERE id = 4;
-```
+   ```SQL
+   UPDATE users SET revenue = 6500 WHERE id = 4;
+   ```
 
 ### 查询数据
 
@@ -90,51 +90,51 @@ MySQL [example_db]> SELECT * FROM users ORDER BY id;
 
 1. 确保系统已经开启短路径查询。短路径查询开启后，满足条件（用于评估是否为点查）的查询会走短路径，直接查询按行存储的数据。
 
-   1. ```SQL
-      SHOW VARIABLES LIKE '%enable_short_circuit%';
-      ```
+   ```SQL
+   SHOW VARIABLES LIKE '%enable_short_circuit%';
+   ```
 
-   2.  如果短路径查询未开启，可以执行命令 `SET enable_short_circuit = true;`， 设置变量 [ `enable_short_circuit`](xxx) 为 `true`。
+   如果短路径查询未开启，可以执行命令 `SET enable_short_circuit = true;`， 设置变量 [ `enable_short_circuit`](xxx) 为 `true`。
 
 2. 查询数据。如果查询满足本条件：WHERE 子句的条件列必须包含所有主键列，并且运算符为  `=` 或者 `IN`，该查询才会走短路径。
 
-   1.  ::: note
+   ::: note
 
-   2.  WHERE 子句的条件列在包含所有主键列的基础上，还可以包含其他列。
+   WHERE 子句的条件列在包含所有主键列的基础上，还可以包含其他列。
 
-   3.  :::
+   :::
 
-   4. ```SQL
-      SELECT * FROM users WHERE id=1;
-      ```
+   ```SQL
+   SELECT * FROM users WHERE id=1;
+   ```
 
-   5.  您可以通过查看查询规划来确认查询是否走短路径。如果查询规划中包括 `Short Circuit Scan: true`，则代表查询走的是短路径。
+   您可以通过查看查询规划来确认查询是否走短路径。如果查询规划中包括 `Short Circuit Scan: true`，则代表查询走的是短路径。
 
-   6. ```SQL
-      MySQL [example_db]> EXPLAIN SELECT * FROM users WHERE id=1;
-      +---------------------------------------------------------+
-      | Explain String                                          |
-      +---------------------------------------------------------+
-      | PLAN FRAGMENT 0                                         |
-      |  OUTPUT EXPRS:1: id | 2: country | 3: city | 4: revenue |
-      |   PARTITION: RANDOM                                     |
-      |                                                         |
-      |   RESULT SINK                                           |
-      |                                                         |
-      |   0:OlapScanNode                                        |
-      |      TABLE: users                                       |
-      |      PREAGGREGATION: OFF. Reason: null                  |
-      |      PREDICATES: 1: id = 1                              |
-      |      partitions=1/1                                     |
-      |      rollup: users                                      |
-      |      tabletRatio=1/6                                    |
-      |      tabletList=10184                                   |
-      |      cardinality=-1                                     |
-      |      avgRowSize=0.0                                     |
-      |      Short Circuit Scan: true                           | -- 短路径查询生效
-      +---------------------------------------------------------+
-      17 rows in set (0.00 sec)
-      ```
+   ```SQL
+   MySQL [example_db]> EXPLAIN SELECT * FROM users WHERE id=1;
+   +---------------------------------------------------------+
+   | Explain String                                          |
+   +---------------------------------------------------------+
+   | PLAN FRAGMENT 0                                         |
+   |  OUTPUT EXPRS:1: id | 2: country | 3: city | 4: revenue |
+   |   PARTITION: RANDOM                                     |
+   |                                                         |
+   |   RESULT SINK                                           |
+   |                                                         |
+   |   0:OlapScanNode                                        |
+   |      TABLE: users                                       |
+   |      PREAGGREGATION: OFF. Reason: null                  |
+   |      PREDICATES: 1: id = 1                              |
+   |      partitions=1/1                                     |
+   |      rollup: users                                      |
+   |      tabletRatio=1/6                                    |
+   |      tabletList=10184                                   |
+   |      cardinality=-1                                     |
+   |      avgRowSize=0.0                                     |
+   |      Short Circuit Scan: true                           | -- 短路径查询生效
+   +---------------------------------------------------------+
+   17 rows in set (0.00 sec)
+   ```
 
 ### 使用预准备语句
 
@@ -154,10 +154,10 @@ EXECUTE select_by_id_stmt USING @id1;
 EXECUTE select_by_id_stmt USING @id2;
 ```
 
-## **限制**
+## 限制
 
-- 行列混存表暂不支持 [ALTER TABLE]()。
-- 短路径查询目前仅适合定期批量导入入后纯查询的场景。因为目前短路径查询和写流程中的 apply 步骤互斥访问索引，所以写操作可能会堵塞短路径查询，导致写入时会影响点查的响应时间。
+- 行列混存表暂不支持 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md)。
+- 短路径查询目前仅适合定期批量导入后纯查询的场景。因为目前短路径查询和写流程中的 apply 步骤互斥访问索引，所以写操作可能会堵塞短路径查询，导致写入时会影响点查的响应时间。
 - 行列混存表可能会大幅增加存储空间的占用。因为数据会按行和列格式存储两份，并且按行存储压缩比可能不如按列存储高。
 - 行列混存表会增加数据导入耗时和资源占用。
 - 如果业务场景中有在线服务的需求，行列混存表可以作为一种可行的解决方案，但其性能可能无法与成熟 OLTP 数据库竞争。
