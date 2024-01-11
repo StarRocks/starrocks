@@ -519,6 +519,8 @@ Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector
 Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
     _is_ht_eos = false;
     _num_input_rows = 0;
+    _is_prepared = false;
+    _is_opened = false;
     if (reset_sink_complete) {
         _is_sink_complete = false;
     }
