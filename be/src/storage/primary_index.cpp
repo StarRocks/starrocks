@@ -598,7 +598,7 @@ public:
         auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         for (uint32_t i = idx_begin; i < idx_end; i++) {
-            if (is_insert_ignore_policy && _map.contains(prefetch_keys[pslot], prefetch_hashes[pslot])) {
+            if (is_insert_ignore_policy && _map.contains(keys[i].to_string())) {
                 (*deletes)[rssid].push_back(i);
             } else {
                 uint64_t v = base + i;
@@ -797,16 +797,16 @@ public:
     }
 
     void upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                DeletesMap* delete, const bool is_insert_ignore_policy) override {
+                DeletesMap* deletes, const bool is_insert_ignore_policy) override {
         if (idx_begin < idx_end) {
             auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
             for (uint32_t i = idx_begin + 1; i < idx_end; i++) {
                 if (keys[i].size != keys[idx_begin].size) {
-                    get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, i, delete, is_insert_ignore_policy);
+                    get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, i, deletes, is_insert_ignore_policy);
                     idx_begin = i;
                 }
             }
-            get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, idx_end, delete, is_insert_ignore_policy);
+            get_index_by_length(keys[idx_begin].size)->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes, is_insert_ignore_policy);
         }
     }
 
@@ -1327,13 +1327,13 @@ Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& 
 }
 
 Status PrimaryIndex::upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin,
-                            uint32_t idx_end, DeletesMap* delete, const bool is_insert_ignore_policy) {
+                            uint32_t idx_end, DeletesMap* deletes, const bool is_insert_ignore_policy) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
-        st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, delete, nullptr, is_insert_ignore_policy);
+        st = _upsert_into_persistent_index(rssid, rowid_start, pks, idx_begin, idx_end, deletes, nullptr, is_insert_ignore_policy);
     } else {
-        _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, delete, is_insert_ignore_policy);
+        _pkey_to_rssid_rowid->upsert(rssid, rowid_start, pks, idx_begin, idx_end, deletes, is_insert_ignore_policy);
     }
     return st;
 }
