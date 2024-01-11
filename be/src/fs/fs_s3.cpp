@@ -506,7 +506,12 @@ Status S3FileSystem::iterate_dir(const std::string& dir, const std::function<boo
     Aws::S3::Model::ListObjectsV2Result result;
     request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithDelimiter("/");
 #ifdef BE_TEST
-    request.SetMaxKeys(1);
+    // NOTE: set max-keys to a small number in BE_TEST mode to force the following list/delete operations
+    // iterating more than one loop, and hence resulting a better code coverage.
+    //
+    // Don't set max-keys to 1, to avoid hitting minio so-called optimization/feature or whatever.
+    // Refer https://github.com/minio/minio/pull/13000 for details.
+    request.SetMaxKeys(2);
 #endif
     do {
         auto outcome = client->ListObjectsV2(request);
@@ -777,7 +782,12 @@ Status S3FileSystem::delete_dir_recursive(const std::string& dirname) {
     Aws::S3::Model::ListObjectsV2Result result;
     request.WithBucket(uri.bucket()).WithPrefix(uri.key());
 #ifdef BE_TEST
-    request.SetMaxKeys(1);
+    // NOTE: set max-keys to a small number in BE_TEST mode to force the following list/delete operations
+    // iterating more than one loop, and hence resulting a better code coverage.
+    //
+    // Don't set max-keys to 1, to avoid hitting minio so-called optimization/feature or whatever.
+    // Refer https://github.com/minio/minio/pull/13000 for details.
+    request.SetMaxKeys(2);
 #endif
 
     Aws::S3::Model::DeleteObjectsRequest delete_request;
