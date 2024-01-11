@@ -44,6 +44,10 @@ public class MockIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+    public void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException {
+    }
+
+    @Override
     public Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
         return null;
     }

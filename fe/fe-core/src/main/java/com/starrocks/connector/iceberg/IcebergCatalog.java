@@ -62,6 +62,8 @@ public interface IcebergCatalog {
         throw new StarRocksConnectorException("This catalog doesn't support dropping tables");
     }
 
+    void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException;
+
     Table getTable(String dbName, String tableName) throws StarRocksConnectorException;
 
     default boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
