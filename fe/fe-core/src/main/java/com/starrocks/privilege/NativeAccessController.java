@@ -109,9 +109,7 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkColumnsAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
                                    Set<String> columns, PrivilegeType privilegeType) throws AccessDeniedException {
-        LOG.info("Need column policies: action {}, {} {}", privilegeType,
-                tableName.getNoClusterString(), columns);
-        throw new AccessDeniedException();
+        throw new AccessDeniedException("Column-level access control not implemented");
     }
 
     @Override
