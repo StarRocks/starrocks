@@ -28,12 +28,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-<<<<<<< HEAD
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
-=======
-import com.starrocks.common.Pair;
->>>>>>> bb08f8cbcf ([UT] Fix mv related unstable tests (#38731))
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
@@ -56,7 +50,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
-import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
@@ -94,35 +87,12 @@ public class MvRewriteTestBase {
         startSuiteTime = Instant.now().getEpochSecond();
 
         CachingMvPlanContextBuilder.getInstance().rebuildCache();
-<<<<<<< HEAD
 
-        // Use sync analyze
-        Config.mv_auto_analyze_async = false;
-
-        // Default REFRESH DEFERRED
-        Config.default_mv_refresh_immediate = false;
-
-        PseudoCluster.getOrCreateWithRandomPort(true, 3);
-        GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
-        cluster = PseudoCluster.getInstance();
-
-        connectContext = UtFrameUtils.createDefaultCtx();
-
-        // 300s: 5min
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000 * 100);
-        // 300s: 5min
-        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000 * 100);
-        connectContext.getSessionVariable().setEnableShortCircuit(false);
-        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(30000000);
-
-        ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
-=======
         PseudoCluster.getOrCreateWithRandomPort(true, 1);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(500);
         cluster = PseudoCluster.getInstance();
 
         connectContext = UtFrameUtils.createDefaultCtx();
->>>>>>> bb08f8cbcf ([UT] Fix mv related unstable tests (#38731))
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
 

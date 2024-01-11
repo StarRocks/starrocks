@@ -35,6 +35,8 @@ import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.DropCatalogStmt;
 import io.delta.standalone.DeltaLog;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.paimon.catalog.Catalog;
@@ -75,10 +77,10 @@ public class ConnectorPlanTestBase extends PlanTestBase {
     public static void doInit(String warehouse) throws Exception {
         PlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
-        mockCatalog(connectContext, warehouse);
+        mockAllCatalogs(connectContext, warehouse);
     }
 
-    public static void mockCatalog(ConnectContext ctx, String warehouse) throws Exception {
+    public static void mockAllCatalogs(ConnectContext ctx, String warehouse) throws Exception {
         GlobalStateMgr gsmMgr = ctx.getGlobalStateMgr();
         MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
         gsmMgr.setMetadataMgr(metadataMgr);
@@ -89,8 +91,6 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         mockDeltaLakeCatalog(metadataMgr);
     }
 
-<<<<<<< HEAD
-=======
     public static void mockCatalog(ConnectContext ctx, String catalogName) throws Exception {
         mockCatalog(ctx, catalogName, "");
     }
@@ -105,10 +105,6 @@ public class ConnectorPlanTestBase extends PlanTestBase {
                 break;
             case MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME:
                 mockJDBCCatalogImpl(metadataMgr);
-                break;
-            case MOCK_PAIMON_CATALOG_NAME:
-                Preconditions.checkState(!Strings.isNullOrEmpty(warehouse));
-                mockPaimonCatalogImpl(metadataMgr, warehouse);
                 break;
             case MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME:
                 mockIcebergCatalogImpl(metadataMgr);
@@ -125,7 +121,6 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         try {
             dropCatalog(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME);
             dropCatalog(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
-            dropCatalog(MOCK_PAIMON_CATALOG_NAME);
             dropCatalog(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
             dropCatalog(MockedDeltaLakeMetadata.MOCKED_CATALOG_NAME);
         } catch (Exception e) {
@@ -138,7 +133,6 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(new DropCatalogStmt(catalog));
     }
 
->>>>>>> bb08f8cbcf ([UT] Fix mv related unstable tests (#38731))
     public static void mockHiveCatalog(ConnectContext ctx) throws DdlException {
         GlobalStateMgr gsmMgr = ctx.getGlobalStateMgr();
         MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
