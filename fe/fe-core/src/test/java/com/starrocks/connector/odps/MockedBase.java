@@ -123,7 +123,6 @@ public class MockedBase {
                 "    \"SourceIP\": \"127.0.0.1\"}");
 
         when(project.getName()).thenReturn("project");
-
         when(tableIterator.hasNext()).thenReturn(true, false);
         when(tableIterator.next()).thenReturn(table);
 
