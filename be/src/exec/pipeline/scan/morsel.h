@@ -324,7 +324,7 @@ public:
     StatusOr<MorselPtr> try_get() override;
     std::string name() const override;
     StatusOr<bool> ready_for_next() const override;
-    void append_morsels(Morsels&& morsels) override { _morsel_queue->append_morsel(std::move(morsels)); }
+    void append_morsels(Morsels&& morsels) override { _morsel_queue->append_morsels(std::move(morsels)); }
 
 private:
     StatusOr<int64_t> _peek_sequence_id() const;
