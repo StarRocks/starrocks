@@ -22,28 +22,42 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.TableRenameClause;
+import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.Transaction;
+import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.UpdateSchema;
+import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergColumnType;
+import static com.starrocks.connector.iceberg.IcebergMetadata.COMMENT;
+import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
+import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
+import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 
 public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     private org.apache.iceberg.Table table;
-    private UpdateSchema updateSchema;
+    private IcebergCatalog icebergCatalog;
     private Transaction transaction;
 
-    public IcebergAlterTableExecutor(AlterTableStmt stmt, org.apache.iceberg.Table table) {
+    public IcebergAlterTableExecutor(AlterTableStmt stmt, org.apache.iceberg.Table table, IcebergCatalog icebergCatalog) {
         super(stmt);
         this.table = table;
-
+        this.icebergCatalog = icebergCatalog;
     }
 
     @Override
@@ -53,18 +67,16 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     @Override
     public void applyClauses() throws DdlException {
         transaction = table.newTransaction();
-        updateSchema = this.transaction.updateSchema();
         super.applyClauses();
-        updateSchema.commit();
         transaction.commitTransaction();
     }
 
     @Override
     public Void visitAddColumnClause(AddColumnClause clause, ConnectContext context) {
         actions.add(() -> {
-            AddColumnClause addColumnClause = (AddColumnClause) clause;
-            ColumnPosition pos = addColumnClause.getColPos();
-            Column column = addColumnClause.getColumnDef().toColumn();
+            UpdateSchema updateSchema = this.transaction.updateSchema();
+            ColumnPosition pos = clause.getColPos();
+            Column column = clause.getColumnDef().toColumn();
 
             // All non-partition columns must use NULL as the default value.
             if (!column.isAllowNull()) {
@@ -85,6 +97,8 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                     throw new StarRocksConnectorException("Unsupported position: " + pos);
                 }
             }
+
+            updateSchema.commit();
         });
         return null;
     }
@@ -92,8 +106,8 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     @Override
     public Void visitAddColumnsClause(AddColumnsClause clause, ConnectContext context) {
         actions.add(() -> {
-            AddColumnsClause addColumnsClause = (AddColumnsClause) clause;
-            List<Column> columns = addColumnsClause
+            UpdateSchema updateSchema = this.transaction.updateSchema();
+            List<Column> columns = clause
                     .getColumnDefs()
                     .stream()
                     .map(ColumnDef::toColumn)
@@ -108,6 +122,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                         toIcebergColumnType(column.getType()),
                         column.getComment());
             }
+            updateSchema.commit();
         });
         return null;
     }
@@ -115,9 +130,9 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     @Override
     public Void visitDropColumnClause(DropColumnClause clause, ConnectContext context) {
         actions.add(() -> {
-            DropColumnClause dropColumnClause = (DropColumnClause) clause;
-            String columnName = dropColumnClause.getColName();
-            updateSchema.deleteColumn(columnName);
+            UpdateSchema updateSchema = this.transaction.updateSchema();
+            String columnName = clause.getColName();
+            updateSchema.deleteColumn(columnName).commit();
         });
         return null;
     }
@@ -126,7 +141,8 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     public Void visitColumnRenameClause(ColumnRenameClause clause, ConnectContext context) {
         actions.add(() -> {
             ColumnRenameClause columnRenameClause = (ColumnRenameClause) clause;
-            updateSchema.renameColumn(columnRenameClause.getColName(), columnRenameClause.getNewColName());
+            UpdateSchema updateSchema = this.transaction.updateSchema();
+            updateSchema.renameColumn(columnRenameClause.getColName(), columnRenameClause.getNewColName()).commit();
         });
         return null;
     }
@@ -134,9 +150,9 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     @Override
     public Void visitModifyColumnClause(ModifyColumnClause clause, ConnectContext context) {
         actions.add(() -> {
-            ModifyColumnClause modifyColumnClause = (ModifyColumnClause) clause;
-            ColumnPosition colPos = modifyColumnClause.getColPos();
-            Column column = modifyColumnClause.getColumnDef().toColumn();
+            UpdateSchema updateSchema = this.transaction.updateSchema();
+            ColumnPosition colPos = clause.getColPos();
+            Column column = clause.getColumnDef().toColumn();
             org.apache.iceberg.types.Type colType = toIcebergColumnType(column.getType());
 
             // UPDATE column type
@@ -169,7 +185,83 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                     throw new StarRocksConnectorException("Unsupported position: " + colPos);
                 }
             }
+
+            updateSchema.commit();
         });
+        return null;
+    }
+
+    @Override
+    public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, ConnectContext context) {
+        actions.add(() -> {
+            UpdateProperties updateProperties = this.transaction.updateProperties();
+            Map<String, String> pendingUpdate = clause.getProperties();
+            if (pendingUpdate.isEmpty()) {
+                throw new StarRocksConnectorException("Modified property is empty");
+            }
+
+            for (Map.Entry<String, String> entry : pendingUpdate.entrySet()) {
+                Preconditions.checkNotNull(entry.getValue(), "property value cannot be null");
+                switch (entry.getKey().toLowerCase()) {
+                    case FILE_FORMAT:
+                        updateProperties.defaultFormat(FileFormat.fromString(entry.getValue()));
+                        break;
+                    case LOCATION_PROPERTY:
+                        updateProperties.commit();
+                        transaction.updateLocation().setLocation(entry.getValue()).commit();
+                        break;
+                    case COMPRESSION_CODEC:
+                        if (!PARQUET_COMPRESSION_TYPE_MAP.containsKey(entry.getValue().toLowerCase(Locale.ROOT))) {
+                            throw new StarRocksConnectorException(
+                                    "Unsupported compression codec for iceberg connector: " + entry.getValue());
+                        }
+
+                        String fileFormat = pendingUpdate.get(FILE_FORMAT);
+                        // only modify compression_codec or modify both file_format and compression_codec.
+                        String currentFileFormat = fileFormat != null ? fileFormat : transaction.table().properties()
+                                .getOrDefault(TableProperties.DEFAULT_FILE_FORMAT,
+                                        TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
+
+                        updateCodeCompr(updateProperties, FileFormat.fromString(currentFileFormat), entry.getValue());
+                        break;
+                    default:
+                        updateProperties.set(entry.getKey(), entry.getValue());
+                }
+            }
+
+            updateProperties.commit();
+        });
+        return null;
+    }
+
+    private void updateCodeCompr(UpdateProperties updateProperties, FileFormat fileFormat, String codeCompression) {
+        switch (fileFormat) {
+            case PARQUET:
+                updateProperties.set(TableProperties.PARQUET_COMPRESSION, codeCompression);
+                break;
+            case ORC:
+                updateProperties.set(TableProperties.ORC_COMPRESSION, codeCompression);
+                break;
+            case AVRO:
+                updateProperties.set(TableProperties.AVRO_COMPRESSION, codeCompression);
+                break;
+            default:
+                throw new StarRocksConnectorException(
+                        "Unsupported file format for iceberg connector");
+        }
+    }
+
+    @Override
+    public Void visitAlterTableCommentClause(AlterTableCommentClause clause, ConnectContext context) {
+        AlterTableCommentClause alterTableCommentClause = (AlterTableCommentClause) clause;
+        UpdateProperties updateProperties = this.transaction.updateProperties();
+        updateProperties.set(COMMENT, alterTableCommentClause.getNewComment()).commit();
+        return null;
+    }
+
+    @Override
+    public Void visitTableRenameClause(TableRenameClause clause, ConnectContext context) {
+        icebergCatalog.renameTable(tableName.getDb(), tableName.getTbl(), clause.getNewTableName());
         return null;
     }
 }
