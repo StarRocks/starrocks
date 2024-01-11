@@ -229,11 +229,10 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitQueryStatement(QueryStatement statement, ConnectContext context) {
         Map<TableName, Relation> allTablesRelations = AnalyzerUtils.collectAllTableAndViewRelations(statement);
         try {
-            checkSelectTableAction(context, allTablesRelations);
-        } catch (ErrorReportException e) {
-            // try column level authorize check
             Map<TableName, Set<String>> allTouchedColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
             checkCanSelectFromColumns(context, allTouchedColumns, allTablesRelations);
+        } catch (ErrorReportException e) {
+            checkSelectTableAction(context, allTablesRelations);
         }
         return null;
     }
@@ -245,21 +244,19 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         // For table just created by CTAS statement, we ignore the check of 'INSERT' privilege on it.
         if (!statement.isForCTAS()) {
             try {
-                Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        statement.getTableName(), PrivilegeType.INSERT);
-            } catch (AccessDeniedException e) {
                 List<String> columnNames = statement.getTargetColumnNames();
+                Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        statement.getTableName(),
+                        columnNames == null ? Collections.singleton("*") : new HashSet<>(columnNames),
+                        PrivilegeType.INSERT);
+            } catch (AccessDeniedException e) {
                 try {
-                    Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            statement.getTableName(),
-                            columnNames == null ? Collections.singleton("*") : new HashSet<>(columnNames),
-                            PrivilegeType.INSERT);
+                    Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            statement.getTableName(), PrivilegeType.INSERT);
                 } catch (AccessDeniedException exception) {
                     AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
                             context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            PrivilegeType.INSERT.name(), ObjectType.COLUMN.name(),
-                            String.join(".", statement.getTableName().getNoClusterString(),
-                                    columnNames == null ? "*" : String.join(",", columnNames)));
+                            PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
                 }
             }
         }
@@ -281,12 +278,11 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         Map<TableName, Relation> allTouchedTables = AnalyzerUtils.collectAllTableAndViewRelations(statement);
         allTouchedTables.remove(statement.getTableName());
         try {
-            checkSelectTableAction(context, allTouchedTables);
-        } catch (ErrorReportException e) {
-            // try column level authorize check
             Map<TableName, Set<String>> tableColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
             tableColumns.remove(statement.getTableName());
             checkCanSelectFromColumns(context, tableColumns, allTouchedTables);
+        } catch (ErrorReportException e) {
+            checkSelectTableAction(context, allTouchedTables);
         }
         return null;
     }
@@ -294,29 +290,26 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitUpdateStatement(UpdateStmt statement, ConnectContext context) {
         try {
-            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    statement.getTableName(), PrivilegeType.UPDATE);
-        } catch (AccessDeniedException e) {
             Set<String> assignmentColumn = statement.getAssignments().stream()
                     .map(columnAssignment -> columnAssignment.getColumn()).collect(Collectors.toSet());
+            Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    statement.getTableName(), assignmentColumn, PrivilegeType.UPDATE);
+        } catch (AccessDeniedException e) {
             try {
-                Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        statement.getTableName(), assignmentColumn, PrivilegeType.UPDATE);
+                Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        statement.getTableName(), PrivilegeType.UPDATE);
             } catch (AccessDeniedException exception) {
                 AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.UPDATE.name(), ObjectType.COLUMN.name(),
-                        String.join(".", statement.getTableName().getNoClusterString(),
-                                String.join(",", assignmentColumn)));
+                        PrivilegeType.UPDATE.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
             }
         }
         Map<TableName, Relation> allTouchedTables = AnalyzerUtils.collectAllTableAndViewRelations(statement);
         try {
-            checkSelectTableAction(context, allTouchedTables);
-        } catch (ErrorReportException e) {
-            // try column level authorize check
             Map<TableName, Set<String>> tableColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
             checkCanSelectFromColumns(context, tableColumns, allTouchedTables);
+        } catch (ErrorReportException e) {
+            checkSelectTableAction(context, allTouchedTables);
         }
         return null;
     }

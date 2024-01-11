@@ -100,9 +100,7 @@ public class ObjectType {
                     .put(11, new Pair<>("GLOBAL FUNCTION", "GLOBAL FUNCTIONS"))
                     .put(12, new Pair<>("STORAGE VOLUME", "STORAGE VOLUMES"))
                     .put(13, new Pair<>("PIPE", "PIPES"))
-                    .put(14, new Pair<>("TABLE_COLUMN", "TABLE COLUMNS"))
-                    .put(15, new Pair<>("VIEW_COLUMN", "VIEW COLUMNS"))
-                    .put(16, new Pair<>("MATERIALIZED_VIEW_COLUMN", "MATERIALIZED VIEW COLUMNS"))
+                    .put(14, new Pair<>("COLUMN", "COLUMNS"))
                     .build();
 
     public static final Map<String, ObjectType> NAME_TO_OBJECT = VALID_OBJECT_TYPE.stream().collect(Collectors.toMap(

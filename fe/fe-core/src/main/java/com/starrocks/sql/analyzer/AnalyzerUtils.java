@@ -386,7 +386,7 @@ public class AnalyzerUtils {
     public static Map<TableName, Set<String>> collectAllSelectTableColumns(StatementBase statementBase) {
         SelectTableColumnCollector selectTableColumnCollector = null;
         if (statementBase instanceof UpdateStmt) {
-            selectTableColumnCollector = new UpdateStmtSelectTableColumnCollector(((UpdateStmt) statementBase));
+            selectTableColumnCollector = new UpdateStmtSelectTableColumnCollector((UpdateStmt) statementBase);
         } else {
             selectTableColumnCollector = new SelectTableColumnCollector();
         }
@@ -425,7 +425,7 @@ public class AnalyzerUtils {
 
             // In the UpdateStatement, columns other than those in the assignment are taken as outputExpression for
             // the SelectRelation (even if these columns are not mentioned in the SQL),
-            // which is not in line with expectations.
+            // which is not inline with expectations.
             boolean skipOutputExpr = (relation instanceof JoinRelation) ||
                     (relation instanceof TableRelation && ((TableRelation) relation).getTable().equals(updateTable));
             if (node.getOutputExpression() != null) {
