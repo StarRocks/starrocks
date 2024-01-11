@@ -823,6 +823,9 @@ public class StmtExecutor {
     }
 
     private void forwardToLeader() throws Exception {
+        if (parsedStmt instanceof ExecuteStmt) {
+            throw new AnalysisException("ExecuteStmt Statement don't support statement need to be forward to leader");
+        }
         leaderOpExecutor = new LeaderOpExecutor(parsedStmt, originStmt, context, redirectStatus);
         LOG.debug("need to transfer to Leader. stmt: {}", context.getStmtId());
         leaderOpExecutor.execute();
@@ -1842,7 +1845,12 @@ public class StmtExecutor {
         long transactionId = stmt.getTxnId();
         TransactionState txnState = null;
         String label = DebugUtil.printId(context.getExecutionId());
-        if (targetTable instanceof OlapTable) {
+        if (targetTable instanceof ExternalOlapTable) {
+            Preconditions.checkState(stmt instanceof InsertStmt,
+                    "External OLAP table only supports insert statement");
+            String stmtLabel = ((InsertStmt) stmt).getLabel();
+            label = Strings.isNullOrEmpty(stmtLabel) ? MetaUtils.genInsertLabel(context.getExecutionId()) : stmtLabel;
+        } else if (targetTable instanceof OlapTable) {
             txnState = transactionMgr.getTransactionState(database.getId(), transactionId);
             if (txnState == null) {
                 throw new DdlException("txn does not exist: " + transactionId);

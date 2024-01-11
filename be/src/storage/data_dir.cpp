@@ -400,8 +400,9 @@ Status DataDir::load() {
             if (!rowset_meta->tablet_schema()) {
                 auto tablet_schema_ptr = tablet->tablet_schema();
                 rowset_meta->set_tablet_schema(tablet_schema_ptr);
-                Status rs_meta_save_status =
-                        RowsetMetaManager::save(get_meta(), rowset_meta->tablet_uid(), rowset_meta->get_meta_pb());
+                RowsetMetaPB meta_pb;
+                rowset_meta->get_full_meta_pb(&meta_pb);
+                Status rs_meta_save_status = RowsetMetaManager::save(get_meta(), rowset_meta->tablet_uid(), meta_pb);
                 if (!rs_meta_save_status.ok()) {
                     LOG(WARNING) << "Failed to save rowset meta, rowset=" << rowset_meta->rowset_id()
                                  << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();
@@ -426,8 +427,9 @@ Status DataDir::load() {
             Status publish_status = tablet->load_rowset(rowset);
             if (!rowset_meta->tablet_schema()) {
                 rowset_meta->set_tablet_schema(tablet->tablet_schema());
-                Status rs_meta_save_status =
-                        RowsetMetaManager::save(get_meta(), rowset_meta->tablet_uid(), rowset_meta->get_meta_pb());
+                RowsetMetaPB meta_pb;
+                rowset_meta->get_full_meta_pb(&meta_pb);
+                Status rs_meta_save_status = RowsetMetaManager::save(get_meta(), rowset_meta->tablet_uid(), meta_pb);
                 if (!rs_meta_save_status.ok()) {
                     LOG(WARNING) << "Failed to save rowset meta, rowset=" << rowset_meta->rowset_id()
                                  << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();

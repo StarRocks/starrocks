@@ -19,8 +19,6 @@ import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
@@ -67,8 +65,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
 
-        FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
 
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
@@ -79,9 +77,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(true);
-        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
-        FeConstants.runningUnitTest = true;
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
 
         new MockUp<MaterializedView>() {
             @Mock
@@ -112,7 +109,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         starRocksAssert.withDatabase(MATERIALIZED_DB_NAME)
                 .useDatabase(MATERIALIZED_DB_NAME);
-
     }
 
     @AfterClass

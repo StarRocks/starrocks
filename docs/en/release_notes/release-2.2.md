@@ -4,14 +4,16 @@ displayed_sidebar: "English"
 
 # StarRocks version 2.2
 
+## 2.2.13
+
 Release date: April 6, 2023
 
-## Improvements
+### Improvements
 
 - Optimized the bitmap_contains() function to reduce its memory consumption and improve its performance in some scenarios. [#20616](https://github.com/StarRocks/starrocks/issues/20616)
 - Optimized the Compaction framework to reduce its CPU resource consumption. [#11746](https://github.com/StarRocks/starrocks/issues/11746)
 
-## Bug Fixes
+### Bug Fixes
 
 The following bugs are fixed:
 

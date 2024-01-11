@@ -54,7 +54,9 @@ void ORCHdfsFileStream::prepareCache(PrepareCacheScope scope, uint64_t offset, u
 
     doRead(_cache_buffer.data(), length, offset);
 
-    clearIORanges();
+    // Don't do clearIORanges(), because it will clear io ranges setted in startNextStripe()
+    // Just left clearIORanges() operation take place in startNextStripe()
+    // clearIORanges();
 }
 
 bool ORCHdfsFileStream::isAlreadyCachedInBuffer(uint64_t offset, uint64_t length) {
