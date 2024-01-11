@@ -14,14 +14,14 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
-import org.apache.parquet.Strings;
 
 import java.util.Comparator;
 import java.util.List;
