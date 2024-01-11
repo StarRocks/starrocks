@@ -70,7 +70,7 @@ Release date: December 1, 2023
 
 #### Shared-data cluster
 
-- Supports persisting indexes of [Primary Key tables](../table_design/table_types/primary_key_table.md) to local disks.
+- Supports persisting indexes of [Primary Key tables](https://docs.starrocks.io/docs/table_design/table_types/primary_key_table/) to local disks.
 - Supports even distribution of Data Cache among multiple local disks.
 
 #### Materialized View
@@ -89,18 +89,18 @@ Release date: December 1, 2023
 
 #### Storage engine, data ingestion, and export
 
-- Added the following features of loading with the table function [FILES()](../sql-reference/sql-functions/table-functions/files.md):
+- Added the following features of loading with the table function [FILES()](https://docs.starrocks.io/docs/sql-reference/sql-functions/table-functions/files/):
   - Loading Parquet and ORC format data from Azure or GCP.
   - Extracting the value of a key/value pair from the file path as the value of a column using the parameter `columns_from_path`.
   - Loading complex data types including ARRAY, JSON, MAP, and STRUCT.
-- Supports unloading data from StarRocks to Parquet-formatted files stored in AWS S3 or HDFS by using INSERT INTO FILES. For detailed instructions, see [Unload data using INSERT INTO FILES](../unloading/unload_using_insert_into_files.md).
-- Supports [manual optimization of table structure and data distribution strategy](../table_design/Data_distribution.md#optimize-data-distribution-after-table-creation-since-32) used in an existing table to optimize the query and loading performance. You can set a new bucket key, bucket number, or sort key for a table. You can also set a different bucket number for specific partitions.
+- Supports unloading data from StarRocks to Parquet-formatted files stored in AWS S3 or HDFS by using INSERT INTO FILES. For detailed instructions, see [Unload data using INSERT INTO FILES](https://docs.starrocks.io/docs/unloading/unload_using_insert_into_files/).
+- Supports [manual optimization of table structure and data distribution strategy](https://docs.starrocks.io/docs/table_design/Data_distribution#optimize-data-distribution-after-table-creation-since-32) used in an existing table to optimize the query and loading performance. You can set a new bucket key, bucket number, or sort key for a table. You can also set a different bucket number for specific partitions.
 - Supports continuous data loading from [AWS S3](https://docs.starrocks.io/docs/loading/s3/#use-pipe) or [HDFS](https://docs.starrocks.io/docs/loading/hdfs_load/#use-pipe) using the PIPE method.
   - When PIPE detects new  or modifications in a remote storage directory, it can automatically load the new or modified data into the destination table in StarRocks. While loading data, PIPE automatically splits a large loading task into smaller, serialized tasks, enhancing stability in large-scale data ingestion scenarios and reducing the cost of error retries.
 
 #### Query
 
-- Supports [HTTP SQL API](../reference/HTTP_API/SQL.md), enabling users to access StarRocks data via HTTP and execute SELECT, SHOW, EXPLAIN, or KILL operations.
+- Supports [HTTP SQL API](https://docs.starrocks.io/docs/reference/HTTP_API/SQL/), enabling users to access StarRocks data via HTTP and execute SELECT, SHOW, EXPLAIN, or KILL operations.
 - Supports Runtime Profile and text-based Profile analysis commands (SHOW PROFILELIST, ANALYZE PROFILE, EXPLAIN ANALYZE) to allow users to directly analyze profiles via MySQL clients, facilitating bottleneck identification and discovery of optimization opportunities.
 
 #### SQL reference
@@ -117,12 +117,12 @@ Added the following functions:
 
 #### Privileges and security
 
-StarRocks supports access control through [Apache Ranger](../administration/ranger_plugin.md), providing a higher level of data security and allowing the reuse of existing services of external data sources. After integrating with Apache Ranger, StarRocks enables the following access control methods:
+StarRocks supports access control through [Apache Ranger](https://docs.starrocks.io/docs/administration/ranger_plugin/), providing a higher level of data security and allowing the reuse of existing services of external data sources. After integrating with Apache Ranger, StarRocks enables the following access control methods:
 
 - When accessing internal tables, external tables, or other objects in StarRocks, access control can be enforced based on the access policies configured for the StarRocks Service in Ranger.
 - When accessing an external catalog, access control can also leverage the corresponding Ranger service of the original data source (such as Hive Service) to control access (currently, access control for exporting data to Hive is not yet supported).
 
-For more information, see [Manage permissions with Apache Ranger](../administration/ranger_plugin.md).
+For more information, see [Manage permissions with Apache Ranger](https://docs.starrocks.io/docs/administration/ranger_plugin/).
 
 ### Improvements
 
@@ -156,7 +156,7 @@ For more information, see [Manage permissions with Apache Ranger](../administrat
 - Data consistency:
   - Added the property `query_rewrite_consistency` for asynchronous materialized view creation. This property defines the query rewrite rules based on the consistency check.
   - Add the property `force_external_table_query_rewrite` for external catalog-based asynchronous materialized view creation. This property defines whether to allow force query rewrite for asynchronous materialized views created upon external catalogs.
-  - For detailed information, see [CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW.md).
+  - For detailed information, see [CREATE MATERIALIZED VIEW](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW/).
 - Added a consistency check for materialized views' partitioning key.
   - When users create an asynchronous materialized view with window functions that include a PARTITION BY expression, the partitioning column of the window function must match that of the materialized view.
 
@@ -164,10 +164,10 @@ For more information, see [Manage permissions with Apache Ranger](../administrat
 
 - Optimized the persistent index for Primary Key tables by improving memory usage logic while reducing I/O read and write amplification. [#24875](https://github.com/StarRocks/starrocks/pull/24875)  [#27577](https://github.com/StarRocks/starrocks/pull/27577)  [#28769](https://github.com/StarRocks/starrocks/pull/28769)
 - Supports data re-distribution across local disks for Primary Key tables.
-- Partitioned tables support automatic cooldown based on the partition time range and cooldown time. Compared to the original cooldown logic, it is more convenient to perform hot and cold data management on the partition level. For more information, see [Specify initial storage medium, automatic storage cooldown time, replica number](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#specify-initial-storage-medium-automatic-storage-cooldown-time-replica-number).
-- The Publish phase of a load job that writes data into a Primary Key table is changed from asynchronous mode to synchronous mode. As such, the data loaded can be queried immediately after the load job finishes. For more information, see [enable_sync_publish](../administration/FE_configuration.md#enable_sync_publish)。
-- Supports Fast Schema Evolution, which is controlled by the table property [`fast_schema_evolution`](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#set-fast-schema-evolution). After this feature is enabled, the execution efficiency of adding or dropping columns is significantly improved. This mode is disabled by default (Default value is `false`). You cannot modify this property for existing tables using ALTER TABLE.
-- [Supports dynamically adjusting the number of tablets to create](../table_design/Data_distribution.md#set-the-number-of-buckets) according to cluster information and the size of the data for **Duplicate Key** tables created with the Radom Bucketing strategy.
+- Partitioned tables support automatic cooldown based on the partition time range and cooldown time. Compared to the original cooldown logic, it is more convenient to perform hot and cold data management on the partition level. For more information, see [Specify initial storage medium, automatic storage cooldown time, replica number](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE#specify-initial-storage-medium-automatic-storage-cooldown-time-replica-number).
+- The Publish phase of a load job that writes data into a Primary Key table is changed from asynchronous mode to synchronous mode. As such, the data loaded can be queried immediately after the load job finishes. For more information, see [enable_sync_publish](https://docs.starrocks.io/docs/administration/FE_configuration#enable_sync_publish)。
+- Supports Fast Schema Evolution, which is controlled by the table property [`fast_schema_evolution`](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE#set-fast-schema-evolution). After this feature is enabled, the execution efficiency of adding or dropping columns is significantly improved. This mode is disabled by default (Default value is `false`). You cannot modify this property for existing tables using ALTER TABLE.
+- [Supports dynamically adjusting the number of tablets to create](https://docs.starrocks.io/docs/table_design/Data_distribution#set-the-number-of-buckets) according to cluster information and the size of the data for **Duplicate Key** tables created with the Radom Bucketing strategy.
 
 #### Query
 
@@ -175,7 +175,7 @@ For more information, see [Manage permissions with Apache Ranger](../administrat
 
 #### SQL Reference
 
-- [array_agg](../sql-reference/sql-functions/array-functions/array_agg.md) supports the keyword DISTINCT.
+- [array_agg](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_agg/) supports the keyword DISTINCT.
 - INSERT, UPDATE, and DELETE operations now support `SET_VAR`. [#35283](https://github.com/StarRocks/starrocks/pull/35283)
 
 #### Others

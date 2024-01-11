@@ -181,29 +181,29 @@ displayed_sidebar: "Chinese"
 
 ### 新增特性
 
-- 支持构建异步多表物化视图，实现多表 JOIN 查询加速。异步物化视图支持所有[数据模型](../table_design/table_types/table_types.md)。相关文档，请参见 [物化视图](../using_starrocks/Materialized_view.md)。
+- 支持构建异步多表物化视图，实现多表 JOIN 查询加速。异步物化视图支持所有[数据模型](https://docs.starrocks.io/zh/docs/table_design/table_types/table_types/)。相关文档，请参见 [物化视图](https://docs.starrocks.io/zh/docs/using_starrocks/Materialized_view/)。
 
-- 支持通过 INSERT OVERWRITE 语句批量写入并覆盖数据。相关文档，请参见 [INSERT 导入](../loading/InsertInto.md)。
+- 支持通过 INSERT OVERWRITE 语句批量写入并覆盖数据。相关文档，请参见 [INSERT 导入](https://docs.starrocks.io/zh/docs/loading/InsertInto/)。
 
-- [公测中] 提供无状态的计算节点（Compute Node，简称 CN 节点）。计算节点支持无状态扩缩容，您可通过 StarRocks Operator 部署，并基于 Kubernetes 管理容器化的计算节点，以此实现自动感知系统负载并水平扩展计算节点。相关文档，请参见[使用 StarRocks Operator 在 Kubernetes 部署和管理 CN](../deployment/sr_operator.md)。
+- [公测中] 提供无状态的计算节点（Compute Node，简称 CN 节点）。计算节点支持无状态扩缩容，您可通过 StarRocks Operator 部署，并基于 Kubernetes 管理容器化的计算节点，以此实现自动感知系统负载并水平扩展计算节点。相关文档，请参见[使用 StarRocks Operator 在 Kubernetes 部署和管理 CN](https://docs.starrocks.io/zh/docs/deployment/sr_operator/)。
 
-- Outer Join 支持通过 `<`、`<=`、`>`、`>=`、`<>` 等比较操作符对多表进行非等值关联。相关文档，请参见 [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md)。
+- Outer Join 支持通过 `<`、`<=`、`>`、`>=`、`<>` 等比较操作符对多表进行非等值关联。相关文档，请参见 [SELECT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SELECT/)。
 
-- 支持创建 Iceberg Catalog 和 Hudi Catalog，创建后即可查询 Apache Iceberg 和 Apache Hudi 数据。相关文档，请参见 [Iceberg catalog](../data_source/catalog/iceberg_catalog.md) 和 [Hudi catalog](../data_source/catalog/hudi_catalog.md)。
+- 支持创建 Iceberg Catalog 和 Hudi Catalog，创建后即可查询 Apache Iceberg 和 Apache Hudi 数据。相关文档，请参见 [Iceberg catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/iceberg_catalog/) 和 [Hudi catalog](https://docs.starrocks.io/zh/docs/data_source/catalog/hudi_catalog/)。
 
-- 支持查询 CSV 格式 Apache Hive™ 表中的 ARRAY 列。相关文档，请参见[外部表](../data_source/External_table.md#创建-hive-外表)。
+- 支持查询 CSV 格式 Apache Hive™ 表中的 ARRAY 列。相关文档，请参见[外部表](https://docs.starrocks.io/zh/docs/data_source/External_table#创建-hive-外表)。
 
-- 支持通过 DESC 语句查看外部数据的表结构。相关文档，请参见 [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md)。
+- 支持通过 DESC 语句查看外部数据的表结构。相关文档，请参见 [DESC](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/Utility/DESCRIBE/)。
 
-- 支持通过 GRANT 或 REVOKE 语句授予或撤销用户特定角色或 IMPERSONATE 权限，并支持通过 EXECUTE AS 语句使用 IMPERSONATE 权限执行当前会话。相关文档，请参见 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 、 [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md) 和 [EXECUTE AS](../sql-reference/sql-statements/account-management/EXECUTE_AS.md)。
+- 支持通过 GRANT 或 REVOKE 语句授予或撤销用户特定角色或 IMPERSONATE 权限，并支持通过 EXECUTE AS 语句使用 IMPERSONATE 权限执行当前会话。相关文档，请参见 [GRANT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/account-management/GRANT/) 、 [REVOKE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/account-management/REVOKE/) 和 [EXECUTE AS](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/account-management/EXECUTE_AS/)。
 
-- 支持 FQDN 访问：您可以用域名或结合主机名与端口的方式作为 FE 或 BE 节点的唯一标识，有效避免因 IP 变更导致无法访问的问题。相关文档，请参见 [启用 FQDN 访问](../administration/enable_fqdn.md)。
+- 支持 FQDN 访问：您可以用域名或结合主机名与端口的方式作为 FE 或 BE 节点的唯一标识，有效避免因 IP 变更导致无法访问的问题。相关文档，请参见 [启用 FQDN 访问](https://docs.starrocks.io/zh/docs/administration/enable_fqdn/)。
 
-- flink-connector-starrocks 支持主键模型 Partial Update。相关文档，请参见[使用 flink-connector-starrocks 导入至 StarRocks](../loading/Flink-connector-starrocks.md)。
+- flink-connector-starrocks 支持主键模型 Partial Update。相关文档，请参见[使用 flink-connector-starrocks 导入至 StarRocks](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/)。
 
 - 函数相关：
-  - 新增 array_contains_all 函数，用于判断特定数组是否为另一数组的子集。相关文档，请参见[array_contains_all](../sql-reference/sql-functions/array-functions/array_contains_all.md)。
-  - 新增 percentile_cont 函数，用于通过线性插值法计算百分位数。相关文档，请参见[percentile_cont](../sql-reference/sql-functions/aggregate-functions/percentile_cont.md)。
+  - 新增 array_contains_all 函数，用于判断特定数组是否为另一数组的子集。相关文档，请参见[array_contains_all](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_contains_all/)。
+  - 新增 percentile_cont 函数，用于通过线性插值法计算百分位数。相关文档，请参见[percentile_cont](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/aggregate-functions/percentile_cont/)。
 
 ### 功能优化
 
@@ -217,7 +217,7 @@ displayed_sidebar: "Chinese"
 
 - Cross Join 支持谓词下推，性能提升。
 
-- 统计信息支持直方图，并进一步完善全量统计信息采集。相关文档，请参见[CBO统计信息](../using_starrocks/Cost_based_optimizer.md)。
+- 统计信息支持直方图，并进一步完善全量统计信息采集。相关文档，请参见[CBO统计信息](https://docs.starrocks.io/zh/docs/using_starrocks/Cost_based_optimizer/)。
 
 - 支持 Tablet 自适应多线程 Scan，降低 Scan 性能对同磁盘 Tablet 数量的依赖，从而可以简化分桶数量的设定。相关文档，请参见[确定分桶数量](https://docs.starrocks.io/zh/docs/2.4/table_design/Data_distribution/#%E7%A1%AE%E5%AE%9A%E5%88%86%E6%A1%B6%E6%95%B0%E9%87%8F)。
 
@@ -230,9 +230,9 @@ displayed_sidebar: "Chinese"
 - 支持 Stream Load 事务接口：支持和 Apache Flink®、Apache Kafka® 等其他系统之间实现跨系统的两阶段提交，并提升高并发 Stream Load 导入场景下的性能。
 
 - 函数相关：
-  - 支持在一条 SELECT 语句中使用多个 COUNT(DISTINCT)。相关文档，请参见[count](../sql-reference/sql-functions/aggregate-functions/count.md)。
-  - 窗口函数 min 和 max 支持滑动窗口。相关文档，请参见[窗口函数](../sql-reference/sql-functions/Window_function.md#使用-MAX()-窗口函数)。
-  - 优化函数 window_funnel 性能。相关文档，请参见[window_funnel](../sql-reference/sql-functions/aggregate-functions/window_funnel.md)。
+  - 支持在一条 SELECT 语句中使用多个 COUNT(DISTINCT)。相关文档，请参见[count](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/aggregate-functions/count/)。
+  - 窗口函数 min 和 max 支持滑动窗口。相关文档，请参见[窗口函数](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/Window_function#使用-MAX()-窗口函数)。
+  - 优化函数 window_funnel 性能。相关文档，请参见[window_funnel](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/aggregate-functions/window_funnel/)。
 
 ### 问题修复
 

@@ -188,11 +188,11 @@ displayed_sidebar: "Chinese"
 
 ### 新功能
 
-- 【公测中】支持通过外表的方式查询 Apache Iceberg 数据湖中的数据，帮助您实现对数据湖的极速分析。TPC-H 测试集的结果显示，查询 Apache Iceberg 数据时，StarRocks 的查询速度是 Presto 的 **3 - 5** 倍。相关文档，请参见 [Apache Iceberg 外表](../data_source/External_table.md#deprecated-hive-外部表)。
+- 【公测中】支持通过外表的方式查询 Apache Iceberg 数据湖中的数据，帮助您实现对数据湖的极速分析。TPC-H 测试集的结果显示，查询 Apache Iceberg 数据时，StarRocks 的查询速度是 Presto 的 **3 - 5** 倍。相关文档，请参见 [Apache Iceberg 外表](https://docs.starrocks.io/zh/docs/data_source/External_table#deprecated-hive-外部表)。
 - 【公测中】发布 Pipeline 执行引擎，可以自适应调节查询的并行度。您无需手动设置 session 级别的变量 parallel_fragment_exec_instance_num。并且，在部分高并发场景中，相较于历史版本，新版本性能提升两倍。
-- 支持 CTAS（CREATE TABLE AS SELECT），基于查询结果创建表并且导入数据，从而简化建表和 ETL 操作。相关文档，请参见 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md)。
-- 支持 SQL 指纹，针对慢查询中各类 SQL 语句计算出 SQL 指纹，方便您快速定位慢查询。相关文档，请参见 [SQL 指纹](../administration/Query_planning.md#查看-sql-指纹)。
-- 新增函数 [ANY_VALUE](../sql-reference/sql-functions/aggregate-functions/any_value.md)，[ARRAY_REMOVE](../sql-reference/sql-functions/array-functions/array_remove.md)，哈希函数 [SHA2](../sql-reference/sql-functions/crytographic-functions/sha2.md)。
+- 支持 CTAS（CREATE TABLE AS SELECT），基于查询结果创建表并且导入数据，从而简化建表和 ETL 操作。相关文档，请参见 [CREATE TABLE AS SELECT](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT/)。
+- 支持 SQL 指纹，针对慢查询中各类 SQL 语句计算出 SQL 指纹，方便您快速定位慢查询。相关文档，请参见 [SQL 指纹](https://docs.starrocks.io/zh/docs/administration/Query_planning#查看-sql-指纹)。
+- 新增函数 [ANY_VALUE](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/aggregate-functions/any_value/)，[ARRAY_REMOVE](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_remove/)，哈希函数 [SHA2](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/crytographic-functions/sha2/)。
 
 ### 功能优化
 
@@ -204,7 +204,7 @@ displayed_sidebar: "Chinese"
 - 优化通过外表方式读取 Hive 数据的性能，支持 Hive 的存储格式为 CSV。
 - 支持建表语句的时间戳字段定义为 DEFAULT CURRENT_TIMESTAMP。
 - 支持导入带有多个分隔符的 CSV 文件。
-- flink-source-connector 支持 Flink 批量读取 StarRocks 数据，实现了直连并行读取 BE 节点、自动谓词下推等特性。相关文档，请参见 [Flink Connector](../unloading/Flink_connector.md)。
+- flink-source-connector 支持 Flink 批量读取 StarRocks 数据，实现了直连并行读取 BE 节点、自动谓词下推等特性。相关文档，请参见 [Flink Connector](https://docs.starrocks.io/zh/docs/unloading/Flink_connector/)。
 
 ### 问题修复
 
