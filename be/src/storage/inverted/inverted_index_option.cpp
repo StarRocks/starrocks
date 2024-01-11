@@ -63,11 +63,12 @@ InvertedIndexParserType get_inverted_index_parser_type_from_string(const std::st
 }
 
 std::string get_parser_string_from_properties(const std::map<std::string, std::string>& properties) {
-    if (properties.find(INVERTED_INDEX_PARSER_KEY) != properties.end()) {
-        return properties.at(INVERTED_INDEX_PARSER_KEY);
-    } else {
-        return INVERTED_INDEX_PARSER_NONE;
+    for (const auto& prop : properties) {
+        if (boost::to_lower_copy(prop.first) == INVERTED_INDEX_PARSER_KEY) {
+            return prop.second;
+        }
     }
+    return INVERTED_INDEX_PARSER_NONE;
 }
 
 bool is_tokenized_from_properties(const std::map<std::string, std::string>& properties) {
