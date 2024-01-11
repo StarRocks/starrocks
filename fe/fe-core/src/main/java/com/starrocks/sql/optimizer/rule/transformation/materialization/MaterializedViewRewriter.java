@@ -203,11 +203,8 @@ public class MaterializedViewRewriter {
             return true;
         }
 
-<<<<<<< HEAD
-=======
         // Checks whether the join-on predicate of a query is equivalent to the join-on predicate
         // of a materialized view (MV).
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
         final ScalarOperator mvJoinOnPredicate = mvJoinOp.getOnPredicate();
         final ScalarOperator queryJoinOnPredicate = queryJoinOp.getOnPredicate();
         final ScalarOperator normQueryJoinOnPredicate = MvUtils.canonizePredicateForRewrite(queryJoinOnPredicate);
@@ -221,15 +218,8 @@ public class MaterializedViewRewriter {
             return false;
         }
 
-<<<<<<< HEAD
-        // Checks whether the join-on predicate of a query is equivalent to the join-on predicate
-        // of a materialized view (MV).
-        if (!checkJoinOnPredicateFromOnPredicates(queryJoinOnPredicates, diffPredicates)) {
-            return false;
-=======
         if (diffPredicates.isEmpty()) {
             return true;
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
         }
 
         // try to deduce from join's on predicates or other predicates.
@@ -428,19 +418,11 @@ public class MaterializedViewRewriter {
         if (queryPredicates.isEmpty() && mvPredicates.isEmpty()) {
             return true;
         }
-<<<<<<< HEAD
-        boolean isEqual = isAllPredicateEquivalent(queryPredicates, mvPredicates);
-        if (!isEqual) {
-            logMVRewrite(
-                    mvRewriteContext,
-                    "join child predicate not matched, queryPredicates: {}, mvPredicates: {}, index: {}",
-                    queryPredicates, mvPredicates, index);
-=======
+
         if (!isAllPredicateEquivalent(mvPredicates, queryPredicates)) {
             logMVRewrite(mvRewriteContext, "join child predicate not matched, queryPredicates: {}, " +
                             "mvPredicates: {}, index: {}", queryPredicates, mvPredicates, index);
             return false;
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
         }
         return true;
     }

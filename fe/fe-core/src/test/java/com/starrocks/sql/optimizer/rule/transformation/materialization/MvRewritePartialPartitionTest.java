@@ -25,7 +25,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
-<<<<<<< HEAD
+    private static MockedHiveMetadata mockedHiveMetadata;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
@@ -35,20 +36,11 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         starRocksAssert.withTable(cluster, "table_with_partition");
         starRocksAssert.withTable(cluster, "table_with_day_partition");
 
-=======
-    private static MockedHiveMetadata mockedHiveMetadata;
-
-    @BeforeClass
-    public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
-        MvRewriteTestBase.prepareDefaultDatas();
-
         mockedHiveMetadata =
                 (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
                         getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
         mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
                 ImmutableList.of("l_shipdate=" + HiveMetaClient.PARTITION_NULL_VALUE));
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
     }
 
     @Test
@@ -199,13 +191,9 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         dropMv("test", "partial_mv_7");
     }
 
-<<<<<<< HEAD
-        createAndRefreshMv("create materialized view partial_mv_8" +
-=======
     @Test
     public void testPartialPartition8() throws Exception {
-        createAndRefreshMv("test", "partial_mv_8", "create materialized view partial_mv_8" +
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
+        createAndRefreshMv("create materialized view partial_mv_8" +
                 " partition by c3" +
                 " distributed by hash(c1) as" +
                 " select c1, c3, c2 from test_base_part where c3 < 1000;");
@@ -409,12 +397,7 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
     @Test
     public void testHivePartialPartition1() throws Exception {
         starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-<<<<<<< HEAD
         createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv`\n" +
-=======
-        createAndRefreshMv("test", "hive_parttbl_mv",
-                "CREATE MATERIALIZED VIEW `hive_parttbl_mv`\n" +
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
@@ -430,15 +413,9 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv");
 
-<<<<<<< HEAD
-        MockedHiveMetadata mockedHiveMetadata =
-                (MockedHiveMetadata) connectContext.getGlobalStateMgr().getMetadataMgr().
-                        getOptionalMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME).get();
         mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
                 ImmutableList.of("l_shipdate=" + HiveMetaClient.PARTITION_NULL_VALUE));
 
-=======
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                 "where l_shipdate > '1998-01-04'";
         plan = getFragmentPlan(query);
@@ -457,14 +434,9 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         dropMv("test", "hive_parttbl_mv");
     }
 
-<<<<<<< HEAD
-        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_2`\n" +
-=======
     @Test
     public void testHivePartialPartition2() throws Exception {
-        createAndRefreshMv("test", "hive_parttbl_mv_2",
-                "CREATE MATERIALIZED VIEW `hive_parttbl_mv_2`\n" +
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_2`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
@@ -476,13 +448,10 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
                         ")\n" +
                         "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                         "where l_orderkey > 100;");
-        query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
+        String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                 "where l_orderkey > 100;";
-<<<<<<< HEAD
-        plan = getFragmentPlan(query);
-=======
+
         String plan = getFragmentPlan(query);
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
         PlanTestBase.assertContains(plan, "hive_parttbl_mv_2");
 
         mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
@@ -518,14 +487,9 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         dropMv("test", "hive_parttbl_mv_3");
     }
 
-<<<<<<< HEAD
-        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_4`\n" +
-=======
     @Test
     public void testHivePartialPartition4() throws Exception {
-        createAndRefreshMv("test", "hive_parttbl_mv_4",
-                "CREATE MATERIALIZED VIEW `hive_parttbl_mv_4`\n" +
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_4`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY (`l_shipdate`)\n" +
                         "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
@@ -545,14 +509,9 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         dropMv("test", "hive_parttbl_mv_4");
     }
 
-<<<<<<< HEAD
-        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_5`\n" +
-=======
     @Test
     public void testHivePartialPartition5() throws Exception {
-        createAndRefreshMv("test", "hive_parttbl_mv_5",
-                "CREATE MATERIALIZED VIEW `hive_parttbl_mv_5`\n" +
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
+        createAndRefreshMv("CREATE MATERIALIZED VIEW `hive_parttbl_mv_5`\n" +
                         "COMMENT \"MATERIALIZED_VIEW\"\n" +
                         "PARTITION BY date_trunc('month', o_orderdate)\n" +
                         "DISTRIBUTED BY HASH(`o_orderkey`) BUCKETS 10\n" +

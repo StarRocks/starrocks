@@ -351,10 +351,7 @@ public class PartitionUtil {
                         mvPartitionKeyMap, partitionNameValues.get(partitionColumnIndex));
             }
         }
-<<<<<<< HEAD
-=======
 
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
         LinkedHashMap<String, PartitionKey> sortedPartitionLinkMap = mvPartitionKeyMap.entrySet().stream()
                 .sorted(Map.Entry.comparingByValue(PartitionKey::compareTo))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));

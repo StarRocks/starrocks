@@ -180,7 +180,6 @@ public class MaterializationContext {
         this.mvUsedCount += 1;
     }
 
-<<<<<<< HEAD
     private boolean checkOperatorCompatible(OperatorType query) {
         // Prune based on query operator
         if (query == OperatorType.LOGICAL_AGGR) {
@@ -368,9 +367,7 @@ public class MaterializationContext {
         }
     }
 
-=======
     public Set<String> getRefTableUpdatePartitionNames() {
         return this.refTableUpdatePartitionNames;
     }
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
 }

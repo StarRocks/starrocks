@@ -38,11 +38,8 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-=======
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -376,23 +373,20 @@ public class MvRewritePreprocessor {
 
         List<Table> baseTables = MvUtils.getAllTables(mvPlan);
         List<Table> intersectingTables = baseTables.stream().filter(queryTables::contains).collect(Collectors.toList());
-<<<<<<< HEAD
 
         // If query tables are set which means use related mv for non lock optimization,
         // copy mv's metadata into a ready-only object.
         MaterializedView copiedMV = (context.getQueryTables() != null) ? copyOnlyMaterializedView(mv) : mv;
-=======
-        Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
+        Pair<Table, Column> partitionTableAndColumns = copiedMV.getBaseTableAndPartitionColumn();
 
         // Only record `refTableUpdatedPartitionNames` when `mvPartialPartitionPredicates` is not null and it needs
         // to be compensated by using it.
         Set<String> refTableUpdatedPartitionNames = null;
         if (mvPartialPartitionPredicates != null) {
             Table refBaseTable = partitionTableAndColumns.first;
-            refTableUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfTable(refBaseTable, true);
+            refTableUpdatedPartitionNames = copiedMV.getUpdatedPartitionNamesOfTable(refBaseTable, true);
         }
 
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
         MaterializationContext materializationContext =
                 new MaterializationContext(context, copiedMV, mvPlan, queryColumnRefFactory,
                         mvPlanContext.getRefFactory(), partitionNamesToRefresh,

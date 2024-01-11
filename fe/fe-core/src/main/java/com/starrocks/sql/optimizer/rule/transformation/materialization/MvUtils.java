@@ -62,11 +62,8 @@ import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
-<<<<<<< HEAD
-import com.starrocks.sql.optimizer.MvPlanContextBuilder;
-=======
 import com.starrocks.sql.optimizer.MaterializationContext;
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
+import com.starrocks.sql.optimizer.MvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -462,20 +459,19 @@ public class MvUtils {
         return predicates;
     }
 
-<<<<<<< HEAD
     public static List<ColumnRefOperator> getPredicateColumns(OptExpression root) {
         List<ColumnRefOperator> res = Lists.newArrayList();
         List<ScalarOperator> predicates = getAllValidPredicates(root);
         ListUtils.emptyIfNull(predicates).forEach(x -> x.getColumnRefs(res));
         return res;
-=======
+    }
+
     public static List<ScalarOperator> getAllValidPredicates(ScalarOperator conjunct) {
         if (conjunct == null) {
             return Lists.newArrayList();
         }
         return Utils.extractConjuncts(conjunct).stream().filter(MvUtils::isValidPredicate)
                 .collect(Collectors.toList());
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
     }
 
     // get all predicates within and below root
@@ -1253,7 +1249,6 @@ public class MvUtils {
         return null;
     }
 
-<<<<<<< HEAD
     // convert varchar date to date type
     public static Range<PartitionKey> convertToDateRange(Range<PartitionKey> from) throws AnalysisException {
         if (from.hasLowerBound() && from.hasUpperBound()) {
@@ -1315,7 +1310,8 @@ public class MvUtils {
             return Range.downTo(lowerPartitionKey, from.lowerBoundType());
         }
         return Range.all();
-=======
+    }
+
     private static boolean isRefBaseTable(LogicalScanOperator scanOperator, Table refBaseTable) {
         Table scanTable = scanOperator.getTable();
         if (scanTable.isNativeTableOrMaterializedView() && !scanTable.equals(refBaseTable)) {
@@ -1326,7 +1322,6 @@ public class MvUtils {
             return false;
         }
         return true;
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
     }
 
     /**
@@ -1339,15 +1334,16 @@ public class MvUtils {
      * @param mvPartitionNamesToRefresh : the updated partition names  of the materialized view
      * @return
      */
-<<<<<<< HEAD
+
     private static List<Range<PartitionKey>> getLatestPartitionRangeForTable(
             Table partitionByTable,
             Column partitionColumn,
             MaterializedView mv,
             Set<String> mvPartitionNamesToRefresh) throws AnalysisException {
-        Set<String> modifiedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable, true);
-        List<Range<PartitionKey>> baseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
-                modifiedPartitionNames, MaterializedView.getPartitionExpr(mv));
+        Set<String> refBaseTableUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable, true);
+        // ref base table latest partition ranges except to-refresh partitions
+        List<Range<PartitionKey>> refBaseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
+                refBaseTableUpdatedPartitionNames, MaterializedView.getPartitionExpr(mv));
         // date to varchar range
         Map<Range<PartitionKey>, Range<PartitionKey>> baseRangeMapping = null;
         boolean isConvertToDate = PartitionUtil.isConvertToDate(mv.getFirstPartitionRefTableExpr(), partitionColumn);
@@ -1355,25 +1351,15 @@ public class MvUtils {
             baseRangeMapping = Maps.newHashMap();
             // convert varchar range to date range
             List<Range<PartitionKey>> baseTableDateRanges = Lists.newArrayList();
-            for (Range<PartitionKey> range : baseTableRanges) {
+            for (Range<PartitionKey> range : refBaseTableRanges) {
                 Range<PartitionKey> datePartitionRange = convertToDateRange(range);
                 baseTableDateRanges.add(datePartitionRange);
                 baseRangeMapping.put(datePartitionRange, range);
             }
-            baseTableRanges = baseTableDateRanges;
+            refBaseTableRanges = baseTableDateRanges;
         }
-=======
-    private static List<Range<PartitionKey>> getLatestPartitionRangeForTable(Table partitionByTable,
-                                                                             Column partitionColumn,
-                                                                             MaterializedView mv,
-                                                                             Set<String> mvPartitionNamesToRefresh) {
-        Set<String> refBaseTableUpdatedPartitionNames = mv.getUpdatedPartitionNamesOfTable(partitionByTable, true);
-        // ref base table latest partition ranges except to-refresh partitions
-        List<Range<PartitionKey>> refBaseTableRanges = getLatestPartitionRange(partitionByTable, partitionColumn,
-                refBaseTableUpdatedPartitionNames);
 
         // materialized view latest partition ranges except to-refresh partitions
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
         List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
 
         List<Range<PartitionKey>> latestBaseTableRanges = Lists.newArrayList();

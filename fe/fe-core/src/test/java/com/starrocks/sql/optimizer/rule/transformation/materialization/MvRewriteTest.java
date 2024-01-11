@@ -1511,7 +1511,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
-<<<<<<< HEAD
     public void testPartitionPrune1() throws Exception {
         createAndRefreshMv("CREATE MATERIALIZED VIEW test_partition_tbl_mv1\n" +
                 "               PARTITION BY k1\n" +
@@ -1539,8 +1538,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
-=======
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
     public void testPartitionPrune_SyncMV1() throws Exception {
         starRocksAssert.withTable("CREATE TABLE `sync_tbl_t1` (\n" +
                 "                  `dt` date NOT NULL COMMENT \"\",\n" +

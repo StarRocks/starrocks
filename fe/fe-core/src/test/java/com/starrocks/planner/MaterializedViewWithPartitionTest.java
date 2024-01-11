@@ -175,18 +175,11 @@ public class MaterializedViewWithPartitionTest extends MaterializedViewTestBase 
                         "     partitions=5/5");
 
         sql("select c1, c3, c2 from test_base_part where c2 < 3000 and c3 < 3000")
-<<<<<<< HEAD
                 .contains("partial_mv_6")
-                .contains("TABLE: test_base_part\n" +
-                        "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 9: c2 < 3000, 9: c2 >= 2000\n" +
-                        "     partitions=5/5");
-=======
                 .contains("PREDICATES: 2: c2 < 3000\n" +
                         "     partitions=5/5\n" +
                         "     rollup: test_base_part");
 
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
         // test query delta
         sql("select c1, c3, c2 from test_base_part where c2 < 1000 and c3 < 1000")
                 .contains("partial_mv_6")

@@ -38,9 +38,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         ReplayFromDumpTestBase.beforeClass();
-<<<<<<< HEAD
         connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
-=======
         connectContext.getSessionVariable().setEnableQueryDebugTrace(true);
 
         new MockUp<MaterializedView>() {
@@ -49,7 +47,6 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                 return Sets.newHashSet();
             }
         };
->>>>>>> 7d1c513984 ([BugFix] Fix query partition compensate predicates for mv rewrite  (#30813))
 
         new MockUp<UtFrameUtils>() {
             @Mock
@@ -92,14 +89,9 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     public void testMV_JoinAgg2() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg2");
-        Tracers.register(connectContext);
-        Tracers.init(connectContext, Tracers.Mode.LOGS, "MV");
         connectContext.getSessionVariable()
                 .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, connectContext.getSessionVariable());
-        String pr = Tracers.printLogs();
-        System.out.println(pr);
-        Tracers.close();
         Assert.assertTrue(replayPair.second.contains("table: mv1, rollup: mv1"));
         FeConstants.isReplayFromQueryDump = false;
     }
