@@ -535,9 +535,6 @@ Used to set the memory limit of a query on each BE node. Unit: Byte. The default
 
 ### sql_mode
 
-<<<<<<< HEAD
-  Used to specify the SQL mode to accommodate certain SQL dialects.
-=======
 Used to specify the SQL mode to accommodate certain SQL dialects. Valid values include:
 
 * `PIPES_AS_CONCAT`: The pipe symbol `|` is used to concatenate strings, for example, `select 'hello ' || 'world'`.
@@ -560,7 +557,6 @@ Or, you can set multiple modes at a time, for example:
 ```SQL
 set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
 ```
->>>>>>> 72fb9678e3 ([Doc] Add doc for 'sql_mode' (#38842))
 
 ### sql_safe_updates
 
