@@ -2901,7 +2901,6 @@ public class PlanFragmentBuilder {
 
             List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
                     leftChildColumns, rightChildColumns, onPredicates);
-            Preconditions.checkState(!eqOnPredicates.isEmpty(), "must be eq-join");
 
             for (BinaryPredicateOperator s : eqOnPredicates) {
                 if (!optExpr.inputAt(0).getLogicalProperty().getOutputColumns()
@@ -2909,6 +2908,8 @@ public class PlanFragmentBuilder {
                     s.swap();
                 }
             }
+            eqOnPredicates = eqOnPredicates.stream().filter(p -> !p.isCorrelated()).collect(Collectors.toList());
+            Preconditions.checkState(!eqOnPredicates.isEmpty(), "must be eq-join");
 
             List<Expr> eqJoinConjuncts =
                     eqOnPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
@@ -2921,7 +2922,7 @@ public class PlanFragmentBuilder {
                 }
             }
 
-            List<ScalarOperator> otherJoin = Utils.extractConjuncts(onPredicate);
+            List<ScalarOperator> otherJoin = onPredicates;
             otherJoin.removeAll(eqOnPredicates);
             List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))

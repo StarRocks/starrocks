@@ -47,9 +47,6 @@
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/schema_change_utils.h"
-#include "storage/tablet.h"
-#include "storage/tablet_reader.h"
-#include "storage/tablet_reader_params.h"
 
 namespace starrocks {
 class Field;
@@ -141,18 +138,6 @@ public:
     void set_alter_msg_header(std::string msg) { _alter_msg_header = msg; }
 
 private:
-    struct SchemaChangeParams {
-        TabletSharedPtr base_tablet;
-        TabletSharedPtr new_tablet;
-        std::vector<std::unique_ptr<TabletReader>> rowset_readers;
-        Version version;
-        MaterializedViewParamMap materialized_params_map;
-        std::vector<RowsetSharedPtr> rowsets_to_change;
-        bool sc_sorting = false;
-        bool sc_directly = false;
-        std::unique_ptr<ChunkChanger> chunk_changer = nullptr;
-    };
-
     Status _get_versions_to_be_changed(const TabletSharedPtr& base_tablet,
                                        std::vector<Version>* versions_to_be_changed);
 

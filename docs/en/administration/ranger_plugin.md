@@ -158,9 +158,9 @@ Currently, StarRocks supports:
 
 ## Reuse other services to control access to external tables
 
-For External Catalog, you can reuse external services (such as Hive Service) for access control. StarRocks supports matching different Ranger external services for different Catalogs. When users access an external table, the system implements access control based on the access policy of the Ranger Service corresponding to the external table.
+For External Catalog, you can reuse external services (such as Hive Service) for access control. StarRocks supports matching different Ranger external services for different Catalogs. When users access an external table, the system implements access control based on the access policy of the Ranger Service corresponding to the external table. The user permissions are consistent with the Ranger user with the same name.
 
-1. Copy Hive's Ranger configuration file `ranger-hive-security.xml` to the `fe/conf` file of all FE machines.
+1. Copy Hive's Ranger configuration files `ranger-hive-security.xml` and `ranger-hive-audit.xml` to the `fe/conf` file of all FE machines.
 2. Restart all FE machines.
 3. Configure External Catalog.
 
@@ -169,8 +169,10 @@ For External Catalog, you can reuse external services (such as Hive Service) for
       ```SQL
         CREATE EXTERNAL CATALOG hive_catalog_1
         PROPERTIES (
-            "hive.metastore.uris" = "thrift://172.26.195.10:9083",
-            "ranger.plugin.hive.service.name" = "hive_catalog_1"
+            "type" = "hive",
+            "hive.metastore.type" = "hive",
+            "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+            "ranger.plugin.hive.service.name" = "<ranger_hive_service_name>"
         )
       ```
 
@@ -178,7 +180,7 @@ For External Catalog, you can reuse external services (such as Hive Service) for
   
        ```SQL
        ALTER CATALOG hive_catalog_1
-       SET ("ranger.plugin.hive.service.name" = "hive_catalog_1");
+       SET ("ranger.plugin.hive.service.name" = "<ranger_hive_service_name>");
        ```
 
 ​    This operation changes the authentication method of an existing Catalog to Ranger-based authentication.
