@@ -341,8 +341,7 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
     MorselPtr morsel = std::make_unique<PhysicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(rowid_range));
     morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
-    morsel->set_last_split(_is_last_split_of_current_morsel());
-    _inc_split(morsel.get());
+    _inc_split(_is_last_split_of_current_morsel());
     return morsel;
 }
 
@@ -627,8 +626,7 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
             std::make_shared<ShortKeyRangesOption>(std::move(short_key_ranges), _is_first_split_of_tablet));
     _is_first_split_of_tablet = false;
     morsel->set_rowsets(_tablet_rowsets[_tablet_idx]);
-    morsel->set_last_split(_is_last_split_of_current_morsel());
-    _inc_split(morsel.get());
+    _inc_split(_is_last_split_of_current_morsel());
     return morsel;
 }
 
@@ -854,6 +852,33 @@ bool LogicalSplitMorselQueue::_is_last_split_of_current_morsel() {
 
 MorselQueuePtr create_empty_morsel_queue() {
     return std::make_unique<FixedMorselQueue>(std::vector<MorselPtr>{});
+}
+
+StatusOr<MorselPtr> DynamicMorselQueue::try_get() {
+    std::lock_guard<std::mutex> _l(_mutex);
+    if (_size == 0) return nullptr;
+    _size -= 1;
+    MorselPtr ret = std::move(_queue.front());
+    _queue.pop_front();
+    if (_ticket_checker != nullptr && ret->has_owner_id() && !ret->is_ticket_checker_entered()) {
+        ret->set_ticket_checker_entered(true);
+        _ticket_checker->enter(ret->owner_id(), ret->is_last_split());
+    }
+    return std::move(ret);
+}
+
+void DynamicMorselQueue::unget(MorselPtr&& morsel) {
+    std::lock_guard<std::mutex> _l(_mutex);
+    _size += 1;
+    _queue.emplace_front(std::move(morsel));
+}
+
+void DynamicMorselQueue::append_morsels(std::vector<MorselPtr>&& morsels) {
+    std::lock_guard<std::mutex> _l(_mutex);
+    _size += morsels.size();
+    for (MorselPtr& morsel : morsels) {
+        _queue.emplace_back(std::move(morsel));
+    }
 }
 
 } // namespace starrocks::pipeline

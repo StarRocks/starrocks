@@ -163,8 +163,12 @@ public:
     bool has_owner_id() const { return _has_owner_id; }
     int32_t owner_id() const { return _owner_id; }
     int32_t partition_id() const { return _partition_id; }
+
     bool is_last_split() const { return _is_last_split; }
     void set_last_split(bool v) { _is_last_split = v; }
+
+    bool is_ticket_checker_entered() const { return _ticket_checker_entered; }
+    void set_ticket_checker_entered(bool v) { _ticket_checker_entered = v; }
 
 private:
     std::unique_ptr<TScanRange> _scan_range;
@@ -174,6 +178,7 @@ private:
     int64_t _version = 0;
     int64_t _partition_id = 0;
     bool _is_last_split = true;
+    bool _ticket_checker_entered = false;
 };
 
 /// MorselQueueFactory.
@@ -265,20 +270,20 @@ public:
         _tablet_rowsets = tablet_rowsets;
     }
     virtual void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) {}
-    virtual bool could_attch_ticket_checker() { return false; }
+    virtual bool could_attch_ticket_checker() const { return false; }
 
     virtual size_t num_original_morsels() const { return _num_morsels; }
     virtual size_t max_degree_of_parallelism() const { return _num_morsels; }
     virtual bool empty() const = 0;
     virtual StatusOr<MorselPtr> try_get() = 0;
-    void unget(MorselPtr&& morsel);
+    virtual void unget(MorselPtr&& morsel);
     virtual std::string name() const = 0;
     virtual StatusOr<bool> ready_for_next() const { return true; }
     virtual void append_morsels(Morsels&& morsels) {}
 
 protected:
     Morsels _morsels;
-    const size_t _num_morsels = 0;
+    size_t _num_morsels = 0;
     MorselPtr _unget_morsel = nullptr;
     std::vector<TabletSharedPtr> _tablets;
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
@@ -316,7 +321,7 @@ public:
     void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) override {
         _ticket_checker = ticket_checker;
     }
-    bool could_attch_ticket_checker() override { return true; }
+    bool could_attch_ticket_checker() const override { return true; }
 
     size_t num_original_morsels() const override { return _morsel_queue->num_original_morsels(); }
     size_t max_degree_of_parallelism() const override { return _morsel_queue->max_degree_of_parallelism(); }
@@ -343,19 +348,17 @@ public:
     void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) override {
         _ticket_checker = ticket_checker;
     }
-    bool could_attch_ticket_checker() override { return true; }
+    bool could_attch_ticket_checker() const override { return true; }
     size_t max_degree_of_parallelism() const override { return _degree_of_parallelism; }
 
 protected:
-    void _inc_split(Morsel* morsel) {
+    void _inc_split(bool is_last_split) {
         if (_ticket_checker == nullptr) {
             return;
         }
-        // TODO: can we get tablet_id from this morsel directly?
-        // and that should be morsel->owner_id()
         DCHECK(0 <= _tablet_idx && _tablet_idx < _tablets.size());
         auto tablet_id = _tablets[_tablet_idx]->tablet_id();
-        _ticket_checker->enter(tablet_id, morsel->is_last_split());
+        _ticket_checker->enter(tablet_id, is_last_split);
     }
     ScanMorsel* _cur_scan_morsel() { return down_cast<ScanMorsel*>(_morsels[_tablet_idx].get()); }
 
@@ -477,16 +480,26 @@ private:
 
 class DynamicMorselQueue final : public MorselQueue {
 public:
-    explicit DynamicMorselQueue(Morsels&& morsels) : MorselQueue(std::move(morsels)), _pop_index(0) {}
+    explicit DynamicMorselQueue(Morsels&& morsels) {
+        append_morsels(std::move(morsels));
+        _size = _num_morsels = _queue.size();
+    }
     ~DynamicMorselQueue() override = default;
-    bool empty() const override { return _unget_morsel == nullptr && _pop_index >= _num_morsels; }
+    bool empty() const override { return _size == 0; }
     StatusOr<MorselPtr> try_get() override;
-
+    void unget(MorselPtr&& morsel) override;
     std::string name() const override { return "dynamic_morsel_queue"; }
+    void append_morsels(Morsels&& morsels) override;
+    void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) override {
+        _ticket_checker = ticket_checker;
+    }
+    bool could_attch_ticket_checker() const override { return true; }
 
 private:
+    size_t _size = 0;
+    std::deque<MorselPtr> _queue;
     std::mutex _mutex;
-    std::atomic<size_t> _pop_index;
+    query_cache::TicketCheckerPtr _ticket_checker;
 };
 
 MorselQueuePtr create_empty_morsel_queue();
