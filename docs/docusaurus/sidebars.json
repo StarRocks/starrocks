@@ -194,6 +194,7 @@
         "loading/Flink-connector-starrocks",
         "loading/Load_to_Primary_Key_tables",
         "loading/Etl_in_loading",
+        "loading/loading_tools",
         {
           "type": "category",
           "label": "Concepts",
@@ -1042,6 +1043,7 @@
         "loading/Flink-connector-starrocks",
         "loading/Load_to_Primary_Key_tables",
         "loading/Etl_in_loading",
+        "loading/loading_tools",
         {
           "type": "category",
           "label": "概念介绍",
