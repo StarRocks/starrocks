@@ -134,7 +134,7 @@ public class ResultReceiver {
         } catch (RpcException e) {
             LOG.warn("fetch result rpc exception, finstId={}", DebugUtil.printId(finstId), e);
             status.setRpcStatus(e.getMessage());
-            SimpleScheduler.addToBlacklist(backendId);
+            SimpleScheduler.addToBlocklist(backendId);
         } catch (ExecutionException e) {
             LOG.warn("fetch result execution exception, finstId={}", DebugUtil.printId(finstId), e);
             if (e.getMessage().contains("time out")) {
@@ -144,7 +144,7 @@ public class ResultReceiver {
                                 ConnectContext.get().getSessionVariable().getQueryTimeoutS())));
             } else {
                 status.setRpcStatus(e.getMessage());
-                SimpleScheduler.addToBlacklist(backendId);
+                SimpleScheduler.addToBlocklist(backendId);
             }
         } catch (TimeoutException e) {
             LOG.warn("fetch result timeout, finstId={}", DebugUtil.printId(finstId), e);

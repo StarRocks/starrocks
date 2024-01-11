@@ -17,8 +17,11 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
+import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
@@ -34,6 +37,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
+        ConnectorPlanTestBase.mockCatalog(connectContext, MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
     }
 
     @Test
@@ -1074,7 +1078,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
                     " where t1.d in ('2023-08-01', '2023-08-02') " +
                     " group by t1.d, t2.b, t3.c;";
-            String plan = getFragmentPlan(query);
+            String plan = getFragmentPlan(query, "MV");
             PlanTestBase.assertContains(plan, "UNION");
             PlanTestBase.assertContains(plan, "test_mv1");
         }
@@ -1200,6 +1204,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                 materializedView.getPartitions().stream().map(Partition::getName).sorted()
                         .collect(Collectors.toList());
         Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
 
         {
             String query = "select t1.a, t2.b, t1.d, count(t1.c)\n" +
@@ -1270,7 +1275,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d \n" +
                     " where t1.d >= '2023-08-01' \n" +
                     " group by t1.a, t2.b, t1.d;";
-            String plan = getFragmentPlan(query);
+            String plan = getFragmentPlan(query, "MV");
             PlanTestBase.assertContains(plan, "UNION");
             PlanTestBase.assertContains(plan, "14:OlapScanNode\n" +
                     "     TABLE: test_mv1\n" +
@@ -1967,7 +1972,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " group by a, b, dt;";
             String plan = getFragmentPlan(query);
             PlanTestBase.assertNotContains(plan, "UNION");
-            PlanTestBase.assertContains(plan, "0:OlapScanNode\n" +
+            UtFrameUtils.matchPlanWithoutId(plan, "0:OlapScanNode\n" +
                     "     TABLE: test_mv1\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: 9: dt = '2023-08-01'\n" +
@@ -1988,5 +1993,44 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
         starRocksAssert.dropMaterializedView(mvName);
         starRocksAssert.dropView("view1");
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+    }
+
+    @Test
+    public void testViewBasedRewrite() throws Exception {
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(true);
+        String view = "create view iceberg_table_view " +
+                " as select t1.a, t2.b, t1.d, count(t1.c) as cnt" +
+                " from  iceberg0.partitioned_db.part_tbl1 as t1 " +
+                " inner join iceberg0.partitioned_db.part_tbl2 t2 on t1.d=t2.d " +
+                " inner join iceberg0.partitioned_db.part_tbl3 t3 on t1.d=t3.d " +
+                " group by t1.a, t2.b, t1.d;";
+        starRocksAssert.withView(view);
+        String mvName = "iceberg_mv_1";
+        String mv = "create materialized view iceberg_mv_1 " +
+                "partition by str2date(d,'%Y-%m-%d') " +
+                "distributed by hash(a) " +
+                "REFRESH DEFERRED MANUAL " +
+                "PROPERTIES (\n" +
+                "'replication_num' = '1'" +
+                ") " +
+                "as " +
+                "select a, b, d, cnt " +
+                "from iceberg_table_view";
+        starRocksAssert.withMaterializedView(mv);
+        starRocksAssert.getCtx().executeSql("refresh materialized view iceberg_mv_1" +
+                " partition start('2023-08-01') end('2023-08-02') with sync mode");
+
+        {
+            String query = "select a, b, d, cnt from iceberg_table_view";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "iceberg_mv_1", "UNION");
+        }
+        {
+            String query = "select a, b, d, cnt from iceberg_table_view where d = '2023-08-01'";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "iceberg_mv_1");
+        }
+        starRocksAssert.dropMaterializedView(mvName);
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(false);
     }
 }

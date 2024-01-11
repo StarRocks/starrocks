@@ -40,6 +40,7 @@ public class Pattern {
             .add(OperatorType.LOGICAL_META_SCAN)
             .add(OperatorType.LOGICAL_JDBC_SCAN)
             .add(OperatorType.LOGICAL_BINLOG_SCAN)
+            .add(OperatorType.LOGICAL_VIEW_SCAN)
             .build();
 
     private final OperatorType opType;
@@ -91,6 +92,10 @@ public class Pattern {
 
     public boolean isPatternMultiJoin() {
         return OperatorType.PATTERN_MULTIJOIN.equals(opType);
+    }
+
+    public static boolean isScanOperator(OperatorType operatorType) {
+        return ALL_SCAN_TYPES.contains(operatorType);
     }
 
     public boolean matchWithoutChild(GroupExpression expression) {

@@ -113,6 +113,10 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         return type == PartitionType.RANGE || type == PartitionType.EXPR_RANGE || type == PartitionType.EXPR_RANGE_V2;
     }
 
+    public boolean isListPartition() {
+        return type == PartitionType.LIST;
+    }
+
     public boolean isPartitioned() {
         return type != PartitionType.UNPARTITIONED;
     }
@@ -280,15 +284,15 @@ public class PartitionInfo implements Cloneable, Writable, GsonPreProcessable, G
         buff.append("type: ").append(type.typeString).append("; ");
 
         for (Map.Entry<Long, DataProperty> entry : idToDataProperty.entrySet()) {
-            buff.append(entry.getKey()).append("is HDD: ");
+            buff.append(entry.getKey()).append(" is HDD: ");
             if (entry.getValue().equals(new DataProperty(TStorageMedium.HDD))) {
                 buff.append(true);
             } else {
                 buff.append(false);
             }
-            buff.append("data_property: ").append(entry.getValue().toString());
-            buff.append("replica number: ").append(idToReplicationNum.get(entry.getKey()));
-            buff.append("in memory: ").append(idToInMemory.get(entry.getKey()));
+            buff.append(" data_property: ").append(entry.getValue().toString());
+            buff.append(" replica number: ").append(idToReplicationNum.get(entry.getKey()));
+            buff.append(" in memory: ").append(idToInMemory.get(entry.getKey()));
         }
 
         return buff.toString();

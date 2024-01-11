@@ -578,16 +578,19 @@ public class ShowExecutor {
         //     the base table and supports multi table in MV definition.
         //  2. Table's type is OLAP, this is the old MV type which the MV table is associated with the base
         //     table and only supports single table in MV definition.
-        Map<String, TaskRunStatus> mvNameTaskMap = Maps.newHashMap();
+        Map<String, List<TaskRunStatus>> mvNameTaskMap = Maps.newHashMap();
         if (!materializedViews.isEmpty()) {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             TaskManager taskManager = globalStateMgr.getTaskManager();
-            mvNameTaskMap = taskManager.showMVLastRefreshTaskRunStatus(dbName);
+            Set<String> taskNames = materializedViews.stream()
+                    .map(mv -> TaskBuilder.getMvTaskName(mv.getId()))
+                    .collect(Collectors.toSet());
+            mvNameTaskMap = taskManager.listMVRefreshedTaskRunStatus(dbName, taskNames);
         }
         for (MaterializedView mvTable : materializedViews) {
             long mvId = mvTable.getId();
             ShowMaterializedViewStatus mvStatus = new ShowMaterializedViewStatus(mvId, dbName, mvTable.getName());
-            TaskRunStatus taskStatus = mvNameTaskMap.get(TaskBuilder.getMvTaskName(mvId));
+            List<TaskRunStatus> taskTaskStatusJob = mvNameTaskMap.get(TaskBuilder.getMvTaskName(mvId));
             // refresh_type
             MaterializedView.MvRefreshScheme refreshScheme = mvTable.getRefreshScheme();
             if (refreshScheme == null) {
@@ -607,7 +610,7 @@ public class ShowExecutor {
             // materialized view ddl
             mvStatus.setText(mvTable.getMaterializedViewDdlStmt(true));
             // task run status
-            mvStatus.setLastTaskRunStatus(taskStatus);
+            mvStatus.setLastJobTaskRunStatus(taskTaskStatusJob);
             rowSets.add(mvStatus);
         }
 
@@ -835,44 +838,49 @@ public class ShowExecutor {
 
     // Show databases statement
     private void handleShowDb() {
-        ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
-        List<List<String>> rows = Lists.newArrayList();
-        List<String> dbNames;
-        String catalogName;
-        if (showDbStmt.getCatalogName() == null) {
-            catalogName = connectContext.getCurrentCatalog();
-        } else {
-            catalogName = showDbStmt.getCatalogName();
-        }
-        dbNames = metadataMgr.listDbNames(catalogName);
+        GlobalStateMgr.getCurrentState().tryLock(true);
+        try {
+            ShowDbStmt showDbStmt = (ShowDbStmt) stmt;
+            List<List<String>> rows = Lists.newArrayList();
+            List<String> dbNames;
+            String catalogName;
+            if (showDbStmt.getCatalogName() == null) {
+                catalogName = connectContext.getCurrentCatalog();
+            } else {
+                catalogName = showDbStmt.getCatalogName();
+            }
+            dbNames = metadataMgr.listDbNames(catalogName);
 
-        PatternMatcher matcher = null;
-        if (showDbStmt.getPattern() != null) {
-            matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(),
-                    CaseSensibility.DATABASE.getCaseSensibility());
-        }
-        Set<String> dbNameSet = Sets.newTreeSet();
-        for (String dbName : dbNames) {
-            // Filter dbname
-            if (matcher != null && !matcher.match(dbName)) {
-                continue;
+            PatternMatcher matcher = null;
+            if (showDbStmt.getPattern() != null) {
+                matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(),
+                        CaseSensibility.DATABASE.getCaseSensibility());
+            }
+            Set<String> dbNameSet = Sets.newTreeSet();
+            for (String dbName : dbNames) {
+                // Filter dbname
+                if (matcher != null && !matcher.match(dbName)) {
+                    continue;
+                }
+
+                try {
+                    Authorizer.checkAnyActionOnOrInDb(connectContext.getCurrentUserIdentity(),
+                            connectContext.getCurrentRoleIds(), catalogName, dbName);
+                } catch (AccessDeniedException e) {
+                    continue;
+                }
+
+                dbNameSet.add(dbName);
             }
 
-            try {
-                Authorizer.checkAnyActionOnOrInDb(connectContext.getCurrentUserIdentity(),
-                        connectContext.getCurrentRoleIds(), catalogName, dbName);
-            } catch (AccessDeniedException e) {
-                continue;
+            for (String dbName : dbNameSet) {
+                rows.add(Lists.newArrayList(dbName));
             }
 
-            dbNameSet.add(dbName);
+            resultSet = new ShowResultSet(showDbStmt.getMetaData(), rows);
+        } finally {
+            GlobalStateMgr.getCurrentState().unlock();
         }
-
-        for (String dbName : dbNameSet) {
-            rows.add(Lists.newArrayList(dbName));
-        }
-
-        resultSet = new ShowResultSet(showDbStmt.getMetaData(), rows);
     }
 
     // Show table statement.
@@ -895,37 +903,9 @@ public class ShowExecutor {
         Map<String, String> tableMap = Maps.newTreeMap();
         MetaUtils.checkDbNullAndReport(db, showTableStmt.getDb());
 
-        if (CatalogMgr.isInternalCatalog(catalogName)) {
-            Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
-            try {
-                for (Table tbl : db.getTables()) {
-                    if (matcher != null && !matcher.match(tbl.getName())) {
-                        continue;
-                    }
-
-                    try {
-                        if (tbl.isOlapView()) {
-                            Authorizer.checkAnyActionOnView(
-                                    connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
-                                    new TableName(db.getFullName(), tbl.getName()));
-                        } else if (tbl.isMaterializedView()) {
-                            Authorizer.checkAnyActionOnMaterializedView(connectContext.getCurrentUserIdentity(),
-                                    connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), tbl.getName()));
-                        } else {
-                            Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
-                                    connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), tbl.getName()));
-                        }
-                    } catch (AccessDeniedException e) {
-                        continue;
-                    }
-
-                    tableMap.put(tbl.getName(), tbl.getMysqlType());
-                }
-            } finally {
-                locker.unLockDatabase(db, LockType.READ);
-            }
-        } else {
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
+        try {
             List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
 
             for (String tableName : tableNames) {
@@ -938,14 +918,26 @@ public class ShowExecutor {
                     continue;
                 }
                 try {
-                    Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
-                            connectContext.getCurrentRoleIds(), new TableName(catalogName, dbName, tableName));
+                    if (table.isOlapView()) {
+                        Authorizer.checkAnyActionOnView(
+                                connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                                new TableName(db.getFullName(), table.getName()));
+                    } else if (table.isMaterializedView()) {
+                        Authorizer.checkAnyActionOnMaterializedView(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(), new TableName(db.getFullName(), table.getName()));
+                    } else {
+                        Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
+                                connectContext.getCurrentRoleIds(),
+                                new TableName(catalogName, db.getFullName(), table.getName()));
+                    }
                 } catch (AccessDeniedException e) {
                     continue;
                 }
 
                 tableMap.put(tableName, table.getMysqlType());
             }
+        } finally {
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         for (Map.Entry<String, String> entry : tableMap.entrySet()) {
@@ -1135,6 +1127,11 @@ public class ShowExecutor {
             location = table.getTableLocation();
         } else if (table.isPaimonTable()) {
             location = table.getTableLocation();
+        }
+
+        // Comment
+        if (!Strings.isNullOrEmpty(table.getComment())) {
+            createTableSql.append("\nCOMMENT (\"").append(table.getComment()).append("\")");
         }
 
         if (!Strings.isNullOrEmpty(location)) {
@@ -1696,7 +1693,8 @@ public class ShowExecutor {
     private void handleShowData() {
         ShowDataStmt showStmt = (ShowDataStmt) stmt;
         String dbName = showStmt.getDbName();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -1773,10 +1771,10 @@ public class ShowExecutor {
                     Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
                             connectContext.getCurrentRoleIds(), new TableName(dbName, tableName));
                 } catch (AccessDeniedException e) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW DATA",
-                            connectContext.getCurrentUserIdentity().getUser(),
-                            connectContext.getCurrentUserIdentity().getHost(),
-                            tableName);
+                    AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            connectContext.getCurrentUserIdentity(),
+                            connectContext.getCurrentRoleIds(),
+                            PrivilegeType.ANY.name(), ObjectType.TABLE.name(), tableName);
                 }
 
                 Table table = db.getTable(tableName);

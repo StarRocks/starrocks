@@ -8,6 +8,8 @@ import LoadMethodIntro from '../assets/commonMarkdown/loadMethodIntro.md'
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
+import PipeAdvantages from '../assets/commonMarkdown/pipeAdvantages.md'
+
 StarRocks provides the following options for loading data from HDFS:
 
 <LoadMethodIntro />
@@ -22,7 +24,7 @@ Make sure the source data you want to load into StarRocks is properly stored in 
 
 <InsertPrivNote />
 
-### Gather connection details
+### Gather authentication details
 
 You can use the simple authentication method to establish connections with your HDFS cluster. To use simple authentication, you need to gather the username and password of the account that you can use to access the NameNode of the HDFS cluster.
 
@@ -86,10 +88,10 @@ This is a continuation of the previous example. The previous query is wrapped in
 
 > **NOTE**
 >
-> The syntax of CREATE TABLE when using schema inference does not allow setting the number of replicas, so set it before creating the table. The example below is for a system with a single replica:
+> The syntax of CREATE TABLE when using schema inference does not allow setting the number of replicas, so set it before creating the table. The example below is for a system with three replicas:
 >
 > ```SQL
-> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "1");
+> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "3");
 > ```
 
 Create a database and switch to it:
@@ -197,11 +199,7 @@ CREATE TABLE user_behavior_declared
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 After creating the table, you can load it with INSERT INTO SELECT FROM FILES():
@@ -288,7 +286,6 @@ This method supports the Parquet, ORC, and CSV file formats.
 
 ### Advantages of Broker Load
 
-- Broker Load supports [data transformation](../loading/Etl_in_loading.md) and [data changes](../loading/Load_to_Primary_Key_tables.md) such as UPSERT and DELETE operations during loading.
 - Broker Load runs in the background and clients do not need to stay connected for the job to continue.
 - Broker Load is preferred for long-running jobs, with the default timeout spanning 4 hours.
 - In addition to Parquet and ORC file formats, Broker Load supports CSV files.
@@ -327,11 +324,7 @@ CREATE TABLE user_behavior
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 #### Start a Broker Load
@@ -418,6 +411,8 @@ Starting from v3.2, StarRocks provides the Pipe loading method, which currently 
 
 ### Advantages of Pipe
 
+<PipeAdvantages menu=" HDFS uses LastModifiedTime "/>
+
 Pipe is ideal for continuous data loading and large-scale data loading:
 
 - **Large-scale data loading in micro-batches helps reduce the cost of retries caused by data errors.**
@@ -468,11 +463,7 @@ CREATE TABLE user_behavior_replica
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 #### Start a Pipe job

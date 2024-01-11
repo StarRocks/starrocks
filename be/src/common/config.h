@@ -146,8 +146,13 @@ CONF_Int32(sleep_one_second, "1");
 CONF_Int32(sleep_five_seconds, "5");
 
 // The count of thread to compact
-CONF_Int32(compact_threads, "4");
+CONF_mInt32(compact_threads, "4");
 CONF_Int32(compact_thread_pool_queue_size, "100");
+
+// The count of thread to replication
+CONF_Int32(replication_threads, "64");
+CONF_Int32(replication_thread_pool_queue_size, "2048");
+CONF_Int32(clear_expired_replcation_snapshots_interval_seconds, "3600");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -787,6 +792,10 @@ CONF_Int64(object_storage_connect_timeout_ms, "-1");
 // When it's 0, low speed limit check will be disabled.
 CONF_Int64(object_storage_request_timeout_ms, "-1");
 
+// text reader
+// Spilt text file's scan range into io ranges of 16mb size
+CONF_Int64(text_io_range_size, "16777216");
+
 // orc reader
 CONF_Bool(enable_orc_late_materialization, "true");
 CONF_Int32(orc_row_index_cache_max_size, "1048576");
@@ -800,6 +809,7 @@ CONF_mBool(orc_coalesce_read_enable, "true");
 CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_Bool(parquet_late_materialization_enable, "true");
 CONF_Bool(parquet_late_materialization_v2_enable, "true");
+CONF_Bool(parquet_page_index_enable, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
@@ -885,10 +895,14 @@ CONF_mDouble(starlet_cache_evict_low_water, "0.1");
 CONF_mDouble(starlet_cache_evict_high_water, "0.2");
 // type:Integer. cache directory allocation policy. (0:default, 1:random, 2:round-robin)
 CONF_Int32(starlet_cache_dir_allocate_policy, "0");
+// Cache will evict file cache at this percent if star cache is turned on
+CONF_mDouble(starlet_cache_evict_percent, "0.1");
+// Cache will evict file cache at this speed if star cache is turned on
+CONF_mInt32(starlet_cache_evict_throughput_mb, "200");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 // Only support in S3/HDFS currently.
 CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "131072");
-CONF_mBool(starlet_use_star_cache, "false");
+CONF_mBool(starlet_use_star_cache, "true");
 // TODO: support runtime change
 CONF_Int32(starlet_star_cache_mem_size_percent, "0");
 CONF_Int32(starlet_star_cache_disk_size_percent, "80");
@@ -904,6 +918,9 @@ CONF_Int32(starlet_s3_client_num_instances_per_cache, "1");
 CONF_mBool(starlet_fs_read_prefetch_enable, "false");
 // prefetch threadpool size
 CONF_mInt32(starlet_fs_read_prefetch_threadpool_size, "128");
+CONF_mInt32(starlet_fslib_s3client_nonread_max_retries, "5");
+CONF_mInt32(starlet_fslib_s3client_nonread_retry_scale_factor, "200");
+CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -1042,8 +1059,10 @@ CONF_Bool(enable_pindex_minor_compaction, "true");
 // if l2 num is larger than this, stop doing async compaction,
 // add this config to prevent l2 grow too large.
 CONF_mInt64(max_allow_pindex_l2_num, "5");
-// control the background compaction threads
-CONF_mInt64(pindex_major_compaction_num_threads, "0");
+// Number of max major compaction threads
+CONF_mInt32(pindex_major_compaction_num_threads, "0");
+// Limit of major compaction per disk.
+CONF_mInt32(pindex_major_compaction_limit_per_disk, "2");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
 // control the local persistent index in shared_data gc/evict interval
@@ -1064,6 +1083,12 @@ CONF_mBool(enable_pindex_rebuild_in_compaction, "true");
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");
+
+// When query cache enabled, the operators in the drivers contains cache operator are multilane
+// operators, if the number of lanes is big, Fragment Instance would spend too much time to prepare
+// operators since the number of operators scale up with the number of lanes.
+// ranges in [1,16], default value is 4.
+CONF_mInt32(query_cache_num_lanes_per_driver, "4");
 
 // Used to limit buffer size of tablet send channel.
 CONF_mInt64(send_channel_buffer_limit, "67108864");

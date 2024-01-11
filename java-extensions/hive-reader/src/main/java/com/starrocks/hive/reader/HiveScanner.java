@@ -51,8 +51,12 @@ import static com.google.common.base.Preconditions.checkArgument;
 public class HiveScanner extends ConnectorScanner {
 
     private static final Logger LOG = LogManager.getLogger(HiveScanner.class);
+
+    private static final String SERDE_PROPERTY_PREFIX = "SerDe.";
+
     private final String hiveColumnNames;
     private final String[] hiveColumnTypes;
+    private Map<String, String> serdeProperties = new HashMap<>();
     private final String[] requiredFields;
     private int[] requiredColumnIds;
     private ColumnType[] requiredTypes;
@@ -82,6 +86,8 @@ public class HiveScanner extends ConnectorScanner {
     // The value buffer used to store the value data.
     private Writable value;
 
+    private final String timeZone;
+
     public HiveScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.hiveColumnNames = params.get("hive_column_names");
@@ -98,8 +104,12 @@ public class HiveScanner extends ConnectorScanner {
         this.classLoader = this.getClass().getClassLoader();
         this.fsOptionsProps = params.get("fs_options_props");
         for (Map.Entry<String, String> kv : params.entrySet()) {
+            if (kv.getKey().startsWith(SERDE_PROPERTY_PREFIX)) {
+                this.serdeProperties.put(kv.getKey().substring(SERDE_PROPERTY_PREFIX.length()), kv.getValue());
+            }
             LOG.debug("key = " + kv.getKey() + ", value = " + kv.getValue());
         }
+        this.timeZone = params.get("time_zone");
     }
 
     private JobConf makeJobConf(Properties properties) {
@@ -164,6 +174,7 @@ public class HiveScanner extends ConnectorScanner {
         }
         properties.setProperty("columns.types", types.stream().collect(Collectors.joining(",")));
         properties.setProperty("serialization.lib", this.serde);
+        properties.putAll(serdeProperties);
 
         ScannerHelper.parseFSOptionsProps(fsOptionsProps, kv -> {
             properties.put(kv[0], kv[1]);
@@ -234,7 +245,7 @@ public class HiveScanner extends ConnectorScanner {
                     if (fieldData == null) {
                         appendData(i, null);
                     } else {
-                        ColumnValue fieldValue = new HiveColumnValue(fieldInspectors[i], fieldData);
+                        ColumnValue fieldValue = new HiveColumnValue(fieldInspectors[i], fieldData, timeZone);
                         appendData(i, fieldValue);
                     }
                 }
@@ -294,6 +305,9 @@ public class HiveScanner extends ConnectorScanner {
         sb.append("\n");
         sb.append("serde: ");
         sb.append(serde);
+        sb.append("\n");
+        sb.append("serdeProperties: ");
+        sb.append(serdeProperties.toString());
         sb.append("\n");
         sb.append("inputFormat: ");
         sb.append(inputFormat);

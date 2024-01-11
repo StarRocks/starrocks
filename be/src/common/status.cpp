@@ -263,6 +263,8 @@ std::string Status::code_as_string() const {
         return "GIN Invalid index parameters";
     case TStatusCode::INVERTED_INDEX_NOT_SUPPORTED:
         return "GIN index not supported";
+    case TStatusCode::JIT_COMPILE_ERROR:
+        return "JIT compile error";
     }
     return {};
 }

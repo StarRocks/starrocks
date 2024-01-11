@@ -139,6 +139,17 @@ Status TabletMeta::create_from_file(const string& file_path) {
     return Status::OK();
 }
 
+Status TabletMeta::create_from_memory(std::string_view data) {
+    TabletMetaPB tablet_meta_pb;
+    Status st = ProtobufFileWithHeader::load(&tablet_meta_pb, data);
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to load tablet meta from memory: " << st;
+        return st;
+    }
+    init_from_pb(&tablet_meta_pb);
+    return Status::OK();
+}
+
 Status TabletMeta::reset_tablet_uid(const string& file_path) {
     Status res;
     TabletMeta tmp_tablet_meta;
@@ -346,10 +357,10 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
     }
 
     for (auto& rs : _rs_metas) {
-        rs->to_rowset_pb(tablet_meta_pb->add_rs_metas());
+        rs->get_full_meta_pb(tablet_meta_pb->add_rs_metas());
     }
     for (const auto& rs : _inc_rs_metas) {
-        rs->to_rowset_pb(tablet_meta_pb->add_inc_rs_metas());
+        rs->get_full_meta_pb(tablet_meta_pb->add_inc_rs_metas());
     }
     if (_schema != nullptr) {
         _schema->to_schema_pb(tablet_meta_pb->mutable_schema());
@@ -420,9 +431,8 @@ void TabletMeta::modify_rs_metas(const std::vector<RowsetMetaSharedPtr>& to_add,
         auto it = _rs_metas.begin();
         while (it != _rs_metas.end()) {
             if (rs_to_del->version() == (*it)->version()) {
-                if ((*it)->has_delete_predicate()) {
-                    remove_delete_predicate_by_version((*it)->version());
-                }
+                // delay delete "delete predicate" when deleting stale rowset
+                // fix https://github.com/StarRocks/starrocks/pull/20362
                 _rs_metas.erase(it);
                 // there should be only one rowset match the version
                 break;
@@ -456,6 +466,9 @@ void TabletMeta::delete_stale_rs_meta_by_version(const Version& version) {
     auto it = _stale_rs_metas.begin();
     while (it != _stale_rs_metas.end()) {
         if ((*it)->version() == version) {
+            if ((*it)->has_delete_predicate()) {
+                remove_delete_predicate_by_version((*it)->version());
+            }
             it = _stale_rs_metas.erase(it);
             // version wouldn't be duplicate
             break;

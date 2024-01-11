@@ -121,6 +121,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+    public void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException {
+        delegate.renameTable(dbName, tblName, newTblName);
+        invalidateCache(new IcebergTableName(dbName, tblName));
+    }
+
+    @Override
     public List<String> listPartitionNames(String dbName, String tableName, ExecutorService executorService) {
         IcebergTableName icebergTableName = new IcebergTableName(dbName, tableName);
         if (partitionNames.containsKey(icebergTableName)) {

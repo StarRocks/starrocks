@@ -23,6 +23,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Streams;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -125,6 +126,7 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.JDBC,
                     Table.TableType.MYSQL,
                     Table.TableType.PAIMON,
+                    Table.TableType.ODPS,
                     Table.TableType.DELTALAKE,
                     Table.TableType.VIEW);
 
@@ -737,7 +739,7 @@ public class MaterializedViewAnalyzer {
                         slotRef.toSql());
             } else if (table.isNativeTableOrMaterializedView()) {
                 checkPartitionColumnWithBaseOlapTable(slotRef, (OlapTable) table);
-            } else if (table.isHiveTable() || table.isHudiTable()) {
+            } else if (table.isHiveTable() || table.isHudiTable() || table.isOdpsTable()) {
                 checkPartitionColumnWithBaseHMSTable(slotRef, (HiveMetaStoreTable) table);
             } else if (table.isIcebergTable()) {
                 checkPartitionColumnWithBaseIcebergTable(slotRef, (IcebergTable) table);
@@ -838,11 +840,20 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Materialized view partition column in partition exp " +
                         "must be base table partition column");
             } else {
+                if (icebergTable.specs().size() > 1) {
+                    throw new SemanticException("Do not support create materialized view when " +
+                            "base iceberg table has partition evolution");
+                }
                 boolean found = false;
                 for (PartitionField partitionField : partitionSpec.fields()) {
-                    String partitionColumnName = partitionField.name();
+                    String transformName = partitionField.transform().toString();
+                    String partitionColumnName = icebergTable.schema().findColumnName(partitionField.sourceId());
                     if (partitionColumnName.equalsIgnoreCase(slotRef.getColumnName())) {
                         checkPartitionColumnType(table.getColumn(partitionColumnName));
+                        if (transformName.startsWith("bucket") || transformName.startsWith("truncate")) {
+                            throw new SemanticException("Do not support create materialized view when " +
+                                    "base iceberg table partition transform has bucket or truncate");
+                        }
                         found = true;
                         break;
                     }
@@ -1029,7 +1040,7 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException("Can not refresh non materialized view:" + table.getName(), mvName.getPos());
             }
             MaterializedView mv = (MaterializedView) table;
-            if (!mv.isActive()) {
+            if (!mv.isActive() && AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(mv.getInactiveReason())) {
                 throw new SemanticException("Refresh materialized view failed because [" + mv.getName() +
                         "] is not active. You can try to active it with ALTER MATERIALIZED VIEW " + mv.getName()
                         + " ACTIVE; ", mvName.getPos());

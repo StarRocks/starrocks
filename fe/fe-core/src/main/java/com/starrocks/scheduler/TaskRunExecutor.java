@@ -46,6 +46,8 @@ public class TaskRunExecutor {
 
         CompletableFuture<Constants.TaskRunState> future = CompletableFuture.supplyAsync(() -> {
             status.setState(Constants.TaskRunState.RUNNING);
+            // set process start time
+            status.setProcessStartTime(System.currentTimeMillis());
             try {
                 boolean isSuccess = taskRun.executeTaskRun();
                 if (isSuccess) {
@@ -57,7 +59,7 @@ public class TaskRunExecutor {
                 LOG.warn("failed to execute TaskRun.", ex);
                 status.setState(Constants.TaskRunState.FAILED);
                 status.setErrorCode(-1);
-                status.setErrorMessage(ex.toString());
+                status.setErrorMessage(ex.getMessage());
             } finally {
                 // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
                 ConnectContext.remove();

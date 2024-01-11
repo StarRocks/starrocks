@@ -45,6 +45,13 @@ namespace pipeline {
 using RuntimeFilterPort = starrocks::RuntimeFilterPort;
 using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
 
+// clang-format off
+template <typename T>
+concept DriverPtrCallable = std::invocable<T, const DriverPtr&> &&
+        (std::same_as<std::invoke_result_t<T, const DriverPtr&>, void> ||
+         std::same_as<std::invoke_result_t<T, const DriverPtr&>, Status>);
+// clang-format on
+
 class FragmentContext {
     friend FragmentContextManager;
 
@@ -101,7 +108,25 @@ public:
         }
         return Status::OK();
     }
-    [[nodiscard]] Status iterate_drivers(const std::function<Status(const DriverPtr&)>& call);
+
+    template <DriverPtrCallable Func>
+    [[nodiscard]] auto iterate_drivers(Func call) {
+        using ReturnType = std::invoke_result_t<Func, const DriverPtr&>;
+
+        for (const auto& pipeline : _pipelines) {
+            for (const auto& driver : pipeline->drivers()) {
+                if constexpr (std::is_same_v<ReturnType, Status>) {
+                    RETURN_IF_ERROR(call(driver));
+                } else {
+                    call(driver);
+                }
+            }
+        }
+        if constexpr (std::is_same_v<ReturnType, Status>) {
+            return Status::OK();
+        }
+    }
+
     void clear_all_drivers();
     void close_all_pipelines();
 
@@ -138,9 +163,11 @@ public:
     bool is_stream_pipeline() const { return _is_stream_pipeline; }
     void count_down_epoch_pipeline(RuntimeState* state, size_t val = 1);
 
+#ifdef BE_TEST
     // for ut
     void set_is_stream_test(bool is_stream_test) { _is_stream_test = is_stream_test; }
     bool is_stream_test() const { return _is_stream_test; }
+#endif
 
     size_t expired_log_count() { return _expired_log_count; }
 
@@ -187,7 +214,9 @@ private:
     // STREAM MV
     std::atomic<size_t> _num_finished_epoch_pipelines = 0;
     bool _is_stream_pipeline = false;
+#ifdef BE_TEST
     bool _is_stream_test = false;
+#endif
 
     bool _enable_adaptive_dop = false;
     AdaptiveDopParam _adaptive_dop_param;

@@ -62,6 +62,11 @@ public abstract class Operator {
     //                                  EXTRA-OP    MV-SCAN
     protected int opRuleMask = 0;
 
+    // an operator logically equivalent to 'this' operator
+    // used by view based mv rewrite
+    // eg: LogicalViewScanOperator is logically equivalent to the operator build from the view
+    protected Operator equivalentOp;
+
     public Operator(OperatorType opType) {
         this.opType = opType;
     }
@@ -142,13 +147,20 @@ public abstract class Operator {
         return salt;
     }
 
-
     public int getOpRuleMask() {
         return opRuleMask;
     }
 
     public void setOpRuleMask(int b) {
         this.opRuleMask = b;
+    }
+
+    public Operator getEquivalentOp() {
+        return equivalentOp;
+    }
+
+    public void setEquivalentOp(Operator equivalentOp) {
+        this.equivalentOp = equivalentOp;
     }
 
     public RowOutputInfo getRowOutputInfo(List<OptExpression> inputs) {
@@ -220,6 +232,7 @@ public abstract class Operator {
             builder.projection = operator.projection;
             builder.salt = operator.salt;
             builder.opRuleMask = operator.opRuleMask;
+            builder.equivalentOp = operator.equivalentOp;
             return (B) this;
         }
 

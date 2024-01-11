@@ -49,15 +49,6 @@ void FragmentContext::close_all_pipelines() {
     }
 }
 
-Status FragmentContext::iterate_drivers(const std::function<Status(const DriverPtr&)>& call) {
-    for (const auto& pipeline : _pipelines) {
-        for (const auto& driver : pipeline->drivers()) {
-            RETURN_IF_ERROR(call(driver));
-        }
-    }
-    return Status::OK();
-}
-
 size_t FragmentContext::total_dop() const {
     size_t total = 0;
     for (const auto& pipeline : _pipelines) {
@@ -82,7 +73,10 @@ void FragmentContext::set_data_sink(std::unique_ptr<DataSink> data_sink) {
 }
 
 void FragmentContext::count_down_pipeline(size_t val) {
-    bool all_pipelines_finished = _num_finished_pipelines.fetch_add(val) + val == _pipelines.size();
+    // Note that _pipelines may be destructed after fetch_add
+    // memory_order_seq_cst semantics ensure that previous code does not reorder after fetch_add
+    size_t total_pipelines = _pipelines.size();
+    bool all_pipelines_finished = _num_finished_pipelines.fetch_add(val) + val == total_pipelines;
     if (!all_pipelines_finished) {
         return;
     }
@@ -170,10 +164,7 @@ void FragmentContext::set_final_status(const Status& status) {
                 LOG(WARNING) << ss.str();
             }
             DriverExecutor* executor = _runtime_state->exec_env()->wg_driver_executor();
-            (void)iterate_drivers([executor](const DriverPtr& driver) {
-                executor->cancel(driver.get());
-                return Status::OK();
-            });
+            iterate_drivers([executor](const DriverPtr& driver) { executor->cancel(driver.get()); });
         }
     }
 }

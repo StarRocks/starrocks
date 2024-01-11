@@ -81,6 +81,7 @@ jobs:
     env:
       BRANCH: 'main'
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      INSPECTION: true
     steps:
       - name: clean
         run: |
@@ -283,6 +284,7 @@ jobs:
       BE_NODE: ${{ needs.deploy.outputs.be }}
       BASE_VERSION: ${{needs.deploy.outputs.base_version}}
       BRANCH: ${{needs.deploy.outputs.branch}}
+      INSPECTION: true
     outputs:
       MYSQL_ECI_ID: ${{ steps.run_case.outputs.MYSQL_ECI_ID }}
     steps:
@@ -356,6 +358,7 @@ jobs:
       FE_NODE: ${{ needs.deploy.outputs.fe }}
       BE_NODE: ${{ needs.deploy.outputs.be }}
       BRANCH: 'main'
+      INSPECTION: true
     steps:
       - name: CLEAN
         run: |
@@ -406,7 +409,7 @@ jobs:
   Teardown:
     runs-on: [self-hosted, normal]
     name: Teardown
-    needs: [ deploy, SQL-Tester, admit ]
+    needs: [ deploy, SQL-Tester, admit, be-ut, fe-ut ]
     if: always()
     env:
       BRANCH: ${{ github.base_ref }}
@@ -432,7 +435,7 @@ jobs:
           ./bin/elastic-cluster.sh --renew 0.5
 
       - name: save unstable cases
-        if: always() && github.event_name == 'schedule'
+        if: always() && github.event_name == 'schedule' && steps.backup.outcome == 'success'
         run: |
           cd ci-tool && source lib/init.sh
           ./bin/save_unstable_cases.sh

@@ -70,6 +70,7 @@ import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AddSubPartitionsInfoV2;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.persist.AlterLoadJobOperationLog;
+import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterUserInfo;
@@ -121,6 +122,7 @@ import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.persist.ReplicationJobLog;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -398,6 +400,10 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS:
                 data = AlterMaterializedViewStatusLog.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS:
+                data = AlterMaterializedViewBaseTableInfosLog.read(in);
                 isRead = true;
                 break;
             case OperationType.OP_BACKUP_JOB: {
@@ -1139,6 +1145,10 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_CANCEL_DISABLE_DISK:
                 data = GsonUtils.GSON.fromJson(Text.readString(in), CancelDisableDiskInfo.class);
+                isRead = true;
+                break;
+            case OperationType.OP_REPLICATION_JOB:
+                data = ReplicationJobLog.read(in);
                 isRead = true;
                 break;
             default: {

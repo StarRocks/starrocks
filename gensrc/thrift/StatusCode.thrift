@@ -106,6 +106,8 @@ enum TStatusCode {
 
     REMOTE_FILE_NOT_FOUND = 55, // for hive external table
     YIELD = 56,
+    
+    JIT_COMPILE_ERROR = 57,
 
     // for gin
     INVERTED_INDEX_NOT_SUPPORTED = 61,

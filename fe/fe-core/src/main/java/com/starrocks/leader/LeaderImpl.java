@@ -98,6 +98,8 @@ import com.starrocks.task.DownloadTask;
 import com.starrocks.task.DropAutoIncrementMapTask;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.task.PushTask;
+import com.starrocks.task.RemoteSnapshotTask;
+import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.task.SnapshotTask;
 import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.task.UploadTask;
@@ -134,6 +136,8 @@ import com.starrocks.thrift.TSinglePartitionDesc;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableMeta;
+import com.starrocks.thrift.TTableReplicationRequest;
+import com.starrocks.thrift.TTableReplicationResponse;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletMeta;
 import com.starrocks.thrift.TTaskType;
@@ -242,7 +246,8 @@ public class LeaderImpl {
                         && taskType != TTaskType.CLONE && taskType != TTaskType.PUBLISH_VERSION
                         && taskType != TTaskType.CREATE && taskType != TTaskType.UPDATE_TABLET_META_INFO
                         && taskType != TTaskType.DROP_AUTO_INCREMENT_MAP
-                        && taskType != TTaskType.STORAGE_MEDIUM_MIGRATE) {
+                        && taskType != TTaskType.STORAGE_MEDIUM_MIGRATE
+                        && taskType != TTaskType.REMOTE_SNAPSHOT && taskType != TTaskType.REPLICATE_SNAPSHOT) {
                     if (taskType == TTaskType.REALTIME_PUSH) {
                         PushTask pushTask = (PushTask) task;
                         if (pushTask.getPushType() == TPushType.DELETE) {
@@ -319,6 +324,12 @@ public class LeaderImpl {
                     break;
                 case COMPACTION:
                     finishCompactionTask(task, request);
+                    break;
+                case REMOTE_SNAPSHOT:
+                    finishRemoteSnapshotTask(task, request);
+                    break;
+                case REPLICATE_SNAPSHOT:
+                    finishReplicateSnapshotTask(task, request);
                     break;
                 default:
                     break;
@@ -421,6 +432,24 @@ public class LeaderImpl {
 
     private void finishCompactionTask(AgentTask task, TFinishTaskRequest request) {
         AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+    }
+
+    private void finishRemoteSnapshotTask(AgentTask task, TFinishTaskRequest request) throws MetaNotFoundException {
+        try {
+            GlobalStateMgr.getCurrentState().getReplicationMgr().finishRemoteSnapshotTask(
+                    (RemoteSnapshotTask) task, request);
+        } finally {
+            AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+        }
+    }
+
+    private void finishReplicateSnapshotTask(AgentTask task, TFinishTaskRequest request) throws MetaNotFoundException {
+        try {
+            GlobalStateMgr.getCurrentState().getReplicationMgr().finishReplicateSnapshotTask(
+                    (ReplicateSnapshotTask) task, request);
+        } finally {
+            AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+        }
     }
 
     private void finishRealtimePush(AgentTask task, TFinishTaskRequest request) {
@@ -1283,5 +1312,43 @@ public class LeaderImpl {
         TStatus status = new TStatus(TStatusCode.OK);
         response.setStatus(status);
         return response;
+    }
+
+    public TTableReplicationResponse startTableReplication(TTableReplicationRequest request)
+            throws TException {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        // if current node is follower, forward it to leader
+        if (!globalStateMgr.isLeader()) {
+            TNetworkAddress addr = masterAddr();
+            try {
+                LOG.info("startTableReplication as follower, forward it to master. master: {}", addr.toString());
+                return FrontendServiceProxy.call(addr,
+                        Config.thrift_rpc_timeout_ms,
+                        Config.thrift_rpc_retry_times,
+                        client -> client.startTableReplication(request));
+            } catch (Exception e) {
+                LOG.warn("create thrift client failed during startTableReplication, exception: ", e);
+                TTableReplicationResponse response = new TTableReplicationResponse();
+                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+                status.setError_msgs(Lists.newArrayList("forward request to fe master failed"));
+                response.setStatus(status);
+                return response;
+            }
+        }
+
+        try {
+            globalStateMgr.getReplicationMgr().addReplicationJob(request);
+            TTableReplicationResponse response = new TTableReplicationResponse();
+            TStatus status = new TStatus(TStatusCode.OK);
+            response.setStatus(status);
+            return response;
+        } catch (Exception e) {
+            LOG.warn("Start table replication failed ", e);
+            TTableReplicationResponse response = new TTableReplicationResponse();
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            response.setStatus(status);
+            return response;
+        }
     }
 }

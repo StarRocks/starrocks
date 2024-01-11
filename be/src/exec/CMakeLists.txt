@@ -99,6 +99,7 @@ set(EXEC_FILES
     hdfs_scanner_parquet.cpp
     hdfs_scanner_text.cpp
     hdfs_scanner_partition.cpp
+    mor_processor.cpp
     json_scanner.cpp
     json_parser.cpp
     avro_scanner.cpp
@@ -260,8 +261,8 @@ set(EXEC_FILES
     pipeline/adaptive/collect_stats_sink_operator.cpp
     pipeline/adaptive/collect_stats_source_operator.cpp
     pipeline/adaptive/collect_stats_context.cpp
-    pipeline/adaptive/lazy_instantiate_drivers_operator.cpp
     pipeline/adaptive/utils.cpp
+    pipeline/adaptive/event.cpp
     pipeline/chunk_accumulate_operator.cpp
     pipeline/pipeline.cpp
     pipeline/spill_process_operator.cpp

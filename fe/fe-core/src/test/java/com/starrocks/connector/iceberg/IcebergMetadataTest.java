@@ -19,12 +19,15 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergPartitionKey;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AlreadyExistsException;
@@ -32,6 +35,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.UserException;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
@@ -40,7 +44,18 @@ import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AddColumnClause;
+import com.starrocks.sql.ast.AddColumnsClause;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableCommentClause;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.ModifyColumnClause;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -51,6 +66,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.StatsConstants;
@@ -68,6 +84,7 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
 import org.apache.iceberg.catalog.Namespace;
@@ -96,6 +113,9 @@ import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
 import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
+import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
+import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.RESOURCE_MAPPING_CATALOG_PREFIX;
 
 public class IcebergMetadataTest extends TableTestBase {
@@ -875,7 +895,7 @@ public class IcebergMetadataTest extends TableTestBase {
         Snapshot snapshotBeforeRefresh = table.getSnapshot().get();
 
         mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
-        Assert.assertEquals(snapshotBeforeRefresh.snapshotId(),
+        Assert.assertEquals(snapshotBeforeRefresh.snapshotId() + 1,
                 ((IcebergTable) metadata.getTable("db", "table")).getSnapshot().get().snapshotId());
 
         metadata.refreshTable("db", icebergTable, new ArrayList<>(), true);
@@ -948,10 +968,10 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
                 "table_name", columns, mockedNativeTableD, Maps.newHashMap());
 
-        org.apache.iceberg.PartitionKey partitionKey = new org.apache.iceberg.PartitionKey(SPEC_D, SCHEMA_D);
+        org.apache.iceberg.PartitionKey partitionKey = new org.apache.iceberg.PartitionKey(SPEC_D_5, SCHEMA_D);
         partitionKey.set(0, 438292);
         DataFile tsDataFiles =
-                DataFiles.builder(SPEC_D)
+                DataFiles.builder(SPEC_D_5)
                         .withPath("/path/to/data-d.parquet")
                         .withFileSizeInBytes(20)
                         .withPartition(partitionKey)
@@ -1086,5 +1106,84 @@ public class IcebergMetadataTest extends TableTestBase {
         IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
                 "table_name", new ArrayList<>(), mockedNativeTableD, Maps.newHashMap());
         metadata.refreshTable("db", icebergTable, null, true);
+    }
+
+    @Test
+    public void testAlterTable(@Mocked IcebergHiveCatalog icebergHiveCatalog) throws UserException {
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
+
+        TableName tableName = new TableName("db", "tbl");
+        ColumnDef c1 = new ColumnDef("col1", TypeDef.create(PrimitiveType.INT), true);
+        AddColumnClause addColumnClause = new AddColumnClause(c1, null, null, new HashMap<>());
+
+        ColumnDef c2 = new ColumnDef("col2", TypeDef.create(PrimitiveType.BIGINT), true);
+        ColumnDef c3 = new ColumnDef("col3", TypeDef.create(PrimitiveType.VARCHAR), true);
+        List<ColumnDef> cols = new ArrayList<>();
+        cols.add(c2);
+        cols.add(c3);
+        AddColumnsClause addColumnsClause = new AddColumnsClause(cols, null, new HashMap<>());
+
+        List<AlterClause> clauses = Lists.newArrayList();
+        clauses.add(addColumnClause);
+        clauses.add(addColumnsClause);
+        AlterTableStmt stmt = new AlterTableStmt(tableName, clauses);
+        metadata.alterTable(stmt);
+        clauses.clear();
+
+        // must be default null
+        ColumnDef c4 = new ColumnDef("col4", TypeDef.create(PrimitiveType.INT), false);
+        AddColumnClause addC4 = new AddColumnClause(c4, null, null, new HashMap<>());
+        clauses.add(addC4);
+        AlterTableStmt stmtC4 = new AlterTableStmt(tableName, clauses);
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(stmtC4));
+        clauses.clear();
+
+        // drop/rename/modify column
+        DropColumnClause dropColumnClause = new DropColumnClause("col1", null, new HashMap<>());
+        ColumnRenameClause columnRenameClause = new ColumnRenameClause("col2", "col22");
+        ColumnDef newCol = new ColumnDef("col1", TypeDef.create(PrimitiveType.BIGINT), true);
+        Map<String, String> properties = new HashMap<>();
+        ModifyColumnClause modifyColumnClause =
+                new ModifyColumnClause(newCol, ColumnPosition.FIRST, null, properties);
+        clauses.add(dropColumnClause);
+        clauses.add(columnRenameClause);
+        clauses.add(modifyColumnClause);
+        metadata.alterTable(new AlterTableStmt(tableName, clauses));
+
+        // rename table
+        clauses.clear();
+        TableRenameClause tableRenameClause = new TableRenameClause("newTbl");
+        clauses.add(tableRenameClause);
+        metadata.alterTable(new AlterTableStmt(tableName, clauses));
+
+        // modify table properties/comment
+        clauses.clear();
+        Map<String, String> newProperties = new HashMap<>();
+        newProperties.put(FILE_FORMAT, "orc");
+        newProperties.put(LOCATION_PROPERTY, "new location");
+        newProperties.put(COMPRESSION_CODEC, "gzip");
+        newProperties.put(TableProperties.ORC_BATCH_SIZE, "10240");
+        ModifyTablePropertiesClause modifyTablePropertiesClause = new ModifyTablePropertiesClause(newProperties);
+        AlterTableCommentClause alterTableCommentClause = new AlterTableCommentClause("new comment", NodePosition.ZERO);
+        clauses.add(modifyTablePropertiesClause);
+        clauses.add(alterTableCommentClause);
+        metadata.alterTable(new AlterTableStmt(tableName, clauses));
+
+        // modify empty properties
+        clauses.clear();
+        Map<String, String> emptyProperties = new HashMap<>();
+        ModifyTablePropertiesClause emptyPropertiesClause = new ModifyTablePropertiesClause(emptyProperties);
+        clauses.add(emptyPropertiesClause);
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
+
+        // modify unsupported properties
+        clauses.clear();
+        Map<String, String> invalidProperties = new HashMap<>();
+        invalidProperties.put(FILE_FORMAT, "parquet");
+        invalidProperties.put(COMPRESSION_CODEC, "zzz");
+        ModifyTablePropertiesClause invalidCompressionClause = new ModifyTablePropertiesClause(invalidProperties);
+        clauses.add(invalidCompressionClause);
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
     }
 }

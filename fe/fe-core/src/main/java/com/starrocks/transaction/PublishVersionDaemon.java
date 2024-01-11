@@ -41,7 +41,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -512,7 +511,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 return true;
             }
 
-            Partition partition = table.getPartition(partitionId);
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.info("partition is null in publish partition batch");
                 return true;
@@ -579,9 +578,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
                 stateBatch.putBeTablets(partitionId, nodeToTablets);
             }
-        } catch (Throwable e) {
-            LOG.error("Fail to publish partition {} of txnIds {}: {}", partitionId,
-                    txnIds, e.getMessage());
+        } catch (Exception e) {
+            LOG.error("Fail to publish partition {} of txnIds {}:", partitionId,
+                    txnIds, e);
             return false;
         }
 
@@ -775,6 +774,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                                      @NotNull PartitionCommitInfo partitionCommitInfo,
                                      @NotNull TransactionState txnState) {
         long tableId = tableCommitInfo.getTableId();
+        long baseVersion = 0;
         long txnVersion = partitionCommitInfo.getVersion();
         long txnId = txnState.getTransactionId();
         long commitTime = txnState.getCommitTime();
@@ -797,9 +797,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 LOG.info("Ignore non-exist partition {} of table {} in txn {}", partitionId, table.getName(), txnLabel);
                 return true;
             }
-            if (partition.getVisibleVersion() + 1 != txnVersion) {
+            if (txnState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
+                    partition.getVisibleVersion() + 1 != txnVersion) {
                 return false;
             }
+            baseVersion = partition.getVisibleVersion();
             List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
             for (MaterializedIndex index : indexes) {
                 if (!index.visibleForTransaction(txnId)) {
@@ -824,7 +826,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
-                Utils.publishVersion(normalTablets, txnId, txnVersion - 1, txnVersion, commitTime / 1000,
+                Utils.publishVersion(normalTablets, txnId, baseVersion, txnVersion, commitTime / 1000,
                         compactionScores);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());

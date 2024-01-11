@@ -15,11 +15,15 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Strings;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.SubmitTaskStmt;
-import org.apache.parquet.Strings;
+import org.apache.commons.collections.MapUtils;
+
+import java.util.Map;
 
 public class TaskAnalyzer {
 
@@ -32,6 +36,17 @@ public class TaskAnalyzer {
             }
         }
         submitTaskStmt.setDbName(dbName);
+        analyzeTaskProperties(submitTaskStmt.getProperties());
+    }
+
+    public static void analyzeTaskProperties(Map<String, String> properties) {
+        if (MapUtils.isEmpty(properties)) {
+            return;
+        }
+        String value = properties.get(SessionVariable.WAREHOUSE);
+        if (value != null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, SessionVariable.WAREHOUSE);
+        }
     }
 
 }

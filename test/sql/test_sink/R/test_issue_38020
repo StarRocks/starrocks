@@ -1,0 +1,20 @@
+-- name: test_issue_38020
+create table t3 (c1 int, c2 int);
+-- result:
+-- !result
+insert into t3 values (1, 1);
+-- result:
+-- !result
+select c1, c1, c2 from t3 into outfile "oss://${oss_bucket}/test_sink/test_issue_38020/${uuid0}/";
+-- result:
+-- !result
+shell: ossutil64 cat oss://${oss_bucket}/test_sink/test_issue_38020/${uuid0}/0.csv |head -1
+-- result:
+0
+1	1	1
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/test_issue_38020/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

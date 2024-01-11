@@ -26,6 +26,8 @@ select map{'a':1,'b':2}['a'];
 select map{'a':NULL,'b':2}['a'];
 select map{}['a'];
 select c2["key1"] from map_top_n;
+select map{1: "a", 2: "b"}[c1] from map_top_n;
+select map{null: "a", 2: "b"}[null];
 
 -- name: testEmptyMap
 with t0 as (

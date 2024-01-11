@@ -705,6 +705,7 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
 std::vector<TabletAndScore> TabletManager::pick_tablets_to_do_pk_index_major_compaction() {
     std::vector<TabletAndScore> pick_tablets;
     // 1. pick valid tablet, which score is larger than 0
+    std::vector<TabletSharedPtr> tablet_ptr_list;
     for (const auto& tablets_shard : _tablets_shards) {
         std::shared_lock rlock(tablets_shard.lock);
         for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
@@ -716,14 +717,17 @@ std::vector<TabletAndScore> TabletManager::pick_tablets_to_do_pk_index_major_com
                 continue;
             }
 
-            double score = tablet_ptr->updates()->get_pk_index_write_amp_score();
-            if (score <= 0) {
-                // score == 0 means this tablet's pk index doesn't need major compaction
-                continue;
-            }
-
-            pick_tablets.emplace_back(tablet_ptr, score);
+            tablet_ptr_list.push_back(tablet_ptr);
         }
+    }
+    for (const auto& tablet_ptr : tablet_ptr_list) {
+        double score = tablet_ptr->updates()->get_pk_index_write_amp_score();
+        if (score <= 0) {
+            // score == 0 means this tablet's pk index doesn't need major compaction
+            continue;
+        }
+
+        pick_tablets.emplace_back(tablet_ptr, score);
     }
     // 2. sort tablet by score, by ascending order.
     std::sort(pick_tablets.begin(), pick_tablets.end(), [](TabletAndScore& a, TabletAndScore& b) {
@@ -1326,11 +1330,10 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
         }
         normal_request.tablet_schema.columns.emplace_back();
         TColumn& column = normal_request.tablet_schema.columns.back();
-        column.__set_column_name("__row");
+        column.__set_column_name(Schema::FULL_ROW_COLUMN);
         TColumnType ctype;
         ctype.__set_type(TPrimitiveType::VARCHAR);
-        //TODO
-        ctype.__set_len(65535);
+        ctype.__set_len(TypeDescriptor::MAX_VARCHAR_LENGTH);
         column.__set_column_type(ctype);
         column.__set_aggregation_type(TAggregationType::REPLACE);
         column.__set_is_allow_null(false);

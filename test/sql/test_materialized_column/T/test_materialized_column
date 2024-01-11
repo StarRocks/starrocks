@@ -2,16 +2,16 @@
 CREATE DATABASE test_create_table;
 USE test_create_table;
 
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc INT AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE NOT NULL AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AUTO_INCREMENT AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE DEFAULT "1.0" AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
-CREATE TABLE t ( id BIGINT NOT NULL,  incr BIGINT AUTO_INCREMENT, array_data ARRAY<int> NOT NULL, mc BIGINT AS (incr) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)), mc_1 DOUBLE AS (mc) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc BIGINT AS (sum(id)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)), job INT NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
-CREATE TABLE t ( mc INT AS (1) ) PRIMARY KEY (mc) DISTRIBUTED BY HASH(mc) BUCKETS 7 PROPERTIES("replication_num" = "1");
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc INT AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE NOT NULL AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AUTO_INCREMENT AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE DEFAULT "1.0" AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+CREATE TABLE t ( id BIGINT NOT NULL,  incr BIGINT AUTO_INCREMENT, array_data ARRAY<int> NOT NULL, mc BIGINT AS (incr) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)), mc_1 DOUBLE AS (mc) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc BIGINT AS (sum(id)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)), job INT NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+CREATE TABLE t ( mc INT AS (1) ) PRIMARY KEY (mc) DISTRIBUTED BY HASH(mc) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 
 SHOW CREATE TABLE t;
 
@@ -23,13 +23,13 @@ DROP DATABASE test_create_table;
 CREATE DATABASE test_insert;
 USE test_insert;
 
-CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 INSERT INTO t VALUES (1, [1,2], 0.0);
 INSERT INTO t (id, array_data, mc) VALUES (1, [1,2], 0.0);
 INSERT INTO t VALUES (1, [1,2]);
 INSERT INTO t (id, array_data) VALUES (2, [3,4]);
 
-CREATE TABLE t1 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t1 ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 INSERT INTO t1 VALUES (3, [10,20]);
 INSERT INTO t1 (id, array_data) VALUES (4, [30,40]);
 
@@ -45,7 +45,7 @@ DROP DATABASE test_insert;
 CREATE DATABASE test_materialized_column_schema_change;
 USE test_materialized_column_schema_change;
 
-CREATE TABLE t ( id BIGINT NOT NULL, job INT NOT NULL, incr BIGINT AUTO_INCREMENT, array_data ARRAY<int> NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL, job INT NOT NULL, incr BIGINT AUTO_INCREMENT, array_data ARRAY<int> NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 INSERT INTO t VALUES (1, 2, DEFAULT, [1,2]);
 
 ALTER TABLE t ADD COLUMN mc_1 DOUBLE AS (array_avg(array_data));
@@ -87,7 +87,7 @@ DROP DATABASE test_materialized_column_schema_change;
 CREATE DATABASE test_normal_column_schema_change;
 USE test_normal_column_schema_change;
 
-CREATE TABLE t ( id BIGINT NOT NULL, name BIGINT NOT NULL, job INT NOT NULL, mc INT AS (job) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL, name BIGINT NOT NULL, job INT NOT NULL, mc INT AS (job) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 
 ALTER TABLE t ADD COLUMN newcol INT DEFAULT "0" AFTER mc;
 ALTER TABLE t MODIFY COLUMN job BIGINT;
@@ -113,7 +113,7 @@ DROP DATABASE test_normal_column_schema_change;
 CREATE DATABASE test_materialized_column_in_materialized_view;
 USE test_materialized_column_in_materialized_view;
 
-CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id + 1) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id + 1) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 
 CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY HASH(id) BUCKETS 10 REFRESH ASYNC AS SELECT id, mc FROM t;
 
@@ -131,38 +131,35 @@ DROP DATABASE test_materialized_column_in_materialized_view;
 CREATE DATABASE test_materialized_column_alter_table_with_concurrent_insert;
 USE test_materialized_column_alter_table_with_concurrent_insert;
 
-CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 ALTER TABLE t MODIFY COLUMN mc BIGINT AS (id + 10);
 INSERT INTO t VALUES (1);
 INSERT INTO t VALUES (2);
 INSERT INTO t VALUES (3);
 INSERT INTO t VALUES (4);
 INSERT INTO t VALUES (5);
-SELECT * FROM t ORDER BY id;
 function: wait_alter_table_finish()
 SELECT * FROM t ORDER BY id;
 DROP TABLE t;
 
-CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 ALTER TABLE t DROP COLUMN mc;
 INSERT INTO t VALUES (1);
 INSERT INTO t VALUES (2);
 INSERT INTO t VALUES (3);
 INSERT INTO t VALUES (4);
 INSERT INTO t VALUES (5);
-SELECT * FROM t ORDER BY id;
 function: wait_alter_table_finish()
 SELECT * FROM t ORDER BY id;
 DROP TABLE t;
 
-CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL, mc BIGINT AS (id) ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 ALTER TABLE t ADD COLUMN name BIGINT AS (id + 10);
 INSERT INTO t VALUES (1);
 INSERT INTO t VALUES (2);
 INSERT INTO t VALUES (3);
 INSERT INTO t VALUES (4);
 INSERT INTO t VALUES (5);
-SELECT * FROM t ORDER BY id;
 function: wait_alter_table_finish()
 SELECT * FROM t ORDER BY id;
 DROP TABLE t;
@@ -173,7 +170,7 @@ DROP DATABASE test_materialized_column_alter_table_with_concurrent_insert;
 CREATE DATABASE test_add_multiple_column;
 USE test_add_multiple_column;
 
-CREATE TABLE t ( id BIGINT NOT NULL ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 INSERT INTO t VALUES (1), (2), (3);
 ALTER TABLE t ADD COLUMN (newcol1 BIGINT AS id * 10, newcol2 BIGINT AS id * 100);
 function: wait_alter_table_finish()
@@ -192,7 +189,7 @@ DROP DATABASE test_add_multiple_column;
 CREATE DATABASE test_update;
 USE test_update;
 
-CREATE TABLE t ( id BIGINT NOT NULL, v1 BIGINT NOT NULL, v2 BIGINT NOT NULL, v3 BIGINT AS v2) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL, v1 BIGINT NOT NULL, v2 BIGINT NOT NULL, v3 BIGINT AS v2) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 INSERT INTO t VALUES (1, 2, 3);
 
 SET partial_update_mode = "row";
@@ -222,7 +219,7 @@ DROP DATABASE test_update;
 CREATE DATABASE test_schema_change_for_add_optimization;
 USE test_schema_change_for_add_optimization;
 
-CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 INSERT INTO t VALUES (1, 2);
 ALTER TABLE t ADD COLUMN newcol1 BIGINT AS id + name;
 function: wait_alter_table_finish()
@@ -244,7 +241,7 @@ function: wait_alter_table_finish()
 SELECT * FROM t;
 DROP TABLE t;
 
-CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 INSERT INTO t VALUES (1, 2);
 ALTER TABLE t ADD COLUMN newcol1 BIGINT AS id + name;
 function: wait_alter_table_finish()
@@ -266,7 +263,7 @@ function: wait_alter_table_finish()
 SELECT * FROM t;
 DROP TABLE t;
 
-CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 INSERT INTO t VALUES (1, 2);
 ALTER TABLE t ADD COLUMN newcol1 BIGINT AS id + name;
 function: wait_alter_table_finish()
@@ -290,7 +287,7 @@ function: wait_alter_table_finish()
 SELECT * FROM t;
 DROP TABLE t;
 
-CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL,  name BIGINT NOT NULL ) Unique KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 INSERT INTO t VALUES (1, 2);
 ALTER TABLE t ADD COLUMN newcol1 BIGINT AS id + name;
 function: wait_alter_table_finish()
@@ -321,7 +318,7 @@ DROP DATABASE test_schema_change_for_add_optimization;
 CREATE DATABASE test_schema_change_for_constant_expression;
 USE test_schema_change_for_constant_expression;
 
-CREATE TABLE t ( id BIGINT NOT NULL) PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL) PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 INSERT INTO t VALUES (1),(2),(3);
 ALTER TABLE t ADD COLUMN newcol1 TINYINT AS 1;
 function: wait_alter_table_finish()
@@ -337,7 +334,7 @@ function: wait_alter_table_finish()
 SELECT * FROM t ORDER BY id;
 DROP TABLE t;
 
-CREATE TABLE t ( id BIGINT NOT NULL) DUPLICATE KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1");
+CREATE TABLE t ( id BIGINT NOT NULL) DUPLICATE KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 INSERT INTO t VALUES (1),(2),(3);
 ALTER TABLE t ADD COLUMN newcol1 TINYINT AS 1;
 function: wait_alter_table_finish()
@@ -359,7 +356,7 @@ DROP DATABASE test_schema_change_for_constant_expression;
 CREATE DATABASE test_schema_change_for_after;
 USE test_schema_change_for_after;
 
-CREATE TABLE t0 ( v1 BIGINT NOT NULL, v2 BIGINT NOT NULL, v3 BIGINT NOT NULL) DUPLICATE KEY (v1) DISTRIBUTED BY HASH(v1) BUCKETS 1 PROPERTIES("replication_num" = "1");
+CREATE TABLE t0 ( v1 BIGINT NOT NULL, v2 BIGINT NOT NULL, v3 BIGINT NOT NULL) DUPLICATE KEY (v1) DISTRIBUTED BY HASH(v1) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 
 alter table t0 add column testcol1 BIGINT after xxx, add column testcol2 BIGINT after testcol1;
 alter table t0 add column testcol1 BIGINT after v1, add column testcol2 BIGINT after xxx;

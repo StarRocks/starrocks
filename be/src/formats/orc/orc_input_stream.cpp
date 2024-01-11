@@ -30,25 +30,36 @@ ORCHdfsFileStream::ORCHdfsFileStream(RandomAccessFile* file, uint64_t length, io
         : _file(file), _length(length), _cache_buffer(0), _cache_offset(0), _sb_stream(sb_stream) {}
 
 void ORCHdfsFileStream::prepareCache(PrepareCacheScope scope, uint64_t offset, uint64_t length) {
-    size_t cache_max_size = config::orc_file_cache_max_size;
-    if (scope == PrepareCacheScope::READ_FULL_ROW_INDEX) {
+    size_t cache_max_size = 0;
+    if (scope == PrepareCacheScope::READ_FULL_FILE) {
+        cache_max_size = config::orc_file_cache_max_size;
+    } else if (scope == PrepareCacheScope::READ_FULL_ROW_INDEX) {
         cache_max_size = config::orc_row_index_cache_max_size;
-    }
-    if (scope == PrepareCacheScope::READ_FULL_STRIPE) {
+    } else if (scope == PrepareCacheScope::READ_FULL_STRIPE) {
         cache_max_size = config::orc_stripe_cache_max_size;
     }
 
     if (length > cache_max_size) return;
-    if (canUseCacheBuffer(offset, length)) return;
+    if (isAlreadyCachedInBuffer(offset, length)) return;
     if (scope == PrepareCacheScope::READ_FULL_STRIPE && _tiny_stripe_read) {
         length = computeCacheFullStripeSize(offset, length);
     }
     _cache_buffer.resize(length);
     _cache_offset = offset;
+
+    // We need to set io range manually, otherwise one io request will be split into multiple requests
+    std::vector<IORange> io_ranges{};
+    io_ranges.emplace_back(InputStream::IORange{.offset = offset, .size = length});
+    setIORanges(io_ranges);
+
     doRead(_cache_buffer.data(), length, offset);
+
+    // Don't do clearIORanges(), because it will clear io ranges setted in startNextStripe()
+    // Just left clearIORanges() operation take place in startNextStripe()
+    // clearIORanges();
 }
 
-bool ORCHdfsFileStream::canUseCacheBuffer(uint64_t offset, uint64_t length) {
+bool ORCHdfsFileStream::isAlreadyCachedInBuffer(uint64_t offset, uint64_t length) {
     if ((_cache_buffer.size() != 0) && (offset >= _cache_offset) &&
         ((offset + length) <= (_cache_offset + _cache_buffer.size()))) {
         return true;
@@ -57,7 +68,7 @@ bool ORCHdfsFileStream::canUseCacheBuffer(uint64_t offset, uint64_t length) {
 }
 
 void ORCHdfsFileStream::read(void* buf, uint64_t length, uint64_t offset) {
-    if (canUseCacheBuffer(offset, length)) {
+    if (isAlreadyCachedInBuffer(offset, length)) {
         size_t idx = offset - _cache_offset;
         memcpy(buf, _cache_buffer.data() + idx, length);
     } else {
@@ -90,8 +101,7 @@ void ORCHdfsFileStream::setIORanges(std::vector<IORange>& io_ranges) {
     std::vector<io::SharedBufferedInputStream::IORange> bs_io_ranges;
     bs_io_ranges.reserve(io_ranges.size());
     for (const auto& r : io_ranges) {
-        bs_io_ranges.emplace_back(io::SharedBufferedInputStream::IORange{.offset = static_cast<int64_t>(r.offset),
-                                                                         .size = static_cast<int64_t>(r.size)});
+        bs_io_ranges.emplace_back(static_cast<int64_t>(r.offset), static_cast<int64_t>(r.size));
     }
     Status st = _sb_stream->set_io_ranges(bs_io_ranges);
     if (!st.ok()) {

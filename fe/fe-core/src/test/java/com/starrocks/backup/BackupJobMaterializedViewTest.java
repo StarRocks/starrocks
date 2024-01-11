@@ -24,7 +24,9 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UnitTestUtil;
 import com.starrocks.metric.MetricRepo;
@@ -46,11 +48,14 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.io.File;
 import java.io.IOException;
@@ -62,6 +67,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class BackupJobMaterializedViewTest {
 
     private BackupJob job;
@@ -77,6 +83,9 @@ public class BackupJobMaterializedViewTest {
 
     private long repoId = 30000;
     private AtomicLong id = new AtomicLong(50000);
+    private static final String MV_LABEL = "mv_label";
+
+    private static List<Path> pathsNeedToBeDeleted = Lists.newArrayList();
 
     @Mocked
     private GlobalStateMgr globalStateMgr;
@@ -115,27 +124,29 @@ public class BackupJobMaterializedViewTest {
     private Repository repo = new Repository(repoId, "repo", false, "my_repo",
             new BlobStorage("broker", Maps.newHashMap()));
 
-    @BeforeClass
+    @BeforeAll
     public static void start() {
         Config.tmp_dir = "./";
         File backupDir = new File(BackupHandler.TEST_BACKUP_ROOT_DIR.toString());
-        backupDir.mkdirs();
+        if (!backupDir.exists()) {
+            backupDir.mkdirs();
+        }
 
         MetricRepo.init();
     }
 
-    @AfterClass
+    @AfterAll
     public static void end() throws IOException {
-        Config.tmp_dir = "./";
-        File backupDir = new File(BackupHandler.TEST_BACKUP_ROOT_DIR.toString());
-        if (backupDir.exists()) {
-            Files.walk(BackupHandler.TEST_BACKUP_ROOT_DIR,
-                            FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
-                    .forEach(File::delete);
+        for (Path path : pathsNeedToBeDeleted) {
+            File backupDir = new File(path.toString());
+            if (backupDir.exists()) {
+                Files.walk(path, FileVisitOption.FOLLOW_LINKS).sorted(Comparator.reverseOrder()).map(Path::toFile)
+                        .forEach(File::delete);
+            }
         }
     }
 
-    @Before
+    @BeforeEach
     public void setUp() {
 
         repoMgr = new MockRepositoryMgr();
@@ -200,11 +211,11 @@ public class BackupJobMaterializedViewTest {
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.MATERIALIZED_VIEW_NAME), null));
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
 
-        job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
-        job.setTestPrimaryKey();
+        job = new BackupJob(MV_LABEL, dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
     }
 
     @Test
+    @Order(1)
     public void testRunNormal() {
         // 1.pending
         Assert.assertEquals(BackupJobState.PENDING, job.getState());
@@ -329,7 +340,7 @@ public class BackupJobMaterializedViewTest {
         BackupMeta restoreMetaInfo = null;
         BackupJobInfo restoreJobInfo = null;
         try {
-            restoreMetaInfo = BackupMeta.fromFile(job.getLocalMetaInfoFilePath(), -1);
+            restoreMetaInfo = BackupMeta.fromFile(job.getLocalMetaInfoFilePath(), FeConstants.STARROCKS_META_VERSION);
             Assert.assertEquals(2, restoreMetaInfo.getTables().size());
 
             {
@@ -353,6 +364,24 @@ public class BackupJobMaterializedViewTest {
             Assert.assertEquals(UnitTestUtil.DB_NAME, restoreJobInfo.dbName);
             Assert.assertEquals(job.getLabel(), restoreJobInfo.name);
             Assert.assertEquals(2, restoreJobInfo.tables.size());
+
+            // base table
+            BackupJobInfo.BackupTableInfo baseTableBackupInfo = restoreJobInfo.getTableInfo(UnitTestUtil.TABLE_NAME);
+            Assert.assertTrue(baseTableBackupInfo != null);
+            Table remoteBaseTable = backupMeta.getTable(UnitTestUtil.TABLE_NAME);
+            Assert.assertTrue(remoteBaseTable != null);
+
+            // mv
+            BackupJobInfo.BackupTableInfo mvBackupInfo = restoreJobInfo.getTableInfo(UnitTestUtil.TABLE_NAME);
+            Assert.assertTrue(mvBackupInfo != null);
+            Table mvTable = backupMeta.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME);
+            Assert.assertTrue(mvTable != null);
+            Assert.assertTrue(mvTable instanceof MaterializedView);
+            MaterializedView mv = (MaterializedView) mvTable;
+            Assert.assertTrue(mv != null);
+            Assert.assertTrue(!mv.isActive());
+            Assert.assertTrue(mv.getInactiveReason().contains(String.format("Set the materialized view %s inactive in backup",
+                    UnitTestUtil.MATERIALIZED_VIEW_NAME)));
         } catch (IOException e) {
             e.printStackTrace();
             Assert.fail();
@@ -365,9 +394,14 @@ public class BackupJobMaterializedViewTest {
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
         Assert.assertEquals(BackupJobState.FINISHED, job.getState());
+
+        if (job.getLocalJobDirPath() != null) {
+            pathsNeedToBeDeleted.add(job.getLocalJobDirPath());
+        }
     }
 
     @Test
+    @Order(2)
     public void testRunAbnormal() {
         // 1.pending
         AgentTaskQueue.clearAllTasks();
@@ -376,9 +410,13 @@ public class BackupJobMaterializedViewTest {
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, "unknown_tbl"), null));
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, "unknown_mv"), null));
 
-        job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
+        job = new BackupJob(MV_LABEL, dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         job.run();
         Assert.assertEquals(Status.ErrCode.NOT_FOUND, job.getStatus().getErrCode());
         Assert.assertEquals(BackupJobState.CANCELLED, job.getState());
+
+        if (job.getLocalJobDirPath() != null) {
+            pathsNeedToBeDeleted.add(job.getLocalJobDirPath());
+        }
     }
 }

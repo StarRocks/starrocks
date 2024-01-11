@@ -26,7 +26,6 @@ FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命
 >
 > 只有拥有 `cluster_admin` 角色的用户才可以执行集群管理相关命令。
 
-
 ## 配置 FE 动态参数
 
 您可以通过 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令在线修改 FE 动态参数。
@@ -392,6 +391,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 默认值：60
 
 #### routine_load_unstable_threshold_second
+
 - 含义：Routine Load 导入作业的任一导入任务消费延迟，即正在消费的消息时间戳与当前时间的差值超过该阈值，且数据源中存在未被消费的消息，则导入作业置为 UNSTABLE 状态。
 - 单位：秒
 - 默认值：3600
@@ -503,7 +503,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### enable_auto_tablet_distribution
 
-- 含义：是否开启自动设置分桶功能。<ul><li>设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[确定分桶数量)](../table_design/Data_distribution.md#确定分桶数量)。</li><li>设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。<br />新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。</li></ul>
+- 含义：是否开启自动设置分桶功能。<ul><li>设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[确定分桶数量](../table_design/Data_distribution.md#设置分桶数量)。</li><li>设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。<br />新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。</li></ul>
 - 默认值：TRUE
 - 引入版本：2.5.6
 
@@ -816,6 +816,23 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：是否允许系统自动检查和重新激活异步物化视图。启用此功能后，系统将会自动激活因基表（或视图）Schema Change 或重建而失效（Inactive）的物化视图。请注意，此功能不会激活由用户手动设置为 Inactive 的物化视图。此项功能支持从 v3.1.6 版本开始。
 - 默认值: TRUE
 
+##### jdbc_meta_default_cache_enable
+
+- 含义：JDBC Catalog 元数据缓存是否开启的默认值。当设置为TRUE时，新创建的 JDBC Catalog 会默认开启元数据缓存。
+- 默认值：FALSE
+
+##### jdbc_meta_default_cache_expire_sec
+
+- 含义：JDBC Catalog 元数据缓存的默认过期时间。当 jdbc_meta_default_cache_enable 设置为 TRUE 时，新创建的 JDBC Catalog 会默认设置元数据缓存的过期时间。
+- 单位：秒
+- 默认值：600
+
+##### default_mv_refresh_immediate
+
+- 含义：创建异步物化视图后，是否立即刷新该物化视图。当设置为 `true` 时，异步物化视图创建后会立即刷新。
+- 默认值：TRUE
+- 引入版本：v3.2.3
+
 ## 配置 FE 静态参数
 
 以下 FE 配置项为静态参数，不支持在线修改，您需要在 `fe.conf` 中修改并重启 FE。
@@ -934,6 +951,12 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 含义：FE 节点上 HTTP 服务器的端口。
 - 默认值：8030
+
+#### http_worker_threads_num
+
+- 含义：Http Server 用于处理 HTTP 请求的线程数。如果配置为负数或 0 ，线程数将设置为 CPU 核数的 2 倍。
+- 默认值：0
+- 引入版本：2.5.18，3.0.10，3.1.7，3.2.2
 
 #### http_backlog_num
 

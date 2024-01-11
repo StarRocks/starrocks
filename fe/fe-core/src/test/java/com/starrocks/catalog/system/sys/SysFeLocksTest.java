@@ -22,8 +22,7 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.thrift.TException;
 import org.junit.jupiter.api.Test;
 
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Function;
+import java.lang.Thread.State;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -64,16 +63,13 @@ public class SysFeLocksTest {
             assertEquals("[]", item.getWaiter_list());
 
             // add a waiter
-            AtomicInteger state = new AtomicInteger(0);
             Thread waiter = new Thread(() -> {
-                state.set(1);
                 db.writeLock();
                 db.writeUnlock();
-                ;
             }, "waiter");
             waiter.start();
 
-            while (state.get() != 1) {
+            while (waiter.getState() != State.WAITING) {
                 Thread.sleep(1000);
             }
 
@@ -94,19 +90,7 @@ public class SysFeLocksTest {
             assertEquals("[]", item.getWaiter_list());
 
             // add a waiter
-            AtomicInteger state = new AtomicInteger(0);
-            Function<Integer, Void> awaitState = (expected) -> {
-                while (state.get() != expected) {
-                    try {
-                        Thread.sleep(1000);
-                    } catch (InterruptedException e) {
-                        throw new RuntimeException(e);
-                    }
-                }
-                return null;
-            };
             Thread waiter = new Thread(() -> {
-                state.set(1);
                 db.writeLock();
                 db.writeUnlock();
             }, "waiter");
@@ -117,7 +101,10 @@ public class SysFeLocksTest {
             // 3. two threads share the lock
             // 4. two threads release the lock
 
-            awaitState.apply(1);
+            while (waiter.getState() != State.WAITING) {
+                Thread.sleep(1000);
+            }
+
             item = SysFeLocks.resolveLockInfo(db);
             assertEquals(String.format("[{\"threadId\":%d,\"threadName\":\"%s\"}]", waiter.getId(), waiter.getName()),
                     item.getWaiter_list());

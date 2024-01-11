@@ -367,6 +367,21 @@ public class HiveMetadataTest {
         hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
     }
 
+    @Test
+    public void testAbortSink() {
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        hiveMetadata.abortSink("hive_db", "hive_table", Lists.newArrayList());
+        hiveMetadata.abortSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
+
+        THiveFileInfo fileInfo = new THiveFileInfo();
+        fileInfo.setFile_name("myfile.parquet");
+        fileInfo.setPartition_path("hdfs://127.0.0.1:10000/tmp/starrocks/queryid/col1=2");
+        fileInfo.setRecord_count(10);
+        fileInfo.setFile_size_in_bytes(100);
+        tSinkCommitInfo.setHive_file_info(fileInfo);
+        hiveMetadata.abortSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo));
+    }
+
     @Test(expected = StarRocksConnectorException.class)
     public void testAddPartition() throws Exception {
         String stagingDir = "hdfs://127.0.0.1:10000/tmp/starrocks/queryid";

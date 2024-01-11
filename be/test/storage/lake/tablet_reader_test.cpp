@@ -22,12 +22,10 @@
 #include "column/schema.h"
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
-#include "fs/fs_util.h"
 #include "storage/chunk_helper.h"
-#include "storage/lake/join_path.h"
-#include "storage/lake/location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
+#include "storage/lake/versioned_tablet.h"
 #include "storage/tablet_schema.h"
 #include "test_util.h"
 #include "testutil/assert.h"
@@ -110,8 +108,7 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
-
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
     {
         int64_t txn_id = next_id();
         // write rowset 1 with 2 segments
@@ -137,8 +134,10 @@ TEST_F(LakeDuplicateTabletReaderTest, test_read_success) {
         rowset->set_overlapped(true);
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
+            segs_size->Add(std::move(file.size.value()));
         }
 
         writer->close();
@@ -249,7 +248,7 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
 
     {
         // write rowset 1 with 2 segments
@@ -276,8 +275,10 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         rowset->set_overlapped(true);
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
+            segs_size->Add(std::move(file.size.value()));
         }
 
         writer->close();
@@ -303,8 +304,10 @@ TEST_F(LakeAggregateTabletReaderTest, test_read_success) {
         rowset->set_overlapped(false);
         rowset->set_id(2);
         auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
+            segs_size->Add(std::move(file.size.value()));
         }
 
         writer->close();
@@ -411,7 +414,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
 
     {
         // write rowset 1 with 2 segments
@@ -438,8 +441,10 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteTest, test_read_success) {
         rowset->set_overlapped(true);
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
+            segs_size->Add(std::move(file.size.value()));
         }
 
         writer->close();
@@ -566,8 +571,7 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
 
     Chunk chunk0({c0, c1}, _schema);
 
-    ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
-
+    VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
     {
         // write rowset 1 with 1 segments
         int64_t txn_id = next_id();
@@ -586,8 +590,10 @@ TEST_F(LakeDuplicateTabletReaderWithDeleteNotInOneValueTest, test_read_success) 
         rowset->set_overlapped(true);
         rowset->set_id(1);
         auto* segs = rowset->mutable_segments();
+        auto* segs_size = rowset->mutable_segment_size();
         for (auto& file : writer->files()) {
-            segs->Add(std::move(file));
+            segs->Add(std::move(file.path));
+            segs_size->Add(std::move(file.size.value()));
         }
 
         writer->close();

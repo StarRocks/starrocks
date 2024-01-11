@@ -29,6 +29,15 @@ displayed_sidebar: "Chinese"
     - StarRocks 在 v3.0 版本中升级了 BDB 库。由于 BDB JE 无法回滚，所以降级后您必须继续使用 v3.0 的 BDB 库。
     - 升级至 v3.0 后，集群默认使用新的 RBAC 权限系统。降级后您只能使用 RBAC 权限系统。
 
+> **注意**
+>
+> 如果您在升级之后进行了回滚，之后有计划再次执行升级，比如 2.5->3.0->2.5->3.0。为了避免第二次升级时，部分 FE 节点元数据升级失败，建议您在降级完成后执行如下操作：
+>
+> 1. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 创建新的元数据快照文件。
+> 2. 等待元数据快照文件同步至其他 FE 节点。
+>
+> 您可以通过查看 Leader FE 节点的日志文件 **fe.log** 确认元数据快照文件是否推送完成。如果日志打印以下内容，则说明快照文件推送完成："push image.xxx from subdir [] to other nodes. totally xx nodes, push succeeded xx nodes"。
+
 ### 降级流程
 
 StarRocks 的降级流程与 [升级流程](../deployment/upgrade.md#升级流程) 相反。所以**您需要先降级 FE，再降级 BE 和CN**。错误的降级顺序可能会导致 FE 与 BE/CN 不兼容，进而导致服务崩溃。对于 FE 节点，您必须先降级所有 Follower FE 节点，最后降级 Leader FE 节点。
@@ -46,8 +55,8 @@ StarRocks 的降级流程与 [升级流程](../deployment/upgrade.md#升级流�
 降级前，请关闭 Tablet Clone。
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "0");
-ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_balancing_tablets" = "0");
 ADMIN SET FRONTEND CONFIG ("disable_balance"="true");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
 ```
@@ -55,8 +64,8 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
 完成降级，并且所有 BE 节点状态变为 `Alive` 后，您可以重新开启 Tablet Clone。
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "2000");
-ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "100");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "10000");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_balancing_tablets" = "500");
 ADMIN SET FRONTEND CONFIG ("disable_balance"="false");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 ```
