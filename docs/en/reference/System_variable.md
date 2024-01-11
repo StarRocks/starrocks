@@ -501,7 +501,6 @@ Used to specify the SQL mode to accommodate certain SQL dialects. Valid values i
 * `MODE_DOUBLE_LITERAL`: interprets floating-point types as DOUBLE rather than DECIMAL.
 * `SORT_NULLS_LAST`: places NULL values at the end after sorting.
 * `ERROR_IF_OVERFLOW`: returns an error instead of NULL in the case of arithmetic overflow. Currently, only the DECIMAL data type supports this option.
-* `GROUP_CONCAT_LEGACY`: uses the `group_concat` syntax of v2.5 and earlier. This option is supported from v3.0.9 and v3.1.6.
 
 You can set only one SQL mode, for example:
 
