@@ -145,4 +145,8 @@ else
         # set trimStackTrace to false to show full stack when debugging specified class or case
         ${MVN_CMD} test -DfailIfNoTests=false -DtrimStackTrace=false -D test="$TEST_NAME"
     fi
+<<<<<<< HEAD
 fi
+=======
+fi
+>>>>>>> 64987b9f19 ([Tool] Filter cases in fe ut script (#38889))
