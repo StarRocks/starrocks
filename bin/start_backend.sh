@@ -54,12 +54,14 @@ while true; do
     esac
 done
 
-
 # ================== conf section =======================
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
 source $STARROCKS_HOME/bin/common.sh
 
 export_shared_envvars
+
+check_and_update_max_processes
+
 if [ ${RUN_BE} -eq 1 ] ; then
     export_env_from_conf $STARROCKS_HOME/conf/be.conf
     export_mem_limit_from_conf $STARROCKS_HOME/conf/be.conf
@@ -169,9 +171,6 @@ fi
 
 chmod 755 ${STARROCKS_HOME}/lib/starrocks_be
 
-if [[ $(ulimit -n) -lt 60000 ]]; then
-    ulimit -n 65535
-fi
 
 START_BE_CMD="${NUMA_CMD} ${STARROCKS_HOME}/lib/starrocks_be"
 LOG_FILE=$LOG_DIR/be.out
