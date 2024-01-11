@@ -376,8 +376,9 @@ Status PartitionedSpillerWriter::spill_partition(SerdeContext& ctx, SpilledParti
 
     auto mem_table = partition->spill_writer->mem_table();
     ASSIGN_OR_RETURN(auto serialized_data, mem_table->get_serialized_data());
-    TRACE_SPILL_LOG << fmt::format("spill partition[{}], mem_table_size[{}] bytes[{}] rows[{}]", partition->debug_string(),
-                             serialized_data.get_size(), mem_table->mem_usage(), mem_table->num_rows());
+    TRACE_SPILL_LOG << fmt::format("spill partition[{}], mem_table_size[{}] bytes[{}] rows[{}]",
+                                   partition->debug_string(), serialized_data.get_size(), mem_table->mem_usage(),
+                                   mem_table->num_rows());
 
     partition->bytes += mem_table->mem_usage();
 
@@ -386,7 +387,7 @@ Status PartitionedSpillerWriter::spill_partition(SerdeContext& ctx, SpilledParti
         std::lock_guard<std::mutex> l(_mutex);
         partition->spill_writer->block_group().append(block);
         TRACE_SPILL_LOG << "add block to partition: " << partition->partition_id << "block: " << block->debug_string()
-                  << ", num_rows:" << mem_table->num_rows();
+                        << ", num_rows:" << mem_table->num_rows();
     }
     RETURN_IF_ERROR(block->flush());
     RETURN_IF_ERROR(_spiller->block_manager()->release_block(block));
@@ -454,7 +455,8 @@ Status PartitionedSpillerWriter::_spill_input_partitions(workgroup::YieldContext
     auto& flush_ctx = std::any_cast<PartitionedFlushContextPtr>(yield_ctx.task_context_data)->spill_stage_ctx;
     for (; flush_ctx.processing_idx < spilling_partitions.size();) {
         auto partition = spilling_partitions[flush_ctx.processing_idx];
-        TRACE_SPILL_LOG << fmt::format("spill input partition[{}], processing idx[{}]", partition->debug_string(), flush_ctx.processing_idx);
+        TRACE_SPILL_LOG << fmt::format("spill input partition[{}], processing idx[{}]", partition->debug_string(),
+                                       flush_ctx.processing_idx);
         {
             SCOPED_RAW_TIMER(time_spent_ns);
             RETURN_IF_ERROR(spill_partition(context, partition));

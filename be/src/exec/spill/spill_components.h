@@ -164,9 +164,7 @@ public:
 
     BlockPtr& block() { return _block; }
 
-    void reset_block() {
-        _block = nullptr;
-    }
+    void reset_block() { _block = nullptr; }
 
     BlockGroup& block_group() { return _block_group; }
 
