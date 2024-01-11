@@ -64,6 +64,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -302,20 +303,15 @@ public class MvRewritePreprocessor {
 
                 List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv,
                         connectContext.getSessionVariable().isEnableMaterializedViewPlanCache());
-                if (mvPlanContexts == null) {
+                if (CollectionUtils.isEmpty(mvPlanContexts)) {
                     logMVPrepare(connectContext, mv, "MV plan is not valid: {}, cannot generate plan for rewrite",
                             mv.getName());
                     continue;
                 }
                 for (MvPlanContext mvPlanContext : mvPlanContexts) {
                     if (!mvPlanContext.isValidMvPlan()) {
-                        if (mvPlanContext.getLogicalPlan() != null) {
-                            logMVPrepare(connectContext, mv, "MV plan is not valid: {}, plan:\n {}",
-                                    mv.getName(), mvPlanContext.getLogicalPlan().debugString());
-                        } else {
-                            logMVPrepare(connectContext, mv, "MV plan is not valid: {}",
-                                    mv.getName());
-                        }
+                        logMVPrepare(connectContext, mv, "MV plan is not valid: "
+                                + mvPlanContext.getInvalidReason());
                         continue;
                     }
                     filteredMVs.add(Pair.create(mv, mvPlanContext));
