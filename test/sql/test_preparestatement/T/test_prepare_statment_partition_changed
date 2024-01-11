@@ -7,8 +7,3 @@ PRIMARY KEY (k1)
 DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES("replication_num" = "1");
 
 PREPARE stmt1 FROM insert overwrite prepare_stmt values (?, ?);
-
-set @i = 1;
-
-execute stmt1 using @i, @i;
-execute stmt1 using @i, @i;

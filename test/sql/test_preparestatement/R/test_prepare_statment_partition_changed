@@ -10,17 +10,5 @@ DISTRIBUTED BY HASH(k1) BUCKETS 1 PROPERTIES("replication_num" = "1");
 -- !result
 PREPARE stmt1 FROM insert overwrite prepare_stmt values (?, ?);
 -- result:
-[]
--- !result
-set @i = 1;
--- result:
-[]
--- !result
-execute stmt1 using @i, @i;
--- result:
-[]
--- !result
-execute stmt1 using @i, @i;
--- result:
-[REGEX].*maybe table partition changed after prepared statement creation.*
+E: (1064, 'Invalid statement type for prepared statement')
 -- !result
