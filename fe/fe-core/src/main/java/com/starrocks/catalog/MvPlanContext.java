@@ -40,12 +40,14 @@ public class MvPlanContext {
     // if not, we do not store other fields to save memory,
     // because we will not use other fields
     private boolean isValidMvPlan;
+    private String invalidReason;
 
-    public MvPlanContext() {
+    public MvPlanContext(boolean valid, String invalidReason) {
         this.logicalPlan = null;
         this.outputColumns = null;
         this.refFactory = null;
-        this.isValidMvPlan = false;
+        this.isValidMvPlan = valid;
+        this.invalidReason = invalidReason;
     }
 
     public MvPlanContext(
@@ -72,5 +74,9 @@ public class MvPlanContext {
 
     public boolean isValidMvPlan() {
         return isValidMvPlan;
+    }
+
+    public String getInvalidReason() {
+        return invalidReason;
     }
 }
