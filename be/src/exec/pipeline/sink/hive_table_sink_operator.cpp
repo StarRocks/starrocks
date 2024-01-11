@@ -199,6 +199,10 @@ void HiveTableSinkOperatorFactory::close(RuntimeState* state) {
 }
 
 void HiveTableSinkOperator::add_hive_commit_info(starrocks::parquet::AsyncFileWriter* writer, RuntimeState* state) {
+    if (writer->metadata() == nullptr) {
+        return;
+    }
+
     THiveFileInfo hive_file_info;
     hive_file_info.__set_file_name(path_util::base_name(writer->file_location()));
     hive_file_info.__set_partition_path(writer->partition_location());
