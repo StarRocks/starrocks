@@ -55,6 +55,8 @@ export DORIS_HOME="$STARROCKS_HOME"
 
 source $STARROCKS_HOME/bin/common.sh
 
+check_and_update_max_processes
+
 # export env variables from fe.conf
 #
 # JAVA_OPTS

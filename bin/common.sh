@@ -136,3 +136,13 @@ detect_jvm_xmx() {
     let "MX = MEM_LIMIT * FE_JVM_XMX_PERCENTAGE / 100 / 1024 / 1024"
     echo "-Xmx${MX}m"
 }
+
+check_and_update_max_processes() {
+    if [ $(ulimit -u) -lt 65535 ]; then
+        ulimit -u 65535
+        if [ $? -ne 0 ]; then
+            echo "Warn: update max user processes failed, please refer to https://docs.starrocks.io/docs/deployment/environment_configurations/#max-user-processes"
+        fi
+    fi
+}
+
