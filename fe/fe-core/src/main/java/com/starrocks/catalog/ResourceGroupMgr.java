@@ -107,7 +107,7 @@ public class ResourceGroupMgr implements Writable {
         writeLock();
         try {
             ResourceGroup wg = stmt.getResourceGroup();
-            if (ResourceGroup.isDefaultWgOrMvWg(wg.getName())) {
+            if (ResourceGroup.isDefault(wg.getName())) {
                 throw new DdlException(String.format("Can't create resource group named %s, as it's default.", wg.getName()));
             }
             if (resourceGroupMap.containsKey(wg.getName())) {
@@ -340,7 +340,7 @@ public class ResourceGroupMgr implements Writable {
         writeLock();
         try {
             String name = stmt.getName();
-            if (ResourceGroup.isDefaultWgOrMvWg(name)) {
+            if (ResourceGroup.isDefault(name)) {
                 throw new DdlException(String.format("Default resource group %s does not support change.", name));
             }
             if (!resourceGroupMap.containsKey(name)) {
@@ -438,7 +438,7 @@ public class ResourceGroupMgr implements Writable {
         writeLock();
         try {
             String name = stmt.getName();
-            if (ResourceGroup.isDefaultWgOrMvWg(name)) {
+            if (ResourceGroup.isDefault(name)) {
                 throw new DdlException(String.format("Default resource group %s does not support drop.", name));
             }
             if (!resourceGroupMap.containsKey(name)) {
