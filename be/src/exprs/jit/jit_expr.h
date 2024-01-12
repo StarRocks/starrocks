@@ -56,6 +56,7 @@ private:
     Expr* _expr;
     bool _is_prepared = false;
     JITScalarFunction _jit_function = nullptr;
+    std::string _jit_expr_name;
 };
 
 } // namespace starrocks

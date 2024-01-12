@@ -71,6 +71,9 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     }
 
     _jit_function = function.value_or(nullptr);
+    if (_jit_function) {
+        _jit_expr_name = _expr->debug_string();
+    }
     return Status::OK();
 }
 
@@ -120,7 +123,7 @@ JITExpr::~JITExpr() {
     if (_is_prepared && _jit_function != nullptr) {
         auto* jit_engine = JITEngine::get_instance();
         if (jit_engine->initialized()) {
-            auto status = jit_engine->remove_function(_expr->debug_string());
+            auto status = jit_engine->remove_function(_jit_expr_name);
             if (!status.ok()) {
                 LOG(WARNING) << "JIT: remove function failed, reason: " << status;
             }
