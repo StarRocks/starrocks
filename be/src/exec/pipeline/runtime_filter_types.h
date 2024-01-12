@@ -249,6 +249,8 @@ public:
     }
 
     RuntimeInFilterList get_total_in_filters() {
+        // _partial_in_filters is empty means RF _is_always_true
+        if (_partial_in_filters.empty()) return {};
         return {_partial_in_filters[0].begin(), _partial_in_filters[0].end()};
     }
 

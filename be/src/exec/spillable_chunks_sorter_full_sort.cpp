@@ -64,7 +64,7 @@ Status SpillableChunksSorterFullSort::do_done(RuntimeState* state) {
         return ChunksSorterFullSort::do_done(state);
     }
 
-    if (_sorted_chunks.empty() && _unsorted_chunk == nullptr) {
+    if (_sorted_chunks.empty() && _unsorted_chunk == nullptr && _staging_unsorted_chunks.empty()) {
         // force flush
         RETURN_IF_ERROR(_spiller->flush(state, io_executor(), TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
     } else {
@@ -147,7 +147,9 @@ std::function<StatusOr<ChunkPtr>()> SpillableChunksSorterFullSort::_spill_proces
         if (_process_staging_unsorted_chunk_idx != _staging_unsorted_chunks.size()) {
             return std::move(_staging_unsorted_chunks[_process_staging_unsorted_chunk_idx++]);
         }
-
+        if (_process_early_materialized_chunks_idx != _early_materialized_chunks.size()) {
+            return _late_materialize(std::move(_early_materialized_chunks[_process_early_materialized_chunks_idx++]));
+        }
         if (_process_sorted_chunk_idx != _sorted_chunks.size()) {
             return std::move(_sorted_chunks[_process_sorted_chunk_idx++]);
         }
