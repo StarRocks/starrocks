@@ -88,6 +88,7 @@ import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.ListPartitionDesc;
@@ -522,7 +523,8 @@ public class AnalyzerUtils {
         @Override
         public Void visitSelect(SelectRelation node, Void context) {
             Relation relation = node.getRelation();
-            if (relation instanceof TableRelation || relation instanceof ViewRelation) {
+            if ((relation instanceof TableRelation && !(relation instanceof FileTableFunctionRelation))
+                    || relation instanceof ViewRelation) {
                 List<Expr> outputExpression = node.getOutputExpression();
                 if (outputExpression.stream().allMatch(expr -> expr instanceof FieldReference)) {
                     put(relation.getResolveTableName(), "*");
