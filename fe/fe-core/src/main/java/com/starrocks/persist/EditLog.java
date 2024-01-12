@@ -157,13 +157,6 @@ public class EditLog {
                     globalStateMgr.setNextId(id + 1);
                     break;
                 }
-                case OperationType.OP_SAVE_TRANSACTION_ID: {
-                    String idString = journal.getData().toString();
-                    long id = Long.parseLong(idString);
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
-                            .initTransactionId(id + 1);
-                    break;
-                }
                 case OperationType.OP_SAVE_TRANSACTION_ID_V2: {
                     TransactionIdInfo idInfo = (TransactionIdInfo) journal.getData();
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator()
@@ -625,8 +618,7 @@ public class EditLog {
                     globalStateMgr.replayUpdateClusterAndBackends(info);
                     break;
                 }
-                case OperationType.OP_UPSERT_TRANSACTION_STATE_V2:
-                case OperationType.OP_UPSERT_TRANSACTION_STATE: {
+                case OperationType.OP_UPSERT_TRANSACTION_STATE_V2: {
                     final TransactionState state = (TransactionState) journal.getData();
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionState(state);
                     LOG.debug("opcode: {}, tid: {}", opCode, state.getTransactionId());
@@ -636,12 +628,6 @@ public class EditLog {
                     final TransactionStateBatch stateBatch = (TransactionStateBatch) journal.getData();
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionStateBatch(stateBatch);
                     LOG.debug("opcode: {}, tids: {}", opCode, stateBatch.getTxnIds());
-                    break;
-                }
-                case OperationType.OP_DELETE_TRANSACTION_STATE: {
-                    final TransactionState state = (TransactionState) journal.getData();
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().replayDeleteTransactionState(state);
-                    LOG.debug("opcode: {}, tid: {}", opCode, state.getTransactionId());
                     break;
                 }
                 case OperationType.OP_CREATE_REPOSITORY:
@@ -1313,11 +1299,7 @@ public class EditLog {
     }
 
     public void logSaveTransactionId(long transactionId) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_SAVE_TRANSACTION_ID_V2, new TransactionIdInfo(transactionId));
-        } else {
-            logEdit(OperationType.OP_SAVE_TRANSACTION_ID, new Text(Long.toString(transactionId)));
-        }
+        logJsonObject(OperationType.OP_SAVE_TRANSACTION_ID_V2, new TransactionIdInfo(transactionId));
     }
 
     public void logSaveAutoIncrementId(AutoIncrementInfo info) {
@@ -1722,11 +1704,7 @@ public class EditLog {
 
     // for TransactionState
     public void logInsertTransactionState(TransactionState transactionState) {
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_V2, transactionState);
-        } else {
-            logEdit(OperationType.OP_UPSERT_TRANSACTION_STATE, transactionState);
-        }
+        logJsonObject(OperationType.OP_UPSERT_TRANSACTION_STATE_V2, transactionState);
     }
 
     public void logInsertTransactionStateBatch(TransactionStateBatch stateBatch) {

@@ -637,15 +637,6 @@ public class GlobalTransactionMgr {
         }
     }
 
-    public void replayDeleteTransactionState(TransactionState transactionState) {
-        try {
-            DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionState.getDbId());
-            dbTransactionMgr.deleteTransaction(transactionState);
-        } catch (AnalysisException e) {
-            LOG.warn("replay delete transaction [" + transactionState.getTransactionId() + "] failed", e);
-        }
-    }
-
     public List<List<Comparable>> getDbInfo() {
         List<List<Comparable>> infos = new ArrayList<List<Comparable>>();
         List<Long> dbIds = Lists.newArrayList(dbIdToDatabaseTransactionMgrs.keySet());
