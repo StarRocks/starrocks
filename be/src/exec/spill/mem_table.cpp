@@ -55,9 +55,7 @@ public:
 
     Slice get_data() { return {_buffer.data(), _buffer.size()}; }
 
-    void reset() {
-        _buffer.clear();
-    }
+    void reset() { _buffer.clear(); }
 
 private:
     std::string _buffer;
@@ -232,7 +230,6 @@ void OrderedMemTable::reset() {
     SpillableMemTable::reset();
     _chunk_slice.reset(nullptr);
     _chunk.reset();
-
 }
 
 StatusOr<ChunkPtr> OrderedMemTable::_do_sort(const ChunkPtr& chunk) {
