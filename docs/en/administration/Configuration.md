@@ -1209,16 +1209,7 @@ This section provides an overview of the static parameters that you can configur
 - **Default:** HDD
 - **Description:** The default storage media that is used for a table or partition at the time of table or partition creation if no storage media is specified. Valid values: `HDD` and `SSD`. When you create a table or partition, the default storage media specified by this parameter is used if you do not specify a storage media type for the table or partition.
 
-<<<<<<< HEAD:docs/en/administration/Configuration.md
-##### tablet_sched_balancer_strategy
-
-- **Default:** disk_and_tablet
-- **Description:** The policy based on which load balancing is implemented among tablets. The alias of this parameter is `tablet_balancer_strategy`. Valid values: `disk_and_tablet` and `be_load_score`.
-
 ##### tablet_sched_storage_cooldown_second
-=======
-#### tablet_sched_storage_cooldown_second
->>>>>>> 9df7b0afdd ([Doc] remove unused config tablet_sched_balancer_strategy docs (#37702)):docs/en/administration/FE_configuration.md
 
 - **Default:** -1
 - **Description:** The latency of automatic cooling starting from the time of table creation. The alias of this parameter is `storage_cooldown_second`. Unit: second. The default value `-1` specifies that automatic cooling is disabled. If you want to enable automatic cooling, set this parameter to a value greater than `-1`.
