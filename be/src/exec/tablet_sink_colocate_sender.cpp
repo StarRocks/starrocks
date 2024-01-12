@@ -226,9 +226,6 @@ Status TabletSinkColocateSender::try_close(RuntimeState* state) {
         }
     });
 
-    // update the info of partition num rows
-    state->update_partition_num_rows(_partition_to_num_rows);
-
     if (intolerable_failure) {
         return err_st;
     } else {
@@ -306,6 +303,9 @@ Status TabletSinkColocateSender::close_wait(RuntimeState* state, Status close_st
     } else {
         for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
     }
+
+    // update the info of partition num rows
+    state->update_partition_num_rows(_partition_to_num_rows);
 
     Expr::close(_output_expr_ctxs, state);
     if (_vectorized_partition) {

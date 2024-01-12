@@ -280,14 +280,12 @@ public:
     const std::map<int64_t, int64_t> partition_rows() const noexcept { return _partition_to_num_rows; };
 
     std::string partition_rows_string() {
-        LOG(INFO) << "partition_rows_string";
         std::ostringstream oss;
         for (const auto& pair : _partition_to_num_rows) {
             oss << pair.first << ": " << pair.second << ", ";
         }
 
         std::string result = oss.str();
-        LOG(INFO) << "result" << result;
         if (!result.empty()) {
             result.pop_back(); // remove colon
             result.pop_back(); // remove comma
