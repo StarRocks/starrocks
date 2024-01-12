@@ -109,6 +109,14 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         // nothing to do
     }
 
+    if (master_info.__isset.disabled_disks) {
+        _olap_engine->disable_disks(master_info.disabled_disks);
+    }
+
+    if (master_info.__isset.decommissioned_disks) {
+        _olap_engine->decommission_disks(master_info.decommissioned_disks);
+    }
+
     static auto num_hardware_cores = static_cast<int32_t>(CpuInfo::num_cores());
     if (res.ok()) {
         heartbeat_result.backend_info.__set_be_port(config::be_port);

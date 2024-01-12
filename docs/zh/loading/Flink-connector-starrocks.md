@@ -20,6 +20,7 @@ StarRocks 提供的 Flink connector，相比于 Flink 提供的 [flink-connector
 
 | Connector | Flink       | StarRocks  | Java | Scala      |
 | --------- | ----------- | ---------- | ---- | ---------- |
+| 1.2.9 | 1.15 ～ 1.18 | 2.1 及以上 | 8 | 2.11、2.12 |
 | 1.2.8     | 1.13 ~ 1.17 | 2.1 及以上 | 8    | 2.11、2.12 |
 | 1.2.7     | 1.11 ~ 1.15 | 2.1 及以上 | 8    | 2.11、2.12 |
 
@@ -107,7 +108,7 @@ Flink connector JAR 文件的命名格式如下：
 | sink.buffer-flush.max-rows        | No       | 500000        | 积攒在内存的数据条数，达到该阈值后数据通过 Stream Load 一次性导入 StarRocks。取值范围：[64000, 5000000]。该参数只在 `sink.version` 为 `V1`，`sink.semantic` 为 `at-least-once` 才会生效。 |
 | sink.buffer-flush.interval-ms     | No       | 300000        | 数据发送的间隔，用于控制数据写入 StarRocks 的延迟，取值范围：[1000, 3600000]。该参数只在 `sink.semantic` 为 `at-least-once`才会生效。 |
 | sink.max-retries                  | No       | 3             | Stream Load 失败后的重试次数。超过该数量上限，则数据导入任务报错。取值范围：[0, 10]。该参数只在 `sink.version` 为 `V1` 才会生效。 |
-| sink.connect.timeout-ms           | No       | 1000          | 与 FE 建立 HTTP 连接的超时时间。取值范围：[100, 60000]。     |
+| sink.connect.timeout-ms           | No       |  30000            | 与 FE 建立 HTTP 连接的超时时间。取值范围：[100, 60000]。  Flink connector v1.2.9 之前，默认值为 `1000`。  |
 | sink.wait-for-continue.timeout-ms | No       | 10000         | 此参数自 Flink connector 1.2.7 开始支持。等待 FE HTTP 100-continue 应答的超时时间。取值范围：[3000, 60000]。 |
 | sink.ignore.update-before         | No       | TRUE          | 此参数自 Flink connector 1.2.8 开始支持。将数据导入到主键模型表时，是否忽略来自 Flink 的 UPDATE_BEFORE 记录。如果将此参数设置为 false，则将该记录在主键模型表中视为DELETE 操作。 |
 | sink.parallelism                  | No       | NONE          | 写入的并行度。仅适用于Flink SQL。如果未设置， Flink planner 将决定并行度。**在多并行度的场景中，用户需要确保数据按正确顺序写入。** |
@@ -413,6 +414,18 @@ DISTRIBUTED BY HASH(id);
         }
     }  
     ```
+
+### 使用 Flink CDC 3.0 同步数据（支持 schema change）
+
+[Flink CDC 3.0 框架](https://github.com/ververica/flink-cdc-connectors/releases)可以轻松地从 CDC 数据源（如 MySQL、Kafka）到 StarRocks 构建[流式 ELT 管道](https://ververica.github.io/flink-cdc-connectors/master/content/overview/cdc-pipeline.html)。该管道能够将整个数据库、分库分表以及来自源端的 schema change 同步到 StarRocks。
+
+自 v1.2.9 起，StarRocks 提供的 Flink connector 已经集成至该框架中，并且被命名为 [StarRocks Pipeline Connector](https://ververica.github.io/flink-cdc-connectors/master/content/pipelines/starrocks-pipeline.html)。StarRocks Pipeline Connector 支持：
+
+- 自动创建数据库/表
+- 同步 schema change
+- 同步全量和增量数据
+
+快速上手教程可以参考[从 MySQL 到 StarRocks 的流式 ELT 管道](https://ververica.github.io/flink-cdc-connectors/master/content/quickstart/mysql-starrocks-pipeline-tutorial.html)。
 
 ## 最佳实践
 

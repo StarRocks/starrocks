@@ -110,17 +110,16 @@ void FileSinkIOBuffer::close(RuntimeState* state) {
         WARN_IF_ERROR(_sender->close(final_status), "close sender failed");
         _sender.reset();
 
-        auto st = _state->exec_env()->result_mgr()->cancel_at_time(
+        (void)_state->exec_env()->result_mgr()->cancel_at_time(
                 time(nullptr) + config::result_buffer_cancelled_interval_time, state->fragment_instance_id());
-        st.permit_unchecked_error();
     }
     SinkIOBuffer::close(state);
 }
 
 void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     DeferOp op([&]() {
-        --_num_pending_chunks;
-        DCHECK(_num_pending_chunks >= 0);
+        auto nc = _num_pending_chunks.fetch_sub(1);
+        DCHECK_GE(nc, 1L);
     });
 
     // close is already done, just skip
@@ -150,7 +149,8 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<ChunkPtr>& iter) {
     const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
-        DCHECK_EQ(_num_pending_chunks, 1);
+        auto nc = _num_pending_chunks.load();
+        DCHECK_EQ(nc, 1L);
         close(_state);
         return;
     }

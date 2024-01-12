@@ -25,14 +25,6 @@ public class RefreshSchemeClause extends AlterTableClause {
     protected MaterializedView.RefreshMoment moment;
     protected final NodePosition pos;
 
-    public RefreshSchemeClause(MaterializedView.RefreshType type) {
-        this(type, NodePosition.ZERO);
-    }
-
-    public RefreshSchemeClause(MaterializedView.RefreshType type, NodePosition pos) {
-        this(type, pos, MaterializedView.RefreshMoment.IMMEDIATE);
-    }
-
     public RefreshSchemeClause(MaterializedView.RefreshType type, NodePosition pos, MaterializedView.RefreshMoment moment) {
         super(AlterOpType.REFRESH_SCHEMA, pos);
         this.type = type;

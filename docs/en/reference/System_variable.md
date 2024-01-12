@@ -152,7 +152,7 @@ Used to specify the number of rows of a single packet transmitted by each node d
 
 When the session variable `enable_profile` is set to `false` and the amount of time taken by a query exceeds the threshold specified by the variable `big_query_profile_second_threshold`, a profile is generated for that query.
 
-### cbo_decimal_cast_string_strict  (2.5.14 and later)
+### cbo_decimal_cast_string_strict (2.5.14 and later)
 
 Controls how the CBO converts data from the DECIMAL type to the STRING type. If this variable is set to `true`, the logic built in v2.5.x and later versions prevails and the system implements strict conversion (namely, the system truncates the generated string and fills 0s based on the scale length). If this variable is set to `false`, the logic built in versions earlier than v2.5.x prevails and the system processes all valid digits to generate a string. The default value is `true`.
 
@@ -223,6 +223,10 @@ Default value: false, which means this feature is disabled.
 ### enable_insert_strict
 
 Used to enable the strict mode when loading data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md).
+
+### enable_materialized_view_rewrite_for_insert (3.2.2 and later)
+
+Whether to allow StarRocks to rewrite queries in INSERT INTO SELECT statements. The default value is `false`, indicating Query Rewrite in such scenarios is disabled by default.
 
 ### enable_materialized_view_union_rewrite (2.5 and later)
 
@@ -517,7 +521,7 @@ Used for compatibility with JDBC connection pool C3P0. No practical use.
 
 ### query_mem_limit
 
-Used to set the memory limit of a query on each backend node. The default value is 0, which means no limit for it. Units including `B/K/KB/M/MB/G/GB/T/TB/P/PB` are supported.
+Used to set the memory limit of a query on each BE node. Unit: Byte. The default value is 0, which means no limit for it. This item takes effect only after Pipeline Engine is enbaled.
 
 When the `Memory Exceed Limit` error happens, you could try to increase this variable.
 
@@ -594,7 +598,28 @@ The SQL dialect that is used. For example, you can run the `set sql_dialect = 't
 
 ### sql_mode
 
-Used to specify the SQL mode to accommodate certain SQL dialects.
+Used to specify the SQL mode to accommodate certain SQL dialects. Valid values include:
+
+* `PIPES_AS_CONCAT`: The pipe symbol `|` is used to concatenate strings, for example, `select 'hello ' || 'world'`.
+* `ONLY_FULL_GROUP_BY` (Default): The SELECT LIST can only contain GROUP BY columns or aggregate functions.
+* `ALLOW_THROW_EXCEPTION`: returns an error instead of NULL when type conversion fails.
+* `FORBID_INVALID_DATE`: prohibits invalid dates.
+* `MODE_DOUBLE_LITERAL`: interprets floating-point types as DOUBLE rather than DECIMAL.
+* `SORT_NULLS_LAST`: places NULL values at the end after sorting.
+* `ERROR_IF_OVERFLOW`: returns an error instead of NULL in the case of arithmetic overflow. Currently, only the DECIMAL data type supports this option.
+* `GROUP_CONCAT_LEGACY`: uses the `group_concat` syntax of v2.5 and earlier. This option is supported from v3.0.9 and v3.1.6.
+
+You can set only one SQL mode, for example:
+
+```SQL
+set sql_mode = 'PIPES_AS_CONCAT';
+```
+
+Or, you can set multiple modes at a time, for example:
+
+```SQL
+set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
+```
 
 ### sql_safe_updates
 
@@ -637,9 +662,15 @@ Used to display the time zone of the current system. Cannot be changed.
 
 Used to set the time zone of the current session. The time zone can affect the results of certain time functions.
 
+### transaction_read_only
+
+* Description: Used for MySQL 5.8 compatibility. The alias is `tx_read_only`. This variable specifies the transaction access mode. `ON` indicates read only and `OFF` indicates readable and writable.
+* Default: OFF
+* Introduced in: v2.5.18, v3.0.9, v3.1.7
+
 ### tx_isolation
 
-Used for MySQL client compatibility. No practical usage.
+Used for MySQL client compatibility. No practical usage. The alias is `transaction_isolation`.
 
 ### use_compute_nodes
 

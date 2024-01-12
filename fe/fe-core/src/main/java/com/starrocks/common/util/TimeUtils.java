@@ -347,4 +347,14 @@ public class TimeUtils {
                     + DurationStyle.LONG.toString(periodDuration.getDuration());
         }
     }
+
+    public static String getSessionTimeZone() {
+        String timezone;
+        if (ConnectContext.get() != null) {
+            timezone = ConnectContext.get().getSessionVariable().getTimeZone();
+        } else {
+            timezone = VariableMgr.getDefaultSessionVariable().getTimeZone();
+        }
+        return timezone;
+    }
 }

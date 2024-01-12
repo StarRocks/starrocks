@@ -8312,7 +8312,7 @@
         "name": "namespace",
         "options": [],
         "query": {
-          "query": "label_values(kube_service_info{service=~\".*-fe-search\"}, namespace)",
+          "query": "label_values(kube_service_info{service=~\".*-fe-service\"}, namespace)",
           "refId": "prometheus-namespace-Variable-Query"
         },
         "refresh": 2,
@@ -8339,7 +8339,7 @@
         "name": "feservice",
         "options": [],
         "query": {
-          "query": "label_values(kube_service_info{namespace=\"$namespace\", service=~\".*-fe-search\"}, service)",
+          "query": "label_values(kube_service_info{namespace=\"$namespace\", service=~\".*-fe-service\"}, service)",
           "refId": "prometheus-feservice-Variable-Query"
         },
         "refresh": 2,
@@ -8366,7 +8366,7 @@
         "name": "beservice",
         "options": [],
         "query": {
-          "query": "label_values(kube_service_info{namespace=\"$namespace\", service=~\".*-be-search\"}, service)",
+          "query": "label_values(kube_service_info{namespace=\"$namespace\", service=~\".*-be-service\"}, service)",
           "refId": "prometheus-beservice-Variable-Query"
         },
         "refresh": 2,

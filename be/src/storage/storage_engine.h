@@ -74,6 +74,7 @@ class DataDir;
 class EngineTask;
 class MemTableFlushExecutor;
 class Tablet;
+class ReplicationTxnManager;
 class UpdateManager;
 class CompactionManager;
 class PublishVersionManager;
@@ -219,6 +220,8 @@ public:
 
     TxnManager* txn_manager() { return _txn_manager.get(); }
 
+    ReplicationTxnManager* replication_txn_manager() { return _replication_txn_manager.get(); }
+
     CompactionManager* compaction_manager() { return _compaction_manager.get(); }
 
     PublishVersionManager* publish_version_manager() { return _publish_version_manager.get(); }
@@ -281,6 +284,10 @@ public:
     void clear_cached_delta_column_group(const std::vector<DeltaColumnGroupKey>& dcg_keys);
 
     void clear_rowset_delta_column_group_cache(const Rowset& rowset);
+
+    void disable_disks(const std::vector<string>& disabled_disks);
+
+    void decommission_disks(const std::vector<string>& decommissioned_disks);
 
     void wake_finish_publish_vesion_thread() {
         std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
@@ -367,6 +374,8 @@ private:
 
     void* _path_scan_thread_callback(void* arg);
 
+    void* _clear_expired_replication_snapshots_callback(void* arg);
+
     void* _tablet_checkpoint_callback(void* arg);
 
     void* _adjust_pagecache_callback(void* arg);
@@ -428,6 +437,8 @@ private:
     // threads to run tablet checkpoint
     std::vector<std::thread> _tablet_checkpoint_threads;
 
+    std::thread _clear_expired_replcation_snapshots_thread;
+
     std::thread _compaction_checker_thread;
     std::mutex _checker_mutex;
     std::condition_variable _checker_cv;
@@ -446,6 +457,8 @@ private:
 
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TxnManager> _txn_manager;
+
+    std::unique_ptr<ReplicationTxnManager> _replication_txn_manager;
 
     std::unique_ptr<RowsetIdGenerator> _rowset_id_generator;
 

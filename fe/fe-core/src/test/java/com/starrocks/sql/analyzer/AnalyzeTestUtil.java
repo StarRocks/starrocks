@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -350,7 +351,7 @@ public class AnalyzeTestUtil {
                     connectContext.getSessionVariable().getSqlMode()).get(0);
             Analyzer.analyze(statementBase, connectContext);
             Assert.fail("Miss semantic error exception");
-        } catch (ParsingException | SemanticException | UnsupportedException e) {
+        } catch (ParsingException | SemanticException | UnsupportedException | ErrorReportException e) {
             if (!exceptMessage.equals("")) {
                 Assert.assertTrue(e.getMessage(), e.getMessage().contains(exceptMessage));
             }

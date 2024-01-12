@@ -44,7 +44,7 @@ Status PersistentIndexMemtable::insert(size_t n, const Slice* keys, const IndexV
             std::string msg = strings::Substitute("PersistentIndexMemtable<$0> insert found duplicate key $1", size,
                                                   hexdump((const char*)key.data(), size));
             LOG(WARNING) << msg;
-            return Status::InternalError(msg);
+            return Status::AlreadyExist(msg);
         }
     }
     return Status::OK();

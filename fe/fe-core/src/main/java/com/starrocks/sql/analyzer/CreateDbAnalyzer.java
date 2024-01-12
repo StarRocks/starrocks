@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Strings;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -23,7 +24,6 @@ import com.starrocks.server.RunMode;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.common.MetaUtils;
-import org.apache.parquet.Strings;
 
 import java.util.Map;
 

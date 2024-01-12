@@ -38,8 +38,6 @@ StarRocks 3.0 版本支持了全新的[存算分离模式](./Architecture.md)，
 
 StarRocks 存算分离模式与存算一体模式功能保持一致，写入及热数据查询性能也与存算一体基本持平。用户在存储分离模式下也可以实现数据更新、数据湖分析、物化视图加速等多种场景。
 
-[存算分离模式](../deployment/shared_data/s3.md)
-
 ## CBO 优化器
 
 ![CBO](../assets/1.1-5-cbo.png)
@@ -62,7 +60,7 @@ StarRocks 存储引擎不仅能够提供高效的 Partial Update 操作，也能
 
 ## 智能的物化视图
 
-![materialized_view](../assets/1.2-7-mv.png)
+![materialized_view](../assets/1.1-7-mv.png)
 
 StarRocks 支持用户使用物化视图（materialized view）进行查询加速和数仓分层。不同于一些同类产品的物化视图需要手动和原表做数据同步，StarRocks 的物化视图可以自动根据原始表更新数据。只要原始表数据发生变更，物化视图的更新也同步完成，不需要额外的维护操作就可以保证物化视图能够维持与原表一致。不仅如此，物化视图的选择也是自动进行的。StarRocks 在进行查询规划时，如果有合适的物化视图能够加速查询，StarRocks 自动进行查询改写(query rewrite)，将查询自动定位到最适合的物化视图上进行查询加速。
 
@@ -74,7 +72,7 @@ StarRocks 的物化视图可以替代传统的 ETL 建模流程，用户无需�
 
 ## 数据湖分析
 
-![datalake_analytics](../assets/1.2-8.png)
+![datalake_analytics](../assets/1.1-8-dla.png)
 
 StarRocks 不仅能高效的分析本地存储的数据，也可以作为计算引擎直接分析数据湖中的数据。用户可以通过 StarRocks 提供的 External Catalog，轻松查询存储在 Apache Hive、Apache Iceberg、Apache Hudi、Delta Lake 等数据湖上的数据，无需进行数据迁移。支持的存储系统包括 HDFS、S3、OSS，支持的文件格式包括 Parquet、ORC、CSV。
 

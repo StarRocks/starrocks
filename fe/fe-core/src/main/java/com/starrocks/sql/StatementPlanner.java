@@ -30,7 +30,6 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
@@ -52,6 +51,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -61,12 +61,15 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
+import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.RemoteTransactionMgr;
+import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 
 import java.util.ArrayList;
@@ -75,6 +78,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
 
 public class StatementPlanner {
 
@@ -92,7 +97,8 @@ public class StatementPlanner {
         } else if (stmt instanceof DmlStmt) {
             try {
                 beginTransaction((DmlStmt) stmt, session);
-            } catch (BeginTransactionException | LabelAlreadyUsedException | DuplicatedRequestException | AnalysisException e) {
+            } catch (RunningTxnExceedException | LabelAlreadyUsedException | DuplicatedRequestException | AnalysisException |
+                     BeginTransactionException e) {
                 throw new SemanticException("fail to begin transaction. " + e.getMessage());
             }
         }
@@ -102,7 +108,7 @@ public class StatementPlanner {
 
         // 1. For all queries, we need db lock when analyze phase
         Locker locker = new Locker();
-        try {
+        try (var guard = session.bindScope()) {
             lock(locker, dbs);
             try (Timer ignored = Tracers.watchScope("Analyzer")) {
                 Analyzer.analyze(stmt, session);
@@ -149,7 +155,7 @@ public class StatementPlanner {
         QueryStatement queryStmt = (QueryStatement) stmt;
         resultSinkType = queryStmt.hasOutFileClause() ? TResultSinkType.FILE : resultSinkType;
         ExecPlan plan;
-        if (!isOnlyOlapTable || session.getSessionVariable().isCboUseDBLock()) {
+        if (!isOnlyOlapTable || !GlobalStateMgr.getCurrentState().isLeader() || session.getSessionVariable().isCboUseDBLock()) {
             plan = createQueryPlan(queryStmt.getQueryRelation(), session, resultSinkType);
         } else {
             plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType);
@@ -168,7 +174,9 @@ public class StatementPlanner {
         LogicalPlan logicalPlan;
 
         try (Timer ignored = Tracers.watchScope("Transformer")) {
-            logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
+            // get a logicalPlan without inlining views
+            TransformerContext transformerContext = new TransformerContext(columnRefFactory, session);
+            logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         }
 
         OptExpression optimizedPlan;
@@ -220,7 +228,9 @@ public class StatementPlanner {
 
             LogicalPlan logicalPlan;
             try (Timer ignored = Tracers.watchScope("Transformer")) {
-                logicalPlan = new RelationTransformer(columnRefFactory, session).transformWithSelectLimit(query);
+                // get a logicalPlan without inlining views
+                TransformerContext transformerContext = new TransformerContext(columnRefFactory, session);
+                logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
             }
 
             OptExpression root = ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
@@ -257,12 +267,23 @@ public class StatementPlanner {
                         resultSinkType,
                         !session.getSessionVariable().isSingleNodeExecPlan());
                 isSchemaValid = olapTables.stream().noneMatch(t -> t.lastSchemaUpdateTime.get() > planStartTime);
+
                 isSchemaValid = isSchemaValid && olapTables.stream().allMatch(t ->
                         t.lastVersionUpdateEndTime.get() < buildFragmentStartTime &&
                                 t.lastVersionUpdateEndTime.get() >= t.lastVersionUpdateStartTime.get());
                 if (isSchemaValid) {
                     return plan;
                 }
+
+                // if exists table is applying visible log, we wait 10 ms to retry
+                if (olapTables.stream().anyMatch(t -> t.lastVersionUpdateStartTime.get() > t.lastVersionUpdateEndTime.get())) {
+                    try (Timer timer = Tracers.watchScope("PlanRetrySleepTime")) {
+                        Thread.sleep(10);
+                    } catch (InterruptedException e) {
+                        throw new StarRocksPlannerException("query had been interrupted", INTERNAL_ERROR);
+                    }
+                }
+
             }
         }
         Preconditions.checkState(false, "The tablet write operation update metadata " +
@@ -340,13 +361,14 @@ public class StatementPlanner {
     }
 
     private static void beginTransaction(DmlStmt stmt, ConnectContext session)
-            throws BeginTransactionException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
+            throws BeginTransactionException, RunningTxnExceedException, AnalysisException, LabelAlreadyUsedException,
+            DuplicatedRequestException {
         // not need begin transaction here
-        // 1. explain
+        // 1. explain (exclude explain analyze)
         // 2. insert into files
         // 3. old delete
         // 4. insert overwrite
-        if (stmt.isExplain()) {
+        if (stmt.isExplain() && !StatementBase.ExplainLevel.ANALYZE.equals(stmt.getExplainLevel())) {
             return;
         }
         if (stmt instanceof InsertStmt) {
@@ -372,14 +394,14 @@ public class StatementPlanner {
             return;
         }
 
-        String label = DebugUtil.printId(session.getExecutionId());
+        String label;
         if (stmt instanceof InsertStmt) {
             String stmtLabel = ((InsertStmt) stmt).getLabel();
-            label = Strings.isNullOrEmpty(stmtLabel) ? "insert_" + label : stmtLabel;
+            label = Strings.isNullOrEmpty(stmtLabel) ? MetaUtils.genInsertLabel(session.getExecutionId()) : stmtLabel;
         } else if (stmt instanceof UpdateStmt) {
-            label = "update_" + label;
+            label = MetaUtils.genUpdateLabel(session.getExecutionId());
         } else if (stmt instanceof DeleteStmt) {
-            label = "delete_" + label;
+            label = MetaUtils.genDeleteLabel(session.getExecutionId());
         } else {
             throw UnsupportedException.unsupportedException("Unsupported dml statement " + stmt.getClass().getSimpleName());
         }
@@ -388,17 +410,29 @@ public class StatementPlanner {
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
         long txnId = -1L;
         if (targetTable instanceof ExternalOlapTable) {
-            ExternalOlapTable tbl = (ExternalOlapTable) targetTable;
+            if (!(stmt instanceof InsertStmt)) {
+                throw UnsupportedException.unsupportedException("External OLAP table only supports insert statement");
+            }
+            // sync OLAP external table meta here,
+            // because beginRemoteTransaction will use the dbId and tableId as request param.
+            ExternalOlapTable tbl = MetaUtils.syncOLAPExternalTableMeta((ExternalOlapTable) targetTable);
+            ((InsertStmt) stmt).setTargetTable(tbl);
             TAuthenticateParams authenticateParams = new TAuthenticateParams();
             authenticateParams.setUser(tbl.getSourceTableUser());
             authenticateParams.setPasswd(tbl.getSourceTablePassword());
             authenticateParams.setHost(session.getRemoteIP());
             authenticateParams.setDb_name(tbl.getSourceTableDbName());
             authenticateParams.setTable_names(Lists.newArrayList(tbl.getSourceTableName()));
-            txnId = transactionMgr.beginRemoteTransaction(tbl.getSourceTableDbId(), Lists.newArrayList(tbl.getSourceTableId()),
-                    label, tbl.getSourceTableHost(), tbl.getSourceTablePort(),
-                    new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                    sourceType, session.getSessionVariable().getQueryTimeoutS(), authenticateParams);
+            txnId = RemoteTransactionMgr.beginTransaction(
+                    tbl.getSourceTableDbId(),
+                    Lists.newArrayList(tbl.getSourceTableId()),
+                    label,
+                    sourceType,
+                    session.getSessionVariable().getQueryTimeoutS(),
+                    tbl.getSourceTableHost(),
+                    tbl.getSourceTablePort(),
+                    authenticateParams);
+
         } else if (targetTable instanceof SystemTable || targetTable.isIcebergTable() || targetTable.isHiveTable()
                 || targetTable.isTableFunctionTable() || targetTable.isBlackHoleTable()) {
             // schema table and iceberg and hive table does not need txn

@@ -47,6 +47,7 @@ import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiInPredicate;
+import com.starrocks.analysis.NamedArgument;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Parameter;
@@ -92,7 +93,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DefaultValueExpr;
-import com.starrocks.sql.ast.DictionaryExpr;
+import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -636,7 +637,7 @@ public class ExpressionAnalyzer {
             predicateBaseAndCheck(node);
 
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
-            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
+            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, true);
 
             for (Type type : list) {
                 if (!Type.canCastTo(type, compatibleType)) {
@@ -845,7 +846,7 @@ public class ExpressionAnalyzer {
 
             // check compatible type
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
-            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
+            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, false);
 
             if (compatibleType == Type.INVALID) {
                 throw new SemanticException("The input types (" + list.stream().map(Type::toSql).collect(
@@ -1130,6 +1131,23 @@ public class ExpressionAnalyzer {
                 argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV2(fnName, argumentTypes)) {
                 fn = DecimalV3FunctionAnalyzer.getDecimalV2Function(node, argumentTypes);
+            } else if (FunctionSet.BITMAP_UNION.equals(fnName)) {
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+                if (session.getSessionVariable().isEnableRewriteBitmapUnionToBitmapAgg() &&
+                        node.getChild(0) instanceof FunctionCallExpr) {
+                    FunctionCallExpr arg0Func = (FunctionCallExpr) node.getChild(0);
+                    // Convert bitmap_union(to_bitmap(v1)) to bitmap_agg(v1) when v1's type
+                    // is a numeric type.
+                    if (FunctionSet.TO_BITMAP.equals(arg0Func.getFnName().getFunction())) {
+                        Expr toBitmapArg0 = arg0Func.getChild(0);
+                        Type toBitmapArg0Type = toBitmapArg0.getType();
+                        if (toBitmapArg0Type.isIntegerType() || toBitmapArg0Type.isBoolean()
+                                || toBitmapArg0Type.isLargeIntType()) {
+                            node.setChild(0, toBitmapArg0);
+                            node.resetFnName("", FunctionSet.BITMAP_AGG);
+                        }
+                    }
+                }
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
@@ -1801,7 +1819,8 @@ public class ExpressionAnalyzer {
             if (strictModeIdx >= 0) {
                 expectTypes.add(Type.BOOLEAN);
             }
-            List<Type> actualTypes = params.stream()
+
+            List<Type> actualTypes = node.getChildren().stream()
                     .map(expr -> ScalarType.createType(expr.getType().getPrimitiveType())).collect(Collectors.toList());
             if (!Objects.equals(expectTypes, actualTypes)) {
                 List<String> expectTypeNames = new ArrayList<>();
@@ -1851,7 +1870,7 @@ public class ExpressionAnalyzer {
         }
 
         @Override
-        public Void visitDictionaryExpr(DictionaryExpr node, Scope context) {
+        public Void visitDictionaryGetExpr(DictionaryGetExpr node, Scope context) {
             List<Expr> params = node.getChildren();
             if (params.size() < 2) {
                 throw new SemanticException("dictionary_get function get illegal param list");
@@ -1948,6 +1967,11 @@ public class ExpressionAnalyzer {
             }
             StructType returnType = new StructType(structFields);
             node.setType(returnType);
+            return null;
+        }
+
+        @Override
+        public Void visitNamedArgument(NamedArgument node, Scope context) {
             return null;
         }
     }

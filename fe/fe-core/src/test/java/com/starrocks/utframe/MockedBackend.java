@@ -24,27 +24,21 @@ import com.starrocks.proto.ExecuteCommandRequestPB;
 import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
-import com.starrocks.proto.PClearDictionaryCacheRequest;
-import com.starrocks.proto.PClearDictionaryCacheResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PExecShortCircuitResult;
 import com.starrocks.proto.PFetchDataResult;
-import com.starrocks.proto.PGetDictionaryStatisticRequest;
-import com.starrocks.proto.PGetDictionaryStatisticResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
+import com.starrocks.proto.PProcessDictionaryCacheRequest;
+import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PQueryStatistics;
-import com.starrocks.proto.PRefreshDictionaryCacheBeginRequest;
-import com.starrocks.proto.PRefreshDictionaryCacheBeginResult;
-import com.starrocks.proto.PRefreshDictionaryCacheCommitRequest;
-import com.starrocks.proto.PRefreshDictionaryCacheCommitResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
 import com.starrocks.proto.PUpdateFailPointStatusResponse;
@@ -131,6 +125,7 @@ public class MockedBackend {
     private final int heartBeatPort;
     private final int beThriftPort;
     private final int httpPort;
+    private final int starletPort;
 
     final MockHeatBeatClient heatBeatClient;
 
@@ -149,12 +144,13 @@ public class MockedBackend {
         brpcPort = BASE_PORT.getAndIncrement();
         heartBeatPort = BASE_PORT.getAndIncrement();
         httpPort = BASE_PORT.getAndIncrement();
+        starletPort = BASE_PORT.getAndIncrement();
 
-        heatBeatClient = new MockHeatBeatClient(beThriftPort, httpPort, brpcPort);
+        heatBeatClient = new MockHeatBeatClient(beThriftPort, httpPort, brpcPort, starletPort);
         thriftClient = new MockBeThriftClient(this);
         pbService = new MockPBackendService();
 
-        ((MockGenericPool<?>) ClientPool.heartbeatPool).register(this);
+        ((MockGenericPool<?>) ClientPool.beHeartbeatPool).register(this);
         ((MockGenericPool<?>) ClientPool.backendPool).register(this);
 
         new MockUp<BrpcProxy>() {
@@ -195,16 +191,22 @@ public class MockedBackend {
         return httpPort;
     }
 
+    public int getStarletPort() {
+        return starletPort;
+    }
+
     private static class MockHeatBeatClient extends HeartbeatService.Client {
         private final int brpcPort;
         private final int beThriftPort;
         private final int httpPort;
+        private final int starletPort;
 
-        public MockHeatBeatClient(int beThriftPort, int beHttpPort, int beBrpcPort) {
+        public MockHeatBeatClient(int beThriftPort, int beHttpPort, int beBrpcPort, int starletPort) {
             super(null);
             this.brpcPort = beBrpcPort;
             this.beThriftPort = beThriftPort;
             this.httpPort = beHttpPort;
+            this.starletPort = starletPort;
         }
 
         @Override
@@ -222,6 +224,7 @@ public class MockedBackend {
         public THeartbeatResult recv_heartbeat() {
             TBackendInfo backendInfo = new TBackendInfo(beThriftPort, httpPort);
             backendInfo.setBrpc_port(brpcPort);
+            backendInfo.setStarlet_port(starletPort);
             return new THeartbeatResult(new TStatus(TStatusCode.OK), backendInfo);
         }
     }
@@ -468,26 +471,7 @@ public class MockedBackend {
             return null;
         }
 
-        public Future<PRefreshDictionaryCacheBeginResult> refreshDictionaryCacheBegin(
-                PRefreshDictionaryCacheBeginRequest request) {
-            return null;
-        }
-
-        @Override
-        public Future<PRefreshDictionaryCacheCommitResult> refreshDictionaryCacheCommit(
-                PRefreshDictionaryCacheCommitRequest request) {
-            return null;
-        }
-
-        @Override
-        public Future<PClearDictionaryCacheResult> clearDictionaryCache(
-                PClearDictionaryCacheRequest request) {
-            return null;
-        }
-
-        @Override
-        public Future<PGetDictionaryStatisticResult> getDictionaryStatistic(
-                PGetDictionaryStatisticRequest request) {
+        public Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request) {
             return null;
         }
     }

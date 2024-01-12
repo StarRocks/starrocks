@@ -36,12 +36,13 @@ namespace starrocks::spill {
 class LogBlockContainer {
 public:
     LogBlockContainer(Dir* dir, const TUniqueId& query_id, int32_t plan_node_id, std::string plan_node_name,
-                      uint64_t id)
+                      uint64_t id, bool direct_io)
             : _dir(dir),
               _query_id(query_id),
               _plan_node_id(plan_node_id),
               _plan_node_name(std::move(plan_node_name)),
-              _id(id) {}
+              _id(id),
+              _direct_io(direct_io) {}
 
     ~LogBlockContainer() {
         TRACE_SPILL_LOG << "delete spill container file: " << path();
@@ -69,8 +70,6 @@ public:
     std::string parent_path() const { return fmt::format("{}/{}", _dir->dir(), print_id(_query_id)); }
     uint64_t id() const { return _id; }
 
-    Status ensure_preallocate(size_t length);
-
     Status append_data(const std::vector<Slice>& data, size_t total_size);
 
     Status flush();
@@ -78,7 +77,7 @@ public:
     StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable(size_t offset, size_t length);
 
     static StatusOr<LogBlockContainerPtr> create(Dir* dir, TUniqueId query_id, int32_t plan_node_id,
-                                                 const std::string& plan_node_name, uint64_t id);
+                                                 const std::string& plan_node_name, uint64_t id, bool enable_direct_io);
 
 private:
     Dir* _dir;
@@ -88,6 +87,7 @@ private:
     uint64_t _id;
     std::unique_ptr<WritableFile> _writable_file;
     bool _has_open = false;
+    bool _direct_io = false;
     size_t _data_size = 0;
 };
 
@@ -101,6 +101,7 @@ Status LogBlockContainer::open() {
     if (config::experimental_spill_skip_sync) {
         opt.sync_on_close = false;
     }
+    opt.direct_write = _direct_io;
     ASSIGN_OR_RETURN(_writable_file, _dir->fs()->new_writable_file(opt, file_path));
     TRACE_SPILL_LOG << "create new container file: " << file_path;
     _has_open = true;
@@ -112,11 +113,8 @@ Status LogBlockContainer::close() {
     return Status::OK();
 }
 
-Status LogBlockContainer::ensure_preallocate(size_t length) {
-    return _writable_file->pre_allocate(length);
-}
-
 Status LogBlockContainer::append_data(const std::vector<Slice>& data, size_t total_size) {
+    RETURN_IF_ERROR(_writable_file->pre_allocate(total_size));
     RETURN_IF_ERROR(_writable_file->appendv(data.data(), data.size()));
     _data_size += total_size;
     return Status::OK();
@@ -137,8 +135,9 @@ StatusOr<std::unique_ptr<io::InputStreamWrapper>> LogBlockContainer::get_readabl
 }
 
 StatusOr<LogBlockContainerPtr> LogBlockContainer::create(Dir* dir, TUniqueId query_id, int32_t plan_node_id,
-                                                         const std::string& plan_node_name, uint64_t id) {
-    auto container = std::make_shared<LogBlockContainer>(dir, query_id, plan_node_id, plan_node_name, id);
+                                                         const std::string& plan_node_name, uint64_t id,
+                                                         bool direct_io) {
+    auto container = std::make_shared<LogBlockContainer>(dir, query_id, plan_node_id, plan_node_name, id, direct_io);
     RETURN_IF_ERROR(container->open());
     return container;
 }
@@ -184,7 +183,6 @@ public:
                 _container->dir()->dec_size(total_size);
             }
         });
-        RETURN_IF_ERROR(ret = _container->ensure_preallocate(total_size));
         RETURN_IF_ERROR(ret = _container->append_data(data, total_size));
         _size += total_size;
         return Status::OK();
@@ -257,7 +255,7 @@ StatusOr<BlockPtr> LogBlockManager::acquire_block(const AcquireBlockOptions& opt
     ASSIGN_OR_RETURN(auto dir, ExecEnv::GetInstance()->spill_dir_mgr()->acquire_writable_dir(acquire_dir_opts));
 #endif
 
-    ASSIGN_OR_RETURN(auto block_container, get_or_create_container(dir, opts.plan_node_id, opts.name));
+    ASSIGN_OR_RETURN(auto block_container, get_or_create_container(dir, opts.plan_node_id, opts.name, opts.direct_io));
     return std::make_shared<LogBlock>(block_container, block_container->size());
 }
 
@@ -288,7 +286,8 @@ Status LogBlockManager::release_block(const BlockPtr& block) {
 }
 
 StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(Dir* dir, int32_t plan_node_id,
-                                                                        const std::string& plan_node_name) {
+                                                                        const std::string& plan_node_name,
+                                                                        bool direct_io) {
     TRACE_SPILL_LOG << "get_or_create_container at dir: " << dir->dir() << ", plan node:" << plan_node_id << ", "
                     << plan_node_name;
 
@@ -313,7 +312,8 @@ StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(Dir* dir
     uint64_t id = _next_container_id++;
     std::string container_dir = dir->dir() + "/" + print_id(_query_id);
     RETURN_IF_ERROR(dir->fs()->create_dir_if_missing(container_dir));
-    ASSIGN_OR_RETURN(auto block_container, LogBlockContainer::create(dir, _query_id, plan_node_id, plan_node_name, id));
+    ASSIGN_OR_RETURN(auto block_container,
+                     LogBlockContainer::create(dir, _query_id, plan_node_id, plan_node_name, id, direct_io));
     RETURN_IF_ERROR(block_container->open());
     return block_container;
 }

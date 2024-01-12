@@ -43,7 +43,7 @@ Example 1: Create a Hive catalog named `hive_metastore_catalog`. The correspondi
 CREATE EXTERNAL CATALOG hive_metastore_catalog
 PROPERTIES(
    "type"="hive", 
-   "hive.metastore.uris"="thrift://x.x.x.x:9083"
+   "hive.metastore.uris"="thrift://xx.xx.xx.xx:9083"
 );
 ```
 
@@ -67,7 +67,7 @@ CREATE EXTERNAL CATALOG iceberg_metastore_catalog
 PROPERTIES(
     "type"="iceberg",
     "iceberg.catalog.type"="hive",
-    "iceberg.catalog.hive.metastore.uris"="thrift://x.x.x.x:9083"
+    "iceberg.catalog.hive.metastore.uris"="thrift://xx.xx.xx.xx:9083"
 );
 ```
 
@@ -90,7 +90,7 @@ Example 5: Create a Hudi catalog named `hudi_metastore_catalog`. The correspondi
 CREATE EXTERNAL CATALOG hudi_metastore_catalog
 PROPERTIES(
     "type"="hudi",
-    "hive.metastore.uris"="thrift://x.x.x.x:9083"
+    "hive.metastore.uris"="thrift://xx.xx.xx.xx:9083"
 );
 ```
 
@@ -113,7 +113,7 @@ Example 7: Create a Delta Lake catalog named `delta_metastore_catalog`. The corr
 CREATE EXTERNAL CATALOG delta_metastore_catalog
 PROPERTIES(
     "type"="deltalake",
-    "hive.metastore.uris"="thrift://x.x.x.x:9083"
+    "hive.metastore.uris"="thrift://xx.xx.xx.xx:9083"
 );
 ```
 

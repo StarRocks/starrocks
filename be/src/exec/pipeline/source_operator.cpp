@@ -20,10 +20,10 @@
 namespace starrocks::pipeline {
 
 void SourceOperatorFactory::add_group_dependent_pipeline(const Pipeline* dependent_op) {
-    _group_leader->_group_dependent_pipelines.emplace_back(dependent_op);
+    group_leader()->_group_dependent_pipelines.emplace_back(dependent_op);
 }
 const std::vector<const Pipeline*>& SourceOperatorFactory::group_dependent_pipelines() const {
-    return _group_leader->_group_dependent_pipelines;
+    return group_leader()->_group_dependent_pipelines;
 }
 
 void SourceOperatorFactory::set_group_leader(SourceOperatorFactory* parent) {
@@ -32,38 +32,13 @@ void SourceOperatorFactory::set_group_leader(SourceOperatorFactory* parent) {
     }
     _group_leader = parent->group_leader();
 }
-SourceOperatorFactory* SourceOperatorFactory::group_leader() {
+
+SourceOperatorFactory* SourceOperatorFactory::group_leader() const {
     return _group_leader;
 }
 
-bool SourceOperatorFactory::is_adaptive_group_active() const {
-    if (_group_leader != this) {
-        return _group_leader->is_adaptive_group_active();
-    }
-
-    if (adaptive_state() != AdaptiveState::ACTIVE) {
-        return false;
-    }
-
-    const auto& pipelines = _group_dependent_pipelines;
-    if (!_group_dependent_pipelines_ready) {
-        _group_dependent_pipelines_ready = std::all_of(pipelines.begin(), pipelines.end(), [](const auto& pipeline) {
-            return pipeline->source_operator_factory()->is_adaptive_group_active();
-        });
-        if (!_group_dependent_pipelines_ready) {
-            return false;
-        }
-    }
-
-    _group_dependent_pipelines_finished = std::all_of(pipelines.begin(), pipelines.end(), [](const auto& pipeline) {
-        const auto& drivers = pipeline->drivers();
-        if (drivers.empty()) {
-            return false;
-        }
-        return std::all_of(drivers.begin(), drivers.end(),
-                           [](const auto& driver) { return driver->sink_operator()->is_finished(); });
-    });
-    return _group_dependent_pipelines_finished;
+bool SourceOperatorFactory::is_adaptive_group_initial_active() const {
+    return group_leader()->adaptive_initial_state() == AdaptiveState::ACTIVE;
 }
 
 } // namespace starrocks::pipeline

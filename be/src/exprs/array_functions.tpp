@@ -101,26 +101,25 @@ private:
         Datum v = column.get(index);
         const auto& items = v.get<DatumArray>();
 
-        for (const auto& item : items) {
-            if (item.is_null()) {
-                has_null = true;
-            } else {
-                hash_set->emplace(item.get<CppType>());
-            }
-        }
-
         auto& dest_data_column = dest_column->elements_column();
         auto& dest_offsets = dest_column->offsets_column()->get_data();
 
-        if (has_null) {
-            dest_data_column->append_nulls(1);
+        for (const auto& item : items) {
+            if (item.is_null()) {
+                if (!has_null) {
+                    dest_data_column->append_nulls(1);
+                    has_null = true;
+                }
+                continue;
+            }
+
+            const auto& tt = item.get<CppType>();
+            if (hash_set->count(tt) == 0) {
+                hash_set->emplace(tt);
+                dest_data_column->append_datum(tt);
+            }
         }
 
-        auto iter = hash_set->begin();
-        while (iter != hash_set->end()) {
-            dest_data_column->append_datum(*iter);
-            ++iter;
-        }
         dest_offsets.emplace_back(dest_offsets.back() + hash_set->size() + has_null);
     }
 };

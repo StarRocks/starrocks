@@ -51,6 +51,13 @@ public class OptimizerTraceUtil {
         });
     }
 
+    public static void logMVRewrite(String mvName, String format, Object... objects) {
+        Tracers.log(Tracers.Module.MV, input -> {
+            String str = MessageFormatter.arrayFormat(format, objects).getMessage();
+            return MessageFormatter.format("[MV TRACE] [REWRITE {}] {}", mvName, str).getMessage();
+        });
+    }
+
     public static void logMVRewrite(MvRewriteContext mvRewriteContext, String format, Object... object) {
         MaterializationContext mvContext = mvRewriteContext.getMaterializationContext();
         Tracers.log(Tracers.Module.MV, input -> {
@@ -68,7 +75,17 @@ public class OptimizerTraceUtil {
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
                     rule.type().name(),
-                    String.format(format, object)
+                    MessageFormatter.arrayFormat(format, object).getMessage()
+            };
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] {}", args).getMessage();
+        });
+    }
+
+    public static void logMVRewriteRule(String ruleName, String format, Object... object) {
+        Tracers.log(Tracers.Module.MV, input -> {
+            Object[] args = new Object[] {
+                    ruleName,
+                    MessageFormatter.arrayFormat(format, object).getMessage()
             };
             return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] {}", args).getMessage();
         });

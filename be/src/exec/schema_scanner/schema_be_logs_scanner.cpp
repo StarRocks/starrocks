@@ -67,11 +67,11 @@ Status SchemaBeLogsScanner::start(RuntimeState* state) {
     if (st.ok()) {
         VLOG(3) << msg;
     } else {
-        LOG(WARNING) << msg << " error:" << st.get_error_msg();
+        LOG(WARNING) << msg << " error:" << st.message();
         // send err info to client as log
         auto& err_log = _infos.emplace_back();
         err_log.log = strings::Substitute("grep_log failed pattern:$0 level:$1 limit:$2 error:$3", pattern, level,
-                                          _param->limit, st.get_error_msg());
+                                          _param->limit, st.message());
     }
     _cur_idx = 0;
     return Status::OK();

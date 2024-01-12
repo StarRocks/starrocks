@@ -113,7 +113,8 @@ public class ShowMaterializedViewTest {
                         "information_schema.materialized_views.last_refresh_error_code AS last_refresh_error_code, " +
                         "information_schema.materialized_views.last_refresh_error_message AS last_refresh_error_message, " +
                         "information_schema.materialized_views.TABLE_ROWS AS rows, " +
-                        "information_schema.materialized_views.MATERIALIZED_VIEW_DEFINITION AS text " +
+                        "information_schema.materialized_views.MATERIALIZED_VIEW_DEFINITION AS text, " +
+                        "information_schema.materialized_views.extra_message AS extra_message " +
                         "FROM information_schema.materialized_views " +
                         "WHERE (information_schema.materialized_views.TABLE_SCHEMA = 'abc') AND (information_schema.materialized_views.TABLE_NAME = 'mv1')",
                 AstToStringBuilder.toString(stmt.toSelectStmt()));

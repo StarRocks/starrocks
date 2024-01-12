@@ -126,6 +126,11 @@ public class HiveMetastore implements IHiveMetastore {
     }
 
     @Override
+    public boolean tableExists(String dbName, String tableName) {
+        return client.tableExists(dbName, tableName);
+    }
+
+    @Override
     public List<String> getPartitionKeysByValue(String dbName, String tableName, List<Optional<String>> partitionValues) {
         if (partitionValues.isEmpty()) {
             return client.getPartitionKeys(dbName, tableName);

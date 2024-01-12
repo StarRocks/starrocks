@@ -27,6 +27,7 @@
 #include "storage/lake/types_fwd.h"
 
 namespace starrocks {
+struct FileInfo;
 class Segment;
 class TabletSchemaPB;
 class TCreateTabletReq;
@@ -85,9 +86,19 @@ public:
 
     [[nodiscard]] Status put_txn_log(const TxnLogPtr& log);
 
+    [[nodiscard]] Status put_txn_log(const TxnLogPtr& log, const std::string& path);
+
+    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log);
+
+    [[nodiscard]] Status put_txn_slog(const TxnLogPtr& log, const std::string& path);
+
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
     StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
+
+    StatusOr<TxnLogPtr> get_txn_slog(int64_t tablet_id, int64_t txn_id);
+
+    StatusOr<TxnLogPtr> get_txn_slog(const std::string& path, bool fill_cache = true);
 
     StatusOr<TxnLogPtr> get_txn_vlog(int64_t tablet_id, int64_t version);
 
@@ -113,6 +124,8 @@ public:
     std::string tablet_metadata_location(int64_t tablet_id, int64_t version) const;
 
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const;
+
+    std::string txn_slog_location(int64_t tablet_id, int64_t txn_id) const;
 
     std::string txn_vlog_location(int64_t tablet_id, int64_t version) const;
 
@@ -149,6 +162,9 @@ public:
     // instance address matches the address provided by the segment_addr_hint. This is used to prevent
     // updating the cache size where the cached object is not the one as expected.
     void update_segment_cache_size(std::string_view key, intptr_t segment_addr_hint = 0);
+
+    StatusOr<SegmentPtr> load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
+                                      bool fill_data_cache, bool fill_metadata_cache, TabletSchemaPtr tablet_schema);
 
 private:
     static std::string global_schema_cache_key(int64_t index_id);

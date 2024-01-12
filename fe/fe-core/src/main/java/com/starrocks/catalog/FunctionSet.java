@@ -81,6 +81,7 @@ public class FunctionSet {
     public static final String DAYOFYEAR = "dayofyear";
     public static final String FROM_DAYS = "from_days";
     public static final String FROM_UNIXTIME = "from_unixtime";
+    public static final String FROM_UNIXTIME_MS = "from_unixtime_ms";
     public static final String HOUR = "hour";
     public static final String MINUTE = "minute";
     public static final String MONTH = "month";
@@ -92,6 +93,12 @@ public class FunctionSet {
     public static final String TIMESTAMPADD = "timestampadd";
     public static final String TIMESTAMPDIFF = "timestampdiff";
     public static final String TO_DATE = "to_date";
+    public static final String DATE = "date";
+    public static final String LAST_DAY = "last_day";
+    public static final String MAKEDATE = "makedate";
+    public static final String NEXT_DAY = "next_day";
+    public static final String PREVIOUS_DAY = "previous_day";
+    public static final String TO_TERA_DATE = "to_tera_date";
     public static final String TO_DAYS = "to_days";
     public static final String UNIX_TIMESTAMP = "unix_timestamp";
     public static final String UTC_TIMESTAMP = "utc_timestamp";
@@ -531,6 +538,10 @@ public class FunctionSet {
                     .addAll(Type.FLOAT_TYPES)
                     .build();
 
+    public static final Set<Type> BITMAP_AGG_TYPE =
+            ImmutableSet.<Type>builder()
+                    .addAll(Type.INTEGER_TYPES)
+                    .build();
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
      * need to check whether the expression tree can use vectorized function from bottom to
@@ -653,6 +664,14 @@ public class FunctionSet {
             .add(FunctionSet.COVAR_SAMP)
             .add(FunctionSet.CORR)
             .build();
+
+    public static final Set<String> IGNORE_NULL_WINDOW_FUNCTION =
+            ImmutableSet.<String>builder().add(FunctionSet.FIRST_VALUE)
+                    .add(FunctionSet.LAST_VALUE)
+                    .add(FunctionSet.FIRST_VALUE_REWRITE)
+                    .add(FunctionSet.LEAD)
+                    .add(FunctionSet.LAG)
+                    .build();
 
     public static final List<String> ARRAY_DECIMAL_FUNCTIONS = ImmutableList.<String>builder()
             .add(ARRAY_SUM)
@@ -837,6 +856,9 @@ public class FunctionSet {
 
     public Function getFunction(Function desc, Function.CompareMode mode) {
         List<Function> fns = vectorizedFunctions.get(desc.functionName());
+        if (desc.hasNamedArg() && fns != null && !fns.isEmpty()) {
+            fns = fns.stream().filter(Function::hasNamedArg).collect(Collectors.toList());
+        }
         if (fns == null || fns.isEmpty()) {
             return null;
         }

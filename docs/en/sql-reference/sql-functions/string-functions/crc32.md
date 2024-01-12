@@ -6,7 +6,9 @@ displayed_sidebar: "English"
 
 ## Description
 
-This function returns the CRC32 checksum of a string
+Returns the 32-bit cyclic redundancy check (CRC) value of a string. If the input is NULL, NULL is returned.
+
+This function is used for error detection. It uses the CRC32 algorithm to detect changes between source and target data.
 
 ## Syntax
 
@@ -14,18 +16,21 @@ This function returns the CRC32 checksum of a string
 BIGINT crc32(VARCHAR str)
 ```
 
+## Parameters
+
+`str`: the string for which you want to calculate the CRC32 value.
+
 ## Examples
 
 ```Plain Text
-MySQL [(none)]> select crc32("starrocks");
+mysql > select crc32("starrocks");
 +--------------------+
 | crc32('starrocks') |
 +--------------------+
 |         2312449062 |
 +--------------------+
-```
-```Plain Text
-MySQL [(none)]> select crc32(null);
+
+mysql > select crc32(null);
 +-------------+
 | crc32(NULL) |
 +-------------+
@@ -34,6 +39,6 @@ MySQL [(none)]> select crc32(null);
 1 row in set (0.18 sec)
 ```
 
-## keyword
+## Keywords
 
 CRC32

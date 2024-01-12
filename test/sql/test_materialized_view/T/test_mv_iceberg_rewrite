@@ -54,3 +54,43 @@ function: check_hit_materialized_view("SELECT dt,sum(col_int) FROM mv_iceberg_${
 
 SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} WHERE dt>='2023-12-03' GROUP BY dt order by dt;
 SELECT dt,sum(col_int) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} GROUP BY dt order by dt;
+
+-- drop base table
+use mv_iceberg_${uuid0}.mv_ice_db_${uuid0};
+DROP TABLE mv_ice_tbl_${uuid0};
+set catalog default_catalog;
+use db_${uuid0};
+-- use default_catalog.db_${uuid0};
+[UC]REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+ALTER MATERIALIZED VIEW test_mv1 ACTIVE;
+
+-- recreate it
+use mv_iceberg_${uuid0}.mv_ice_db_${uuid0};
+create table mv_ice_tbl_${uuid0} (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt);
+insert into mv_ice_tbl_${uuid0} values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01'),
+  ('3e82e36e56718dc4abc1168d21ec91ab', 2000, '2023-12-01');
+set catalog default_catalog;
+REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 WITH SYNC MODE;
+select is_active, inactive_reason from information_schema.materialized_views
+  where TABLE_NAME = 'test_mv1' and table_schema = 'db_${uuid0}';
+select * from default_catalog.db_${uuid0}.test_mv1 order by 1, 2;
+
+-- manually inactive and active
+ALTER MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 INACTIVE;
+select is_active, inactive_reason from information_schema.materialized_views
+  where TABLE_NAME = 'test_mv1' and table_schema = 'db_${uuid0}';
+ALTER MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 ACTIVE;
+select is_active, inactive_reason from information_schema.materialized_views
+  where TABLE_NAME = 'test_mv1' and table_schema = 'db_${uuid0}';
+  
+REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 WITH SYNC MODE;
+select * from default_catalog.db_${uuid0}.test_mv1 order by 1, 2;
+
+
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
+drop database mv_iceberg_${uuid0}.mv_ice_db_${uuid0} force;

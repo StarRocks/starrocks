@@ -14,6 +14,10 @@ StarRocks supports the following remote storage systems:
 - AWS S3
 - Google GCS
 
+> **NOTE**
+>
+> Shared-data StarRocks clusters do not support data BACKUP and RESTORE.
+
 ## Back up data
 
 StarRocks supports FULL backup on the granularity level of database, table, or partition.
@@ -171,6 +175,8 @@ You can optimize the performance of BACKUP or RESTORE jobs by modifying the foll
 | download_worker_count   | The maximum number of threads for the download tasks of RESTORE jobs on a BE node. Default: `1`. Increase the value of this configuration item to increase the concurrency of the download task. |
 | max_download_speed_kbps | The upper limit of the download speed on a BE node. Default: `50000`. Unit: KB/s. Usually, the speed of the download tasks in RESTORE jobs will not exceed the default value. If this configuration is limiting the performance of RESTORE jobs, you can increase it according to your bandwidth.|
 
+<!--
+
 ## Materialized view BACKUP and RESTORE
 
 During a BACKUP or a RESTORE job of a table, StarRocks automatically backs up or restores its [Synchronous materialized view](../using_starrocks/Materialized_view-single_table.md).
@@ -198,6 +204,8 @@ After RESTORE, you can check the status of the materialized view using [SHOW MAT
 
 - If the materialized view is active, it can be used directly.
 - If the materialized view is inactive, it might be because its base tables are not restored. After all the base tables are restored, you can use [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md) to re-activate the materialized view.
+
+-->
 
 ## Usage notes
 

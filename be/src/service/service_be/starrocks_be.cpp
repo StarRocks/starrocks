@@ -24,7 +24,6 @@
 #include "block_cache/block_cache.h"
 #include "common/config.h"
 #include "common/daemon.h"
-#include "common/logging.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
 #include "runtime/exec_env.h"

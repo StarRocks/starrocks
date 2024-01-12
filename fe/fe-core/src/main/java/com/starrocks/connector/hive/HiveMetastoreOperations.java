@@ -205,6 +205,10 @@ public class HiveMetastoreOperations {
         return metastore.getTable(dbName, tableName);
     }
 
+    public boolean tableExists(String dbName, String tableName) {
+        return metastore.tableExists(dbName, tableName);
+    }
+
     public List<String> getPartitionKeys(String dbName, String tableName) {
         return metastore.getPartitionKeysByValue(dbName, tableName, HivePartitionValue.ALL_PARTITION_VALUES);
     }

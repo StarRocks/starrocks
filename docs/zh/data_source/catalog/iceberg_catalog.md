@@ -302,8 +302,8 @@ Iceberg Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
 - 基于 Shared Key 进行认证和鉴权
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.shared_key" = "<storage_account_shared_key>"
   ```
 
   `StorageCredentialParams` 包含如下参数。
@@ -316,9 +316,9 @@ Iceberg Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
 - 基于 SAS Token 进行认证和鉴权
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.container" = "<blob_container_name>",
-  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.container" = "<container_name>",
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
   `StorageCredentialParams` 包含如下参数。
@@ -328,6 +328,56 @@ Iceberg Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
   | azure.blob.storage_account| 是           | Blob Storage 账号的用户名。              |
   | azure.blob.container      | 是           | 数据所在 Blob 容器的名称。               |
   | azure.blob.sas_token      | 是           | 用于访问 Blob Storage 账号的 SAS Token。 |
+
+###### Azure Data Lake Storage Gen2
+
+如果选择 Data Lake Storage Gen2 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+
+- 基于 Managed Identity 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                                | **是否必须** | **说明**                                                |
+  | --------------------------------------- | ------------ | ------------------------------------------------------- |
+  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
+  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属 Tenant 的 ID。                                 |
+  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
+
+- 基于 Shared Key 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>",
+  "azure.adls2.shared_key" = "<storage_account_shared_key>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                    | **是否必须** | **说明**                                   |
+  | --------------------------- | ------------ | ------------------------------------------ |
+  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
+  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
+
+- 基于 Service Principal 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                           | **是否必须** | **说明**                                                     |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
+  | azure.adls2.oauth2_client_secret   | 是           | 新建的 Client (Application) Secret。                         |
+  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
 
 ###### Azure Data Lake Storage Gen1
 
@@ -360,56 +410,6 @@ Iceberg Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
   | azure.adls1.oauth2_client_id  | 是           | Service Principal 的 Client (Application) ID。               |
   | azure.adls1.oauth2_credential | 是           | 新建的 Client (Application) Secret。                         |
   | azure.adls1.oauth2_endpoint   | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
-
-###### Azure Data Lake Storage Gen2
-
-如果选择 Data Lake Storage Gen2 作为 Iceberg 集群的文件存储，请按如下配置 `StorageCredentialParams`：
-
-- 基于 Managed Identity 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.oauth2_use_managed_identity" = "true",
-  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                                | **是否必须** | **说明**                                                |
-  | --------------------------------------- | ------------ | ------------------------------------------------------- |
-  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
-  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属 Tenant 的 ID。                                 |
-  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
-
-- 基于 Shared Key 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.storage_account" = "<storage_account_name>",
-  "azure.adls2.shared_key" = "<shared_key>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                    | **是否必须** | **说明**                                   |
-  | --------------------------- | ------------ | ------------------------------------------ |
-  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
-  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
-
-- 基于 Service Principal 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.oauth2_client_id" = "<service_client_id>",
-  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                           | **是否必须** | **说明**                                                     |
-  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
-  | azure.adls2.oauth2_client_secret   | 是           | 新建的 Client (Application) Secret。                         |
-  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
 
 ##### Google GCS
 
@@ -493,7 +493,7 @@ PROPERTIES
 (
     "type" = "iceberg",
     "iceberg.catalog.type" = "hive",
-    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ```
 
@@ -509,7 +509,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2"
 
@@ -541,7 +541,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2"
@@ -575,7 +575,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
@@ -612,7 +612,7 @@ PROPERTIES
 (
     "type" = "iceberg",
     "iceberg.catalog.type" = "hive",
-    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "<s3_endpoint>",
@@ -633,7 +633,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
   );
@@ -647,7 +647,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.container" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
@@ -664,7 +664,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls1.use_managed_service_identity" = "true"    
   );
   ```
@@ -677,7 +677,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls1.oauth2_client_id" = "<application_client_id>",
       "azure.adls1.oauth2_credential" = "<application_client_credential>",
       "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
@@ -694,7 +694,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.oauth2_use_managed_identity" = "true",
       "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
       "azure.adls2.oauth2_client_id" = "<service_client_id>"
@@ -709,7 +709,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.storage_account" = "<storage_account_name>",
       "azure.adls2.shared_key" = "<shared_key>"     
   );
@@ -723,7 +723,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
       "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
@@ -740,7 +740,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "gcp.gcs.use_compute_engine_service_account" = "true"    
   );
   ```
@@ -753,7 +753,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "gcp.gcs.service_account_email" = "<google_service_account_email>",
       "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
       "gcp.gcs.service_account_private_key" = "<google_service_private_key>"    
@@ -770,7 +770,7 @@ PROPERTIES
     (
         "type" = "iceberg",
         "iceberg.catalog.type" = "hive",
-        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
         "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
     );
@@ -784,7 +784,7 @@ PROPERTIES
     (
         "type" = "iceberg",
         "iceberg.catalog.type" = "hive",
-        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
         "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",

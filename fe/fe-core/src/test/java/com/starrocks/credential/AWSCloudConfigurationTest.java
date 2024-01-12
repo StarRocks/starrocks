@@ -63,9 +63,10 @@ public class AWSCloudConfigurationTest {
         hiveConf.set("aws.glue.region", "us-west-1");
         AWSCloudCredential awsCloudCredential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
         Assert.assertNotNull(awsCloudCredential);
-        Assert.assertEquals("AWSCloudCredential{useAWSSDKDefaultBehavior=false, useInstanceProfile=false, " +
-                "accessKey='ak', secretKey='sk', sessionToken='', iamRoleArn='', externalId='', " +
-                "region='us-west-1', endpoint=''}", awsCloudCredential.toCredString());
+        Assert.assertEquals("AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
+                "useInstanceProfile=false, accessKey='ak', secretKey='sk', sessionToken='', iamRoleArn='', " +
+                "stsRegion='', stsEndpoint='', externalId='', region='us-west-1', endpoint=''}",
+                awsCloudCredential.toCredString());
 
         hiveConf = new HiveConf();
         awsCloudCredential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
@@ -83,5 +84,53 @@ public class AWSCloudConfigurationTest {
         Configuration configuration = new Configuration();
         cloudConfiguration.applyToConfiguration(configuration);
         Assert.assertEquals("us-east-1", configuration.get("fs.s3a.endpoint.region"));
+    }
+
+    @Test
+    public void testS3AssumeRoleRegionEndpoint() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("aws.s3.access_key", "ak");
+        properties.put("aws.s3.secret_key", "sk");
+        properties.put("aws.s3.iam_role_arn", "arn");
+        properties.put("aws.s3.sts.endpoint", "endpoint");
+        {
+            CloudConfiguration cloudConfiguration =
+                    CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+            Assert.assertNotNull(cloudConfiguration);
+            Configuration configuration = new Configuration();
+            Assert.assertThrows(IllegalArgumentException.class,
+                    () -> cloudConfiguration.applyToConfiguration(configuration));
+        }
+
+        properties.put("aws.s3.sts.region", "region");
+        {
+            CloudConfiguration cloudConfiguration =
+                    CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
+            Assert.assertNotNull(cloudConfiguration);
+            Configuration configuration = new Configuration();
+            cloudConfiguration.applyToConfiguration(configuration);
+            Assert.assertEquals("region", configuration.get("fs.s3a.assumed.role.sts.endpoint.region"));
+            Assert.assertEquals("endpoint", configuration.get("fs.s3a.assumed.role.sts.endpoint"));
+        }
+    }
+
+    @Test
+    public void testGlueAssumeRoleRegionEndpoint() {
+        HiveConf hiveConf = new HiveConf();
+        hiveConf.set("aws.glue.access_key", "ak");
+        hiveConf.set("aws.glue.secret_key", "sk");
+        hiveConf.set("aws.glue.iam_role_arn", "arn");
+        hiveConf.set("aws.glue.sts.endpoint", "endpoint");
+        {
+            AWSCloudCredential credential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
+            Assert.assertNotNull(credential);
+            Assert.assertThrows(IllegalArgumentException.class, credential::generateAWSCredentialsProvider);
+        }
+
+        hiveConf.set("aws.glue.sts.region", "region");
+        {
+            AWSCloudCredential credential = CloudConfigurationFactory.buildGlueCloudCredential(hiveConf);
+            Assert.assertNotNull(credential);
+        }
     }
 }

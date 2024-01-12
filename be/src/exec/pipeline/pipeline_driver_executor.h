@@ -52,7 +52,7 @@ public:
     virtual void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
                                    bool done, bool attach_profile) = 0;
 
-    virtual void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) = 0;
+    virtual void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool* done) = 0;
 
     virtual void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const = 0;
 
@@ -78,7 +78,7 @@ public:
     void close() override;
     void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status, bool done,
                            bool attach_profile) override;
-    void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx) override;
+    void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool* done) override;
 
     void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const override;
 
@@ -92,7 +92,8 @@ private:
     void _worker_thread();
     StatusOr<DriverRawPtr> _get_next_driver(std::queue<DriverRawPtr>& local_driver_queue);
     void _finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
-    RuntimeProfile* _build_merged_instance_profile(QueryContext* query_ctx, FragmentContext* fragment_ctx);
+    RuntimeProfile* _build_merged_instance_profile(QueryContext* query_ctx, FragmentContext* fragment_ctx,
+                                                   ObjectPool* obj_pool);
 
     void _finalize_epoch(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state);
 
@@ -106,6 +107,7 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool;
     PipelineDriverPollerPtr _blocked_driver_poller;
     std::unique_ptr<ExecStateReporter> _exec_state_reporter;
+    std::unique_ptr<AuditStatisticsReporter> _audit_statistics_reporter;
 
     std::atomic<int> _next_id = 0;
     std::atomic_int64_t _schedule_count = 0;

@@ -145,6 +145,8 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
         // in acquiring _lock.
         // TODO: Rethink the lifecycle of DataStreamRecvr to distinguish
         // errors from receiver-initiated teardowns.
+        VLOG_QUERY << request.sender_id() << " sender transmits chunks to a non-existing receiver fragment "
+                   << print_id(request.finst_id());
         return Status::OK();
     }
 

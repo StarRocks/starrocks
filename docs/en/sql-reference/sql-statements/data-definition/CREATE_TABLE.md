@@ -160,11 +160,11 @@ Optional value: `mysql`, `elasticsearch`, `hive`, `jdbc` (2.3 and later), `icebe
 
         "database" = "hive_db_name",
         "table" = "hive_table_name",
-        "hive.metastore.uris" = "thrift://127.0.0.1:9083"
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
     )
     ```
 
-    Here, database is the name of the corresponding database in Hive table. Table is the name of Hive table. hive.metastore.uris is the server address.
+    Here, database is the name of the corresponding database in Hive table. Table is the name of Hive table. `hive.metastore.uris` is the server address.
 
 - For JDBC, specify the following properties:
 
@@ -345,7 +345,7 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
   - You can only use random bucketing to create Duplicate Key tables.
   - You can not specify a [Colocation Group](../../../using_starrocks/Colocate_join.md) for a table bucketed randomly.
   - [Spark Load](../../../loading/SparkLoad.md) cannot be used to load data into tables bucketed randomly.
-  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
+  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Set the number of buckets](../../../table_design/Data_distribution.md#set-the-number-of-buckets).
 
   For more information, see [Random bucketing](../../../table_design/Data_distribution.md#random-bucketing-since-v31).
 
@@ -374,7 +374,7 @@ StarRocks supports hash bucketing and random bucketing. If you do not configure 
   - **When you create a table, you must specify its bucketing columns**.
   - The values of bucketing columns cannot be updated.
   - Bucketing columns cannot be modified after they are specified.
-  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
+  - Since StarRocks v2.5.7, you do not need to set the number of buckets when you create a table. StarRocks automatically sets the number of buckets. If you want to set this parameter, see [Set the number of buckets](../../../table_design/Data_distribution.md#set-the-number-of-buckets).
 
 ### ORDER BY
 
@@ -515,11 +515,11 @@ PROPERTIES (
 
 #### Specify the bucket size for tables configured with random bucketing
 
-Since v3.2, for tables configured with random bucketing, you can specify the bucket size by using the `bucket_size` parameter in `PROPERTIES` at table creation. The default size is `1024 * 1024 * 1024 B` (1 GB), and the maximum size is 4 GB.
+Since v3.2, for tables configured with random bucketing, you can specify the bucket size by using the `bucket_size` parameter in `PROPERTIES` at table creation to enable the on-demand and dynamic increase of the number of buckets. Unit: B.
 
 ```sql
 PROPERTIES (
-    "bucket_size" = "3221225472"
+    "bucket_size" = "1073741824"
 )
 ```
 
@@ -641,11 +641,11 @@ PROPERTIES (
 
 #### Set fast schema evolution
 
-`fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` (default) or `FALSE`. Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](../../sql-statements/data-definition/ALTER_TABLE.md) after table creation. This parameter is supported since v3.2.0.
+`fast_schema_evolution`: Whether to enable fast schema evolution for the table. Valid values are `TRUE` or `FALSE` (default). Enabling fast schema evolution can increase the speed of schema changes and reduce resource usage when columns are added or dropped. Currently, this property can only be enabled at table creation, and it cannot be modified using [ALTER TABLE](../../sql-statements/data-definition/ALTER_TABLE.md) after table creation. This parameter is supported since v3.2.0.
   > **NOTE**
   >
   > - StarRocks shared-data clusters do not support this parameter.
-  > - If you need to configure fast schema evolution at the cluster level, such as disabling fast schema evolution within the StarRocks cluster, you can set the FE dynamic parameter [`fast_schema_evolution`](../../../administration/FE_configuration.md#fast_schema_evolution).
+  > - If you need to configure fast schema evolution at the cluster level, such as disabling fast schema evolution within the StarRocks cluster, you can set the FE dynamic parameter [`enable_fast_schema_evolution`](../../../administration/FE_configuration.md#enable_fast_schema_evolution).
 
 ## Examples
 

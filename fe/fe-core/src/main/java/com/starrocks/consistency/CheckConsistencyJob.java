@@ -111,10 +111,6 @@ public class CheckConsistencyJob {
         return tabletId;
     }
 
-    public synchronized void setChecksum(long backendId, long checksum) {
-        this.checksumMap.put(backendId, checksum);
-    }
-
     /*
      * return:
      *  true: continue

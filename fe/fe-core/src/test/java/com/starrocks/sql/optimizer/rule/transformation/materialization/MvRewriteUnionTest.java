@@ -17,7 +17,10 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Pair;
+import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -28,6 +31,7 @@ import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
 import java.util.List;
+import java.util.Set;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MvRewriteUnionTest extends MvRewriteTestBase {
@@ -169,7 +173,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
     public void testUnionRewrite3() throws Exception {
         // multi tables query
         createAndRefreshMv("create materialized view join_union_mv_1" +
-                " distributed by hash(empid)" +
+                " distributed by hash(empid) buckets 3 " +
                 " as" +
                 " select emps2.empid, emps2.salary, d1.deptno, d1.name name1, d2.name name2" +
                 " from emps2 join depts2 d1 on emps2.deptno = d1.deptno" +
@@ -181,16 +185,16 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 " join depts2 d2 on emps2.deptno = d2.deptno where d1.deptno < 120";
         String plan2 = getFragmentPlan(query2);
         PlanTestBase.assertContains(plan2, "join_union_mv_1");
-        PlanTestBase.assertContains(plan2, "6:HASH JOIN\n" +
+        PlanTestBase.assertContainsIgnoreColRefs(plan2, "7:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (COLOCATE)\n" +
                 "  |  colocate: true\n" +
-                "  |  equal join conjunct: 15: deptno = 20: deptno");
-        PlanTestBase.assertContains(plan2, "2:OlapScanNode\n" +
+                "  |  equal join conjunct: 15: deptno = 18: deptno");
+        PlanTestBase.assertContainsIgnoreColRefs(plan2, "2:OlapScanNode\n" +
                 "     TABLE: emps2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 15: deptno < 120, 15: deptno >= 100\n" +
                 "     partitions=1/1");
-        PlanTestBase.assertContains(plan2, "1:OlapScanNode\n" +
+        PlanTestBase.assertContainsIgnoreColRefs(plan2, "1:OlapScanNode\n" +
                 "     TABLE: depts2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 18: deptno < 120, 18: deptno >= 100");
@@ -245,17 +249,15 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
         String plan8 = getFragmentPlan(query8);
 
         PlanTestBase.assertContains(plan8, "join_agg_union_mv_2");
-        PlanTestBase.assertContains(plan8, "4:HASH JOIN\n" +
-                "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
+        PlanTestBase.assertContainsIgnoreColRefs(plan8, "5:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 20: v1 = 24: t1d\n" +
-                "  |  \n" +
-                "  |----3:EXCHANGE");
-        PlanTestBase.assertContains(plan8, "2:OlapScanNode\n" +
+                "  |  equal join conjunct: 24: t1d = 20: v1");
+        PlanTestBase.assertContainsIgnoreColRefs(plan8, "1:OlapScanNode\n" +
                 "     TABLE: test_all_type2\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 24: t1d >= 100, 24: t1d < 120");
-        PlanTestBase.assertContains(plan8, "1:OlapScanNode\n" +
+        PlanTestBase.assertContainsIgnoreColRefs(plan8, "1:OlapScanNode\n" +
                 "     TABLE: t02\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 20: v1 >= 100, 20: v1 < 120");
@@ -342,5 +344,121 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
         String plan6 = getFragmentPlan(query6);
         PlanTestBase.assertContains(plan6, "mv_agg_1", "emps", "UNION");
         dropMv("test", "mv_agg_1");
+    }
+
+    @Test
+    public void testUnionAllRewriteWithExtraPredicates() {
+        starRocksAssert.withTable(new MTable("mt1", "k1",
+                        List.of(
+                                "k1 INT",
+                                "k2 string",
+                                "v1 INT",
+                                "v2 INT"
+                        ),
+                        "k1",
+                        List.of(
+                                "PARTITION `p1` VALUES LESS THAN ('3')",
+                                "PARTITION `p2` VALUES LESS THAN ('6')",
+                                "PARTITION `p3` VALUES LESS THAN ('9')"
+                        )
+                ),
+                () -> {
+                    cluster.runSql("test", "insert into mt1 values (1,1,1,1), (4,2,1,1);");
+                    starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW union_mv0 " +
+                            " PARTITION BY (k1) " +
+                            " DISTRIBUTED BY HASH(k1) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " AS SELECT k1,k2, v1,v2 from mt1;");
+                    starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW union_mv0 \n" +
+                            "PARTITION START ('%s') END ('%s')", "1", "3"));
+                    MaterializedView mv1 = getMv("test", "union_mv0");
+                    Set<String> mvNames = mv1.getPartitionNames();
+                    Assert.assertEquals("[p1]", mvNames.toString());
+
+                    {
+                        String[] sqls = {
+                                "SELECT k1,k2, v1,v2 from mt1 where k1=1",
+                                "SELECT k1,k2, v1,v2 from mt1 where k1<3",
+                                "SELECT k1,k2, v1,v2 from mt1 where k1<2",
+                        };
+                        for (String query : sqls) {
+                            String plan = getFragmentPlan(query);
+                            PlanTestBase.assertNotContains(plan, ":UNION");
+                            PlanTestBase.assertContains(plan, "union_mv0");
+                        }
+                    }
+                    {
+                        String query = "SELECT k1,k2, v1,v2 from mt1 where k1<6";
+                        String plan = getFragmentPlan(query);
+                        PlanTestBase.assertContains(plan, ":UNION");
+                        PlanTestBase.assertContains(plan, "union_mv0");
+                    }
+
+                    {
+                        List<Pair<String, String>> sqls = List.of(
+                                Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1<6 and k2 like 'a%'",
+                                        "1:OlapScanNode\n" +
+                                                "     TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 10: k2 LIKE 'a%'"),
+                                // TODO: remove redundant predicates
+                                Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1 != 3 and k2 like 'a%'",
+                                        "TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 9: k1 != 3, (9: k1 < 3) OR (9: k1 > 3), 10: k2 LIKE 'a%'\n" +
+                                                "     partitions=2/3")
+                        );
+                        for (Pair<String, String> p : sqls) {
+                            String query = p.first;
+                            String plan = getFragmentPlan(query);
+                            PlanTestBase.assertContains(plan, ":UNION");
+                            PlanTestBase.assertContainsIgnoreColRefs(plan, "union_mv0", p.second);
+                        }
+                    }
+                    {
+                        String query = "SELECT k1,k2, v1,v2 from mt1 where k1 > 0 and k2 like 'a%'";
+                        String plan = getFragmentPlan(query);
+                        PlanTestBase.assertNotContains(plan, ":UNION", "union_mv0");
+                    }
+                    {
+                        List<Pair<String, String>> sqls = List.of(
+                                Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>1 and k2 like 'a%'",
+                                        "1:OlapScanNode\n" +
+                                                "     TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 9: k1 > 1, (9: k1 >= 3) OR (9: k1 IS NULL), 10: k2 LIKE 'a%'"),
+                                Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>1 and k2 like 'a%'",
+                                        "1:OlapScanNode\n" +
+                                                "     TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 9: k1 > 1, 10: k2 LIKE 'a%', (9: k1 >= 3) OR (9: k1 IS NULL)"),
+                                Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>0 and k2 like 'a%'",
+                                        "1:OlapScanNode\n" +
+                                                "     TABLE: mt1\n" +
+                                                "     PREAGGREGATION: ON\n" +
+                                                "     PREDICATES: 9: k1 > 0, 10: k2 LIKE 'a%', (9: k1 >= 3) OR (9: k1 IS NULL)")
+                                );
+                        QueryDebugOptions debugOptions = new QueryDebugOptions();
+                        debugOptions.setEnableMVEagerUnionAllRewrite(true);
+                        connectContext.getSessionVariable().setQueryDebugOptions(debugOptions.toString());
+                        for (Pair<String, String> p : sqls) {
+                            String query = p.first;
+                            String plan = getFragmentPlan(query);
+                            PlanTestBase.assertContains(plan, ":UNION");
+                            PlanTestBase.assertContainsIgnoreColRefs(plan, "union_mv0", p.second);
+                        }
+                    }
+                    starRocksAssert.dropMaterializedView("union_mv0");
+                }
+        );
+    }
+    @Test
+    public void testAssertContainsIgnoreColRefs() {
+        String p1 = "7:SELECT\n" +
+                "  |  predicates: 1: k1 > 1, 2: k2 LIKE 'a%'";
+        String p =
+                "7:SELECT\n" +
+                "  |  predicates: 2: k2 LIKE 'a%', 1: k1 > 1";
+        PlanTestBase.assertContainsIgnoreColRefs(p1, p);
     }
 }

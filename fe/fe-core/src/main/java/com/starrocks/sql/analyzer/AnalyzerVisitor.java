@@ -560,13 +560,13 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitAlterSystemStatement(AlterSystemStmt statement, ConnectContext context) {
-        AlterSystemStmtAnalyzer.analyze(statement, context);
+        new AlterSystemStmtAnalyzer().analyze(statement, context);
         return null;
     }
 
     @Override
     public Void visitCancelAlterSystemStatement(CancelAlterSystemStmt statement, ConnectContext context) {
-        AlterSystemStmtAnalyzer.analyze(statement, context);
+        new AlterSystemStmtAnalyzer().analyze(statement, context);
         return null;
     }
 

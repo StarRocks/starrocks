@@ -1876,6 +1876,38 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testBitmapUnionAggRewrite() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToMetaScan(true);
+        // normal case
+        String sql = "select " +
+                "bitmap_union(to_bitmap(t1a))," + // varchar
+                "bitmap_union(to_bitmap(t1b))," + // smallint
+                "bitmap_union(to_bitmap(t1c))," + // int
+                "bitmap_union(to_bitmap(t1d))," + // bigint
+                "bitmap_union(to_bitmap(t1e))," + // float
+                "bitmap_union(to_bitmap(t1f))," + //double
+                "bitmap_union(to_bitmap(t1g))," + // bigint
+                "bitmap_union(to_bitmap(id_datetime))," + // datetime
+                "bitmap_union(to_bitmap(id_date))," + // date
+                "bitmap_union(to_bitmap(id_decimal))" + //decimal
+                "from test_all_type_not_null";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
+                "  |  output: bitmap_union(to_bitmap(1: t1a)), " +
+                "bitmap_agg(2: t1b), " +
+                "bitmap_agg(3: t1c), " +
+                "bitmap_agg(4: t1d), " +
+                "bitmap_union(to_bitmap(CAST(5: t1e AS VARCHAR))), " +
+                "bitmap_union(to_bitmap(CAST(6: t1f AS VARCHAR))), " +
+                "bitmap_agg(7: t1g), " +
+                "bitmap_union(to_bitmap(CAST(8: id_datetime AS VARCHAR))), " +
+                "bitmap_union(to_bitmap(CAST(9: id_date AS VARCHAR))), " +
+                "bitmap_union(to_bitmap(CAST(10: id_decimal AS VARCHAR)))\n" +
+                "  |  group by: ");
+
+    }
+
+    @Test
     public void testGroupByLiteral() throws Exception {
         String sql = "select -9223372036854775808 group by TRUE;";
         String plan = getFragmentPlan(sql);
@@ -2560,5 +2592,30 @@ public class AggregateTest extends PlanTestBase {
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=0/1");
+    }
+
+    @Test
+    public void testLegacyGroupConcat() throws Exception {
+        String sql = "select /*+ set_var(sql_mode = GROUP_CONCAT_LEGACY) */ group_concat(v1) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), ', ')");
+
+        sql = "select /*+ set_var('sql_mode' = 'GROUP_CONCAT_LEGACY, ONLY_full_group_by') */ group_concat(v1, '-') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-')");
+
+
+        sql = "select /*+ set_var(sql_mode = '68719476768') */ group_concat(v1, '-') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-')");
+
+        sql = "select /*+ set_var(sql_mode = 68719476768) */ group_concat(v1, '-') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-')");
+
+        // overwrite the GROUP_CONCAT_LEGACY
+        sql = "select /*+ set_var(sql_mode = 68719476768) */ /*+ set_var(sql_mode = 32) */ group_concat(v1, '-') from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "output: group_concat(CAST(1: v1 AS VARCHAR), '-', ',')");
     }
 }

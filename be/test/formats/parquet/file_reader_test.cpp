@@ -31,6 +31,7 @@
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
 #include "formats/parquet/parquet_test_util/util.h"
+#include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptor_helper.h"
@@ -666,44 +667,8 @@ HdfsScannerContext* FileReaderTest::_create_file_struct_in_struct_prune_and_no_o
 
 void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, int value,
                                                std::vector<ExprContext*>* conjunct_ctxs) {
-    std::vector<TExprNode> nodes;
-
-    TExprNode node0;
-    node0.node_type = TExprNodeType::BINARY_PRED;
-    node0.opcode = opcode;
-    node0.child_type = TPrimitiveType::INT;
-    node0.num_children = 2;
-    node0.__isset.opcode = true;
-    node0.__isset.child_type = true;
-    node0.type = gen_type_desc(TPrimitiveType::BOOLEAN);
-    nodes.emplace_back(node0);
-
-    TExprNode node1;
-    node1.node_type = TExprNodeType::SLOT_REF;
-    node1.type = gen_type_desc(TPrimitiveType::INT);
-    node1.num_children = 0;
-    TSlotRef t_slot_ref = TSlotRef();
-    t_slot_ref.slot_id = slot_id;
-    t_slot_ref.tuple_id = 0;
-    node1.__set_slot_ref(t_slot_ref);
-    node1.is_nullable = true;
-    nodes.emplace_back(node1);
-
-    TExprNode node2;
-    node2.node_type = TExprNodeType::INT_LITERAL;
-    node2.type = gen_type_desc(TPrimitiveType::INT);
-    node2.num_children = 0;
-    TIntLiteral int_literal;
-    int_literal.value = value;
-    node2.__set_int_literal(int_literal);
-    node2.is_nullable = false;
-    nodes.emplace_back(node2);
-
-    TExpr t_expr;
-    t_expr.nodes = nodes;
-
     std::vector<TExpr> t_conjuncts;
-    t_conjuncts.emplace_back(t_expr);
+    ParquetUTBase::append_int_conjunct(opcode, slot_id, value, &t_conjuncts);
 
     ASSERT_OK(Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs, nullptr));
     ASSERT_OK(Expr::prepare(*conjunct_ctxs, _runtime_state));
@@ -1240,7 +1205,7 @@ TEST_F(FileReaderTest, TestReadWithUpperPred) {
     auto chunk = _create_struct_chunk();
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
-    LOG(ERROR) << "status: " << status.get_error_msg();
+    LOG(ERROR) << "status: " << status.message();
     ASSERT_EQ(3, chunk->num_rows());
 
     ColumnPtr int_col = chunk->get_column_by_slot_id(0);
@@ -1322,7 +1287,7 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     //init
     auto* ctx = _create_file_map_char_key_context();
     Status status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok()) << status.get_error_msg();
+    ASSERT_TRUE(status.ok()) << status.message();
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
     std::vector<io::SharedBufferedInputStream::IORange> ranges;
@@ -1349,7 +1314,7 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     chunk->append_column(c_map1, chunk->num_columns());
 
     status = file_reader->get_next(&chunk);
-    ASSERT_TRUE(status.ok()) << status.get_error_msg();
+    ASSERT_TRUE(status.ok()) << status.message();
     EXPECT_EQ(chunk->num_rows(), 1);
     EXPECT_EQ(chunk->debug_row(0), "[0, {'abc':123}, {'def':456}]");
 }
@@ -1668,7 +1633,7 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitive) {
 
     Status status = file_reader->init(ctx);
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
     ASSERT_TRUE(status.ok());
 
@@ -1723,7 +1688,7 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitiveError) {
     Status status = file_reader->init(ctx);
     EXPECT_TRUE(!status.ok());
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
 }
 
@@ -1765,7 +1730,7 @@ TEST_F(FileReaderTest, TestReadStructNull) {
 
     Status status = file_reader->init(ctx);
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
     ASSERT_TRUE(status.ok());
 
@@ -1809,7 +1774,7 @@ TEST_F(FileReaderTest, TestReadBinary) {
 
     Status status = file_reader->init(ctx);
     if (!status.ok()) {
-        std::cout << status.get_error_msg() << std::endl;
+        std::cout << status.message() << std::endl;
     }
     ASSERT_TRUE(status.ok());
 
@@ -2091,7 +2056,7 @@ TEST_F(FileReaderTest, TestReadArrayMap) {
     // Illegal parquet files, not support it anymore
     ASSERT_FALSE(status.ok());
 
-    //  ASSERT_TRUE(status.ok()) << status.get_error_msg();
+    //  ASSERT_TRUE(status.ok()) << status.message();
     //  EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
     //
     //  auto chunk = std::make_shared<Chunk>();
@@ -2395,8 +2360,8 @@ TEST_F(FileReaderTest, TestHudiMORTwoNestedLevelArray) {
     Status status = file_reader->init(ctx);
 
     // Illegal parquet files, not support it anymore
-    ASSERT_FALSE(status.ok()) << status.get_error_msg();
-    // ASSERT_TRUE(status.ok()) << status.get_error_msg();
+    ASSERT_FALSE(status.ok()) << status.message();
+    // ASSERT_TRUE(status.ok()) << status.message();
 
     //  EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
     //
@@ -2496,7 +2461,7 @@ TEST_F(FileReaderTest, TestLateMaterializationAboutRequiredComplexType) {
         chunk->reset();
         status = file_reader->get_next(&chunk);
         if (!status.ok() && !status.is_end_of_file()) {
-            std::cout << status.get_error_msg() << std::endl;
+            std::cout << status.message() << std::endl;
             break;
         }
         chunk->check_or_die();
@@ -2711,7 +2676,7 @@ TEST_F(FileReaderTest, CheckLargeParquetHeader) {
         chunk->reset();
         status = file_reader->get_next(&chunk);
         if (!status.ok()) {
-            std::cout << status.get_error_msg() << std::endl;
+            std::cout << status.message() << std::endl;
             break;
         }
         chunk->check_or_die();
@@ -2779,9 +2744,9 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
     TypeDescriptor type_int = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
 
     Utils::SlotDesc slot_descs[] = {
-            {"data", type_data},
-            {"struct", type_struct},
-            {"int", type_int},
+            {"data", type_data, 0},
+            {"struct", type_struct, 1},
+            {"int", type_int, 2},
             {""},
     };
 
@@ -2790,12 +2755,15 @@ TEST_F(FileReaderTest, TestMinMaxForIcebergTable) {
     ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
 
     Utils::SlotDesc min_max_slots[] = {
-            {"int", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+            {"int", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 2},
             {""},
     };
     ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
-    _create_int_conjunct_ctxs(TExprOpcode::GE, 0, 5, &ctx->min_max_conjunct_ctxs);
-    _create_int_conjunct_ctxs(TExprOpcode::LE, 0, 5, &ctx->min_max_conjunct_ctxs);
+    std::vector<TExpr> t_conjuncts;
+    ParquetUTBase::append_int_conjunct(TExprOpcode::GE, 2, 5, &t_conjuncts);
+    ParquetUTBase::append_int_conjunct(TExprOpcode::LE, 2, 5, &t_conjuncts);
+
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
     // --------------finish init context---------------
 
     Status status = file_reader->init(ctx);
@@ -2914,7 +2882,7 @@ TEST_F(FileReaderTest, TestRandomReadWith2PageSize) {
                     chunk->check_or_die();
                     total_row_nums += chunk->num_rows();
                     if (!status.ok() && !status.is_end_of_file()) {
-                        std::cout << status.get_error_msg() << std::endl;
+                        std::cout << status.message() << std::endl;
                         DCHECK(false) << "file path: " << file_path << ", " << _print_in_predicate();
                     }
                     // check row value
@@ -3169,6 +3137,66 @@ TEST_F(FileReaderTest, TestReadFooterCache) {
     ASSERT_TRUE(status2.ok());
     ASSERT_EQ(ctx2->stats->footer_cache_read_count, 1);
     ASSERT_EQ(ctx2->stats->footer_cache_write_count, 0);
+}
+
+TEST_F(FileReaderTest, TestTime) {
+    // format:
+    // id: INT, b: TIME
+    const std::string filepath = "./be/test/formats/parquet/test_data/test_parquet_time_type.parquet";
+    auto file = _create_file(filepath);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(filepath), 100000);
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor type_int = TypeDescriptor::from_logical_type(LogicalType::TYPE_INT);
+
+    TypeDescriptor type_time = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
+
+    Utils::SlotDesc slot_descs[] = {
+            {"c1", type_int},
+            {"c2", type_time},
+            {""},
+    };
+
+    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file_col_not_null_path));
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(type_int, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(type_time, true), chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+
+    chunk->check_or_die();
+
+    EXPECT_EQ("[1, 3723]", chunk->debug_row(0));
+    EXPECT_EQ("[4, NULL]", chunk->debug_row(1));
+    EXPECT_EQ("[3, 11045]", chunk->debug_row(2));
+    EXPECT_EQ("[2, 7384]", chunk->debug_row(3));
+
+    size_t total_row_nums = 0;
+    total_row_nums += chunk->num_rows();
+
+    {
+        while (!status.is_end_of_file()) {
+            chunk->reset();
+            status = file_reader->get_next(&chunk);
+            chunk->check_or_die();
+            total_row_nums += chunk->num_rows();
+        }
+    }
+
+    EXPECT_EQ(4, total_row_nums);
 }
 
 } // namespace starrocks::parquet

@@ -604,7 +604,6 @@ The conditional update feature is designed to resolve data disorder. If the sour
 > - You cannot specify different columns as update conditions for the same batch of data.
 > - DELETE operations do not support conditional updates.
 > - In versions earlier than v3.1.3, partial updates and conditional updates cannot be used simultaneously. From v3.1.3 onwards, StarRocks supports using partial updates with conditional updates.
-> - Only Stream Load and Routine Load support conditional updates.
 
 ### Data examples
 
@@ -677,6 +676,20 @@ Run a load to update the records whose `id` values are `101` and `102`, respecti
       "kafka_broker_list" ="<kafka_broker_host>:<kafka_broker_port>",
       "kafka_topic" = "topic5",
       "property.kafka_default_offsets" ="OFFSET_BEGINNING"
+  );
+  ```
+
+- Run a Broker Load job:
+
+  ```SQL
+  LOAD LABEL test_db.table5
+  ( DATA INFILE ("s3://xxx.csv")
+    INTO TABLE table5 COLUMNS TERMINATED BY "," FORMAT AS "CSV"
+  )
+  WITH BROKER
+  PROPERTIES
+  (
+      "merge_condition" = "version"
   );
   ```
 

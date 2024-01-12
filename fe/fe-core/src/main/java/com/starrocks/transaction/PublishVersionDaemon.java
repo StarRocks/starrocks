@@ -41,7 +41,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -55,9 +54,13 @@ import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
+import com.starrocks.proto.DeleteTxnLogRequest;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
@@ -91,6 +94,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
     private static final int LAKE_PUBLISH_MAX_QUEUE_SIZE = 4096;
 
     private ThreadPoolExecutor lakeTaskExecutor;
+    private ThreadPoolExecutor deleteTxnLogExecutor;
     private Set<Long> publishingLakeTransactions;
 
     private Set<Long> publishingLakeTransactionsBatchTableId;
@@ -212,6 +216,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
      * 3) the new task will be rejected once the total number of threads reaches `corePoolSize` and the queue is also full.
      * <p>
      * core threads will be idle and timed out if no more tasks for a while (60 seconds by default).
+     *
      * @return the thread pool executor
      */
     private @NotNull ThreadPoolExecutor getLakeTaskExecutor() {
@@ -229,6 +234,26 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     .registerListener(() -> this.adjustLakeTaskExecutor());
         }
         return lakeTaskExecutor;
+    }
+
+    private @NotNull ThreadPoolExecutor getDeleteTxnLogExecutor() {
+        if (deleteTxnLogExecutor == null) {
+            // Create a new thread for every task if there is no idle threads available.
+            // Idle threads will be cleaned after `KEEP_ALIVE_TIME` seconds, which is 60 seconds by default.
+            int numThreads = Math.max(Config.lake_publish_delete_txnlog_max_threads, 1);
+            deleteTxnLogExecutor = ThreadPoolManager.newDaemonCacheThreadPool(numThreads,
+                    "lake-publish-delete-txnLog", true);
+
+            // register ThreadPool config change listener
+            GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+                int newMaxThreads = Config.lake_publish_delete_txnlog_max_threads;
+                if (deleteTxnLogExecutor != null && newMaxThreads > 0
+                        && deleteTxnLogExecutor.getMaximumPoolSize() != newMaxThreads) {
+                    deleteTxnLogExecutor.setMaximumPoolSize(Config.lake_publish_delete_txnlog_max_threads);
+                }
+            });
+        }
+        return deleteTxnLogExecutor;
     }
 
     private @NotNull Set<Long> getPublishingLakeTransactions() {
@@ -486,7 +511,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 return true;
             }
 
-            Partition partition = table.getPartition(partitionId);
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.info("partition is null in publish partition batch");
                 return true;
@@ -543,19 +568,61 @@ public class PublishVersionDaemon extends FrontendDaemon {
 
                 // commit time of last transactionState as commitTime
                 long commitTime = transactionStates.get(transactionStates.size() - 1).getCommitTime();
+
+                // used to delete txnLog when publish success
+                Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
                 Utils.publishVersionBatch(publishTablets, txnIds,
-                        startVersion - 1, endVersion, commitTime, compactionScores);
+                        startVersion - 1, endVersion, commitTime, compactionScores, nodeToTablets);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
+                stateBatch.putBeTablets(partitionId, nodeToTablets);
             }
-        } catch (Throwable e) {
-            LOG.error("Fail to publish partition {} of txnIds {}: {}", partitionId,
-                    txnIds, e.getMessage());
+        } catch (Exception e) {
+            LOG.error("Fail to publish partition {} of txnIds {}:", partitionId,
+                    txnIds, e);
             return false;
         }
 
         return true;
+    }
+
+    private void submitDeleteTxnLogJob(TransactionStateBatch txnStateBatch, Map<Long, List<Long>> dirtyPartitions) {
+        try {
+            // submit may throw RejectedExecutionException if the task cannot be scheduled for execution
+            getDeleteTxnLogExecutor().submit(() -> {
+                txnStateBatch.getPartitionToTablets().entrySet().stream().forEach(entry -> {
+                    long partitionId = entry.getKey();
+                    List<Long> txnIds = dirtyPartitions.get(partitionId);
+                    Map<ComputeNode, Set<Long>> nodeToTablets = entry.getValue();
+
+                    for (Map.Entry<ComputeNode, Set<Long>> entryItem : nodeToTablets.entrySet()) {
+                        // check whether the node is still alive
+                        ComputeNode node = entryItem.getKey();
+                        if (!node.isAlive()) {
+                            LOG.warn("Backend or computeNode {} been dropped or not alive " +
+                                            "while building publish version request",
+                                    entryItem.getKey());
+                            continue;
+                        }
+
+                        DeleteTxnLogRequest request = new DeleteTxnLogRequest();
+                        request.tabletIds = new ArrayList<>(entryItem.getValue());
+                        request.txnIds = txnIds;
+                        try {
+                            LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
+                            // just ignore the response, for we don't care the result of delete txn log
+                            // and vacuum will clan the txn log finally if it failed.
+                            lakeService.deleteTxnLog(request);
+                        } catch (Exception e) {
+                            LOG.warn("delete txn log error: " + e.getMessage());
+                        }
+                    }
+                });
+            });
+        } catch (Exception e) {
+            LOG.warn("delete txn log error: " + e.getMessage());
+        }
     }
 
     private CompletableFuture<Void> publishLakeTransactionBatchAsync(TransactionStateBatch txnStateBatch) {
@@ -650,6 +717,8 @@ public class PublishVersionDaemon extends FrontendDaemon {
                         refreshMvIfNecessary(state);
                     }
 
+                    // here create the job to drop txnLog, for the visibleVersion has been updated
+                    submitDeleteTxnLogJob(txnStateBatch, dirtyPartitons);
                 } catch (UserException e) {
                     throw new RuntimeException(e);
                 }
@@ -705,6 +774,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                                      @NotNull PartitionCommitInfo partitionCommitInfo,
                                      @NotNull TransactionState txnState) {
         long tableId = tableCommitInfo.getTableId();
+        long baseVersion = 0;
         long txnVersion = partitionCommitInfo.getVersion();
         long txnId = txnState.getTransactionId();
         long commitTime = txnState.getCommitTime();
@@ -727,9 +797,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 LOG.info("Ignore non-exist partition {} of table {} in txn {}", partitionId, table.getName(), txnLabel);
                 return true;
             }
-            if (partition.getVisibleVersion() + 1 != txnVersion) {
+            if (txnState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
+                    partition.getVisibleVersion() + 1 != txnVersion) {
                 return false;
             }
+            baseVersion = partition.getVisibleVersion();
             List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
             for (MaterializedIndex index : indexes) {
                 if (!index.visibleForTransaction(txnId)) {
@@ -754,7 +826,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             if (CollectionUtils.isNotEmpty(normalTablets)) {
                 Map<Long, Double> compactionScores = new HashMap<>();
-                Utils.publishVersion(normalTablets, txnId, txnVersion - 1, txnVersion, commitTime / 1000,
+                Utils.publishVersion(normalTablets, txnId, baseVersion, txnVersion, commitTime / 1000,
                         compactionScores);
 
                 Quantiles quantiles = Quantiles.compute(compactionScores.values());

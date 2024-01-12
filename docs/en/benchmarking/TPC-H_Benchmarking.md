@@ -921,7 +921,7 @@ create database if not exists tpch_sr;
 use tpch_sr;
 CREATE EXTERNAL RESOURCE "hive_test" PROPERTIES (
   "type" = "hive",
-  "hive.metastore.uris" = "thrift://xxx.xxx.xxx.xxx:9083"
+  "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 CREATE EXTERNAL TABLE IF NOT EXISTS nation (
     n_nationkey int,

@@ -29,16 +29,12 @@ public class TableSnapshotInfo {
     private final BaseTableInfo baseTableInfo;
     private final Table baseTable;
 
-    // used for iceberg table
-    private final long refreshSnapshotTime;
-
     // partition's base info to be used in `updateMeta`
     Map<String, MaterializedView.BasePartitionInfo> refreshedPartitionInfos = Maps.newHashMap();
 
-    public TableSnapshotInfo(BaseTableInfo baseTableInfo, Table baseTable, long refreshSnapshotTime) {
+    public TableSnapshotInfo(BaseTableInfo baseTableInfo, Table baseTable) {
         this.baseTableInfo = baseTableInfo;
         this.baseTable = baseTable;
-        this.refreshSnapshotTime = refreshSnapshotTime;
     }
 
     public BaseTableInfo getBaseTableInfo() {
@@ -47,10 +43,6 @@ public class TableSnapshotInfo {
 
     public Table getBaseTable() {
         return baseTable;
-    }
-
-    public long getRefreshSnapshotTime() {
-        return refreshSnapshotTime;
     }
 
     public Map<String, MaterializedView.BasePartitionInfo> getRefreshedPartitionInfos() {

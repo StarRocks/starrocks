@@ -119,7 +119,8 @@ public class OlapTableFactory implements AbstractTableFactory {
                     partitionNameToId.put(desc.getPartitionName(), partitionId);
                 }
 
-                DynamicPartitionUtil.checkIfAutomaticPartitionAllowed(stmt.getProperties());
+                DynamicPartitionUtil.checkIfExpressionPartitionAllowed(stmt.getProperties(),
+                        expressionPartitionDesc.getExpr());
 
             } else {
                 throw new DdlException("Currently only support range or list partition with engine type olap");

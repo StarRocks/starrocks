@@ -47,8 +47,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     VLOG(3) << "Start horizontal compaction. tablet: " << _tablet.id() << ", reader chunk size: " << chunk_size;
 
     Schema schema = ChunkHelper::convert_schema(tablet_schema);
-    Tablet tablet(_tablet.tablet_manager(), _tablet.id());
-    TabletReader reader(tablet, _tablet.version(), schema, _input_rowsets);
+    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CUMULATIVE_COMPACTION;
@@ -100,9 +99,12 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     for (auto& rowset : _input_rowsets) {
         op_compaction->add_input_rowsets(rowset->id());
     }
+
     for (auto& file : writer->files()) {
-        op_compaction->mutable_output_rowset()->add_segments(file);
+        op_compaction->mutable_output_rowset()->add_segments(file.path);
+        op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
     }
+
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);

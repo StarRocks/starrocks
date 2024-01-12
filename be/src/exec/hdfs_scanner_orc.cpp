@@ -150,8 +150,14 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                 max_chunk->columns()[i]->append_nulls(1);
             } else {
                 auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(_scanner_ctx.partition_values[part_idx]);
-                min_chunk->columns()[i]->append(*const_column->data_column(), 0, 1);
-                max_chunk->columns()[i]->append(*const_column->data_column(), 0, 1);
+                ColumnPtr data_column = const_column->data_column();
+                if (data_column->is_nullable()) {
+                    min_chunk->columns()[i]->append_nulls(1);
+                    max_chunk->columns()[i]->append_nulls(1);
+                } else {
+                    min_chunk->columns()[i]->append(*data_column, 0, 1);
+                    max_chunk->columns()[i]->append(*data_column, 0, 1);
+                }
             }
         }
     }
@@ -402,7 +408,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             s.offset = stripeInfo.offset();
             s.length = stripeInfo.datalength() + stripeInfo.indexlength() + stripeInfo.footerlength();
             stripes.emplace_back(s);
-            _app_stats.stripe_sizes.push_back(s.length);
+            _app_stats.orc_stripe_sizes.push_back(s.length);
         }
         orc_hdfs_file_stream->setStripes(std::move(stripes));
     }
@@ -446,10 +452,10 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         }
 
         size_t chunk_size = 0;
-        size_t chunk_size_ori = 0;
+        size_t init_chunk_size = 0;
         if (_orc_reader->get_cvb_size() != 0) {
             chunk_size = _orc_reader->get_cvb_size();
-            chunk_size_ori = chunk_size;
+            init_chunk_size = chunk_size;
             {
                 StatusOr<ChunkPtr> ret;
                 SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
@@ -505,7 +511,7 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
 
         // if has lazy load fields, skip it if chunk_size == 0
         if (chunk_size == 0) {
-            _app_stats.late_materialize_skip_rows += chunk_size_ori;
+            _app_stats.late_materialize_skip_rows += init_chunk_size;
             continue;
         }
         {
@@ -534,13 +540,17 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
     _should_skip_file = false;
     _use_orc_sargs = true;
     // todo: build predicate hook and ranges hook.
+
     if (!scanner_params.deletes.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
-        IcebergDeleteBuilder iceberg_delete_builder(scanner_params.fs, scanner_params.path,
-                                                    scanner_params.conjunct_ctxs, scanner_params.materialize_slots,
-                                                    &_need_skip_rowids);
+        const IcebergDeleteBuilder iceberg_delete_builder(scanner_params.fs, scanner_params.path,
+                                                          scanner_params.conjunct_ctxs,
+                                                          scanner_params.materialize_slots, &_need_skip_rowids);
+
         for (const auto& tdelete_file : scanner_params.deletes) {
-            RETURN_IF_ERROR(iceberg_delete_builder.build_orc(runtime_state->timezone(), *tdelete_file));
+            RETURN_IF_ERROR(iceberg_delete_builder.build_orc(runtime_state->timezone(), *tdelete_file,
+                                                             scanner_params.mor_params.equality_slots, runtime_state,
+                                                             _mor_processor));
         }
         _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
     }
@@ -548,26 +558,33 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
     return Status::OK();
 }
 
-static const std::string kORCProfileSectionPrefix = "ORC";
-
 void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
-    RuntimeProfile::Counter* stripe_sizes_counter = nullptr;
-    RuntimeProfile::Counter* stripe_number_counter = nullptr;
+    const std::string orcProfileSectionPrefix = "ORC";
+
     RuntimeProfile* root = profile->runtime_profile;
+    ADD_COUNTER(root, orcProfileSectionPrefix, TUnit::NONE);
 
-    ADD_COUNTER(root, kORCProfileSectionPrefix, TUnit::NONE);
+    do_update_iceberg_v2_counter(root, orcProfileSectionPrefix);
 
-    do_update_iceberg_v2_counter(root, kORCProfileSectionPrefix);
-
-    // we expect to get average stripe size instead of sum.
-    stripe_sizes_counter = root->add_child_counter("StripeSizes", TUnit::BYTES,
-                                                   RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
-                                                   kORCProfileSectionPrefix);
-    stripe_number_counter = ADD_CHILD_COUNTER(root, "StripeNumber", TUnit::UNIT, kORCProfileSectionPrefix);
-    for (auto v : _app_stats.stripe_sizes) {
-        COUNTER_UPDATE(stripe_sizes_counter, v);
+    double total_stripe_size = 0;
+    for (const auto& v : _app_stats.orc_stripe_sizes) {
+        total_stripe_size += v;
     }
-    COUNTER_UPDATE(stripe_number_counter, _app_stats.stripe_sizes.size());
+    double avg_stripe_size = 0;
+    if (_app_stats.orc_stripe_sizes.size() > 0) {
+        // _app_stats.orc_stripe_sizes maybe zero
+        avg_stripe_size = total_stripe_size / _app_stats.orc_stripe_sizes.size();
+    }
+
+    RuntimeProfile::Counter* stripe_avg_size_counter = root->add_child_counter(
+            "PerFilePerStripeAvgSize", TUnit::BYTES,
+            RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG), orcProfileSectionPrefix);
+    RuntimeProfile::Counter* stripe_number_counter = root->add_child_counter(
+            "PerFileStripeNumber", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
+            orcProfileSectionPrefix);
+
+    COUNTER_UPDATE(stripe_avg_size_counter, avg_stripe_size);
+    COUNTER_UPDATE(stripe_number_counter, _app_stats.orc_stripe_sizes.size());
 }
 
 } // namespace starrocks

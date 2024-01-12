@@ -181,6 +181,7 @@ To synchronize data from MySQL in real time, the system needs to read data from 
 
     ```Bash
     [db]
+    type = mysql
     host = xxx.xx.xxx.xx
     port = 3306
     user = user1
@@ -214,7 +215,8 @@ To synchronize data from MySQL in real time, the system needs to read data from 
     flink.starrocks.sink.buffer-flush.interval-ms=15000
     ```
 
-    - `[db]`: MySQL connection information.
+    - `[db]`: information used to access the source database.
+       - `type`: type of the source database. In this topic, the source database is `mysql`.
        - `host`: IP address of the MySQL server.
        - `port`: port number of the MySQL database, defaults to `3306`
        - `user`: username for accessing the MySQL database

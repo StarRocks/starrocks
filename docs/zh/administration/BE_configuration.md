@@ -24,6 +24,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 以下是 BE 动态参数列表。
 
+#### enable_stream_load_verbose_log
+
+- 含义：是否在日志中记录 Stream Load 的 HTTP 请求和响应信息。
+- 默认值：false
+- **引入版本：**2.5.17、3.0.9、3.1.6、3.2.1
+
 #### report_task_interval_seconds
 
 - 含义：汇报单个任务的间隔。建表，删除表，导入，schema change 都可以被认定是任务。
@@ -182,9 +188,9 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### trash_file_expire_time_sec
 
-- 含义：回收站清理的间隔，默认 72 个小时。
+- 含义：回收站清理的间隔，默认 24 个小时。自 v2.5.17、v3.0.9 以及 v3.1.6 起，默认值由 259,200 变为 86,400。
 - 单位：秒
-- 默认值：259200
+- 默认值：86,400
 
 #### base_compaction_check_interval_seconds
 
@@ -731,7 +737,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### mem_limit
 
-- 含义：BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100GB"）。
+- 含义：BE 进程内存上限。可设为比例上限（如 "80%"）或物理上限（如 "100G"）。
 - 默认值：90%
 
 #### flush_thread_num_per_store

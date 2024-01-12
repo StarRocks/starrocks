@@ -29,6 +29,9 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 
 /**
  * starrocks's own java version bitmap
@@ -45,15 +48,18 @@ public class BitmapValue {
     public static final int BITMAP32 = 2;
     public static final int SINGLE64 = 3;
     public static final int BITMAP64 = 4;
+    public static final int SET = 10;
 
     public static final int SINGLE_VALUE = 1;
     public static final int BITMAP_VALUE = 2;
+    public static final int SET_VALUE = 3;
 
     public static final long UNSIGNED_32BIT_INT_MAX_VALUE = 4294967295L;
 
     private int bitmapType;
     private long singleValue;
     private Roaring64Map bitmap;
+    private Set<Long> set;
 
     // for single value serialize and deserialize
     private final ByteBuffer buffer;
@@ -64,6 +70,48 @@ public class BitmapValue {
         buffer = ByteBuffer.allocate(8);
         // be deserializes by little endian
         buffer.order(ByteOrder.LITTLE_ENDIAN);
+    }
+
+    public BitmapValue(long v) {
+        bitmapType = SINGLE_VALUE;
+        singleValue = v;
+
+        buffer = ByteBuffer.allocate(8);
+        // be deserializes by little endian
+        buffer.order(ByteOrder.LITTLE_ENDIAN);
+    }
+
+    public BitmapValue(long start, long end) {
+        bitmapType = EMPTY;
+        buffer = ByteBuffer.allocate(8);
+        // be deserializes by little endian
+        buffer.order(ByteOrder.LITTLE_ENDIAN);
+
+        for (long i = start; i < end; i++) {
+            add(i);
+        }
+    }
+
+    public BitmapValue(BitmapValue other) throws IOException {
+        buffer = ByteBuffer.allocate(8);
+        // be deserializes by little endian
+        buffer.order(ByteOrder.LITTLE_ENDIAN);
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        try {
+            DataOutput output = new DataOutputStream(outputStream);
+            other.serialize(output);
+        } catch (IOException e) {
+            throw new IOException("Error serializing bitmap: ", e);
+        } finally {
+            outputStream.close();
+        }
+
+        try (DataInputStream inputStream = new DataInputStream(new ByteArrayInputStream(outputStream.toByteArray()))) {
+            deserialize(inputStream);
+        } catch (IOException e) {
+            throw new IOException("Error deserializing bitmap: ", e);
+        }
     }
 
     public static byte[] bitmapToBytes(BitmapValue bitmap) throws IOException {
@@ -98,16 +146,41 @@ public class BitmapValue {
                 break;
             case SINGLE_VALUE:
                 if (this.singleValue != value) {
-                    bitmap = new Roaring64Map();
-                    bitmap.add(value);
-                    bitmap.add(singleValue);
-                    bitmapType = BITMAP_VALUE;
+                    set = new HashSet<>();
+                    set.add(value);
+                    set.add(singleValue);
+                    bitmapType = SET_VALUE;
                 }
                 break;
             case BITMAP_VALUE:
                 bitmap.addLong(value);
                 break;
+            case SET_VALUE:
+                if (set.size() < 32) {
+                    set.add(value);
+                } else {
+                    fromSetToBitmap();
+                    bitmap.add(value);
+                }
+                break;
         }
+    }
+
+    private void fromSetToBitmap() {
+        bitmap = new Roaring64Map();
+        for (Long v : set) {
+            bitmap.add(v);
+        }
+        set = null;
+        bitmapType = BITMAP_VALUE;
+    }
+
+    private Roaring64Map fromSetToBitmap(Set<Long> set) {
+        Roaring64Map bitmap = new Roaring64Map();
+        for (Long v : set) {
+            bitmap.add(v);
+        }
+        return bitmap;
     }
 
     public boolean contains(int value) {
@@ -116,13 +189,14 @@ public class BitmapValue {
 
     public boolean contains(long value) {
         switch (bitmapType) {
-            case EMPTY:
-                return false;
             case SINGLE_VALUE:
                 return singleValue == value;
             case BITMAP_VALUE:
                 return bitmap.contains(value);
+            case SET_VALUE:
+                return set.contains(value);
             default:
+                // EMPTY
                 return false;
         }
     }
@@ -135,6 +209,8 @@ public class BitmapValue {
                 return 1;
             case BITMAP_VALUE:
                 return bitmap.getLongCardinality();
+            case SET_VALUE:
+                return set.size();
         }
         return 0;
     }
@@ -160,6 +236,14 @@ public class BitmapValue {
             case BITMAP_VALUE:
                 bitmap.serialize(output);
                 break;
+            case SET_VALUE: {
+                output.writeByte(SET);
+                output.writeInt(Integer.reverseBytes(set.size()));
+                for (Long v : set) {
+                    output.writeLong(Long.reverseBytes(v));
+                }
+                break;
+            }
         }
     }
 
@@ -194,6 +278,17 @@ public class BitmapValue {
                 bitmap.deserialize(input, bitmapType);
                 this.bitmapType = BITMAP_VALUE;
                 break;
+            case SET:
+                if (set == null) {
+                    set = new HashSet<>();
+                }
+                int size = Integer.reverseBytes(input.readInt());
+                for (int i = 0; i < size; i++) {
+                    Long v = Long.reverseBytes(input.readLong());
+                    set.add(v);
+                }
+                this.bitmapType = SET_VALUE;
+                break;
             default:
                 throw new RuntimeException(String.format("unknown bitmap type %s ", bitmapType));
         }
@@ -223,6 +318,15 @@ public class BitmapValue {
                             this.bitmapType = SINGLE_VALUE;
                         }
                         break;
+                    case SET_VALUE:
+                        if (!this.set.contains(other.singleValue)) {
+                            clear();
+                        } else {
+                            clear();
+                            this.singleValue = other.singleValue;
+                            this.bitmapType = SINGLE_VALUE;
+                        }
+                        break;
                 }
                 break;
             case BITMAP_VALUE:
@@ -236,8 +340,49 @@ public class BitmapValue {
                         break;
                     case BITMAP_VALUE:
                         this.bitmap.and(other.bitmap);
-                        convertToSmallerType();
+                        convertBitmapToSmallerType();
                         break;
+                    case SET_VALUE:
+                        Set<Long> newSet = new HashSet<>();
+                        for (Long v : set) {
+                            if (other.bitmap.contains(v)) {
+                                newSet.add(v);
+                            }
+                        }
+                        set = newSet;
+                        break;
+                }
+                break;
+            case SET_VALUE:
+                switch (this.bitmapType) {
+                    case EMPTY:
+                        break;
+                    case SINGLE_VALUE:
+                        if (!other.set.contains(this.singleValue)) {
+                            clear();
+                        }
+                        break;
+                    case BITMAP_VALUE: {
+                        Set<Long> newSet = new HashSet<>();
+                        for (Long v : other.set) {
+                            if (this.bitmap.contains(v)) {
+                                newSet.add(v);
+                            }
+                        }
+                        set = newSet;
+                        bitmapType = SET_VALUE;
+                        break;
+                    }
+                    case SET_VALUE: {
+                        Set<Long> newSet = new HashSet<>();
+                        for (Long v : other.set) {
+                            if (this.set.contains(v)) {
+                                newSet.add(v);
+                            }
+                        }
+                        set = newSet;
+                        break;
+                    }
                 }
                 break;
         }
@@ -254,16 +399,154 @@ public class BitmapValue {
             case BITMAP_VALUE:
                 switch (this.bitmapType) {
                     case EMPTY:
-                        this.bitmap = other.bitmap;
+                        this.bitmap = new Roaring64Map();
+                        this.bitmap.or(other.bitmap);
                         this.bitmapType = BITMAP_VALUE;
                         break;
                     case SINGLE_VALUE:
-                        this.bitmap = other.bitmap;
+                        this.bitmap = new Roaring64Map();
+                        this.bitmap.or(other.bitmap);
                         this.bitmap.add(this.singleValue);
                         this.bitmapType = BITMAP_VALUE;
                         break;
                     case BITMAP_VALUE:
                         this.bitmap.or(other.bitmap);
+                        break;
+                    case SET_VALUE: {
+                        this.bitmap = new Roaring64Map();
+                        this.bitmap.or(other.bitmap);
+                        for (Long v : this.set) {
+                            this.bitmap.add(v);
+                        }
+                        this.bitmapType = BITMAP_VALUE;
+                        this.set = null;
+                        break;
+                    }
+                }
+                break;
+            case SET_VALUE:
+                switch (this.bitmapType) {
+                    case EMPTY: {
+                        this.set = new HashSet<>();
+                        this.set.addAll(other.set);
+                        this.bitmapType = SET_VALUE;
+                        break;
+                    }
+                    case SINGLE_VALUE: {
+                        this.set = new HashSet<>(other.set);
+                        if (other.set.size() < 32) {
+                            this.set.add(singleValue);
+                            this.bitmapType = SET_VALUE;
+                        } else {
+                            fromSetToBitmap();
+                            this.bitmap.add(singleValue);
+                        }
+                        break;
+                    }
+                    case SET_VALUE: {
+                        for (Long v : other.set) {
+                            add(v);
+                        }
+                        break;
+                    }
+                    case BITMAP_VALUE: {
+                        for (Long v : other.set) {
+                            bitmap.add(v);
+                        }
+                        break;
+                    }
+                }
+                break;
+        }
+    }
+
+    public void xor(BitmapValue other) throws IOException {
+        switch (other.bitmapType) {
+            case EMPTY:
+                break;
+            case SINGLE_VALUE:
+                switch (bitmapType) {
+                    case EMPTY:
+                        add(other.singleValue);
+                        break;
+                    case SINGLE_VALUE:
+                        if (other.singleValue == this.singleValue) {
+                            clear();
+                        } else {
+                            add(other.singleValue);
+                        }
+                        break;
+                    case BITMAP_VALUE:
+                        if (this.bitmap.contains(other.singleValue)) {
+                            this.bitmap.removeLong(other.singleValue);
+                        } else {
+                            this.bitmap.addLong(other.singleValue);
+                        }
+                        break;
+                    case SET_VALUE:
+                        if (this.set.contains(other.singleValue)) {
+                            this.set.remove(other.singleValue);
+                        } else {
+                            this.set.add(other.singleValue);
+                        }
+                        break;
+                }
+                break;
+            case BITMAP_VALUE:
+                switch (this.bitmapType) {
+                    case EMPTY:
+                        this.bitmap = new Roaring64Map();
+                        this.bitmap.or(other.bitmap);
+                        bitmapType = BITMAP_VALUE;
+                        break;
+                    case SINGLE_VALUE:
+                        this.bitmap = new Roaring64Map();
+                        this.bitmap.or(other.bitmap);
+                        bitmapType = BITMAP_VALUE;
+                        if (this.bitmap.contains(this.singleValue)) {
+                            this.bitmap.removeLong(this.singleValue);
+                        } else {
+                            this.bitmap.addLong(this.singleValue);
+                        }
+                        break;
+                    case BITMAP_VALUE:
+                        this.bitmap.xor(other.bitmap);
+                        break;
+                    case SET_VALUE:
+                        this.bitmap = fromSetToBitmap(this.set);
+                        this.bitmap.xor(other.bitmap);
+                        this.bitmapType = BITMAP_VALUE;
+                        this.set = null;
+                        break;
+                }
+                break;
+            case SET_VALUE:
+                switch (this.bitmapType) {
+                    case EMPTY:
+                        this.set = new HashSet<>(other.set);
+                        this.bitmapType = SET_VALUE;
+                        break;
+                    case SINGLE_VALUE:
+                        this.set = new HashSet<>(other.set);
+                        if (this.set.contains(this.singleValue)) {
+                            this.set.remove(this.singleValue);
+                        } else {
+                            this.set.add(this.singleValue);
+                        }
+                        this.bitmapType = SET_VALUE;
+                        break;
+                    case BITMAP_VALUE:
+                        Roaring64Map tmpBitmap = fromSetToBitmap(other.set);
+                        this.bitmap.xor(tmpBitmap);
+                        break;
+                    case SET_VALUE:
+                        for (Long v : other.set) {
+                            if (this.set.contains(v)) {
+                                this.set.remove(v);
+                            } else {
+                                this.set.add(v);
+                            }
+                        }
                         break;
                 }
                 break;
@@ -297,6 +580,11 @@ public class BitmapValue {
                 break;
             case BITMAP_VALUE:
                 ret = bitmap.equals(otherBitmap.bitmap);
+                break;
+            case SET_VALUE: {
+                ret = set.equals(otherBitmap.set);
+                break;
+            }
         }
         return ret;
     }
@@ -313,8 +601,30 @@ public class BitmapValue {
             case BITMAP_VALUE:
                 toStringStr = this.bitmap.toString();
                 break;
+            case SET_VALUE:
+                toStringStr = String.format("{%s}", setToString());
+                break;
+
         }
         return toStringStr;
+    }
+
+    public String setToString() {
+        final StringBuilder answer = new StringBuilder();
+        Long[] values = new Long[this.set.size()];
+        int pos = 0;
+        for (Long v : this.set) {
+            values[pos++] = v;
+        }
+        Arrays.sort(values);
+
+        for (Long v : values) {
+            if (answer.length() > 0) {
+                answer.append(",");
+            }
+            answer.append(v);
+        }
+        return answer.toString();
     }
 
     public String serializeToString() {
@@ -325,6 +635,8 @@ public class BitmapValue {
                 return String.format("%s", singleValue);
             case BITMAP_VALUE:
                 return this.bitmap.serializeToString();
+            case SET_VALUE:
+                return setToString();
         }
         return "";
     }
@@ -333,18 +645,17 @@ public class BitmapValue {
         this.bitmapType = EMPTY;
         this.singleValue = -1;
         this.bitmap = null;
+        this.set = null;
     }
 
-    private void convertToSmallerType() {
-        if (bitmapType == BITMAP_VALUE) {
-            if (bitmap.getLongCardinality() == 0) {
-                this.bitmap = null;
-                this.bitmapType = EMPTY;
-            } else if (bitmap.getLongCardinality() == 1) {
-                this.singleValue = bitmap.select(0);
-                this.bitmapType = SINGLE_VALUE;
-                this.bitmap = null;
-            }
+    private void convertBitmapToSmallerType() {
+        if (bitmap.getLongCardinality() == 0) {
+            this.bitmap = null;
+            this.bitmapType = EMPTY;
+        } else if (bitmap.getLongCardinality() == 1) {
+            this.singleValue = bitmap.select(0);
+            this.bitmapType = SINGLE_VALUE;
+            this.bitmap = null;
         }
     }
 
@@ -366,6 +677,14 @@ public class BitmapValue {
                 return isLongValue32bitEnough(singleValue);
             case BITMAP_VALUE:
                 return bitmap.is32BitsEnough();
+            case SET_VALUE: {
+                for (Long v : set) {
+                    if (!isLongValue32bitEnough(v)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
             default:
                 return false;
         }

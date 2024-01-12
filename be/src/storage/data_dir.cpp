@@ -72,7 +72,6 @@ DataDir::DataDir(const std::string& path, TStorageMedium::type storage_medium, T
           _available_bytes(0),
           _disk_capacity_bytes(0),
           _storage_medium(storage_medium),
-          _is_used(false),
           _tablet_manager(tablet_manager),
           _txn_manager(txn_manager),
           _cluster_id_mgr(std::make_shared<ClusterIdMgr>(path)),
@@ -99,7 +98,7 @@ Status DataDir::init(bool read_only) {
     RETURN_IF_ERROR_WITH_WARN(_init_meta(read_only), "_init_meta failed");
     RETURN_IF_ERROR_WITH_WARN(init_persistent_index_dir(), "_init_persistent_index_dir failed");
 
-    _is_used = true;
+    _state = DiskState::ONLINE;
     return Status::OK();
 }
 
@@ -150,14 +149,25 @@ Status DataDir::set_cluster_id(int32_t cluster_id) {
 }
 
 void DataDir::health_check() {
+    const int retry_times = 10;
     // check disk
-    if (_is_used) {
-        Status res = _read_and_write_test_file();
-        if (!res.ok()) {
-            LOG(WARNING) << "store read/write test file occur IO Error. path=" << _path << ", res=" << res.to_string();
-            if (is_io_error(res)) {
-                _is_used = false;
+    if (_state != DiskState::DECOMMISSIONED && _state != DiskState::DISABLED) {
+        bool all_failed = true;
+        for (int i = 0; i < retry_times; i++) {
+            Status res = _read_and_write_test_file();
+            if (res.ok() || !is_io_error(res)) {
+                all_failed = false;
+                break;
+            } else {
+                LOG(WARNING) << "store read/write test file occur IO Error. path=" << _path
+                             << ", res=" << res.to_string();
             }
+        }
+        if (all_failed) {
+            LOG(WARNING) << "store test failed " << retry_times << " times, set _state to OFFLINE. path=" << _path;
+            _state = DiskState::OFFLINE;
+        } else {
+            _state = DiskState::ONLINE;
         }
     }
 }
@@ -299,7 +309,7 @@ Status DataDir::load() {
         for (auto tablet_id : tablet_ids) {
             Status s = _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
             if (!s.ok()) {
-                LOG(ERROR) << "data dir " << _path << " drop_tablet failed: " << s.get_error_msg();
+                LOG(ERROR) << "data dir " << _path << " drop_tablet failed: " << s.message();
                 return s;
             }
         }
@@ -320,7 +330,7 @@ Status DataDir::load() {
     if (!load_tablet_status.ok()) {
         LOG(FATAL) << "there is failure when scan rockdb tablet metas, quit process"
                    << ". loaded tablet: " << tablet_ids.size() << " error tablet: " << failed_tablet_ids.size()
-                   << ", path: " << _path << " error: " << load_tablet_status.get_error_msg()
+                   << ", path: " << _path << " error: " << load_tablet_status.message()
                    << " duration: " << (MonotonicMillis() - load_tablet_start) << "ms";
     } else {
         LOG(INFO) << "load tablet from meta finished"
@@ -343,7 +353,7 @@ Status DataDir::load() {
             tablet->tablet_meta()->to_meta_pb(&tablet_meta_pb);
             Status s = TabletMetaManager::save(this, tablet_meta_pb);
             if (!s.ok()) {
-                LOG(ERROR) << "data dir " << _path << " save tablet meta failed: " << s.get_error_msg();
+                LOG(ERROR) << "data dir " << _path << " save tablet meta failed: " << s.message();
                 return s;
             }
         }
@@ -390,8 +400,9 @@ Status DataDir::load() {
             if (!rowset_meta->tablet_schema()) {
                 auto tablet_schema_ptr = tablet->tablet_schema();
                 rowset_meta->set_tablet_schema(tablet_schema_ptr);
-                Status rs_meta_save_status =
-                        RowsetMetaManager::save(get_meta(), rowset_meta->tablet_uid(), rowset_meta->get_meta_pb());
+                RowsetMetaPB meta_pb;
+                rowset_meta->get_full_meta_pb(&meta_pb);
+                Status rs_meta_save_status = RowsetMetaManager::save(get_meta(), rowset_meta->tablet_uid(), meta_pb);
                 if (!rs_meta_save_status.ok()) {
                     LOG(WARNING) << "Failed to save rowset meta, rowset=" << rowset_meta->rowset_id()
                                  << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();
@@ -416,8 +427,9 @@ Status DataDir::load() {
             Status publish_status = tablet->load_rowset(rowset);
             if (!rowset_meta->tablet_schema()) {
                 rowset_meta->set_tablet_schema(tablet->tablet_schema());
-                Status rs_meta_save_status =
-                        RowsetMetaManager::save(get_meta(), rowset_meta->tablet_uid(), rowset_meta->get_meta_pb());
+                RowsetMetaPB meta_pb;
+                rowset_meta->get_full_meta_pb(&meta_pb);
+                Status rs_meta_save_status = RowsetMetaManager::save(get_meta(), rowset_meta->tablet_uid(), meta_pb);
                 if (!rs_meta_save_status.ok()) {
                     LOG(WARNING) << "Failed to save rowset meta, rowset=" << rowset_meta->rowset_id()
                                  << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();
@@ -445,7 +457,7 @@ Status DataDir::load() {
 
     if (!load_rowset_status.ok()) {
         LOG(WARNING) << "load rowset from meta finished, data dir: " << _path << " error/total: " << error_rowset_count
-                     << "/" << total_rowset_count << " error: " << load_rowset_status.get_error_msg()
+                     << "/" << total_rowset_count << " error: " << load_rowset_status.message()
                      << " duration: " << (MonotonicMillis() - load_rowset_start) << "ms";
     } else {
         LOG(INFO) << "load rowset from meta finished, data dir: " << _path << " error/total: " << error_rowset_count

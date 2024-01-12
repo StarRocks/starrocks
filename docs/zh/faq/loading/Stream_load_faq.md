@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# Stream Load 常见问题
+# Stream Load 导入常见问题
 
 ## 1. Stream Load 是否支持识别 CSV 格式文件开头前几行的列名？或者是否支持在数据读取过程中跳过开头前几行数据？
 
@@ -37,4 +37,4 @@ StarRocks 支持在导入过程中进行数据转换，具体请参见[导入过
 源数据文件大小超过 10 GB, 超过 Stream Load 所能支持的文件大小上限。有两种解决方法：
 
 - 通过 `seq -w 0 n` 拆分数据文件。
-- 通过 `curl -XPOST http:///be_host:http_port/api/update_config?streaming_load_max_mb=<file_size>` 调整 [BE 配置项](../../administration/BE_configuration.md) `streaming_load_max_mb` 的取值来扩大文件大小上限。
+- 通过 `curl -XPOST http://be_host:http_port/api/update_config?streaming_load_max_mb=<file_size>` 调整 [BE 配置项](../../administration/BE_configuration.md) `streaming_load_max_mb` 的取值来扩大文件大小上限。

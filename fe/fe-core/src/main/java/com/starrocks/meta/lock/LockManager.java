@@ -155,7 +155,7 @@ public class LockManager {
                         removeFromWaiterList(rid, locker, lockType);
 
                         /* Failure to acquire lock within the timeout ms*/
-                        throw new LockTimeoutException();
+                        throw new LockTimeoutException("");
                     }
 
                     /*

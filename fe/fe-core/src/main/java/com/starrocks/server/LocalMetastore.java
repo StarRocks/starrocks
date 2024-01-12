@@ -114,6 +114,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
@@ -141,6 +142,7 @@ import com.starrocks.persist.AddSubPartitionsInfoV2;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
+import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ColumnRenameInfo;
 import com.starrocks.persist.CreateDbInfo;
@@ -2761,6 +2763,46 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+    public void replayBatchDeleteReplica(BatchDeleteReplicaInfo info) {
+        for (long tabletId : info.getTablets()) {
+            TabletMeta meta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tabletId);
+            if (meta == null) {
+                continue;
+            }
+            Database db = getDbIncludeRecycleBin(meta.getDbId());
+            if (db == null) {
+                LOG.warn("replay delete replica failed, db is null, meta: {}", meta);
+                continue;
+            }
+            db.writeLock();
+            try {
+                OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, meta.getTableId());
+                if (olapTable == null) {
+                    LOG.warn("replay delete replica failed, table is null, meta: {}", meta);
+                    continue;
+                }
+                Partition partition = getPartitionIncludeRecycleBin(olapTable, meta.getPartitionId());
+                if (partition == null) {
+                    LOG.warn("replay delete replica failed, partition is null, meta: {}", meta);
+                    continue;
+                }
+                MaterializedIndex materializedIndex = partition.getIndex(meta.getIndexId());
+                if (materializedIndex == null) {
+                    LOG.warn("replay delete replica failed, materializedIndex is null, meta: {}", meta);
+                    continue;
+                }
+                LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(tabletId);
+                if (tablet == null) {
+                    LOG.warn("replay delete replica failed, tablet is null, meta: {}", meta);
+                    continue;
+                }
+                tablet.deleteReplicaByBackendId(info.getBackendId());
+            } finally {
+                db.writeUnlock();
+            }
+        }
+    }
+
     @Override
     public Table getTable(String dbName, String tblName) {
         Database database = getDb(dbName);
@@ -3119,11 +3161,26 @@ public class LocalMetastore implements ConnectorMetadata {
                 asyncRefreshContext.setStartTime(randomizedStart);
             }
             if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
-                asyncRefreshContext.setStep(
-                        ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue());
-                asyncRefreshContext.setTimeUnit(
-                        asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
+                long intervalStep = ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue();
+                String refreshTimeUnit = asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription();
+                asyncRefreshContext.setStep(intervalStep);
+                asyncRefreshContext.setTimeUnit(refreshTimeUnit);
+
+                // Check the interval time should not be less than the min allowed config time.
+                if (Config.materialized_view_min_refresh_interval > 0) {
+                    TimeUnit intervalTimeUnit = TimeUtils.convertUnitIdentifierToTimeUnit(refreshTimeUnit);
+                    long periodSeconds = TimeUtils.convertTimeUnitValueToSecond(intervalStep, intervalTimeUnit);
+                    if (periodSeconds < Config.materialized_view_min_refresh_interval) {
+                        throw new DdlException(String.format("Refresh schedule interval %s is too small which may cost " +
+                                        "a lot of memory/cpu resources to refresh the asynchronous materialized view, " +
+                                        "please config an interval larger than " +
+                                        "Config.min_allowed_materialized_view_schedule_time(%ss).",
+                                periodSeconds,
+                                Config.materialized_view_min_refresh_interval));
+                    }
+                }
             }
+
             // task which type is EVENT_TRIGGERED can not use external table as base table now.
             if (asyncRefreshContext.getTimeUnit() == null) {
                 // asyncRefreshContext's timeUnit is null means this task's type is EVENT_TRIGGERED
@@ -3745,7 +3802,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
             db.dropTable(oldTableName);
             db.registerTableUnlocked(olapTable);
-            inactiveRelatedMaterializedView(db, olapTable, String.format("based table %s renamed ", oldTableName));
+            inactiveRelatedMaterializedView(db, olapTable,
+                    MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(oldTableName));
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }
@@ -3772,7 +3830,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 mv.setInactiveAndReason(reason);
 
                 // recursive inactive
-                inactiveRelatedMaterializedView(db, mv, String.format("base table %s inactive", mv.getName()));
+                inactiveRelatedMaterializedView(db, mv,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableActive(mv.getName()));
             } else {
                 LOG.info("Ignore materialized view {} does not exists", mvId);
             }
@@ -3793,7 +3852,8 @@ public class LocalMetastore implements ConnectorMetadata {
             db.dropTable(tableName);
             table.setName(newTableName);
             db.registerTableUnlocked(table);
-            inactiveRelatedMaterializedView(db, table, String.format("base table {} renamed", tableName));
+            inactiveRelatedMaterializedView(db, table,
+                    MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(tableName));
 
             LOG.info("replay rename table[{}] to {}, tableId: {}", tableName, newTableName, table.getId());
         } finally {
