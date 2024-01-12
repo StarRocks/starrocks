@@ -313,18 +313,12 @@ ExecStateReporter::ExecStateReporter() {
     }
 }
 
-<<<<<<< HEAD
-void ExecStateReporter::submit(std::function<void()>&& report_task) {
-    auto st = _thread_pool->submit_func(std::move(report_task));
-    st.permit_unchecked_error();
-=======
 void ExecStateReporter::submit(std::function<void()>&& report_task, bool priority) {
     if (priority) {
         (void)_priority_thread_pool->submit_func(std::move(report_task));
     } else {
         (void)_thread_pool->submit_func(std::move(report_task));
     }
->>>>>>> d088b3f14c ([BugFix] Fix exec state report lost lead to ingestion status getting stuck (#36688))
 }
 
 } // namespace starrocks::pipeline
