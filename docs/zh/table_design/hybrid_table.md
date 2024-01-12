@@ -23,7 +23,8 @@ StarRocks 属于 OLAP 数据库，原先数据是按列存储的方式，能够�
 
 - 必须为主键模型表。
 - `__row` 列的长度不能超过 1 MB。
-- 不支持列的数据类型为 ARRAY、MAP、STRUCT。
+- 不支持列的数据类型为 BITMAP、JSON、ARRAY、MAP、STRUCT。
+- 表中除了主键列外必须包含更多的列。
 
 :::
 

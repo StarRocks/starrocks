@@ -238,7 +238,7 @@ Boolean value to control whether to enable rule-based materialized view query re
 
 ### enable_short_circuit (3.2.3 and later)
 
-Whether to enable short circuiting for queries. Default: `false`. If it is set to true, when the table is a hybrid table and the query meets the conditions (used to assess whether it is a point query): the conditions column of the WHERE clause must include all primary key columns, and the operator must be = or IN. Only then will the query take the short path, directly retrieving the data stored in rows.
+Whether to enable short circuiting for queries. Default: `false`. If it is set to true, when the table is a hybrid table and the query meets the criteria (used to evaluate whether the query is a point query): the conditional columns in the WHERE clause include all primary key columns, and the operator in the WHERE clause are `=` or `IN`. Only then will the query take the short circuiting to directly scan the data stored in rows.
 
 ### enable_spill (3.0 and later)
 
