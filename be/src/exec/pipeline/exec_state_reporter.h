@@ -23,13 +23,10 @@ public:
                                                                     bool done);
     static Status report_exec_status(const TReportExecStatusParams& params, ExecEnv* exec_env,
                                      const TNetworkAddress& fe_addr);
-<<<<<<< HEAD
+
     ExecStateReporter();
-    void submit(std::function<void()>&& report_task);
-=======
 
     void submit(std::function<void()>&& report_task, bool priority = false);
->>>>>>> d088b3f14c ([BugFix] Fix exec state report lost lead to ingestion status getting stuck (#36688))
 
 private:
     std::unique_ptr<ThreadPool> _thread_pool;
