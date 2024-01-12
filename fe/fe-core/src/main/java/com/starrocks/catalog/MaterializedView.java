@@ -1788,18 +1788,17 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
 
         List<BaseTableInfo> newBaseTableInfos = Lists.newArrayList();
-        Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap =
-                this.refreshScheme.asyncRefreshContext.baseTableVisibleVersionMap;
+
 
         boolean isSetInactive = false;
         Map<TableName, MvBaseTableBackupInfo> mvBaseTableToBackupTableInfo = mvRestoreContext.getMvBaseTableToBackupTableInfo();
         Map<TableName, TableName> remoteToLocalTableName = Maps.newHashMap();
         MvId oldMvId = null;
+        boolean isWriteBaseTableInfoChangeEditLog = false;
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
             String remoteDbName = baseTableInfo.getDbName();
             String remoteTableName = baseTableInfo.getTableName();
             TableName remoteDbTblName = new TableName(remoteDbName, remoteTableName);
-
             if (!mvBaseTableToBackupTableInfo.containsKey(remoteDbTblName)) {
                 // baseTableInfo's db/table is not found in the `mvBaseTableToBackupTableInfo`: the base table may not
                 // be backed up and restored before.
@@ -1822,6 +1821,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 if (resetResult.second.isPresent() && oldMvId == null) {
                     oldMvId = resetResult.second.get();
                 }
+                // Only write edit log when base table also backed up and restored.
+                isWriteBaseTableInfoChangeEditLog = true;
             }
         }
 
@@ -1867,9 +1868,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         fixRelationship();
 
         // write edit log
-        AlterMaterializedViewBaseTableInfosLog alterMaterializedViewBaseTableInfos =
-                new AlterMaterializedViewBaseTableInfosLog(dbId, getId(), oldMvId, baseTableInfos, baseTableVisibleVersionMap);
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterMvBaseTableInfos(alterMaterializedViewBaseTableInfos);
+        if (isWriteBaseTableInfoChangeEditLog) {
+            Map<Long, Map<String, BasePartitionInfo>> baseTableVisibleVersionMap =
+                    this.refreshScheme.asyncRefreshContext.baseTableVisibleVersionMap;
+            AlterMaterializedViewBaseTableInfosLog alterMaterializedViewBaseTableInfos =
+                    new AlterMaterializedViewBaseTableInfosLog(dbId, getId(), oldMvId, baseTableInfos,
+                            baseTableVisibleVersionMap);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterMvBaseTableInfos(alterMaterializedViewBaseTableInfos);
+        }
 
         // rebuild mv tasks to be scheduled in TaskManager.
         TaskBuilder.rebuildMVTask(db.getFullName(), this);
