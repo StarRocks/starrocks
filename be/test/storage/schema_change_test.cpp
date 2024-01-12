@@ -426,7 +426,7 @@ TEST_F(SchemaChangeTest, schema_change_with_directing_v2) {
     TabletSharedPtr new_tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
     TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1101);
 
-    ChunkChanger chunk_changer(new_tablet->tablet_schema());
+    ChunkChanger chunk_changer(base_tablet->tablet_schema(), new_tablet->tablet_schema());
     for (size_t i = 0; i < 4; ++i) {
         ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(i);
         column_mapping->ref_column = i;
@@ -482,7 +482,7 @@ TEST_F(SchemaChangeTest, schema_change_with_sorting_v2) {
                                                                       create_tablet_req.tablet_schema.schema_hash);
     TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1103);
 
-    ChunkChanger chunk_changer(new_tablet->tablet_schema());
+    ChunkChanger chunk_changer(new_tablet->tablet_schema(), new_tablet->tablet_schema());
     ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(0);
     column_mapping->ref_column = 1;
     column_mapping = chunk_changer.get_mutable_column_mapping(1);
@@ -543,7 +543,7 @@ TEST_F(SchemaChangeTest, schema_change_with_agg_key_reorder) {
                                                                       create_tablet_req.tablet_schema.schema_hash);
     TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1203);
 
-    ChunkChanger chunk_changer(new_tablet->tablet_schema());
+    ChunkChanger chunk_changer(new_tablet->tablet_schema(), new_tablet->tablet_schema());
     ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(0);
     column_mapping->ref_column = 1;
     column_mapping = chunk_changer.get_mutable_column_mapping(1);
@@ -639,7 +639,7 @@ TEST_F(SchemaChangeTest, schema_change_with_materialized_column_old_style) {
     TabletSharedPtr new_tablet = engine->tablet_manager()->get_tablet(create_tablet_req.tablet_id);
     TabletSharedPtr base_tablet = engine->tablet_manager()->get_tablet(1301);
 
-    ChunkChanger chunk_changer(new_tablet->tablet_schema());
+    ChunkChanger chunk_changer(new_tablet->tablet_schema(), new_tablet->tablet_schema());
     for (size_t i = 0; i < 4; ++i) {
         ColumnMapping* column_mapping = chunk_changer.get_mutable_column_mapping(i);
         column_mapping->ref_column = i;

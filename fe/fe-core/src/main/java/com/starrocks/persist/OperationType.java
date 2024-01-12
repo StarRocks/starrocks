@@ -224,7 +224,6 @@ public class OperationType {
     public static final short OP_SAVE_TRANSACTION_ID = 104;
     public static final short OP_SAVE_AUTO_INCREMENT_ID = 105;
     public static final short OP_DELETE_AUTO_INCREMENT_ID = 106;
-    public static final short OP_UPSERT_TRANSACTION_STATE_BATCH = 108;
 
     // routine load 110~120
     @Deprecated
@@ -417,6 +416,7 @@ public class OperationType {
     //Txn json format log
     public static final short OP_UPSERT_TRANSACTION_STATE_V2 = 12110;
     public static final short OP_SAVE_TRANSACTION_ID_V2 = 12111;
+    public static final short OP_UPSERT_TRANSACTION_STATE_BATCH = 12112;
 
     //colocate table json format log
     public static final short OP_COLOCATE_ADD_TABLE_V2 = 12130;

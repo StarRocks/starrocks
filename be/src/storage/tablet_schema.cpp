@@ -259,6 +259,13 @@ void TabletColumn::to_schema_pb(ColumnPB* column) const {
     }
 }
 
+void TabletSchema::copy_from(const std::shared_ptr<const TabletSchema>& tablet_schema) {
+    TabletSchemaPB tablet_schema_pb;
+    tablet_schema->to_schema_pb(&tablet_schema_pb);
+    _init_from_pb(tablet_schema_pb);
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_schema_mem_tracker(), mem_usage())
+}
+
 void TabletColumn::add_sub_column(const TabletColumn& sub_column) {
     _get_or_alloc_extra_fields()->sub_columns.push_back(sub_column);
 }

@@ -2195,7 +2195,7 @@ void TabletUpdatesTest::test_link_from(bool enable_persistent_index) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
     _tablet2->set_tablet_state(TABLET_NOTREADY);
-    auto chunk_changer = std::make_unique<ChunkChanger>(_tablet2->tablet_schema());
+    auto chunk_changer = std::make_unique<ChunkChanger>(_tablet->tablet_schema(), _tablet2->tablet_schema());
     ASSERT_TRUE(_tablet2->updates()->link_from(_tablet.get(), 4, chunk_changer.get()).ok());
 
     ASSERT_EQ(N, read_tablet(_tablet2, 4));
@@ -2292,7 +2292,8 @@ void TabletUpdatesTest::test_convert_from(bool enable_persistent_index) {
     ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
 
     tablet_to_schema_change->set_tablet_state(TABLET_NOTREADY);
-    auto chunk_changer = std::make_unique<ChunkChanger>(tablet_to_schema_change->tablet_schema());
+    auto chunk_changer =
+            std::make_unique<ChunkChanger>(_tablet->tablet_schema(), tablet_to_schema_change->tablet_schema());
     for (int i = 0; i < tablet_to_schema_change->tablet_schema().num_columns(); ++i) {
         const auto& new_column = tablet_to_schema_change->tablet_schema().column(i);
         int32_t column_index = _tablet->field_index(std::string{new_column.name()});
@@ -2327,7 +2328,8 @@ void TabletUpdatesTest::test_convert_from_with_pending(bool enable_persistent_in
     ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys2)).ok());
 
     tablet_to_schema_change->set_tablet_state(TABLET_NOTREADY);
-    auto chunk_changer = std::make_unique<ChunkChanger>(tablet_to_schema_change->tablet_schema());
+    auto chunk_changer =
+            std::make_unique<ChunkChanger>(_tablet->tablet_schema(), tablet_to_schema_change->tablet_schema());
     for (int i = 0; i < tablet_to_schema_change->tablet_schema().num_columns(); ++i) {
         const auto& new_column = tablet_to_schema_change->tablet_schema().column(i);
         int32_t column_index = _tablet->field_index(std::string{new_column.name()});
@@ -2364,7 +2366,8 @@ void TabletUpdatesTest::test_convert_from_with_mutiple_segment(bool enable_persi
     ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset_with_mutiple_segments(_tablet, keys_by_segment)).ok());
 
     tablet_to_schema_change->set_tablet_state(TABLET_NOTREADY);
-    auto chunk_changer = std::make_unique<ChunkChanger>(tablet_to_schema_change->tablet_schema());
+    auto chunk_changer =
+            std::make_unique<ChunkChanger>(_tablet->tablet_schema(), tablet_to_schema_change->tablet_schema());
     for (int i = 0; i < tablet_to_schema_change->tablet_schema().num_columns(); ++i) {
         const auto& new_column = tablet_to_schema_change->tablet_schema().column(i);
         int32_t column_index = _tablet->field_index(std::string{new_column.name()});
@@ -2431,7 +2434,8 @@ void TabletUpdatesTest::test_reorder_from(bool enable_persistent_index) {
     ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset_schema_change_sort_key(_tablet, keys)).ok());
 
     tablet_with_sort_key1->set_tablet_state(TABLET_NOTREADY);
-    auto chunk_changer = std::make_unique<ChunkChanger>(tablet_with_sort_key1->tablet_schema());
+    auto chunk_changer =
+            std::make_unique<ChunkChanger>(_tablet->tablet_schema(), tablet_with_sort_key1->tablet_schema());
     for (int i = 0; i < tablet_with_sort_key1->tablet_schema().num_columns(); ++i) {
         const auto& new_column = tablet_with_sort_key1->tablet_schema().column(i);
         int32_t column_index = _tablet->field_index(std::string{new_column.name()});
@@ -2448,7 +2452,7 @@ void TabletUpdatesTest::test_reorder_from(bool enable_persistent_index) {
 
     const auto& tablet_with_sort_key2 = create_tablet_with_sort_key(rand(), rand(), {2});
     tablet_with_sort_key2->set_tablet_state(TABLET_NOTREADY);
-    chunk_changer = std::make_unique<ChunkChanger>(tablet_with_sort_key2->tablet_schema());
+    chunk_changer = std::make_unique<ChunkChanger>(_tablet->tablet_schema(), tablet_with_sort_key2->tablet_schema());
     for (int i = 0; i < tablet_with_sort_key2->tablet_schema().num_columns(); ++i) {
         const auto& new_column = tablet_with_sort_key2->tablet_schema().column(i);
         int32_t column_index = _tablet->field_index(std::string{new_column.name()});

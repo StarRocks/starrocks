@@ -37,4 +37,4 @@ StarRocks 支持在导入过程中进行数据转换，具体请参见[导入过
 源数据文件大小超过 10 GB, 超过 Stream Load 所能支持的文件大小上限。有两种解决方法：
 
 - 通过 `seq -w 0 n` 拆分数据文件。
-- 通过 `curl -XPOST http:///be_host:http_port/api/update_config?streaming_load_max_mb=<file_size>` 调整 [BE 配置项](../../administration/Configuration.md#配置-be-动态参数) `streaming_load_max_mb` 的取值来扩大文件大小上限。
+- 通过 `curl -XPOST http://be_host:http_port/api/update_config?streaming_load_max_mb=<file_size>` 调整 [BE 配置项](../../administration/Configuration.md#配置-be-动态参数) `streaming_load_max_mb` 的取值来扩大文件大小上限。

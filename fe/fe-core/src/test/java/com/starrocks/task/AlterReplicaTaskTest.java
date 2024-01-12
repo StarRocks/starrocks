@@ -21,8 +21,6 @@ import com.starrocks.thrift.TTabletType;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.HashMap;
-
 public class AlterReplicaTaskTest {
 
     @Test
@@ -82,7 +80,7 @@ public class AlterReplicaTaskTest {
     @Test
     public void testRollupLocalTablet() {
         AlterReplicaTask task = AlterReplicaTask.rollupLocalTablet(1, 2, 3, 4, 5, 6,
-                7, 8, 9, 10, 11, 12, new HashMap<>());
+                7, 8, 9, 10, 11, 12, null);
 
         Assert.assertEquals(1, task.getBackendId());
         Assert.assertEquals(2, task.getDbId());
