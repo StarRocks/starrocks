@@ -17,6 +17,7 @@ package com.starrocks.sql.plan;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
@@ -27,6 +28,7 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -34,10 +36,14 @@ import java.util.List;
 
 public class ShortCircuitTest extends PlanTestBase {
 
+    private static boolean OLD_VALUE;
+
     @Test
     public void testShortcircuit() throws Exception {
         connectContext.getSessionVariable().setEnableShortCircuit(true);
         connectContext.getSessionVariable().setPreferComputeNode(true);
+        OLD_VALUE = FeConstants.runningUnitTest;
+        FeConstants.runningUnitTest = true;
 
         // project support short circuit
         String sql = "select pk1 || v3 from tprimary1 where pk1=20";
@@ -52,7 +58,11 @@ public class ShortCircuitTest extends PlanTestBase {
         // boolean filter
         sql = "select pk1 || v3 from tprimary_bool where pk1=33 and pk2=true";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
+        assertCContains(planFragment, "Short Circuit Scan: true", "tabletRatio=1/3");
+
+        sql = "select pk1 || v3 from tprimary_bool where pk1=33 and pk2";
+        planFragment = getFragmentPlan(sql);
+        assertCContains(planFragment, "Short Circuit Scan: true", "tabletRatio=1/3");
 
         //  support short circuit
         sql = "select * from tprimary1 where pk1 in (20)";
@@ -97,5 +107,10 @@ public class ShortCircuitTest extends PlanTestBase {
 
         ExecutionFragment execFragment = coord.getExecutionDAG().getRootFragment();
         Assert.assertEquals(true, execFragment.getPlanFragment().isShortCircuit());
+    }
+
+    @AfterClass
+    public static void afterClass() {
+        FeConstants.runningUnitTest = OLD_VALUE;
     }
 }
