@@ -165,6 +165,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         return plan;
     }
 
+    // transform relation without considering the sql_select_limit
     public LogicalPlan transform(Relation relation) {
         OptExprBuilder optExprBuilder;
         if (relation instanceof QueryRelation && !((QueryRelation) relation).getCteRelations().isEmpty()) {
