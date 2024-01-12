@@ -119,7 +119,7 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、H
 
 ### 启用 External Catalog 物化视图的查询改写
 
-由于不保证数据的强一致性，StarRocks 默认禁用 Hudi、Iceberg 和 JDBC Catalog 物化视图的查询改写功能。您可以通过在创建物化视图时将 Property `force_external_table_query_rewrite` 设置为 `true` 来启用此功能。对于基于 Hive Catalog 中的表创建的物化视图，查询改写功能默认开启。在涉及查询改写的情况下，如果您使用非常复杂的查询语句来构建物化视图，我们建议您拆分查询语句并以嵌套方式构建多个简单的物化视图。嵌套的物化视图更加灵活，可以适应更广泛的查询模式。
+由于不保证数据的强一致性，StarRocks 默认禁用 Hudi 和 JDBC Catalog 物化视图的查询改写功能。您可以通过在创建物化视图时将 Property `force_external_table_query_rewrite` 设置为 `true` 来启用此功能。对于基于 Hive Catalog 中的表创建的物化视图，查询改写功能默认开启。在涉及查询改写的情况下，如果您使用非常复杂的查询语句来构建物化视图，我们建议您拆分查询语句并以嵌套方式构建多个简单的物化视图。嵌套的物化视图更加灵活，可以适应更广泛的查询模式。
 
 示例：
 
