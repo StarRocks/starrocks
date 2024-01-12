@@ -364,7 +364,8 @@ BE dynamic parameters are as follows.
 #### compact_threads
 
 - **Default:** 4
-- **Description:** The number of threads used for concurrent compaction tasks. Each threads corresponds to a compaction task queue. Idle threads can obtain and process compaction tasks from the task queues of the in-use threads.
+- **Description:** The maximum number of threads used for concurrent compaction tasks.
+- **Introduced in:**
 
 #### update_compaction_ratio_threshold
 
