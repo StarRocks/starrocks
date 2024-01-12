@@ -236,6 +236,10 @@ Boolean value to control whether to enable materialized view Union query rewrite
 
 Boolean value to control whether to enable rule-based materialized view query rewrite. This variable is mainly used in single-table query rewrite. Default: `true`.
 
+### enable_short_circuit (3.2.3 and later)
+
+Whether to enable short circuiting for queries. Default: `false`. If it is set to true, when the table uses hybrid row-column storage and the query meets the criteria (to evaluate whether the query is a point query): the conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the short circuit to directly query the data stored in the row-by-row fashion.
+
 ### enable_spill (3.0 and later)
 
 Whether to enable intermediate result spilling. Default: `false`. If it is set to `true`, StarRocks spills the intermediate results to disk to reduce the memory usage when processing aggregate, sort, or join operators in queries.
