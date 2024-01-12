@@ -211,7 +211,6 @@ public class JournalEntity implements Writable {
         LOG.debug("get opcode: {}", opCode);
         switch (opCode) {
             case OperationType.OP_SAVE_NEXTID:
-            case OperationType.OP_SAVE_TRANSACTION_ID:
             case OperationType.OP_ERASE_DB:
             case OperationType.OP_ERASE_TABLE:
             case OperationType.OP_ERASE_PARTITION:
@@ -614,13 +613,6 @@ public class JournalEntity implements Writable {
             case OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS: {
                 data = new BackendIdsUpdateInfo();
                 ((BackendIdsUpdateInfo) data).readFields(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_UPSERT_TRANSACTION_STATE:
-            case OperationType.OP_DELETE_TRANSACTION_STATE: {
-                data = new TransactionState();
-                ((TransactionState) data).readFields(in);
                 isRead = true;
                 break;
             }

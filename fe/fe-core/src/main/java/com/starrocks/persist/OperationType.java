@@ -213,15 +213,9 @@ public class OperationType {
 
     //real time load 100 -108
     @Deprecated
-    public static final short OP_UPSERT_TRANSACTION_STATE = 100;
-    @Deprecated
-    public static final short OP_DELETE_TRANSACTION_STATE = 101;
-    @Deprecated
     public static final short OP_FINISHING_ROLLUP = 102;
     @Deprecated
     public static final short OP_FINISHING_SCHEMA_CHANGE = 103;
-    @Deprecated
-    public static final short OP_SAVE_TRANSACTION_ID = 104;
     public static final short OP_SAVE_AUTO_INCREMENT_ID = 105;
     public static final short OP_DELETE_AUTO_INCREMENT_ID = 106;
     // light schema change for add and drop columns
