@@ -169,6 +169,8 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
                 "FROM t1_agg AS t1_17 " +
                 "GROUP BY t1_17.c_1_0, t1_17.c_1_1 ORDER BY t1_17.c_1_0 DESC, t1_17.c_1_1 ASC");
 
+        // NOTE: change `selectBestRowCountIndex` to prefer non-baseIndexId so can choose the mv for
+        // mv's rowCount and columnSize is the same with the base table.
         {
             String query = "select * from t1_agg";
             String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, query);

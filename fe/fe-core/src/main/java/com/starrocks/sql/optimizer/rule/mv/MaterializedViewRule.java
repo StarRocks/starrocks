@@ -499,6 +499,7 @@ public class MaterializedViewRule extends Rule {
     private long selectBestRowCountIndex(Set<Long> indexesMatchingBestPrefixIndex, OlapTable olapTable) {
         long minRowCount = Long.MAX_VALUE;
         long selectedIndexId = 0;
+        long baseIndexId = olapTable.getBaseIndexId();
         for (Long indexId : indexesMatchingBestPrefixIndex) {
             long rowCount = 0;
             for (Partition partition : olapTable.getPartitions()) {
@@ -511,7 +512,11 @@ public class MaterializedViewRule extends Rule {
                 // check column number, select one minimum column number
                 int selectedColumnSize = olapTable.getSchemaByIndexId(selectedIndexId).size();
                 int currColumnSize = olapTable.getSchemaByIndexId(indexId).size();
-                if (currColumnSize < selectedColumnSize) {
+                // If indexId and old selectedIndexId both have the same rowCount and columnSize,
+                // prefer non baseIndexId first.
+                if (currColumnSize == selectedColumnSize) {
+                    selectedIndexId = (indexId == baseIndexId) ? selectedIndexId : indexId;
+                } else if (currColumnSize < selectedColumnSize) {
                     selectedIndexId = indexId;
                 }
             }
