@@ -47,13 +47,19 @@ public class MvRewriteContext {
 
     private List<JoinDeriveContext> joinDeriveContexts;
 
+    // Whether to compensate partition predicate from the plan's `selectedPartitionIds`,
+    // check `isNeedCompensatePartitionPredicate` to get more information.
+    private final boolean isCompensatePartitionPredicate;
+
     public MvRewriteContext(
             MaterializationContext materializationContext,
             List<Table> queryTables,
             OptExpression queryExpression,
             ReplaceColumnRefRewriter queryColumnRefRewriter,
             PredicateSplit queryPredicateSplit,
-            List<ScalarOperator> onPredicates, Rule rule) {
+            List<ScalarOperator> onPredicates,
+            Rule rule,
+            boolean isCompensatePartitionPredicate) {
         this.materializationContext = materializationContext;
         this.queryTables = queryTables;
         this.queryExpression = queryExpression;
@@ -62,6 +68,7 @@ public class MvRewriteContext {
         this.onPredicates = onPredicates;
         this.rule = rule;
         this.joinDeriveContexts = Lists.newArrayList();
+        this.isCompensatePartitionPredicate = isCompensatePartitionPredicate;
     }
 
     public MaterializationContext getMaterializationContext() {
@@ -114,5 +121,9 @@ public class MvRewriteContext {
 
     public void setEnforcedNonExistedColumns(List<ColumnRefOperator> enforcedNonExistedColumns) {
         this.enforcedNonExistedColumns = enforcedNonExistedColumns;
+    }
+
+    public boolean isCompensatePartitionPredicate() {
+        return this.isCompensatePartitionPredicate;
     }
 }
