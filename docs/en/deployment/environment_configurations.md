@@ -145,10 +145,10 @@ sysctl -p
 Transparent Huge Pages are enabled by default. We recommend you disable this feature because it can interfere with the memory allocator, and thereby lead to a drop in performance.
 
 ```Bash
-# Temporary change.
+# Change the configuration temporarily.
 echo madvise | sudo tee /sys/kernel/mm/transparent_hugepage/enabled
 echo madvise | sudo tee /sys/kernel/mm/transparent_hugepage/defrag
-# Permanent change.
+# Change the configuration permanently.
 cat >> /etc/rc.d/rc.local << EOF
 if test -f /sys/kernel/mm/transparent_hugepage/enabled; then
    echo madvise > /sys/kernel/mm/transparent_hugepage/enabled
@@ -216,9 +216,9 @@ We recommend you use the mq-deadline scheduler for SATA disks and the kyber sche
 The mq-deadline scheduler algorithm suits SATA disks.
 
 ```Bash
-# Temporary change.
+# Change the configuration temporarily.
 echo mq-deadline | sudo tee /sys/block/${disk}/queue/scheduler
-# Permanent change.
+# Change the configuration permanently.
 cat >> /etc/rc.d/rc.local << EOF
 echo mq-deadline | sudo tee /sys/block/${disk}/queue/scheduler
 EOF
@@ -230,9 +230,9 @@ chmod +x /etc/rc.d/rc.local
 - If your NVMe or SSD disks support the kyber scheduler algorithm:
 
    ```Bash
-   # Temporary change.
+   # Change the configuration temporarily.
    echo kyber | sudo tee /sys/block/${disk}/queue/scheduler
-   # Permanent change.
+   # Change the configuration permanently.
    cat >> /etc/rc.d/rc.local << EOF
    echo kyber | sudo tee /sys/block/${disk}/queue/scheduler
    EOF
@@ -242,9 +242,9 @@ chmod +x /etc/rc.d/rc.local
 - If your NVMe or SSD disks support the none (or noop) scheduler.
 
    ```Bash
-   # Temporary change.
+   # Change the configuration temporarily.
    echo none | sudo tee /sys/block/vdb/queue/scheduler
-   # Permanent change.
+   # Change the configuration permanently.
    cat >> /etc/rc.d/rc.local << EOF
    echo none | sudo tee /sys/block/${disk}/queue/scheduler
    EOF
@@ -256,9 +256,9 @@ chmod +x /etc/rc.d/rc.local
 We recommend you disable SELinux.
 
 ```Bash
-# Temporary change.
+# Change the configuration temporarily.
 setenforce 0
-# Permanent change.
+# Change the configuration permanently.
 sed -i 's/SELINUX=.*/SELINUX=disabled/' /etc/selinux/config
 sed -i 's/SELINUXTYPE/#SELINUXTYPE/' /etc/selinux/config
 ```
