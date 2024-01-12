@@ -158,7 +158,6 @@ import static io.trino.plugin.jdbc.PredicatePushdownController.DISABLE_PUSHDOWN;
 import static io.trino.plugin.jdbc.PredicatePushdownController.FULL_PUSHDOWN;
 import static io.trino.plugin.jdbc.StandardColumnMappings.bigintColumnMapping;
 import static io.trino.plugin.jdbc.StandardColumnMappings.bigintWriteFunction;
-import static io.trino.plugin.jdbc.StandardColumnMappings.booleanColumnMapping;
 import static io.trino.plugin.jdbc.StandardColumnMappings.booleanWriteFunction;
 import static io.trino.plugin.jdbc.StandardColumnMappings.charWriteFunction;
 import static io.trino.plugin.jdbc.StandardColumnMappings.dateReadFunctionUsingLocalDate;
@@ -171,7 +170,6 @@ import static io.trino.plugin.jdbc.StandardColumnMappings.integerColumnMapping;
 import static io.trino.plugin.jdbc.StandardColumnMappings.integerWriteFunction;
 import static io.trino.plugin.jdbc.StandardColumnMappings.longDecimalWriteFunction;
 import static io.trino.plugin.jdbc.StandardColumnMappings.timestampReadFunction;
-import static io.trino.plugin.jdbc.StandardColumnMappings.longTimestampWriteFunction;
 import static io.trino.plugin.jdbc.StandardColumnMappings.realWriteFunction;
 import static io.trino.plugin.jdbc.StandardColumnMappings.shortDecimalWriteFunction;
 import static io.trino.plugin.jdbc.StandardColumnMappings.smallintColumnMapping;
@@ -199,9 +197,7 @@ import static io.trino.spi.type.IntegerType.INTEGER;
 import static io.trino.spi.type.RealType.REAL;
 import static io.trino.spi.type.SmallintType.SMALLINT;
 import static io.trino.spi.type.TimeType.createTimeType;
-import static io.trino.spi.type.TimeWithTimeZoneType.TIME_WITH_TIME_ZONE;
 import static io.trino.spi.type.TimestampType.createTimestampType;
-import static io.trino.spi.type.TimestampWithTimeZoneType.TIMESTAMP_TZ_MILLIS;
 import static io.trino.spi.type.TinyintType.TINYINT;
 import static io.trino.spi.type.VarbinaryType.VARBINARY;
 import static java.lang.Float.floatToRawIntBits;
@@ -432,9 +428,6 @@ public class StarRocksClient
         }
 
         switch (typeHandle.getJdbcType()) {
-            case Types.BIT:
-                return Optional.of(booleanColumnMapping());
-
             case Types.TINYINT:
                 return Optional.of(tinyintColumnMapping());
 
@@ -459,7 +452,6 @@ public class StarRocksClient
             case Types.DOUBLE:
                 return Optional.of(doubleColumnMapping());
 
-            case Types.NUMERIC:
             case Types.DECIMAL:
                 int decimalDigits = typeHandle.getDecimalDigits().orElseThrow(() -> new IllegalStateException("decimal digits not present"));
                 int precision = typeHandle.getRequiredColumnSize();
@@ -623,7 +615,7 @@ public class StarRocksClient
             return WriteMapping.longMapping("float", realWriteFunction());
         }
         if (type == DOUBLE) {
-            return WriteMapping.doubleMapping("double precision", doubleWriteFunction());
+            return WriteMapping.doubleMapping("double", doubleWriteFunction());
         }
 
         if (type instanceof DecimalType decimalType) {
@@ -638,27 +630,15 @@ public class StarRocksClient
             return WriteMapping.longMapping("date", mySqlDateWriteFunctionUsingLocalDate());
         }
 
-        if (type instanceof TimeType timeType) {
-            if (timeType.getPrecision() <= MAX_SUPPORTED_DATE_TIME_PRECISION) {
-                return WriteMapping.longMapping(format("time(%s)", timeType.getPrecision()), timeWriteFunction(timeType.getPrecision()));
+        if (type instanceof TimestampType timestampType) {
+            if (timestampType.getPrecision() == 0) {
+                return WriteMapping.longMapping("datetime", timestampWriteFunction(timestampType));
             }
-            return WriteMapping.longMapping(format("time(%s)", MAX_SUPPORTED_DATE_TIME_PRECISION), timeWriteFunction(MAX_SUPPORTED_DATE_TIME_PRECISION));
-        }
-
-        if (TIME_WITH_TIME_ZONE.equals(type) || TIMESTAMP_TZ_MILLIS.equals(type)) {
             throw new TrinoException(NOT_SUPPORTED, "Unsupported column type: " + type.getDisplayName());
         }
 
-        if (type instanceof TimestampType timestampType) {
-            if (timestampType.getPrecision() <= MAX_SUPPORTED_DATE_TIME_PRECISION) {
-                verify(timestampType.getPrecision() <= TimestampType.MAX_SHORT_PRECISION);
-                return WriteMapping.longMapping(format("datetime(%s)", timestampType.getPrecision()), timestampWriteFunction(timestampType));
-            }
-            return WriteMapping.objectMapping(format("datetime(%s)", MAX_SUPPORTED_DATE_TIME_PRECISION), longTimestampWriteFunction(timestampType, MAX_SUPPORTED_DATE_TIME_PRECISION));
-        }
-
         if (VARBINARY.equals(type)) {
-            return WriteMapping.sliceMapping("mediumblob", varbinaryWriteFunction());
+            return WriteMapping.sliceMapping("varbinary", varbinaryWriteFunction());
         }
 
         if (type instanceof CharType charType) {
@@ -666,7 +646,7 @@ public class StarRocksClient
         }
 
         if (type instanceof VarcharType varcharType) {
-            String dataType = "string";
+            String dataType = varcharType.getLength().map(l -> "varchar(" + l + ")").orElse("string");
             return WriteMapping.sliceMapping(dataType, varcharWriteFunction());
         }
 

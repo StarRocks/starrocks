@@ -47,10 +47,10 @@ public class StarRocksConfig
 {
     private static final Splitter SPLITTER = Splitter.on(',').trimResults().omitEmptyStrings();
     private List<String> loadUrls = ImmutableList.of();
-    private String labelPrefix;
-    private long maxCacheBytes;
-    private int connectTimeout;
-    private long chunkLimit;
+    private String labelPrefix = "trino-";
+    private long maxCacheBytes = 268435456L;
+    private int connectTimeout = 30000;
+    private long chunkLimit = Long.MAX_VALUE;
 
     @NotNull
     @Size(min = 1)
