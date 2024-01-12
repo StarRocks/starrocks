@@ -365,7 +365,7 @@ BE dynamic parameters are as follows.
 
 - **Default:** 4
 - **Description:** The maximum number of threads used for concurrent compaction tasks.
-- **Introduced in:**
+- **Introduced in:** 3.0.0
 
 #### update_compaction_ratio_threshold
 
