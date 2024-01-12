@@ -244,7 +244,7 @@ Whether to enable intermediate result spilling. Default: `false`. If it is set t
 
 Used to check whether the column name referenced in ORDER BY is ambiguous. When this variable is set to the default value `TRUE`, an error is reported for such a query pattern: Duplicate alias is used in different expressions of the query and this alias is also a sorting field in ORDER BY, for example, `select distinct t1.* from tbl1 t1 order by t1.k1;`. The logic is the same as that in v2.3 and earlier. When this variable is set to `FALSE`, a loose deduplication mechanism is used, which processes such queries as valid SQL queries.
 
-This variable is supported from 2.5.18 and 3.1.7.
+This variable is supported from v2.5.18 and v3.1.7.
 
 ### enable_profile
 
