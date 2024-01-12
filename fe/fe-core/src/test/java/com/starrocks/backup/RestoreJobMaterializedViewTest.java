@@ -45,6 +45,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
@@ -135,6 +136,8 @@ public class RestoreJobMaterializedViewTest {
     private EditLog editLog;
     @Mocked
     private SystemInfoService systemInfoService;
+    @Mocked
+    private NodeSelector nodeSelector;
 
     @Injectable
     private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
@@ -185,7 +188,10 @@ public class RestoreJobMaterializedViewTest {
             }
 
             {
-                systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
+                systemInfoService.getNodeSelector();
+                minTimes = 0;
+                result = nodeSelector;
+                nodeSelector.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
                 result = beIds;
 

@@ -54,6 +54,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskQueue;
@@ -131,6 +132,8 @@ public class RestoreJobPrimaryKeyTest {
     private EditLog editLog;
     @Mocked
     private SystemInfoService systemInfoService;
+    @Mocked
+    private NodeSelector nodeSelector;
 
     @Injectable
     private Repository repo = new Repository(repoId, "repo", false, "bos://my_repo",
@@ -168,7 +171,10 @@ public class RestoreJobPrimaryKeyTest {
 
         new Expectations() {
             {
-                systemInfoService.getNodeSelector().seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
+                systemInfoService.getNodeSelector();
+                minTimes = 0;
+                result = nodeSelector;
+                nodeSelector.seqChooseBackendIds(anyInt, anyBoolean, anyBoolean, null);
                 minTimes = 0;
                 result = new Delegate() {
                     public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAlive,
