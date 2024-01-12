@@ -102,7 +102,8 @@ enum TPipelineProfileLevel {
 enum TSpillMode {
   AUTO,
   FORCE,
-  NONE
+  NONE,
+  RANDOM,
 }
 
 enum TSpillableOperatorType {
@@ -204,6 +205,10 @@ struct TQueryOptions {
   78: optional i32 spill_encode_level;
   79: optional i64 spill_revocable_max_bytes;
   80: optional bool spill_enable_direct_io;
+  // only used in spill_mode="random"
+  // probability of triggering operator spill
+  // (0.0,1.0)
+  81: optional double spill_rand_ratio;
 
   85: optional TSpillMode spill_mode;
   
