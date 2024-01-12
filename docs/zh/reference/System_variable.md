@@ -233,7 +233,9 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 ### enable_strict_order_by
 
-是否校验 order by 引用列歧义性。默认值：`true`。查询中输出列如果存在不同的表达式, 但使用重复的别名且按照该别名排序，查询会报错。该行为和 2.3 及之前版本的逻辑一致。如果取值为 `false`，采用宽松的去重机制，把这类查询作为有效 SQL 处理。
+是否校验 ORDER BY 引用列是否有歧义。设置为默认值 `TRUE` 时，如果查询中的输出列存在不同的表达式使用重复别名的情况，且按照该别名进行排序，查询会报错，例如 `select distinct t1.* from tbl1 t1 order by t1.k1;`。该行为和 2.3 及之前版本的逻辑一致。如果取值为 `FALSE`，采用宽松的去重机制，把这类查询作为有效 SQL 处理。
+
+该变量从 2.5.18，3.1.7 开始支持。
 
 ### enable_profile
 
