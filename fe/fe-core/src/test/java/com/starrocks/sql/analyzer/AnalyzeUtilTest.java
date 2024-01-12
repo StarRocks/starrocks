@@ -170,6 +170,13 @@ public class AnalyzeUtilTest {
         Assert.assertEquals("[db1.t0]", m.keySet().toString());
         Assert.assertEquals("[[*]]", m.values().toString());
 
+        // multi table select *
+        sql = "select * from db1.t0,db2.t0,test.t0";
+        statementBase = analyzeSuccess(sql);
+        m = AnalyzerUtils.collectAllSelectTableColumns(statementBase);
+        Assert.assertEquals("[test.t0, db2.t0, db1.t0]", m.keySet().toString());
+        Assert.assertEquals("[[*], [*], [*]]", m.values().toString());
+
         // SubqueryRelation
         sql = "select v11 from (select v1 as v11 from db2.t0) t1";
         statementBase = analyzeSuccess(sql);
@@ -285,19 +292,19 @@ public class AnalyzeUtilTest {
         Assert.assertEquals("[[pk, v1], [v1, v2]]", m.values().toString());
 
         m = AnalyzerUtils.collectAllSelectTableColumns(
-                analyzeSuccess("delete from tprimary using tprimary2 tp2 where tprimary.pk = tp2.pk"));
+                analyzeSuccess("delete from test.tprimary using test.tprimary2 tp2 where test.tprimary.pk = tp2.pk"));
         Assert.assertEquals("[test.tprimary2, test.tprimary]", m.keySet().toString());
         Assert.assertEquals("[[pk], [pk]]", m.values().toString());
 
         m = AnalyzerUtils.collectAllSelectTableColumns(analyzeSuccess(
-                "delete from tprimary using tprimary2 tp2 join t0 where tprimary.pk = tp2.pk " +
+                "delete from test.tprimary using test.tprimary2 tp2 join test.t0 where test.tprimary.pk = tp2.pk " +
                         "and tp2.pk = t0.v1 and t0.v2 > 0"));
         Assert.assertEquals("[test.t0, test.tprimary2, test.tprimary]", m.keySet().toString());
         Assert.assertEquals("[[v1, v2], [pk], [pk]]", m.values().toString());
 
         m = AnalyzerUtils.collectAllSelectTableColumns(analyzeSuccess(
-                "with tp2cte as (select * from tprimary2 where v2 < 10) delete from tprimary using " +
-                        "tp2cte where tprimary.pk = tp2cte.pk"));
+                "with tp2cte as (select * from test.tprimary2 where v2 < 10) delete from test.tprimary using " +
+                        "tp2cte where test.tprimary.pk = tp2cte.pk"));
         Assert.assertEquals("[test.tprimary2, test.tprimary]", m.keySet().toString());
         Assert.assertEquals("[[*, v2], [pk]]", m.values().toString());
 
@@ -331,28 +338,28 @@ public class AnalyzeUtilTest {
     public void testUpdateStatementCollectColumns() {
         // Primary Key
         // multi table update
-        String sql = "update tprimary set v2 = tp2.v2 from tprimary2 tp2 where tprimary.pk = tp2.pk";
+        String sql = "update test.tprimary set v2 = tp2.v2 from test.tprimary2 tp2 where test.tprimary.pk = tp2.pk";
         StatementBase statementBase = analyzeSuccess(sql);
         Map<TableName, Set<String>> m = AnalyzerUtils.collectAllSelectTableColumns(statementBase);
         Assert.assertEquals("[test.tprimary2, test.tprimary]", m.keySet().toString());
         Assert.assertEquals("[[pk, v2], [pk]]", m.values().toString());
 
         // single table update without condition
-        sql = "update tprimary set v2 = 1";
+        sql = "update test.tprimary set v2 = 1";
         statementBase = analyzeSuccess(sql);
         m = AnalyzerUtils.collectAllSelectTableColumns(statementBase);
         Assert.assertEquals("[]", m.keySet().toString());
         Assert.assertEquals("[]", m.values().toString());
 
         // single table update
-        sql = "update tprimary set v2 = 1 where v1 = 2";
+        sql = "update test.tprimary set v2 = 1 where v1 = 2";
         statementBase = analyzeSuccess(sql);
         m = AnalyzerUtils.collectAllSelectTableColumns(statementBase);
         Assert.assertEquals("[test.tprimary]", m.keySet().toString());
         Assert.assertEquals("[[v1]]", m.values().toString());
 
         // single table update subquery
-        sql = "update tprimary set v2 = v4+1 where v1 < (select avg(v1) from tprimary)";
+        sql = "update test.tprimary set v2 = v4+1 where v1 < (select avg(v1) from test.tprimary)";
         statementBase = analyzeSuccess(sql);
         m = AnalyzerUtils.collectAllSelectTableColumns(statementBase);
         Assert.assertEquals("[test.tprimary]", m.keySet().toString());
@@ -360,15 +367,15 @@ public class AnalyzeUtilTest {
 
         // multi table update plus
         m = AnalyzerUtils.collectAllSelectTableColumns(analyzeSuccess(
-                "update tprimary set v2 = tp2.v2 from tprimary2 tp2 join t0 where tprimary.pk = tp2.pk " +
-                        "and tp2.pk = t0.v1 and t0.v2 > 0"));
+                "update test.tprimary set v2 = tp2.v2 from test.tprimary2 tp2 join test.t0 where " +
+                        "test.tprimary.pk = tp2.pk and tp2.pk = test.t0.v1 and test.t0.v2 > 0"));
         Assert.assertEquals("[test.t0, test.tprimary2, test.tprimary]", m.keySet().toString());
         Assert.assertEquals("[[v1, v2], [pk, v2], [pk]]", m.values().toString());
 
         // multi table update cte
         m = AnalyzerUtils.collectAllSelectTableColumns(analyzeSuccess(
-                "with tp2cte as (select * from tprimary2 where v2 < 10) update tprimary set v2 = tp2cte.v2 " +
-                        "from tp2cte where tprimary.pk = tp2cte.pk"));
+                "with tp2cte as (select * from test.tprimary2 where v2 < 10) update test.tprimary " +
+                        "set v2 = tp2cte.v2 from tp2cte where test.tprimary.pk = tp2cte.pk"));
         Assert.assertEquals("[test.tprimary2, test.tprimary]", m.keySet().toString());
         Assert.assertEquals("[[*, v2], [pk]]", m.values().toString());
 

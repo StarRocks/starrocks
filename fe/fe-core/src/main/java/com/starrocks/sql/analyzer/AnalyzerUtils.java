@@ -462,15 +462,15 @@ public class AnalyzerUtils {
 
     private static class SelectTableColumnCollector extends AstTraverser<Void, Void> {
         protected Map<TableName, Set<String>> tableColumns;
-
         protected Map<String, TableName> aliasMap;
-
         protected Set<TableName> ctes;
+        protected Set<TableName> realTableAndViews;
 
         public SelectTableColumnCollector() {
             this.tableColumns = Maps.newHashMap();
             this.aliasMap = Maps.newHashMap();
             this.ctes = Sets.newHashSet();
+            this.realTableAndViews = Sets.newHashSet();
         }
 
         public Map<TableName, Set<String>> getTableColumns() {
@@ -486,7 +486,10 @@ public class AnalyzerUtils {
             }
             tableColumns.putAll(added);
             for (TableName cte : ctes) {
-                tableColumns.remove(cte);
+                // policy rewrite node tblName maybe real Table/View
+                if (!realTableAndViews.contains(cte)) {
+                    tableColumns.remove(cte);
+                }
             }
             return tableColumns;
         }
@@ -503,31 +506,58 @@ public class AnalyzerUtils {
             return super.visitSubquery(node, context);
         }
 
+        private void visitTableAndView(TableName alias, TableName realName, boolean createByPolicyRewritten) {
+            if (alias != null) {
+                aliasMap.put(alias.getTbl(), realName);
+            }
+            if (!createByPolicyRewritten) {
+                realTableAndViews.add(realName);
+            } else {
+                // policy rewritten node should be ignored
+                ctes.add(realName);
+            }
+        }
+
         @Override
         public Void visitTable(TableRelation node, Void context) {
-            if (node.getAlias() != null) {
-                aliasMap.put(node.getAlias().getTbl(), node.getName());
-            }
+            visitTableAndView(node.getAlias(), node.getName(), node.isCreateByPolicyRewritten());
             return super.visitTable(node, context);
         }
 
         @Override
         public Void visitView(ViewRelation node, Void context) {
-            if (node.getAlias() != null) {
-                aliasMap.put(node.getAlias().getTbl(), node.getName());
-            }
+            visitTableAndView(node.getAlias(), node.getName(), node.isCreateByPolicyRewritten());
             // block view definition drill-down
             return null;
+        }
+
+        // handle 'select * from a,b,c' situation
+        private boolean fillStarRelation(Relation relation, Set<TableName> starRelationNames) {
+            if (relation instanceof TableRelation || relation instanceof ViewRelation) {
+                if (!(relation instanceof FileTableFunctionRelation)) {
+                    starRelationNames.add(relation.getResolveTableName());
+                }
+                return true;
+            } else if (relation instanceof JoinRelation) {
+                JoinRelation joinRelation = (JoinRelation) relation;
+                boolean leftResult = fillStarRelation(joinRelation.getLeft(), starRelationNames);
+                boolean rightResult = fillStarRelation(joinRelation.getRight(), starRelationNames);
+                return leftResult && rightResult;
+            } else return false;
         }
 
         @Override
         public Void visitSelect(SelectRelation node, Void context) {
             Relation relation = node.getRelation();
-            if ((relation instanceof TableRelation && !(relation instanceof FileTableFunctionRelation))
-                    || relation instanceof ViewRelation) {
-                List<Expr> outputExpression = node.getOutputExpression();
-                if (outputExpression.stream().allMatch(expr -> expr instanceof FieldReference)) {
+            if (node.getOutputExpression().stream().allMatch(expr -> expr instanceof FieldReference)) {
+                if ((relation instanceof TableRelation && !(relation instanceof FileTableFunctionRelation))
+                        || relation instanceof ViewRelation) {
                     put(relation.getResolveTableName(), "*");
+                } else {
+                    Set<TableName> starRelationNames = Sets.newHashSet();
+                    if (fillStarRelation(relation, starRelationNames)) {
+                        starRelationNames.forEach(name -> put(name, "*"));
+                    }
                 }
             }
             return super.visitSelect(node, context);
