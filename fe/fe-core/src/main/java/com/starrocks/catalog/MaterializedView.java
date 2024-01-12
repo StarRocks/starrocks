@@ -1065,7 +1065,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
             for (BaseTableInfo tableInfo : baseTableInfos) {
-                Table table = tableInfo.getTable();
+                Table table = tableInfo.getTableChecked();
 
                 // we can not judge whether mv based on external table is update-to-date,
                 // because we do not know that any changes in external table.
@@ -1130,7 +1130,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         TableProperty.QueryRewriteConsistencyMode externalTableRewriteMode = getForceExternalTableQueryRewrite();
         TableProperty.QueryRewriteConsistencyMode olapTableRewriteMode = tableProperty.getOlapTableQueryRewrite();
         for (BaseTableInfo tableInfo : baseTableInfos) {
-            Table table = tableInfo.getTable();
+            Table table = tableInfo.getTableChecked();
             if (!table.isNativeTableOrMaterializedView()) {
                 switch (externalTableRewriteMode) {
                     case DISABLE:
@@ -1237,13 +1237,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Preconditions.checkState(slotRefs.size() == 1);
         SlotRef partitionSlotRef = slotRefs.get(0);
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            Table table = baseTableInfo.getTable();
+            Table table = baseTableInfo.getTableChecked();
             if (partitionSlotRef.getTblNameWithoutAnalyzed().getTbl().equals(baseTableInfo.getTableName())) {
                 return Pair.create(table, table.getColumn(partitionSlotRef.getColumnName()));
             }
         }
         String baseTableNames = baseTableInfos.stream()
-                .map(tableInfo -> tableInfo.getTable().getName()).collect(Collectors.joining(","));
+                .map(tableInfo -> tableInfo.getTableChecked().getName()).collect(Collectors.joining(","));
         throw new RuntimeException(
                 String.format("can not find partition info for mv:%s on base tables:%s", name, baseTableNames));
     }

@@ -249,7 +249,7 @@ You can find a function based on the following categories:
 - [cast](../sql-functions/json-functions/json-query-and-processing-functions/cast.md)
 - [get_json_double](../sql-functions/json-functions/json-query-and-processing-functions/get_json_double.md)
 - [get_json_int](../sql-functions/json-functions/json-query-and-processing-functions/get_json_int.md)
-- [get_json_string](../sql-functions/json-functions/json-query-and-processing-functions/get_json_string.md)
+- [get_json_strin,get_json_object](../sql-functions/json-functions/json-query-and-processing-functions/get_json_string.md)
 - [json_each](../sql-functions/json-functions/json-query-and-processing-functions/json_each.md)
 - [json_exists](../sql-functions/json-functions/json-query-and-processing-functions/json_exists.md)
 - [json_length](../sql-functions/json-functions/json-query-and-processing-functions/json_length.md)

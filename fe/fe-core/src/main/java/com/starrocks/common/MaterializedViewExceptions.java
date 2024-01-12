@@ -14,6 +14,9 @@
 
 package com.starrocks.common;
 
+import com.starrocks.catalog.BaseTableInfo;
+import com.starrocks.sql.analyzer.SemanticException;
+
 /**
  * Encapsulate error message and exceptions for materialized view
  */
@@ -24,5 +27,25 @@ public class MaterializedViewExceptions {
      */
     public static String inactiveReasonForBaseTableNotExists(String tableName) {
         return "base-table dropped: " + tableName;
+    }
+
+    public static String inactiveReasonForBaseTableRenamed(String tableName) {
+        return "base-table renamed: " + tableName;
+    }
+
+    public static String inactiveReasonForBaseTableSwapped(String tableName) {
+        return "base-table swapped: " + tableName;
+    }
+
+    public static String inactiveReasonForBaseTableActive(String tableName) {
+        return "base-mv inactive: " + tableName;
+    }
+
+    public static String inactiveReasonForBaseViewChanged(String tableName) {
+        return "base-view changed: " + tableName;
+    }
+
+    public static SemanticException reportBaseTableNotExists(BaseTableInfo baseTableInfo) {
+        return new SemanticException("base-table not dropped: " + baseTableInfo.getTableName());
     }
 }

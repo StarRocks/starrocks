@@ -54,6 +54,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
@@ -885,8 +886,10 @@ public class Alter {
         origTable.checkAndSetName(newTblName, true);
 
         // inactive the related MVs
-        LocalMetastore.inactiveRelatedMaterializedView(db, origTable, "base-table swapped: " + origTblName);
-        LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl, "base-table swapped: " + newTblName);
+        LocalMetastore.inactiveRelatedMaterializedView(db, origTable,
+                MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName));
+        LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl,
+                MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName));
         swapTableInternal(db, origTable, olapNewTbl);
 
         // write edit log
@@ -976,7 +979,8 @@ public class Alter {
             throw new DdlException("failed to init view stmt", e);
         }
         view.setNewFullSchema(newFullSchema);
-        LocalMetastore.inactiveRelatedMaterializedView(db, view, "base-table changed: " + viewName);
+        LocalMetastore.inactiveRelatedMaterializedView(db, view,
+                MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName));
 
         db.dropTable(viewName);
         db.createTable(view);
@@ -1005,7 +1009,8 @@ public class Alter {
                 throw new DdlException("failed to init view stmt", e);
             }
             view.setNewFullSchema(newFullSchema);
-            LocalMetastore.inactiveRelatedMaterializedView(db, view, "base-view changed: " + view.getName());
+            LocalMetastore.inactiveRelatedMaterializedView(db, view,
+                    MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName));
 
             db.dropTable(viewName);
             db.createTable(view);

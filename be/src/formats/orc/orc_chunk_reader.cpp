@@ -19,6 +19,7 @@
 #include "formats/orc/fill_function.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/orc/orc_mapping.h"
+#include "formats/orc/orc_memory_pool.h"
 #include "fs/fs.h"
 #include "gen_cpp/orc_proto.pb.h"
 #include "gutil/casts.h"
@@ -61,6 +62,7 @@ OrcChunkReader::OrcChunkReader(RuntimeState* state, std::vector<SlotDescriptor*>
 
 Status OrcChunkReader::init(std::unique_ptr<orc::InputStream> input_stream) {
     try {
+        _reader_options.setMemoryPool(*getOrcMemoryPool());
         auto reader = orc::createReader(std::move(input_stream), _reader_options);
         return init(std::move(reader));
     } catch (std::exception& e) {
