@@ -36,8 +36,6 @@ package com.starrocks.alter;
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
@@ -68,9 +66,6 @@ public class AlterJobV2Test {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        Config.alter_scheduler_interval_millisecond = 1000;
-        FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         UtFrameUtils.setUpForPersistTest();
 
@@ -78,6 +73,9 @@ public class AlterJobV2Test {
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.setQueryId(UUIDUtil.genUUID());
         starRocksAssert = new StarRocksAssert(connectContext);
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
 
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.schema_change_test(k1 int, k2 int, k3 int) " +

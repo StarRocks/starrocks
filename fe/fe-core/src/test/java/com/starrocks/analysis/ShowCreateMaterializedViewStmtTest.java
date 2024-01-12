@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -45,13 +44,14 @@ public class ShowCreateMaterializedViewStmtTest {
 
     @BeforeAll
     public static void setUp() throws Exception {
-        FeConstants.runningUnitTest = true;
-        Config.alter_scheduler_interval_millisecond = 100;
-        Config.dynamic_partition_enable = true;
-        Config.dynamic_partition_check_interval_seconds = 1;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.createDefaultCtx();
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(ctx);
+        // NOTE: no set it because we need to check the defined sql.
+        Config.default_mv_refresh_immediate = true;
+
         ConnectorPlanTestBase.mockHiveCatalog(ctx);
         starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase("test").useDatabase("test")

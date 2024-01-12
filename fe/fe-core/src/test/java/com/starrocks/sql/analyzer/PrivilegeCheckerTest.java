@@ -193,7 +193,6 @@ public class PrivilegeCheckerTest {
     }
 
     private static void createMaterializedView(String sql, ConnectContext connectContext) throws Exception {
-        Config.enable_experimental_mv = true;
         CreateMaterializedViewStatement createMaterializedViewStatement =
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
@@ -2289,7 +2288,6 @@ public class PrivilegeCheckerTest {
     public void testCreateMaterializedViewStatement() throws Exception {
 
         // db create privilege
-        Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv1 " +
                 "distributed by hash(k2)" +
                 "refresh async START('9999-12-31') EVERY(INTERVAL 3 MINUTE) " +
@@ -2342,7 +2340,6 @@ public class PrivilegeCheckerTest {
     @Test
     public void testAlterMaterializedViewStatement() throws Exception {
 
-        Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv1 " +
                 "distributed by hash(k2)" +
                 "refresh async START('9999-12-31') EVERY(INTERVAL 3 MINUTE) " +
@@ -2366,7 +2363,6 @@ public class PrivilegeCheckerTest {
     public void testRefreshMaterializedViewStatement() throws Exception {
 
         ctxToRoot();
-        Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv2 " +
                 "distributed by hash(k2)" +
                 "refresh async START('9999-12-31') EVERY(INTERVAL 3 MINUTE) " +
@@ -2396,7 +2392,6 @@ public class PrivilegeCheckerTest {
     @Test
     public void testShowMaterializedViewStatement() throws Exception {
         ctxToRoot();
-        Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv3 " +
                 "distributed by hash(k2)" +
                 "refresh async START('9999-12-31') EVERY(INTERVAL 3 MINUTE) " +
@@ -2432,7 +2427,6 @@ public class PrivilegeCheckerTest {
     public void testDropMaterializedViewStatement() throws Exception {
 
         ctxToRoot();
-        Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv4 " +
                 "distributed by hash(k2)" +
                 "refresh async START('9999-12-31') EVERY(INTERVAL 3 MINUTE) " +
@@ -3088,7 +3082,6 @@ public class PrivilegeCheckerTest {
     @Test
     public void testShowTable() throws Exception {
         ctxToRoot();
-        Config.enable_experimental_mv = true;
         String createSql = "create materialized view db1.mv5 " +
                 "distributed by hash(k2)" +
                 "refresh async START('9999-12-31') EVERY(INTERVAL 1000 MINUTE) " +

@@ -23,7 +23,6 @@ import com.starrocks.backup.mv.MVRestoreUpdater;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -46,7 +45,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         MaterializedViewTestBase.beforeClass();
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
-        Config.default_replication_num = 1;
 
         starRocksAssert.useTable("depts");
         starRocksAssert.useTable("depts_null");

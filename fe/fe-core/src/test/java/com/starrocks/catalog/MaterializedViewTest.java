@@ -25,7 +25,6 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.NotImplementedException;
@@ -357,7 +356,6 @@ public class MaterializedViewTest {
     @Test
     public void testRangePartitionSerialization() throws Exception {
         FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -425,7 +423,6 @@ public class MaterializedViewTest {
     @Test
     public void testRenameMaterializedView() throws Exception {
         FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -486,7 +483,6 @@ public class MaterializedViewTest {
     @Test
     public void testMvAfterDropBaseTable() throws Exception {
         FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -520,7 +516,6 @@ public class MaterializedViewTest {
     @Test
     public void testMvAfterBaseTableRename() throws Exception {
         FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -554,7 +549,6 @@ public class MaterializedViewTest {
     @Test
     public void testMaterializedViewWithHint() throws Exception {
         FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -648,7 +642,6 @@ public class MaterializedViewTest {
     @Test
     public void testCreateMaterializedViewWithInactiveMaterializedView() throws Exception {
         FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
