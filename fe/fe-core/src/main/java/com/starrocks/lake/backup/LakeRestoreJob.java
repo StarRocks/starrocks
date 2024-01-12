@@ -28,6 +28,7 @@ import com.starrocks.backup.RestoreFileMapping.IdChain;
 import com.starrocks.backup.RestoreJob;
 import com.starrocks.backup.SnapshotInfo;
 import com.starrocks.backup.Status;
+import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FsBroker;
@@ -84,9 +85,10 @@ public class LakeRestoreJob extends RestoreJob {
 
     public LakeRestoreJob(String label, String backupTs, long dbId, String dbName, BackupJobInfo jobInfo,
                           boolean allowLoad, int restoreReplicationNum, long timeoutMs,
-                          GlobalStateMgr globalStateMgr, long repoId, BackupMeta backupMeta) {
+                          GlobalStateMgr globalStateMgr, long repoId, BackupMeta backupMeta,
+                          MvRestoreContext mvRestoreContext) {
         super(label, backupTs, dbId, dbName, jobInfo, allowLoad, restoreReplicationNum, timeoutMs,
-                globalStateMgr, repoId, backupMeta);
+                globalStateMgr, repoId, backupMeta, mvRestoreContext);
         this.type = JobType.LAKE_RESTORE;
     }
 
@@ -315,7 +317,7 @@ public class LakeRestoreJob extends RestoreJob {
             LakeTable remoteLakeTbl = (LakeTable) remoteOlapTbl;
             StorageInfo storageInfo = remoteLakeTbl.getTableProperty().getStorageInfo();
             remoteLakeTbl.setStorageInfo(pathInfo, storageInfo.getDataCacheInfo());
-            remoteLakeTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
+            remoteLakeTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum, new MvRestoreContext());
         } catch (DdlException e) {
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
         }

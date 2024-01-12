@@ -53,6 +53,7 @@ import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreFileMapping.IdChain;
 import com.starrocks.backup.Status.ErrCode;
+import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
@@ -61,7 +62,6 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -180,6 +180,8 @@ public class RestoreJob extends AbstractJob {
 
     protected Map<Long, Long> unfinishedSignatureToId = Maps.newConcurrentMap();
 
+    private MvRestoreContext mvRestoreContext;
+
     private AgentBatchTask batchTask;
 
     public RestoreJob() {
@@ -188,7 +190,8 @@ public class RestoreJob extends AbstractJob {
 
     public RestoreJob(String label, String backupTs, long dbId, String dbName, BackupJobInfo jobInfo,
                       boolean allowLoad, int restoreReplicationNum, long timeoutMs,
-                      GlobalStateMgr globalStateMgr, long repoId, BackupMeta backupMeta) {
+                      GlobalStateMgr globalStateMgr, long repoId, BackupMeta backupMeta,
+                      MvRestoreContext mvRestoreContext) {
         super(JobType.RESTORE, label, dbId, dbName, timeoutMs, globalStateMgr, repoId);
         this.backupTimestamp = backupTs;
         this.jobInfo = jobInfo;
@@ -196,6 +199,7 @@ public class RestoreJob extends AbstractJob {
         this.restoreReplicationNum = restoreReplicationNum;
         this.state = RestoreJobState.PENDING;
         this.backupMeta = backupMeta;
+        this.mvRestoreContext = mvRestoreContext;
     }
 
     public RestoreJobState getState() {
@@ -204,6 +208,14 @@ public class RestoreJob extends AbstractJob {
 
     public RestoreFileMapping getFileMapping() {
         return fileMapping;
+    }
+
+    public BackupJobInfo getJobInfo() {
+        return jobInfo;
+    }
+
+    public BackupMeta getBackupMeta() {
+        return backupMeta;
     }
 
     public synchronized boolean finishTabletSnapshotTask(SnapshotTask task, TFinishTaskRequest request) {
@@ -735,7 +747,7 @@ public class RestoreJob extends AbstractJob {
     }
 
     protected Status resetTableForRestore(OlapTable remoteOlapTbl, Database db) {
-        return remoteOlapTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum);
+        return remoteOlapTbl.resetIdsForRestore(globalStateMgr, db, restoreReplicationNum, mvRestoreContext);
     }
 
     protected void sendCreateReplicaTasks() {
@@ -1420,14 +1432,16 @@ public class RestoreJob extends AbstractJob {
                         }
                     }
 
-                    if (tbl.isMaterializedView()) {
-                        // rebuild materialized view after restore job finished
-                        MaterializedView mv = (MaterializedView) tbl;
+                    // rebuild olap table after restore job finished,
+                    // - for base table, update existed materialized view's base table info
+                    // - for materialized view, update existed materialized view's base table infos
+                    if (tbl instanceof OlapTable) {
+                        OlapTable olapTable = (OlapTable) tbl;
                         try {
-                            mv.doAfterRestore(db);
+                            olapTable.doAfterRestore(db, mvRestoreContext);
                         } catch (Exception e) {
                             // no throw exceptions
-                            LOG.warn(String.format("rebuild materialized view %s failed: ", mv.getName()), e);
+                            LOG.warn(String.format("rebuild olap table %s failed: ", olapTable.getName()), e);
                         }
                     }
                 }

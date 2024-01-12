@@ -198,6 +198,7 @@ import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
+import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
@@ -3259,6 +3260,10 @@ public class GlobalStateMgr {
 
     public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
         this.alterJobMgr.replayAlterMaterializedViewStatus(log);
+    }
+
+    public void replayAlterMaterializedViewBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log) {
+        this.alterJobMgr.replayAlterMaterializedViewBaseTableInfos(log);
     }
 
     /*

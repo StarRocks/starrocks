@@ -141,11 +141,12 @@ public class BaseTableInfo {
 
     public Table getTable() {
         if (isInternalCatalog(catalogName)) {
-            Table table = getTableById();
-            if (table == null) {
-                table = getTableByName();
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+            if (db == null) {
+                return null;
+            } else {
+                return db.getTable(tableId);
             }
-            return table;
         } else {
             if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
                 LOG.warn("catalog {} not exist", catalogName);
@@ -157,24 +158,10 @@ public class BaseTableInfo {
                 return null;
             }
 
-            if (tableIdentifier == null) {
-                this.tableIdentifier = table.getTableIdentifier();
-                return table;
-            }
-
             if (tableIdentifier != null && table.getTableIdentifier().equals(tableIdentifier)) {
                 return table;
             }
             return null;
-        }
-    }
-
-    public Table getTableById() {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        if (db == null) {
-            return null;
-        } else {
-            return db.getTable(tableId);
         }
     }
 

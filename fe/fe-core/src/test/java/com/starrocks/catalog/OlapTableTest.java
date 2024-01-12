@@ -39,6 +39,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table.TableType;
@@ -86,7 +87,7 @@ public class OlapTableTest {
             if (table.getType() != TableType.OLAP) {
                 continue;
             }
-            ((OlapTable) table).resetIdsForRestore(GlobalStateMgr.getCurrentState(), db, 3);
+            ((OlapTable) table).resetIdsForRestore(GlobalStateMgr.getCurrentState(), db, 3, new MvRestoreContext());
         }
     }
 
