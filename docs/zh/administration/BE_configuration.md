@@ -415,6 +415,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。
 - 默认值：10
 
+#### lake_enable_vertical_compaction_fill_data_cache
+
+- 含义：存算分离集群下，是否允许 Compaction 任务在执行时缓存数据到本地磁盘上。
+- 默认值：false
+- 引入版本：3.1.7、3.2.3
+
 #### update_compaction_ratio_threshold
 
 - 含义：存算分离集群下主键模型表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
@@ -425,12 +431,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：磁盘进行垃圾清理的最大间隔。自 3.0 版本起，该参数由静态变为动态。
 - 单位：秒
 - 默认值：3600
-
-#### lake_enable_vertical_compaction_fill_data_cache
-
-- 含义：存算分离集群下，是否允许 Compaction 任务在执行时缓存数据到本地磁盘上。
-- 默认值：false
-- 引入版本：3.1.7、3.2.3
 
 #### min_garbage_sweep_interval
 
