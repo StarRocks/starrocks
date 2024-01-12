@@ -14,5 +14,12 @@
 
 package com.starrocks.meta.lock;
 
+import com.google.common.base.Strings;
+
 public class LockTimeoutException extends RuntimeException {
+
+    public LockTimeoutException(String msg) {
+        super(Strings.nullToEmpty(msg));
+    }
+
 }

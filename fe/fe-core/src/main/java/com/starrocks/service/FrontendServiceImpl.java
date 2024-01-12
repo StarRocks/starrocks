@@ -113,6 +113,7 @@ import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
+import com.starrocks.meta.lock.LockTimeoutException;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
@@ -1440,6 +1441,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setStatus(status);
         try {
             loadTxnCommitImpl(request, status);
+        } catch (LockTimeoutException e) {
+            LOG.warn("failed to commit txn_id: {}: {}", request.getTxnId(), e.getMessage());
+            status.setStatus_code(TStatusCode.TIMEOUT);
+            status.addToError_msgs(e.getMessage());
         } catch (CommitRateExceededException e) {
             long allowCommitTime = e.getAllowCommitTime();
             LOG.warn("commit rate exceeded. txn_id: {}: allow commit time: {}", request.getTxnId(), allowCommitTime);
@@ -1761,6 +1766,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setStatus(status);
         try {
             result.setParams(streamLoadPutImpl(request));
+        } catch (LockTimeoutException e) {
+            LOG.warn("failed to get stream load plan: {}", e.getMessage());
+            status.setStatus_code(TStatusCode.TIMEOUT);
+            status.addToError_msgs(e.getMessage());
         } catch (UserException | StarRocksPlannerException e) {
             LOG.warn("failed to get stream load plan: {}", e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
@@ -1778,7 +1787,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return new DefaultCoordinator.Factory();
     }
 
-    private TExecPlanFragmentParams streamLoadPutImpl(TStreamLoadPutRequest request) throws UserException {
+    TExecPlanFragmentParams streamLoadPutImpl(TStreamLoadPutRequest request) throws UserException {
         String cluster = request.getCluster();
         if (Strings.isNullOrEmpty(cluster)) {
             cluster = SystemInfoService.DEFAULT_CLUSTER;
@@ -1790,10 +1799,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (db == null) {
             throw new UserException("unknown database, database=" + dbName);
         }
+
         long timeoutMs = request.isSetThrift_rpc_timeout_ms() ? request.getThrift_rpc_timeout_ms() : 5000;
+        // Make timeout less than thrift_rpc_timeout_ms.
+        // Otherwise, it will result in error like "call frontend service failed"
+        timeoutMs = timeoutMs * 3 / 4;
+
         Locker locker = new Locker();
         if (!locker.tryLockDatabase(db, LockType.READ, timeoutMs)) {
-            throw new UserException("get database read lock timeout, database=" + dbName);
+            throw new LockTimeoutException(
+                    "get database read lock timeout, database=" + dbName + ", timeout=" + timeoutMs + "ms");
         }
         try {
             Table table = db.getTable(request.getTbl());
