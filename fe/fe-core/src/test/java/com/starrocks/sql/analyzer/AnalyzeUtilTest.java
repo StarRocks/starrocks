@@ -337,6 +337,13 @@ public class AnalyzeUtilTest {
         Assert.assertEquals("[test.tprimary2, test.tprimary]", m.keySet().toString());
         Assert.assertEquals("[[pk, v2], [pk]]", m.values().toString());
 
+        // single table update without condition
+        sql = "update tprimary set v2 = 1";
+        statementBase = analyzeSuccess(sql);
+        m = AnalyzerUtils.collectAllSelectTableColumns(statementBase);
+        Assert.assertEquals("[]", m.keySet().toString());
+        Assert.assertEquals("[]", m.values().toString());
+
         // single table update
         sql = "update tprimary set v2 = 1 where v1 = 2";
         statementBase = analyzeSuccess(sql);

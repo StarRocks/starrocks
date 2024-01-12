@@ -289,6 +289,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitUpdateStatement(UpdateStmt statement, ConnectContext context) {
+        boolean hasUpdatePrivOnTargetTable = false;
         try {
             Set<String> assignmentColumn = statement.getAssignments().stream()
                     .map(columnAssignment -> columnAssignment.getColumn()).collect(Collectors.toSet());
@@ -298,6 +299,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
             try {
                 Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         statement.getTableName(), PrivilegeType.UPDATE);
+                hasUpdatePrivOnTargetTable = true;
             } catch (AccessDeniedException exception) {
                 AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -305,10 +307,13 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
             }
         }
         Map<TableName, Relation> allTouchedTables = AnalyzerUtils.collectAllTableAndViewRelations(statement);
+        Map<TableName, Set<String>> tableColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
         try {
-            Map<TableName, Set<String>> tableColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
             checkCanSelectFromColumns(context, tableColumns, allTouchedTables);
         } catch (ErrorReportException e) {
+            if (hasUpdatePrivOnTargetTable || !tableColumns.containsKey(statement.getTableName())) {
+                allTouchedTables.remove(statement.getTableName());
+            }
             checkSelectTableAction(context, allTouchedTables);
         }
         return null;
