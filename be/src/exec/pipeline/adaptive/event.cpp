@@ -66,8 +66,7 @@ std::string Event::to_string() const {
 
 class CollectStatsSourceInitializeEvent final : public Event {
 public:
-    CollectStatsSourceInitializeEvent(DriverExecutor* executor, SourceOperatorFactory* const leader_source_op,
-                                      std::vector<Pipeline*>&& pipelines);
+    CollectStatsSourceInitializeEvent(DriverExecutor* executor, std::vector<Pipeline*>&& pipelines);
 
     ~CollectStatsSourceInitializeEvent() override = default;
 
@@ -77,33 +76,21 @@ public:
 
 private:
     DriverExecutor* const _executor;
-    const size_t _original_leader_dop;
-    SourceOperatorFactory* const _leader_source_op;
     /// The pipelines should be in topo order, that is the upstream pipeline of a pipeline should be in front of it.
     std::vector<Pipeline*> _pipelines;
 };
 
 CollectStatsSourceInitializeEvent::CollectStatsSourceInitializeEvent(DriverExecutor* executor,
-                                                                     SourceOperatorFactory* const leader_source_op,
                                                                      std::vector<Pipeline*>&& pipelines)
-        : _executor(executor),
-          _original_leader_dop(leader_source_op->degree_of_parallelism()),
-          _leader_source_op(leader_source_op),
-          _pipelines(std::move(pipelines)) {}
+        : _executor(executor), _pipelines(std::move(pipelines)) {}
 
 DEFINE_FAIL_POINT(collect_stats_source_initialize_prepare_failed);
 
 void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
     DeferOp defer_op([this, state] { finish(state); });
 
-    _leader_source_op->adjust_dop();
-    const size_t leader_dop = _leader_source_op->degree_of_parallelism();
-    const bool adjust_dop = leader_dop != _original_leader_dop;
-
     for (auto* pipeline : _pipelines) {
-        if (adjust_dop) {
-            pipeline->source_operator_factory()->adjust_max_dop(leader_dop);
-        }
+        pipeline->source_operator_factory()->adjust_dop();
         pipeline->instantiate_drivers(state);
     }
 
@@ -142,6 +129,24 @@ void CollectStatsSourceInitializeEvent::process(RuntimeState* state) {
 }
 
 // ------------------------------------------------------------------------------------
+// DependsAllEventt
+// ------------------------------------------------------------------------------------
+
+class DependsAllEvent final : public Event {
+public:
+    explicit DependsAllEvent(const std::vector<EventPtr>& events) : _events(events) {}
+
+    ~DependsAllEvent() override = default;
+
+    void process(RuntimeState* state) override { finish(state); }
+
+    std::string name() const override { return "depends_all_event"; }
+
+private:
+    std::vector<EventPtr> _events;
+};
+
+// ------------------------------------------------------------------------------------
 // Event factory methods.
 // ------------------------------------------------------------------------------------
 
@@ -150,9 +155,16 @@ EventPtr Event::create_event() {
 }
 
 EventPtr Event::create_collect_stats_source_initialize_event(DriverExecutor* executor,
-                                                             SourceOperatorFactory* const leader_source_op,
                                                              std::vector<Pipeline*>&& pipelines) {
-    return std::make_shared<CollectStatsSourceInitializeEvent>(executor, leader_source_op, std::move(pipelines));
+    return std::make_shared<CollectStatsSourceInitializeEvent>(executor, std::move(pipelines));
+}
+
+EventPtr Event::depends_all(const std::vector<EventPtr>& events) {
+    EventPtr merged_event = std::make_shared<DependsAllEvent>(events);
+    for (const auto& event : events) {
+        merged_event->add_dependency(event.get());
+    }
+    return merged_event;
 }
 
 } // namespace starrocks::pipeline
