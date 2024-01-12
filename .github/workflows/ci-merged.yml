@@ -4,7 +4,7 @@ on:
   pull_request_target:
     branches:
       - main
-      - 'branch*'
+      - 'branch-[0-9].[0-9]'
     types:
       - closed
 permissions:
@@ -166,3 +166,52 @@ jobs:
           fi
           
           gh run list --workflow ${yaml} -R ${REPO} -b ${GITHUB_HEAD_REF} --json databaseId -q '.[].databaseId' | xargs gh run cancel -R ${REPO} || true
+
+  update_backport_merged_msg:
+    runs-on: [ self-hosted, quick ]
+    if: >
+      github.base_ref != 'main' && github.event.pull_request.merged == true
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - name: prepare merge label
+        if: >
+          !contains(github.event.pull_request.labels.*.name, 'sync') &&
+          contains(github.event.pull_request.title, '(backport #')
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+        run: |
+          LABEL="${GITHUB_BASE_REF##*-}-merged"
+          gh label create "${LABEL}" -R ${GITHUB_REPOSITORY} -c 98C1D7 -f
+
+      - name: add merge label
+        if: >
+          always() && !contains(github.event.pull_request.labels.*.name, 'sync') &&
+          contains(github.event.pull_request.title, '(backport #')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          LABEL="${GITHUB_BASE_REF##*-}-merged"
+          ORI_PR=$(echo "${{ github.event.pull_request.title }}" | grep -oP '\(backport #\K\d+' | tail -n 1)
+          gh pr edit ${ORI_PR} -R ${GITHUB_REPOSITORY} --add-label "${LABEL}"
+
+      - name: prepare version label
+        id: prepare_version_label
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.PAT }}
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
+          version=$(./scripts/get_next_release_tag.sh)
+          version_label="version:${version}"
+          echo "LABEL=${version_label}" >> $GITHUB_OUTPUT
+          gh label create "${version_label}" -R ${GITHUB_REPOSITORY} -c 1d76db -f
+
+      - name: add version label
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
+        run: |
+          gh pr edit ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --add-label "${VERSION_LABEL}"
+          

@@ -129,6 +129,8 @@ RuntimeState::RuntimeState(ExecEnv* exec_env) : _exec_env(exec_env) {
 }
 
 RuntimeState::~RuntimeState() {
+    // dict exprs
+    _dict_optimize_parser.close();
     // close error log file
     if (_error_log_file != nullptr && _error_log_file->is_open()) {
         _error_log_file->close();
@@ -139,7 +141,6 @@ RuntimeState::~RuntimeState() {
     if (_rejected_record_file != nullptr && _rejected_record_file->is_open()) {
         _rejected_record_file->close();
     }
-    _process_status.permit_unchecked_error();
 }
 
 void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -237,11 +238,11 @@ std::string RuntimeState::error_log() {
     return boost::algorithm::join(_error_log, "\n");
 }
 
-bool RuntimeState::log_error(const std::string& error) {
+bool RuntimeState::log_error(std::string_view error) {
     std::lock_guard<std::mutex> l(_error_log_lock);
 
     if (_error_log.size() < _query_options.max_errors) {
-        _error_log.push_back(error);
+        _error_log.emplace_back(error);
         return true;
     }
 
@@ -253,7 +254,7 @@ void RuntimeState::log_error(const Status& status) {
         return;
     }
 
-    log_error(status.get_error_msg());
+    log_error(status);
 }
 
 void RuntimeState::get_unreported_errors(std::vector<std::string>* new_errors) {
@@ -286,14 +287,13 @@ bool RuntimeState::use_column_pool() const {
     return true;
 }
 
-Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_allocation_size,
-                                            const std::string* msg) {
+Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_allocation_size, std::string_view msg) {
     DCHECK_GE(failed_allocation_size, 0);
     {
         std::lock_guard<std::mutex> l(_process_status_lock);
         if (_process_status.ok()) {
-            if (msg != nullptr) {
-                _process_status = Status::MemoryLimitExceeded(*msg);
+            if (!msg.empty()) {
+                _process_status = Status::MemoryLimitExceeded(msg);
             } else {
                 _process_status = Status::MemoryLimitExceeded("Memory limit exceeded");
             }
@@ -382,7 +382,7 @@ void RuntimeState::append_error_msg_to_file(const std::string& line, const std::
     if (_error_log_file == nullptr) {
         Status status = create_error_log_file();
         if (!status.ok()) {
-            LOG(WARNING) << "Create error file log failed. because: " << status.get_error_msg();
+            LOG(WARNING) << "Create error file log failed. because: " << status.message();
             if (_error_log_file != nullptr) {
                 _error_log_file->close();
                 delete _error_log_file;
@@ -424,7 +424,7 @@ void RuntimeState::append_rejected_record_to_file(const std::string& record, con
     if (_rejected_record_file == nullptr) {
         Status status = create_rejected_record_file();
         if (!status.ok()) {
-            LOG(WARNING) << "Create rejected record file failed. because: " << status.get_error_msg();
+            LOG(WARNING) << "Create rejected record file failed. because: " << status.message();
             if (_rejected_record_file != nullptr) {
                 _rejected_record_file->close();
                 _rejected_record_file.reset();
@@ -457,8 +457,18 @@ GlobalDictMaps* RuntimeState::mutable_query_global_dict_map() {
     return &_query_global_dicts;
 }
 
+DictOptimizeParser* RuntimeState::mutable_dict_optimize_parser() {
+    return &_dict_optimize_parser;
+}
+
 Status RuntimeState::init_query_global_dict(const GlobalDictLists& global_dict_list) {
-    return _build_global_dict(global_dict_list, &_query_global_dicts, nullptr);
+    RETURN_IF_ERROR(_build_global_dict(global_dict_list, &_query_global_dicts, nullptr));
+    _dict_optimize_parser.set_mutable_dict_maps(this, &_query_global_dicts);
+    return Status::OK();
+}
+
+Status RuntimeState::init_query_global_dict_exprs(const std::map<int, TExpr>& exprs) {
+    return _dict_optimize_parser.init_dict_exprs(exprs);
 }
 
 Status RuntimeState::init_load_global_dict(const GlobalDictLists& global_dict_list) {
@@ -487,10 +497,6 @@ Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list,
         }
     }
     return Status::OK();
-}
-
-std::shared_ptr<QueryStatistics> RuntimeState::intermediate_query_statistic() {
-    return _query_ctx->intermediate_query_statistic();
 }
 
 std::shared_ptr<QueryStatisticsRecvr> RuntimeState::query_recv() {

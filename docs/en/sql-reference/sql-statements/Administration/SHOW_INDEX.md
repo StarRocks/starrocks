@@ -8,7 +8,13 @@ displayed_sidebar: "English"
 
 This statement is used to show information related to index in a table. It currently only supports bitmap index.
 
-Syntax:
+:::tip
+
+This operation does not require privileges.
+
+:::
+
+## Syntax
 
 ```sql
 SHOW INDEX[ES] FROM [db_name.]table_name [FROM database]

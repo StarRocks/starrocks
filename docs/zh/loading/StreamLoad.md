@@ -61,7 +61,7 @@ Stream Load 当前不支持导入某一列为 JSON 的 CSV 文件的数据。
 
 本文以 curl 工具为例，介绍如何使用 Stream Load 从本地文件系统导入 CSV 或 JSON 格式的数据。有关创建导入作业的详细语法和参数说明，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。
 
-注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
+注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包裹起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
 
 #### 导入 CSV 格式的数据
 
@@ -246,7 +246,7 @@ Stream Load 不支持手动取消导入作业。如果导入作业发生超时�
 
 这里介绍使用 Stream Load 导入方式需要注意的一些系统参数配置。这些参数作用于所有 Stream Load 导入作业。
 
-- `streaming_load_max_mb`：单个源数据文件的大小上限。默认文件大小上限为 10 GB。具体请参见[配置 BE 动态参数](../administration/Configuration.md#配置-be-动态参数)。
+- `streaming_load_max_mb`：单个源数据文件的大小上限。默认文件大小上限为 10 GB。具体请参见[配置 BE 动态参数](../administration/BE_configuration.md)。
 
   建议一次导入的数据量不要超过 10 GB。如果数据文件的大小超过 10 GB，建议您拆分成若干小于 10 GB 的文件分次导入。如果由于业务场景需要，无法拆分数据文件，可以适当调大该参数的取值，从而提高数据文件的大小上限。
 
@@ -261,7 +261,7 @@ Stream Load 不支持手动取消导入作业。如果导入作业发生超时�
 
   :::
 
-- `stream_load_default_timeout_second`：导入作业的超时时间。默认超时时间为 600 秒。具体请参见[配置 FE 动态参数](../administration/Configuration.md#配置-fe-动态参数)。
+- `stream_load_default_timeout_second`：导入作业的超时时间。默认超时时间为 600 秒。具体请参见[配置 FE 动态参数](../administration/FE_configuration.md)。
 
   如果您创建的导入作业经常发生超时，可以通过该参数适当地调大超时时间。您可以通过如下公式计算导入作业的超时时间：
 
@@ -314,7 +314,7 @@ Broker Load 是一种异步导入方式。提交导入作业以后，StarRocks �
 
 Broker Load 支持导入单个数据文件到单张表、导入多个数据文件到单张表、以及导入多个数据文件分别到多张表。这里以导入多个数据文件到单张表为例。
 
-注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
+注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包裹起来。参见[关键字](../sql-reference/sql-statements/keywords.md)。
 
 #### 数据样例
 

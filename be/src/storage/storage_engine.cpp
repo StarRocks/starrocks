@@ -58,8 +58,10 @@
 #include "storage/base_compaction.h"
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
+#include "storage/dictionary_cache_manager.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/publish_version_manager.h"
+#include "storage/replication_txn_manager.h"
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset/unique_rowset_id_generator.h"
@@ -110,11 +112,13 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _is_all_cluster_id_exist(true),
           _tablet_manager(new TabletManager(config::tablet_map_shard_size)),
           _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size, options.store_paths.size())),
+          _replication_txn_manager(new ReplicationTxnManager()),
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
           _memtable_flush_executor(nullptr),
           _update_manager(new UpdateManager(options.update_mem_tracker)),
           _compaction_manager(new CompactionManager()),
-          _publish_version_manager(new PublishVersionManager()) {
+          _publish_version_manager(new PublishVersionManager()),
+          _dictionary_cache_manager(new DictionaryCacheManager()) {
 #ifdef BE_TEST
     _p_instance = _s_instance;
     _s_instance = this;
@@ -207,7 +211,7 @@ Status StorageEngine::_open(const EngineOptions& options) {
 
     std::unique_ptr<ThreadPool> thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("delta_writer")
-                            .set_min_threads(config::number_tablet_writer_threads / 2)
+                            .set_min_threads(1)
                             .set_max_threads(std::max<int>(1, config::number_tablet_writer_threads))
                             .set_max_queue_size(40960 /*a random chosen number that should big enough*/)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(/*5 minutes=*/5 * 60 * 1000))
@@ -471,7 +475,7 @@ std::vector<DataDir*> StorageEngine::get_stores_for_create_tablet(TStorageMedium
     {
         std::lock_guard<std::mutex> l(_store_lock);
         for (auto& it : _store_map) {
-            if (it.second->is_used()) {
+            if (it.second->get_state() == DiskState::ONLINE) {
                 if (_available_storage_medium_type_count == 1 || it.second->storage_medium() == storage_medium) {
                     if (!it.second->capacity_limit_reached(0)) {
                         stores.push_back(it.second);
@@ -569,8 +573,7 @@ bool StorageEngine::_delete_tablets_on_unused_root_path() {
         exit(0);
     }
 
-    auto st = _tablet_manager->drop_tablets_on_error_root_path(tablet_info_vec);
-    st.permit_unchecked_error();
+    (void)_tablet_manager->drop_tablets_on_error_root_path(tablet_info_vec);
     // If tablet_info_vec is not empty, means we have dropped some tablets.
     return !tablet_info_vec.empty();
 }
@@ -629,6 +632,7 @@ void StorageEngine::stop() {
         JOIN_THREADS(_path_gc_threads)
     }
 
+    JOIN_THREAD(_clear_expired_replcation_snapshots_thread)
 #undef JOIN_THREADS
 #undef JOIN_THREAD
 
@@ -682,8 +686,7 @@ void StorageEngine::clear_transaction_task(const TTransactionId transaction_id,
                           << " tablet_uid=" << tablet_info.first.tablet_uid;
                 continue;
             }
-            auto st = StorageEngine::instance()->txn_manager()->delete_txn(partition_id, tablet, transaction_id);
-            st.permit_unchecked_error();
+            (void)StorageEngine::instance()->txn_manager()->delete_txn(partition_id, tablet, transaction_id);
         }
     }
     LOG(INFO) << "Cleared transaction task txn_id: " << transaction_id;
@@ -799,13 +802,13 @@ static void do_manual_compaction(TabletManager* tablet_manager, ManualCompaction
     auto st = tablet->updates()->get_rowsets_for_compaction(t.rowset_size_threshold, t.input_rowset_ids, t.total_bytes);
     if (!st.ok()) {
         t.status = st.to_string();
-        LOG(WARNING) << "get_rowsets_for_compaction failed: " << st.get_error_msg();
+        LOG(WARNING) << "get_rowsets_for_compaction failed: " << st.message();
         return;
     }
     st = tablet->updates()->compaction(mem_tracker, t.input_rowset_ids);
     t.status = st.to_string();
     if (!st.ok()) {
-        LOG(WARNING) << "manual compaction failed: " << st.get_error_msg() << " tablet:" << t.tablet_id;
+        LOG(WARNING) << "manual compaction failed: " << st.message() << " tablet:" << t.tablet_id;
         return;
     }
 }
@@ -955,10 +958,12 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
     // when executing migration.
     std::shared_lock rlock(best_tablet->get_migration_lock(), std::try_to_lock);
     if (!rlock.owns_lock()) {
-        return Status::InternalError("Fail to get migration lock, tablet_id: {}", best_tablet->tablet_id());
+        return Status::InternalError(
+                fmt::format("Fail to get migration lock, tablet_id: {}", best_tablet->tablet_id()));
     }
     if (Tablet::check_migrate(best_tablet)) {
-        return Status::InternalError("Fail to check migrate tablet, tablet_id: {}", best_tablet->tablet_id());
+        return Status::InternalError(
+                fmt::format("Fail to check migrate tablet, tablet_id: {}", best_tablet->tablet_id()));
     }
 
     Status res;
@@ -1537,6 +1542,40 @@ void StorageEngine::clear_rowset_delta_column_group_cache(const Rowset& rowset) 
         }
         return dcg_keys;
     }());
+}
+
+void StorageEngine::disable_disks(const std::vector<string>& disabled_disks) {
+    std::lock_guard<std::mutex> l(_store_lock);
+
+    for (auto& it : _store_map) {
+        if (std::find(disabled_disks.begin(), disabled_disks.end(), it.second->path()) != disabled_disks.end()) {
+            it.second->set_state(DiskState::DISABLED);
+            LOG(INFO) << "disk " << it.second->path() << " is set to DISABLED";
+        } else {
+            if (it.second->get_state() == DiskState::DISABLED) {
+                it.second->set_state(DiskState::ONLINE);
+                LOG(INFO) << "disk " << it.second->path() << " is recovered to ONLINE, previous state is DISABLED";
+            }
+        }
+    }
+}
+
+void StorageEngine::decommission_disks(const std::vector<string>& decommission_disks) {
+    std::lock_guard<std::mutex> l(_store_lock);
+
+    for (auto& it : _store_map) {
+        if (std::find(decommission_disks.begin(), decommission_disks.end(), it.second->path()) !=
+            decommission_disks.end()) {
+            it.second->set_state(DiskState::DECOMMISSIONED);
+            LOG(INFO) << "disk " << it.second->path() << " is set to DECOMMISSIONED";
+        } else {
+            if (it.second->get_state() == DiskState::DECOMMISSIONED) {
+                it.second->set_state(DiskState::ONLINE);
+                LOG(INFO) << "disk " << it.second->path()
+                          << " is recovered to ONLINE, previous state is DECOMMISSIONED";
+            }
+        }
+    }
 }
 
 } // namespace starrocks

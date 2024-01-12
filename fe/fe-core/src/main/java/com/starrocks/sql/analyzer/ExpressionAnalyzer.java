@@ -47,6 +47,7 @@ import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiInPredicate;
+import com.starrocks.analysis.NamedArgument;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Parameter;
@@ -63,6 +64,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.Dictionary;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
@@ -91,6 +93,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.DefaultValueExpr;
+import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
@@ -634,7 +637,7 @@ public class ExpressionAnalyzer {
             predicateBaseAndCheck(node);
 
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
-            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
+            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, true);
 
             for (Type type : list) {
                 if (!Type.canCastTo(type, compatibleType)) {
@@ -843,7 +846,7 @@ public class ExpressionAnalyzer {
 
             // check compatible type
             List<Type> list = node.getChildren().stream().map(Expr::getType).collect(Collectors.toList());
-            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list);
+            Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(list, false);
 
             if (compatibleType == Type.INVALID) {
                 throw new SemanticException("The input types (" + list.stream().map(Type::toSql).collect(
@@ -1128,6 +1131,23 @@ public class ExpressionAnalyzer {
                 argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV2(fnName, argumentTypes)) {
                 fn = DecimalV3FunctionAnalyzer.getDecimalV2Function(node, argumentTypes);
+            } else if (FunctionSet.BITMAP_UNION.equals(fnName)) {
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+                if (session.getSessionVariable().isEnableRewriteBitmapUnionToBitmapAgg() &&
+                        node.getChild(0) instanceof FunctionCallExpr) {
+                    FunctionCallExpr arg0Func = (FunctionCallExpr) node.getChild(0);
+                    // Convert bitmap_union(to_bitmap(v1)) to bitmap_agg(v1) when v1's type
+                    // is a numeric type.
+                    if (FunctionSet.TO_BITMAP.equals(arg0Func.getFnName().getFunction())) {
+                        Expr toBitmapArg0 = arg0Func.getChild(0);
+                        Type toBitmapArg0Type = toBitmapArg0.getType();
+                        if (toBitmapArg0Type.isIntegerType() || toBitmapArg0Type.isBoolean()
+                                || toBitmapArg0Type.isLargeIntType()) {
+                            node.setChild(0, toBitmapArg0);
+                            node.resetFnName("", FunctionSet.BITMAP_AGG);
+                        }
+                    }
+                }
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
@@ -1799,7 +1819,8 @@ public class ExpressionAnalyzer {
             if (strictModeIdx >= 0) {
                 expectTypes.add(Type.BOOLEAN);
             }
-            List<Type> actualTypes = params.stream()
+
+            List<Type> actualTypes = node.getChildren().stream()
                     .map(expr -> ScalarType.createType(expr.getType().getPrimitiveType())).collect(Collectors.toList());
             if (!Objects.equals(expectTypes, actualTypes)) {
                 List<String> expectTypeNames = new ArrayList<>();
@@ -1845,6 +1866,112 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitParameterExpr(Parameter node, Scope context) {
+            return null;
+        }
+
+        @Override
+        public Void visitDictionaryGetExpr(DictionaryGetExpr node, Scope context) {
+            List<Expr> params = node.getChildren();
+            if (params.size() < 2) {
+                throw new SemanticException("dictionary_get function get illegal param list");
+            }
+
+            if (!(params.get(0) instanceof StringLiteral)) {
+                throw new SemanticException("dictionary_get function first param dictionary_name should be string literal");
+            }
+
+            String dictionaryName = ((StringLiteral) params.get(0)).getValue();
+            if (!GlobalStateMgr.getCurrentState().getDictionaryMgr().isExist(dictionaryName)) {
+                throw new SemanticException("dictionary: " + dictionaryName + " does not exist");
+            }
+            Dictionary dictionary = GlobalStateMgr.getCurrentState().getDictionaryMgr().getDictionaryByName(dictionaryName);
+
+            if (!node.getSkipStateCheck()) {
+                if (dictionary.getState() == Dictionary.DictionaryState.CANCELLED) {
+                    throw new SemanticException("dictionary: " + dictionaryName + " is in CANCELLED state");
+                }
+
+                if (dictionary.getState() == Dictionary.DictionaryState.UNINITIALIZED) {
+                    throw new SemanticException("dictionary: " + dictionaryName + " is in UNINITIALIZED state");
+                }
+
+                if (dictionary.getReadLatest() && dictionary.getState() == Dictionary.DictionaryState.REFRESHING) {
+                    throw new SemanticException("dictionary_read_latest is ON, dictionary: " +
+                            dictionaryName + " is in REFRESHING state");
+                }
+            }
+
+            List<String> dictionaryKeys = dictionary.getKeys();
+            int dictionaryKeysSize = dictionaryKeys.size();
+            int paramDictionaryKeysSize = params.size() - 1;
+            if (paramDictionaryKeysSize != dictionaryKeysSize) {
+                throw new SemanticException("dictionary: " + dictionaryName + " has keys size: " +
+                                            Integer.toString(dictionaryKeysSize) +
+                                            " but param give: " + Integer.toString(paramDictionaryKeysSize));
+            }
+
+            Database db = GlobalStateMgr.getCurrentState().getFullNameToDb().get(dictionary.getDbName());
+            Table table = db.getTable(dictionary.getQueryableObject());
+            if (table == null) {
+                throw new SemanticException("dict table %s is not found", table.getName());
+            }
+
+            List<Column> schema = table.getFullSchema();
+            List<Type> paramType = new ArrayList<>();
+            List<Column> keysColumn = new ArrayList<>();
+            paramType.add(Type.VARCHAR);
+            for (String key : dictionaryKeys) {
+                for (int i = 0; i < schema.size(); ++i) {
+                    if (key.equals(schema.get(i).getName())) {
+                        keysColumn.add(schema.get(i));
+                        paramType.add(schema.get(i).getType());
+                    }
+                }
+            }
+
+            List<String> dictionaryValues = dictionary.getValues();
+            List<Column> valuesColumn = new ArrayList<>();
+            for (String value : dictionaryValues) {
+                for (int i = 0; i < schema.size(); ++i) {
+                    if (value.equals(schema.get(i).getName())) {
+                        valuesColumn.add(schema.get(i));
+                    }
+                }
+            }
+
+            for (int i = 0; i < keysColumn.size(); ++i) {
+                Expr parmExpr = params.get(i + 1);
+                Column column = keysColumn.get(i);
+                if (!column.getType().equals(parmExpr.getType())) {
+                    if (!Type.canCastTo(column.getType(), parmExpr.getType())) {
+                        throw new SemanticException("column type " + column.getType().toSql()
+                                + " cast from " + parmExpr.getType().toSql() + " is invalid.");
+                    } else {
+                        parmExpr = new CastExpr(column.getType(), parmExpr);
+                        params.set(i + 1, parmExpr);
+                        node.getChildren().set(i + 1, parmExpr);
+                    }
+                }
+            }
+
+            node.setDictionaryId(dictionary.getDictionaryId());
+            node.setDictionaryTxnId(GlobalStateMgr.getCurrentState().getDictionaryMgr().
+                    getLastSuccessTxnId(dictionary.getDictionaryId()));
+            node.setKeySize(dictionary.getKeys().size());
+
+            ArrayList<StructField> structFields = new ArrayList<>(valuesColumn.size());
+            for (Column column : valuesColumn) {
+                String fieldName = column.getName();
+                Type fieldType = column.getType();
+                structFields.add(new StructField(fieldName, fieldType));
+            }
+            StructType returnType = new StructType(structFields);
+            node.setType(returnType);
+            return null;
+        }
+
+        @Override
+        public Void visitNamedArgument(NamedArgument node, Scope context) {
             return null;
         }
     }

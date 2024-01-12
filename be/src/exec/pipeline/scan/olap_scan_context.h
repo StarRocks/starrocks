@@ -90,7 +90,6 @@ private:
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
     std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
-    DictOptimizeParser _dict_optimize_parser;
     ObjectPool _obj_pool;
 
     // For shared_scan mechanism

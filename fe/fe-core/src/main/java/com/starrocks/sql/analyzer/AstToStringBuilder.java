@@ -68,6 +68,7 @@ import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
+import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.ExportStmt;
@@ -111,6 +112,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
 import static java.util.stream.Collectors.toList;
 
 /**
@@ -135,7 +137,6 @@ public class AstToStringBuilder {
         // when you just want to a function name as its alias set it false
         protected boolean addFunctionDbName;
 
-
         public AST2StringBuilderVisitor() {
             this(true);
         }
@@ -143,7 +144,6 @@ public class AstToStringBuilder {
         public AST2StringBuilderVisitor(boolean addFunctionDbName) {
             this.addFunctionDbName = addFunctionDbName;
         }
-
 
         // ------------------------------------------- Privilege Statement -------------------------------------------------
 
@@ -957,6 +957,15 @@ public class AstToStringBuilder {
                     sb.append(visit(node.getChild(end)));
                 }
                 sb.append(")");
+            } else if (IGNORE_NULL_WINDOW_FUNCTION.contains(functionName)) {
+                List<String> p = node.getChildren().stream().map(child -> {
+                    String str = visit(child);
+                    if (child instanceof SlotRef && node.getIgnoreNulls()) {
+                        str += " ignore nulls";
+                    }
+                    return str;
+                }).collect(Collectors.toList());
+                sb.append(Joiner.on(", ").join(p)).append(")");
             } else {
                 List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
                 sb.append(Joiner.on(", ").join(p)).append(")");
@@ -1200,6 +1209,11 @@ public class AstToStringBuilder {
         @Override
         public String visitDictQueryExpr(DictQueryExpr node, Void context) {
             return visitFunctionCall(node, context);
+        }
+
+        @Override
+        public String visitDictionaryGetExpr(DictionaryGetExpr node, Void context) {
+            return "DICTIONARY_GET";
         }
 
         private String visitAstList(List<? extends ParseNode> contexts) {

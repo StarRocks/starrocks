@@ -46,12 +46,11 @@ public:
 
     [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-    [[nodiscard]] Status reset_state(starrocks::RuntimeState* state,
-                                     const std::vector<ChunkPtr>& refill_chunks) override;
+    [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 private:
     ChunkPtr _build_chunk(const std::vector<ColumnPtr>& output_columns);
-    [[nodiscard]] Status _process_table_function();
+    [[nodiscard]] Status _process_table_function(RuntimeState* state);
     void _copy_result(const std::vector<ColumnPtr>& columns, uint32_t max_column_size);
 
     const TPlanNode& _tnode;

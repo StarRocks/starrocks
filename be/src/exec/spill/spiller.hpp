@@ -148,7 +148,7 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
     _running_flush_tasks++;
     // TODO: handle spill queue
     auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table),
-                 trace = TraceInfo(state)](auto& ctx) {
+                 trace = TraceInfo(state)](auto& yield_ctx) {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
         RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
         DEFER_GUARD_END(guard);
@@ -156,18 +156,25 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
         DCHECK_GT(_running_flush_tasks, 0);
         DCHECK(has_pending_data());
         //
-        auto defer = DeferOp([&]() {
+        auto defer = CancelableDefer([&]() {
             {
                 std::lock_guard _(_mutex);
                 _mem_table_pool.emplace(std::move(mem_table));
             }
-
             _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
+            yield_ctx.set_finished();
         });
+
         if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
             return Status::OK();
         }
-        _spiller->update_spilled_task_status(flush_task(state, mem_table));
+
+        int yield = false;
+        _spiller->update_spilled_task_status(yieldable_flush_task(yield_ctx, state, mem_table, &yield));
+        if (yield) {
+            defer.cancel();
+        }
+
         return Status::OK();
     };
     // submit io task
@@ -290,19 +297,26 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
     _running_flush_tasks++;
 
     auto task = [this, guard = guard, splitting_partitions = std::move(splitting_partitions),
-                 spilling_partitions = std::move(spilling_partitions), trace = TraceInfo(state)](auto& ctx) {
+                 spilling_partitions = std::move(spilling_partitions), trace = TraceInfo(state)](auto& yield_ctx) {
         SCOPED_SET_TRACE_INFO({}, trace.query_id, trace.fragment_id);
         RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
         DEFER_GUARD_END(guard);
-        RACE_DETECT(detect_flush, var1);
         // concurrency test
-        auto defer = DeferOp([&]() { _spiller->update_spilled_task_status(_decrease_running_flush_tasks()); });
+        RACE_DETECT(detect_flush, var1);
+        auto defer = CancelableDefer([&]() {
+            _spiller->update_spilled_task_status(_decrease_running_flush_tasks());
+            yield_ctx.set_finished();
+        });
 
         if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
             return Status::OK();
         }
-
-        _spiller->update_spilled_task_status(_flush_task(splitting_partitions, spilling_partitions));
+        int yield = false;
+        _spiller->update_spilled_task_status(
+                yieldable_flush_task(yield_ctx, splitting_partitions, spilling_partitions, &yield));
+        if (yield) {
+            defer.cancel();
+        }
         return Status::OK();
     };
 
@@ -312,4 +326,5 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
 
     return Status::OK();
 }
+
 } // namespace starrocks::spill

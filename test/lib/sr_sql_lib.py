@@ -27,6 +27,7 @@ import bz2
 import configparser
 import datetime
 import json
+import logging
 import os
 import re
 import subprocess
@@ -59,8 +60,41 @@ LOG_DIR = os.path.join(root_path, "log")
 if not os.path.exists(LOG_DIR):
     os.mkdir(LOG_DIR)
 
+
+class Filter(logging.Filter):
+    """
+    Msg filters by log levels
+    """
+
+    # pylint: disable= super-init-not-called
+    def __init__(self, msg_level=logging.WARNING):
+        super().__init__()
+        self.msg_level = msg_level
+
+    def filter(self, record):
+        # replace secret infos
+        for secret_k, secret_v in SECRET_INFOS.items():
+            try:
+                record.msg = record.msg.replace(secret_v, '${%s}' % secret_k)
+            except Exception:
+                record.msg = str(record.msg).replace(secret_v, '${%s}' % secret_k)
+
+        if record.levelno >= self.msg_level:
+            return False
+        return True
+
+
+def self_print(msg):
+    # replace secret infos
+    for secret_k, secret_v in SECRET_INFOS.items():
+        msg = msg.replace(secret_v, '${%s}' % secret_k)
+
+    print(msg)
+
+
 __LOG_FILE = os.path.join(LOG_DIR, "sql_test.log")
 log.init_comlog("sql", log.INFO, __LOG_FILE, log.ROTATION, 100 * 1024 * 1024, False)
+logging.getLogger().addFilter(Filter())
 
 T_R_DB = "t_r_db"
 T_R_TABLE = "t_r_table"
@@ -73,6 +107,8 @@ NAME_FLAG = "-- name: "
 UNCHECK_FLAG = "[UC]"
 ORDER_FLAG = "[ORDER]"
 REGEX_FLAG = "[REGEX]"
+
+SECRET_INFOS = {}
 
 
 class StarrocksSQLApiLib(object):
@@ -135,6 +171,11 @@ class StarrocksSQLApiLib(object):
         for env_key, env_value in config_parser.items("env"):
             if not env_value:
                 env_value = os.environ.get(env_key, "")
+            else:
+                # save secrets info
+                if 'aws' in env_key:
+                    SECRET_INFOS[env_key] = env_value
+
             self.__setattr__(env_key, env_value)
 
     def connect_starrocks(self):
@@ -919,15 +960,15 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
-    def wait_async_materialized_view_finish(self, mv_name, min_success_num = 1, check_count=60):
+    def wait_async_materialized_view_finish(self, mv_name, check_count=60):
         """
         wait async materialized view job finish and return status
         """
         status = ""
         show_sql = "SHOW MATERIALIZED VIEWS WHERE name='" + mv_name + "'"
         count = 0
-        success_num = 0
-        while count < check_count and success_num < min_success_num:
+        num = 0
+        while count < check_count:
             res = self.execute_sql(show_sql, True)
             status = res["result"][-1][12]
             if status != "SUCCESS":
@@ -935,7 +976,7 @@ class StarrocksSQLApiLib(object):
             else:
                 # sleep another 5s to avoid FE's async action.
                 time.sleep(1)
-                success_num += 1
+                break
             count += 1
         tools.assert_equal("SUCCESS", status, "wait aysnc materialized view finish error")
 
@@ -943,23 +984,21 @@ class StarrocksSQLApiLib(object):
         """
         wait pipe load finish
         """
-        status = ""
-        show_sql = "select state from information_schema.pipes where database_name='{}' and pipe_name='{}'".format(db_name, pipe_name)
+        state = ""
+        show_sql = "select state, load_status, last_error  from information_schema.pipes where database_name='{}' and pipe_name='{}'".format(db_name, pipe_name)
         count = 0
         print("waiting for pipe {}.{} finish".format(db_name, pipe_name))
         while count < check_count:
             res = self.execute_sql(show_sql, True)
             print(res)
-            status = res["result"][0][0]
-            if status != "FINISHED":
-                print("pipe status is " + status)
+            state = res["result"][0][0]
+            if state == 'RUNNING':
+                print("pipe state is " + state)
                 time.sleep(1)
             else:
-                # sleep another 5s to avoid FE's async action.
-                time.sleep(1)
                 break
             count += 1
-        tools.assert_equal("FINISHED", status, "didn't wait pipe finish")
+        tools.assert_equal("FINISHED", state, "didn't wait for the pipe to finish")
 
 
     def check_hit_materialized_view_plan(self, res, mv_name):
@@ -1384,3 +1423,20 @@ class StarrocksSQLApiLib(object):
         match = re.search(expect, str(res["result"]))
         print(expect)
         tools.assert_true(match, "expected cardinality: " + rows + ". but found: " + str(res["result"]))
+
+    def wait_refresh_dictionary_finish(self, name, check_status):
+        """
+        wait dictionary refresh job finish and return status
+        """
+        status = ""
+        while True:
+            res = self.execute_sql(
+                "SHOW DICTIONARY %s" % name,
+                True,
+            )
+
+            status = res["result"][0][6]
+            if status != ("REFRESHING") and status != ("COMMITTING"):
+                break
+            time.sleep(0.5)
+        tools.assert_equal(check_status, status, "wait refresh dictionary finish error")

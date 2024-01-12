@@ -119,6 +119,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         PAIMON,
         @SerializedName("HIVE_VIEW")
         HIVE_VIEW,
+        @SerializedName("ODPS")
+        ODPS,
         @SerializedName("BLACKHOLE")
         BLACKHOLE;
 
@@ -257,7 +259,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     }
 
     public String getCatalogName() {
-        return "default";
+        return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
     }
 
     public String getName() {
@@ -354,6 +356,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
 
     public boolean isPaimonTable() {
         return type == TableType.PAIMON;
+    }
+
+    public boolean isOdpsTable() {
+        return type == TableType.ODPS;
     }
 
     public boolean isJDBCTable() {
@@ -467,6 +473,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             table = LakeMaterializedView.read(in);
             table.setTypeRead(true);
             return table;
+        } else if (type == TableType.ODPS) {
+            table = new OdpsTable();
         } else {
             throw new IOException("Unknown table type: " + type.name());
         }
@@ -554,6 +562,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     }
 
     public Partition getPartition(String partitionName) {
+        return null;
+    }
+    public Partition getPartition(String partitionName, boolean isTempPartition) {
         return null;
     }
 

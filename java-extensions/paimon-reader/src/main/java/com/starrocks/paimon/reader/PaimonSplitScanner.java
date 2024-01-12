@@ -52,6 +52,8 @@ public class PaimonSplitScanner extends ConnectorScanner {
     private final ClassLoader classLoader;
     private final String[] nestedFields;
 
+    private String timeZone;
+
     public PaimonSplitScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.requiredFields = params.get("required_fields").split(",");
@@ -60,6 +62,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
         this.predicateInfo = params.get("predicate_info");
         this.encodedTable = params.get("native_table");
         this.classLoader = this.getClass().getClassLoader();
+        this.timeZone = params.get("time_zone");
     }
 
     private void parseRequiredTypes() {
@@ -99,7 +102,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
         List<Predicate> predicates = PaimonScannerUtils.decodeStringToObject(predicateInfo);
         readBuilder.withFilter(predicates);
         Split split = PaimonScannerUtils.decodeStringToObject(splitInfo);
-        RecordReader<InternalRow> reader = readBuilder.newRead().createReader(split);
+        RecordReader<InternalRow> reader = readBuilder.newRead().executeFilter().createReader(split);
         iterator = new RecordReaderIterator<>(reader);
     }
 
@@ -145,7 +148,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
                     if (fieldData == null) {
                         appendData(i, null);
                     } else {
-                        ColumnValue fieldValue = new PaimonColumnValue(fieldData, logicalTypes[i]);
+                        ColumnValue fieldValue = new PaimonColumnValue(fieldData, logicalTypes[i], timeZone);
                         appendData(i, fieldValue);
                     }
                 }

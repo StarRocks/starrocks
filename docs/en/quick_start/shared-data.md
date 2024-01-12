@@ -93,7 +93,7 @@ docker compose up -d
 
 Check the progress of the services. It should take around 30 seconds for the FE and CN to become healthy. The MinIO container will not show a health indicator, but you will be using the MinIO web UI and that will verify its health.
 
-Run `docker compose ps` until the FE and CN show a status of `healthy`:
+Run `docker compose ps` until MinIO, the FE, and the CN services show a status of `healthy`:
 
 ```bash
 docker compose ps
@@ -101,28 +101,22 @@ docker compose ps
 
 ```plaintext
 SERVICE        CREATED          STATUS                    PORTS
-starrocks-cn   25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:8040->8040/tcp
-starrocks-fe   25 seconds ago   Up 24 seconds (healthy)   0.0.0.0:8030->8030/tcp, 0.0.0.0:9020->9020/tcp, 0.0.0.0:9030->9030/tcp
-minio          25 seconds ago   Up 24 seconds             0.0.0.0:9000-9001->9000-9001/tcp
+minio          32 seconds ago   Up 32 seconds (healthy)   0.0.0.0:9000-9001->9000-9001/tcp
+starrocks-cn   32 seconds ago   Up 31 seconds (healthy)   0.0.0.0:8040->8040/tcp
+starrocks-fe   32 seconds ago   Up 31 seconds (healthy)   0.0.0.0:8030->8030/tcp, 0.0.0.0:9020->9020/tcp, 0.0.0.0:9030->9030/tcp
 ```
 
 ---
 
-## Generate MinIO credentials
+## Examine MinIO credentials
 
-In order to use MinIO for Object Storage with StarRocks you need to generate an **access key**.
+In order to use MinIO for Object Storage with StarRocks, StarRocks needs a MinIO access key. The access key was generated during the startup of the Docker services. To help you better understand the way that StarRocks connects to MinIO you should verify that the key exists.
 
 ### Open the MinIO web UI
 
-Browse to http://localhost:9001/access-keys The username and password are specified in the Docker compose file, and are `minioadmin` and `minioadmin`. You should see that there are no access keys yet. Click **Create access key +**.
+Browse to http://localhost:9001/access-keys The username and password are specified in the Docker compose file, and are `miniouser` and `miniopassword`. You should see that there is one access key. The Key is `AAAAAAAAAAAAAAAAAAAA`, you cannot see the secret in the MinIO Console, but it is in the Docker compose file and is `BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`:
 
-MinIO will generate a key, click **Create** and download the key.
-
-![Make sure to click create](../assets/quick-start/MinIO-create.png)
-
-:::note
-The access key is not saved until you click on **Create**, do not just copy the key and navigate away from the page
-:::
+![View the MinIO access key](../assets/quick-start/MinIO-view-key.png)
 
 ---
 
@@ -163,9 +157,36 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 
 ---
 
-## Configure StarRocks for shared-data
+## StarRocks configuration for shared-data
 
-At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and Minio.
+At this point you have StarRocks running, and you have MinIO running. The MinIO access key is used to connect StarRocks and Minio. When StarRocks started up it established the connection with MinIO and created the default storage volume in MinIO.
+
+This is the configuration used to set the default storage volume to use MinIO (this is also in the Docker compose file). The configuration will be described in detail at the end of this guide, for now just note that the `aws_s3_access_key` is set to the string that you saw in the MinIO Console and that the `run_mode` is set to `shared_data`:
+
+```plaintext
+#highlight-start
+# enable shared data, set storage type, set endpoint
+run_mode = shared_data
+#highlight-end
+cloud_native_storage_type = S3
+aws_s3_endpoint = minio:9000
+
+# set the path in MinIO
+aws_s3_path = starrocks
+
+#highlight-start
+# credentials for MinIO object read/write
+aws_s3_access_key = AAAAAAAAAAAAAAAAAAAA
+aws_s3_secret_key = BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+#highlight-end
+aws_s3_use_instance_profile = false
+aws_s3_use_aws_sdk_default_behavior = false
+
+# Set this to false if you do not want default
+# storage created in the object storage using
+# the details provided above
+enable_load_volume_from_conf = true
+```
 
 ### Connect to StarRocks with a SQL client
 
@@ -181,46 +202,23 @@ docker compose exec starrocks-fe \
 mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
 ```
 
-### Create a storage volume
+#### Examine the storage volume
 
-Details for the configuration shown below:
+```sql
+SHOW STORAGE VOLUMES;
+```
 
-- The MinIO server is available at the URL `http://minio:9000`
-- The bucket created above is named `starrocks`
-- Data written to this volume will be stored in a folder named `shared` within the bucket `starrocks`
-:::tip
-The folder `shared` will be created the first time data is written to the volume
-:::
-- The MinIO server is not using SSL
-- The MinIO key and secret are entered as `aws.s3.access_key` and `aws.s3.secret_key`. Use the access key that you created in the MinIO web UI earlier.
-- The volume `shared` is the default volume
-
-:::tip
-Edit the command before you run it and replace the highlighted access key information with the access key and secret that you created in MinIO.
-:::
-
-```bash
-CREATE STORAGE VOLUME shared
-TYPE = S3
-LOCATIONS = ("s3://starrocks/shared/")
-PROPERTIES
-(
-    "enabled" = "true",
-    "aws.s3.endpoint" = "http://minio:9000",
-    "aws.s3.use_aws_sdk_default_behavior" = "false",
-    "aws.s3.enable_ssl" = "false",
-    "aws.s3.use_instance_profile" = "false",
-    # highlight-start
-    "aws.s3.access_key" = "IA2UYcx3Wakpm6sHoFcl",
-    "aws.s3.secret_key" = "E33cdRM9MfWpP2FiRpc056Zclg6CntXWa3WPBNMy"
-    # highlight-end
-);
-
-SET shared AS DEFAULT STORAGE VOLUME;
+```plaintext
++------------------------+
+| Storage Volume         |
++------------------------+
+| builtin_storage_volume |
++------------------------+
+1 row in set (0.00 sec)
 ```
 
 ```sql
-DESC STORAGE VOLUME shared\G
+DESC STORAGE VOLUME builtin_storage_volume\G
 ```
 
 :::tip
@@ -232,20 +230,22 @@ Many SQL clients do not interpret vertical formatting output, so you should repl
 
 ```plaintext
 *************************** 1. row ***************************
-     Name: shared
+     Name: builtin_storage_volume
      Type: S3
 IsDefault: true
-# highlight-start
- Location: s3://starrocks/shared/
-   Params: {"aws.s3.access_key":"******","aws.s3.secret_key":"******","aws.s3.endpoint":"http://minio:9000","aws.s3.region":"us-east-1","aws.s3.use_instance_profile":"false","aws.s3.use_aws_sdk_default_behavior":"false"}
-# highlight-end
+#highlight-start
+ Location: s3://starrocks
+   Params: {"aws.s3.access_key":"******","aws.s3.secret_key":"******","aws.s3.endpoint":"minio:9000","aws.s3.region":"","aws.s3.use_instance_profile":"false","aws.s3.use_aws_sdk_default_behavior":"false"}
+#highlight-end
   Enabled: true
   Comment:
 1 row in set (0.03 sec)
 ```
 
+Verify that the parameters match the configuration.
+
 :::note
-The folder `shared` will not be visible in the MinIO object list until data is written to the bucket.
+The folder `builtin_storage_volume` will not be visible in the MinIO object list until data is written to the bucket.
 :::
 
 ---
@@ -380,10 +380,12 @@ The CN configuration used here is the default, as the CN is designed for shared-
 ```bash
 sys_log_level = INFO
 
+# ports for admin, web, heartbeat service
 be_port = 9060
 be_http_port = 8040
 heartbeat_service_port = 9050
 brpc_port = 8060
+starlet_port = 9070
 ```
 
 ### FE configuration
@@ -392,48 +394,29 @@ The FE configuration is slightly different from the default as the FE must be co
 
 The `docker-compose.yml` file generates the FE configuration in the `command`.
 
-```yml
-    command: >
-      bash -c "echo run_mode=shared_data >> /opt/starrocks/fe/conf/fe.conf &&
-      echo cloud_native_meta_port=6090 >> /opt/starrocks/fe/conf/fe.conf &&
-      echo aws_s3_path=starrocks >> /opt/starrocks/fe/conf/fe.conf &&
-      echo aws_s3_endpoint=minio:9000 >> /opt/starrocks/fe/conf/fe.conf &&
-      echo aws_s3_use_instance_profile=false >> /opt/starrocks/fe/conf/fe.conf &&
-      echo cloud_native_storage_type=S3 >> /opt/starrocks/fe/conf/fe.conf &&
-      echo aws_s3_use_aws_sdk_default_behavior=true >> /opt/starrocks/fe/conf/fe.conf &&
-      sh /opt/starrocks/fe/bin/start_fe.sh"
-```
+```plaintext
+# enable shared data, set storage type, set endpoint
+run_mode = shared_data
+cloud_native_storage_type = S3
+aws_s3_endpoint = minio:9000
 
-This results in this config file:
+# set the path in MinIO
+aws_s3_path = starrocks
 
-```bash title='fe/fe.conf'
-LOG_DIR = ${STARROCKS_HOME}/log
+# credentials for MinIO object read/write
+aws_s3_access_key = AAAAAAAAAAAAAAAAAAAA
+aws_s3_secret_key = BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+aws_s3_use_instance_profile = false
+aws_s3_use_aws_sdk_default_behavior = false
 
-DATE = "$(date +%Y%m%d-%H%M%S)"
-JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseMembar -XX:SurvivorRatio=8 -XX:MaxTenuringThreshold=7 -XX:+PrintGCDateStamps -XX:+PrintGCDetails -XX:+UseConcMarkSweepGC -XX:+UseParNewGC -XX:+CMSClassUnloadingEnabled -XX:-CMSParallelRemarkEnabled -XX:CMSInitiatingOccupancyFraction=80 -XX:SoftRefLRUPolicyMSPerMB=0 -Xloggc:${LOG_DIR}/fe.gc.log.$DATE -XX:+PrintConcurrentLocks"
-
-JAVA_OPTS_FOR_JDK_11="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time"
-
-sys_log_level = INFO
-
-http_port = 8030
-rpc_port = 9020
-query_port = 9030
-edit_log_port = 9010
-mysql_service_nio_enabled = true
-
-# highlight-start
-run_mode=shared_data
-aws_s3_path=starrocks
-aws_s3_endpoint=minio:9000
-aws_s3_use_instance_profile=false
-cloud_native_storage_type=S3
-aws_s3_use_aws_sdk_default_behavior=true
-# highlight-end
+# Set this to false if you do not want default
+# storage created in the object storage using
+# the details provided above
+enable_load_volume_from_conf = true
 ```
 
 :::note
-This config file contains the default entries and the additions for shared-data. The entries for shared-data are highlighted.
+This config file does not contain the default entries for an FE, only the shared-data configuration is shown.
 :::
 
 The non-default FE configuration settings:
@@ -446,25 +429,37 @@ Many configuration parameters are prefixed with `s3_`. This prefix is used for a
 
 This enables shared-data use.
 
-#### `aws_s3_path=starrocks`
+#### `cloud_native_storage_type=S3`
 
-The bucket name.
+This specifies whether S3 compatible storage or Azure Blob Storage is used. For MinIO this is always S3.
 
 #### `aws_s3_endpoint=minio:9000`
 
 The MinIO endpoint, including port number.
 
+#### `aws_s3_path=starrocks`
+
+The bucket name.
+
+#### `aws_s3_access_key=AA`
+
+The MinIO access key.
+
+#### `aws_s3_secret_key=BB`
+
+The MinIO access key secret.
+
 #### `aws_s3_use_instance_profile=false`
 
 When using MinIO an access key is used, and so instance profiles are not used with MinIO.
 
-#### `cloud_native_storage_type=S3`
+#### `aws_s3_use_aws_sdk_default_behavior=false`
 
-This specifies whether S3 compatible storage or Azure Blob Storage is used. For MinIO this is always S3.
+When using MinIO this parameter is always set to false.
 
-#### `aws_s3_use_aws_sdk_default_behavior=true`
+#### `enable_load_volume_from_conf=true`
 
-When using MinIO this parameter is always set to true.
+When this is true, a StarRocks storage volume named `builtin_storage_volume` is created using MinIO object storage, and it is set to be the default storage volume for the tables that you create.
 
 ---
 

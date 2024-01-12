@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#ifdef USE_STAROS
 #include "storage/lake/local_pk_index_manager.h"
 
 #include <chrono>
@@ -187,3 +188,5 @@ void LocalPkIndexManager::evict(UpdateManager* update_manager, DataDir* data_dir
 }
 
 } // namespace starrocks::lake
+
+#endif // USE_STAROS

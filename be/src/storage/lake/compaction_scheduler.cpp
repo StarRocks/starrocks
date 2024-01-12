@@ -88,17 +88,16 @@ CompactionScheduler::CompactionScheduler(TabletManager* tablet_mgr)
           _limiter(config::compact_threads),
           _contexts_lock(),
           _contexts(),
-          _task_queue_count(config::compact_threads),
-          _task_queues(new TaskQueue[_task_queue_count]) {
-    CHECK_GT(_task_queue_count, 0);
+          _task_queues(config::compact_threads) {
+    CHECK_GT(_task_queues.task_queue_size(), 0);
     auto st = ThreadPoolBuilder("clound_native_compact")
-                      .set_min_threads(_task_queue_count)
-                      .set_max_threads(_task_queue_count)
-                      .set_max_queue_size(_task_queue_count)
+                      .set_min_threads(0)
+                      .set_max_threads(INT_MAX)
+                      .set_max_queue_size(INT_MAX)
                       .build(&_threads);
     CHECK(st.ok()) << st;
 
-    for (int i = 0; i < _task_queue_count; i++) {
+    for (int i = 0; i < _task_queues.task_queue_size(); i++) {
         CHECK(_threads->submit_func([this, id = i]() { this->thread_task(id); }).ok());
     }
 }
@@ -106,7 +105,6 @@ CompactionScheduler::CompactionScheduler(TabletManager* tablet_mgr)
 CompactionScheduler::~CompactionScheduler() {
     _stopped.store(true, std::memory_order_relaxed);
     _threads->wait();
-    delete[] _task_queues;
 }
 
 void CompactionScheduler::compact(::google::protobuf::RpcController* controller, const CompactRequest* request,
@@ -122,7 +120,7 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
             std::lock_guard l(_contexts_lock);
             _contexts.Append(context.get());
         }
-        _task_queues[idx].put(std::move(context));
+        _task_queues.put(idx, context);
     }
     TEST_SYNC_POINT("CompactionScheduler::compact:return");
 }
@@ -149,6 +147,44 @@ void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
     }
 }
 
+// Pay special attentions to the following statements order with different new and old val
+void CompactionScheduler::update_compact_threads(int32_t new_val) {
+    if (_task_queues.modifying()) {
+        LOG(ERROR) << "Failed to update compact_threads to " << new_val
+                   << " due to concurrency update, reset it back to " << _task_queues.target_size();
+        config::compact_threads = _task_queues.target_size();
+        return;
+    }
+
+    if (new_val == _task_queues.task_queue_size()) {
+        return;
+    } else if (new_val <= 0) {
+        LOG(ERROR) << "compact_threads can't be set to " << new_val << ", reset it back to "
+                   << _task_queues.target_size();
+        config::compact_threads = _task_queues.target_size();
+    }
+
+    _task_queues.set_target_size(new_val);
+    if (_task_queues.target_size() != new_val) {
+        LOG(ERROR) << "Failed to update compact_threads to " << new_val
+                   << " due to concurrency update, bereset it back to " << _task_queues.target_size();
+        config::compact_threads = _task_queues.target_size();
+        return;
+    }
+
+    auto old_val = _task_queues.task_queue_size();
+    if (new_val > old_val) {
+        // increase queue count
+        _task_queues.resize_if_needed(_limiter);
+        for (int i = old_val; i < new_val; i++) {
+            CHECK(_threads->submit_func([this, id = i]() { this->thread_task(id); }).ok());
+        }
+    } else {
+        // In order to prevent exceptions due to concurrent modifications of the task queues,
+        // reducing the queue length will be completed asynchronously.
+    }
+}
+
 void CompactionScheduler::remove_states(const std::vector<std::unique_ptr<CompactionTaskContext>>& states) {
     std::lock_guard l(_contexts_lock);
     for (auto& context : states) {
@@ -156,25 +192,19 @@ void CompactionScheduler::remove_states(const std::vector<std::unique_ptr<Compac
     }
 }
 
-void CompactionScheduler::steal_task(int start_index, std::unique_ptr<CompactionTaskContext>* context) {
-    for (int i = 0; i < _task_queue_count; i++) {
-        if (_task_queues[(start_index + i) % _task_queue_count].try_get(context)) {
-            return;
-        }
-    }
-    DCHECK(*context == nullptr);
-}
-
 void CompactionScheduler::thread_task(int id) {
     while (!_stopped.load(std::memory_order_acquire)) {
+        if (reschedule_task_if_needed(id)) {
+            break;
+        }
         if (!_limiter.acquire()) {
             std::this_thread::sleep_for(std::chrono::seconds(1));
             continue;
         }
 
         CompactionContextPtr context;
-        if (!_task_queues[id].try_get(&context)) {
-            steal_task(id + 1, &context);
+        if (!_task_queues.try_get(id, &context)) {
+            _task_queues.steal_task(id + 1, &context);
         }
 
         if (context != nullptr) {
@@ -225,13 +255,14 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     auto cost = finish_time - start_time;
 
     // Task failure due to memory limitations allows for retries. more threads allow for more retries.
-    if (status.is_mem_limit_exceeded() && context->runs.load(std::memory_order_relaxed) < _task_queue_count + 1) {
+    if (status.is_mem_limit_exceeded() &&
+        context->runs.load(std::memory_order_relaxed) < _task_queues.task_queue_size() + 1) {
         LOG(WARNING) << "Memory limit exceeded, will retry later. tablet_id=" << tablet_id << " version=" << version
                      << " txn_id=" << txn_id << " cost=" << cost << "s";
         context->progress.update(0);
         auto idx = choose_task_queue_by_txn_id(context->txn_id);
         // re-schedule the compaction task
-        _task_queues[idx].put(std::move(context));
+        _task_queues.put(idx, context);
     } else {
         VLOG_IF(3, status.ok()) << "Compacted tablet " << tablet_id << ". version=" << version << " txn_id=" << txn_id
                                 << " cost=" << cost << "s";
@@ -280,6 +311,37 @@ Status CompactionScheduler::abort(int64_t txn_id) {
         }
     }
     return Status::NotFound(fmt::format("no compaction task with txn id {}", txn_id));
+}
+
+// If `lake_compaction_max_concurrency` is reduced during runtime, `id` may exceed it.
+// Reschedule all the tasks in _task_queues where idx ranges from [new_val, old_val-1].
+// return true means current thread id is beyond target size, current thread shoud exist.
+bool CompactionScheduler::reschedule_task_if_needed(int id) {
+    if (id >= _task_queues.target_size()) {
+        CompactionContextPtr context;
+        while (_task_queues.try_get(id, &context)) {
+            auto idx = choose_task_queue_by_txn_id(context->txn_id);
+            _task_queues.put(idx, context);
+        }
+
+        _task_queues.resize_if_needed(_limiter);
+        return true;
+    }
+    return false;
+}
+
+// Shrink _task_queues if `id` exceeds _target_size, provided that all tasks
+// from superfluous threads have been rescheduled.
+// Expanding the queue can be executed immediately.
+void CompactionScheduler::WrapTaskQueues::resize_if_needed(Limiter& limiter) {
+    std::lock_guard<std::mutex> lock(_task_queues_mutex);
+    for (int i = _target_size; i < _internal_task_queues.size(); i++) {
+        if (_internal_task_queues[i]->get_size() > 0) {
+            return;
+        }
+    }
+    resize(_target_size);
+    limiter.adapt_to_task_queue_size(_target_size);
 }
 
 } // namespace starrocks::lake

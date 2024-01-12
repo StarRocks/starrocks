@@ -14,6 +14,8 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.alter.OptimizeTask;
 import com.starrocks.analysis.IntLiteral;
@@ -22,9 +24,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.PipeTaskDesc;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -33,7 +37,10 @@ import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.warehouse.Warehouse;
+import org.apache.commons.collections.MapUtils;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -47,7 +54,9 @@ public class TaskBuilder {
         task.setCreateTime(System.currentTimeMillis());
         task.setDbName(desc.getDbName());
         task.setDefinition(desc.getSqlTask());
-        task.setProperties(desc.getProperties());
+        task.setProperties(desc.getVariables());
+
+        handleSpecialTaskProperties(task);
         return task;
     }
 
@@ -74,7 +83,35 @@ public class TaskBuilder {
         task.setDefinition(submitTaskStmt.getSqlText());
         task.setProperties(submitTaskStmt.getProperties());
         task.setExpireTime(System.currentTimeMillis() + Config.task_ttl_second * 1000L);
+
+        handleSpecialTaskProperties(task);
         return task;
+    }
+
+    /**
+     * Handle some special task properties like warehouse, session variables...
+     */
+    private static void handleSpecialTaskProperties(Task task) {
+        Map<String, String> properties = task.getProperties();
+        if (MapUtils.isEmpty(properties)) {
+            return;
+        }
+
+        List<String> toRemove = Lists.newArrayList();
+        Map<String, String> toAdd = Maps.newHashMap();
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            // warehouse: translate the warehouse into warehouse_id, in case it changed after renaming
+            if (entry.getKey().equalsIgnoreCase(SessionVariable.WAREHOUSE)) {
+                Warehouse wa = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(entry.getValue());
+                Preconditions.checkArgument(wa != null, "warehouse not exists: " + entry.getValue());
+
+                toRemove.add(entry.getKey());
+                toAdd.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID, String.valueOf(wa.getId()));
+            }
+        }
+
+        toRemove.forEach(properties::remove);
+        properties.putAll(toAdd);
     }
 
     public static String getAnalyzeMVStmt(String tableName) {
@@ -105,6 +142,7 @@ public class TaskBuilder {
         task.setProperties(properties);
         task.setDefinition(sql);
         task.setExpireTime(0L);
+        handleSpecialTaskProperties(task);
         return task;
     }
 
@@ -121,6 +159,7 @@ public class TaskBuilder {
         task.setDefinition(materializedView.getTaskDefinition());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
+        handleSpecialTaskProperties(task);
         return task;
     }
 
@@ -136,6 +175,7 @@ public class TaskBuilder {
                 "insert overwrite " + materializedView.getName() + " " + materializedView.getViewDefineSql());
         task.setPostRun(getAnalyzeMVStmt(materializedView.getName()));
         task.setExpireTime(0L);
+        handleSpecialTaskProperties(task);
         return task;
     }
 

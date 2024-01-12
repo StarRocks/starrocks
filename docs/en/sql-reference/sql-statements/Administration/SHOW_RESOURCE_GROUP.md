@@ -8,6 +8,12 @@ displayed_sidebar: "English"
 
 Shows the information of resource groups.
 
+:::tip
+
+This operation does not require privileges.
+
+:::
+
 ## Syntax
 
 ```SQL
@@ -38,7 +44,7 @@ SHOW { RESOURCE GROUPS [ALL] | RESOURCE GROUP <resource_group_name> }
 | type                       | Type of resource group.                                      |
 | classifiers                | Classifiers that are associated with the resource group. `id` is the ID of the classifier, and `weight` is the degree of matching. |
 
-## Example 
+## Examples
 
 Example 1: Shows all resource groups in the cluster.
 

@@ -8,7 +8,13 @@ displayed_sidebar: "English"
 
 This statement is used to show content in columns from specified tables.
 
-Syntax:
+:::tip
+
+This operation does not require privileges.
+
+:::
+
+## Syntax
 
 ```sql
 SHOW FULL COLUMNS FROM <tbl_name>

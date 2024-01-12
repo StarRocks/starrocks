@@ -54,6 +54,11 @@ bool OlapTableSinkOperator::is_finished() const {
 }
 
 bool OlapTableSinkOperator::pending_finish() const {
+    // audit report not finish, we need check until finish
+    if (!_is_audit_report_done) {
+        return true;
+    }
+
     // sink's open not finish, we need check util finish
     if (!_is_open_done) {
         if (!_sink->is_open_done()) {
@@ -108,7 +113,9 @@ Status OlapTableSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
 
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
-        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+        _is_audit_report_done = false;
+        state->exec_env()->wg_driver_executor()->report_audit_statistics(state->query_ctx(), state->fragment_ctx(),
+                                                                         &_is_audit_report_done);
     }
     if (_is_open_done && !_automatic_partition_chunk) {
         // sink's open already finish, we can try_close

@@ -17,14 +17,14 @@ displayed_sidebar: "Chinese"
     Query OK, 0 rows affected (0.00 sec)
     ```
 
-- **保留关键字** (Reserved keywords) 不能直接作为标识符给变量或者函数等命名，需要做特殊处理。在 StarRocks 中，使用保留关键字作为标识符，需要用反引号 (`\`) 将其括起。例如，`LIKE` 为保留关键字，如要创建一个名为 `LIKE` 的数据库，语法如下。
+- **保留关键字** (Reserved keywords) 不能直接作为标识符给变量或者函数等命名，需要做特殊处理。在 StarRocks 中，使用保留关键字作为标识符，需要用反引号（`）将其括起。例如，`LIKE` 为保留关键字，如要创建一个名为 `LIKE` 的数据库，语法如下。
 
     ```SQL
     CREATE DATABASE `LIKE`;
     Query OK, 0 rows affected (0.01 sec)
     ```
 
-  如果未使用反引号 (`\`) 包裹，则会报错：
+  如果未使用反引号（`）包裹，则会报错：
 
    ```SQL
     CREATE DATABASE LIKE;
@@ -33,7 +33,7 @@ displayed_sidebar: "Chinese"
 
 ## 保留关键字
 
-下面按照字母顺序列举了 StarRocks 中所有保留关键字，使用时需要用反引号 (`\`) 包裹。StarRocks 不同版本中的保留关键字可能会有不同。
+下面按照字母顺序列举了 StarRocks 中所有保留关键字，使用时需要用反引号（`）包裹。StarRocks 不同版本中的保留关键字可能会有不同。
 
 ### A
 

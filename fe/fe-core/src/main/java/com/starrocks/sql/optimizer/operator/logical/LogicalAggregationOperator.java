@@ -59,6 +59,7 @@ public class LogicalAggregationOperator extends LogicalOperator {
     // but for single distinct function, partitionByColumns are not same with groupingKeys
     private List<ColumnRefOperator> partitionByColumns;
 
+    // @todo: refactor it, SingleDistinctFunctionPos depend on the map's order, but the order is not fixed
     // When generate plan fragment, we need this info.
     // For SQL: select count(distinct id_bigint), sum(id_int) from test_basic;
     // In the distinct local (update serialize) agg stage:

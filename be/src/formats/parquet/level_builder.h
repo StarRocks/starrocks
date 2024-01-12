@@ -117,9 +117,10 @@ private:
                                         const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                         const CallbackFunction& write_leaf_callback);
 
-    void _write_varchar_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
-                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
-                                     const CallbackFunction& write_leaf_callback);
+    template <LogicalType lt>
+    void _write_byte_array_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                        const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                        const CallbackFunction& write_leaf_callback);
 
     void _write_date_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                   const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
@@ -140,6 +141,10 @@ private:
     void _write_struct_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                     const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                     const CallbackFunction& write_leaf_callback);
+
+    void _write_time_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                  const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                  const CallbackFunction& write_leaf_callback);
 
     std::shared_ptr<std::vector<uint8_t>> _make_null_bitset(const LevelBuilderContext& ctx, const uint8_t* nulls,
                                                             const size_t col_size) const;

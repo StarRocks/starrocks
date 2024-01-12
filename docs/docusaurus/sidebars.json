@@ -1,97 +1,6 @@
- {
+{
   "English": [
     "introduction/StarRocks_intro",
-    {
-      "type": "category",
-      "label": "Release Notes",
-      "link": { "type": "doc", "id": "cover_pages/release_notes_overview" },
-      "items": [
-        {
-          "type": "category",
-          "label": "StarRocks",
-          "link": { "type": "doc", "id": "cover_pages/release_notes_index" },
-          "items": [
-            {
-              "type": "link",
-              "label": "v3.2",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/release_notes/release-3.2.md"
-            },
-            {
-              "type": "link",
-              "label": "v3.1",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/release_notes/release-3.1.md"
-            },
-            {
-              "type": "link",
-              "label": "v3.0",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/release_notes/release-3.0.md"
-            },
-            {
-              "type": "link",
-              "label": "v2.5",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/release_notes/release-2.5.md"
-            },
-            {
-              "type": "link",
-              "label": "v2.4",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/release_notes/release-2.4.md"
-            },
-            {
-              "type": "link",
-              "label": "v2.3",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/release_notes/release-2.3.md"
-            },
-            {
-              "type": "link",
-              "label": "v2.2",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/release_notes/release-2.2.md"
-            },
-            {
-              "type": "link",
-              "label": "v2.1",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/release_notes/release-2.1.md"
-            },
-            {
-              "type": "link",
-              "label": "v2.0",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/release_notes/release-2.0.md"
-            },
-            {
-              "type": "link",
-              "label": "v1.19",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/release_notes/release-1.19.md"
-            }
-          ]
-        },
-        {
-          "type": "category",
-          "label": "StarRocks Ecosystem",
-          "link": { "type": "doc", "id": "cover_pages/connector_index" },
-          "items": [
-            {
-              "type": "link",
-              "label": "StarRocks Flink Connector",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/ecosystem_release/flink_connector.md"
-            },
-            {
-              "type": "link",
-              "label": "StarRocks Kafka Connector",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/ecosystem_release/kafka_connector.md"
-            },
-            {
-              "type": "link",
-              "label": "StarRocks Spark Connector",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/ecosystem_release/spark_connector.md"
-            },
-            {
-              "type": "link",
-              "label": "starrocks-kubernetes-operator",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/en/ecosystem_release/starrocks-kubernetes-operator.md"
-            }
-          ]
-        }
-      ]
-    },
     {
       "type": "category",
       "label": "Introduction to StarRocks",
@@ -103,6 +12,12 @@
       "label": "Quick Start",
       "link": {"type": "doc", "id": "quick_start/quick_start"},
       "items": ["quick_start/shared-nothing", "quick_start/shared-data", "quick_start/iceberg"]
+    },
+    {
+      "type": "category",
+      "label": "Project Help",
+      "link": {"type": "doc", "id": "project_help/project_help"},
+      "items": ["project_help/slack"]
     },
     {
       "type": "category",
@@ -138,8 +53,9 @@
     {
       "type": "category",
       "label": "Table Design",
-      "link": {"type": "doc", "id": "table_design/StarRocks_table_design"},
+      "link": {"type": "doc", "id": "table_design/catalog_db_tbl"},
       "items": [
+        "table_design/StarRocks_table_design",
         {
           "type": "category",
           "label": "Table types",
@@ -153,7 +69,8 @@
           "items": ["table_design/expression_partitioning", "table_design/list_partitioning", "table_design/dynamic_partitioning", "table_design/Temporary_partition"]
         },
         "table_design/data_compression",
-        "table_design/Sort_key"
+        "table_design/Sort_key",
+        "table_design/hybrid_table"
       ]
     },
     {
@@ -164,8 +81,8 @@
         {
           "type": "category",
           "label": "Load from Object Storage",
-          "link": {"type": "doc", "id": "loading/s3"},
-          "items": ["loading/s3", "loading/gcs", "loading/cloud_storage_load"]
+          "link": {"type": "doc", "id": "loading/objectstorage"},
+          "items": ["loading/s3", "loading/gcs", "loading/minio", "loading/cloud_storage_load"]
         },
         "loading/StreamLoad",
         "loading/hdfs_load",
@@ -187,8 +104,7 @@
         "loading/Flink-connector-starrocks",
         "loading/Load_to_Primary_Key_tables",
         "loading/Etl_in_loading",
-        "loading/CloudCanal",
-        "loading/DataX-starrocks-writer",
+        "loading/loading_tools",
         {
           "type": "category",
           "label": "Concepts",
@@ -200,8 +116,9 @@
     {
       "type": "category",
       "label": "Data Unloading",
-      "link": {"type": "doc", "id": "unloading/Export"},
+      "link": {"type": "doc", "id": "unloading/unloading"},
       "items": [
+        "unloading/Export",
         "unloading/Spark_connector",
         "unloading/Flink_connector",
         "unloading/unload_using_insert_into_files"
@@ -212,6 +129,10 @@
       "label": "Query Data Lakes",
       "link": {"type": "doc", "id": "data_source/data_lakes"},
       "items": [
+        {
+          "type": "doc",
+          "id": "data_source/icebergtutorial"
+        },
         {
           "type": "category",
           "label": "Catalog",
@@ -285,9 +206,79 @@
       "label": "Integrations",
       "link": {"type": "doc", "id": "integrations/integrations"},
       "items": [
-        "integrations/authenticate_to_aws_resources",
-        "integrations/authenticate_to_azure_storage",
-        "integrations/authenticate_to_gcs",
+        {
+          "type": "category",
+          "label": "Cloud Authentication",
+          "description": "Use AWS, Azure, or GCP authentication",
+          "link": {"type": "doc", "id": "cover_pages/csp_auth"},
+          "items": [
+            "integrations/authenticate_to_aws_resources",
+            "integrations/authenticate_to_azure_storage",
+            "integrations/authenticate_to_gcs"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Data Lake",
+          "description": "Iceberg, Hive, Delta Lake, Hudi, etc.",
+          "link": {"type": "doc", "id": "integrations/data_lakes"},
+          "items": [
+             "data_source/catalog/hive_catalog",
+             "data_source/catalog/iceberg_catalog",
+             "data_source/catalog/hudi_catalog",
+             "data_source/catalog/deltalake_catalog"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Streaming Data",
+          "description": "Stream with Kafka, Flink, and StarRocks tools",
+          "link": {"type": "doc", "id": "integrations/streaming"},
+          "items": [
+            "integrations/streaming/flink",
+            {
+              "type":"category",
+              "label": "Apache Kafka",
+              "description": "Streaming from Kafka",
+              "link": {"type": "doc", "id": "integrations/streaming/apache_kafka"},
+              "items": ["integrations/streaming/kafka/Kafka-connector-starrocks", "integrations/streaming/kafka/RoutineLoad", "loading/automq-routine-load"]
+            },
+            {
+              "type":"category",
+              "label": "StarRocks Pipe",
+              "description": "Pipe: Ideal for continuous loading at scale",
+              "link": {"type": "doc", "id": "integrations/streaming/pipe"},
+              "items": ["integrations/streaming/pipe/hdfs", "integrations/streaming/pipe/s3"]
+            }
+          ]
+        },
+        {
+          "type": "category",
+          "label": "Batch Loading Data",
+          "description": "Batch loading and data transformation",
+          "link": {"type": "doc", "id": "cover_pages/batch_loading_integration"},
+          "items": [
+             "integrations/batch/Spark-connector-starrocks",
+             "integrations/batch/SparkLoad"
+           ]
+        },
+        {
+          "type": "category",
+          "label": "Loading Tools",
+          "description": "Integrations with more loading tools",
+          "link": {"type": "doc", "id": "integrations/loading_tools/loading_tools_integration"},
+          "items": [
+            "integrations/loading_tools/SMT",
+            "integrations/loading_tools/DataX-starrocks-writer",
+            "integrations/loading_tools/CloudCanal",
+            {
+              "type": "link",
+              "label": "Kettle connector",
+              "description": "Integrations with Kettle",
+              "href": "https://github.com/StarRocks/starrocks-connector-for-kettle"
+             }
+           ]
+        },
         {
           "type": "category",
           "label": "BI Tools",
@@ -313,7 +304,16 @@
             "integrations/IDE_integrations/jupysql"
           ]
         },
-        "integrations/other_integrations/intro"
+        {
+          "type": "doc",
+          "id": "integrations/other_integrations/datadog_support"
+        },
+        {
+          "type": "link",
+          "label": "DBT",
+          "description": "Modeling and transformation with DBT",
+          "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
+         }
       ]
     },
     {
@@ -328,7 +328,8 @@
           "items": [
             "administration/Scale_up_down",
             "administration/Backup_and_restore",
-            "administration/Configuration",
+            "administration/FE_configuration",
+            "administration/BE_configuration",
             "administration/Monitor_and_Alert",
             "administration/audit_loader",
             "administration/enable_fqdn",
@@ -372,7 +373,15 @@
           "link": {"type": "doc", "id": "cover_pages/performance_tuning"},
           "items": [
             "administration/Query_planning",
-            "administration/query_profile",
+            {
+              "type": "category",
+              "label": "Query Profile",
+              "link": {"type": "doc", "id": "administration/query_profile_overview"},
+              "items": [
+                "administration/query_profile_text_based_analysis",
+                "administration/query_profile_details"
+              ]
+            },
             "administration/Profiling"
           ]
         }
@@ -448,9 +457,9 @@
                   "label": "Numeric",
                   "link": {"type": "doc", "id": "sql-reference/overview-pages/numeric"},
                   "items": [
-                    "sql-reference/sql-statements/data-types/INT",
                     "sql-reference/sql-statements/data-types/TINYINT",
                     "sql-reference/sql-statements/data-types/SMALLINT",
+                    "sql-reference/sql-statements/data-types/INT",
                     "sql-reference/sql-statements/data-types/BIGINT",
                     "sql-reference/sql-statements/data-types/LARGEINT",
                     "sql-reference/sql-statements/data-types/DECIMAL",
@@ -727,7 +736,8 @@
         "data_source/datalake_faq",
         "faq/Sql_faq",
         "faq/Dump_query",
-        "faq/Others"
+        "faq/Others",
+        "faq/FAQ_On_Github"
       ]
     },
     {
@@ -751,97 +761,6 @@
     "introduction/StarRocks_intro",
     {
       "type": "category",
-      "label": "Release Notes",
-      "link": { "type": "doc", "id": "cover_pages/release_notes_overview" },
-      "items": [
-        {
-          "type": "category",
-          "label": "StarRocks",
-          "link": { "type": "doc", "id": "cover_pages/release_notes_index" },
-          "items": [
-            {
-              "type": "link",
-              "label": "v3.2",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/release_notes/release-3.2.md"
-            },
-            {
-              "type": "link",
-              "label": "v3.1",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/release_notes/release-3.1.md"
-            },
-            {
-              "type": "link",
-              "label": "v3.0",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/release_notes/release-3.0.md"
-            },
-            {
-              "type": "link",
-              "label": "v2.5",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/release_notes/release-2.5.md"
-            },
-            {
-              "type": "link",
-              "label": "v2.4",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/release_notes/release-2.4.md"
-            },
-            {
-              "type": "link",
-              "label": "v2.3",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/release_notes/release-2.3.md"
-            },
-            {
-              "type": "link",
-              "label": "v2.2",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/release_notes/release-2.2.md"
-            },
-            {
-              "type": "link",
-              "label": "v2.1",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/release_notes/release-2.1.md"
-            },
-            {
-              "type": "link",
-              "label": "v2.0",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/release_notes/release-2.0.md"
-            },
-            {
-              "type": "link",
-              "label": "v1.19",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/release_notes/release-1.19.md"
-            }
-          ]
-        },
-        {
-          "type": "category",
-          "label": "StarRocks Ecosystem",
-          "link": { "type": "doc", "id": "cover_pages/connector_index" },
-          "items": [
-            {
-              "type": "link",
-              "label": "StarRocks Flink Connector",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/ecosystem_release/flink_connector.md"
-            },
-            {
-              "type": "link",
-              "label": "StarRocks Kafka Connector",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/ecosystem_release/kafka_connector.md"
-            },
-            {
-              "type": "link",
-              "label": "StarRocks Spark Connector",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/ecosystem_release/spark_connector.md"
-            },
-            {
-              "type": "link",
-              "label": "starrocks-kubernetes-operator",
-              "href": "https://github.com/StarRocks/starrocks/blob/main/docs/zh/ecosystem_release/starrocks-kubernetes-operator.md"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "type": "category",
       "label": "产品简介",
       "link": {"type": "doc", "id": "introduction/introduction"},
       "items": ["introduction/what_is_starrocks", "introduction/Architecture", "introduction/Features"]
@@ -851,6 +770,12 @@
       "label": "快速开始",
       "link": {"type": "doc", "id": "quick_start/quick_start"},
       "items": ["quick_start/deploy_with_docker", "quick_start/Create_table", "quick_start/Import_and_query"]
+    },
+    {
+      "type": "category",
+      "label": " 项目协助",
+      "link": {"type": "doc", "id": "project_help/project_help"},
+      "items": ["project_help/slack"]
     },
     {
       "type": "category",
@@ -886,8 +811,9 @@
     {
       "type": "category",
       "label": "表设计",
-      "link": {"type": "doc", "id": "table_design/StarRocks_table_design"},
+      "link": {"type": "doc", "id": "table_design/catalog_db_tbl"},
       "items": [
+        "table_design/StarRocks_table_design",
         {
           "type": "category",
           "label": "数据模型",
@@ -901,7 +827,8 @@
           "items": ["table_design/expression_partitioning", "table_design/list_partitioning", "table_design/dynamic_partitioning", "table_design/Temporary_partition"]
         },
         "table_design/data_compression",
-        "table_design/Sort_key"
+        "table_design/Sort_key",
+        "table_design/hybrid_table"
       ]
     },
     {
@@ -912,7 +839,7 @@
         {
           "type": "category",
           "label": "从对象存储导入",
-          "link": {"type": "doc", "id": "loading/s3"},
+          "link": {"type": "doc", "id": "loading/objectstorage"},
           "items": ["loading/s3"]
         },
         "loading/StreamLoad",
@@ -936,8 +863,7 @@
         "loading/Flink-connector-starrocks",
         "loading/Load_to_Primary_Key_tables",
         "loading/Etl_in_loading",
-        "loading/CloudCanal",
-        "loading/DataX-starrocks-writer",
+        "loading/loading_tools",
         {
           "type": "category",
           "label": "概念介绍",
@@ -949,8 +875,9 @@
     {
       "type": "category",
       "label": "导出数据",
-      "link": {"type": "doc", "id": "unloading/Export"},
+      "link": {"type": "doc", "id": "unloading/unloading"},
       "items": [
+        "unloading/Export",
         "unloading/Spark_connector",
         "unloading/Flink_connector",
         "unloading/unload_using_insert_into_files"
@@ -1034,12 +961,83 @@
       "label": "外部系统集成",
       "link": {"type": "doc", "id": "integrations/integrations"},
       "items": [
-        "integrations/authenticate_to_aws_resources",
-        "integrations/authenticate_to_azure_storage",
-        "integrations/authenticate_to_gcs",
         {
           "type": "category",
-          "label": "BI 集成",
+          "label": "CSP 认证鉴权",
+          "description": "AWS、Azure、及 GCP 资源认证鉴权",
+          "link": {"type": "doc", "id": "cover_pages/csp_auth"},
+          "items": [
+            "integrations/authenticate_to_aws_resources",
+            "integrations/authenticate_to_azure_storage",
+            "integrations/authenticate_to_gcs"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "查询数据湖",
+          "description": "Iceberg、Hive、Delta Lake、Hudi 等",
+          "link": {"type": "doc", "id": "integrations/data_lakes"},
+          "items": [
+             "data_source/catalog/hive_catalog",
+             "data_source/catalog/iceberg_catalog",
+             "data_source/catalog/hudi_catalog",
+             "data_source/catalog/deltalake_catalog"
+          ]
+        },
+        {
+          "type": "category",
+          "label": "实时导入",
+          "description": "通过 Kafka、Flink、或 StarRocks 工具实现数据流实时导入",
+          "link": {"type": "doc", "id": "integrations/streaming"},
+          "items": [
+            "integrations/streaming/flink",
+            {
+              "type":"category",
+              "label": "Apache Kafka",
+              "description": "从 Kafka 导入实时数据流",
+              "link": {"type": "doc", "id": "integrations/streaming/apache_kafka"},
+              "items": ["integrations/streaming/kafka/Kafka-connector-starrocks", "integrations/streaming/kafka/RoutineLoad", "loading/automq-routine-load"]
+            },
+            {
+              "type":"category",
+              "label": "StarRocks Pipe",
+              "description": "实现大规模、持续数据导入的理想工具",
+              "link": {"type": "doc", "id": "integrations/streaming/pipe"},
+              "items": ["integrations/streaming/pipe/hdfs", "integrations/streaming/pipe/s3"]
+            }
+          ]
+        },
+        {
+          "type": "category",
+          "label": "批量导入",
+          "description": "批量导入与数据转换",
+          "link": {"type": "doc", "id": "cover_pages/batch_loading_integration"},
+          "items": [
+             "integrations/batch/Spark-connector-starrocks",
+             "integrations/batch/SparkLoad"
+           ]
+        },
+        {
+          "type": "category",
+          "label": "导入工具",
+          "description": "更多导入工具集成",
+          "link": {"type": "doc", "id": "integrations/loading_tools/loading_tools_integration"},
+          "items": 
+          [
+            "integrations/loading_tools/SMT",
+            "integrations/loading_tools/DataX-starrocks-writer",
+            "integrations/loading_tools/CloudCanal",
+            {
+              "type": "link",
+              "label": "Kettle connector",
+              "description": "Integrations with Kettle",
+              "href": "https://github.com/StarRocks/starrocks-connector-for-kettle"
+             }
+           ]
+        },
+        {
+          "type": "category",
+          "label": "BI 工具",
           "link": {"type": "doc", "id": "cover_pages/bi_tools"},
           "items": [
             "integrations/BI_integrations/Superset",
@@ -1053,7 +1051,7 @@
         },
         {
           "type": "category",
-          "label": "IDE 集成",
+          "label": "IDE 工具",
           "link": {"type": "doc", "id": "cover_pages/ide_tools"},
           "items": [
             "integrations/IDE_integrations/DataGrip",
@@ -1062,7 +1060,16 @@
             "integrations/IDE_integrations/jupysql"
           ]
         },
-        "integrations/other_integrations/intro"
+        {
+          "type": "doc",
+          "id": "integrations/other_integrations/datadog_support"
+        },
+        {
+          "type": "link",
+          "label": "DBT",
+          "description": "通过 DBT 实现数据建模与转换",
+          "href": "https://github.com/StarRocks/starrocks/tree/main/contrib/dbt-connector/README.md"
+         }
       ]
     },
     {
@@ -1077,7 +1084,8 @@
           "items": [
             "administration/Scale_up_down",
             "administration/Backup_and_restore",
-            "administration/Configuration",
+            "administration/FE_configuration",
+            "administration/BE_configuration",
             "administration/Monitor_and_Alert",
             "administration/audit_loader",
             "administration/enable_fqdn",
@@ -1120,7 +1128,15 @@
           "link": {"type": "doc", "id": "cover_pages/performance_tuning"},
           "items": [
             "administration/Query_planning",
-            "administration/query_profile",
+            {
+              "type": "category",
+              "label": "Query Profile",
+              "link": {"type": "doc", "id": "administration/query_profile_overview"},
+              "items": [
+                "administration/query_profile_text_based_analysis",
+                "administration/query_profile_details"
+              ]
+            },
             "administration/Profiling"
           ]
         }
@@ -1196,6 +1212,7 @@
                   "label": "数值类型",
                   "link": {"type": "doc", "id": "sql-reference/overview-pages/numeric"},
                   "items": [
+                    "sql-reference/sql-statements/data-types/TINYINT",
                     "sql-reference/sql-statements/data-types/SMALLINT",
                     "sql-reference/sql-statements/data-types/INT",
                     "sql-reference/sql-statements/data-types/BIGINT",
@@ -1474,7 +1491,8 @@
         "data_source/datalake_faq",
         "faq/Sql_faq",
         "faq/Dump_query",
-        "faq/Others"
+        "faq/Others",
+        "faq/FAQ_On_Github"
       ]
     },
     {

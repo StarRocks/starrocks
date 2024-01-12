@@ -612,11 +612,19 @@ INSERT INTO low_card_duplicate (c0,c1,c2,c3,c4,c5,c6) VALUES
 -- !result
 [UC] analyze full table common_duplicate;
 -- result:
-test_db_e015f9503b1711ee914c2207f0c28980.common_duplicate	analyze	status	OK
+test_db_d0bf876e9d5011eea8e700163e04d4c2.common_duplicate	analyze	status	OK
 -- !result
 [UC] analyze full table low_card_duplicate;
 -- result:
-test_db_e015f9503b1711ee914c2207f0c28980.low_card_duplicate	analyze	status	OK
+test_db_d0bf876e9d5011eea8e700163e04d4c2.low_card_duplicate	analyze	status	OK
+-- !result
+function: wait_global_dict_ready('c3', 'low_card_duplicate')
+-- result:
+
+-- !result
+function: wait_global_dict_ready('c4', 'low_card_duplicate')
+-- result:
+
 -- !result
 SELECT LOWER(lcd.c3) AS upper_c1, CASE WHEN lcd.c4 = 'shenzhen' THEN 'cityA' WHEN lcd.c4 = 'guangzhou' THEN 'cityB' ELSE 'other city' END AS case_result FROM low_card_duplicate lcd right JOIN common_duplicate cd ON lcd.c0 = cd.c0 order by upper_c1 limit 5;
 -- result:
@@ -693,11 +701,11 @@ group by
     lower_c3
 order by max(lower_c3) limit 5;
 -- result:
-shanghai - a-beijing	beijing	1	["iahgnahs"]
-hangzhou - a-beijing	beijing	1	["uohzgnah"]
-guangzhou - a-beijing	beijing	1	["uohzgnaug"]
 shenzhen - a-beijing	beijing	1	["nehznehs"]
 beijing - a-beijing	beijing	1	["gnijieb"]
+guangzhou - a-beijing	beijing	1	["uohzgnaug"]
+hangzhou - a-beijing	beijing	1	["uohzgnah"]
+shanghai - a-beijing	beijing	1	["iahgnahs"]
 -- !result
 SELECT
     CONCAT(lcd.c4, ' - ', 'a') AS concatenated_values,
@@ -768,11 +776,11 @@ select
 from
     low_card_duplicate lcd;
 -- result:
-guangzhou
-beijing
-hangzhou
 shanghai
+beijing
+guangzhou
 shenzhen
+hangzhou
 -- !result
 SELECT
     c4,
@@ -982,11 +990,11 @@ FROM
 GROUP BY
     grouped_results.upper_c1;
 -- result:
+SHENZHEN	770	c
 BEIJING	1034	c
 GUANGZHOU	968	c
 HANGZHOU	1056	c
 SHANGHAI	990	c
-SHENZHEN	770	c
 -- !result
 SELECT
     lcd.c0,
@@ -1068,13 +1076,13 @@ FROM
     low_card_duplicate lcd
     INNER JOIN low_card_duplicate lcp ON lcd.c0 = lcp.c0
     right JOIN common_duplicate cd ON lcd.c0 = cd.c0
-    order by c0, upper_c1 limit 5;
+    order by c0, upper_c1, coalesce_c2 desc limit 5;
 -- result:
-None	None	-1.5167388e+09	DefaultValue	other city	None	None
-None	None	-7.656731e+08	DefaultValue	other city	None	None
-None	None	-1.451903e+09	DefaultValue	other city	None	None
-None	None	0.43250552	DefaultValue	other city	None	None
-None	None	-8.338103e+08	DefaultValue	other city	None	None
+None	None	6.883423e+08	DefaultValue	other city	None	None
+None	None	5.535997e+08	DefaultValue	other city	None	None
+None	None	4.954498e+08	DefaultValue	other city	None	None
+None	None	4.6972787e+08	DefaultValue	other city	None	None
+None	None	2.0941956e+09	DefaultValue	other city	None	None
 -- !result
 WITH CTE1 AS (
     SELECT
@@ -1273,16 +1281,16 @@ FROM
     low_card_duplicate
 ORDER BY c1, c2, rank limit 10;
 -- result:
-		1	9896154.00000000000000000000
 		1	0.00175303445490039722
-		6	7954463.00000000000000000000
-		6	8983395.00000000000000000000
-		6	0.00142515312812037520
+		1	9896154.00000000000000000000
 		6	0.00738631979156705382
+		6	7954463.00000000000000000000
+		6	0.00142515312812037520
+		6	8983395.00000000000000000000
 		7	7953378.00000000000000000000
 		7	0.00952553311745999506
-		11	7077253.00000000000000000000
 		11	2.0835238245287E-7
+		11	7077253.00000000000000000000
 -- !result
 select
     unnest

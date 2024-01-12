@@ -671,6 +671,19 @@ TEST_F(BitmapValueTest, bitmap_to_string) {
             "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,"
             "37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63",
             _large_bitmap.to_string().c_str());
+
+    auto bitmap = std::make_unique<BitmapValue>(18446744073709551611ul);
+    ASSERT_EQ("18446744073709551611", bitmap->to_string());
+    bitmap->add(18446744073709551612ul);
+    ASSERT_EQ("18446744073709551611,18446744073709551612", bitmap->to_string());
+    for (size_t i = 0; i < 64; i++) {
+        bitmap->add(i);
+    }
+    ASSERT_EQ(
+            "0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31,32,33,34,35,36,"
+            "37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,18446744073709551611,"
+            "18446744073709551612",
+            bitmap->to_string());
 }
 
 TEST_F(BitmapValueTest, bitmap_to_array) {
@@ -695,6 +708,21 @@ TEST_F(BitmapValueTest, bitmap_to_array) {
     ASSERT_EQ(array_4.size(), 64);
     for (size_t i = 0; i < 64; i++) {
         ASSERT_EQ(array_4[i], i);
+    }
+
+    // append multi times
+    std::vector<int64_t> array_5;
+    _large_bitmap.to_array(&array_5);
+    ASSERT_EQ(array_5.size(), 64);
+
+    auto new_bitmap = gen_bitmap(100, 200);
+    new_bitmap.to_array(&array_5);
+    ASSERT_EQ(array_5.size(), 164);
+    for (size_t i = 0; i < 64; i++) {
+        ASSERT_EQ(array_5[i], i);
+    }
+    for (size_t i = 64; i < 164; i++) {
+        ASSERT_EQ(array_5[i], i + 36);
     }
 }
 
@@ -910,6 +938,75 @@ TEST_F(BitmapValueTest, subset_in_range) {
     BitmapValue bitmap_7;
     ret = _medium_bitmap.bitmap_subset_limit_internal(68, 69, &bitmap_7);
     ASSERT_EQ(ret, 0);
+}
+
+TEST_F(BitmapValueTest, next_batch) {
+    BitmapValueIter iter;
+    std::vector<uint64_t> values;
+
+    // empty
+    values.resize(5);
+    iter.reset(_empty_bitmap);
+    uint64_t ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 0);
+
+    // single
+    values.resize(5);
+    iter.reset(_single_bitmap);
+    ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 1);
+    ASSERT_EQ(values[0], 0);
+
+    // set
+    values.resize(5);
+    iter.reset(_medium_bitmap);
+    ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 5);
+    for (size_t i = 0; i < 5; i++) {
+        ASSERT_EQ(values[i], i);
+    }
+    ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 5);
+    for (size_t i = 0; i < 5; i++) {
+        ASSERT_EQ(values[i], i + 5);
+    }
+    ret_size = iter.next_batch(values.data(), 5);
+    ASSERT_EQ(ret_size, 4);
+    for (size_t i = 0; i < 4; i++) {
+        ASSERT_EQ(values[i], i + 10);
+    }
+
+    // bitmap
+    values.resize(30);
+    iter.reset(_large_bitmap);
+    ret_size = iter.next_batch(values.data(), 30);
+    ASSERT_EQ(ret_size, 30);
+    for (size_t i = 0; i < 30; i++) {
+        ASSERT_EQ(values[i], i);
+    }
+    ret_size = iter.next_batch(values.data(), 30);
+    ASSERT_EQ(ret_size, 30);
+    for (size_t i = 0; i < 30; i++) {
+        ASSERT_EQ(values[i], i + 30);
+    }
+    ret_size = iter.next_batch(values.data(), 30);
+    ASSERT_EQ(ret_size, 4);
+    for (size_t i = 0; i < 4; i++) {
+        ASSERT_EQ(values[i], i + 60);
+    }
+
+    // read more then bitmap size
+    values.resize(100);
+    iter.reset(_large_bitmap);
+    ret_size = iter.next_batch(values.data(), 100);
+    ASSERT_EQ(ret_size, 64);
+    for (size_t i = 0; i < 64; i++) {
+        ASSERT_EQ(values[i], i);
+    }
+
+    // read 0
+    ret_size = iter.next_batch(values.data(), 0);
+    ASSERT_EQ(ret_size, 0);
 }
 
 std::string convert_bitmap_to_string(BitmapValue& bitmap) {

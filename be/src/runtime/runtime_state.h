@@ -39,6 +39,7 @@
 #include <memory>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -50,6 +51,7 @@
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
+#include "runtime/global_dict/parser.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
@@ -159,7 +161,7 @@ public:
     };
 
     // Appends error to the _error_log if there is space
-    bool log_error(const std::string& error);
+    bool log_error(std::string_view error);
 
     // If !status.ok(), appends the error to the _error_log
     void log_error(const Status& status);
@@ -208,13 +210,13 @@ public:
     // If 'failed_allocation_size' is not 0, then it is the size of the allocation (in
     // bytes) that would have exceeded the limit allocated for 'tracker'.
     // This value and tracker are only used for error reporting.
-    // If 'msg' is non-NULL, it will be appended to query_status_ in addition to the
+    // If 'msg' is not empty, it will be appended to query_status_ in addition to the
     // generic "Memory limit exceeded" error.
     [[nodiscard]] Status set_mem_limit_exceeded(MemTracker* tracker = nullptr, int64_t failed_allocation_size = 0,
-                                                const std::string* msg = nullptr);
+                                                std::string_view msg = {});
 
-    [[nodiscard]] Status set_mem_limit_exceeded(const std::string& msg) {
-        return set_mem_limit_exceeded(nullptr, 0, &msg);
+    [[nodiscard]] Status set_mem_limit_exceeded(std::string_view msg) {
+        return set_mem_limit_exceeded(nullptr, 0, msg);
     }
 
     // Returns a non-OK status if query execution should stop (e.g., the query was cancelled
@@ -344,11 +346,18 @@ public:
     int64_t spill_operator_min_bytes() const { return _query_options.spill_operator_min_bytes; }
     int64_t spill_operator_max_bytes() const { return _query_options.spill_operator_max_bytes; }
     int64_t spill_revocable_max_bytes() const { return _query_options.spill_revocable_max_bytes; }
+    bool spill_enable_direct_io() const {
+        return _query_options.__isset.spill_enable_direct_io && _query_options.spill_enable_direct_io;
+    }
 
     int32_t spill_encode_level() const { return _query_options.spill_encode_level; }
 
     bool error_if_overflow() const {
         return _query_options.__isset.overflow_mode && _query_options.overflow_mode == TOverflowMode::REPORT_ERROR;
+    }
+
+    bool enable_hyperscan_vec() const {
+        return _query_options.__isset.enable_hyperscan_vec && _query_options.enable_hyperscan_vec;
     }
 
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
@@ -390,11 +399,15 @@ public:
 
     const GlobalDictMaps& get_load_global_dict_map() const;
 
+    DictOptimizeParser* mutable_dict_optimize_parser();
+
     const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() { return _load_dict_versions; }
 
     using GlobalDictLists = std::vector<TGlobalDict>;
     [[nodiscard]] Status init_query_global_dict(const GlobalDictLists& global_dict_list);
     [[nodiscard]] Status init_load_global_dict(const GlobalDictLists& global_dict_list);
+
+    [[nodiscard]] Status init_query_global_dict_exprs(const std::map<int, TExpr>& exprs);
 
     void set_func_version(int func_version) { this->_func_version = func_version; }
     int func_version() const { return this->_func_version; }
@@ -402,7 +415,6 @@ public:
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
-    std::shared_ptr<QueryStatistics> intermediate_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
     [[nodiscard]] Status reset_epoch();
@@ -417,6 +429,8 @@ public:
         return _query_options.__isset.enable_collect_table_level_scan_stats &&
                _query_options.enable_collect_table_level_scan_stats;
     }
+
+    bool is_jit_enabled() const { return _query_options.__isset.enable_jit && _query_options.enable_jit; }
 
 private:
     // Set per-query state.
@@ -543,6 +557,7 @@ private:
     GlobalDictMaps _query_global_dicts;
     GlobalDictMaps _load_global_dicts;
     phmap::flat_hash_map<uint32_t, int64_t> _load_dict_versions;
+    DictOptimizeParser _dict_optimize_parser;
 
     pipeline::QueryContext* _query_ctx = nullptr;
     pipeline::FragmentContext* _fragment_ctx = nullptr;

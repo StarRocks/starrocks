@@ -54,7 +54,7 @@ public:
     size_t write_buffer_rows() const;
 
     // return true suggests caller should flush this memory table
-    bool insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
+    StatusOr<bool> insert(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
     Status flush(SegmentPB* seg_info = nullptr);
 
@@ -72,10 +72,10 @@ public:
     bool check_supported_column_partial_update(const Chunk& chunk);
 
 private:
-    void _merge();
+    Status _merge();
 
-    void _sort(bool is_final, bool by_sort_key = false);
-    void _sort_column_inc(bool by_sort_key = false);
+    Status _sort(bool is_final, bool by_sort_key = false);
+    Status _sort_column_inc(bool by_sort_key = false);
     void _append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final);
 
     void _init_aggregator_if_needed();
@@ -111,7 +111,7 @@ private:
 
     int64_t _max_buffer_size = config::write_buffer_size;
     // initial value is max size
-    size_t _max_buffer_row = -1;
+    size_t _max_buffer_row = std::numeric_limits<size_t>::max();
     size_t _total_rows = 0;
     size_t _merged_rows = 0;
 

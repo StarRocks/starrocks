@@ -59,12 +59,15 @@ namespace starrocks {
 
 namespace detail {
 class Roaring64Map;
-}
+class BitmapValueIter;
+} // namespace detail
 // Represent the in-memory and on-disk structure of StarRocks's BITMAP data type.
 // Optimize for the case where the bitmap contains 0 or 1 element which is common
 // for streaming load scenario.
 class BitmapValue {
 public:
+    friend class BitmapValueIter;
+
     enum BitmapDataType {
         EMPTY = 0,
         SINGLE = 1, // single element
@@ -224,5 +227,31 @@ private:
     std::unique_ptr<phmap::flat_hash_set<uint64_t>> _set;
     uint64_t _sv = 0; // store the single value when _type == SINGLE
     BitmapDataType _type{EMPTY};
+};
+
+class BitmapValueIter {
+public:
+    void reset(const BitmapValue& bitmap) {
+        _bitmap = &bitmap;
+        _offset = 0;
+        _cardinality = bitmap.cardinality();
+        if (bitmap.type() == BitmapValue::BitmapDataType::BITMAP) {
+            _bitmap_iter = std::make_unique<detail::Roaring64MapSetBitForwardIterator>(*bitmap._bitmap);
+        } else {
+            _bitmap_iter.reset();
+        }
+    }
+
+    uint64_t next_batch(uint64_t* values, uint64_t count);
+    uint64_t offset() { return _offset; }
+    void set_offset(uint64_t offset) { _offset = offset; }
+
+private:
+    uint64_t _remain_rows() const { return _cardinality - _offset; }
+
+    const BitmapValue* _bitmap = nullptr;
+    uint64_t _offset = 0;
+    uint64_t _cardinality = 0;
+    std::unique_ptr<detail::Roaring64MapSetBitForwardIterator> _bitmap_iter;
 };
 } // namespace starrocks

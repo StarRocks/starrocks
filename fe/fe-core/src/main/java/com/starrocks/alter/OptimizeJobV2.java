@@ -480,7 +480,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 // log an error if update colocation info failed, insert overwrite already succeeded
                 LOG.error("table {} update colocation info failed after insert overwrite, {}.", tableId, e.getMessage());
             }
-            targetTable.lastSchemaUpdateTime.set(System.currentTimeMillis());
+            targetTable.lastSchemaUpdateTime.set(System.nanoTime());
 
             if (allPartitionOptimized) {
                 this.distributionInfo = optimizeClause.getDistributionDesc().toDistributionInfo(targetTable.getColumns());

@@ -292,8 +292,11 @@ public class StatisticsCollectJobFactory {
 
                 Preconditions.checkState(partitions.size() == partitionNames.size());
                 for (int index = 0; index < partitions.size(); index++) {
+                    // for external table, we get last modified time from other system, there may be a time inconsistency
+                    // between the two systems, so we add 60 seconds to make sure table update time is later than
+                    // statistics update time
                     LocalDateTime partitionUpdateTime = LocalDateTime.ofInstant(
-                            Instant.ofEpochSecond(partitions.get(index).getModifiedTime()),
+                            Instant.ofEpochSecond(partitions.get(index).getModifiedTime()).plusSeconds(60),
                             Clock.systemDefaultZone().getZone());
                     if (partitionUpdateTime.isAfter(statisticsUpdateTime)) {
                         updatedPartitions.add(partitionNames.get(index));
@@ -304,7 +307,8 @@ public class StatisticsCollectJobFactory {
             IcebergTable icebergTable = (IcebergTable) table;
             if (statisticsUpdateTime != LocalDateTime.MIN && !icebergTable.isUnPartitioned()) {
                 updatedPartitions.addAll(IcebergPartitionUtils.getChangedPartitionNames(icebergTable.getNativeTable(),
-                        statisticsUpdateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                        statisticsUpdateTime.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
+                                - 60 * 1000L,
                         icebergTable.getNativeTable().currentSnapshot()));
             }
         }
@@ -344,20 +348,19 @@ public class StatisticsCollectJobFactory {
 
         BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
         double healthy = 0;
+        LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
         if (basicStatsMeta != null) {
-            LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
-            LocalDateTime statisticsUpdateTime = basicStatsMeta.getUpdateTime();
-            if (statisticsUpdateTime.isAfter(tableUpdateTime)) {
+            if (basicStatsMeta.isUpdatedAfterLoad(tableUpdateTime)) {
                 LOG.debug("statistics job doesn't work on non-update table: {}, " +
                                 "last update time: {}, last collect time: {}",
-                        table.getName(), tableUpdateTime, statisticsUpdateTime);
+                        table.getName(), tableUpdateTime, basicStatsMeta.getUpdateTime());
                 return;
             }
 
             long sumDataSize = 0;
             for (Partition partition : table.getPartitions()) {
                 LocalDateTime partitionUpdateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
-                if (statisticsUpdateTime.isBefore(partitionUpdateTime)) {
+                if (!basicStatsMeta.isUpdatedAfterLoad(partitionUpdateTime)) {
                     sumDataSize += partition.getDataSize();
                 }
             }
@@ -370,7 +373,8 @@ public class StatisticsCollectJobFactory {
                     Long.parseLong(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL)) :
                     defaultInterval;
 
-            if (statisticsUpdateTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now())) {
+            if (!basicStatsMeta.isInitJobMeta() &&
+                    basicStatsMeta.getUpdateTime().plusSeconds(timeInterval).isAfter(LocalDateTime.now())) {
                 LOG.debug("statistics job doesn't work on the interval table: {}, " +
                                 "last collect time: {}, interval: {}, table size: {}MB",
                         table.getName(), tableUpdateTime, timeInterval, ByteSizeUnit.BYTES.toMB(sumDataSize));
@@ -390,9 +394,9 @@ public class StatisticsCollectJobFactory {
             } else if (healthy < Config.statistic_auto_collect_sample_threshold) {
                 if (sumDataSize > Config.statistic_auto_collect_small_table_size) {
                     LOG.debug("statistics job choose sample on real-time update table: {}" +
-                                    ", last collect time: {}, current healthy: {}, full collect healthy limit: {}<, " +
+                                    ", last collect time: {}, current healthy: {}, full collect healthy limit: {}, " +
                                     ", update data size: {}MB, full collect healthy data size limit: <{}MB",
-                            table.getName(), statisticsUpdateTime, healthy,
+                            table.getName(), basicStatsMeta.getUpdateTime(), healthy,
                             Config.statistic_auto_collect_sample_threshold, ByteSizeUnit.BYTES.toMB(sumDataSize),
                             ByteSizeUnit.BYTES.toMB(Config.statistic_auto_collect_small_table_size));
                     createSampleStatsJob(allTableJobMap, job, db, table, columns);
@@ -406,7 +410,7 @@ public class StatisticsCollectJobFactory {
         if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.SAMPLE)) {
             createSampleStatsJob(allTableJobMap, job, db, table, columns);
         } else if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)) {
-            if (basicStatsMeta == null) {
+            if (basicStatsMeta == null || basicStatsMeta.isInitJobMeta()) {
                 createFullStatsJob(allTableJobMap, job, LocalDateTime.MIN, db, table, columns);
             } else {
                 createFullStatsJob(allTableJobMap, job, basicStatsMeta.getUpdateTime(), db, table, columns);

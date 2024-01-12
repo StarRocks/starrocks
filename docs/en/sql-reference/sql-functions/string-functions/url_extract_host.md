@@ -1,26 +1,27 @@
 ---
 displayed_sidebar: "English"
+unlisted: true
 ---
 
 # url_extract_host
 
 ## Description
 
-extract host from url string.
+Extracts the host section from a URL.
 
 ## Syntax
 
 ```haskell
-url_extract_host(str)
+VARCHAR url_extract_host(VARACHR str)
 ```
 
 ## Parameters
 
-- `str`: the string to extract its host string. If `str` is not a string type, it will try implicit cast first.
+- `str`: the string to extract its host string. If `str` is not a string, this function will try implicit cast first.
 
-## Return values
+## Return value
 
-Return an encode string.
+Returns the host string.
 
 ## Examples
 

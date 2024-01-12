@@ -24,7 +24,7 @@ import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IndexDef;
-import com.starrocks.analysis.IndexFactory;
+import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
@@ -33,6 +33,7 @@ import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -106,8 +107,17 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitCreateIndexClause(CreateIndexClause clause, ConnectContext context) {
         IndexDef indexDef = clause.getIndexDef();
         indexDef.analyze();
-        clause.setIndex(IndexFactory.createIndexFromDef(indexDef));
-
+        Index index;
+        // Only assign meaningful indexId for OlapTable
+        if (table.isOlapTableOrMaterializedView()) {
+            long indexId = IndexType.isCompatibleIndex(indexDef.getIndexType()) ? ((OlapTable) table).incAndGetMaxIndexId() : -1;
+            index = new Index(indexId, indexDef.getIndexName(), indexDef.getColumns(),
+                    indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
+        } else {
+            index = new Index(indexDef.getIndexName(), indexDef.getColumns(),
+                    indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
+        }
+        clause.setIndex(index);
         return null;
     }
 
@@ -129,6 +139,10 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         Map<String, String> properties = clause.getProperties();
         if (properties.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Properties is not set");
+        }
+
+        if (table.isExternalTableWithFileSystem()) {
+            return null;
         }
 
         if (properties.size() != 1
@@ -205,11 +219,11 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             try {
                 int val = Integer.parseInt(valStr);
                 if (val < 0) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Property " 
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Property "
                             + PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC + " must not be less than 0");
                 }
             } catch (NumberFormatException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Property " 
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Property "
                         + PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC + " must be integer: " + valStr);
             }
             clause.setNeedTableStable(false);

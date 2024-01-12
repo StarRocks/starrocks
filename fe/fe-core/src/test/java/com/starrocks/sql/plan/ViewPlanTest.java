@@ -26,6 +26,7 @@ public class ViewPlanTest extends PlanTestBase {
     private static final AtomicInteger INDEX = new AtomicInteger(0);
 
     private void testView(String sql) throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(false);
         String viewName = "view" + INDEX.getAndIncrement();
         String createView = "create view " + viewName + " as " + sql;
         starRocksAssert.withView(createView);
@@ -38,6 +39,7 @@ public class ViewPlanTest extends PlanTestBase {
     }
 
     private void testViewIgnoreObjectCountDistinct(String sql) throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setEnableViewBasedMvRewrite(false);
         String viewName = "view" + INDEX.getAndIncrement();
         String createView = "create view " + viewName + " as " + sql;
         starRocksAssert.withView(createView);

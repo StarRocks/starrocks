@@ -235,7 +235,6 @@ select split_part(c1, "##", -3) from t1;
 -- result:
 abc
 -- !result
-
 -- name: test_url_extract_host
 select url_extract_host('https://starrocks.com/test/api/v1');
 -- result:
@@ -269,10 +268,9 @@ values ('1', 'https://starrocks.com/doc?k1=10&k2=3&k1=100'),
 -- !result
 select url_extract_host(url) from test_url_extract_host;
 -- result:
-starrocks.com
 starrocks.快速.com
+starrocks.com
 -- !result
-
 -- name: test_url_encode
 select url_encode('https://docs.starrocks.io/en-us/latest/quick_start/Deploy');
 -- result:
@@ -286,8 +284,6 @@ select url_encode(NULL);
 -- result:
 None
 -- !result
-
---name: test_url_decode
 select url_decode('https%3A%2F%2Fdocs.starrocks.io%2Fen-us%2Flatest%2Fquick_start%2FDeploy');
 -- result:
 https://docs.starrocks.io/en-us/latest/quick_start/Deploy
@@ -299,8 +295,6 @@ https://docs.starrocks数据库.io/en-us/latest/quick_start/Deploy?name=快速
 select url_decode(NULL);
 -- result:
 None
--- !result
-
 -- !result
 select substring_index("hello world", " ", 1);
 -- result:
@@ -391,4 +385,113 @@ mysql.com
 select substring_index(c1, ".", -3) from t2;
 -- result:
 com.mysql.com
+-- !result
+select crc32("starrocks");
+-- result:
+2312449062
+-- !result
+select crc32("STARROCKS");
+-- result:
+3440849609
+-- !result
+select crc32("中文");
+-- result:
+1510599991
+-- !result
+create table crc01(c0 varchar(20), c1 varchar(20), c2 varchar(20))
+        DUPLICATE KEY(c0)
+        DISTRIBUTED BY HASH(c0)
+        BUCKETS 1
+        PROPERTIES('replication_num'='1');
+-- result:
+-- !result
+insert into crc01 values ('hello world', 'com.mysql.com', "镜舟科技");
+-- result:
+-- !result
+select crc32(c0) from crc01;
+-- result:
+222957957
+-- !result
+select crc32(c1) from crc01;
+-- result:
+2823441944
+-- !result
+select crc32(c2) from crc01;
+-- result:
+2291122336
+-- !result
+select ngram_search("chinese","china");
+-- result:
+0.5
+-- !result
+select ngram_search("chinese","CHINESE");
+-- result:
+0.0
+-- !result
+select ngram_search_case_insensitive("chinese","CHINESE");
+-- result:
+1.0
+-- !result
+select ngram_search_case_insensitive("CHINESE","chinese");
+-- result:
+1.0
+-- !result
+select ngram_search("chinese","");
+-- result:
+0.0
+-- !result
+select ngram_search("","chinese");
+-- result:
+0.0
+-- !result
+select ngram_search("","");
+-- result:
+0.0
+-- !result
+select ngram_search("chi","chi");
+-- result:
+0.0
+-- !result
+CREATE TABLE `string_table` (
+  `rowkey` varchar(300) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`rowkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`rowkey`) BUCKETS 64
+PROPERTIES (
+    "replication_num" = "1",
+    "bucket_size" = "4294967296",
+    "storage_volume" = "builtin_storage_volume",
+    "enable_persistent_index" = "false",
+    "compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into string_table values
+("000073a7-274f-46bf-bfaf-678868cc26cd"),
+("e6249ba1-5b54-46bf-bfaf-89d69094b757"),
+("93da4b36-5401-46bf-bfa7-2bde65779623"),
+("2548c7aa-d94f-46bf-b0a4-d769f248cbb2"),
+("1bd32347-274f-4a30-93f3-9087594de9cd");
+-- result:
+-- !result
+select ngram_search(rowkey,"000073a7-274f-46bf-bfaf-678868cc26cd") as a from string_table order by a;
+-- result:
+0.15151513
+0.18181819
+0.21212119
+0.24242425
+1.0
+-- !result
+select ngram_search(rowkey, "e6249ba1-5b54-46bf-bfaf-89d69094b757") as a from string_table order by a;
+-- result:
+0.0
+0.121212125
+0.18181819
+0.24242425
+1.0
+-- !result
+select ngram_search("000073a7-274f-46bf-bfaf-678868cc26cd",rowkey) from string_table;
+-- result:
+E: (1064, "ngram function's second parameter must be const")
 -- !result

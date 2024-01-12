@@ -1104,7 +1104,7 @@ None	[1,2,3,4,10]
 -- !result
 select s.s_1, t.i_1 from array_test s full join array_test t on s.s_1 => t.i_1 order by 1, 2;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 70. Detail message: Unexpected input '=', the most similar input is {<EOF>, ';'}.")
+E: (1064, "Getting syntax error at line 1, column 70. Detail message: Unexpected input '=>', the most similar input is {<EOF>, ';'}.")
 -- !result
 select s.aas_1, t.aas_1 from array_test s full join array_test t on s.aas_1 <= t.aas_1 order by 1, 2;
 -- result:

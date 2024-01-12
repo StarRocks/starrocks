@@ -131,7 +131,7 @@ public:
                         "key=$4",
                         rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i]);
                 LOG(ERROR) << msg;
-                return Status::InternalError(msg);
+                return Status::AlreadyExist(msg);
             }
         }
         return Status::OK();
@@ -289,7 +289,7 @@ public:
                             rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
                             hexdump(keys[i].data, keys[i].size));
                     LOG(ERROR) << msg;
-                    return Status::InternalError(msg);
+                    return Status::AlreadyExist(msg);
                 }
                 uint32_t prefetch_i = i + PREFETCHN;
                 if (LIKELY(prefetch_i < idx_end)) {
@@ -310,7 +310,7 @@ public:
                             rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
                             hexdump(keys[i].data, keys[i].size));
                     LOG(ERROR) << msg;
-                    return Status::InternalError(msg);
+                    return Status::AlreadyExist(msg);
                 }
             }
         }
@@ -572,7 +572,7 @@ public:
                         rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
                         hexdump(keys[i].data, keys[i].size));
                 LOG(ERROR) << msg;
-                return Status::InternalError(msg);
+                return Status::AlreadyExist(msg);
             }
             _total_length += keys[i].size;
         }
@@ -1278,9 +1278,10 @@ Status PrimaryIndex::insert(uint32_t rssid, const vector<uint32_t>& rowids, cons
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     if (_persistent_index != nullptr) {
         auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
-        RETURN_IF_ERROR(_insert_into_persistent_index(rssid, rowids, pks));
+        return _insert_into_persistent_index(rssid, rowids, pks);
+    } else {
+        return _pkey_to_rssid_rowid->insert(rssid, rowids, pks, 0, pks.size());
     }
-    return _pkey_to_rssid_rowid->insert(rssid, rowids, pks, 0, pks.size());
 }
 
 Status PrimaryIndex::insert(uint32_t rssid, uint32_t rowid_start, const Column& pks) {
@@ -1411,6 +1412,43 @@ Status PrimaryIndex::major_compaction(Tablet* tablet) {
         return _persistent_index->major_compaction(tablet);
     } else {
         return Status::OK();
+    }
+}
+
+Status PrimaryIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta) {
+    std::lock_guard<std::mutex> lg(_lock);
+    _table_id = tablet->belonged_table_id();
+    _tablet_id = tablet->tablet_id();
+    const TabletSchemaCSPtr tablet_schema_ptr = tablet->tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
+    for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
+        pk_columns[i] = (ColumnId)i;
+    }
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
+    _set_schema(pkey_schema);
+
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
+
+    if (tablet->get_enable_persistent_index() && (fix_size <= 128)) {
+        if (_persistent_index != nullptr) {
+            _persistent_index.reset();
+        }
+        _persistent_index = std::make_unique<PersistentIndex>(tablet->schema_hash_path());
+        RETURN_IF_ERROR(_persistent_index->reset(tablet, version, index_meta));
+    } else {
+        if (_pkey_to_rssid_rowid != nullptr) {
+            _pkey_to_rssid_rowid.reset();
+        }
+        _pkey_to_rssid_rowid = create_hash_index(_enc_pk_type, _key_size);
+    }
+    _loaded = true;
+
+    return Status::OK();
+}
+
+void PrimaryIndex::reset_cancel_major_compaction() {
+    if (_persistent_index != nullptr) {
+        _persistent_index->reset_cancel_major_compaction();
     }
 }
 

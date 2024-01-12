@@ -57,8 +57,6 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.catalog.MaterializedIndexMeta;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -103,7 +101,6 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTaskType;
 import io.opentelemetry.api.trace.StatusCode;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -122,6 +119,8 @@ import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.inactiveRelatedMaterializedViews;
 
 /*
  * Version 2 of SchemaChangeJob.
@@ -782,7 +781,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             onFinished(tbl);
 
             // If schema changes include fields which defined in related mv, set those mv state to inactive.
-            inactiveRelatedMv(modifiedColumns, tbl);
+            inactiveRelatedMaterializedViews(db, tbl, modifiedColumns);
 
             pruneMeta();
             tbl.onReload();
@@ -831,30 +830,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             }
         }
         return modifiedColumns;
-    }
-
-    private void inactiveRelatedMv(Set<String> modifiedColumns, OlapTable table) {
-        if (modifiedColumns.isEmpty()) {
-            return;
-        }
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        for (MvId mvId : table.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
-            if (mv == null) {
-                LOG.warn("Ignore materialized view {} does not exists", mvId);
-                continue;
-            }
-            for (Column mvColumn : mv.getColumns()) {
-                if (modifiedColumns.contains(mvColumn.getName())) {
-                    LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                    "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
-                            mvColumn.getName(), table.getName());
-                    mv.setInactiveAndReason(
-                            "base-table schema changed for columns: " + StringUtils.join(modifiedColumns, ","));
-                    return;
-                }
-            }
-        }
     }
 
     @Override
@@ -961,7 +936,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
 
         tbl.setState(OlapTableState.NORMAL);
-        tbl.lastSchemaUpdateTime.set(System.currentTimeMillis());
+        tbl.lastSchemaUpdateTime.set(System.nanoTime());
     }
 
     /*

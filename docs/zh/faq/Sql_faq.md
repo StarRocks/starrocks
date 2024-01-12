@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# 查询相关问题
+# 查询常见问题
 
 ## 构建物化视图失败：fail to allocate memory
 
@@ -163,7 +163,7 @@ client连接的时候加上`-A`参数，比如 `mysql -uroot -h127.0.0.1 -P8867 
 
 ## BE 和 FE 日志文件太多，怎么处理？
 
-调整日志级别和参数大小，详情参考 log 相关的参数默认值和作用说明：[参数配置](../administration/Configuration.md)。
+调整日志级别和参数大小，详情参考 log 相关的参数默认值和作用说明：[参数配置](../administration/FE_configuration.md)。
 
 ## 更改副本数失败：table lineorder is colocate table, cannot change replicationNum
 

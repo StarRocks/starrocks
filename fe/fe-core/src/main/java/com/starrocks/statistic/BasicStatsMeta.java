@@ -23,6 +23,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.TableStatistic;
+import org.apache.commons.collections4.MapUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -134,8 +135,9 @@ public class BasicStatsMeta implements Writable {
             if (tableStatistic != null) {
                 cachedTableRowCount += tableStatistic.getRowCount();
             }
-            LocalDateTime loadTimes = StatisticUtils.getPartitionLastUpdateTime(partition);
-            if (partition.hasData() && updateTime.isBefore(loadTimes)) {
+            LocalDateTime loadTime = StatisticUtils.getPartitionLastUpdateTime(partition);
+
+            if (partition.hasData() && !isUpdatedAfterLoad(loadTime)) {
                 updatePartitionCount++;
             }
         }
@@ -167,5 +169,20 @@ public class BasicStatsMeta implements Writable {
 
     public void increaseUpdateRows(Long delta) {
         updateRows += delta;
+    }
+
+    public boolean isInitJobMeta() {
+        return MapUtils.isNotEmpty(properties) && properties.containsKey(StatsConstants.INIT_SAMPLE_STATS_JOB);
+    }
+
+    public boolean isUpdatedAfterLoad(LocalDateTime loadTime) {
+        if (isInitJobMeta()) {
+            // We update the updateTime of a partition then we may do an init sample collect job, these auto init
+            // sample may return a wrong healthy value which may block the auto full collect job.
+            // so we return false to regard it like a manual collect job before load.
+            return false;
+        } else {
+            return updateTime.isAfter(loadTime);
+        }
     }
 }

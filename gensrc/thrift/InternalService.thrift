@@ -203,6 +203,7 @@ struct TQueryOptions {
   77: optional i64 spill_operator_max_bytes;
   78: optional i32 spill_encode_level;
   79: optional i64 spill_revocable_max_bytes;
+  80: optional bool spill_enable_direct_io;
 
   85: optional TSpillMode spill_mode;
   
@@ -245,6 +246,9 @@ struct TQueryOptions {
   111: optional bool enable_file_metacache;
 
   112: optional bool enable_pipeline_level_shuffle;
+  113: optional bool enable_hyperscan_vec;
+
+  114: optional bool enable_jit = false;
 }
 
 

@@ -46,7 +46,7 @@ Status PlainTextBuilder::add_chunk(Chunk* chunk) {
     RETURN_IF_ERROR(init());
 
     const size_t num_rows = chunk->num_rows();
-    const size_t num_cols = chunk->num_columns();
+    const size_t num_cols = _output_expr_ctxs.size();
     if (num_cols != _converters.size()) {
         auto err = strings::Substitute("Unmatched number of columns expected=$0 real=$1", _converters.size(), num_cols);
         return Status::InternalError(err);

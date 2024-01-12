@@ -18,7 +18,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -58,17 +57,7 @@ import java.util.List;
 public class MvRewritePreprocessorTest extends MvRewriteTestBase {
     @BeforeClass
     public static void before() throws Exception {
-        starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
-                "  `v1` bigint NULL COMMENT \"\",\n" +
-                "  `v2` bigint NULL COMMENT \"\",\n" +
-                "  `v3` bigint NULL\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
-                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
+        starRocksAssert.useTable("t0");
 
     }
 
@@ -146,8 +135,7 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
 
     @Test
     public void testPreprocessMvNonPartitionMv() throws Exception {
-        Config.enable_experimental_mv = true;
-        cluster.runSql("test", "insert into t0 values(10, 20, 30)");
+        executeInsertSql(connectContext, "insert into t0 values(10, 20, 30)");
         starRocksAssert.withMaterializedView("create materialized view mv_1 distributed by hash(`v1`) " +
                 "as select v1, v2, sum(v3) as total from t0 group by v1, v2");
         starRocksAssert.withMaterializedView("create materialized view mv_2 distributed by hash(`v1`) " +
@@ -189,7 +177,7 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                 "PROPERTIES('replication_num' = '1');");
-        cluster.runSql("test", "insert into tbl_with_mv values(\"2020-02-20\", 20, 30)");
+        executeInsertSql(connectContext, "insert into tbl_with_mv values(\"2020-02-20\", 20, 30)");
 
         {
             starRocksAssert.withMaterializedView("create materialized view mv_4\n" +
@@ -198,7 +186,7 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                     "refresh manual\n" +
                     "as select k1, k2, v1  from tbl_with_mv;");
             refreshMaterializedView("test", "mv_4");
-            cluster.runSql("test", "insert into tbl_with_mv partition(p3) values(\"2020-03-05\", 20, 30)");
+            executeInsertSql(connectContext, "insert into tbl_with_mv partition(p3) values(\"2020-03-05\", 20, 30)");
 
             String sql = "select k1, sum(v1) from tbl_with_mv group by k1";
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
@@ -227,7 +215,7 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             }
 
             refreshMaterializedView("test", "mv_4");
-            cluster.runSql("test", "insert into tbl_with_mv partition(p2) values(\"2020-02-20\", 20, 30)");
+            executeInsertSql(connectContext, "insert into tbl_with_mv partition(p2) values(\"2020-02-20\", 20, 30)");
             Optimizer optimizer2 = new Optimizer();
             OptExpression expr2 = optimizer2.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
                     new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
@@ -249,7 +237,7 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
                     "refresh manual\n" +
                     "as select k1, k2, v1  from tbl_with_mv;");
             refreshMaterializedView("test", "mv_5");
-            cluster.runSql("test", "insert into tbl_with_mv partition(p3) values(\"2020-03-05\", 20, 30)");
+            executeInsertSql(connectContext, "insert into tbl_with_mv partition(p3) values(\"2020-03-05\", 20, 30)");
 
             String sql = "select k1, sum(v1) from tbl_with_mv group by k1";
             StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);

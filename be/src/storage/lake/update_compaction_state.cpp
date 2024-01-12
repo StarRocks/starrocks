@@ -34,6 +34,7 @@ CompactionState::~CompactionState() {
 Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_manager,
                                       const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
     TRACE_COUNTER_SCOPE_LATENCY_US("load_segments_latency_us");
+    std::lock_guard<std::mutex> lg(_state_lock);
     if (pk_cols.empty() && rowset->num_segments() > 0) {
         pk_cols.resize(rowset->num_segments());
     } else {
@@ -51,8 +52,6 @@ Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_mana
     }
     return _load_segments(rowset, tablet_schema, segment_id);
 }
-
-static const size_t large_compaction_memory_threshold = 1000000000;
 
 Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id) {
     vector<uint32_t> pk_columns;
@@ -96,12 +95,14 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
         itr->close();
     }
     dest = std::move(col);
+    dest->raw_data();
     _memory_usage += dest->memory_usage();
     _update_manager->compaction_state_mem_tracker()->consume(dest->memory_usage());
     return Status::OK();
 }
 
 void CompactionState::release_segments(uint32_t segment_id) {
+    std::lock_guard<std::mutex> lg(_state_lock);
     if (segment_id >= pk_cols.size() || pk_cols[segment_id] == nullptr) {
         return;
     }

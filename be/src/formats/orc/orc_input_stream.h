@@ -75,7 +75,7 @@ public:
 
 private:
     void doRead(void* buf, uint64_t length, uint64_t offset);
-    bool canUseCacheBuffer(uint64_t offset, uint64_t length);
+    bool isAlreadyCachedInBuffer(uint64_t offset, uint64_t length);
     uint64_t computeCacheFullStripeSize(uint64_t offset, uint64_t length);
 
     RandomAccessFile* _file;

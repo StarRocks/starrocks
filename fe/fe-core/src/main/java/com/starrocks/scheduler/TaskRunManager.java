@@ -29,6 +29,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.Nullable;
 
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Queue;
@@ -42,7 +43,8 @@ public class TaskRunManager {
 
     // taskId -> pending TaskRun Queue, for each Task only support 1 running taskRun currently,
     // so the map value is priority queue need to be sorted by priority from large to small
-    private final Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap = Maps.newConcurrentMap();
+    private final Map<Long, PriorityBlockingQueue<TaskRun>> pendingTaskRunMap =
+            Collections.synchronizedMap(Maps.newLinkedHashMap());
 
     // taskId -> running TaskRun, for each Task only support 1 running taskRun currently,
     // so the map value is not queue
@@ -66,13 +68,13 @@ public class TaskRunManager {
         for (Long taskId : pendingTaskRunMap.keySet()) {
             PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
             if (taskRuns != null && !taskRuns.isEmpty()) {
-                validPendingCount++;
+                validPendingCount += taskRuns.size();
             }
         }
 
         if (validPendingCount >= Config.task_runs_queue_length) {
-            LOG.warn("pending TaskRun exceeds task_runs_queue_length:{}, reject the submit.",
-                    Config.task_runs_queue_length);
+            LOG.warn("pending TaskRun exceeds task_runs_queue_length:{}, reject the submit: {}",
+                    Config.task_runs_queue_length, taskRun);
             return new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
         }
 
@@ -82,7 +84,10 @@ public class TaskRunManager {
         status.setMergeRedundant(option.isMergeRedundant());
         status.setProperties(option.getTaskRunProperties());
         GlobalStateMgr.getCurrentState().getEditLog().logTaskRunCreateStatus(status);
-        arrangeTaskRun(taskRun, option.isMergeRedundant());
+        if (!arrangeTaskRun(taskRun)) {
+            LOG.warn("Submit task run to pending queue failed, reject the submit:{}", taskRun);
+            return new SubmitResult(null, SubmitResult.SubmitStatus.REJECTED);
+        }
         return new SubmitResult(queryId, SubmitResult.SubmitStatus.SUBMITTED, taskRun.getFuture());
     }
 
@@ -103,41 +108,60 @@ public class TaskRunManager {
     // The manual priority is higher. For manual tasks, we do not merge operations.
     // For automatic tasks, we will compare the definition, and if they are the same,
     // we will perform the merge operation.
-    public void arrangeTaskRun(TaskRun taskRun, boolean mergeRedundant) {
+    public boolean arrangeTaskRun(TaskRun taskRun) {
         if (!tryTaskRunLock()) {
-            return;
+            return false;
         }
         try {
             long taskId = taskRun.getTaskId();
             PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.computeIfAbsent(taskId,
                     u -> Queues.newPriorityBlockingQueue());
-            if (mergeRedundant) {
-                TaskRun oldTaskRun = getTaskRun(taskRuns, taskRun);
-                if (oldTaskRun != null) {
+            // If the task run is sync-mode, it will hang forever if the task run is merged because
+            // user's using `future.get()` to wait and the future will not be set forever.
+            ExecuteOption executeOption = taskRun.getExecuteOption();
+            if (executeOption.isMergeRedundant()) {
+                Iterator<TaskRun> iter = taskRuns.iterator();
+                while (iter.hasNext()) {
+                    TaskRun oldTaskRun = iter.next();
+                    if (oldTaskRun == null) {
+                        continue;
+                    }
+                    // If old task run is a sync-mode task, skip to merge it to avoid sync-mode task
+                    // hanging after removing it.
+                    if (!oldTaskRun.getExecuteOption().isMergeRedundant()) {
+                        continue;
+                    }
+                    // skip if old task run is not equal to the task run
                     // The remove here is actually remove the old TaskRun.
                     // Note that the old TaskRun and new TaskRun may have the same definition,
                     // but other attributes may be different, such as priority, creation time.
                     // higher priority and create time will be result after merge is complete
-                    // and queryId will be change.
-                    boolean isRemove = taskRuns.remove(taskRun);
-                    if (!isRemove) {
+                    // and queryId will be changed.
+                    if (!oldTaskRun.equals(taskRun)) {
                         LOG.warn("failed to remove TaskRun definition is [{}]",
-                                taskRun.getStatus().getDefinition());
+                                taskRun);
+                        continue;
                     }
+
                     if (oldTaskRun.getStatus().getPriority() > taskRun.getStatus().getPriority()) {
                         taskRun.getStatus().setPriority(oldTaskRun.getStatus().getPriority());
                     }
                     if (oldTaskRun.getStatus().getCreateTime() > taskRun.getStatus().getCreateTime()) {
                         taskRun.getStatus().setCreateTime(oldTaskRun.getStatus().getCreateTime());
                     }
+                    LOG.info("Merge redundant task run, oldTaskRun: {}, taskRun: {}",
+                            oldTaskRun, taskRun);
+                    iter.remove();
                 }
             }
             if (!taskRuns.offer(taskRun)) {
-                LOG.warn("failed to offer task");
+                LOG.warn("failed to offer task: {}", taskRun);
+                return false;
             }
         } finally {
             taskRunUnlock();
         }
+        return true;
     }
 
     // Because java PriorityQueue does not provide an interface for searching by element,
@@ -168,6 +192,7 @@ public class TaskRunManager {
             Future<?> future = taskRun.getFuture();
             if (future.isDone()) {
                 runningIterator.remove();
+                LOG.info("Task run is done from state RUNNING to {}, {}", taskRun.getStatus().getState(), taskRun);
                 taskRunHistory.addHistory(taskRun.getStatus());
                 TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
                         Constants.TaskRunState.RUNNING, taskRun.getStatus().getState());
@@ -193,6 +218,7 @@ public class TaskRunManager {
                         break;
                     }
                     TaskRun pendingTaskRun = taskRunQueue.poll();
+                    LOG.info("start to schedule pending task run to execute: {}", pendingTaskRun);
                     taskRunExecutor.executeTaskRun(pendingTaskRun);
                     runningTaskRunMap.put(taskId, pendingTaskRun);
                     // RUNNING state persistence is for FE FOLLOWER update state

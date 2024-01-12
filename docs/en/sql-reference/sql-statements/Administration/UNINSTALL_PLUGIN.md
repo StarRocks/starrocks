@@ -8,7 +8,13 @@ displayed_sidebar: "English"
 
 This statement is used to uninstall a plugin.
 
-Syntax:
+:::tip
+
+This operation requires the SYSTEM-level PLUGIN privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
+
+## Syntax
 
 ```SQL
 UNINSTALL PLUGIN <plugin_name>

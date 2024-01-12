@@ -909,7 +909,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "select 1 as k1");
         String expected = "PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:2: expr\n" +
-                "  PARTITION: UNPARTITIONED\n" +
+                "  PARTITION: RANDOM\n" +
                 "\n" +
                 "  TABLE FUNCTION TABLE SINK\n" +
                 "    PATH: hdfs://127.0.0.1:9000/files/data_\n" +
@@ -918,12 +918,88 @@ public class InsertPlanTest extends PlanTestBase {
                 "    SINGLE: false\n" +
                 "    RANDOM\n" +
                 "\n" +
+                "  2:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 02\n" +
+                "    RANDOM\n" +
+                "\n" +
                 "  1:Project\n" +
                 "  |  <slot 2> : 1\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL\n";
+        Assert.assertEquals(expected, actual);
+    }
+
+    @Test
+    public void testInsertFilesWithSingle() throws Exception {
+        String actual = getInsertExecPlan("insert into files " +
+                "(\"path\" = \"hdfs://127.0.0.1:9000/files/\", \"format\"=\"parquet\", \"compression\" = \"uncompressed\"," +
+                " \"single\" = \"true\") " +
+                "select 1 as k1, 2 as k2");
+        String expected = "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:2: expr | 3: expr\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  TABLE FUNCTION TABLE SINK\n" +
+                "    PATH: hdfs://127.0.0.1:9000/files/\n" +
+                "    FORMAT: parquet\n" +
+                "    PARTITION BY: []\n" +
+                "    SINGLE: true\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : 1\n" +
+                "  |  <slot 3> : 2\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL\n";
+        Assert.assertEquals(expected, actual);
+    }
+
+    @Test
+    public void testInsertFilesWithPartition() throws Exception {
+        String actual = getInsertExecPlan("insert into files " +
+                "(\"path\" = \"hdfs://127.0.0.1:9000/files/\", \"format\"=\"parquet\", \"compression\" = \"uncompressed\"," +
+                " \"partition_by\" = \"v1\") " +
+                "select v1, v2 from t0");
+        String expected = "PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:1: v1 | 2: v2\n" +
+                "  PARTITION: HASH_PARTITIONED: 1: v1\n" +
+                "\n" +
+                "  TABLE FUNCTION TABLE SINK\n" +
+                "    PATH: hdfs://127.0.0.1:9000/files/\n" +
+                "    FORMAT: parquet\n" +
+                "    PARTITION BY: [v1]\n" +
+                "    SINGLE: false\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:EXCHANGE\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 01\n" +
+                "    HASH_PARTITIONED: 1: v1\n" +
+                "\n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=2.0\n";
         Assert.assertEquals(expected, actual);
     }
 }

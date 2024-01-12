@@ -39,7 +39,7 @@ public:
         return Status::OK();
     }
 
-    Status serialize(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) override;
+    Status serialize_to_block(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) override;
     StatusOr<ChunkUniquePtr> deserialize(SerdeContext& ctx, BlockReader* reader) override;
 
 private:
@@ -84,37 +84,44 @@ size_t ColumnarSerde::_max_serialized_size(const ChunkPtr& chunk) const {
     return total_size;
 }
 
-Status ColumnarSerde::serialize(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) {
+Status ColumnarSerde::serialize_to_block(SerdeContext& ctx, const ChunkPtr& chunk, BlockPtr block) {
+    const auto& columns = chunk->columns();
     size_t max_serialized_size = _max_serialized_size(chunk);
-    auto& serialize_buffer = ctx.serialize_buffer;
-    serialize_buffer.resize(max_serialized_size);
+    auto& serialize_buffer = ctx.aligned_buffer;
+    // DIRECT write require ALIGN TO page size
+    const size_t PAGE_SIZE = 4096;
+    serialize_buffer.resize(
+            ALIGN_UP(max_serialized_size + columns.size() * sizeof(uint32_t) + sizeof(size_t), PAGE_SIZE));
 
     uint8_t* buf = reinterpret_cast<uint8_t*>(serialize_buffer.data());
-    uint8_t* head = buf;
 
-    const auto& columns = chunk->columns();
+    size_t meta_len = 0;
 
-    std::unique_ptr<uint8_t[]> meta_buf;
-    size_t meta_len;
     if (_encode_context == nullptr) {
         SCOPED_TIMER(_parent->metrics().serialize_timer);
+        meta_len = sizeof(size_t);
+        uint8_t* head = buf = buf + meta_len;
         for (const auto& column : columns) {
             buf = serde::ColumnArraySerde::serialize(*column, buf);
             if (UNLIKELY(buf == nullptr)) {
                 return Status::InternalError("unsupported column occurs in spill serialize phase");
             }
         }
-        serialize_buffer.resize(buf - head);
+        size_t content_length = buf - head;
+        auto align_size = ALIGN_UP(content_length + meta_len, PAGE_SIZE);
+        serialize_buffer.resize(align_size);
         // only 8 bytes for serialized size if encoding is disable
-        meta_len = sizeof(size_t);
-        meta_buf.reset(new uint8_t[meta_len]);
-        uint8_t* tmp_buf = meta_buf.get();
-        UNALIGNED_STORE64(tmp_buf, serialize_buffer.size());
+        UNALIGNED_STORE64(serialize_buffer.data(), align_size - meta_len);
     } else {
         SCOPED_TIMER(_parent->metrics().serialize_timer);
+        // 8 bytes for encoded size, 4 bytes for each column's encode level
+        // @TODO(silverbullet233): encode levels can be further encoded to save space if necessary.
+        meta_len = sizeof(size_t) + columns.size() * sizeof(uint32_t);
+        uint8_t* head = buf = buf + meta_len;
+
         auto encode_levels = _get_encode_levels();
-        std::vector<std::pair<uint64_t, uint64_t>>
-                column_stats; // used to record raw_bytes and encoded_bytes for each column
+        // used to record raw_bytes and encoded_bytes for each column
+        std::vector<std::pair<uint64_t, uint64_t>> column_stats;
         column_stats.reserve(columns.size());
         int padding_size = 0;
         for (size_t i = 0; i < columns.size(); i++) {
@@ -130,15 +137,13 @@ Status ColumnarSerde::serialize(SerdeContext& ctx, const ChunkPtr& chunk, BlockP
             }
         }
         _update_encode_stats(column_stats);
+        size_t content_length = buf - head;
+        auto align_size = ALIGN_UP(content_length + meta_len + padding_size, PAGE_SIZE);
+        serialize_buffer.resize(align_size);
 
-        serialize_buffer.resize(buf - head + padding_size);
-        // 8 bytes for encoded size, 4 bytes for each column's encode level
-        // @TODO(silverbullet233): encode levels can be further encoded to save space if necessary.
-        meta_len = sizeof(size_t) + columns.size() * sizeof(uint32_t);
-        meta_buf.reset(new uint8_t[meta_len]);
         // fill encoded size
-        uint8_t* tmp_buf = meta_buf.get();
-        UNALIGNED_STORE64(tmp_buf, serialize_buffer.size());
+        auto* tmp_buf = serialize_buffer.data();
+        UNALIGNED_STORE64(tmp_buf, serialize_buffer.size() - meta_len);
         tmp_buf += sizeof(size_t);
         // fill encode level
         for (auto encode_level : encode_levels) {
@@ -148,7 +153,6 @@ Status ColumnarSerde::serialize(SerdeContext& ctx, const ChunkPtr& chunk, BlockP
     }
 
     std::vector<Slice> data;
-    data.emplace_back(Slice(meta_buf.get(), meta_len));
     data.emplace_back(Slice(serialize_buffer.data(), serialize_buffer.size()));
     {
         SCOPED_TIMER(_parent->metrics().write_io_timer);

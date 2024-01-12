@@ -15,8 +15,10 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -27,10 +29,12 @@ import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
+import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
@@ -40,6 +44,7 @@ import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
@@ -59,10 +64,13 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.DeleteFile;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.MetadataTableType;
+import org.apache.iceberg.MetadataTableUtils;
 import org.apache.iceberg.Metrics;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionSpecParser;
+import org.apache.iceberg.PartitionsTable;
 import org.apache.iceberg.ReplacePartitions;
 import org.apache.iceberg.Schema;
 import org.apache.iceberg.SchemaParser;
@@ -80,6 +88,7 @@ import org.apache.iceberg.io.CloseableIterator;
 import org.apache.iceberg.types.Conversions;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
+import org.apache.iceberg.util.StructProjection;
 import org.apache.iceberg.util.TableScanUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -109,18 +118,22 @@ import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSc
 import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.HIVE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.REST_CATALOG;
-import static com.starrocks.connector.iceberg.hive.IcebergHiveCatalog.LOCATION_PROPERTY;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 public class IcebergMetadata implements ConnectorMetadata {
 
     private static final Logger LOG = LogManager.getLogger(IcebergMetadata.class);
+
+    public static final String LOCATION_PROPERTY = "location";
+    public static final String FILE_FORMAT = "file_format";
+    public static final String COMPRESSION_CODEC = "compression_codec";
+    public static final String COMMENT = "comment";
+
     private final String catalogName;
     private final HdfsEnvironment hdfsEnvironment;
     private final IcebergCatalog icebergCatalog;
     private final IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
 
-    private final Map<TableIdentifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<IcebergFilter, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
     private final Set<IcebergFilter> scannedTables = new HashSet<>();
@@ -198,9 +211,35 @@ public class IcebergMetadata implements ConnectorMetadata {
         PartitionSpec partitionSpec = parsePartitionFields(schema, partitionColNames);
         Map<String, String> properties = stmt.getProperties() == null ? new HashMap<>() : stmt.getProperties();
         String tableLocation = properties.get(LOCATION_PROPERTY);
+        properties.put(COMMENT, stmt.getComment());
         Map<String, String> createTableProperties = IcebergApiConverter.rebuildCreateTableProperties(properties);
 
         return icebergCatalog.createTable(dbName, tableName, schema, partitionSpec, tableLocation, createTableProperties);
+    }
+
+    @Override
+    public void alterTable(AlterTableStmt stmt) throws UserException {
+        String dbName = stmt.getDbName();
+        String tableName = stmt.getTableName();
+        org.apache.iceberg.Table table = icebergCatalog.getTable(dbName, tableName);
+
+        if (table == null) {
+            throw new StarRocksConnectorException(
+                    "Failed to load iceberg table: " + stmt.getTbl().toString());
+        }
+
+        IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(stmt, table, icebergCatalog);
+        executor.execute();
+
+        synchronized (this) {
+            try {
+                icebergCatalog.refreshTable(dbName, tableName, jobPlanningExecutor);
+            } catch (Exception exception) {
+                LOG.error("Failed to refresh caching iceberg table.");
+                icebergCatalog.invalidateCache(new CachingIcebergCatalog.IcebergTableName(dbName, tableName));
+            }
+            asyncRefreshOthersFeMetadataCache(dbName, tableName);
+        }
     }
 
     @Override
@@ -210,7 +249,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             return;
         }
         icebergCatalog.dropTable(stmt.getDbName(), stmt.getTableName(), stmt.isForceDrop());
-        tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
         StatisticUtils.dropStatisticsAfterDropTable(icebergTable);
         asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
     }
@@ -218,21 +256,23 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public Table getTable(String dbName, String tblName) {
         TableIdentifier identifier = TableIdentifier.of(dbName, tblName);
-        if (tables.containsKey(identifier)) {
-            return tables.get(identifier);
-        }
 
         try {
             IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
             org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(dbName, tblName);
             Table table = IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
-            tables.put(identifier, table);
+            table.setComment(icebergTable.properties().getOrDefault(COMMENT, ""));
             return table;
 
         } catch (StarRocksConnectorException | NoSuchTableException e) {
             LOG.error("Failed to get iceberg table {}", identifier, e);
             return null;
         }
+    }
+
+    @Override
+    public boolean tableExists(String dbName, String tblName) {
+        return icebergCatalog.tableExists(dbName, tblName);
     }
 
     @Override
@@ -273,6 +313,75 @@ public class IcebergMetadata implements ConnectorMetadata {
         remoteFileInfo.setFiles(remoteFileDescs);
 
         return Lists.newArrayList(remoteFileInfo);
+    }
+
+    @Override
+    public List<PartitionInfo> getPartitions(Table table, List<String> partitionNames) {
+        Map<String, Partition> partitionMap = Maps.newHashMap();
+        IcebergTable icebergTable = (IcebergTable) table;
+        PartitionsTable partitionsTable = (PartitionsTable) MetadataTableUtils.
+                createMetadataTableInstance(icebergTable.getNativeTable(), MetadataTableType.PARTITIONS);
+
+        if (icebergTable.isUnPartitioned()) {
+            try (CloseableIterable<FileScanTask> tasks = partitionsTable.newScan().planFiles()) {
+                for (FileScanTask task : tasks) {
+                    // partitionsTable Table schema :
+                    // record_count,
+                    // file_count,
+                    // total_data_file_size_in_bytes,
+                    // position_delete_record_count,
+                    // position_delete_file_count,
+                    // equality_delete_record_count,
+                    // equality_delete_file_count,
+                    // last_updated_at,
+                    // last_updated_snapshot_id
+                    CloseableIterable<StructLike> rows = task.asDataTask().rows();
+                    for (StructLike row : rows) {
+                        // Get the last updated time of the table according to the table schema
+                        long lastUpdated = row.get(7, Long.class);
+                        Partition partition = new Partition(lastUpdated);
+                        return ImmutableList.of(partition);
+                    }
+                }
+            } catch (IOException e) {
+                throw new StarRocksConnectorException("Failed to get partitions for table: " + table.getName(), e);
+            }
+        } else {
+            // For partition table, we need to get all partitions from PartitionsTable.
+            try (CloseableIterable<FileScanTask> tasks = partitionsTable.newScan().planFiles()) {
+                for (FileScanTask task : tasks) {
+                    // partitionsTable Table schema :
+                    // partition,
+                    // spec_id,
+                    // record_count,
+                    // file_count,
+                    // total_data_file_size_in_bytes,
+                    // position_delete_record_count,
+                    // position_delete_file_count,
+                    // equality_delete_record_count,
+                    // equality_delete_file_count,
+                    // last_updated_at,
+                    // last_updated_snapshot_id
+                    CloseableIterable<StructLike> rows = task.asDataTask().rows();
+                    for (StructLike row : rows) {
+                        // Get the partition data/spec id/last updated time according to the table schema
+                        StructProjection partitionData = row.get(0, StructProjection.class);
+                        int specId = row.get(1, Integer.class);
+                        long lastUpdated = row.get(9, Long.class);
+                        PartitionSpec spec = icebergTable.getNativeTable().specs().get(specId);
+                        Partition partition = new Partition(lastUpdated);
+                        String partitionName =
+                                PartitionUtil.convertIcebergPartitionToPartitionName(spec, partitionData);
+                        partitionMap.put(partitionName, partition);
+                    }
+                }
+            } catch (IOException e) {
+                throw new StarRocksConnectorException("Failed to get partitions for table: " + table.getName(), e);
+            }
+        }
+        ImmutableList.Builder<PartitionInfo> partitions = ImmutableList.builder();
+        partitionNames.forEach(partitionName -> partitions.add(partitionMap.get(partitionName)));
+        return partitions.build();
     }
 
     private void triggerIcebergPlanFilesIfNeeded(IcebergFilter key, IcebergTable table, ScalarOperator predicate, long limit) {
@@ -337,7 +446,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                         continue;
                     }
 
-                    srTypes.add(icebergTable.getColumn(partitionField.name()).getType());
+                    srTypes.add(icebergTable.getColumn(icebergTable.getPartitionSourceName(spec.schema(),
+                            partitionField)).getType());
                 }
 
                 if (icebergTable.hasPartitionTransformedEvolution()) {
@@ -410,7 +520,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         // FileScanTask are splits of file. Avoid calculating statistics for a file multiple times.
         Set<String> filePaths = new HashSet<>();
         while (fileScanTasks.hasNext()) {
-            FileScanTask scanTask = fileScanTaskIterator.next();
+            FileScanTask scanTask = fileScanTasks.next();
 
             FileScanTask icebergSplitScanTask = scanTask;
             if (enableCollectColumnStatistics()) {
@@ -736,7 +846,6 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public void clear() {
         splitTasks.clear();
-        tables.clear();
         databases.clear();
         scannedTables.clear();
         IcebergMetricsReporter.remove();

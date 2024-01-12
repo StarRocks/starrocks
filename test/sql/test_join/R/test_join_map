@@ -63,14 +63,14 @@ select t.map0, s.map0 from map_test t join map_test s where s.map0 = t.map0 orde
 {0:"ab"}	{0:"ab"}
 {1:null}	{1:null}
 {null:null}	{null:null}
-{3:"",null:null}	{3:"",null:null}
+{null:null,3:""}	{null:null,3:""}
 -- !result
 select t.map1, s.map1 from map_test t join map_test s where s.map1 = t.map1 order by t.pk;
 -- result:
 {0.000:"ab"}	{0.000:"ab"}
 {null:""}	{null:""}
 {null:null}	{null:null}
-{3.000:"",null:null}	{3.000:"",null:null}
+{null:null,3.000:""}	{null:null,3.000:""}
 -- !result
 select t.map0, s.map4 from map_test t join map_test s where s.map0 = t.map4 order by t.pk;
 -- result:
@@ -295,7 +295,7 @@ E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 75. 
 -- !result
 select t.map3, s.map5 from map_test t left join map_test s on s.map3 => t.map5 order by t.pk;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 69. Detail message: Unexpected input '=', the most similar input is {<EOF>, ';'}.")
+E: (1064, "Getting syntax error at line 1, column 69. Detail message: Unexpected input '=>', the most similar input is {<EOF>, ';'}.")
 -- !result
 select t.map5, s.map5 from map_test t left join map_test s on s.map5 = t.map5 order by t.pk;
 -- result:
@@ -325,7 +325,7 @@ E: (1064, 'Getting analyzing error from line 1, column 63 to line 1, column 76. 
 -- !result
 select t.map3, s.map5 from map_test t right join map_test s on s.map3 => t.map5 order by t.pk;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 70. Detail message: Unexpected input '=', the most similar input is {<EOF>, ';'}.")
+E: (1064, "Getting syntax error at line 1, column 70. Detail message: Unexpected input '=>', the most similar input is {<EOF>, ';'}.")
 -- !result
 select t.map5, s.map5 from map_test t right join map_test s on s.map5 = t.map5 order by t.pk;
 -- result:

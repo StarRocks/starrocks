@@ -116,6 +116,10 @@ public class HashDistributionSpec extends DistributionSpec {
             return true;
         }
 
+        if (spec.type.equals(DistributionType.ROUND_ROBIN)) {
+            return true;
+        }
+
         if (!spec.type.equals(DistributionType.SHUFFLE)) {
             return false;
         }

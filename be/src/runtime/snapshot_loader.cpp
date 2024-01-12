@@ -109,7 +109,7 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
         if (!status.ok()) {
             std::stringstream ss;
             ss << "failed to get broker client. "
-               << "broker addr: " << upload.broker_addr << ". msg: " << status.get_error_msg();
+               << "broker addr: " << upload.broker_addr << ". msg: " << status.message();
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
@@ -253,7 +253,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
         if (!status.ok()) {
             std::stringstream ss;
             ss << "failed to get broker client. "
-               << "broker addr: " << download.broker_addr << ". msg: " << status.get_error_msg();
+               << "broker addr: " << download.broker_addr << ". msg: " << status.message();
             LOG(WARNING) << ss.str();
             return Status::InternalError(ss.str());
         }
@@ -411,8 +411,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             std::string new_name;
             Status st = _replace_tablet_id(local_file, remote_tablet_id, &new_name);
             if (!st.ok()) {
-                LOG(WARNING) << "failed to replace tablet id. unknown local file: " << st.get_error_msg()
-                             << ". ignore it";
+                LOG(WARNING) << "failed to replace tablet id. unknown local file: " << st.message() << ". ignore it";
                 continue;
             }
             VLOG(2) << "new file name after replace tablet id: " << new_name;
@@ -910,7 +909,7 @@ Status SnapshotLoader::_get_existing_files_from_local(const std::string& local_p
     Status status = FileSystem::Default()->get_children(local_path, local_files);
     if (!status.ok()) {
         std::stringstream ss;
-        ss << "failed to list files in local path: " << local_path << ", msg: " << status.get_error_msg();
+        ss << "failed to list files in local path: " << local_path << ", msg: " << status.message();
         LOG(WARNING) << ss.str();
         return status;
     }

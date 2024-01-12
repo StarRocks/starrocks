@@ -46,9 +46,6 @@ public class PaimonConnector implements Connector {
     private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private final HdfsEnvironment hdfsEnvironment;
     private Catalog paimonNativeCatalog;
-    private final String catalogType;
-    private final String metastoreUris;
-    private final String warehousePath;
     private final String catalogName;
     private final Options paimonOptions;
 
@@ -57,9 +54,9 @@ public class PaimonConnector implements Connector {
         this.catalogName = context.getCatalogName();
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
-        this.catalogType = properties.get(PAIMON_CATALOG_TYPE);
-        this.metastoreUris = properties.get(HIVE_METASTORE_URIS);
-        this.warehousePath = properties.get(PAIMON_CATALOG_WAREHOUSE);
+        String catalogType = properties.get(PAIMON_CATALOG_TYPE);
+        String metastoreUris = properties.get(HIVE_METASTORE_URIS);
+        String warehousePath = properties.get(PAIMON_CATALOG_WAREHOUSE);
 
         this.paimonOptions = new Options();
         if (Strings.isNullOrEmpty(catalogType)) {

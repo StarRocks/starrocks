@@ -26,6 +26,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.List;
+
 import static com.starrocks.sql.optimizer.MVTestUtils.waitForSchemaChangeAlterJobFinish;
 import static com.starrocks.sql.optimizer.MVTestUtils.waitingRollupJobV2Finish;
 
@@ -35,7 +37,9 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
         MvRewriteTestBase.beforeClass();
         // For mv rewrite with schema change or rollup, need to set it false, otherwise unit tests will be failed.
         FeConstants.runningUnitTest = false;
-        MvRewriteTestBase.prepareDefaultDatas();
+
+        starRocksAssert.withTable(cluster, "t0");
+        starRocksAssert.withTable(cluster, "test_all_type");
     }
 
     @Test
@@ -165,6 +169,8 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
                 "FROM t1_agg AS t1_17 " +
                 "GROUP BY t1_17.c_1_0, t1_17.c_1_1 ORDER BY t1_17.c_1_0 DESC, t1_17.c_1_1 ASC");
 
+        // NOTE: change `selectBestRowCountIndex` to prefer non-baseIndexId so can choose the mv for
+        // mv's rowCount and columnSize is the same with the base table.
         {
             String query = "select * from t1_agg";
             String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, query);
@@ -190,7 +196,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
                     " on t0.v1 = test_all_type.t1d) t" +
                     " where v1 < 100");
 
-            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+            createAndRefreshMv("create materialized view join_mv_1" +
                     " distributed by hash(v1)" +
                     " as " +
                     " SELECT * from view1");
@@ -224,7 +230,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
                     " on view1.v1 = view2.t1d) t" +
                     " where v1 < 100");
 
-            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+            createAndRefreshMv("create materialized view join_mv_1" +
                     " distributed by hash(v1)" +
                     " as " +
                     " SELECT * from view3");
@@ -253,7 +259,7 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
             starRocksAssert.withView("create view view1 as " +
                     " SELECT v1 from t0");
 
-            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+            createAndRefreshMv("create materialized view join_mv_1" +
                     " distributed by hash(v11)" +
                     " as " +
                     " SELECT v11, v12 from (select vv1.v1 v11, vv2.v1 v12 from view1 vv1 join view1 vv2 on vv1.v1 = vv2.v1 ) t");
@@ -267,31 +273,39 @@ public class MVRewriteWithSchemaChangeTest extends MvRewriteTestBase {
             dropMv("test", "join_mv_1");
         }
 
+
         {
-            starRocksAssert.withView("create view view1 as " +
-                    " select deptno1, deptno2, empid, name " +
-                    "from " +
-                    "(SELECT emps_par.deptno as deptno1, depts.deptno as deptno2, emps_par.empid, emps_par.name from emps_par " +
-                    "join depts" +
-                    " on emps_par.deptno = depts.deptno) t");
+            starRocksAssert.withTables(cluster, List.of("depts", "emps_par"),
+                    () -> {
+                        starRocksAssert.withView("create view view1 as " +
+                                " select deptno1, deptno2, empid, name " +
+                                "from " +
+                                "(" +
+                                "   SELECT emps_par.deptno as deptno1, depts.deptno as deptno2, " +
+                                "   emps_par.empid, emps_par.name from emps_par " +
+                                "join depts" +
+                                " on emps_par.deptno = depts.deptno) t");
 
-            createAndRefreshMv("test", "join_mv_2", "create materialized view join_mv_2" +
-                    " distributed by hash(deptno2)" +
-                    " partition by deptno1" +
-                    " as " +
-                    " SELECT deptno1, deptno2, empid, name from view1 union SELECT deptno1, deptno2, empid, name from view1");
+                        createAndRefreshMv("create materialized view join_mv_2" +
+                                " distributed by hash(deptno2)" +
+                                " partition by deptno1" +
+                                " as " +
+                                " SELECT deptno1, deptno2, empid, name from view1 " +
+                                " union " +
+                                " SELECT deptno1, deptno2, empid, name from view1");
 
-            createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
-                    " distributed by hash(deptno2)" +
-                    " partition by deptno1" +
-                    " as " +
-                    " SELECT deptno1, deptno2, empid, name from view1");
+                        createAndRefreshMv("create materialized view join_mv_1" +
+                                " distributed by hash(deptno2)" +
+                                " partition by deptno1" +
+                                " as " +
+                                " SELECT deptno1, deptno2, empid, name from view1");
 
-            {
-                String query = "SELECT deptno1, deptno2, empid, name from view1";
-                String plan = getFragmentPlan(query);
-                PlanTestBase.assertContains(plan, "join_mv_1");
-            }
+                        {
+                            String query = "SELECT deptno1, deptno2, empid, name from view1";
+                            String plan = getFragmentPlan(query);
+                            PlanTestBase.assertContains(plan, "join_mv_1");
+                        }
+                    });
 
             starRocksAssert.dropView("view1");
             dropMv("test", "join_mv_1");

@@ -47,6 +47,8 @@ add_library(Storage STATIC
     primary_index.cpp
     primary_key_encoder.cpp
     protobuf_file.cpp
+    replication_txn_manager.cpp
+    replication_utils.cpp
     rowset_update_state.cpp
     rowset_column_update_state.cpp
     update_compaction_state.cpp
@@ -60,6 +62,7 @@ add_library(Storage STATIC
     tablet_manager.cpp
     tablet_meta.cpp
     tablet_meta_manager.cpp
+    tablet_index.cpp
     tablet_schema.cpp
     tablet_schema_map.cpp
     tablet_updates.cpp
@@ -180,6 +183,7 @@ add_library(Storage STATIC
     lake/vacuum.cpp
     lake/general_tablet_writer.cpp
     lake/pk_tablet_writer.cpp
+    lake/replication_txn_manager.cpp
     lake/rowset.cpp
     lake/schema_change.cpp
     lake/starlet_location_provider.cpp
@@ -196,6 +200,7 @@ add_library(Storage STATIC
     lake/versioned_tablet.cpp
     lake/vertical_compaction_task.cpp
     lake/metacache.cpp
+    lake/primary_key_recover.cpp
     binlog_util.cpp
     binlog_file_writer.cpp
     binlog_file_reader.cpp
@@ -206,6 +211,9 @@ add_library(Storage STATIC
     lake/txn_log_applier.cpp
     lake/lake_local_persistent_index.cpp
     persistent_index_compaction_manager.cpp
+    persistent_index_tablet_loader.cpp
+    lake/lake_local_persistent_index_tablet_loader.cpp
     lake/lake_persistent_index.cpp
     lake/persistent_index_memtable.cpp
-    lake/local_pk_index_manager.cpp)
+    lake/local_pk_index_manager.cpp
+    dictionary_cache_manager.cpp)

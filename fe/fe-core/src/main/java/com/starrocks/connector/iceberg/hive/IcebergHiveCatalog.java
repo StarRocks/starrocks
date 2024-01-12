@@ -54,11 +54,11 @@ import java.util.stream.Collectors;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_METASTORE_URIS;
+import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static org.apache.hadoop.hive.conf.HiveConf.ConfVars.METASTOREWAREHOUSE;
 
 public class IcebergHiveCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(IcebergHiveCatalog.class);
-    public static final String LOCATION_PROPERTY = "location";
 
     private final Configuration conf;
     private final HiveCatalog delegate;
@@ -96,6 +96,11 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     @Override
     public Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
         return delegate.loadTable(TableIdentifier.of(dbName, tableName));
+    }
+
+    @Override
+    public boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
+        return delegate.tableExists(TableIdentifier.of(dbName, tableName));
     }
 
     @Override
@@ -184,6 +189,11 @@ public class IcebergHiveCatalog implements IcebergCatalog {
     @Override
     public boolean dropTable(String dbName, String tableName, boolean purge) {
         return delegate.dropTable(TableIdentifier.of(dbName, tableName), purge);
+    }
+
+    @Override
+    public void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException {
+        delegate.renameTable(TableIdentifier.of(dbName, tblName), TableIdentifier.of(dbName, newTblName));
     }
 
     @Override

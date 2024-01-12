@@ -205,6 +205,29 @@ public class JobSpec {
                     .build();
         }
 
+        public static JobSpec fromRefreshDictionaryCacheSpec(ConnectContext context,
+                                                             TUniqueId queryId,
+                                                             DescriptorTable descTable,
+                                                             List<PlanFragment> fragments,
+                                                             List<ScanNode> scanNodes) {
+            TQueryOptions queryOptions = context.getSessionVariable().toThrift();
+            TQueryGlobals queryGlobals = genQueryGlobals(context.getStartTimeInstant(),
+                                                         context.getSessionVariable().getTimeZone());
+
+            return new JobSpec.Builder()
+                    .queryId(queryId)
+                    .fragments(fragments)
+                    .scanNodes(scanNodes)
+                    .descTable(descTable.toThrift())
+                    .enableStreamPipeline(false)
+                    .isBlockQuery(false)
+                    .needReport(false)
+                    .queryGlobals(queryGlobals)
+                    .queryOptions(queryOptions)
+                    .commonProperties(context)
+                    .build();
+        }
+
         public static JobSpec fromNonPipelineBrokerLoadJobSpec(ConnectContext context,
                                                                Long loadJobId, TUniqueId queryId,
                                                                DescriptorTable descTable,
@@ -464,7 +487,7 @@ public class JobSpec {
             this.enablePipeline(isEnablePipeline(context, instance.fragments));
             instance.connectContext = context;
 
-            instance.enableQueue = isEnableQueue();
+            instance.enableQueue = isEnableQueue(context);
             instance.needQueued = needCheckQueue();
             instance.enableGroupLevelQueue = instance.enableQueue && GlobalVariable.isEnableGroupLevelQueryQueue();
 
@@ -553,7 +576,11 @@ public class JobSpec {
                     fragments.stream().allMatch(PlanFragment::canUsePipeline);
         }
 
-        private boolean isEnableQueue() {
+        private boolean isEnableQueue(ConnectContext connectContext) {
+            if (connectContext != null && connectContext.getSessionVariable() != null &&
+                    !connectContext.getSessionVariable().isEnableQueryQueue()) {
+                return false;
+            }
             if (instance.isStatisticsJob()) {
                 return GlobalVariable.isEnableQueryQueueStatistic();
             }

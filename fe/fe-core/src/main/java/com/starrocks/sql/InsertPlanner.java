@@ -53,6 +53,7 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -78,6 +79,7 @@ import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -164,19 +166,25 @@ public class InsertPlanner {
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
+        SessionVariable currentVariable = session.getSessionVariable();
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(targetTable);
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
+        boolean previousMVRewrite = currentVariable.isEnableMaterializedViewRewrite();
+        boolean enableMVRewrite = currentVariable.isEnableMaterializedViewRewriteForInsert() &&
+                currentVariable.isEnableMaterializedViewRewrite();
         try (Timer ignore = Tracers.watchScope("InsertPlanner")) {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(false);
             }
             // Non-query must use the strategy assign scan ranges per driver sequence, which local shuffle agg cannot use.
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
+            session.getSessionVariable().setEnableMaterializedViewRewrite(enableMVRewrite);
 
             Optimizer optimizer = new Optimizer();
-            PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
+            PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns,
+                    session.getSessionVariable());
 
             LOG.debug("property {}", requiredPropertySet);
             OptExpression optimizedPlan;
@@ -285,7 +293,7 @@ public class InsertPlanner {
             } else if (targetTable instanceof IcebergTable) {
                 descriptorTable.addReferencedTable(targetTable);
                 dataSink = new IcebergTableSink((IcebergTable) targetTable, tupleDesc,
-                        isKeyPartitionStaticInsert(insertStmt, queryRelation));
+                        isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
             } else if (targetTable instanceof HiveTable) {
                 dataSink = new HiveTableSink((HiveTable) targetTable, tupleDesc,
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
@@ -337,6 +345,7 @@ public class InsertPlanner {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(true);
             }
+            session.getSessionVariable().setEnableMaterializedViewRewrite(previousMVRewrite);
         }
     }
 
@@ -648,7 +657,8 @@ public class InsertPlanner {
      * so that the same key will be sent to the same fragment instance
      */
     private PhysicalPropertySet createPhysicalPropertySet(InsertStmt insertStmt,
-                                                          List<ColumnRefOperator> outputColumns) {
+                                                          List<ColumnRefOperator> outputColumns,
+                                                          SessionVariable session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         if ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())) {
             DistributionProperty distributionProperty = DistributionProperty
@@ -681,10 +691,30 @@ public class InsertPlanner {
         }
 
 
-        if (targetTable instanceof TableFunctionTable && ((TableFunctionTable) targetTable).isWriteSingleFile()) {
-            DistributionProperty distributionProperty = DistributionProperty
-                    .createProperty(new GatherDistributionSpec());
-            return new PhysicalPropertySet(distributionProperty);
+        if (targetTable instanceof TableFunctionTable) {
+            TableFunctionTable table = (TableFunctionTable) targetTable;
+            if (table.isWriteSingleFile()) {
+                return new PhysicalPropertySet(DistributionProperty
+                        .createProperty(new GatherDistributionSpec()));
+            }
+
+            if (session.isEnableConnectorSinkGlobalShuffle()) {
+                // use random shuffle for unpartitioned table
+                if (table.getPartitionColumnNames().isEmpty()) {
+                    return new PhysicalPropertySet(DistributionProperty
+                            .createProperty(new RoundRobinDistributionSpec()));
+                } else { // use hash shuffle for partitioned table
+                    List<Integer> partitionColumnIDs = table.getPartitionColumnIDs().stream()
+                            .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
+                    HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
+                            HashDistributionDesc.SourceType.SHUFFLE_AGG);
+                    return new PhysicalPropertySet(DistributionProperty
+                            .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
+                }
+            }
+
+            // no global shuffle
+            return PhysicalPropertySet.EMPTY;
         }
 
 

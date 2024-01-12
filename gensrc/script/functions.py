@@ -326,6 +326,10 @@ vectorized_functions = [
 
     [30430, 'translate', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::translate',
      'StringFunctions::translate_prepare', 'StringFunctions::translate_close'],
+    [30431, 'crc32', 'BIGINT', ['VARCHAR'], 'StringFunctions::crc32'],
+
+    [30440, 'ngram_search', 'FLOAT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::ngram_search','StringFunctions::ngram_search_prepare','StringFunctions::ngram_search_close'],
+    [30441, 'ngram_search_case_insensitive', 'FLOAT', ['VARCHAR', 'VARCHAR'], 'StringFunctions::ngram_search_case_insensitive','StringFunctions::ngram_search_case_insensitive_prepare','StringFunctions::ngram_search_close'],
 
     # Binary Functions
     # to_binary
@@ -453,6 +457,7 @@ vectorized_functions = [
     [50287, 'unix_timestamp', 'BIGINT', ['VARCHAR', 'VARCHAR'], 'TimeFunctions::to_unix_from_datetime_with_format_64'],
     [50288, 'from_unixtime', 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_64'],
     [50289, 'from_unixtime', 'VARCHAR', ['BIGINT', 'VARCHAR'], 'TimeFunctions::from_unix_to_datetime_with_format_64', 'TimeFunctions::from_unix_prepare', 'TimeFunctions::from_unix_close'],
+    [50290, 'from_unixtime_ms', 'VARCHAR', ['BIGINT'], 'TimeFunctions::from_unix_to_datetime_ms_64'],
 
     [50300, 'unix_timestamp', 'INT', [], 'TimeFunctions::to_unix_for_now_32'],
     [50301, 'unix_timestamp', 'INT', ['DATETIME'], 'TimeFunctions::to_unix_from_datetime_32'],

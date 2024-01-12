@@ -25,17 +25,18 @@ $ pip install dbt-starrocks
 ```
 
 ## Supported features
-| Starrocks <= 2.5 | Starrocks 2.5 ~ 3.1  | Starrocks >= 3.1  |              Feature              |
-|:----------------:|:--------------------:|:-----------------:|:---------------------------------:|
-|        ✅         |          ✅           |         ✅         |       Table materialization       |
-|        ✅         |          ✅           |         ✅         |       View materialization        |
-|        ❌         |          ❌           |         ✅         | Materialized View materialization |
-|        ❌         |          ✅           |         ✅         |    Incremental materialization    |
-|        ❌         |          ✅           |         ✅         |         Primary Key Model         |
-|        ✅         |          ✅           |         ✅         |              Sources              |
-|        ✅         |          ✅           |         ✅         |         Custom data tests         |
-|        ✅         |          ✅           |         ✅         |           Docs generate           |
-|        ❌         |          ❌           |         ❌         |               Kafka               |
+| Starrocks <= 2.5 | Starrocks 2.5 ~ 3.1 | Starrocks >= 3.1  |              Feature              |
+|:----------------:|:-------------------:|:-----------------:|:---------------------------------:|
+|        ✅         |          ✅          |         ✅         |       Table materialization       |
+|        ✅         |          ✅          |         ✅         |       View materialization        |
+|        ❌         |          ❌          |         ✅         | Materialized View materialization |
+|        ❌         |          ✅          |         ✅         |    Incremental materialization    |
+|        ❌         |          ✅          |         ✅         |         Primary Key Model         |
+|        ✅         |          ✅          |         ✅         |              Sources              |
+|        ✅         |          ✅          |         ✅         |         Custom data tests         |
+|        ✅         |          ✅          |         ✅         |           Docs generate           |
+|        ❌         |          ❌          |         ✅         |       Expression Partition        |
+|        ❌         |          ❌          |         ❌         |               Kafka               |
 
 ### Notice
 1. When StarRocks Version < 2.5, `Create table as` can only set engine='OLAP' and table_type='DUPLICATE'
@@ -84,8 +85,12 @@ models:
   buckets: 3                // default 10
   partition_by: ['some_date']
   partition_by_init: ["PARTITION p1 VALUES [('1971-01-01 00:00:00'), ('1991-01-01 00:00:00')),PARTITION p1972 VALUES [('1991-01-01 00:00:00'), ('1999-01-01 00:00:00'))"]
+  // RANGE, LIST, or Expr partition types should be used in conjunction with partition_by configuration
+  // Expr partition type requires an expression (e.g., date_trunc) specified in partition_by
+  order_by: ['some_column'] // only for PRIMARY table_type
+  partition_type: 'RANGE'   // RANGE or LIST or Expr Need to be used in combination with partition_by configuration
   properties: [{"replication_num":"1", "in_memory": "true"}]
-  refresh_method: 'async' // only for materialized view default manual
+  refresh_method: 'async'   // only for materialized view default manual
 ```
   
 ### dbt run config:
@@ -93,6 +98,8 @@ models:
 ```
 {{ config(materialized='view') }}
 {{ config(materialized='table', engine='OLAP', buckets=32, distributed_by=['id']) }}
+{{ config(materialized='table', partition_by=['date_trunc("day", first_order)'], partition_type='Expr') }}
+{{ config(materialized='table', table_type='PRIMARY', keys=['customer_id'], order_by=['first_name', 'last_name'] }}
 {{ config(materialized='incremental', table_type='PRIMARY', engine='OLAP', buckets=32, distributed_by=['id']) }}
 {{ config(materialized='materialized_view') }}
 {{ config(materialized='materialized_view', properties={"storage_medium":"SSD"}) }}

@@ -345,6 +345,9 @@ public class CostModel {
                     result = CostEstimate.of(outputSize, 0,
                             Math.max(statistics.getOutputSize(outputColumns), 1));
                     break;
+                case ROUND_ROBIN:
+                    result = CostEstimate.of(outputSize * factor, 0, outputSize * factor);
+                    break;
                 default:
                     throw new StarRocksPlannerException(
                             "not support " + distributionSpec.getType() + "distribution type",

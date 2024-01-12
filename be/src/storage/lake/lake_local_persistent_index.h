@@ -25,18 +25,16 @@ namespace starrocks::lake {
 
 class MetaFileBuilder;
 class LakePrimaryIndex;
+class TabletManager;
 
 class LakeLocalPersistentIndex : public PersistentIndex {
 public:
-    explicit LakeLocalPersistentIndex(std::string path) : PersistentIndex(path) { _path = path; }
+    explicit LakeLocalPersistentIndex(std::string path) : PersistentIndex(std::move(path)) {}
 
-    ~LakeLocalPersistentIndex() override {}
+    ~LakeLocalPersistentIndex() override = default;
 
-    Status load_from_lake_tablet(starrocks::lake::Tablet* tablet, const TabletMetadata& metadata, int64_t base_version,
+    Status load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata, int64_t base_version,
                                  const MetaFileBuilder* builder);
-
-private:
-    std::string _path;
 };
 
 } // namespace starrocks::lake

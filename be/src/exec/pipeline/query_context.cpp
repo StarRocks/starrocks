@@ -20,6 +20,7 @@
 #include "agent/master_info.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/spill/query_spill_manager.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/client_cache.h"
@@ -68,6 +69,11 @@ QueryContext::~QueryContext() noexcept {
         }
         _exec_env->runtime_filter_cache()->remove(_query_id);
     }
+
+    // Make sure all bytes are released back to parent trackers.
+    if (_connector_scan_mem_tracker != nullptr) {
+        _connector_scan_mem_tracker->release_without_root();
+    }
 }
 
 void QueryContext::count_down_fragments() {
@@ -85,8 +91,7 @@ void QueryContext::count_down_fragments() {
     // considering that this feature is generally used for debugging,
     // I think it should not have a big impact now
     if (query_trace != nullptr) {
-        auto st = query_trace->dump();
-        st.permit_unchecked_error();
+        (void)query_trace->dump();
     }
 }
 
@@ -98,32 +103,8 @@ void QueryContext::cancel(const Status& status) {
     _fragment_mgr->cancel(status);
 }
 
-int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t per_instance_mem_limit,
-                                              size_t pipeline_dop, int64_t option_query_mem_limit) {
-    // no mem_limit
-    if (per_instance_mem_limit <= 0 && option_query_mem_limit <= 0) {
-        return -1;
-    }
-
-    int64_t mem_limit;
-    if (option_query_mem_limit > 0) {
-        mem_limit = option_query_mem_limit;
-    } else {
-        mem_limit = per_instance_mem_limit;
-        // query's mem_limit = per-instance mem_limit * num_instances * pipeline_dop
-        static constexpr int64_t MEM_LIMIT_MAX = std::numeric_limits<int64_t>::max();
-        if (MEM_LIMIT_MAX / total_fragments() / pipeline_dop > mem_limit) {
-            mem_limit *= static_cast<int64_t>(total_fragments()) * pipeline_dop;
-        } else {
-            mem_limit = MEM_LIMIT_MAX;
-        }
-    }
-
-    return mem_limit;
-}
-
 void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
-                                    workgroup::WorkGroup* wg) {
+                                    int64_t spill_mem_limit, workgroup::WorkGroup* wg, RuntimeState* runtime_state) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter =
@@ -134,8 +115,10 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
             std::string label = "Group=" + wg->name() + ", " + _profile->name();
             _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP_BIG_QUERY, big_query_mem_limit,
                                                         std::move(label), parent);
+            _mem_tracker->set_reserve_limit(spill_mem_limit);
         } else {
             _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, query_mem_limit, _profile->name(), parent);
+            _mem_tracker->set_reserve_limit(spill_mem_limit);
         }
 
         MemTracker* p = parent;
@@ -145,6 +128,25 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         _static_query_mem_limit = p->limit();
         if (query_mem_limit > 0) {
             _static_query_mem_limit = std::min(query_mem_limit, _static_query_mem_limit);
+        }
+        if (big_query_mem_limit > 0) {
+            _static_query_mem_limit = std::min(big_query_mem_limit, _static_query_mem_limit);
+        }
+        _connector_scan_operator_mem_share_arbitrator =
+                _object_pool.add(new ConnectorScanOperatorMemShareArbitrator(_static_query_mem_limit));
+
+        {
+            MemTracker* connector_scan_parent = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker();
+            if (wg != nullptr) {
+                connector_scan_parent = wg->connector_scan_mem_tracker();
+            }
+            double connector_scan_use_query_mem_ratio = config::connector_scan_use_query_mem_ratio;
+            if (runtime_state != nullptr && runtime_state->query_options().__isset.connector_scan_use_query_mem_ratio) {
+                connector_scan_use_query_mem_ratio = runtime_state->query_options().connector_scan_use_query_mem_ratio;
+            }
+            _connector_scan_mem_tracker = std::make_shared<MemTracker>(
+                    MemTracker::QUERY, _static_query_mem_limit * connector_scan_use_query_mem_ratio,
+                    _profile->name() + "/connector_scan", connector_scan_parent);
         }
     });
 }
@@ -188,7 +190,7 @@ std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
     auto query_statistic = std::make_shared<QueryStatistics>();
     // Not transmit delta if it's the final sink
     if (_is_final_sink) {
-        return query_statistic;
+        return nullptr;
     }
 
     query_statistic->add_cpu_costs(_delta_cpu_cost_ns.exchange(0));
@@ -632,7 +634,7 @@ void QueryContextManager::report_fragments(
                     rpc_status = fe_connection.reopen();
                     if (!rpc_status.ok()) {
                         LOG(WARNING) << "ReportExecStatus() to " << fe_addr << " failed after reopening connection:\n"
-                                     << rpc_status.get_error_msg();
+                                     << rpc_status.message();
                         continue;
                     }
                     fe_connection->batchReportExecStatus(res, report_batch);

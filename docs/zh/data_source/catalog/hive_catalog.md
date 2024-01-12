@@ -279,8 +279,8 @@ Hive Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
 - 基于 Shared Key 进行认证和鉴权
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.shared_key" = "<storage_account_shared_key>"
   ```
 
   `StorageCredentialParams` 包含如下参数。
@@ -293,18 +293,68 @@ Hive Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
 - 基于 SAS Token 进行认证和鉴权
 
   ```SQL
-  "azure.blob.account_name" = "<blob_storage_account_name>",
-  "azure.blob.container_name" = "<blob_container_name>",
-  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.container" = "<container_name>",
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
   `StorageCredentialParams` 包含如下参数。
 
   | **参数**                  | **是否必须** | **说明**                                 |
   | ------------------------- | ------------ | ---------------------------------------- |
-  | azure.blob.account_name   | 是           | Blob Storage 账号的用户名。              |
-  | azure.blob.container_name | 是           | 数据所在 Blob 容器的名称。               |
+  | azure.blob.storage_account| 是           | Blob Storage 账号的用户名。              |
+  | azure.blob.container      | 是           | 数据所在 Blob 容器的名称。               |
   | azure.blob.sas_token      | 是           | 用于访问 Blob Storage 账号的 SAS Token。 |
+
+###### Azure Data Lake Storage Gen2
+
+如果选择 Data Lake Storage Gen2 作为 Hive 集群的文件存储，请按如下配置 `StorageCredentialParams`：
+
+- 基于 Managed Identity 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                                | **是否必须** | **说明**                                                |
+  | --------------------------------------- | ------------ | ------------------------------------------------------- |
+  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
+  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属 Tenant 的 ID。                                 |
+  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
+
+- 基于 Shared Key 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>",
+  "azure.adls2.shared_key" = "<storage_account_shared_key>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                    | **是否必须** | **说明**                                   |
+  | --------------------------- | ------------ | ------------------------------------------ |
+  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
+  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
+
+- 基于 Service Principal 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                           | **是否必须** | **说明**                                                     |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
+  | azure.adls2.oauth2_client_secret   | 是           | 新建的 Client (Application) Secret。                         |
+  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
 
 ###### Azure Data Lake Storage Gen1
 
@@ -337,56 +387,6 @@ Hive Catalog 从 3.0 版本起支持 Microsoft Azure Storage。
   | azure.adls1.oauth2_client_id  | 是           | Service Principal 的 Client (Application) ID。               |
   | azure.adls1.oauth2_credential | 是           | 新建的 Client (Application) Secret。                         |
   | azure.adls1.oauth2_endpoint   | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
-
-###### Azure Data Lake Storage Gen2
-
-如果选择 Data Lake Storage Gen2 作为 Hive 集群的文件存储，请按如下配置 `StorageCredentialParams`：
-
-- 基于 Managed Identity 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.oauth2_use_managed_identity" = "true",
-  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                                | **是否必须** | **说明**                                                |
-  | --------------------------------------- | ------------ | ------------------------------------------------------- |
-  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
-  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属 Tenant 的 ID。                                 |
-  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
-
-- 基于 Shared Key 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.storage_account" = "<storage_account_name>",
-  "azure.adls2.shared_key" = "<shared_key>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                    | **是否必须** | **说明**                                   |
-  | --------------------------- | ------------ | ------------------------------------------ |
-  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
-  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
-
-- 基于 Service Principal 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.oauth2_client_id" = "<service_client_id>",
-  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                           | **是否必须** | **说明**                                                     |
-  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
-  | azure.adls2.oauth2_client_secret   | 是           | 新建的 Client (Application) Secret。                         |
-  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
 
 ##### Google GCS
 
@@ -488,7 +488,7 @@ PROPERTIES
 (
     "type" = "hive",
     "hive.metastore.type" = "hive",
-    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ```
 
@@ -504,7 +504,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2"
   );
@@ -535,7 +535,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2"
@@ -569,7 +569,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
@@ -606,7 +606,7 @@ PROPERTIES
 (
     "type" = "hive",
     "hive.metastore.type" = "hive",
-    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "<s3_endpoint>",
@@ -627,7 +627,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
   );
@@ -641,9 +641,9 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
-      "azure.blob.account_name" = "<blob_storage_account_name>",
-      "azure.blob.container_name" = "<blob_container_name>",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
+      "azure.blob.storage_account" = "<blob_storage_account_name>",
+      "azure.blob.container" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
   );
   ```
@@ -658,7 +658,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls1.use_managed_service_identity" = "true"    
   );
   ```
@@ -671,7 +671,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls1.oauth2_client_id" = "<application_client_id>",
       "azure.adls1.oauth2_credential" = "<application_client_credential>",
       "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
@@ -688,7 +688,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.oauth2_use_managed_identity" = "true",
       "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
       "azure.adls2.oauth2_client_id" = "<service_client_id>"
@@ -703,7 +703,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.storage_account" = "<storage_account_name>",
       "azure.adls2.shared_key" = "<shared_key>"     
   );
@@ -717,7 +717,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
       "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>" 
@@ -734,7 +734,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "gcp.gcs.use_compute_engine_service_account" = "true"    
   );
   ```
@@ -747,7 +747,7 @@ PROPERTIES
   (
       "type" = "hive",
       "hive.metastore.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "gcp.gcs.service_account_email" = "<google_service_account_email>",
       "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
       "gcp.gcs.service_account_private_key" = "<google_service_private_key>"    
@@ -764,7 +764,7 @@ PROPERTIES
     (
         "type" = "hive",
         "hive.metastore.type" = "hive",
-        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
         "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
     );
@@ -778,7 +778,7 @@ PROPERTIES
     (
         "type" = "hive",
         "hive.metastore.type" = "hive",
-        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
         "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
@@ -1234,7 +1234,7 @@ HMS 2.x 和 3.x 版本均支持配置事件侦听器。这里以配套 HMS 3.1.2
   PROPERTIES
   (
       "type" = "hive",
-      "hive.metastore.uris" = "thrift://102.168.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
        ....
       "enable_hms_events_incremental_sync" = "true"
   );
@@ -1253,13 +1253,13 @@ HMS 2.x 和 3.x 版本均支持配置事件侦听器。这里以配套 HMS 3.1.2
 
 ## 周期性刷新元数据缓存
 
-自 2.5.5 版本起，StarRocks 可以周期性刷新经常访问的 Hive 外部数据目录的元数据缓存，达到感知数据更新的效果。您可以通过以下 [FE 参数](../../administration/Configuration.md#fe-配置项)配置 Hive 元数据缓存周期性刷新：
+自 2.5.5 版本起，StarRocks 可以周期性刷新经常访问的 Hive 外部数据目录的元数据缓存，达到感知数据更新的效果。您可以通过以下 [FE 参数](../../administration/FE_configuration.md)配置 Hive 元数据缓存周期性刷新：
 
 | 配置名称                                                      | 默认值                        | 说明                                  |
 | ------------------------------------------------------------ | ---------------------------- | ------------------------------------ |
-| enable_background_refresh_connector_metadata                 | v3.0 为 true，v2.5 为 false   | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
-| background_refresh_metadata_interval_millis                  | 600000（10 分钟）             | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
-| background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）              | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。[FE 动态参数](../../administration/Configuration.md#配置-fe-动态参数)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
+| enable_background_refresh_connector_metadata                 | v3.0 为 true，v2.5 为 false   | 是否开启 Hive 元数据缓存周期性刷新。开启后，StarRocks 会轮询 Hive 集群的元数据服务（HMS 或 AWS Glue），并刷新经常访问的 Hive 外部数据目录的元数据缓存，以感知数据更新。`true` 代表开启，`false` 代表关闭。[FE 动态参数](../../administration/FE_configuration.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
+| background_refresh_metadata_interval_millis                  | 600000（10 分钟）             | 接连两次 Hive 元数据缓存刷新之间的间隔。单位：毫秒。[FE 动态参数](../../administration/FE_configuration.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
+| background_refresh_metadata_time_secs_since_last_access_secs | 86400（24 小时）              | Hive 元数据缓存刷新任务过期时间。对于已被访问过的 Hive Catalog，如果超过该时间没有被访问，则停止刷新其元数据缓存。对于未被访问过的 Hive Catalog，StarRocks 不会刷新其元数据缓存。单位：秒。[FE 动态参数](../../administration/FE_configuration.md)，可以通过 [ADMIN SET FRONTEND CONFIG](../../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令设置。 |
 
 元数据缓存周期性刷新与元数据自动异步更新策略配合使用，可以进一步加快数据访问速度，降低从外部数据源读取数据的压力，提升查询性能。
 

@@ -16,6 +16,10 @@ StarRocks 支持在以下外部存储系统中备份数据：
 - 阿里云 OSS
 - 腾讯云 COS
 
+> **说明**
+>
+> StarRocks 存算分离集群不支持数据备份和恢复。
+
 ## 备份数据
 
 StarRocks 支持以数据库、表、或分区为粒度全量备份数据。
@@ -203,6 +207,8 @@ PROPERTIES (
 | download_worker_count   | BE 节点下载任务的最大线程数，用于还原作业。默认值：`1`。增加此配置项的值可以增加下载任务并行度。|
 | max_download_speed_kbps | BE 节点下载速度上限。默认值：`50000`。单位：KB/s。通常还原作业的下载速度不会超过默认值。如果该速度上限限制了还原作业的性能，您可以根据带宽情况适当增加。|
 
+<!--
+
 ## 物化视图备份恢复
 
 在备份或还原表（Table）数据期间，StarRocks 会自动备份或还原其中的 [同步物化视图](../using_starrocks/Materialized_view-single_table.md)。
@@ -230,6 +236,8 @@ PROPERTIES (
 
 - 如果物化视图处于 Active 状态，则可以直接使用。
 - 如果物化视图处于 Inactive 状态，可能是因为其基表尚未还原。在还原所有基表后，您可以使用[ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md) 重新激活物化视图。
+
+-->
 
 ## 注意事项
 

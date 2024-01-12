@@ -724,7 +724,8 @@ public class AnalyzeMgr implements Writable {
         if (basicStatsMeta == null) {
             // first load without analyze op, we need fill a meta with loaded rows for cardinality estimation
             BasicStatsMeta meta = new BasicStatsMeta(dbId, tableId, Lists.newArrayList(),
-                    StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(), Maps.newHashMap(), loadedRows);
+                    StatsConstants.AnalyzeType.SAMPLE, LocalDateTime.now(),
+                    StatsConstants.buildInitStatsProp(), loadedRows);
             GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().put(tableId, meta);
         } else {
             basicStatsMeta.increaseUpdateRows(loadedRows);

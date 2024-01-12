@@ -17,12 +17,12 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
@@ -41,11 +41,13 @@ import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.rules.TemporaryFolder;
 
 import java.util.List;
+import java.util.Map;
 
 public class MVRefreshTestBase {
     private static final Logger LOG = LogManager.getLogger(MvRewriteTestBase.class);
@@ -58,15 +60,18 @@ public class MVRefreshTestBase {
     protected static long startSuiteTime = 0;
     protected long startCaseTime = 0;
 
+    protected static final String TEST_DB_NAME = "test";
+
     @BeforeClass
     public static void beforeClass() throws Exception {
-        FeConstants.runningUnitTest = true;
-        FeConstants.enablePruneEmptyOutputScan = false;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
-        ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
         starRocksAssert = new StarRocksAssert(connectContext);
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
         if (!starRocksAssert.databaseExist("_statistics_")) {
             StatisticsMetaManager m = new StatisticsMetaManager();
             m.createStatisticsTablesForTest();
@@ -113,5 +118,29 @@ public class MVRefreshTestBase {
     public void executeInsertSql(ConnectContext connectContext, String sql) throws Exception {
         connectContext.setQueryId(UUIDUtil.genUUID());
         new StmtExecutor(connectContext, sql).execute();
+    }
+
+    protected MaterializedView getMv(String dbName, String mvName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Table table = db.getTable(mvName);
+        Assert.assertNotNull(table);
+        Assert.assertTrue(table instanceof MaterializedView);
+        MaterializedView mv = (MaterializedView) table;
+        return mv;
+    }
+
+    protected Table getTable(String dbName, String tableName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Table table = db.getTable(tableName);
+        Assert.assertNotNull(table);
+        return table;
+    }
+
+    protected TaskRun buildMVTaskRun(MaterializedView mv, String dbName) {
+        Task task = TaskBuilder.buildMvTask(mv, dbName);
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        Map<String, String> testProperties = task.getProperties();
+        testProperties.put(TaskRun.IS_TEST, "true");
+        return taskRun;
     }
 }

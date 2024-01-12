@@ -12,7 +12,7 @@ However, when it comes to building complex and efficient reports using data from
 
 ## Overview
 
-StarRocks supports building asynchronous materialized views based on external catalogs such as Hive catalog, Iceberg catalog, Hudi catalog and JDBC catalog. External catalog-based materialized views are particularly useful in the following scenarios:
+StarRocks supports building asynchronous materialized views based on external catalogs such as Hive catalog, Iceberg catalog, Hudi catalog, JDBC catalog, and Paimon catalog. External catalog-based materialized views are particularly useful in the following scenarios:
 
 - **Transparent Acceleration of data lake reports**
 
@@ -20,7 +20,7 @@ StarRocks supports building asynchronous materialized views based on external ca
 
   Through the query rewrite capability of materialized views, report acceleration can be made transparent and imperceptible to users. When slow queries are identified, data engineers can analyze the pattern of slow queries and create materialized views on demand. Application-side queries are then intelligently rewritten and transparently accelerated by the materialized view, allowing for rapid improvement in query performance without modifying the logic of the business application or the query statement.
 
-- **Incremental calculation of real-time  data associated with historical data**
+- **Incremental calculation of real-time data associated with historical data**
 
   Suppose your business application requires the association of real-time data in StarRocks native tables and historical data in the data lake for incremental calculations. In this situation, materialized views can provide a straightforward solution. For example, if the real-time fact table is a native table in StarRocks and the dimension table is stored in the data lake, you can easily perform incremental calculations by constructing materialized views that associate the native table with the table in the external data sources.
 
@@ -70,7 +70,7 @@ Materialized views, Data Cache, and native tables in StarRocks are all effective
 Compared to directly querying lake data or loading data into native tables, materialized views offer several unique advantages:
 
 - **Local storage  acceleration**: Materialized views can leverage StarRocks' acceleration advantages with local storage, such as indexes, partitioning, bucketing, and collocate groups, resulting in better query performance compared to querying data from the data lake directly.
-- **Zero maintenance for loading tasks**: Materialized views update data transparently via automatic refresh tasks. There's no need to maintain loading tasks to perform scheduled data updates. Additionally, Hive catalog-based materialized views can detect data changes and perform incremental refreshes at the partition level.
+- **Zero maintenance for loading tasks**: Materialized views update data transparently via automatic refresh tasks. There's no need to maintain loading tasks to perform scheduled data updates. Additionally, Hive, Iceberg, and Paimon catalog-based materialized views can detect data changes and perform incremental refreshes at the partition level.
 - **Intelligent  query  rewrite**: Queries can be transparently rewritten to use materialized views. You can benefit from acceleration instantly without the need to modify the query statements your application uses.
 
 <br />
@@ -96,7 +96,7 @@ Creating a materialized view on tables in external catalogs is similar to creati
 
 Currently, StarRocks cannot detect partition-level data changes in Hudi catalogs. Therefore, a full-size refresh is performed once the task is triggered.
 
-For Hive Catalog, Iceberg Catalog (starting from v3.1.4) and JDBC catalog (starting from v3.1.4, only for MySQL Range partitioning), StarRocks supports detecting data changes at the partition level. As a result, StarRocks can:
+For Hive Catalog, Iceberg Catalog (starting from v3.1.4), JDBC catalog (starting from v3.1.4, only for MySQL Range partitioning), and Paimon Catalog (starting from v3.2.1), StarRocks supports detecting data changes at the partition level. As a result, StarRocks can:
 
 - Refresh only the partitions with data changes to avoid full-size refresh, reducing resource consumption caused by refresh.
 

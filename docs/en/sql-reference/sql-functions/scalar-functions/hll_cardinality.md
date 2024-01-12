@@ -2,11 +2,11 @@
 displayed_sidebar: "English"
 ---
 
-# HLL_CARDINALITY
+# hll_cardinality
 
 ## Description
 
-HLL_CARDINALITY is used to calculate the cardinality of a single HLL type value.
+Calculates the cardinality of a single HLL type value.
 
 ## Syntax
 

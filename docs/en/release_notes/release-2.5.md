@@ -4,6 +4,71 @@ displayed_sidebar: "English"
 
 # StarRocks version 2.5
 
+## 2.5.18
+
+Release date: Jan 10, 2024
+
+### Improvements
+
+- When using JDK, the default GC algorithm is G1. [#37498](https://github.com/StarRocks/starrocks/pull/37498)
+- The result returned by the [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) statement now includes the timestamps of consumption messages from each partition. [#36222](https://github.com/StarRocks/starrocks/pull/36222)
+
+### Behavior Change
+
+- Added the session variable `enable_materialized_view_for_insert`, which controls whether materialized views rewrite the queries in INSERT INTO SELECT statements. The default value is `false`. [#37505](https://github.com/StarRocks/starrocks/pull/37505)
+- Added the session variable `enable_strict_order_by`. When this variable is set to the default value `TRUE`, an error is reported for such a query pattern: Duplicate alias is used in different expressions of the query and this alias is also a sorting field in ORDER BY, for example, `select distinct t1.* from tbl1 t1 order by t1.k1;`. The logic is the same as that in v2.3 and earlier. When this variable is set to `FALSE`, a loose deduplication mechanism is used, which processes such queries as valid SQL queries. [#37910](https://github.com/StarRocks/starrocks/pull/37910)
+
+### Parameter Change
+
+- Added the FE configuration item `routine_load_unstable_threshold_second`. [#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- Added the FE configuration item `http_worker_threads_num`, which specifies the number of threads for HTTP server to deal with HTTP requests. The default value is `0`. If the value for this parameter is set to a negative value or 0, the actual thread number is twice the number of CPU cores. [#37530](https://github.com/StarRocks/starrocks/pull/37530)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Using NaN (Not a Number) columns as ORDER BY columns may cause BEs to crash. [#30759](https://github.com/StarRocks/starrocks/pull/30759)
+- Failure to update primary key indexes may cause the error "get_applied_rowsets failed". [#27488](https://github.com/StarRocks/starrocks/pull/27488)
+- Hive metadata in [Hive catalogs](https://docs.starrocks.io/docs/2.5/data_source/catalog/hive_catalog/) is not automatically refreshed when new fields are added to Hive tables. [#37668](https://github.com/StarRocks/starrocks/pull/37668)
+- When `SELECT ... FROM ... INTO OUTFILE` is executed to export data into CSV files, the error "Unmatched number of columns" is reported if the FROM clause contains multiple constants. [#38045](https://github.com/StarRocks/starrocks/pull/38045)
+- In some cases, `bitmap_to_string` may return incorrect result due to data type overflow. [#37405](https://github.com/StarRocks/starrocks/pull/37405)
+
+## 2.5.17
+
+Release date: December 19, 2023
+
+### New Features
+
+- Added a new metric `max_tablet_rowset_num` for setting the maximum allowed number of rowsets. This metric helps detect possible compaction issues and thus reduces the occurrences of the error "too many versions". [#36539](https://github.com/StarRocks/starrocks/pull/36539)
+- Added the [subdivide_bitmap](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/subdivide_bitmap/) function. [#35817](https://github.com/StarRocks/starrocks/pull/35817)
+
+### Improvements
+
+- The result returned by the [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) statement provides a new field `OtherMsg`, which shows information about the last failed task. [#35806](https://github.com/StarRocks/starrocks/pull/35806)
+- The default retention period of trash files is changed to 1 day from the original 3 days. [#37113](https://github.com/StarRocks/starrocks/pull/37113)
+- Optimized the performance of persistent index update when compaction is performed on all rowsets of a Primary Key table, which reduces disk read I/O. [#36819](https://github.com/StarRocks/starrocks/pull/36819)
+- Optimized the logic used to compute compaction scores for Primary Key tables, thereby aligning the compaction scores for Primary Key tables within a more consistent range with the other three table types. [#36534](https://github.com/StarRocks/starrocks/pull/36534)
+- Queries on MySQL external tables and the external tables within JDBC catalogs support including keywords in the WHERE clause. [#35917](https://github.com/StarRocks/starrocks/pull/35917)
+- Added the bitmap_from_binary function to Spark Load to support loading Binary data. [#36050](https://github.com/StarRocks/starrocks/pull/36050)
+- The bRPC expiration time is shortened from 1 hour to the duration specified by the session variable [`query_timeout`](https://docs.starrocks.io/zh/docs/3.2/reference/System_variable/#query_timeout).  This prevents query failures caused by RPC request expiration. [#36778](https://github.com/StarRocks/starrocks/pull/36778)
+
+### Parameter Change
+
+- A new BE configuration item `enable_stream_load_verbose_log` is added. The default value is `false`. With this parameter set to `true`, StarRocks can record the HTTP requests and responses for Stream Load jobs, making troubleshooting easier. [#36113](https://github.com/StarRocks/starrocks/pull/36113)
+- The BE static parameter `update_compaction_per_tablet_min_interval_seconds` becomes mutable. [#36819](https://github.com/StarRocks/starrocks/pull/36819)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Queries fail during hash joins, causing BEs to crash. [#32219](https://github.com/StarRocks/starrocks/pull/32219)
+- The FE performance plunges after the FE configuration item `enable_collect_query_detail_info` is set to `true`. [#35945](https://github.com/StarRocks/starrocks/pull/35945)
+- Errors may be thrown if large amounts of data are loaded into a Primary Key table with persistent index enabled. [#34352](https://github.com/StarRocks/starrocks/pull/34352)
+- The starrocks_be process may exit unexpectedly when `./agentctl.sh stop be` is used to stop a BE. [#35108](https://github.com/StarRocks/starrocks/pull/35108)
+- The [array_distinct](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_distinct/) function occasionally causes the BEs to crash. [#36377](https://github.com/StarRocks/starrocks/pull/36377)
+- Deadlocks may occur when users refresh materialized views. [#35736](https://github.com/StarRocks/starrocks/pull/35736)
+- In some scenarios, dynamic partitioning may encounter an error, which causes FE start failures. [#36846](https://github.com/StarRocks/starrocks/pull/36846)
+
 ## 2.5.16
 
 Release date: December 1, 2023
@@ -27,9 +92,7 @@ Release date: November 29, 2023
   - Optimized the `bitmap_xor` function. [#34069](https://github.com/StarRocks/starrocks/pull/34069)
   - Supports Copy on Write to optimize Bitmap performance and reduce memory consumption. [#34047](https://github.com/StarRocks/starrocks/pull/34047)
 
-### Compatibility Changes
-
-#### Parameters
+### Parameter Change
 
 - The FE dynamic parameter `enable_new_publish_mechanism` is changed to a static parameter. You must restart the FE after you modify the parameter settings. [#35338](https://github.com/StarRocks/starrocks/pull/35338)
 
@@ -56,7 +119,7 @@ Release date: November 14, 2023
 
 - The `COLUMNS` table in the system database `INFORMATION_SCHEMA` can display ARRAY, MAP, and STRUCT columns. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
 
-### Compatibility changes
+### Parameter change
 
 #### System variables
 
@@ -157,8 +220,8 @@ Release date: August 7, 2023
 
 ### New features
 
-- Supports aggregate functions [COVAR_SAMP](../sql-reference/sql-functions/aggregate-functions/covar_samp.md), [COVAR_POP](../sql-reference/sql-functions/aggregate-functions/covar_pop.md), and [CORR](../sql-reference/sql-functions/aggregate-functions/corr.md).
-- Supports the following [window functions](../sql-reference/sql-functions/Window_function.md): COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP.
+- Supports aggregate functions [COVAR_SAMP](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/covar_samp/), [COVAR_POP](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/covar_pop/), and [CORR](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/corr/).
+- Supports the following [window functions](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function/): COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP.
 
 ### Improvements
 
@@ -222,7 +285,7 @@ Release date: June 30, 2023
 ### Improvements
 
 - Optimized the error message reported when partitions are added to a non-partitioned table. [#25266](https://github.com/StarRocks/starrocks/pull/25266)
-- Optimized the [auto tablet distribution policy](../table_design/Data_distribution.md#determine-the-number-of-buckets) for tables. [#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- Optimized the [auto tablet distribution policy](https://docs.starrocks.io/docs/2.5/table_design/Data_distribution/#determine-the-number-of-tablets) for tables. [#24543](https://github.com/StarRocks/starrocks/pull/24543)
 - Optimized the default comments in the CREATE TABLE statement. [#24803](https://github.com/StarRocks/starrocks/pull/24803)
 - Optimized the manual refreshing of asynchronous materialized views. Supports using the REFRESH MATERIALIZED VIEW WITH SYNC MODE syntax to synchronously invoke materialized view refresh tasks. [#25910](https://github.com/StarRocks/starrocks/pull/25910)
 
@@ -240,8 +303,8 @@ Release date: June 14, 2023
 
 ### New features
 
-- Inactive materialized views can be manually activated using `ALTER MATERIALIZED VIEW <mv_name> ACTIVE`. You can use this SQL command to activate materialized views whose base tables were dropped and then recreated. For more information, see [ALTER MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW.md). [#24001](https://github.com/StarRocks/starrocks/pull/24001)
-- StarRocks can automatically set an appropriate number of tablets when you create a table or add a partition, eliminating the need for manual operations. For more information, see [Determine the number of tablets](../table_design/Data_distribution.md#determine-the-number-of-buckets). [#10614](https://github.com/StarRocks/starrocks/pull/10614)
+- Inactive materialized views can be manually activated using `ALTER MATERIALIZED VIEW <mv_name> ACTIVE`. You can use this SQL command to activate materialized views whose base tables were dropped and then recreated. For more information, see [ALTER MATERIALIZED VIEW](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW/). [#24001](https://github.com/StarRocks/starrocks/pull/24001)
+- StarRocks can automatically set an appropriate number of tablets when you create a table or add a partition, eliminating the need for manual operations. For more information, see [Determine the number of tablets](https://docs.starrocks.io/docs/2.5/table_design/Data_distribution/#determine-the-number-of-tablets). [#10614](https://github.com/StarRocks/starrocks/pull/10614)
 
 ### Improvements
 
@@ -301,7 +364,7 @@ Added a metric to monitor the tablet status of Primary Key tables:
 - Added the `ErrorStateTabletNum` column to the output of `SHOW PROC '/statistic/'` to display the number of **err_state** tablets.
 - Added the `ErrorStateTablets` column to the output of `SHOW PROC '/statistic/<db_id>/'` to display the IDs of **err_state** tablets.
 
-For more information, see [SHOW PROC](../sql-reference/sql-statements/Administration/SHOW_PROC.md).
+For more information, see [SHOW PROC](https://docs.starrocks.io/docs/sql-reference/sql-statements/Administration/SHOW_PROC/).
 
 ### Improvements
 
@@ -335,7 +398,7 @@ Release date: April 4, 2023
 - Optimized the type inference logic. If a query like `SELECT sum(CASE WHEN XXX);` contains a constant `0`, such as `SELECT sum(CASE WHEN k1 = 1 THEN v1 ELSE 0 END) FROM test;`, pre-aggregation is automatically enabled to accelerate the query. [#19474](https://github.com/StarRocks/starrocks/pull/19474)
 - Supports using `SHOW CREATE VIEW` to view the creation statement of a materialized view. [#19999](https://github.com/StarRocks/starrocks/pull/19999)
 - Supports transmitting packets that are 2 GB or larger in size for a single bRPC request between BE nodes. [#20283](https://github.com/StarRocks/starrocks/pull/20283) [#20230](https://github.com/StarRocks/starrocks/pull/20230)
-- Supports using [SHOW CREATE CATALOG](../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog.
+- Supports using [SHOW CREATE CATALOG](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG/) to query the creation statement of an external catalog.
 
 ### Bug Fixes
 
@@ -415,7 +478,7 @@ Release date: February 5, 2023
 - Asynchronous materialized views created based on external catalogs support query rewrite.  [#11116](https://github.com/StarRocks/starrocks/issues/11116) [#15791](https://github.com/StarRocks/starrocks/issues/15791)
 - Allows users to specify a collection period for automatic CBO statistics collection, which prevents cluster performance jitter caused by automatic full collection. [#14996](https://github.com/StarRocks/starrocks/pull/14996)
 - Added Thrift server queue. Requests that cannot be processed immediately during INSERT INTO SELECT can be pending in the Thrift server queue, preventing requests from being rejected. [#14571](https://github.com/StarRocks/starrocks/pull/14571)
-- Deprecated the FE parameter `default_storage_medium`. If `storage_medium` is not explicitly specified when users create a table, the system automatically infers the storage medium of the table based on BE disk type. For more information, see description of `storage_medium` in [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_VIEW.md). [#14394](https://github.com/StarRocks/starrocks/pull/14394)
+- Deprecated the FE parameter `default_storage_medium`. If `storage_medium` is not explicitly specified when users create a table, the system automatically infers the storage medium of the table based on BE disk type. For more information, see description of `storage_medium` in [CREATE TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_VIEW/). [#14394](https://github.com/StarRocks/starrocks/pull/14394)
 
 ### Bug Fixes
 
@@ -436,49 +499,49 @@ Release date: January 22, 2023
 
 ### New Features
 
-- Supports querying Merge On Read tables using [Hudi catalogs](../data_source/catalog/hudi_catalog.md) and [Hudi external tables](../data_source/External_table.md#deprecated-hudi-external-table). [#6780](https://github.com/StarRocks/starrocks/pull/6780)
-- Supports querying STRUCT and MAP data using [Hive catalogs](../data_source/catalog/hive_catalog.md), Hudi catalogs, and [Iceberg catalogs](../data_source/catalog/iceberg_catalog.md). [#10677](https://github.com/StarRocks/starrocks/issues/10677)
-- Provides [Data Cache](../data_source/data_cache.md) to improve access performance of hot data stored in external storage systems, such as HDFS. [#11597](https://github.com/StarRocks/starrocks/pull/11579)
-- Supports creating [Delta Lake catalogs](../data_source/catalog/deltalake_catalog.md), which allow direct queries on data from Delta Lake. [#11972](https://github.com/StarRocks/starrocks/issues/11972)
+- Supports querying Merge On Read tables using [Hudi catalogs](https://docs.starrocks.io/docs/data_source/catalog/hudi_catalog/) and [Hudi external tables](https://docs.starrocks.io/docs/data_source/External_table#deprecated-hudi-external-table). [#6780](https://github.com/StarRocks/starrocks/pull/6780)
+- Supports querying STRUCT and MAP data using [Hive catalogs](https://docs.starrocks.io/docs/data_source/catalog/hive_catalog/), Hudi catalogs, and [Iceberg catalogs](https://docs.starrocks.io/docs/data_source/catalog/iceberg_catalog/). [#10677](https://github.com/StarRocks/starrocks/issues/10677)
+- Provides [Data Cache](https://docs.starrocks.io/docs/data_source/data_cache/) to improve access performance of hot data stored in external storage systems, such as HDFS. [#11597](https://github.com/StarRocks/starrocks/pull/11579)
+- Supports creating [Delta Lake catalogs](https://docs.starrocks.io/docs/data_source/catalog/deltalake_catalog/), which allow direct queries on data from Delta Lake. [#11972](https://github.com/StarRocks/starrocks/issues/11972)
 - Hive, Hudi, and Iceberg catalogs are compatible with AWS Glue. [#12249](https://github.com/StarRocks/starrocks/issues/12249)
-- Supports creating [file external tables](../data_source/file_external_table.md), which allow direct queries on Parquet and ORC files from HDFS and object stores. [#13064](https://github.com/StarRocks/starrocks/pull/13064)
-- Supports creating materialized views based on Hive, Hudi, Iceberg catalogs, and materialized views. For more information, see [Materialized view](../using_starrocks/Materialized_view.md). [#11116](https://github.com/StarRocks/starrocks/issues/11116) [#11873](https://github.com/StarRocks/starrocks/pull/11873)
-- Supports conditional updates for tables that use the Primary Key table. For more information, see [Change data through loading](../loading/Load_to_Primary_Key_tables.md). [#12159](https://github.com/StarRocks/starrocks/pull/12159)
-- Supports [Query Cache](../using_starrocks/query_cache.md), which stores intermediate computation results of queries, improving the QPS and reduces the average latency of highly-concurrent, simple queries. [#9194](https://github.com/StarRocks/starrocks/pull/9194)
-- Supports specifying the priority of Broker Load jobs. For more information, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) [#11029](https://github.com/StarRocks/starrocks/pull/11029)
-- Supports specifying the number of replicas for data loading for StarRocks native tables. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md). [#11253](https://github.com/StarRocks/starrocks/pull/11253)
-- Supports [query queues](../administration/query_queues.md). [#12594](https://github.com/StarRocks/starrocks/pull/12594)
-- Supports isolating compute resources occupied by data loading, thereby limiting the resource consumption of data loading tasks. For more information, see [Resource group](../administration/resource_group.md). [#12606](https://github.com/StarRocks/starrocks/pull/12606)
-- Supports specifying the following data compression algorithms for StarRocks native tables: LZ4, Zstd, Snappy, and Zlib. For more information, see [Data compression](../table_design/data_compression.md). [#10097](https://github.com/StarRocks/starrocks/pull/10097) [#12020](https://github.com/StarRocks/starrocks/pull/12020)
-- Supports [user-defined variables](../reference/user_defined_variables.md). [#10011](https://github.com/StarRocks/starrocks/pull/10011)
-- Supports [lambda expression](../sql-reference/sql-functions/Lambda_expression.md) and the following higher-order functions: [array_map](../sql-reference/sql-functions/array-functions/array_map.md), [array_sum](../sql-reference/sql-functions/array-functions/array_sum.md), and [array_sortby](../sql-reference/sql-functions/array-functions/array_sortby.md). [#9461](https://github.com/StarRocks/starrocks/pull/9461) [#9806](https://github.com/StarRocks/starrocks/pull/9806) [#10323](https://github.com/StarRocks/starrocks/pull/10323) [#14034](https://github.com/StarRocks/starrocks/pull/14034)
-- Provides the QUALIFY clause that filters the results of [window functions](../sql-reference/sql-functions/Window_function.md). [#13239](https://github.com/StarRocks/starrocks/pull/13239)
-- Supports using the result returned by the uuid() and uuid_numeric() functions as the default value of a column when you create a table. For more information, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md). [#11155](https://github.com/StarRocks/starrocks/pull/11155)
-- Supports the following functions: [map_size](../sql-reference/sql-functions/map-functions/map_size.md), [map_keys](../sql-reference/sql-functions/map-functions/map_keys.md), [map_values](../sql-reference/sql-functions/map-functions/map_values.md), [max_by](../sql-reference/sql-functions/aggregate-functions/max_by.md), [sub_bitmap](../sql-reference/sql-functions/bitmap-functions/sub_bitmap.md), [bitmap_to_base64](../sql-reference/sql-functions/bitmap-functions/bitmap_to_base64.md), [host_name](../sql-reference/sql-functions/utility-functions/host_name.md), and [date_slice](../sql-reference/sql-functions/date-time-functions/date_slice.md). [#11299](https://github.com/StarRocks/starrocks/pull/11299) [#11323](https://github.com/StarRocks/starrocks/pull/11323) [#12243](https://github.com/StarRocks/starrocks/pull/12243) [#11776](https://github.com/StarRocks/starrocks/pull/11776) [#12634](https://github.com/StarRocks/starrocks/pull/12634) [#14225](https://github.com/StarRocks/starrocks/pull/14225)
+- Supports creating [file external tables](https://docs.starrocks.io/docs/data_source/file_external_table/), which allow direct queries on Parquet and ORC files from HDFS and object stores. [#13064](https://github.com/StarRocks/starrocks/pull/13064)
+- Supports creating materialized views based on Hive, Hudi, Iceberg catalogs, and materialized views. For more information, see [Materialized view](https://docs.starrocks.io/docs/using_starrocks/Materialized_view/). [#11116](https://github.com/StarRocks/starrocks/issues/11116) [#11873](https://github.com/StarRocks/starrocks/pull/11873)
+- Supports conditional updates for tables that use the Primary Key table. For more information, see [Change data through loading](https://docs.starrocks.io/docs/loading/Load_to_Primary_Key_tables/). [#12159](https://github.com/StarRocks/starrocks/pull/12159)
+- Supports [Query Cache](https://docs.starrocks.io/docs/using_starrocks/query_cache/), which stores intermediate computation results of queries, improving the QPS and reduces the average latency of highly-concurrent, simple queries. [#9194](https://github.com/StarRocks/starrocks/pull/9194)
+- Supports specifying the priority of Broker Load jobs. For more information, see [BROKER LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/BROKER_LOAD/) [#11029](https://github.com/StarRocks/starrocks/pull/11029)
+- Supports specifying the number of replicas for data loading for StarRocks native tables. For more information, see [CREATE TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE/). [#11253](https://github.com/StarRocks/starrocks/pull/11253)
+- Supports [query queues](https://docs.starrocks.io/docs/administration/query_queues/). [#12594](https://github.com/StarRocks/starrocks/pull/12594)
+- Supports isolating compute resources occupied by data loading, thereby limiting the resource consumption of data loading tasks. For more information, see [Resource group](https://docs.starrocks.io/docs/administration/resource_group/). [#12606](https://github.com/StarRocks/starrocks/pull/12606)
+- Supports specifying the following data compression algorithms for StarRocks native tables: LZ4, Zstd, Snappy, and Zlib. For more information, see [Data compression](https://docs.starrocks.io/docs/table_design/data_compression/). [#10097](https://github.com/StarRocks/starrocks/pull/10097) [#12020](https://github.com/StarRocks/starrocks/pull/12020)
+- Supports [user-defined variables](https://docs.starrocks.io/docs/reference/user_defined_variables/). [#10011](https://github.com/StarRocks/starrocks/pull/10011)
+- Supports [lambda expression](https://docs.starrocks.io/docs/sql-reference/sql-functions/Lambda_expression/) and the following higher-order functions: [array_map](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_map/), [array_sum](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_sum/), and [array_sortby](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_sortby/). [#9461](https://github.com/StarRocks/starrocks/pull/9461) [#9806](https://github.com/StarRocks/starrocks/pull/9806) [#10323](https://github.com/StarRocks/starrocks/pull/10323) [#14034](https://github.com/StarRocks/starrocks/pull/14034)
+- Provides the QUALIFY clause that filters the results of [window functions](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function/). [#13239](https://github.com/StarRocks/starrocks/pull/13239)
+- Supports using the result returned by the uuid() and uuid_numeric() functions as the default value of a column when you create a table. For more information, see [CREATE TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE/). [#11155](https://github.com/StarRocks/starrocks/pull/11155)
+- Supports the following functions: [map_size](https://docs.starrocks.io/docs/sql-reference/sql-functions/map-functions/map_size/), [map_keys](https://docs.starrocks.io/docs/sql-reference/sql-functions/map-functions/map_keys/), [map_values](https://docs.starrocks.io/docs/sql-reference/sql-functions/map-functions/map_values/), [max_by](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/max_by/), [sub_bitmap](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/sub_bitmap/), [bitmap_to_base64](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/bitmap_to_base64/), [host_name](https://docs.starrocks.io/docs/sql-reference/sql-functions/utility-functions/host_name/), and [date_slice](https://docs.starrocks.io/docs/sql-reference/sql-functions/date-time-functions/date_slice/). [#11299](https://github.com/StarRocks/starrocks/pull/11299) [#11323](https://github.com/StarRocks/starrocks/pull/11323) [#12243](https://github.com/StarRocks/starrocks/pull/12243) [#11776](https://github.com/StarRocks/starrocks/pull/11776) [#12634](https://github.com/StarRocks/starrocks/pull/12634) [#14225](https://github.com/StarRocks/starrocks/pull/14225)
 
 ### Improvements
 
-- Optimized the metadata access performance when you query external data using [Hive catalogs](../data_source/catalog/hive_catalog.md), [Hudi catalogs](../data_source/catalog/hudi_catalog.md), and [Iceberg catalogs](../data_source/catalog/iceberg_catalog.md). [#11349](https://github.com/StarRocks/starrocks/issues/11349)
-- Supports querying ARRAY data using [Elasticsearch external tables](../data_source/External_table.md#deprecated-elasticsearch-external-table). [#9693](https://github.com/StarRocks/starrocks/pull/9693)
+- Optimized the metadata access performance when you query external data using [Hive catalogs](https://docs.starrocks.io/docs/data_source/catalog/hive_catalog/), [Hudi catalogs](https://docs.starrocks.io/docs/data_source/catalog/hudi_catalog/), and [Iceberg catalogs](https://docs.starrocks.io/docs/data_source/catalog/iceberg_catalog/). [#11349](https://github.com/StarRocks/starrocks/issues/11349)
+- Supports querying ARRAY data using [Elasticsearch external tables](https://docs.starrocks.io/docs/data_source/External_table#deprecated-elasticsearch-external-table). [#9693](https://github.com/StarRocks/starrocks/pull/9693)
 - Optimized the following aspects of materialized views:
-  - Asynchronous materialized views support automatic and transparent query rewrite based on the SPJG-type materialized views. For more information, see [Materialized view](../using_starrocks/Materialized_view.md#rewrite-and-accelerate-queries-with-the-asynchronous-materialized-view). [#13193](https://github.com/StarRocks/starrocks/issues/13193)
-  - Asynchronous materialized views support multiple async refresh mechanisms. For more information, see [Materialized view](../using_starrocks/Materialized_view.md#manually-refresh-an-asynchronous-materialized-view). [#12712](https://github.com/StarRocks/starrocks/pull/12712) [#13171](https://github.com/StarRocks/starrocks/pull/13171) [#13229](https://github.com/StarRocks/starrocks/pull/13229) [#12926](https://github.com/StarRocks/starrocks/pull/12926)
+  - Asynchronous materialized views support automatic and transparent query rewrite based on the SPJG-type materialized views. For more information, see [Materialized view](https://docs.starrocks.io/docs/using_starrocks/Materialized_view#rewrite-and-accelerate-queries-with-the-asynchronous-materialized-view). [#13193](https://github.com/StarRocks/starrocks/issues/13193)
+  - Asynchronous materialized views support multiple async refresh mechanisms. For more information, see [Materialized view](https://docs.starrocks.io/docs/using_starrocks/Materialized_view#manually-refresh-an-asynchronous-materialized-view). [#12712](https://github.com/StarRocks/starrocks/pull/12712) [#13171](https://github.com/StarRocks/starrocks/pull/13171) [#13229](https://github.com/StarRocks/starrocks/pull/13229) [#12926](https://github.com/StarRocks/starrocks/pull/12926)
   - The efficiency of refreshing materialized views is improved. [#13167](https://github.com/StarRocks/starrocks/issues/13167)
 - Optimized the following aspects of data loading:
-  - Optimized loading performance in multi-replica scenarios by supporting the "single leader replication" mode. Data loading gains a one-fold performance lift. For more information about "single leader replication", see `replicated_storage` in [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md). [#10138](https://github.com/StarRocks/starrocks/pull/10138)
-  - Broker Load and Spark Load no longer need to depend on brokers for data loading when only one HDFS cluster or one Kerberos user is configured. However, if you have multiple HDFS clusters or multiple Kerberos users, you still need to deploy a broker. For more information, see [Load data from HDFS or cloud storage](../loading/BrokerLoad.md) and [Bulk load using Apache Spark™](../loading/SparkLoad.md). [#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)
+  - Optimized loading performance in multi-replica scenarios by supporting the "single leader replication" mode. Data loading gains a one-fold performance lift. For more information about "single leader replication", see `replicated_storage` in [CREATE TABLE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE/). [#10138](https://github.com/StarRocks/starrocks/pull/10138)
+  - Broker Load and Spark Load no longer need to depend on brokers for data loading when only one HDFS cluster or one Kerberos user is configured. However, if you have multiple HDFS clusters or multiple Kerberos users, you still need to deploy a broker. For more information, see [Load data from HDFS or cloud storage](https://docs.starrocks.io/docs/loading/BrokerLoad/) and [Bulk load using Apache Spark™](https://docs.starrocks.io/docs/loading/SparkLoad/). [#9049](https://github.com/starrocks/starrocks/pull/9049) [#9228](https://github.com/StarRocks/starrocks/pull/9228)
   - Optimized the performance of Broker Load when a large number of small ORC files are loaded. [#11380](https://github.com/StarRocks/starrocks/pull/11380)
   - Reduced the memory usage when you load data into Primary Key tables.
-- Optimized the `information_schema` database and the `tables` and `columns` tables within. Adds a new table `table_config`. For more information, see [Information Schema](../reference/overview-pages/information_schema.md). [#10033](https://github.com/StarRocks/starrocks/pull/10033)
+- Optimized the `information_schema` database and the `tables` and `columns` tables within. Adds a new table `table_config`. For more information, see [Information Schema](https://docs.starrocks.io/docs/reference/overview-pages/information_schema/). [#10033](https://github.com/StarRocks/starrocks/pull/10033)
 - Optimized data backup and restore:
-  - Supports backing up and restoring data from multiple tables in a database at a time. For more information, see [Backup and restore data](../administration/Backup_and_restore.md). [#11619](https://github.com/StarRocks/starrocks/issues/11619)
+  - Supports backing up and restoring data from multiple tables in a database at a time. For more information, see [Backup and restore data](https://docs.starrocks.io/docs/administration/Backup_and_restore/). [#11619](https://github.com/StarRocks/starrocks/issues/11619)
   - Supports backing up and restoring data from Primary Key tables. For more information, see Backup and restore. [#11885](https://github.com/StarRocks/starrocks/pull/11885)
 - Optimized the following functions:
-  - Added an optional parameter for the [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md) function, which is used to determine whether the beginning or end of the time interval is returned. [#11216](https://github.com/StarRocks/starrocks/pull/11216)
-  - Added a new mode `INCREASE` for the [window_funnel](../sql-reference/sql-functions/aggregate-functions/window_funnel.md) function to avoid computing duplicate timestamps. [#10134](https://github.com/StarRocks/starrocks/pull/10134)
-  - Supports specifying multiple arguments in the [unnest](../sql-reference/sql-functions/array-functions/unnest.md) function. [#12484](https://github.com/StarRocks/starrocks/pull/12484)
-  - lead() and lag() functions support querying HLL and BITMAP data. For more information, see [Window function](../sql-reference/sql-functions/Window_function.md). [#12108](https://github.com/StarRocks/starrocks/pull/12108)
-  - The following ARRAY functions support querying JSON data: [array_agg](../sql-reference/sql-functions/array-functions/array_agg.md), [array_sort](../sql-reference/sql-functions/array-functions/array_sort.md), [array_concat](../sql-reference/sql-functions/array-functions/array_concat.md), [array_slice](../sql-reference/sql-functions/array-functions/array_slice.md), and [reverse](../sql-reference/sql-functions/array-functions/reverse.md). [#13155](https://github.com/StarRocks/starrocks/pull/13155)
+  - Added an optional parameter for the [time_slice](https://docs.starrocks.io/docs/sql-reference/sql-functions/date-time-functions/time_slice/) function, which is used to determine whether the beginning or end of the time interval is returned. [#11216](https://github.com/StarRocks/starrocks/pull/11216)
+  - Added a new mode `INCREASE` for the [window_funnel](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/window_funnel/) function to avoid computing duplicate timestamps. [#10134](https://github.com/StarRocks/starrocks/pull/10134)
+  - Supports specifying multiple arguments in the [unnest](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/unnest/) function. [#12484](https://github.com/StarRocks/starrocks/pull/12484)
+  - lead() and lag() functions support querying HLL and BITMAP data. For more information, see [Window function](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function/). [#12108](https://github.com/StarRocks/starrocks/pull/12108)
+  - The following ARRAY functions support querying JSON data: [array_agg](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_agg/), [array_sort](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_sort/), [array_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_concat/), [array_slice](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_slice/), and [reverse](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/reverse/). [#13155](https://github.com/StarRocks/starrocks/pull/13155)
   - Optimized the use of some functions. The `current_date`, `current_timestamp`, `current_time`, `localtimestamp`, and `localtime` functions can be executed without using `()`, for example, you can directly run `select current_date;`. [# 14319](https://github.com/StarRocks/starrocks/pull/14319)
 - Removed some redundant information from FE logs. [# 15374](https://github.com/StarRocks/starrocks/pull/15374)
 

@@ -99,6 +99,7 @@ set(EXEC_FILES
     hdfs_scanner_parquet.cpp
     hdfs_scanner_text.cpp
     hdfs_scanner_partition.cpp
+    mor_processor.cpp
     json_scanner.cpp
     json_parser.cpp
     avro_scanner.cpp
@@ -108,6 +109,7 @@ set(EXEC_FILES
     table_function_node.cpp
     schema_scanner.cpp
     schema_scan_node.cpp
+    dictionary_cache_writer.cpp
     iceberg/iceberg_delete_builder.cpp
     iceberg/iceberg_delete_file_iterator.cpp
     schema_scanner/schema_tables_scanner.cpp
@@ -148,7 +150,9 @@ set(EXEC_FILES
     schema_scanner/schema_helper.cpp
     schema_scanner/schema_routine_load_jobs_scanner.cpp
     schema_scanner/schema_stream_loads_scanner.cpp
+    schema_scanner/schema_be_datacache_metrics_scanner.cpp
     schema_scanner/sys_object_dependencies.cpp
+    schema_scanner/sys_fe_locks.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp
@@ -201,6 +205,7 @@ set(EXEC_FILES
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp
     pipeline/sink/export_sink_operator.cpp
+    pipeline/sink/dictionary_cache_sink_operator.cpp
     pipeline/sink/mysql_table_sink_operator.cpp
     pipeline/sink/memory_scratch_sink_operator.cpp
     pipeline/select_operator.cpp
@@ -256,8 +261,8 @@ set(EXEC_FILES
     pipeline/adaptive/collect_stats_sink_operator.cpp
     pipeline/adaptive/collect_stats_source_operator.cpp
     pipeline/adaptive/collect_stats_context.cpp
-    pipeline/adaptive/lazy_instantiate_drivers_operator.cpp
     pipeline/adaptive/utils.cpp
+    pipeline/adaptive/event.cpp
     pipeline/chunk_accumulate_operator.cpp
     pipeline/pipeline.cpp
     pipeline/spill_process_operator.cpp

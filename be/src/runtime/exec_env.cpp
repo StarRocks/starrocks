@@ -49,6 +49,7 @@
 #include "exec/spill/dir_manager.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
+#include "exprs/jit/jit_engine.h"
 #include "fs/fs_s3.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/TFileBrokerService.h"
@@ -76,6 +77,7 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/replication_txn_manager.h"
 #include "storage/lake/starlet_location_provider.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
@@ -195,6 +197,9 @@ Status GlobalEnv::_init_mem_tracker() {
             calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
     _query_pool_mem_tracker =
             regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit, "query_pool", this->process_mem_tracker());
+    _connector_scan_pool_mem_tracker =
+            regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit * config::connector_scan_use_query_mem_ratio,
+                           "query_pool/connector_scan", nullptr);
 
     int64_t load_mem_limit = calc_max_load_memory(_process_mem_tracker->limit());
     _load_mem_tracker = regist_tracker(MemTracker::LOAD, load_mem_limit, "load", process_mem_tracker());
@@ -226,6 +231,7 @@ Status GlobalEnv::_init_mem_tracker() {
     _clone_mem_tracker = regist_tracker(-1, "clone", _process_mem_tracker.get());
     int64_t consistency_mem_limit = calc_max_consistency_memory(_process_mem_tracker->limit());
     _consistency_mem_tracker = regist_tracker(consistency_mem_limit, "consistency", _process_mem_tracker.get());
+    _replication_mem_tracker = regist_tracker(-1, "replication", _process_mem_tracker.get());
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
@@ -374,6 +380,13 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
                             .build(&_load_rpc_pool));
     REGISTER_GAUGE_STARROCKS_METRIC(load_rpc_threadpool_size, _load_rpc_pool->num_threads)
 
+    RETURN_IF_ERROR(ThreadPoolBuilder("dictionary_cache") // thread pool for dictionary cache Sink
+                            .set_min_threads(1)
+                            .set_max_threads(8)
+                            .set_max_queue_size(1000)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                            .build(&_dictionary_cache_pool));
+
     std::unique_ptr<ThreadPool> driver_executor_thread_pool;
     _max_executor_threads = CpuInfo::num_cores();
     if (config::pipeline_exec_thread_pool_thread_num > 0) {
@@ -469,7 +482,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     // it means acting as compute node while store_path is empty. some threads are not needed for that case.
     Status status = _load_path_mgr->init();
     if (!status.ok()) {
-        LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
+        LOG(ERROR) << "load path mgr init failed." << status.message();
         exit(-1);
     }
 
@@ -479,6 +492,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
             new lake::UpdateManager(_lake_location_provider, GlobalEnv::GetInstance()->update_mem_tracker());
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
+    _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
     if (config::starlet_cache_dir.empty()) {
         std::vector<std::string> starlet_cache_paths;
         std::for_each(store_paths.begin(), store_paths.end(), [&](const StorePath& root_path) {
@@ -494,6 +508,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
             new lake::UpdateManager(_lake_location_provider, GlobalEnv::GetInstance()->update_mem_tracker());
     _lake_tablet_manager =
             new lake::TabletManager(_lake_location_provider, _lake_update_manager, config::lake_metadata_cache_limit);
+    _lake_replication_txn_manager = new lake::ReplicationTxnManager(_lake_tablet_manager);
 #endif
 
     _agent_server = new AgentServer(this, false);
@@ -510,6 +525,12 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
+
+    auto jit_engine = JITEngine::get_instance();
+    status = jit_engine->init();
+    if (!status.ok()) {
+        LOG(WARNING) << "Failed to init JIT engine: " << status.message();
+    }
 
     return Status::OK();
 }
@@ -568,6 +589,10 @@ void ExecEnv::stop() {
         _routine_load_task_executor->stop();
     }
 
+    if (_dictionary_cache_pool) {
+        _dictionary_cache_pool->shutdown();
+    }
+
 #ifndef BE_TEST
     close_s3_clients();
 #endif
@@ -620,6 +645,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_lake_tablet_manager);
     SAFE_DELETE(_lake_location_provider);
     SAFE_DELETE(_lake_update_manager);
+    SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);
     _metrics = nullptr;
 }
@@ -645,13 +671,23 @@ void ExecEnv::wait_for_finish() {
     _wait_for_fragments_finish();
 }
 
-int32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {
+uint32_t ExecEnv::calc_pipeline_dop(int32_t pipeline_dop) const {
     if (pipeline_dop > 0) {
         return pipeline_dop;
     }
 
     // Default dop is a half of the number of hardware threads.
-    return std::max<int32_t>(1, _max_executor_threads / 2);
+    return std::max<uint32_t>(1, _max_executor_threads / 2);
+}
+
+uint32_t ExecEnv::calc_pipeline_sink_dop(int32_t pipeline_sink_dop) const {
+    if (pipeline_sink_dop > 0) {
+        return pipeline_sink_dop;
+    }
+
+    // Default sink dop is the number of hardware threads with a cap of 64.
+    auto dop = std::max<uint32_t>(1, _max_executor_threads);
+    return std::min<uint32_t>(dop, 64);
 }
 
 ThreadPool* ExecEnv::delete_file_thread_pool() {
