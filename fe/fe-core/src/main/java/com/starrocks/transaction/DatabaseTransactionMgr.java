@@ -49,8 +49,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.TabletInvertedIndex;
-import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
@@ -96,7 +94,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
-
 
 /**
  * Transaction Manager in database level, as a component in GlobalTransactionMgr
@@ -435,8 +432,6 @@ public class DatabaseTransactionMgr {
         txnSpan.setAttribute("db", db.getOriginName());
         txnSpan.addEvent("commit_start");
 
-        ensureTableIdListIsPresent(transactionState, tabletCommitInfos);
-
         List<TransactionStateListener> stateListeners = populateTransactionStateListeners(transactionState, db);
 
         String tableNames = stateListeners.stream().map(TransactionStateListener::getTableName)
@@ -530,10 +525,7 @@ public class DatabaseTransactionMgr {
 
         Span txnSpan = transactionState.getTxnSpan();
         txnSpan.setAttribute("db", db.getFullName());
-        StringBuilder tableListString = new StringBuilder();
         txnSpan.addEvent("pre_commit_start");
-
-        ensureTableIdListIsPresent(transactionState, tabletCommitInfos);
 
         List<TransactionStateListener> stateListeners = populateTransactionStateListeners(transactionState, db);
         String tableNames = stateListeners.stream().map(TransactionStateListener::getTableName)
@@ -600,7 +592,6 @@ public class DatabaseTransactionMgr {
         StringBuilder tableListString = new StringBuilder();
         txnSpan.addEvent("commit_start");
 
-        List<TransactionStateListener> stateListeners = Lists.newArrayList();
         for (Long tableId : transactionState.getTableIdList()) {
             Table table = db.getTable(tableId);
             if (table == null) {
@@ -733,7 +724,7 @@ public class DatabaseTransactionMgr {
         readLock();
         try {
             List<Long> txnIds = transactionGraph.getTxnsWithoutDependency();
-            return txnIds.stream().map(id -> idToRunningTransactionState.get(id)).collect(Collectors.toList());
+            return txnIds.stream().map(idToRunningTransactionState::get).collect(Collectors.toList());
         } finally {
             readUnlock();
         }
@@ -749,7 +740,7 @@ public class DatabaseTransactionMgr {
                 List<Long> txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatch(
                         Config.lake_batch_publish_min_version_num,
                         Config.lake_batch_publish_max_version_num, txnId);
-                List<TransactionState> states = txnsWithDependency.stream().map(id -> idToRunningTransactionState.get(id))
+                List<TransactionState> states = txnsWithDependency.stream().map(idToRunningTransactionState::get)
                         .filter(Objects::nonNull)
                         .collect(Collectors.toList());
                 if (states.isEmpty()) {
@@ -1595,7 +1586,6 @@ public class DatabaseTransactionMgr {
         return true;
     }
 
-
     // the write lock of database has been hold
     private boolean updateCatalogAfterVisibleBatch(TransactionStateBatch transactionStateBatch, Database db) {
         Table table = db.getTable(transactionStateBatch.getTableId());
@@ -1852,7 +1842,6 @@ public class DatabaseTransactionMgr {
         }
     }
 
-
     private void collectStatisticsForStreamLoadOnFirstLoadBatch(TransactionStateBatch txnStateBatch, Database db) {
         for (TransactionState txnState : txnStateBatch.getTransactionStates()) {
             collectStatisticsForStreamLoadOnFirstLoad(txnState, db);
@@ -1865,22 +1854,6 @@ public class DatabaseTransactionMgr {
             return "";
         }
         return transactionState.getPublishTimeoutDebugInfo();
-    }
-
-    private void ensureTableIdListIsPresent(@NotNull TransactionState transactionState,
-                                            @NotNull List<TabletCommitInfo> tabletCommitInfos) {
-        if (!transactionState.getTableIdList().isEmpty()) {
-            return;
-        }
-        Set<Long> tableSet = Sets.newHashSet();
-        List<Long> tabletIds = tabletCommitInfos.stream().map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
-        List<TabletMeta> tabletMetaList = globalStateMgr.getTabletInvertedIndex().getTabletMetaList(tabletIds);
-        for (TabletMeta meta : tabletMetaList) {
-            if (meta != TabletInvertedIndex.NOT_EXIST_TABLET_META) {
-                tableSet.add(meta.getTableId());
-            }
-        }
-        transactionState.setTableIdList(Lists.newArrayList(tableSet));
     }
 
     @NotNull
