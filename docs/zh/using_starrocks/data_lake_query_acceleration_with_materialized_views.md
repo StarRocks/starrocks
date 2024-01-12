@@ -12,11 +12,7 @@ StarRocks 提供了开箱即用的数据湖查询功能，非常适用于对湖�
 
 ## 概述
 
-<<<<<<< HEAD
-StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog 和 Hudi Catalog，构建异步物化视图。基于 External Catalog 的物化视图在以下情况下特别有用：
-=======
-StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、Hudi Catalog、JDBC Catalog 和 Paimon Catalog 构建异步物化视图。基于 External Catalog 的物化视图在以下情况下特别有用：
->>>>>>> f02c7c696f ([Doc] Add the materialized view features of the jdbc catalog in the document (#36794))
+StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、Hudi Catalog 和 JDBC Catalog，构建异步物化视图。基于 External Catalog 的物化视图在以下情况下特别有用：
 
 - **数据湖报表的透明加速**
 
@@ -98,11 +94,7 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、H
 
 目前，StarRocks 无法检测 Hudi Catalog 中的分区级别数据更改。因此，一旦触发刷新任务，将执行全量刷新。
 
-<<<<<<< HEAD
-对于 Hive Catalog 和 Iceberg Catalog (从 v3.1.4 版本起), StarRocks 支持检测分区级别数据更改。从而，StarRocks 可以: 
-=======
-对于 Hive Catalog、Iceberg Catalog (从 v3.1.4 版本起)、JDBC Catalog (从 v3.1.4 版本起，且仅支持 MySQL Range 分区) 和 Paimon Catalog (从 v3.2.1 版本起), StarRocks 支持检测分区级别数据更改。从而，StarRocks 可以: 
->>>>>>> f02c7c696f ([Doc] Add the materialized view features of the jdbc catalog in the document (#36794))
+对于 Hive Catalog、Iceberg Catalog (从 v3.1.4 版本起) 和 JDBC Catalog (从 v3.1.4 版本起，且仅支持 MySQL Range 分区) , StarRocks 支持检测分区级别数据更改。从而，StarRocks 可以: 
 
 - 仅刷新数据有更改的分区，避免全量刷新，减少刷新导致的资源消耗。
 - 在查询改写期间在一定程度上确保数据一致性。如果数据湖中的基表发生数据更改，查询将不会被改写至使用物化视图。
