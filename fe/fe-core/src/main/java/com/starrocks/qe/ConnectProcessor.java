@@ -42,6 +42,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.profile.Tracers;
+>>>>>>> 9b3d4861cf ([Refactor] record error code (#38948))
 import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
@@ -61,6 +65,11 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.ast.ExecuteStmt;
+import com.starrocks.sql.ast.PrepareStmt;
+>>>>>>> 9b3d4861cf ([Refactor] record error code (#38948))
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
@@ -164,6 +173,10 @@ public class ConnectProcessor {
         long elapseMs = endTime - ctx.getStartTime();
 
         boolean isForwardToLeader = (executor != null) ? executor.getIsForwardToLeaderOrInit(false) : false;
+<<<<<<< HEAD
+=======
+
+>>>>>>> 9b3d4861cf ([Refactor] record error code (#38948))
         // ignore recording some failed stmt like kill connection
         if (ctx.getState().getErrType() == QueryState.ErrType.IGNORE_ERR) {
             return;
@@ -171,7 +184,10 @@ public class ConnectProcessor {
 
         // TODO how to unify TStatusCode, ErrorCode, ErrType, ConnectContext.errorCode
         String errorCode = StringUtils.isNotEmpty(ctx.getErrorCode()) ? ctx.getErrorCode() : ctx.getState().getErrType().name();
+<<<<<<< HEAD
 
+=======
+>>>>>>> 9b3d4861cf ([Refactor] record error code (#38948))
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
                 .setState(ctx.getState().toString())
                 .setErrorCode(errorCode)
@@ -388,7 +404,11 @@ public class ConnectProcessor {
                 }
             }
         } catch (AnalysisException e) {
+<<<<<<< HEAD
             LOG.warn("Failed to parse SQL: " + originStmt + ", because: ", e);
+=======
+            LOG.warn("Failed to parse SQL: " + originStmt + ", because.", e);
+>>>>>>> 9b3d4861cf ([Refactor] record error code (#38948))
             ctx.getState().setError(e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
         } catch (Throwable e) {
@@ -397,6 +417,11 @@ public class ConnectProcessor {
             LOG.warn("Process one query failed. SQL: " + originStmt + ", because unknown reason: ", e);
             ctx.getState().setError("Unexpected exception: " + e.getMessage());
             ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+<<<<<<< HEAD
+=======
+        } finally {
+            Tracers.close();
+>>>>>>> 9b3d4861cf ([Refactor] record error code (#38948))
         }
 
         // audit after exec
