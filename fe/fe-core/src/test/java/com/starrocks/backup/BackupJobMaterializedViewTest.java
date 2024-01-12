@@ -24,6 +24,7 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -78,6 +79,7 @@ public class BackupJobMaterializedViewTest {
 
     private long repoId = 30000;
     private AtomicLong id = new AtomicLong(50000);
+    private static final String MV_LABEL = "mv_label";
 
     @Mocked
     private GlobalStateMgr globalStateMgr;
@@ -201,8 +203,7 @@ public class BackupJobMaterializedViewTest {
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.MATERIALIZED_VIEW_NAME), null));
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
 
-        job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
-        job.setTestPrimaryKey();
+        job = new BackupJob(MV_LABEL, dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
     }
 
     @Test
@@ -354,6 +355,24 @@ public class BackupJobMaterializedViewTest {
             Assert.assertEquals(UnitTestUtil.DB_NAME, restoreJobInfo.dbName);
             Assert.assertEquals(job.getLabel(), restoreJobInfo.name);
             Assert.assertEquals(2, restoreJobInfo.tables.size());
+
+            // base table
+            BackupJobInfo.BackupTableInfo baseTableBackupInfo = restoreJobInfo.getTableInfo(UnitTestUtil.TABLE_NAME);
+            Assert.assertTrue(baseTableBackupInfo != null);
+            Table remoteBaseTable = backupMeta.getTable(UnitTestUtil.TABLE_NAME);
+            Assert.assertTrue(remoteBaseTable != null);
+
+            // mv
+            BackupJobInfo.BackupTableInfo mvBackupInfo = restoreJobInfo.getTableInfo(UnitTestUtil.TABLE_NAME);
+            Assert.assertTrue(mvBackupInfo != null);
+            Table mvTable = backupMeta.getTable(UnitTestUtil.MATERIALIZED_VIEW_NAME);
+            Assert.assertTrue(mvTable != null);
+            Assert.assertTrue(mvTable instanceof MaterializedView);
+            MaterializedView mv = (MaterializedView) mvTable;
+            Assert.assertTrue(mv != null);
+            Assert.assertTrue(!mv.isActive());
+            Assert.assertTrue(mv.getInactiveReason().contains(String.format("Set the materialized view %s inactive in backup",
+                    UnitTestUtil.MATERIALIZED_VIEW_NAME)));
         } catch (IOException e) {
             e.printStackTrace();
             Assert.fail();
@@ -377,7 +396,7 @@ public class BackupJobMaterializedViewTest {
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, "unknown_tbl"), null));
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, "unknown_mv"), null));
 
-        job = new BackupJob("label", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
+        job = new BackupJob(MV_LABEL, dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         job.run();
         Assert.assertEquals(Status.ErrCode.NOT_FOUND, job.getStatus().getErrCode());
         Assert.assertEquals(BackupJobState.CANCELLED, job.getState());

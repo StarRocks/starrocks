@@ -54,6 +54,8 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.Status.ErrCode;
+import com.starrocks.backup.mv.MvBackupInfo;
+import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
@@ -656,7 +658,8 @@ public class OlapTable extends Table {
         }
     }
 
-    public Status resetIdsForRestore(GlobalStateMgr globalStateMgr, Database db, int restoreReplicationNum) {
+    public Status resetIdsForRestore(GlobalStateMgr globalStateMgr, Database db, int restoreReplicationNum,
+                                     MvRestoreContext mvRestoreContext) {
         // copy an origin index id to name map
         Map<Long, String> origIdxIdToName = Maps.newHashMap();
         for (Map.Entry<String, Long> entry : indexNameToId.entrySet()) {
@@ -800,6 +803,44 @@ public class OlapTable extends Table {
                         version, schemaHash);
                 newTablet.addReplica(replica, false/* update inverted index */);
             }
+        }
+        return Status.OK;
+    }
+
+    public Status doAfterRestore(Database db, MvRestoreContext mvRestoreContext) throws DdlException {
+        if (relatedMaterializedViews == null || relatedMaterializedViews.isEmpty()) {
+            return Status.OK;
+        }
+
+        Map<MvId, MvBackupInfo> mvIdTableNameMap = mvRestoreContext.getMvIdToTableNameMap();
+        for (MvId mvId : relatedMaterializedViews) {
+            // Find the associated mv if possible
+            MvBackupInfo mvBackupInfo = mvIdTableNameMap.get(mvId);
+            if (mvBackupInfo == null) {
+                continue;
+            }
+            MvId localMvId = mvBackupInfo.getLocalMvId();
+            if (localMvId == null) {
+                continue;
+            }
+            Database mvDb = GlobalStateMgr.getCurrentState().getDb(localMvId.getDbId());
+            if (mvDb == null) {
+                continue;
+            }
+            Table mvTable = mvDb.getTable(localMvId.getId());
+            if (mvTable == null) {
+                continue;
+            }
+            if (!mvTable.isMaterializedView()) {
+                LOG.warn("Base table {} related materialized view {} is not a mv, local mvId:{}, remote mvId:{}",
+                        this.name, mvTable.getName(), localMvId, mvId);
+                continue;
+            }
+            MaterializedView mv = (MaterializedView) mvTable;
+            if (mv.isActive()) {
+                continue;
+            }
+            mv.doAfterRestore(db, mvRestoreContext);
         }
         return Status.OK;
     }

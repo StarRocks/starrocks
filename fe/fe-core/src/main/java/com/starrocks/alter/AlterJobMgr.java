@@ -75,6 +75,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
@@ -286,7 +287,7 @@ public class AlterJobMgr {
             String createMvSql = materializedView.getMaterializedViewDdlStmt(false);
             QueryStatement mvQueryStatement = null;
             try {
-                mvQueryStatement = recreateMVQuery(materializedView, context);
+                mvQueryStatement = recreateMVQuery(materializedView, context, createMvSql);
             } catch (SemanticException e) {
                 throw new SemanticException("Can not active materialized view [%s]" +
                         " because analyze materialized view define sql: \n\n%s" +
@@ -308,10 +309,11 @@ public class AlterJobMgr {
     /*
      * Recreate the MV query and validate the correctness of syntax and schema
      */
-    private static QueryStatement recreateMVQuery(MaterializedView materializedView, ConnectContext context) {
+    public static QueryStatement recreateMVQuery(MaterializedView materializedView,
+                                                 ConnectContext context,
+                                                 String createMvSql) {
         // If we could parse the MV sql successfully, and the schema of mv does not change,
         // we could reuse the existing MV
-        String createMvSql = materializedView.getMaterializedViewDdlStmt(false);
         Optional<Database> mayDb = GlobalStateMgr.getCurrentState().mayGetDb(materializedView.getDbId());
 
         // check database existing
@@ -339,6 +341,25 @@ public class AlterJobMgr {
         }
 
         return createStmt.getQueryStatement();
+    }
+
+    public void replayAlterMaterializedViewBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log) {
+        long dbId = log.getDbId();
+        long mvId = log.getMvId();
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        db.writeLock();
+        MaterializedView mv = null;
+        try {
+            mv = (MaterializedView) db.getTable(mvId);
+            mv.replayAlterMaterializedViewBaseTableInfos(log);
+        } catch (Throwable e) {
+            if (mv != null) {
+                LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
+                mv.setInactiveAndReason("replay alter status failed: " + e.getMessage());
+            }
+        } finally {
+            db.writeUnlock();
+        }
     }
 
     public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
