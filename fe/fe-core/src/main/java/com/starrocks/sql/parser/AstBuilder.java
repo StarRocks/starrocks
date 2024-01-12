@@ -947,14 +947,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 false,
                 qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
                 null,
+                context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
                 "",
+                null,
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 partitionDesc,
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
                 properties,
                 null,
                 context.comment() == null ? null :
-                        ((StringLiteral) visit(context.comment().string())).getStringValue());
+                        ((StringLiteral) visit(context.comment().string())).getStringValue(),
+                null,
+                context.orderByDesc() == null ? null :
+                    visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
+                        .stream().map(Identifier::getValue).collect(toList())
+                );
 
         List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
         return new CreateTableAsSelectStmt(
