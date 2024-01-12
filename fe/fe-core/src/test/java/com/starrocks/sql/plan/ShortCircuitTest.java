@@ -36,10 +36,13 @@ import java.util.List;
 
 public class ShortCircuitTest extends PlanTestBase {
 
+    private static boolean OLD_VALUE;
+
     @Test
     public void testShortcircuit() throws Exception {
         connectContext.getSessionVariable().setEnableShortCircuit(true);
         connectContext.getSessionVariable().setPreferComputeNode(true);
+        OLD_VALUE = FeConstants.runningUnitTest;
         FeConstants.runningUnitTest = true;
 
         // project support short circuit
@@ -108,7 +111,7 @@ public class ShortCircuitTest extends PlanTestBase {
 
     @AfterClass
     public static void afterClass() {
-        FeConstants.runningUnitTest = false;
+        FeConstants.runningUnitTest = OLD_VALUE;
     }
 
 }
