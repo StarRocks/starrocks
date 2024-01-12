@@ -426,6 +426,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：秒
 - 默认值：3600
 
+#### lake_enable_vertical_compaction_fill_data_cache
+
+- 含义：存算分离集群下，是否允许 Compaction 任务在执行时缓存数据到本地磁盘上。
+- 默认值：false
+- 引入版本：3.1.7、3.2.3
+
 #### min_garbage_sweep_interval
 
 - 含义：磁盘进行垃圾清理的最小间隔。自 3.0 版本起，该参数由静态变为动态。
