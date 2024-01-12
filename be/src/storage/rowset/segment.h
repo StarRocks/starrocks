@@ -182,6 +182,8 @@ public:
 
     const std::string& file_name() const { return _segment_file_info.path; }
 
+    const FileInfo& segment_file_info() const { return _segment_file_info; }
+
     uint32_t num_rows() const { return _num_rows; }
 
     // Load and decode short key index.
