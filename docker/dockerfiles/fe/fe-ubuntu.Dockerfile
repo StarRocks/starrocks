@@ -26,7 +26,7 @@ FROM ubuntu:22.04
 ARG STARROCKS_ROOT=/opt/starrocks
 
 RUN apt-get update -y && apt-get install -y --no-install-recommends \
-        default-jdk mysql-client curl vim tree net-tools less tzdata linux-tools-common linux-tools-generic && \
+        openjdk-11-jdk mysql-client curl vim tree net-tools less tzdata linux-tools-common linux-tools-generic && \
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
         dpkg-reconfigure -f noninteractive tzdata && \
         rm -rf /var/lib/apt/lists/*
