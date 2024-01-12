@@ -227,7 +227,7 @@ chmod +x /etc/rc.d/rc.local
 
 ### SSD and NVMe
 
-- If your NVMe or SSD disks supports the kyber scheduler algorithm:
+- If your NVMe or SSD disks support the kyber scheduler algorithm:
 
    ```Bash
    # Temporary change.
@@ -239,7 +239,7 @@ chmod +x /etc/rc.d/rc.local
    chmod +x /etc/rc.d/rc.local
    ```
 
-- If your NVMe or SSD disks supports the none (or noop) scheduler.
+- If your NVMe or SSD disks support the none (or noop) scheduler.
 
    ```Bash
    # Temporary change.
