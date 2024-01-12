@@ -53,6 +53,7 @@ private:
     size_t _memory_usage = 0;
     std::vector<ChunkIteratorPtr> _segment_iters;
     int64_t _tablet_id = 0;
+    std::mutex _state_lock;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const CompactionState& o) {
