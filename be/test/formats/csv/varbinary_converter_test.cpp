@@ -56,10 +56,10 @@ TEST_F(VarBinaryConverterTest, test_read_varbinary) {
     EXPECT_TRUE(conv->read_string(col.get(), " 0101", Converter::Options()));
 
     EXPECT_EQ(4, col->size());
-    ASSERT_EQ(Slice("AB"), hex_binary(col->get(0).get_slice()));
-    ASSERT_EQ(Slice("0101"), hex_binary(col->get(1).get_slice()));
-    ASSERT_EQ(Slice("AB"), hex_binary(col->get(2).get_slice()));
-    ASSERT_EQ(Slice("0101"), hex_binary(col->get(3).get_slice()));
+    ASSERT_EQ("AB", hex_binary(col->get(0).get_slice()));
+    ASSERT_EQ("0101", hex_binary(col->get(1).get_slice()));
+    ASSERT_EQ("AB", hex_binary(col->get(2).get_slice()));
+    ASSERT_EQ("0101", hex_binary(col->get(3).get_slice()));
 
     EXPECT_FALSE(conv->read_string(col.get(), "xyz", Converter::Options()));
     EXPECT_FALSE(conv->read_string(col.get(), "1", Converter::Options()));
