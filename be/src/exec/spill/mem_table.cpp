@@ -55,14 +55,27 @@ public:
 
     Slice get_data() { return {_buffer.data(), _buffer.size()}; }
 
+    void reset() {
+        _buffer.clear();
+    }
+
 private:
     std::string _buffer;
 };
 
 StatusOr<Slice> SpillableMemTable::get_serialized_data() const {
     DCHECK(_block != nullptr) << "block should not be null";
-    auto memory_block = dynamic_cast<MemoryBlock*>(_block.get());
-    return memory_block->get_data();
+    return _block->get_data();
+}
+
+void SpillableMemTable::reset() {
+    _num_rows = 0;
+    int64_t consumption = _tracker->consumption();
+    _tracker->release(consumption);
+    COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, -consumption);
+    if (_block) {
+        _block->reset();
+    }
 }
 
 bool UnorderedMemTable::is_empty() {
@@ -126,10 +139,7 @@ Status UnorderedMemTable::flush(FlushCallBack callback) {
     return Status::OK();
 }
 void UnorderedMemTable::reset() {
-    _num_rows = 0;
-    int64_t consumption = _tracker->consumption();
-    _tracker->release(consumption);
-    COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, -consumption);
+    SpillableMemTable::reset();
     _chunks.clear();
 }
 
@@ -219,10 +229,10 @@ Status OrderedMemTable::done() {
 }
 
 void OrderedMemTable::reset() {
-    _num_rows = 0;
-    int64_t consumption = _tracker->consumption();
-    _tracker->release(consumption);
-    COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, -consumption);
+    SpillableMemTable::reset();
+    _chunk_slice.reset(nullptr);
+    _chunk.reset();
+
 }
 
 StatusOr<ChunkPtr> OrderedMemTable::_do_sort(const ChunkPtr& chunk) {
