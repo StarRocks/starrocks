@@ -163,6 +163,9 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
 
     // IOTime
     _io_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTime", IO_TASK_EXEC_TIMER_NAME);
+
+    _access_path_hits_counter = ADD_COUNTER(_runtime_profile, "AccessPathHits", TUnit::UNIT);
+    _access_path_unhits_counter = ADD_COUNTER(_runtime_profile, "AccessPathUnhits", TUnit::UNIT);
 }
 
 Status OlapChunkSource::_get_tablet(const TInternalScanRange* scan_range) {
@@ -550,25 +553,29 @@ void OlapChunkSource::_update_counter() {
 
     if (_reader->stats().flat_json_hits.size() > 0) {
         std::string access_path_hits = "AccessPathHits";
-        auto* total_counter = ADD_COUNTER(_runtime_profile, access_path_hits, TUnit::UNIT);
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().flat_json_hits) {
-            auto* path_counter = ADD_CHILD_COUNTER(_runtime_profile, k, TUnit::UNIT, access_path_hits);
+            auto* path_counter = _runtime_profile->get_counter(k);
+            if (path_counter == nullptr) {
+                path_counter = ADD_CHILD_COUNTER(_runtime_profile, k, TUnit::UNIT, access_path_hits);
+            }
             total += v;
-            COUNTER_SET(path_counter, v);
+            COUNTER_UPDATE(path_counter, v);
         }
-        COUNTER_SET(total_counter, total);
+        COUNTER_UPDATE(_access_path_hits_counter, total);
     }
     if (_reader->stats().dynamic_json_hits.size() > 0) {
         std::string access_path_unhits = "AccessPathUnhits";
-        auto* total_counter = ADD_COUNTER(_runtime_profile, access_path_unhits, TUnit::UNIT);
         int64_t total = 0;
         for (auto& [k, v] : _reader->stats().dynamic_json_hits) {
-            auto* path_counter = ADD_CHILD_COUNTER(_runtime_profile, k, TUnit::UNIT, access_path_unhits);
+            auto* path_counter = _runtime_profile->get_counter(k);
+            if (path_counter == nullptr) {
+                path_counter = ADD_CHILD_COUNTER(_runtime_profile, k, TUnit::UNIT, access_path_unhits);
+            }
             total += v;
-            COUNTER_SET(path_counter, v);
+            COUNTER_UPDATE(path_counter, v);
         }
-        COUNTER_SET(total_counter, total);
+        COUNTER_SET(_access_path_unhits_counter, total);
     }
 }
 

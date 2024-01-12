@@ -96,7 +96,13 @@ Status FlatJsonColumnWriter::append(const Column& column) {
 }
 
 Status FlatJsonColumnWriter::append(const ColumnPtr& column) {
+    size_t ss = column->size();
+    RETURN_IF_ERROR(_json_column_writer->append(column));
+    // keep refs
     _json_datas.emplace_back(column);
+    for (auto& ptr : _json_datas) {
+        DCHECK_EQ(ss, ptr->size());
+    }
     return Status::OK();
 }
 
@@ -222,7 +228,7 @@ void FlatJsonColumnWriter::_flat_column(std::vector<ColumnPtr>& json_datas) {
 
 Status FlatJsonColumnWriter::finish() {
     for (const auto& js : _json_datas) {
-        RETURN_IF_ERROR(_json_column_writer->append(*js));
+        DCHECK_GT(js->size(), 0);
     }
     _flat_column(_json_datas);
 

@@ -22,11 +22,11 @@
 
 namespace starrocks {
 
-StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterater(
+StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterator(
         ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
         std::vector<std::unique_ptr<ColumnIterator>> field_iters, std::vector<std::string>& flat_paths,
         ColumnAccessPath* path);
 
-StatusOr<std::unique_ptr<ColumnIterator>> create_json_dynamic_flat_iterater(
+StatusOr<std::unique_ptr<ColumnIterator>> create_json_dynamic_flat_iterator(
         std::unique_ptr<ScalarColumnIterator> json_iter, std::vector<std::string>& flat_paths, ColumnAccessPath* path);
 } // namespace starrocks

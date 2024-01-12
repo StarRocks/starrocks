@@ -308,14 +308,14 @@ Status JsonDynamicFlatIterator::get_row_ranges_by_zone_map(const std::vector<con
     return _json_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges);
 }
 
-StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterater(
+StatusOr<std::unique_ptr<ColumnIterator>> create_json_flat_iterator(
         ColumnReader* reader, std::unique_ptr<ColumnIterator> null_iter,
         std::vector<std::unique_ptr<ColumnIterator>> field_iters, std::vector<std::string>& full_paths,
         ColumnAccessPath* path) {
     return std::make_unique<JsonFlatColumnIterator>(reader, null_iter, field_iters, full_paths, path);
 }
 
-StatusOr<std::unique_ptr<ColumnIterator>> create_json_dynamic_flat_iterater(
+StatusOr<std::unique_ptr<ColumnIterator>> create_json_dynamic_flat_iterator(
         std::unique_ptr<ScalarColumnIterator> json_iter, std::vector<std::string>& flat_paths, ColumnAccessPath* path) {
     return std::make_unique<JsonDynamicFlatIterator>(json_iter, flat_paths, path);
 }

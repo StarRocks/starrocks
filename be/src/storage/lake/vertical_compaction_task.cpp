@@ -159,13 +159,15 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
                                   config::lake_compaction_stream_buffer_size_bytes};
     RETURN_IF_ERROR(reader.open(reader_params));
 
-    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
     auto char_field_indexes = ChunkHelper::get_char_field_indexes(schema);
 
     VLOG(3) << "Compact column group. tablet: " << _tablet.id() << ", column group: " << column_group_index
             << ", reader chunk size: " << chunk_size;
 
     while (true) {
+        // don't reuse column, json writer may used the column for an long-term
+        auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+
         if (UNLIKELY(StorageEngine::instance()->bg_worker_stopped())) {
             return Status::Cancelled("background worker stopped");
         }

@@ -175,3 +175,9 @@ select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j2, "$.key3"), JSON_LENGTH(j2, "$.
 select JSON_LENGTH(j1, "$.key8"), JSON_LENGTH(j2, "$.key9"), JSON_LENGTH(j2, "$.key10") from ajs1 order by v1 limit 2;
 select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j2, "$") from ajs1 order by v1 limit 2;
 select JSON_LENGTH(j1, "asdf"), JSON_LENGTH(j2, "$13"), JSON_LENGTH(j2, "$.key3") from ajs1 order by v1 limit 2;
+
+select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j2, "$.key2.key3") from js1 where v2 = 2 order by v1 limit 2;
+select JSON_LENGTH(j1, "$.key2"), JSON_LENGTH(j2, "$.key3"), JSON_LENGTH(j2, "$.key4") from js1 where v2 > 1 order by v1 limit 2;
+select JSON_LENGTH(j1, "$.key8"), JSON_LENGTH(j2, "$.key9"), JSON_LENGTH(j2, "$.key10") from js1 where v1 < 1 order by v1 limit 2;
+select JSON_LENGTH(j1, "$.key12"), JSON_LENGTH(j2, "$.key13"), JSON_LENGTH(j2, "$") from js1 where v1 = -1 order by v1 limit 2;
+select JSON_LENGTH(j1, "asdf"), JSON_LENGTH(j2, "$13"), JSON_LENGTH(j2, "$.key3") from js1 where v1 = 10 order by v1 limit 2;

@@ -540,14 +540,14 @@ StatusOr<std::unique_ptr<ColumnIterator>> ColumnReader::new_iterator(ColumnAcces
 
         if (flat_iters.size() != flat_paths.size()) {
             // we must dynamic flat json, because we don't know other segment wasn't the paths
-            return create_json_dynamic_flat_iterater(std::move(json_iter), flat_paths, path);
+            return create_json_dynamic_flat_iterator(std::move(json_iter), flat_paths, path);
         }
 
         std::unique_ptr<ColumnIterator> null_iterator;
         if (is_nullable()) {
             ASSIGN_OR_RETURN(null_iterator, (*_sub_readers)[0]->new_iterator());
         }
-        return create_json_flat_iterater(this, std::move(null_iterator), std::move(flat_iters), flat_paths, path);
+        return create_json_flat_iterator(this, std::move(null_iterator), std::move(flat_iters), flat_paths, path);
     } else if (is_scalar_field_type(delegate_type(_column_type))) {
         return std::make_unique<ScalarColumnIterator>(this);
     } else if (_column_type == LogicalType::TYPE_ARRAY) {

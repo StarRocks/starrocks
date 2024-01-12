@@ -35,10 +35,7 @@ public:
 
     JsonColumn() = default;
     explicit JsonColumn(size_t size) : SuperClass(size) {}
-    JsonColumn(const JsonColumn& rhs) : SuperClass(rhs) {
-        _flat_columns = std::move(rhs._flat_columns);
-        _flat_column_paths = std::move(rhs._flat_column_paths);
-    }
+    JsonColumn(const JsonColumn& rhs) : SuperClass(rhs) {}
 
     JsonColumn(JsonColumn&& rhs) noexcept : SuperClass(std::move(rhs)) {
         _flat_columns = std::move(rhs._flat_columns);
@@ -123,6 +120,7 @@ private:
 
     // flat-column paths
     std::vector<std::string> _flat_column_paths;
+    std::unordered_map<std::string, int> _path_to_index;
 };
 
 } // namespace starrocks

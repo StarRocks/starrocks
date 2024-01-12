@@ -548,17 +548,17 @@ static inline StatusOr<std::tuple<ColumnPtr, JsonPath>> _extract_from_flat_json(
         path = viewer.value(0).to_string();
         for (int row = 1; row < columns[1]->size(); ++row) {
             if (viewer.is_null(row)) {
-                return Status::JsonFormatError("flat json unsupported null json path");
+                return Status::JsonFormatError("flat json doesn't support null json path");
             }
             auto slice = viewer.value(row);
             if (path != slice.to_string()) {
-                return Status::JsonFormatError("flat json unsupported variables json path");
+                return Status::JsonFormatError("flat json doesn't support variables json path");
             }
         }
     }
 
     if (UNLIKELY(columns[0]->is_constant())) {
-        return Status::JsonFormatError("flat json unsupported constant json");
+        return Status::JsonFormatError("flat json doesn't support constant json");
     }
 
     JsonPath required_path;
@@ -590,7 +590,7 @@ static inline StatusOr<std::tuple<ColumnPtr, JsonPath>> _extract_from_flat_json(
         }
     }
 
-    return Status::JsonFormatError(fmt::format("flat json doesn't contains json path: {}", path));
+    return Status::JsonFormatError(fmt::format("flat json not found json path: {}", path));
 }
 
 template <LogicalType ResultType>
