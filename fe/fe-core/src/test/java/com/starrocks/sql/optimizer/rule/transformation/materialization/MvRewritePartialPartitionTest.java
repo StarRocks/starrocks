@@ -413,9 +413,6 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "hive_parttbl_mv");
 
-        mockedHiveMetadata.updatePartitions("partitioned_db", "lineitem_par",
-                ImmutableList.of("l_shipdate=" + HiveMetaClient.PARTITION_NULL_VALUE));
-
         query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` " +
                 "where l_shipdate > '1998-01-04'";
         plan = getFragmentPlan(query);
