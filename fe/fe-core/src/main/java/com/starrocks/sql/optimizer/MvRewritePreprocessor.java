@@ -372,10 +372,21 @@ public class MvRewritePreprocessor {
         // If query tables are set which means use related mv for non lock optimization,
         // copy mv's metadata into a ready-only object.
         MaterializedView copiedMV = (context.getQueryTables() != null) ? copyOnlyMaterializedView(mv) : mv;
+        Pair<Table, Column> partitionTableAndColumns = copiedMV.getBaseTableAndPartitionColumn();
+
+        // Only record `refTableUpdatedPartitionNames` when `mvPartialPartitionPredicates` is not null and it needs
+        // to be compensated by using it.
+        Set<String> refTableUpdatedPartitionNames = null;
+        if (mvPartialPartitionPredicates != null) {
+            Table refBaseTable = partitionTableAndColumns.first;
+            refTableUpdatedPartitionNames = copiedMV.getUpdatedPartitionNamesOfTable(refBaseTable, true);
+        }
+
         MaterializationContext materializationContext =
                 new MaterializationContext(context, copiedMV, mvPlan, queryColumnRefFactory,
                         mvPlanContext.getRefFactory(), partitionNamesToRefresh,
-                        baseTables, originQueryColumns, intersectingTables, mvPartialPartitionPredicates);
+                        baseTables, originQueryColumns, intersectingTables,
+                        mvPartialPartitionPredicates, refTableUpdatedPartitionNames);
         List<ColumnRefOperator> mvOutputColumns = mvPlanContext.getOutputColumns();
         // generate scan mv plan here to reuse it in rule applications
         LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext, partitionNamesToRefresh);
