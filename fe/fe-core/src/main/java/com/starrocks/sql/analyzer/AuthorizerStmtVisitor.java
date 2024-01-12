@@ -31,7 +31,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.ExportJob;
@@ -231,7 +230,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         try {
             Map<TableName, Set<String>> allTouchedColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
             checkCanSelectFromColumns(context, allTouchedColumns, allTablesRelations);
-        } catch (ErrorReportException e) {
+        } catch (AccessDeniedException e) {
             checkSelectTableAction(context, allTablesRelations);
         }
         return null;
@@ -281,7 +280,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
             Map<TableName, Set<String>> tableColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
             tableColumns.remove(statement.getTableName());
             checkCanSelectFromColumns(context, tableColumns, allTouchedTables);
-        } catch (ErrorReportException e) {
+        } catch (AccessDeniedException e) {
             checkSelectTableAction(context, allTouchedTables);
         }
         return null;
@@ -310,7 +309,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         Map<TableName, Set<String>> tableColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
         try {
             checkCanSelectFromColumns(context, tableColumns, allTouchedTables);
-        } catch (ErrorReportException e) {
+        } catch (AccessDeniedException e) {
             if (hasUpdatePrivOnTargetTable || !tableColumns.containsKey(statement.getTableName())) {
                 allTouchedTables.remove(statement.getTableName());
             }
@@ -374,8 +373,8 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         }
     }
 
-    void checkCanSelectFromColumns(ConnectContext context, Map<TableName, Set<String>> allTouchedTableColumns,
-                                   Map<TableName, Relation> allTouchedTables) {
+    private void checkCanSelectFromColumns(ConnectContext context, Map<TableName, Set<String>> allTouchedTableColumns,
+                                   Map<TableName, Relation> allTouchedTables) throws AccessDeniedException {
         for (Map.Entry<TableName, Set<String>> tableColumns : allTouchedTableColumns.entrySet()) {
             TableName tableName = tableColumns.getKey();
             Set<String> columns = tableColumns.getValue();
@@ -387,28 +386,11 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                 table = ((ViewRelation) relation).getView();
             }
             if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
-                try {
-                    Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            PrivilegeType.OPERATE);
-                } catch (AccessDeniedException e) {
-                    AccessDeniedException.reportAccessDenied(
-                            InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
-                }
+                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.OPERATE);
             } else {
-                boolean isView = table instanceof View || table.isMaterializedView();
-                try {
-                    Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            tableName, columns, PrivilegeType.SELECT);
-                } catch (AccessDeniedException e) {
-                    AccessDeniedException.reportAccessDenied(
-                            isView ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog(),
-                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            PrivilegeType.SELECT.name(), ObjectType.COLUMN.name(),
-                            String.join(".", tableName.getNoClusterString(),
-                                    String.join(",", columns)));
-                }
+                Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        tableName, columns, PrivilegeType.SELECT);
             }
         }
     }
