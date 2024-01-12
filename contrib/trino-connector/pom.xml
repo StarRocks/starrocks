@@ -4,13 +4,7 @@
     xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-<!--    <parent>-->
-<!--        <groupId>io.airlift</groupId>-->
-<!--        <artifactId>airbase</artifactId>-->
-<!--        <version>139</version>-->
-<!--    </parent>-->
-
-    <groupId>io.trino</groupId>
+    <groupId>com.starrocks</groupId>
     <artifactId>trino-starrocks</artifactId>
     <version>418</version>
     <description>Trino - StarRocks Connector</description>
@@ -425,26 +419,6 @@
                 <artifactId>provisio-maven-plugin</artifactId>
                 <version>1.0.18</version>
             </plugin>
-
-<!--            <plugin>-->
-<!--                <groupId>pl.project13.maven</groupId>-->
-<!--                <artifactId>git-commit-id-plugin</artifactId>-->
-<!--                <version>5.0.0</version>-->
-<!--                <configuration>-->
-<!--                    <skip>true</skip>-->
-<!--                    <verbose>true</verbose>-->
-<!--                    <runOnlyOnce>true</runOnlyOnce>-->
-<!--                    <injectAllReactorProjects>true</injectAllReactorProjects>-->
-<!--                    <offline>true</offline>-->
-<!--                    &lt;!&ndash; A workaround to make build work in a Git worktree, see https://github.com/git-commit-id/git-commit-id-maven-plugin/issues/215 &ndash;&gt;-->
-<!--                    <useNativeGit>true</useNativeGit>-->
-<!--                    <dotGitDirectory>${project.basedir}/../../.git</dotGitDirectory>-->
-<!--                    <failOnNoGitDirectory>false</failOnNoGitDirectory>-->
-<!--                    <failOnUnableToExtractRepoInfo>false</failOnUnableToExtractRepoInfo>-->
-<!--&lt;!&ndash;                    <validationShouldFailIfNoMatch>false</validationShouldFailIfNoMatch>&ndash;&gt;-->
-<!--&lt;!&ndash;                    <failOnUnableToExtractRepoInfo>true</failOnUnableToExtractRepoInfo>&ndash;&gt;-->
-<!--                </configuration>-->
-<!--            </plugin>-->
 
             <plugin>
                 <groupId>io.trino</groupId>
