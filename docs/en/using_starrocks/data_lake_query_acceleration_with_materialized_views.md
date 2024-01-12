@@ -94,9 +94,9 @@ Creating a materialized view on tables in external catalogs is similar to creati
 
 ### Choose a suitable refresh strategy
 
-Currently, StarRocks cannot detect partition-level data changes in Hudi catalogs and JDBC catalogs. Therefore, a full-size refresh is performed once the task is triggered.
+Currently, StarRocks cannot detect partition-level data changes in Hudi catalogs. Therefore, a full-size refresh is performed once the task is triggered.
 
-For Hive Catalog， Iceberg Catalog (starting from v3.1.4) and JDBC catalog (starting from v3.1.4, only supports MySQL Range partitioning), StarRocks supports detecting data changes at the partition level. As a result, StarRocks can:
+For Hive Catalog, Iceberg Catalog (starting from v3.1.4) and JDBC catalog (starting from v3.1.4, only for MySQL Range partitioning), StarRocks supports detecting data changes at the partition level. As a result, StarRocks can:
 
 - Refresh only the partitions with data changes to avoid full-size refresh, reducing resource consumption caused by refresh.
 
