@@ -535,7 +535,28 @@ Used to set the memory limit of a query on each BE node. Unit: Byte. The default
 
 ### sql_mode
 
-  Used to specify the SQL mode to accommodate certain SQL dialects.
+Used to specify the SQL mode to accommodate certain SQL dialects. Valid values include:
+
+* `PIPES_AS_CONCAT`: The pipe symbol `|` is used to concatenate strings, for example, `select 'hello ' || 'world'`.
+* `ONLY_FULL_GROUP_BY` (Default): The SELECT LIST can only contain GROUP BY columns or aggregate functions.
+* `ALLOW_THROW_EXCEPTION`: returns an error instead of NULL when type conversion fails.
+* `FORBID_INVALID_DATE`: prohibits invalid dates.
+* `MODE_DOUBLE_LITERAL`: interprets floating-point types as DOUBLE rather than DECIMAL.
+* `SORT_NULLS_LAST`: places NULL values at the end after sorting.
+* `ERROR_IF_OVERFLOW`: returns an error instead of NULL in the case of arithmetic overflow. Currently, only the DECIMAL data type supports this option.
+* `GROUP_CONCAT_LEGACY`: uses the `group_concat` syntax of v2.5 and earlier. This option is supported from v3.0.9 and v3.1.6.
+
+You can set only one SQL mode, for example:
+
+```SQL
+set sql_mode = 'PIPES_AS_CONCAT';
+```
+
+Or, you can set multiple modes at a time, for example:
+
+```SQL
+set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
+```
 
 ### sql_safe_updates
 

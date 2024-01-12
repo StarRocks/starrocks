@@ -1171,7 +1171,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
             for (BaseTableInfo tableInfo : baseTableInfos) {
-                Table table = tableInfo.getTable();
+                Table table = tableInfo.getTableChecked();
 
                 if (table.isView()) {
                     // freshness of view should be ignored
@@ -1240,7 +1240,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         TableProperty.QueryRewriteConsistencyMode externalTableRewriteMode = getForceExternalTableQueryRewrite();
         TableProperty.QueryRewriteConsistencyMode olapTableRewriteMode = tableProperty.getOlapTableQueryRewrite();
         for (BaseTableInfo tableInfo : baseTableInfos) {
-            Table table = tableInfo.getTable();
+            Table table = tableInfo.getTableChecked();
             if (!table.isNativeTableOrMaterializedView()) {
                 switch (externalTableRewriteMode) {
                     case DISABLE:
@@ -1347,13 +1347,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         Preconditions.checkState(slotRefs.size() == 1);
         SlotRef partitionSlotRef = slotRefs.get(0);
         for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            Table table = baseTableInfo.getTable();
+            Table table = baseTableInfo.getTableChecked();
             if (partitionSlotRef.getTblNameWithoutAnalyzed().getTbl().equals(table.getName())) {
                 return Pair.create(table, table.getColumn(partitionSlotRef.getColumnName()));
             }
         }
         String baseTableNames = baseTableInfos.stream()
-                .map(tableInfo -> tableInfo.getTable().getName()).collect(Collectors.joining(","));
+                .map(tableInfo -> tableInfo.getTableChecked().getName()).collect(Collectors.joining(","));
         throw new RuntimeException(
                 String.format("can not find partition info for mv:%s on base tables:%s", name, baseTableNames));
     }

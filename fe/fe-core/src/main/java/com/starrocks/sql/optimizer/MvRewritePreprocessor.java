@@ -53,7 +53,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
-import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getMvPartialPartitionPredicates;
 
 public class MvRewritePreprocessor {
     private static final Logger LOG = LogManager.getLogger(MvRewritePreprocessor.class);
@@ -140,12 +139,8 @@ public class MvRewritePreprocessor {
         }
         if (!mvPlanContext.isValidMvPlan()) {
             mv.setPlanMode(MaterializedView.PlanMode.INVALID);
-            if (mvPlanContext.getLogicalPlan() != null) {
-                logMVPrepare(connectContext, mv, "MV plan is not valid: {}, plan:\n {}",
-                        mv.getName(), mvPlanContext.getLogicalPlan().explain());
-            } else {
-                logMVPrepare(connectContext, mv, "MV plan is not valid: {}", mv.getName());
-            }
+            logMVPrepare(connectContext, mv, "MV plan is not valid: {}, {}",
+                    mv.getName(), mvPlanContext.getInvalidReason());
             return;
         }
 
@@ -155,7 +150,8 @@ public class MvRewritePreprocessor {
             if (!partitionNamesToRefresh.isEmpty()) {
                 StringBuilder sb = new StringBuilder();
                 for (BaseTableInfo base : mv.getBaseTableInfos()) {
-                    String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
+                    String versionInfo =
+                            Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTableChecked()));
                     sb.append(String.format("base table {} version: {}; ", base, versionInfo));
                 }
                 logMVPrepare("[MV PREPARE] MV {} is outdated, stale partitions %, detailed version info: {}",
@@ -167,7 +163,7 @@ public class MvRewritePreprocessor {
             // then it can not be a candidate
             StringBuilder sb = new StringBuilder();
             for (BaseTableInfo base : mv.getBaseTableInfos()) {
-                String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTable()));
+                String versionInfo = Joiner.on(",").join(mv.getBaseTableLatestPartitionInfo(base.getTableChecked()));
                 sb.append(String.format("base table {} version: {}; ", base, versionInfo));
             }
             logMVPrepare("[MV PREPARE] MV {} is outdated and all its partitions need to be " +
@@ -183,7 +179,7 @@ public class MvRewritePreprocessor {
         if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
             // when mv is partitioned and there are some refreshed partitions,
             // when should calculate the latest partition range predicates for partition-by base table
-            mvPartialPartitionPredicates = getMvPartialPartitionPredicates(mv, mvPlan, partitionNamesToRefresh);
+            mvPartialPartitionPredicates = MvUtils.getMvPartialPartitionPredicates(mv, mvPlan, partitionNamesToRefresh);
             if (mvPartialPartitionPredicates == null) {
                 logMVPrepare(connectContext, mv, "Partitioned MV {} is outdated which contains some partitions " +
                         "to be refreshed:{}", mv.getName(), partitionNamesToRefresh);
