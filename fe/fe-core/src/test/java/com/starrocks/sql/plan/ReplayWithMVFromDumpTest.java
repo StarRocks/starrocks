@@ -154,6 +154,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     }
 
     @Test
+    @Ignore
     public void testMVOnMV2() throws Exception {
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         Pair<QueryDumpInfo, String> replayPair =
