@@ -123,14 +123,9 @@ public class DbPEntryObject implements PEntryObject {
     public boolean validate(GlobalStateMgr globalStateMgr) {
         if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
             return globalStateMgr.getDbIncludeRecycleBin(Long.parseLong(this.uuid)) != null;
-        } else {
-            Optional<Catalog> catalog = globalStateMgr.getCatalogMgr().getCatalogById(catalogId);
-            if (!catalog.isPresent()) {
-                return false;
-            }
-            String dbName = ExternalCatalog.getDbNameFromUUID(uuid);
-            return globalStateMgr.getMetadataMgr().getDb(catalog.get().getName(), dbName) != null;
         }
+        // do not validate privilege of external database
+        return true;
     }
 
     @Override
