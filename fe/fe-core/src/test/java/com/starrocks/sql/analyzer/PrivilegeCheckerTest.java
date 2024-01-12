@@ -532,6 +532,116 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
+    public void testSelectCatalogViewForUser() throws Exception {
+        ctxToTestUser();
+        try {
+            StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "select * from hive0.tpch.customer_view");
+            stmtExecutor.execute();
+        } catch (AccessDeniedException e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied;"));
+        }
+        Assert.assertTrue(starRocksAssert.getCtx().getState().getErrorMessage().contains("Access denied;"));
+        starRocksAssert.getCtx().getState().reset();
+
+        ctxToRoot();
+        StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "set catalog hive0");
+        stmtExecutor.execute();
+        grantRevokeSqlAsRoot("grant SELECT on view tpch.customer_view to test");
+        ctxToTestUser();
+        try {
+            stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "select * from hive0.tpch.customer_view");
+            stmtExecutor.execute();
+        } catch (AccessDeniedException e) {
+            Assert.assertFalse(e.getMessage().contains("Access denied;"));
+        }
+        Assert.assertFalse(starRocksAssert.getCtx().getState().getErrorMessage().contains("Access denied;"));
+        starRocksAssert.getCtx().getState().reset();
+        Assert.assertEquals(ImmutableList.of(ImmutableList.of("'test'@'%'", "hive0",
+                "GRANT SELECT ON VIEW tpch.customer_view TO USER 'test'@'%'")),
+                starRocksAssert.show("show grants for test"));
+
+
+        // revoke select on view
+        ctxToRoot();
+        grantRevokeSqlAsRoot("revoke SELECT on view tpch.customer_view from test");
+
+        // grant select to all view
+        grantRevokeSqlAsRoot("grant SELECT on all views in all databases to test");
+        ctxToTestUser();
+        try {
+            stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "select * from hive0.tpch.customer_view");
+            stmtExecutor.execute();
+        } catch (AccessDeniedException e) {
+            Assert.assertFalse(e.getMessage().contains("Access denied;"));
+        }
+        Assert.assertFalse(starRocksAssert.getCtx().getState().getErrorMessage().contains("Access denied;"));
+        starRocksAssert.getCtx().getState().reset();
+        Assert.assertEquals(ImmutableList.of(ImmutableList.of("'test'@'%'", "hive0",
+                        "GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO USER 'test'@'%'")),
+                starRocksAssert.show("show grants for test"));
+
+        ctxToRoot();
+        grantRevokeSqlAsRoot("revoke SELECT on all views in all databases from test");
+        stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "set catalog default_catalog");
+        stmtExecutor.execute();
+    }
+
+    @Test
+    public void testSelectCatalogViewForRole() throws Exception {
+        ctxToRoot();
+        StmtExecutor stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "set catalog hive0");
+        stmtExecutor.execute();
+
+        grantRevokeSqlAsRoot("grant test_role to test");
+        ctxToTestUser();
+        try {
+            stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "select * from hive0.tpch.customer_view");
+            stmtExecutor.execute();
+        } catch (AccessDeniedException e) {
+            Assert.assertTrue(e.getMessage().contains("Access denied;"));
+        }
+        Assert.assertTrue(starRocksAssert.getCtx().getState().getErrorMessage().contains("Access denied;"));
+        starRocksAssert.getCtx().getState().reset();
+
+        grantRevokeSqlAsRoot("grant SELECT on view tpch.customer_view to role test_role");
+        try {
+            stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "select * from hive0.tpch.customer_view");
+            stmtExecutor.execute();
+        } catch (AccessDeniedException e) {
+            Assert.assertFalse(e.getMessage().contains("Access denied;"));
+        }
+        Assert.assertFalse(starRocksAssert.getCtx().getState().getErrorMessage().contains("Access denied;"));
+        starRocksAssert.getCtx().getState().reset();
+        Assert.assertEquals(ImmutableList.of(ImmutableList.of("test_role", "hive0",
+                        "GRANT SELECT ON VIEW tpch.customer_view TO ROLE 'test_role'")),
+                starRocksAssert.show("show grants for role test_role"));
+
+        // revoke select on view
+        ctxToRoot();
+        grantRevokeSqlAsRoot("revoke SELECT on view tpch.customer_view from role test_role");
+
+        // grant select to all view
+        grantRevokeSqlAsRoot("grant SELECT on all views in all databases to role test_role");
+        ctxToTestUser();
+        try {
+            stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "select * from hive0.tpch.customer_view");
+            stmtExecutor.execute();
+        } catch (AccessDeniedException e) {
+            Assert.assertFalse(e.getMessage().contains("Access denied;"));
+        }
+        Assert.assertFalse(starRocksAssert.getCtx().getState().getErrorMessage().contains("Access denied;"));
+        starRocksAssert.getCtx().getState().reset();
+        Assert.assertEquals(ImmutableList.of(ImmutableList.of("test_role", "hive0",
+                        "GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE 'test_role'")),
+                starRocksAssert.show("show grants for role test_role"));
+
+        ctxToRoot();
+        grantRevokeSqlAsRoot("revoke SELECT on all views in all databases from role test_role");
+        stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "set catalog default_catalog");
+        stmtExecutor.execute();
+    }
+
+    @Test
     public void testResourceGroupStmt() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createRg3Sql = "create resource group rg3\n" +

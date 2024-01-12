@@ -306,7 +306,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                                 tableName, PrivilegeType.SELECT);
                     } catch (AccessDeniedException e) {
                         AccessDeniedException.reportAccessDenied(
-                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                tableName.getCatalog(),
                                 context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                                 PrivilegeType.SELECT.name(), ObjectType.VIEW.name(), tableName.getTbl());
                     }

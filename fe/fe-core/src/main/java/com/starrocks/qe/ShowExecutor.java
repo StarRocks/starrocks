@@ -127,6 +127,7 @@ import com.starrocks.privilege.PrivilegeEntry;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.TablePEntryObject;
+import com.starrocks.privilege.ViewPEntryObject;
 import com.starrocks.proto.FailPointTriggerModeType;
 import com.starrocks.proto.PFailPointInfo;
 import com.starrocks.proto.PFailPointTriggerMode;
@@ -2222,6 +2223,12 @@ public class ShowExecutor {
                 return null;
             }
             return getCatalogNameById(tablePEntryObject.getCatalogId());
+        } else if (objectType.equals(ObjectType.VIEW)) {
+            ViewPEntryObject viewPEntryObject = (ViewPEntryObject) privilegeEntry.getObject();
+            if (viewPEntryObject.getCatalogId() == PrivilegeBuiltinConstants.ALL_CATALOGS_ID) {
+                return null;
+            }
+            return getCatalogNameById(viewPEntryObject.getCatalogId());
         } else {
             return InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         }

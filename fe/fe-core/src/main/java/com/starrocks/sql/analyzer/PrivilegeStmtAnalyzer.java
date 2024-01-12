@@ -281,15 +281,13 @@ public class PrivilegeStmtAnalyzer {
                     Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList().size() == 1);
 
                     List<String> tokens = stmt.getPrivilegeObjectNameTokensList().get(0);
-                    if (ObjectType.TABLE.equals(objectType)) {
+                    if (ObjectType.TABLE.equals(objectType) || ObjectType.VIEW.equals(objectType)) {
                         if (tokens.size() != 2) {
                             throw new SemanticException("Invalid grant statement with error privilege object " + tokens);
                         }
                         objectList.add(authorizationManager.generateObject(objectType,
                                 Lists.newArrayList(session.getCurrentCatalog(), tokens.get(0), tokens.get(1))));
-                    } else if (ObjectType.VIEW.equals(objectType)
-                            || ObjectType.MATERIALIZED_VIEW.equals(objectType)
-                            || ObjectType.PIPE.equals(objectType)) {
+                    } else if (ObjectType.MATERIALIZED_VIEW.equals(objectType) || ObjectType.PIPE.equals(objectType)) {
                         if (tokens.size() != 2) {
                             throw new SemanticException("Invalid grant statement with error privilege object " + tokens);
                         }
@@ -344,7 +342,7 @@ public class PrivilegeStmtAnalyzer {
                         throw new SemanticException("Grant/Revoke unsupported object type " + objectType.name());
                     }
                 } else {
-                    if (ObjectType.TABLE.equals(objectType)) {
+                    if (ObjectType.TABLE.equals(objectType) || ObjectType.VIEW.equals(objectType)) {
                         Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
 
                         for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
@@ -365,7 +363,7 @@ public class PrivilegeStmtAnalyzer {
                                     Lists.newArrayList(tableName.getCatalog(), tableName.getDb(), tableName.getTbl())));
 
                         }
-                    } else if (ObjectType.VIEW.equals(objectType) || ObjectType.MATERIALIZED_VIEW.equals(objectType)) {
+                    } else if (ObjectType.MATERIALIZED_VIEW.equals(objectType)) {
                         Preconditions.checkArgument(stmt.getPrivilegeObjectNameTokensList() != null);
 
                         for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {

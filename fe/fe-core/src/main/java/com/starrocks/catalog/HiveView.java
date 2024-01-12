@@ -38,15 +38,21 @@ public class HiveView extends Table {
     }
 
     private final String catalogName;
+    private final String dbName;
+    private final long createTime;
+
     private final String inlineViewDef;
     private final Type viewType;
 
     public static final String PRESTO_VIEW_PREFIX = "/* Presto View: ";
     public static final String PRESTO_VIEW_SUFFIX = " */";
 
-    public HiveView(long id, String catalogName, String name, List<Column> schema, String definition, Type type) {
+    public HiveView(long id, String catalogName, String dbName, String name, List<Column> schema, long createTime,
+                    String definition, Type type) {
         super(id, name, TableType.HIVE_VIEW, schema);
         this.catalogName = requireNonNull(catalogName, "Hive view catalog name is null");
+        this.dbName = requireNonNull(dbName, "Hive view db name is null");
+        this.createTime = createTime;
         this.inlineViewDef = requireNonNull(definition, "Hive view text is null");
         this.viewType = requireNonNull(type, "Hive view type is null");
     }
@@ -112,5 +118,69 @@ public class HiveView extends Table {
 
     public String getCatalogName() {
         return catalogName;
+    }
+
+    @Override
+    public String getUUID() {
+        return String.join(".", catalogName, dbName, name, Long.toString(createTime));
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder {
+        private long id;
+        private String catalogName;
+        private String dbName;
+        private String viewName;
+        private long createTime;
+        private List<Column> schema;
+        private String definition;
+        private Type type;
+
+        public Builder setId(long id) {
+            this.id = id;
+            return this;
+        }
+
+        public Builder setCatalogName(String catalogName) {
+            this.catalogName = catalogName;
+            return this;
+        }
+
+        public Builder setDbName(String dbName) {
+            this.dbName = dbName;
+            return this;
+        }
+
+        public Builder setViewName(String viewName) {
+            this.viewName = viewName;
+            return this;
+        }
+
+        public Builder setCreateTime(long createTime) {
+            this.createTime = createTime;
+            return this;
+        }
+
+        public Builder setSchema(List<Column> schema) {
+            this.schema = schema;
+            return this;
+        }
+
+        public Builder setDefinition(String definition) {
+            this.definition = definition;
+            return this;
+        }
+
+        public Builder setType(Type type) {
+            this.type = type;
+            return this;
+        }
+
+        public HiveView build() {
+            return new HiveView(id, catalogName, dbName, viewName, schema, createTime, definition, type);
+        }
     }
 }
