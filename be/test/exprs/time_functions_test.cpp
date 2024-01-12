@@ -1437,8 +1437,16 @@ TEST_F(TimeFunctionsTest, str_to_date) {
 
     const char* str1 = "01,5,2013";
     const char* str2 = "2020-06-24 17:10:25";
+    const char* str3 = "20130501";
+    const char* str4 = "2013-05-01";
+    const char* str5 = "201305";
+    const char* str6 = "2013-05";
     const char* fmt1 = "%d,%m,%Y";
     const char* fmt2 = "%Y-%m-%d %H:%i:%s";
+    const char* fmt3 = "%Y%m%d";
+    const char* fmt4 = "%Y-%m-%d";
+    const char* fmt5 = "%Y%m";
+    const char* fmt6 = "%Y-%m";
     TimestampValue ts1 = TimestampValue::create(2013, 5, 1, 0, 0, 0);
     TimestampValue ts2 = TimestampValue::create(2020, 6, 24, 17, 10, 25);
 
@@ -1451,12 +1459,26 @@ TEST_F(TimeFunctionsTest, str_to_date) {
         fmt_col->append_datum(Slice(fmt1));
         str_col->append_datum(Slice(str2)); // str2 <=> fmt2
         fmt_col->append_datum(Slice(fmt2));
+
+        // invalid format
         (void)str_col->append_nulls(1); // null <=> fmt1
         fmt_col->append_datum(Slice(fmt1));
         str_col->append_datum(Slice(str1)); // str1 <=> null
         (void)fmt_col->append_nulls(1);
         (void)str_col->append_nulls(1); // null <=> null
         (void)fmt_col->append_nulls(1);
+        str_col->append_datum(Slice(str3)); // str3 <=> fmt5
+        fmt_col->append_datum(Slice(fmt5));
+
+        // valid format with and without 'day' part provided
+        str_col->append_datum(Slice(str3)); // str3 <=> fmt3
+        fmt_col->append_datum(Slice(fmt3));
+        str_col->append_datum(Slice(str4)); // str4 <=> fmt4
+        fmt_col->append_datum(Slice(fmt4));
+        str_col->append_datum(Slice(str5)); // str5 <=> fmt5
+        fmt_col->append_datum(Slice(fmt5));
+        str_col->append_datum(Slice(str6)); // str6 <=> fmt6
+        fmt_col->append_datum(Slice(fmt6));
 
         Columns columns;
         columns.emplace_back(str_col);
@@ -1465,11 +1487,14 @@ TEST_F(TimeFunctionsTest, str_to_date) {
         ASSERT_TRUE(result->is_nullable());
 
         NullableColumn::Ptr nullable_col = ColumnHelper::as_column<NullableColumn>(result);
-        ASSERT_EQ(5, nullable_col->size());
+        ASSERT_EQ(10, nullable_col->size());
         ASSERT_EQ(ts1, nullable_col->get(0).get_timestamp());
         ASSERT_EQ(ts2, nullable_col->get(1).get_timestamp());
-        for (int i = 2; i < 5; ++i) {
+        for (int i = 2; i < 6; ++i) {
             ASSERT_TRUE(nullable_col->is_null(i));
+        }
+        for (int i = 6; i < 9; ++i) {
+            ASSERT_EQ(ts1, nullable_col->get(i).get_timestamp());
         }
     }
     // const
