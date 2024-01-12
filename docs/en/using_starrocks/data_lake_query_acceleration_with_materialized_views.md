@@ -122,7 +122,7 @@ From v3.1.4, StarRocks supports detecting data changes for Iceberg Catalog at th
 
 ### Enable query rewrite for external catalog-based materialized views
 
-By default, StarRocks does not support query rewrite for materialized views built on Hudi, Iceberg, and JDBC catalogs because query rewrite in this scenario cannot ensure a strong consistency of results. You can enable this feature by setting the property `force_external_table_query_rewrite` to `true` when creating the materialized view. For materialized views built on tables in Hive catalogs, the query rewrite is enabled by default.
+By default, StarRocks does not support query rewrite for materialized views built on Hudi, and JDBC catalogs because query rewrite in this scenario cannot ensure a strong consistency of results. You can enable this feature by setting the property `force_external_table_query_rewrite` to `true` when creating the materialized view. For materialized views built on tables in Hive catalogs, the query rewrite is enabled by default.
 
 Example:
 
