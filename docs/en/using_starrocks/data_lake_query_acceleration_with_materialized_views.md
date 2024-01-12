@@ -12,11 +12,7 @@ However, when it comes to building complex and efficient reports using data from
 
 ## Overview
 
-<<<<<<< HEAD
-StarRocks supports building asynchronous materialized views based on external catalogs such as Hive catalog, Iceberg catalog, and Hudi catalog. External catalog-based materialized views are particularly useful in the following scenarios:
-=======
-StarRocks supports building asynchronous materialized views based on external catalogs such as Hive catalog, Iceberg catalog, Hudi catalog, JDBC catalog, and Paimon catalog. External catalog-based materialized views are particularly useful in the following scenarios:
->>>>>>> f02c7c696f ([Doc] Add the materialized view features of the jdbc catalog in the document (#36794))
+StarRocks supports building asynchronous materialized views based on external catalogs such as Hive catalog, Iceberg catalog, Hudi catalog, and JDBC catalog. External catalog-based materialized views are particularly useful in the following scenarios:
 
 - **Transparent Acceleration of data lake reports**
 
@@ -100,11 +96,7 @@ Creating a materialized view on tables in external catalogs is similar to creati
 
 Currently, StarRocks cannot detect partition-level data changes in Hudi catalogs. Therefore, a full-size refresh is performed once the task is triggered.
 
-<<<<<<< HEAD
-For Hive Catalog and Iceberg Catalog (starting from v3.1.4), StarRocks supports detecting data changes at the partition level. As a result, StarRocks can:
-=======
-For Hive Catalog, Iceberg Catalog (starting from v3.1.4), JDBC catalog (starting from v3.1.4, only for MySQL range-partitioned tables), and Paimon Catalog (starting from v3.2.1), StarRocks supports detecting data changes at the partition level. As a result, StarRocks can:
->>>>>>> f02c7c696f ([Doc] Add the materialized view features of the jdbc catalog in the document (#36794))
+For Hive Catalog, Iceberg Catalog (starting from v3.1.4), and JDBC catalog (starting from v3.1.4, only for MySQL range-partitioned tables), StarRocks supports detecting data changes at the partition level. As a result, StarRocks can:
 
 - Refresh only the partitions with data changes to avoid full-size refresh, reducing resource consumption caused by refresh.
 
