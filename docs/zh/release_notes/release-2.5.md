@@ -16,7 +16,7 @@ displayed_sidebar: "Chinese"
 ### 行为变更
 
 - 新增 Session 变量 `enable_materialized_view_for_insert`，默认值为 `FALSE`，即物化视图默认不改写 INSERT INTO SELECT 语句中的查询。[#37505](https://github.com/StarRocks/starrocks/pull/37505)
-- 新增 Session 变量 `enable_strict_order_by`。当取值为默认值 `TRUE` 时，如果查询中的输出列存在不同的表达式使用重复别名的情况，且按照该别名进行排序，查询会报错，例如 `select distinct t1.* from tbl1 t1 order by t1.k1;`。该行为和 2.3 及之前版本的逻辑一致。如果取值为 `FALSE`，采用宽松的去重机制，把这类查询作为有效 SQL 处理。 [#37910](https://github.com/StarRocks/starrocks/pull/37910)
+- 新增 Session 变量 `enable_strict_order_by`。当取值为默认值 `TRUE` 时，如果查询中的输出列存在不同的表达式使用重复别名的情况，且按照该别名进行排序，查询会报错，例如 `select distinct t1.* from tbl1 t1 order by t1.k1;`。该行为和 2.3 及之前版本的逻辑一致。如果取值为 `FALSE`，采用宽松的去重机制，把这类查询作为有效 SQL 处理。[#37910](https://github.com/StarRocks/starrocks/pull/37910)
 
 ### 参数变更
 
@@ -27,10 +27,10 @@ displayed_sidebar: "Chinese"
 
 修复了如下问题：
 
-- 使用非数列 (NaN 列) 进行排序可能导致 BE crash。 [#30759](https://github.com/StarRocks/starrocks/pull/30759)
-- 更新主键索引失败可能导致 "get_applied_rowsets failed"。 [#27488](https://github.com/StarRocks/starrocks/pull/27488)
+- 使用非数列 (NaN 列) 进行排序可能导致 BE crash。[#30759](https://github.com/StarRocks/starrocks/pull/30759)
+- 更新主键索引失败可能导致 "get_applied_rowsets failed"。[#27488](https://github.com/StarRocks/starrocks/pull/27488)
 - [Hive Catalog](https://docs.starrocks.io/zh/docs/2.5/data_source/catalog/hive_catalog/) 的元数据在 Hive 表新增字段后不会自动刷新。[#37668](https://github.com/StarRocks/starrocks/pull/37668)
-- `SELECT ... FROM ... INTO OUTFILE` 导出至 CSV 时，如果 FROM 子句中包含多个常量，执行时会报错："Unmatched number of columns"。 [#38045](https://github.com/StarRocks/starrocks/pull/38045)
+- `SELECT ... FROM ... INTO OUTFILE` 导出至 CSV 时，如果 FROM 子句中包含多个常量，执行时会报错："Unmatched number of columns"。[#38045](https://github.com/StarRocks/starrocks/pull/38045)
 - 某些情况下 `bitmap_to_string` 会因为转换时数据类型溢出导致查询结果错误。[#37405](https://github.com/StarRocks/starrocks/pull/37405)
 
 ## 2.5.17
