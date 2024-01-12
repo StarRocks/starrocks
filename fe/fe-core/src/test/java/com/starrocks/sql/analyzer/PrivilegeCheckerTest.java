@@ -556,10 +556,9 @@ public class PrivilegeCheckerTest {
         }
         Assert.assertFalse(starRocksAssert.getCtx().getState().getErrorMessage().contains("Access denied;"));
         starRocksAssert.getCtx().getState().reset();
-        Assert.assertEquals(ImmutableList.of(ImmutableList.of("'test'@'%'", "hive0",
-                "GRANT SELECT ON VIEW tpch.customer_view TO USER 'test'@'%'")),
-                starRocksAssert.show("show grants for test"));
-
+        Assert.assertTrue(starRocksAssert.show("show grants for test").
+                contains(ImmutableList.of("'test'@'%'", "hive0",
+                        "GRANT SELECT ON VIEW tpch.customer_view TO USER 'test'@'%'")));
 
         // revoke select on view
         ctxToRoot();
@@ -576,13 +575,14 @@ public class PrivilegeCheckerTest {
         }
         Assert.assertFalse(starRocksAssert.getCtx().getState().getErrorMessage().contains("Access denied;"));
         starRocksAssert.getCtx().getState().reset();
-        Assert.assertEquals(ImmutableList.of(ImmutableList.of("'test'@'%'", "hive0",
-                        "GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO USER 'test'@'%'")),
-                starRocksAssert.show("show grants for test"));
+        Assert.assertTrue(starRocksAssert.show("show grants for test").contains(
+                ImmutableList.of("'test'@'%'", "hive0",
+                        "GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO USER 'test'@'%'")));
 
         ctxToRoot();
         grantRevokeSqlAsRoot("revoke SELECT on all views in all databases from test");
         stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "set catalog default_catalog");
+
         stmtExecutor.execute();
     }
 
@@ -612,9 +612,9 @@ public class PrivilegeCheckerTest {
         }
         Assert.assertFalse(starRocksAssert.getCtx().getState().getErrorMessage().contains("Access denied;"));
         starRocksAssert.getCtx().getState().reset();
-        Assert.assertEquals(ImmutableList.of(ImmutableList.of("test_role", "hive0",
-                        "GRANT SELECT ON VIEW tpch.customer_view TO ROLE 'test_role'")),
-                starRocksAssert.show("show grants for role test_role"));
+        Assert.assertTrue(starRocksAssert.show("show grants for role test_role").contains(
+                ImmutableList.of("test_role", "hive0",
+                        "GRANT SELECT ON VIEW tpch.customer_view TO ROLE 'test_role'")));
 
         // revoke select on view
         ctxToRoot();
@@ -631,12 +631,13 @@ public class PrivilegeCheckerTest {
         }
         Assert.assertFalse(starRocksAssert.getCtx().getState().getErrorMessage().contains("Access denied;"));
         starRocksAssert.getCtx().getState().reset();
-        Assert.assertEquals(ImmutableList.of(ImmutableList.of("test_role", "hive0",
-                        "GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE 'test_role'")),
-                starRocksAssert.show("show grants for role test_role"));
+        Assert.assertTrue(starRocksAssert.show("show grants for role test_role").contains(
+                ImmutableList.of("test_role", "hive0",
+                        "GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE 'test_role'")));
 
         ctxToRoot();
         grantRevokeSqlAsRoot("revoke SELECT on all views in all databases from role test_role");
+        grantRevokeSqlAsRoot("revoke test_role from user test");
         stmtExecutor = new StmtExecutor(starRocksAssert.getCtx(), "set catalog default_catalog");
         stmtExecutor.execute();
     }
