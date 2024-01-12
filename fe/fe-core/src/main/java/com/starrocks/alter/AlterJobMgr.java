@@ -75,12 +75,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
-<<<<<<< HEAD
-=======
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
->>>>>>> fc47941546 ([Enhancement] Support to use backup version map for mv rewrite in materialized view restore (#38642))
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
@@ -352,8 +347,7 @@ public class AlterJobMgr {
         long dbId = log.getDbId();
         long mvId = log.getMvId();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        db.writeLock();
         MaterializedView mv = null;
         try {
             mv = (MaterializedView) db.getTable(mvId);
@@ -364,7 +358,7 @@ public class AlterJobMgr {
                 mv.setInactiveAndReason("replay alter status failed: " + e.getMessage());
             }
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            db.writeUnlock();
         }
     }
 
