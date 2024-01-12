@@ -1126,14 +1126,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 #### 存储（FE 静态）
 
-<<<<<<< HEAD:docs/zh/administration/Configuration.md
-##### tablet_sched_balancer_strategy
-
-- 含义：Tablet 均衡策略。参数别名为 `tablet_balancer_strategy`。取值范围：`disk_and_tablet` 和 `be_load_score`。
-- 默认值：`disk_and_tablet`
-=======
->>>>>>> 9df7b0afdd ([Doc] remove unused config tablet_sched_balancer_strategy docs (#37702)):docs/zh/administration/FE_configuration.md
-
 ##### tablet_sched_storage_cooldown_second
 
 - 含义：从 Table 创建时间点开始计算，自动降冷的时延。降冷是指从 SSD 介质迁移到 HDD 介质。<br />参数别名为 `storage_cooldown_second`。默认值 `-1` 表示不进行自动降冷。如需启用自动降冷功能，请显式设置参数取值大于 0。
