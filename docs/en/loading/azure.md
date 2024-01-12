@@ -292,7 +292,7 @@ This method supports the following file formats:
 - Parquet
 - ORC
 - CSV
-- JSON (supported from v3.2 onwards)
+- JSON (supported from v3.2.3 onwards)
 
 ### Advantages of Broker Load
 

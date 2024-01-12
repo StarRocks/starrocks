@@ -307,7 +307,7 @@ REJECTED_RECORD_PATH: NULL
 - Parquet
 - ORC
 - CSV
-- JSON（自 3.2 版本起支持）
+- JSON（自 3.2.3 版本起支持）
 
 ### Broker Load 优势
 
