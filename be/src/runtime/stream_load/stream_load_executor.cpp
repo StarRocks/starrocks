@@ -61,7 +61,8 @@ TLoadTxnCommitResult k_stream_load_commit_result;
 TLoadTxnRollbackResult k_stream_load_rollback_result;
 #endif
 
-static Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, StreamLoadContext* ctx);
+static Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms,
+                                  TLoadTxnCommitResult* result);
 static StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::string_view db,
                                                          std::string_view table, int64_t txn_id);
 static bool wait_txn_visible_until(const AuthInfo& auth, std::string_view db, std::string_view table, int64_t txn_id,
@@ -223,15 +224,49 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
         request.__isset.txnCommitAttachment = true;
     }
 
+<<<<<<< HEAD
     return commit_txn_internal(request, rpc_timeout_ms, ctx);
+=======
+    int retry = 0;
+    TLoadTxnCommitResult result;
+    while (true) {
+        RETURN_IF_ERROR(commit_txn_internal(request, rpc_timeout_ms, &result));
+        Status st(result.status);
+        if (st.ok()) {
+            ctx->need_rollback = false;
+            return st;
+        } else if (st.is_publish_timeout()) {
+            ctx->need_rollback = false;
+            bool visible =
+                    wait_txn_visible_until(ctx->auth, request.db, request.tbl, request.txnId, ctx->load_deadline_sec);
+            return visible ? Status::OK() : st;
+        } else if (st.is_eagain()) {
+            LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry after sleeping "
+                         << result.retry_interval_ms << "ms. errmsg=" << st.message();
+            std::this_thread::sleep_for(std::chrono::milliseconds(result.retry_interval_ms));
+        } else if (st.is_time_out()) {
+            if (++retry > 1) {
+                ctx->need_rollback = true;
+                return st;
+            }
+            LOG(WARNING) << "commit transaction " << request.txnId << " failed, will retry. errmsg=" << st.message();
+            if (ctx->load_deadline_sec > 0) {
+                rpc_timeout_ms = (ctx->load_deadline_sec - UnixSeconds()) * 1000;
+            }
+        } else {
+            ctx->need_rollback = true;
+            return st;
+        }
+    }
+>>>>>>> a1be5505d8 ([Enhancement] Improve stream load rpc timeout and retry (#37473))
 }
 
-Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, StreamLoadContext* ctx) {
+Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_timeout_ms, TLoadTxnCommitResult* result) {
     TNetworkAddress master_addr = get_master_address();
-    TLoadTxnCommitResult result;
 #ifndef BE_TEST
-    auto st = ThriftRpcHelper::rpc<FrontendServiceClient>(
+    RETURN_IF_ERROR(ThriftRpcHelper::rpc<FrontendServiceClient>(
             master_addr.hostname, master_addr.port,
+<<<<<<< HEAD
             [&request, &result](FrontendServiceConnection& client) { client->loadTxnCommit(result, request); },
             rpc_timeout_ms);
     if (st.is_thrift_rpc_error()) {
@@ -241,9 +276,14 @@ Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_tim
     } else if (!st.ok()) {
         return st;
     }
+=======
+            [&request, &result](FrontendServiceConnection& client) { client->loadTxnCommit(*result, request); },
+            rpc_timeout_ms));
+>>>>>>> a1be5505d8 ([Enhancement] Improve stream load rpc timeout and retry (#37473))
 #else
-    result = k_stream_load_commit_result;
+    *result = k_stream_load_commit_result;
 #endif
+<<<<<<< HEAD
     Status status(result.status);
     if (status.ok()) {
         ctx->need_rollback = false;
@@ -262,6 +302,9 @@ Status commit_txn_internal(const TLoadTxnCommitRequest& request, int32_t rpc_tim
         ctx->need_rollback = true;
         return status;
     }
+=======
+    return Status::OK();
+>>>>>>> a1be5505d8 ([Enhancement] Improve stream load rpc timeout and retry (#37473))
 }
 
 StatusOr<TTransactionStatus::type> get_txn_status(const AuthInfo& auth, std::string_view db, std::string_view table,

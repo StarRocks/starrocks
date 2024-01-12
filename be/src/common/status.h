@@ -301,10 +301,18 @@ public:
         return code() == TStatusCode::TIMEOUT;
     }
 
+<<<<<<< HEAD
     bool is_eagain() const {
         mark_checked();
         return code() == TStatusCode::SR_EAGAIN;
     }
+=======
+    bool is_publish_timeout() const { return code() == TStatusCode::PUBLISH_TIMEOUT; }
+
+    bool is_eagain() const { return code() == TStatusCode::SR_EAGAIN; }
+
+    bool is_yield() const { return code() == TStatusCode::YIELD; }
+>>>>>>> a1be5505d8 ([Enhancement] Improve stream load rpc timeout and retry (#37473))
 
     // Convert into TStatus. Call this if 'status_container' contains an optional
     // TStatus field named 'status'. This also sets __isset.status.

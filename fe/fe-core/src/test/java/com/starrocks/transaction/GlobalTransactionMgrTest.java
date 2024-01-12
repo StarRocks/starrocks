@@ -57,6 +57,11 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadTaskInfo;
+<<<<<<< HEAD
+=======
+import com.starrocks.meta.lock.LockTimeoutException;
+import com.starrocks.metric.MetricRepo;
+>>>>>>> a1be5505d8 ([Enhancement] Improve stream load rpc timeout and retry (#37473))
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
@@ -895,4 +900,31 @@ public class GlobalTransactionMgrTest {
         Assert.assertThrows(UserException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
                 Collections.emptyList(), Collections.emptyList(), 10, null));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testRetryCommitOnRateLimitExceededThrowLockTimeoutException()
+            throws UserException {
+        Database db = new Database(10L, "db0");
+        GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+        doThrow(LockTimeoutException.class)
+                .when(globalTransactionMgr)
+                .commitTransaction(10L, 1001L, Collections.emptyList(), Collections.emptyList(), null);
+        Assert.assertThrows(LockTimeoutException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001L,
+                Collections.emptyList(), Collections.emptyList(), 10L, null));
+    }
+
+    @Test
+    public void testGetTransactionNumByCoordinateBe() throws LabelAlreadyUsedException, AnalysisException,
+            RunningTxnExceedException, DuplicatedRequestException {
+        masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        GlobalStateMgrTestUtil.testTxnLable1,
+                        transactionSourceBe,
+                        LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        long res = masterTransMgr.getTransactionNumByCoordinateBe("localbe");
+        assertEquals(1, res);
+    }
+>>>>>>> a1be5505d8 ([Enhancement] Improve stream load rpc timeout and retry (#37473))
 }

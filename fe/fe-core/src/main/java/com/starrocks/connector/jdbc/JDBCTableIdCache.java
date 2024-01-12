@@ -13,6 +13,7 @@
 // limitations under the License.
 
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/jdbc/JDBCTableIdCache.java
 package com.starrocks.connector.jdbc;
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -31,4 +32,14 @@ public class JDBCTableIdCache {
     public static Integer getTableId(JDBCTableName tableKey) {
         return tableIdCache.get(tableKey);
     }
+=======
+import com.google.common.base.Strings;
+
+public class LockTimeoutException extends RuntimeException {
+
+    public LockTimeoutException(String msg) {
+        super(Strings.nullToEmpty(msg));
+    }
+
+>>>>>>> a1be5505d8 ([Enhancement] Improve stream load rpc timeout and retry (#37473)):fe/fe-core/src/main/java/com/starrocks/meta/lock/LockTimeoutException.java
 }

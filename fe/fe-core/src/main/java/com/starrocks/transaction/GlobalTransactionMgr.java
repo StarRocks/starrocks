@@ -43,7 +43,14 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+<<<<<<< HEAD
 import com.starrocks.common.io.Writable;
+=======
+import com.starrocks.meta.lock.LockTimeoutException;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
+import com.starrocks.metric.MetricRepo;
+>>>>>>> a1be5505d8 ([Enhancement] Improve stream load rpc timeout and retry (#37473))
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -506,9 +513,11 @@ public class GlobalTransactionMgr implements Writable {
         while (true) {
             try {
                 return commitTransactionUnderDatabaseWLock(db, transactionId, tabletCommitInfos, tabletFailInfos,
-                        txnCommitAttachment);
+                        txnCommitAttachment, timeoutMs);
             } catch (CommitRateExceededException e) {
                 throttleCommitOnRateExceed(e, startTime, timeoutMs);
+            } catch (LockTimeoutException e) {
+                throw e;
             } catch (Exception e) {
                 throw new UserException("fail to execute commit task: " + e.getMessage(), e);
             }
@@ -536,8 +545,17 @@ public class GlobalTransactionMgr implements Writable {
     private VisibleStateWaiter commitTransactionUnderDatabaseWLock(
             @NotNull Database db, long transactionId, @NotNull List<TabletCommitInfo> tabletCommitInfos,
             @NotNull List<TabletFailInfo> tabletFailInfos,
+<<<<<<< HEAD
             @Nullable TxnCommitAttachment attachment) throws UserException {
         db.writeLock();
+=======
+            @Nullable TxnCommitAttachment attachment, long timeoutMs) throws UserException {
+        Locker locker = new Locker();
+        if (!locker.tryLockDatabase(db, LockType.WRITE, timeoutMs)) {
+            throw new LockTimeoutException(
+                    "get database write lock timeout, database=" + db.getFullName() + ", timeout=" + timeoutMs + "ms");
+        }
+>>>>>>> a1be5505d8 ([Enhancement] Improve stream load rpc timeout and retry (#37473))
         try {
             return commitTransaction(db.getId(), transactionId, tabletCommitInfos, tabletFailInfos, attachment);
         } finally {
