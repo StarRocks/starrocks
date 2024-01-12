@@ -302,10 +302,10 @@ public class Authorizer {
 
         List<AccessControlChecker> basicCheckers = ImmutableList.of(
                 () -> controller.checkAnyActionOnDb(currentUser, roleIds, catalogName, db),
-                () -> controller.checkAnyActionOnAnyTable(currentUser, roleIds, catalogName, db)
+                () -> controller.checkAnyActionOnAnyTable(currentUser, roleIds, catalogName, db),
+                () -> controller.checkAnyActionOnAnyView(currentUser, roleIds, catalogName, db)
         );
         List<AccessControlChecker> extraCheckers = ImmutableList.of(
-                () -> controller.checkAnyActionOnAnyView(currentUser, roleIds, db),
                 () -> controller.checkAnyActionOnAnyMaterializedView(currentUser, roleIds, db),
                 () -> controller.checkAnyActionOnAnyFunction(currentUser, roleIds, db),
                 () -> controller.checkAnyActionOnPipe(currentUser, roleIds, new PipeName("*", "*"))

@@ -136,7 +136,8 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     }
 
     @Override
-    public void checkAnyActionOnAnyView(UserIdentity currentUser, Set<Long> roleIds, String db) throws AccessDeniedException {
+    public void checkAnyActionOnAnyView(UserIdentity currentUser, Set<Long> roleIds, String catalog, String db)
+            throws AccessDeniedException {
         Database database = GlobalStateMgr.getServingState().getDb(db);
         for (Table table : database.getViews()) {
             RangerStarRocksResource resource = new RangerStarRocksResource(ObjectType.VIEW,
