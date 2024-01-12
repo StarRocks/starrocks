@@ -16,6 +16,13 @@ In addition to the native RBAC privilege system, StarRocks v3.1 also supports ac
 
 This topic describes the permission control methods and integration process of StarRocks and Apache Ranger. For information on how to create security policies on Ranger to manage data security, see the [Apache Ranger official website](https://ranger.apache.org/).
 
+Currently, StarRocks supports:
+
+- Creates access policies, masking policies, and row-level filter policies through Apache Ranger.
+- Ranger audit logs.
+
+**Ranger Servers that use Kerberos for authentication are not supported.**
+
 ## Permission control method
 
 StarRocks integrated with Apache Ranger provides the following permission control methods:
@@ -48,11 +55,6 @@ After StarRocks is integrating with Apache Ranger, you can achieve the following
 ## Integration procedure
 
 ### Installation ranger-starrocks-plugin
-
-Currently, StarRocks supports:
-
-- Creates access policies, masking policies, and row-level filter policies through Apache Ranger.
-- Ranger audit logs.
 
 1. Create the `starrocks` folder in the Ranger Admin directory `ews/webapp/WEB-INF/classes/ranger-plugins`.
 
