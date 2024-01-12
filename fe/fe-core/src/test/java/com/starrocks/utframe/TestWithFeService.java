@@ -26,6 +26,7 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -69,13 +70,16 @@ public abstract class TestWithFeService {
     protected String runningDir =
             "fe/mocked/" + getClass().getSimpleName() + "/" + UUID.randomUUID() + "/";
     protected ConnectContext connectContext;
+    // derived class can set this runMode to SHARED_DATA mode to create a shared-data cluster
+    protected RunMode runMode = RunMode.SHARED_NOTHING;
 
     @BeforeAll
     public final void beforeAll() throws Exception {
         beforeCreatingConnectContext();
-        connectContext = createDefaultCtx();
         beforeCluster();
         createStarrocksCluster();
+        // don't touch anything before GlobalStateMgr is initialized.
+        connectContext = createDefaultCtx();
         runBeforeAll();
     }
 
@@ -152,7 +156,7 @@ public abstract class TestWithFeService {
     }
 
     protected void createStarrocksCluster() {
-        UtFrameUtils.createMinStarRocksCluster(true);
+        UtFrameUtils.createMinStarRocksCluster(true, runMode);
     }
 
     protected void cleanStarrocksFeDir() {
@@ -191,7 +195,7 @@ public abstract class TestWithFeService {
     public void createTables(String... sqls) throws Exception {
         for (String sql : sqls) {
             CreateTableStmt stmt = (CreateTableStmt) parseAndAnalyzeStmt(sql);
-            GlobalStateMgr.getCurrentState().createTable(stmt);
+            StarRocksAssert.utCreateTableWithRetry(stmt);
         }
         updateReplicaPathHash();
     }

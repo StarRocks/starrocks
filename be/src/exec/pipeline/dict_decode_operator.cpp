@@ -38,11 +38,19 @@ Status DictDecodeOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk
     Columns decode_columns(_encode_column_cids.size());
     for (size_t i = 0; i < _encode_column_cids.size(); i++) {
         const ColumnPtr& encode_column = chunk->get_column_by_slot_id(_encode_column_cids[i]);
-        TypeDescriptor desc;
-        desc.type = TYPE_VARCHAR;
+        TypeDescriptor* desc = _decode_column_types[i];
+        decode_columns[i] = ColumnHelper::create_column(*desc, encode_column->is_nullable());
+        if (encode_column->only_null()) {
+            bool res = decode_columns[i]->append_nulls(encode_column->size());
+            DCHECK(res);
+            continue;
+        }
 
-        decode_columns[i] = ColumnHelper::create_column(desc, encode_column->is_nullable());
-        RETURN_IF_ERROR(_decoders[i]->decode(encode_column.get(), decode_columns[i].get()));
+        if (desc->is_array_type()) {
+            RETURN_IF_ERROR(_decoders[i]->decode_array(encode_column.get(), decode_columns[i].get()));
+        } else {
+            RETURN_IF_ERROR(_decoders[i]->decode_string(encode_column.get(), decode_columns[i].get()));
+        }
     }
 
     _cur_chunk = std::make_shared<Chunk>();

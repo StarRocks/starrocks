@@ -816,6 +816,23 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：是否允许系统自动检查和重新激活异步物化视图。启用此功能后，系统将会自动激活因基表（或视图）Schema Change 或重建而失效（Inactive）的物化视图。请注意，此功能不会激活由用户手动设置为 Inactive 的物化视图。此项功能支持从 v3.1.6 版本开始。
 - 默认值: TRUE
 
+##### jdbc_meta_default_cache_enable
+
+- 含义：JDBC Catalog 元数据缓存是否开启的默认值。当设置为TRUE时，新创建的 JDBC Catalog 会默认开启元数据缓存。
+- 默认值：FALSE
+
+##### jdbc_meta_default_cache_expire_sec
+
+- 含义：JDBC Catalog 元数据缓存的默认过期时间。当 jdbc_meta_default_cache_enable 设置为 TRUE 时，新创建的 JDBC Catalog 会默认设置元数据缓存的过期时间。
+- 单位：秒
+- 默认值：600
+
+##### default_mv_refresh_immediate
+
+- 含义：创建异步物化视图后，是否立即刷新该物化视图。当设置为 `true` 时，异步物化视图创建后会立即刷新。
+- 默认值：TRUE
+- 引入版本：v3.2.3
+
 ## 配置 FE 静态参数
 
 以下 FE 配置项为静态参数，不支持在线修改，您需要在 `fe.conf` 中修改并重启 FE。

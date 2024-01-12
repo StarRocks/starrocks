@@ -224,6 +224,7 @@ public:
     const std::string& get_input_format() const;
     const std::string& get_serde_lib() const;
     const std::map<std::string, std::string> get_serde_properties() const;
+    const std::string& get_time_zone() const;
 
 private:
     std::string _serde_lib;
@@ -231,6 +232,7 @@ private:
     std::string _hive_column_names;
     std::string _hive_column_types;
     std::map<std::string, std::string> _serde_properties;
+    std::string _time_zone;
 };
 
 class IcebergTableDescriptor : public HiveTableDescriptor {
@@ -262,12 +264,14 @@ public:
     const std::string& get_hive_column_types() const;
     const std::string& get_input_format() const;
     const std::string& get_serde_lib() const;
+    const std::string& get_time_zone() const;
 
 private:
     std::string _serde_lib;
     std::string _input_format;
     std::string _hive_column_names;
     std::string _hive_column_types;
+    std::string _time_zone;
 };
 
 class DeltaLakeTableDescriptor : public HiveTableDescriptor {
@@ -287,6 +291,7 @@ public:
     const std::string& get_hive_column_types() const;
     const std::string& get_input_format() const;
     const std::string& get_serde_lib() const;
+    const std::string& get_time_zone() const;
 
 private:
     std::string _hudi_instant_time;
@@ -294,6 +299,7 @@ private:
     std::string _hive_column_types;
     std::string _input_format;
     std::string _serde_lib;
+    std::string _time_zone;
 };
 
 class PaimonTableDescriptor : public HiveTableDescriptor {
@@ -302,9 +308,26 @@ public:
     ~PaimonTableDescriptor() override = default;
     bool has_partition() const override { return false; }
     const std::string& get_paimon_native_table() const;
+    const std::string& get_time_zone() const;
 
 private:
     std::string _paimon_native_table;
+    std::string _time_zone;
+};
+
+class OdpsTableDescriptor : public HiveTableDescriptor {
+public:
+    OdpsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~OdpsTableDescriptor() override = default;
+    bool has_partition() const override { return false; }
+    const std::string& get_database_name() const;
+    const std::string& get_table_name() const;
+    const std::string& get_time_zone() const;
+
+private:
+    std::string _database_name;
+    std::string _table_name;
+    std::string _time_zone;
 };
 
 // ===========================================

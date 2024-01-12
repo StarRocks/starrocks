@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Predicate;
 import com.google.common.base.Splitter;
@@ -113,7 +114,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.statistic.StatsConstants;
-import org.apache.arrow.util.VisibleForTesting;
 import org.apache.commons.lang3.StringUtils;
 
 import java.time.LocalDateTime;

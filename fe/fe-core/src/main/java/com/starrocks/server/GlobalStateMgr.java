@@ -42,7 +42,6 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
@@ -53,7 +52,6 @@ import com.starrocks.authentication.UserPropertyInfo;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.binlog.BinlogManager;
-import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.CatalogIdGenerator;
@@ -86,7 +84,6 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -135,7 +132,6 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.elasticsearch.EsRepository;
 import com.starrocks.connector.exception.StarRocksConnectorException;
@@ -188,6 +184,7 @@ import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
+import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
@@ -228,7 +225,9 @@ import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
@@ -1206,6 +1205,7 @@ public class GlobalStateMgr {
 
     // wait until FE is ready.
     public void waitForReady() throws InterruptedException {
+        long lastLoggingTimeMs = System.currentTimeMillis();
         while (true) {
             if (isReady()) {
                 LOG.info("globalStateMgr is ready. FE type: {}", feType);
@@ -1224,6 +1224,22 @@ public class GlobalStateMgr {
 
             Thread.sleep(2000);
             LOG.info("wait globalStateMgr to be ready. FE type: {}. is ready: {}", feType, isReady.get());
+
+            if (System.currentTimeMillis() - lastLoggingTimeMs > 60000L) {
+                lastLoggingTimeMs = System.currentTimeMillis();
+                LOG.warn("It took too much time for FE to transfer to a stable state(LEADER/FOLLOWER), " +
+                        "it maybe caused by one of the following reasons: " +
+                        "1. There are too many BDB logs to replay, because of previous failure of checkpoint" +
+                        "(you can check the create time of image file under meta/image dir). " +
+                        "2. Majority voting members(LEADER or FOLLOWER) of the FE cluster haven't started completely. " +
+                        "3. FE node has multiple IPs, you should configure the priority_networks in fe.conf " +
+                        "to match the ip record in meta/image/ROLE. And we don't support change the ip of FE node. " +
+                        "Ignore this reason if you are using FQDN. " +
+                        "4. The time deviation between FE nodes is greater than 5s, " +
+                        "please use ntp or other tools to keep clock synchronized. " +
+                        "5. The configuration of edit_log_port has changed, please reset to the original value. " +
+                        "6. The replayer thread may get stuck, please use jstack to find the details.");
+            }
         }
     }
 
@@ -1633,47 +1649,12 @@ public class GlobalStateMgr {
         for (String dbName : dbNames) {
             Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
             for (MaterializedView mv : db.getMaterializedViews()) {
-                List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
-                updateBaseTableRelatedMv(db.getId(), mv, baseTableInfos);
+                mv.onReload();
             }
         }
 
         long duration = System.currentTimeMillis() - startMillis;
         LOG.info("finish processing all tables' related materialized views in {}ms", duration);
-    }
-
-    public void updateBaseTableRelatedMv(Long dbId, MaterializedView mv, List<BaseTableInfo> baseTableInfos) {
-        for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            Table table;
-            try {
-                table = baseTableInfo.getTable();
-            } catch (Exception e) {
-                LOG.warn("there is an exception during get table from mv base table. exception:", e);
-                continue;
-            }
-            if (table == null) {
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                        "the table {} was not exist.", mv.getName(), mv.getId(), baseTableInfo.getTableName());
-                mv.setInactiveAndReason("base table dropped: " + baseTableInfo.getTableId());
-                continue;
-            }
-            if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
-                MaterializedView baseMv = (MaterializedView) table;
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                "the materialized view{}({}) is invalid.", mv.getName(), mv.getId(),
-                        baseMv.getName(), baseMv.getId());
-                mv.setInactiveAndReason("base mv is not active: " + baseMv.getName());
-                continue;
-            }
-            MvId mvId = new MvId(dbId, mv.getId());
-            table.addRelatedMaterializedView(mvId);
-            if (!table.isNativeTableOrMaterializedView()) {
-                connectorTblMetaInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
-                        baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
-                        ConnectorTableInfo.builder().setRelatedMaterializedViews(
-                                Sets.newHashSet(mvId)).build());
-            }
-        }
     }
 
     private void checkOpTypeValid() throws IOException {
@@ -3168,6 +3149,10 @@ public class GlobalStateMgr {
         this.alterJobMgr.replayAlterMaterializedViewStatus(log);
     }
 
+    public void replayAlterMaterializedViewBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log) {
+        this.alterJobMgr.replayAlterMaterializedViewBaseTableInfos(log);
+    }
+
     /*
      * used for handling CancelAlterStmt (for client is the CANCEL ALTER
      * command). including SchemaChangeHandler and RollupHandler
@@ -3316,7 +3301,8 @@ public class GlobalStateMgr {
                 Authorizer.checkAnyActionOnCatalog(ctx.getCurrentUserIdentity(),
                         ctx.getCurrentRoleIds(), newCatalogName);
             } catch (AccessDeniedException e) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+                AccessDeniedException.reportAccessDenied(newCatalogName, ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                        PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), newCatalogName);
             }
         }
         ctx.setCurrentCatalog(newCatalogName);
@@ -3347,7 +3333,9 @@ public class GlobalStateMgr {
                     Authorizer.checkAnyActionOnCatalog(ctx.getCurrentUserIdentity(),
                             ctx.getCurrentRoleIds(), newCatalogName);
                 } catch (AccessDeniedException e) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "USE CATALOG");
+                    AccessDeniedException.reportAccessDenied(newCatalogName,
+                            ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                            PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), newCatalogName);
                 }
             }
             ctx.setCurrentCatalog(newCatalogName);
@@ -3365,8 +3353,9 @@ public class GlobalStateMgr {
             Authorizer.checkAnyActionOnOrInDb(ctx.getCurrentUserIdentity(),
                     ctx.getCurrentRoleIds(), ctx.getCurrentCatalog(), dbName);
         } catch (AccessDeniedException e) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                    ctx.getCurrentUserIdentity().getUser(), dbName);
+            AccessDeniedException.reportAccessDenied(ctx.getCurrentCatalog(),
+                    ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                    PrivilegeType.ANY.name(), ObjectType.DATABASE.name(), dbName);
         }
 
         ctx.setDatabase(dbName);
@@ -3512,9 +3501,10 @@ public class GlobalStateMgr {
         locker.lockDatabase(db, LockType.READ);
         try {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
-            if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView) && !(table instanceof IcebergTable)) {
+            if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView)
+                    && !(table instanceof IcebergTable) && !(table instanceof JDBCTable)) {
                 throw new StarRocksConnectorException(
-                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg/odps external table/view");
+                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg/odps/jdbc external table/view");
             }
         } finally {
             locker.unLockDatabase(db, LockType.READ);

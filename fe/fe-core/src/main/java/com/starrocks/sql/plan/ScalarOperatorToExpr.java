@@ -570,14 +570,11 @@ public class ScalarOperatorToExpr {
 
         @Override
         public Expr visitDictMappingOperator(DictMappingOperator operator, FormatterContext context) {
+            // @todo: rewrite ScalarOperatorToExpr process when v1 is deprecated
             final ColumnRefOperator dictColumn = operator.getDictColumn();
             final SlotRef dictExpr = (SlotRef) dictColumn.accept(this, context);
             final ScalarOperator call = operator.getOriginScalaOperator();
-            final ColumnRefOperator key =
-                    new ColumnRefOperator(call.getUsedColumns().getFirstId(), Type.VARCHAR,
-                            operator.getDictColumn().getName(),
-                            dictExpr.isNullable());
-
+            final ColumnRefOperator key = call.getColumnRefs().get(0);
             // Because we need to rewrite the string column to PlaceHolder when we build DictExpr,
             // the PlaceHolder and the original string column have the same id,
             // so we need to save the original string column first and restore it after we build the expression
@@ -585,13 +582,25 @@ public class ScalarOperatorToExpr {
             // 1. save the previous expr, it was null or string column
             final Expr old = context.colRefToExpr.get(key);
             // 2. use a placeholder instead of string column to build DictMapping
-            context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(), Type.VARCHAR));
+            if (key.getType().isArrayType()) {
+                context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(),
+                        Type.ARRAY_VARCHAR));
+            } else {
+                context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(),
+                        Type.VARCHAR));
+            }
             final Expr callExpr = buildExpr.build(call, context);
             // 3. recover the previous column
             if (old != null) {
                 context.colRefToExpr.put(key, old);
             }
-            Expr result = new DictMappingExpr(dictExpr, callExpr);
+            Expr result;
+            if (operator.getStringProvideOperator() != null) {
+                final Expr stringExpr = buildExpr.build(operator.getStringProvideOperator(), context);
+                result = new DictMappingExpr(dictExpr, callExpr, stringExpr);
+            } else {
+                result = new DictMappingExpr(dictExpr, callExpr);
+            }
             result.setType(operator.getType());
             hackTypeNull(result);
             return result;

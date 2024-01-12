@@ -878,18 +878,17 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         }
     }
 
-    private boolean canEliminateNull(SlotDescriptor slot) {
-        for (Expr expr : conjuncts) {
-            if (expr.isBound(slot.getId())) {
-                ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr);
-                ColumnRefOperator column = new ColumnRefOperator(slot.getId().asInt(), slot.getType(),
-                        "any", true);
-                if (Utils.canEliminateNull(Sets.newHashSet(column), operator)) {
-                    return true;
-                }
-            }
+    protected boolean canEliminateNull(Expr expr, SlotDescriptor slot) {
+        if (expr.isBound(slot.getId())) {
+            ScalarOperator operator = SqlToScalarOperatorTranslator.translate(expr);
+            ColumnRefOperator column = new ColumnRefOperator(slot.getId().asInt(), slot.getType(),
+                    "any", true);
+            return Utils.canEliminateNull(Sets.newHashSet(column), operator);
         }
         return false;
+    }
+    protected boolean canEliminateNull(SlotDescriptor slot) {
+        return conjuncts.stream().anyMatch(expr -> canEliminateNull(expr, slot));
     }
 
     private boolean tryPushdownRuntimeFilterToChild(DescriptorTable descTbl, RuntimeFilterDescription description,

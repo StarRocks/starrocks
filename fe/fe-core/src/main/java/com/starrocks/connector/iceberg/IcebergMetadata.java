@@ -44,20 +44,11 @@ import com.starrocks.connector.iceberg.cost.IcebergStatisticProvider;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AddColumnClause;
-import com.starrocks.sql.ast.AddColumnsClause;
-import com.starrocks.sql.ast.AlterClause;
-import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
-import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
-import com.starrocks.sql.ast.ModifyColumnClause;
-import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -127,18 +118,22 @@ import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSc
 import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.HIVE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.REST_CATALOG;
-import static com.starrocks.connector.iceberg.hive.IcebergHiveCatalog.LOCATION_PROPERTY;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 public class IcebergMetadata implements ConnectorMetadata {
 
     private static final Logger LOG = LogManager.getLogger(IcebergMetadata.class);
+
+    public static final String LOCATION_PROPERTY = "location";
+    public static final String FILE_FORMAT = "file_format";
+    public static final String COMPRESSION_CODEC = "compression_codec";
+    public static final String COMMENT = "comment";
+
     private final String catalogName;
     private final HdfsEnvironment hdfsEnvironment;
     private final IcebergCatalog icebergCatalog;
     private final IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
 
-    private final Map<TableIdentifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<IcebergFilter, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
     private final Set<IcebergFilter> scannedTables = new HashSet<>();
@@ -216,6 +211,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         PartitionSpec partitionSpec = parsePartitionFields(schema, partitionColNames);
         Map<String, String> properties = stmt.getProperties() == null ? new HashMap<>() : stmt.getProperties();
         String tableLocation = properties.get(LOCATION_PROPERTY);
+        properties.put(COMMENT, stmt.getComment());
         Map<String, String> createTableProperties = IcebergApiConverter.rebuildCreateTableProperties(properties);
 
         return icebergCatalog.createTable(dbName, tableName, schema, partitionSpec, tableLocation, createTableProperties);
@@ -232,31 +228,10 @@ public class IcebergMetadata implements ConnectorMetadata {
                     "Failed to load iceberg table: " + stmt.getTbl().toString());
         }
 
-        List<AlterClause> alterClauses = stmt.getOps();
-        List<AlterClause> tableChanges = Lists.newArrayList();
-        List<AlterClause> schemaChanges = Lists.newArrayList();
-        for (AlterClause clause : alterClauses) {
-            if (clause instanceof AddColumnClause
-                    || clause instanceof AddColumnsClause
-                    || clause instanceof DropColumnClause
-                    || clause instanceof ColumnRenameClause
-                    || clause instanceof ModifyColumnClause) {
-                schemaChanges.add(clause);
-            } else if (clause instanceof ModifyTablePropertiesClause
-                    || clause instanceof TableRenameClause
-                    || clause instanceof AlterTableCommentClause
-            ) {
-                tableChanges.add(clause);
-            } else {
-                throw new StarRocksConnectorException(
-                        "Unsupported alter operation for iceberg connector: " + clause.toString());
-            }
-        }
-
-        commitAlterTable(table, schemaChanges, tableChanges);
+        IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(stmt, table, icebergCatalog);
+        executor.execute();
 
         synchronized (this) {
-            tables.remove(TableIdentifier.of(dbName, tableName));
             try {
                 icebergCatalog.refreshTable(dbName, tableName, jobPlanningExecutor);
             } catch (Exception exception) {
@@ -267,24 +242,6 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
     }
 
-    private void commitAlterTable(org.apache.iceberg.Table table,
-                                  List<AlterClause> schemaChanges,
-                                  List<AlterClause> tableChanges) {
-        Transaction transaction = table.newTransaction();
-
-        // todo apply table changes like rename/set properties/modify comment
-        if (!tableChanges.isEmpty()) {
-            throw new StarRocksConnectorException(
-                    "Unsupported alter operation for iceberg connector");
-        }
-
-        if (!schemaChanges.isEmpty()) {
-            IcebergApiConverter.applySchemaChanges(transaction.updateSchema(), schemaChanges);
-        }
-
-        transaction.commitTransaction();
-    }
-
     @Override
     public void dropTable(DropTableStmt stmt) {
         Table icebergTable = getTable(stmt.getDbName(), stmt.getTableName());
@@ -292,7 +249,6 @@ public class IcebergMetadata implements ConnectorMetadata {
             return;
         }
         icebergCatalog.dropTable(stmt.getDbName(), stmt.getTableName(), stmt.isForceDrop());
-        tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
         StatisticUtils.dropStatisticsAfterDropTable(icebergTable);
         asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
     }
@@ -300,15 +256,12 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public Table getTable(String dbName, String tblName) {
         TableIdentifier identifier = TableIdentifier.of(dbName, tblName);
-        if (tables.containsKey(identifier)) {
-            return tables.get(identifier);
-        }
 
         try {
             IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
             org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(dbName, tblName);
             Table table = IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
-            tables.put(identifier, table);
+            table.setComment(icebergTable.properties().getOrDefault(COMMENT, ""));
             return table;
 
         } catch (StarRocksConnectorException | NoSuchTableException e) {
@@ -493,7 +446,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                         continue;
                     }
 
-                    srTypes.add(icebergTable.getColumn(partitionField.name()).getType());
+                    srTypes.add(icebergTable.getColumn(icebergTable.getPartitionSourceName(spec.schema(),
+                            partitionField)).getType());
                 }
 
                 if (icebergTable.hasPartitionTransformedEvolution()) {
@@ -892,7 +846,6 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public void clear() {
         splitTasks.clear();
-        tables.clear();
         databases.clear();
         scannedTables.clear();
         IcebergMetricsReporter.remove();

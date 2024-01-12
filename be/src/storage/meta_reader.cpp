@@ -112,7 +112,7 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
         const auto& field = _collect_context.seg_collecter_params.fields[i];
         if (field == "dict_merge") {
             TypeDescriptor item_desc;
-            item_desc = slot->type();
+            item_desc.type = TYPE_VARCHAR;
             TypeDescriptor desc;
             desc.type = TYPE_ARRAY;
             desc.children.emplace_back(item_desc);
@@ -233,6 +233,11 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
 
     if (words.size() > DICT_DECODE_MAX_SIZE) {
         return Status::GlobalDictError("global dict greater than DICT_DECODE_MAX_SIZE");
+    }
+
+    // array<string> has none dict, return directly
+    if (words.size() < 1) {
+        return Status::OK();
     }
 
     [[maybe_unused]] NullableColumn* nullable_column = nullptr;

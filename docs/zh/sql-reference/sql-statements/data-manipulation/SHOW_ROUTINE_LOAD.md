@@ -21,7 +21,7 @@ SHOW [ALL] ROUTINE LOAD FOR [<db_name>.]<job_name>
 [ LIMIT { [offset, ] limit | limit OFFSET offset } ]
 ```
 
-:::NOTE
+:::note
 
 如果返回结果中的字段较多，可使用 `\G` 分行，如 `SHOW ROUTINE LOAD FOR <job_name>\G`。
 

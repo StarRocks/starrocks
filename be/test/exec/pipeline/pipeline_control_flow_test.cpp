@@ -257,7 +257,7 @@ public:
         return std::make_shared<TestSourceOperator>(this, _id, _plan_node_id, driver_sequence, _chunk_num, _chunk_size,
                                                     _counter, _pending_finish_cnt);
     }
-    SourceOperatorFactory::AdaptiveState adaptive_state() const override { return AdaptiveState::ACTIVE; }
+    SourceOperatorFactory::AdaptiveState adaptive_initial_state() const override { return AdaptiveState::ACTIVE; }
 
 private:
     size_t _chunk_num;

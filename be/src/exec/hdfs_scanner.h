@@ -16,9 +16,8 @@
 
 #include <atomic>
 #include <boost/algorithm/string.hpp>
-#include <utility>
 
-#include "column/chunk.h"
+#include "exec/mor_processor.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
@@ -72,12 +71,14 @@ struct HdfsScanStats {
     bool has_page_statistics = false;
     // page skip
     int64_t page_skip = 0;
+    // page index
+    int64_t rows_before_page_index = 0;
+    int64_t page_index_ns = 0;
 
     // late materialize round-by-round
     int64_t group_min_round_cost = 0;
 
-    // ORC only!
-    std::vector<int64_t> stripe_sizes;
+    std::vector<int64_t> orc_stripe_sizes;
 
     // Iceberg v2 only!
     int64_t iceberg_delete_file_build_ns = 0;
@@ -158,7 +159,7 @@ struct HdfsScannerParams {
     // The file last modification time
     int64_t modification_time = 0;
 
-    const TupleDescriptor* tuple_desc = nullptr;
+    TupleDescriptor* tuple_desc = nullptr;
 
     // columns read from file
     std::vector<SlotDescriptor*> materialize_slots;
@@ -200,6 +201,7 @@ struct HdfsScannerParams {
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
     bool use_file_metacache = false;
+    MORParams mor_params;
 };
 
 struct HdfsScannerContext {
@@ -305,7 +307,7 @@ public:
     int64_t num_rows_read() const { return _app_stats.rows_read; }
     int64_t cpu_time_spent() const { return _total_running_time - _app_stats.io_ns; }
     int64_t io_time_spent() const { return _app_stats.io_ns; }
-    int64_t estimated_mem_usage() const;
+    virtual int64_t estimated_mem_usage() const;
     void set_keep_priority(bool v) { _keep_priority = v; }
     bool keep_priority() const { return _keep_priority; }
     void update_counter();
@@ -355,6 +357,7 @@ private:
     Status _build_scanner_context();
     MonotonicStopWatch _pending_queue_sw;
     void update_hdfs_counter(HdfsScanProfile* profile);
+    Status _init_mor_processor(RuntimeState* runtime_state, const MORParams& params);
 
 protected:
     std::atomic_bool _pending_token = false;
@@ -370,6 +373,8 @@ protected:
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
     std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
     int64_t _total_running_time = 0;
+
+    std::shared_ptr<DefaultMORProcessor> _mor_processor;
 };
 
 } // namespace starrocks

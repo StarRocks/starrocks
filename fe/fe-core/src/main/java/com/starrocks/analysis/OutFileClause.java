@@ -79,6 +79,7 @@ public class OutFileClause implements ParseNode {
         PARQUET_COMPRESSION_TYPE_MAP.put("lz4", TCompressionType.LZ4);
         PARQUET_COMPRESSION_TYPE_MAP.put("zlib", TCompressionType.ZLIB);
         PARQUET_COMPRESSION_TYPE_MAP.put("uncompressed", TCompressionType.NO_COMPRESSION);
+        PARQUET_COMPRESSION_TYPE_MAP.put("none", TCompressionType.NO_COMPRESSION);
     }
 
     public static final Set<PrimitiveType> PARQUET_SUPPORTED_PRIMITIVE_TYPES = ImmutableSet.of(

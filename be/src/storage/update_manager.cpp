@@ -243,9 +243,11 @@ void UpdateManager::clear_cached_del_vec(const std::vector<TabletSegmentId>& tsi
     }
 }
 
-StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore* meta, int64_t tablet_id,
+StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore* meta, const std::string& tablet_path,
+                                                                        int64_t tablet_id,
                                                                         int64_t min_readable_version) {
     std::vector<std::pair<TabletSegmentId, int64_t>> clear_dcgs;
+    std::vector<std::string> clear_filenames;
     const int64_t begin_ms = UnixMillis();
     auto is_timeout = [begin_ms]() {
         if (UnixMillis() > begin_ms + 10) { // only hold cache_clock for 10ms max.
@@ -259,7 +261,8 @@ StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore*
         auto itr = _delta_column_group_cache.lower_bound(TabletSegmentId(tablet_id, 0));
         while (itr != _delta_column_group_cache.end() && !is_timeout() && itr->first.tablet_id == tablet_id) {
             // gc not required delta column group
-            DeltaColumnGroupListHelper::garbage_collection(itr->second, itr->first, min_readable_version, clear_dcgs);
+            DeltaColumnGroupListHelper::garbage_collection(itr->second, itr->first, min_readable_version, tablet_path,
+                                                           &clear_dcgs, &clear_filenames);
             itr++;
         }
     }
@@ -273,6 +276,10 @@ StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore*
         }
     }
     RETURN_IF_ERROR(meta->write_batch(&wb));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(tablet_path));
+    for (const auto& filename : clear_filenames) {
+        WARN_IF_ERROR(fs->delete_file(filename), "delete file fail, filename: " + filename);
+    }
     return clear_dcgs.size();
 }
 

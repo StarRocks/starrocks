@@ -329,11 +329,26 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate,
                                                ScalarOperatorRewriteContext context) {
-        if (predicate.getChild(0).isVariable() && predicate.getChild(0).equals(predicate.getChild(1))) {
+        ScalarOperator left = predicate.getChild(0);
+        ScalarOperator right = predicate.getChild(1);
+        if (left.isVariable() && left.equals(right)) {
             if (predicate.getBinaryType().equals(BinaryType.EQ_FOR_NULL)) {
                 return ConstantOperator.createBoolean(true);
             }
         }
+
+        if (predicate.getBinaryType().isEqual() && left.isConstantRef() && right.getType().isBoolean()) {
+            ConstantOperator constantOperator = (ConstantOperator) left;
+            if (constantOperator.isTrue()) {
+                return right;
+            }
+        } else if (predicate.getBinaryType().isEqual() && left.getType().isBoolean() && right.isConstantRef()) {
+            ConstantOperator constantOperator = (ConstantOperator) right;
+            if (constantOperator.isTrue()) {
+                return left;
+            }
+        }
+
         return predicate;
     }
 

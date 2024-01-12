@@ -14,15 +14,32 @@
 
 #include "storage/rowset/column_decoder.h"
 
+#include "column/array_column.h"
 #include "column/binary_column.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
+#include "common/status.h"
 #include "fmt/core.h"
 #include "gutil/casts.h"
 #include "storage/rowset/dictcode_column_iterator.h"
 
 namespace starrocks {
 Status ColumnDecoder::encode_to_global_id(Column* datas, Column* codes) {
+    auto* data = datas;
+    if (datas->is_nullable()) {
+        auto* nullable_column = down_cast<NullableColumn*>(datas);
+        data = nullable_column->data_column().get();
+    }
+    if (data->is_binary()) {
+        return _encode_string_to_global_id(datas, codes);
+    } else if (data->is_array()) {
+        return _encode_array_to_global_id(datas, codes);
+    }
+    return Status::NotSupported("encode to global id not support type.");
+}
+
+Status ColumnDecoder::_encode_string_to_global_id(Column* datas, Column* codes) {
     const auto ed = _global_dict->end();
     size_t num_rows = datas->size();
     codes->resize(num_rows);
@@ -66,11 +83,30 @@ Status ColumnDecoder::encode_to_global_id(Column* datas, Column* codes) {
     return Status::OK();
 }
 
+Status ColumnDecoder::_encode_array_to_global_id(Column* datas, Column* codes) {
+    if (datas->is_nullable()) {
+        auto* nullable_column = down_cast<NullableColumn*>(datas);
+        auto* lowcard_nullcolumn = down_cast<NullableColumn*>(codes);
+        auto* array_column = down_cast<ArrayColumn*>(nullable_column->data_column().get());
+        auto* lowcard_array_column = down_cast<ArrayColumn*>(lowcard_nullcolumn->data_column().get());
+
+        lowcard_nullcolumn->null_column()->swap_column(*nullable_column->null_column());
+        lowcard_array_column->offsets_column()->swap_column(*array_column->offsets_column());
+        return _encode_string_to_global_id(array_column->elements_column().get(),
+                                           lowcard_array_column->elements_column().get());
+    } else {
+        auto* array_column = down_cast<ArrayColumn*>(datas);
+        auto* lowcard_array_column = down_cast<ArrayColumn*>(codes);
+        lowcard_array_column->offsets_column()->swap_column(*array_column->offsets_column());
+        return _encode_string_to_global_id(array_column->elements_column().get(),
+                                           lowcard_array_column->elements_column().get());
+    }
+}
+
 void ColumnDecoder::check_global_dict() {
     if (_global_dict && _all_page_dict_encoded) {
         std::vector<int16_t> code_convert_map;
-        auto* scalar_iter = down_cast<ScalarColumnIterator*>(_iter);
-        Status st = GlobalDictCodeColumnIterator::build_code_convert_map(scalar_iter, _global_dict, &code_convert_map);
+        Status st = GlobalDictCodeColumnIterator::build_code_convert_map(_iter, _global_dict, &code_convert_map);
         if (st.ok()) {
             _code_convert_map = std::move(code_convert_map);
         } else {

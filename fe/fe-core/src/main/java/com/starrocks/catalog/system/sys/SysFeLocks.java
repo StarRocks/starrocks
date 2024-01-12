@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
@@ -52,9 +53,9 @@ public class SysFeLocks {
                         .column("lock_type", ScalarType.createVarcharType(64))
                         .column("lock_object", ScalarType.createVarcharType(64))
                         .column("lock_mode", ScalarType.createVarcharType(64))
-                        .column("lock_start_time", ScalarType.createVarcharType(64))
+                        .column("lock_start_time", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("thread_info", ScalarType.createVarcharType(64))
-                        .column("granted", ScalarType.createVarchar(64))
+                        .column("granted", ScalarType.createType(PrimitiveType.BOOLEAN))
                         .column("waiter_list", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .build(),
                 TSchemaTableType.SYS_FE_LOCKS);

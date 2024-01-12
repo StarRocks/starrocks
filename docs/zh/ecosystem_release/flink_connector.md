@@ -44,7 +44,7 @@ displayed_sidebar: "Chinese"
 
 #### 1.2.9
 
-本版本发布包含如下新增特性和问题修复。值得注意的变化是，Flink connector 已与 Flink CDC 3.0 集成，可轻松地从 CDC 数据源（如 MySQL、Kafka）构建流式 ELT 管道到 StarRocks。更多信息，您参见 [Flink CDC 同步（支持 schema change）](../loading/Flink-connector-starrocks.md#flink-cdc同步支持-schema-change)。
+本版本发布包含如下新增特性和问题修复。值得注意的变化是，Flink connector 已与 Flink CDC 3.0 集成，可轻松地从 CDC 数据源（如 MySQL、Kafka）构建流式 ELT 管道到 StarRocks。更多信息，您参见 [Flink CDC 同步（支持 schema change）](../loading/Flink-connector-starrocks.md#flink-cdc-同步支持-schema-change)。
 
 **新增特性**
 

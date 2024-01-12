@@ -180,6 +180,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.InsertTxnCommitAttachment;
+import com.starrocks.transaction.RemoteTransactionMgr;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionCommitFailedException;
@@ -574,8 +575,13 @@ public class StmtExecutor {
                         }
                     } finally {
                         boolean isAsync = false;
-                        if (!needRetry && context.isProfileEnabled()) {
-                            isAsync = tryProcessProfileAsync(execPlan);
+                        if (needRetry) {
+                            // If the runtime profile is enabled, then we need to clean up the profile record related
+                            // to this failed execution.
+                            String queryId = DebugUtil.printId(context.getExecutionId());
+                            ProfileManager.getInstance().removeProfile(queryId);
+                        } else if (context.isProfileEnabled()) {
+                            isAsync = tryProcessProfileAsync(execPlan, i);
                             if (parsedStmt.isExplain() &&
                                     StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
                                 handleExplainStmt(ExplainAnalyzer.analyze(
@@ -817,15 +823,26 @@ public class StmtExecutor {
     }
 
     private void forwardToLeader() throws Exception {
+        if (parsedStmt instanceof ExecuteStmt) {
+            throw new AnalysisException("ExecuteStmt Statement don't support statement need to be forward to leader");
+        }
         leaderOpExecutor = new LeaderOpExecutor(parsedStmt, originStmt, context, redirectStatus);
         LOG.debug("need to transfer to Leader. stmt: {}", context.getStmtId());
         leaderOpExecutor.execute();
     }
 
-    private boolean tryProcessProfileAsync(ExecPlan plan) {
-        if (coord == null || coord.getQueryProfile() == null) {
+    private boolean tryProcessProfileAsync(ExecPlan plan, int retryIndex) {
+        if (coord == null) {
             return false;
         }
+
+        // Disable runtime profile processing after the query is finished.
+        coord.setTopProfileSupplier(null);
+
+        if (coord.getQueryProfile() == null) {
+            return false;
+        }
+
         // This process will get information from the context, so it must be executed synchronously.
         // Otherwise, the context may be changed, for example, containing the wrong query id.
         profile = buildTopLevelProfile();
@@ -850,6 +867,9 @@ public class StmtExecutor {
             long totalTimeMs = now - startTime;
             summaryProfile.addInfoString(ProfileManager.END_TIME, TimeUtils.longToTimeString(now));
             summaryProfile.addInfoString(ProfileManager.TOTAL_TIME, DebugUtil.getPrettyStringMs(totalTimeMs));
+            if (retryIndex > 0) {
+                summaryProfile.addInfoString(ProfileManager.RETRY_TIMES, Integer.toString(retryIndex + 1));
+            }
 
             ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
             String profileContent = ProfileManager.getInstance().pushProfile(profilingPlan, profile);
@@ -1362,7 +1382,7 @@ public class StmtExecutor {
     }
 
     // Process use catalog statement
-    private void handleUseCatalogStmt() throws AnalysisException {
+    private void handleUseCatalogStmt() {
         UseCatalogStmt useCatalogStmt = (UseCatalogStmt) parsedStmt;
         try {
             String catalogName = useCatalogStmt.getCatalogName();
@@ -1744,7 +1764,7 @@ public class StmtExecutor {
         } finally {
             boolean isAsync = false;
             if (context.isProfileEnabled()) {
-                isAsync = tryProcessProfileAsync(execPlan);
+                isAsync = tryProcessProfileAsync(execPlan, 0);
                 if (parsedStmt.isExplain() &&
                         StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
                     handleExplainStmt(ExplainAnalyzer.analyze(ProfilingExecPlan.buildFrom(execPlan), profile, null));
@@ -1825,7 +1845,12 @@ public class StmtExecutor {
         long transactionId = stmt.getTxnId();
         TransactionState txnState = null;
         String label = DebugUtil.printId(context.getExecutionId());
-        if (targetTable instanceof OlapTable) {
+        if (targetTable instanceof ExternalOlapTable) {
+            Preconditions.checkState(stmt instanceof InsertStmt,
+                    "External OLAP table only supports insert statement");
+            String stmtLabel = ((InsertStmt) stmt).getLabel();
+            label = Strings.isNullOrEmpty(stmtLabel) ? MetaUtils.genInsertLabel(context.getExecutionId()) : stmtLabel;
+        } else if (targetTable instanceof OlapTable) {
             txnState = transactionMgr.getTransactionState(database.getId(), transactionId);
             if (txnState == null) {
                 throw new DdlException("txn does not exist: " + transactionId);
@@ -1963,7 +1988,7 @@ public class StmtExecutor {
                 if (filteredRows > 0) {
                     if (targetTable instanceof ExternalOlapTable) {
                         ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                        transactionMgr.abortRemoteTransaction(
+                        RemoteTransactionMgr.abortRemoteTransaction(
                                 externalTable.getSourceTableDbId(), transactionId,
                                 externalTable.getSourceTableHost(),
                                 externalTable.getSourceTablePort(),
@@ -2012,7 +2037,7 @@ public class StmtExecutor {
 
             if (targetTable instanceof ExternalOlapTable) {
                 ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                if (transactionMgr.commitRemoteTransaction(
+                if (RemoteTransactionMgr.commitRemoteTransaction(
                         externalTable.getSourceTableDbId(), transactionId,
                         externalTable.getSourceTableHost(),
                         externalTable.getSourceTablePort(),
@@ -2102,13 +2127,14 @@ public class StmtExecutor {
             try {
                 if (targetTable instanceof ExternalOlapTable) {
                     ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
-                    transactionMgr.abortRemoteTransaction(
+                    RemoteTransactionMgr.abortRemoteTransaction(
                             externalTable.getSourceTableDbId(), transactionId,
                             externalTable.getSourceTableHost(),
                             externalTable.getSourceTablePort(),
                             errMsg);
                 } else if (targetTable.isExternalTableWithFileSystem()) {
-                    // ignored
+                    GlobalStateMgr.getCurrentState().getMetadataMgr().abortSink(
+                            catalogName, dbName, tableName, coord.getSinkCommitInfos());
                 } else {
                     transactionMgr.abortTransaction(
                             database.getId(), transactionId,

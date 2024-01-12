@@ -101,6 +101,8 @@ public:
 
     bool try_remove_primary_index_cache(uint32_t tablet_id);
 
+    void unload_primary_index(int64_t tablet_id);
+
     // if base version != index.data_version, need to clear index cache
     Status check_meta_version(const Tablet& tablet, int64_t base_version);
 
@@ -149,6 +151,8 @@ public:
     bool try_lock_pk_index_shard(int64_t tablet_id) { return _get_pk_index_shard_lock(tablet_id).try_lock(); }
 
     void unlock_pk_index_shard(int64_t tablet_id) { _get_pk_index_shard_lock(tablet_id).unlock(); }
+
+    void try_remove_cache(uint32_t tablet_id, int64_t txn_id);
 
 private:
     // print memory tracker state

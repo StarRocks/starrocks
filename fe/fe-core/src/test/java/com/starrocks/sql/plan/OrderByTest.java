@@ -16,6 +16,7 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
@@ -635,6 +636,23 @@ class OrderByTest extends PlanTestBase {
         assertNotContains(plan2, " runtime filters");
     }
 
+    @Test
+    public void testTopNRuntimeFilterWithNotPrunedPartitionFilter() throws Exception {
+        String sql = "select * from lineitem_partition where L_SHIPDATE >= '1990-01-01' order by L_SHIPDATE limit 100;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (<slot 11> 11: L_SHIPDATE)");
+    }
+
+    @Test
+    public void testTopNRuntimeFilterWithPrunedPartitionFilter() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select * from lineitem_partition where L_SHIPDATE >= '1993-01-01' order by L_SHIPDATE limit 100;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "     probe runtime filters:\n");
+        FeConstants.runningUnitTest = false;
+    }
+
     @ParameterizedTest
     @MethodSource("failToStrictSql")
     void testFailToStrictOrderByExpression(String sql) {
@@ -676,6 +694,9 @@ class OrderByTest extends PlanTestBase {
         list.add(Arguments.of("select v1, * from t0  order by abs(v1)", "order by: <slot 4> 4: abs ASC"));
         list.add(Arguments.of("select distinct * from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
         list.add(Arguments.of("select distinct *, v1 from t0  order by abs(v1)", "order by: <slot 4> 4: abs ASC"));
+        list.add(Arguments.of("select distinct abs(v1) v1 from t0 order by v1", "order by: <slot 4> 4: abs ASC"));
+        list.add(Arguments.of("select distinct abs(v1) from t0 order by abs(v1)", "order by: <slot 4> 4: abs ASC"));
+        list.add(Arguments.of("select distinct abs(v1) v1 from t0 order by abs(v1)", "order by: <slot 5> 5: abs ASC"));
         return list.stream();
     }
 
@@ -693,6 +714,7 @@ class OrderByTest extends PlanTestBase {
         list.add(Arguments.of("select *, v1, upper(v1) v1 from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
         list.add(Arguments.of("select distinct upper(v1) v1, *, v1 from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
         list.add(Arguments.of("select distinct *, v1, upper(v1) v1 from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select distinct abs(v1) v1, v1 from t0 order by v1", "order by: <slot 4> 4: abs ASC"));
 
         return list.stream();
     }

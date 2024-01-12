@@ -460,7 +460,7 @@ public class DynamicPartitionUtil {
         }
 
         if (!Strings.isNullOrEmpty(properties.get(DynamicPartitionProperty.ENABLE))
-                && !ExpressionRangePartitionInfoV2.isTimestampFunction(expr)) {
+                && !ExpressionRangePartitionInfoV2.supportedDynamicPartition(expr)) {
             throw new DdlException("Expression partitioning does not support properties of dynamic partitioning");
         }
     }

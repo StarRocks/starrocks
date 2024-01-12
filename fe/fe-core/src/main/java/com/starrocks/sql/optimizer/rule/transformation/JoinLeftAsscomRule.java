@@ -84,7 +84,7 @@ public class JoinLeftAsscomRule extends JoinAssociateBaseRule {
             return false;
         }
 
-        return JoinReorderHelper.isLeftAsscom(input.inputAt(0), input);
+        return JoinReorderHelper.isLeftAsscom(input.inputAt(0), input, isInnerMode);
     }
 
     @Override

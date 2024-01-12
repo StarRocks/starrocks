@@ -203,6 +203,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -296,7 +297,8 @@ public class PlanFragmentBuilder {
         }
 
         List<Expr> outputExprs = outputColumns.stream().map(variable -> ScalarOperatorToExpr
-                        .buildExecExpression(variable, new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr())))
+                        .buildExecExpression(variable,
+                                new ScalarOperatorToExpr.FormatterContext(execPlan.getColRefToExpr())))
                 .collect(Collectors.toList());
         execPlan.getOutputExprs().addAll(outputExprs);
 
@@ -305,11 +307,11 @@ public class PlanFragmentBuilder {
         // We shouldn't set result sink directly to top fragment, because we will hash multi result sink.
         // Note: If enable compute node and the top fragment not GATHER node, the parallelism of top fragment can't
         // be 1, it's error
-        if (!enableComputeNode(execPlan)
+        if ((!enableComputeNode(execPlan)
                 && !inputFragment.hashLocalBucketShuffleRightOrFullJoin(inputFragment.getPlanRoot())
                 && execPlan.getScanNodes().stream().allMatch(d -> d instanceof OlapScanNode)
-                && ((execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
-                .reduce(Integer::sum).orElse(2) <= 1) || execPlan.getPhysicalPlan().getShortCircuit())) {
+                && (execPlan.getScanNodes().stream().map(d -> ((OlapScanNode) d).getScanTabletIds().size())
+                .reduce(Integer::sum).orElse(2) <= 1)) || execPlan.getPhysicalPlan().getShortCircuit()) {
             inputFragment.setOutputExprs(outputExprs);
             return;
         }
@@ -434,7 +436,8 @@ public class PlanFragmentBuilder {
 
             // NOTE:
             // - only support push down single predicate(eg, a = xx) to scan node.
-            // - only keys in agg-key model (aggregation/unique_key model) and primary-key model can be included in the unused
+            // - only keys in agg-key model (aggregation/unique_key model) and primary-key model can be included in
+            // the unused
             // columns.
             // - complex pred(eg, a + b = xx) can not be pushed down to scan node yet.
             // so the columns in complex predicate are useful for the stage after scan.
@@ -586,11 +589,13 @@ public class PlanFragmentBuilder {
 
             projectNode.setHasNullableGenerateChild();
 
-            Statistics statistics = optExpression.getStatistics();
-            Statistics.Builder b = Statistics.builder();
-            b.setOutputRowCount(statistics.getOutputRowCount());
-            b.addColumnStatisticsFromOtherStatistic(statistics, new ColumnRefSet(node.getOutputColumns()));
-            projectNode.computeStatistics(b.build());
+            Optional.ofNullable(optExpression.getStatistics()).ifPresent(statistics -> {
+                Statistics.Builder b = Statistics.builder();
+                b.setOutputRowCount(statistics.getOutputRowCount());
+                b.addColumnStatisticsFromOtherStatistic(statistics, new ColumnRefSet(node.getOutputColumns()));
+                projectNode.computeStatistics(b.build());
+            });
+
 
             for (SlotId sid : projectMap.keySet()) {
                 SlotDescriptor slotDescriptor = tupleDescriptor.getSlot(sid.asInt());
@@ -611,23 +616,23 @@ public class PlanFragmentBuilder {
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
 
             Map<SlotRef, SlotRef> slotRefMap = Maps.newHashMap();
+            Map<Integer, ColumnRefOperator> dictIdToStringRef = node.getDictToStrings().entrySet().stream()
+                    .collect(Collectors.toMap(k -> k.getKey().getId(), Map.Entry::getValue));
             for (TupleId tupleId : inputFragment.getPlanRoot().getTupleIds()) {
                 TupleDescriptor childTuple = context.getDescTbl().getTupleDesc(tupleId);
-                ArrayList<SlotDescriptor> slots = childTuple.getSlots();
-                for (SlotDescriptor slot : slots) {
+                for (SlotDescriptor slot : childTuple.getSlots()) {
                     int slotId = slot.getId().asInt();
-                    boolean isNullable = slot.getIsNullable();
-                    if (node.getDictToStrings().containsKey(slotId)) {
-                        Integer stringSlotId = node.getDictToStrings().get(slotId);
-                        SlotDescriptor slotDescriptor =
-                                context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(stringSlotId));
-                        slotDescriptor.setIsNullable(isNullable);
+                    if (dictIdToStringRef.containsKey(slotId)) {
+                        ColumnRefOperator stringRef = dictIdToStringRef.get(slotId);
+                        SlotDescriptor slotDescriptor = context.getDescTbl()
+                                .addSlotDescriptor(tupleDescriptor, new SlotId(stringRef.getId()));
+                        slotDescriptor.setIsNullable(slot.getIsNullable());
                         slotDescriptor.setIsMaterialized(true);
-                        slotDescriptor.setType(Type.VARCHAR);
+                        slotDescriptor.setType(stringRef.getType());
 
-                        context.getColRefToExpr().put(new ColumnRefOperator(stringSlotId, Type.VARCHAR,
+                        context.getColRefToExpr().put(new ColumnRefOperator(stringRef.getId(), stringRef.getType(),
                                         "<dict-code>", slotDescriptor.getIsNullable()),
-                                new SlotRef(stringSlotId.toString(), slotDescriptor));
+                                new SlotRef(stringRef.toString(), slotDescriptor));
                     } else {
                         // Note: must change the parent tuple id
                         SlotDescriptor slotDescriptor = new SlotDescriptor(slot.getId(), tupleDescriptor, slot);
@@ -654,7 +659,7 @@ public class PlanFragmentBuilder {
             DecodeNode decodeNode = new DecodeNode(context.getNextNodeId(),
                     tupleDescriptor,
                     inputFragment.getPlanRoot(),
-                    node.getDictToStrings(), projectMap, slotRefMap);
+                    node.getDictIdToStringsId(), projectMap, slotRefMap);
             decodeNode.computeStatistics(optExpression.getStatistics());
             decodeNode.setLimit(node.getLimit());
 
@@ -835,7 +840,8 @@ public class PlanFragmentBuilder {
         }
 
         @NotNull
-        private static Map<Integer, Expr> getGlobalDictsExprs(Map<Integer, ScalarOperator> dictExprs, ExecPlan context) {
+        private static Map<Integer, Expr> getGlobalDictsExprs(Map<Integer, ScalarOperator> dictExprs,
+                                                              ExecPlan context) {
             if (dictExprs.isEmpty()) {
                 return Collections.emptyMap();
             }
@@ -852,7 +858,8 @@ public class PlanFragmentBuilder {
             }
 
             Map<Integer, Expr> globalDictsExprs = Maps.newHashMap();
-            ScalarOperatorToExpr.FormatterContext formatterContext = new ScalarOperatorToExpr.FormatterContext(nodeRefs);
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(nodeRefs);
 
             dictExprs.forEach((k, v) ->
                     globalDictsExprs.put(k, ScalarOperatorToExpr.buildExecExpression(v, formatterContext)));
@@ -1093,15 +1100,7 @@ public class PlanFragmentBuilder {
             TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
             tupleDescriptor.setTable(referenceTable);
 
-            // set slot
-            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
-                SlotDescriptor slotDescriptor =
-                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
-                slotDescriptor.setColumn(entry.getValue());
-                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
-                slotDescriptor.setIsMaterialized(true);
-                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
-            }
+            prepareContextSlots(node, context, tupleDescriptor);
 
             DeltaLakeScanNode deltaLakeScanNode =
                     new DeltaLakeScanNode(context.getNextNodeId(), tupleDescriptor, "DeltaLakeScanNode");
@@ -1239,8 +1238,9 @@ public class PlanFragmentBuilder {
             // set slot
             prepareContextSlots(node, context, tupleDescriptor);
 
+            TupleDescriptor equalityDeleteTupleDesc = context.getDescTbl().createTupleDescriptor();
             IcebergScanNode icebergScanNode =
-                    new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode");
+                    new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, "IcebergScanNode", equalityDeleteTupleDesc);
             icebergScanNode.computeStatistics(optExpression.getStatistics());
             icebergScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
             try {
@@ -2989,6 +2989,7 @@ public class PlanFragmentBuilder {
 
             List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
                     leftChildColumns, rightChildColumns, onPredicates);
+            eqOnPredicates = eqOnPredicates.stream().filter(p -> !p.isCorrelated()).collect(Collectors.toList());
             Preconditions.checkState(!eqOnPredicates.isEmpty(), "must be eq-join");
 
             for (BinaryPredicateOperator s : eqOnPredicates) {

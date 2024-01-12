@@ -108,7 +108,7 @@ public:
 
     [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override {
         if (_local_dict_code_col == nullptr) {
-            _local_dict_code_col = _new_local_dict_col(values->is_nullable());
+            _local_dict_code_col = _new_local_dict_col(values);
         }
         _local_dict_code_col->reset_column();
         RETURN_IF_ERROR(_col_iter->fetch_dict_codes_by_rowid(rowids, size, _local_dict_code_col.get()));
@@ -146,13 +146,17 @@ public:
         return _col_iter->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges);
     }
 
-    [[nodiscard]] static Status build_code_convert_map(ScalarColumnIterator* file_column_iter,
-                                                       GlobalDictMap* global_dict,
+    [[nodiscard]] static Status build_code_convert_map(ColumnIterator* file_column_iter, GlobalDictMap* global_dict,
                                                        std::vector<int16_t>* code_convert_map);
 
 private:
+    [[nodiscard]] Status decode_array_dict_codes(const Column& codes, Column* words);
+
+    [[nodiscard]] Status decode_string_dict_codes(const Column& codes, Column* words);
+
+private:
     // create a new empty local dict column
-    ColumnPtr _new_local_dict_col(bool nullable);
+    ColumnPtr _new_local_dict_col(Column* src);
     // swap null column between src and dst column
     void _swap_null_columns(Column* src, Column* dst);
 

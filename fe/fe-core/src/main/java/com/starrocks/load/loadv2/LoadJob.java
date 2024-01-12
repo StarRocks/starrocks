@@ -80,7 +80,7 @@ import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
-import com.starrocks.transaction.BeginTransactionException;
+import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
@@ -171,6 +171,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
 
     @SerializedName("mc")
     protected String mergeCondition;
+    @SerializedName("jo")
+    protected JSONOptions jsonOptions = new JSONOptions();
 
     public int getProgress() {
         return this.progress;
@@ -393,6 +395,18 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             if (properties.containsKey(LoadStmt.LOG_REJECTED_RECORD_NUM)) {
                 logRejectedRecordNum = Long.parseLong(properties.get(LoadStmt.LOG_REJECTED_RECORD_NUM));
             }
+
+            if (properties.containsKey(LoadStmt.STRIP_OUTER_ARRAY)) {
+                jsonOptions.stripOuterArray = Boolean.parseBoolean(properties.get(LoadStmt.STRIP_OUTER_ARRAY));
+            }
+
+            if (properties.containsKey(LoadStmt.JSONPATHS)) {
+                jsonOptions.jsonPaths = properties.get(LoadStmt.JSONPATHS);
+            }
+
+            if (properties.containsKey(LoadStmt.JSONROOT)) {
+                jsonOptions.jsonRoot = properties.get(LoadStmt.JSONROOT);
+            }
         }
     }
 
@@ -401,7 +415,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     public void beginTxn()
-            throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
+            throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
     }
 
     /**
@@ -409,11 +423,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
      * if job has been cancelled, this step will be ignored
      *
      * @throws LabelAlreadyUsedException  the job is duplicated
-     * @throws BeginTransactionException  the limit of load job is exceeded
+     * @throws RunningTxnExceedException  the limit of load job is exceeded
      * @throws AnalysisException          there are error params in job
      * @throws DuplicatedRequestException
      */
-    public void execute() throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException,
+    public void execute() throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException,
             DuplicatedRequestException, LoadException {
         writeLock();
         try {
@@ -423,7 +437,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
     }
 
-    public void unprotectedExecute() throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException,
+    public void unprotectedExecute() throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException,
             DuplicatedRequestException, LoadException {
         // check if job state is pending
         if (state != JobState.PENDING) {
@@ -1251,5 +1265,16 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
             String json = Text.readString(in);
             return GsonUtils.GSON.fromJson(json, LoadJobStateUpdateInfo.class);
         }
+    }
+
+    public static class JSONOptions {
+        @SerializedName("s")
+        public boolean stripOuterArray;
+
+        @SerializedName("jp")
+        public String jsonPaths;
+
+        @SerializedName("jr")
+        public String jsonRoot;
     }
 }

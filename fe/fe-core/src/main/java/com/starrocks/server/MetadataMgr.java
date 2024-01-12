@@ -220,6 +220,10 @@ public class MetadataMgr {
         return db;
     }
 
+    public Database getDb(Long databaseId) {
+        return localMetastore.getDb(databaseId);
+    }
+
     public List<String> listTableNames(String catalogName, String dbName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> tableNames = ImmutableSet.builder();
@@ -319,6 +323,14 @@ public class MetadataMgr {
         return connectorTable;
     }
 
+    public Table getTable(Long databaseId, Long tableId) {
+        Database database = localMetastore.getDb(databaseId);
+        if (database == null) {
+            return null;
+        }
+        return database.getTable(tableId);
+    }
+
     public boolean tableExists(String catalogName, String dbName, String tblName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         return connectorMetadata.map(metadata -> metadata.tableExists(dbName, tblName)).orElse(false);
@@ -403,7 +415,6 @@ public class MetadataMgr {
         return statistics.build();
     }
 
-
     public Statistics getTableStatistics(OptimizerContext session,
                                          String catalogName,
                                          Table table,
@@ -482,6 +493,18 @@ public class MetadataMgr {
                 metadata.finishSink(dbName, tableName, sinkCommitInfos);
             } catch (StarRocksConnectorException e) {
                 LOG.error("table sink commit failed", e);
+                throw new StarRocksConnectorException(e.getMessage());
+            }
+        });
+    }
+
+    public void abortSink(String catalogName, String dbName, String tableName, List<TSinkCommitInfo> sinkCommitInfos) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> {
+            try {
+                metadata.abortSink(dbName, tableName, sinkCommitInfos);
+            } catch (StarRocksConnectorException e) {
+                LOG.error("table sink abort failed", e);
                 throw new StarRocksConnectorException(e.getMessage());
             }
         });

@@ -12,20 +12,7 @@ displayed_sidebar: "Chinese"
 
 ### StarRocks 版本
 
-StarRocks 的版本号由三个数字表示，格式为 **Major.Minor.Patch**，例如 `2.5.4`。第一个数字代表 StarRocks 的重大版本，第二个数字代表大版本，第三个数字代表小版本。目前，StarRocks 为部分版本提供长期支持（Long-time Support，LTS），维护期为半年以上。
-
-| **StarRocks 版本** | **是否为 LTS 版本** |
-| ------------------ | ------------------- |
-| v1.19.x            | 否                  |
-| v2.0.x             | 否                  |
-| v2.1.x             | 否                  |
-| v2.2.x             | 否                  |
-| v2.3.x             | 否                  |
-| v2.4.x             | 否                  |
-| v2.5.x             | 是                  |
-| v3.0.x             | 否                  |
-| v3.1.x             | 否                  |
-| v3.2.x             | 否                  |
+StarRocks 的版本号由三个数字表示，格式为 **Major.Minor.Patch**，例如 `2.5.4`。第一个数字代表 StarRocks 的重大版本，第二个数字代表大版本，第三个数字代表小版本。
 
 ### 升级路径
 
@@ -41,6 +28,15 @@ StarRocks 的版本号由三个数字表示，格式为 **Major.Minor.Patch**，
 
   - 您必须从 v1.19 升级到 v2.0。
   - 您必须从 v2.5 升级到 v3.0。
+
+> **注意**
+>
+> 如果您需要进行连续的大版本升级，比如从 2.4->2.5->3.0->3.1->3.2，或者在升级之后进行了降级，之后再次执行升级，比如 2.5->3.0->2.5->3.0。为了避免部分 FE 节点元数据升级失败，需要在相邻的两次升级之间或降级后升级前执行如下操作：
+>
+> 1. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 创建新的元数据快照文件。
+> 2. 等待元数据快照文件同步至其他 FE 节点。
+>
+> 您可以通过查看 Leader FE 节点的日志文件 **fe.log** 确认元数据快照文件是否推送完成。如果日志打印以下内容，则说明快照文件推送完成："push image.xxx from subdir [] to other nodes. totally xx nodes, push succeeded xx nodes"。
 
 ### 升级流程
 
@@ -59,8 +55,8 @@ StarRocks 支持**滚动升级**，允许您在不停止服务的情况下升级
 升级前，请关闭 Tablet Clone。
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "0");
-ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "0");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_balancing_tablets" = "0");
 ADMIN SET FRONTEND CONFIG ("disable_balance"="true");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
 ```
@@ -68,8 +64,8 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="true");
 完成升级，并且所有 BE 节点状态变为 `Alive` 后，您可以重新开启 Tablet Clone。
 
 ```SQL
-ADMIN SET FRONTEND CONFIG ("max_scheduling_tablets" = "2000");
-ADMIN SET FRONTEND CONFIG ("max_balancing_tablets" = "100");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_scheduling_tablets" = "10000");
+ADMIN SET FRONTEND CONFIG ("tablet_sched_max_balancing_tablets" = "500");
 ADMIN SET FRONTEND CONFIG ("disable_balance"="false");
 ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
 ```
@@ -189,12 +185,3 @@ ADMIN SET FRONTEND CONFIG ("disable_colocate_balance"="false");
    ```
 
 5. 重复以上步骤升级其他 Follower FE 节点，最后升级 Leader FE 节点。
-
-  > **注意**
-  >
-  > 如果您从 v2.5 升级至 v3.0 之后，进行了回滚，然后再次升级至 v3.0，为了避免部分 Follower FE 节点元数据升级失败，则必须在升级完成后执行以下步骤：
-  >
-  > 1. 执行 [ALTER SYSTEM CREATE IMAGE](../sql-reference/sql-statements/Administration/ALTER_SYSTEM.md) 创建新的元数据快照文件。
-  > 2. 等待元数据快照文件同步至其他 FE 节点。
-  >
-  > 您可以通过查看 Leader FE 节点的日志文件 **fe.log** 确认元数据快照文件是否推送完成。如果日志打印以下内容，则说明快照文件推送完成："push image.* from subdir [] to other nodes. totally xx nodes, push successed xx nodes"。

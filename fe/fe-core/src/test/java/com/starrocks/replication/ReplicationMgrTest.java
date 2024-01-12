@@ -77,7 +77,8 @@ public class ReplicationMgrTest {
                 "properties('replication_num' = '1'); ";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
                 AnalyzeTestUtil.getConnectContext());
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+
         table = (OlapTable) db.getTable("single_partition_duplicate_key");
 
         srcTable = DeepCopy.copyWithGson(table, OlapTable.class);
@@ -92,8 +93,10 @@ public class ReplicationMgrTest {
 
     @Before
     public void setUp() throws Exception {
-        srcTable.getPartitions().iterator().next()
-                .updateVisibleVersion(table.getPartitions().iterator().next().getCommittedVersion() + 100);
+        Partition partition = table.getPartitions().iterator().next();
+        Partition srcPartition = srcTable.getPartitions().iterator().next();
+        partition.updateVersionForRestore(10);
+        srcPartition.updateVersionForRestore(partition.getCommittedVersion() + 100);
 
         job = new ReplicationJob("test_token", db.getId(), table, srcTable, GlobalStateMgr.getCurrentSystemInfo());
         replicationMgr = new ReplicationMgr();

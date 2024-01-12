@@ -109,10 +109,7 @@ EXPLAIN ANALYZE <sql_statement>
 
 ## 限制
 
+- EXPLAIN ANALYZE INSERT INTO 语句仅支持内表。
 - 为了获得更好的视觉效果，输出文本中包含了 ANSI 字符，以提供颜色、高亮等功能。推荐使用 MyCLI 客户端。对于不兼容 ANSI 功能的客户端，比如 MySQL 客户端，可能会出现右侧边界未对齐的现象，但并不影响使用。例如：
 
 ![img](../assets/Profile/text_based_profile_not_aligned.jpeg)
-
-- EXPLAIN ANALYZE INSERT INTO 语句仅支持内表。
-
-

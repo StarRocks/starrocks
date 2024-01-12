@@ -423,16 +423,16 @@ If you choose Blob Storage as storage for your Iceberg cluster, take one of the 
 - To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.shared_key" = "<storage_account_shared_key>"
   ```
 
 - To choose the SAS Token authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.container" = "<blob_container_name>",
-  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.container" = "<container_name>",
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
 `StorageCredentialParams` for Microsoft Azure:
@@ -500,7 +500,7 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
 
   ```SQL
   "azure.adls2.storage_account" = "<storage_account_name>",
-  "azure.adls2.shared_key" = "<shared_key>"
+  "azure.adls2.shared_key" = "<storage_account_shared_key>"
   ```
 
   Or:

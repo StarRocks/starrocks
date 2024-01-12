@@ -34,7 +34,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TExplainLevel;
@@ -47,6 +46,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.rules.ErrorCollector;
 import org.junit.rules.ExpectedException;
 
@@ -108,28 +108,72 @@ public class PlanTestNoneDBBase {
         }
     }
 
-    private static String ignoreColRefs(String s) {
-        // ignore colRef id
-        // eg:
-        //  |  predicates: 2: k2 LIKE 'a%'
-        // to
-        //  |  predicates: $: k2 LIKE 'a%'
-        String str = s.replaceAll("\\d+: ", "\\$ ");
-        // ignore predicate order
-        // |  predicates: 2: k2 LIKE 'a%' or 1: k1 > 1
-        // TODO: only reorder predicates rather than the whole line.
-        return Arrays.stream(StringUtils.split(str, " ,;")).sorted().collect(Collectors.joining(" "));
+    private static final String NORMAL_PLAN_PREDICATE_PREFIX = "PREDICATES:";
+    private static final String LOWER_NORMAL_PLAN_PREDICATE_PREFIX = "predicates:";
+    private static final String LOGICAL_PLAN_SCAN_PREFIX = "SCAN ";
+    private static final String LOGICAL_PLAN_PREDICATE_PREFIX = " predicate";
+
+    private static String normalizeLogicalPlanPredicate(String predicate) {
+        if (predicate.startsWith(LOGICAL_PLAN_SCAN_PREFIX) && predicate.contains(LOGICAL_PLAN_PREDICATE_PREFIX)) {
+            String[] splitArray = predicate.split(LOGICAL_PLAN_PREDICATE_PREFIX);
+            Preconditions.checkArgument(splitArray.length == 2);
+            String first = splitArray[0];
+            String second = splitArray[1];
+            String predicates = second.substring(1, second.length() - 2);
+            StringBuilder sb = new StringBuilder();
+            sb.append(first);
+            sb.append(LOGICAL_PLAN_PREDICATE_PREFIX + "[");
+            String sorted = Arrays.stream(predicates.split(" AND ")).sorted().collect(Collectors.joining(" AND "));
+            sorted = Arrays.stream(sorted.split(" OR ")).sorted().collect(Collectors.joining(" OR "));
+            sb.append(sorted);
+            sb.append("])");
+            return sb.toString();
+        } else {
+            return predicate;
+        }
+    }
+
+    private static String normalizeLogicalPlan(String plan) {
+        return Stream.of(plan.split("\n"))
+                .filter(s -> !s.contains("tabletList"))
+                .map(str -> str.replaceAll("\\d+: ", "col\\$: ").trim())
+                .map(str -> str.replaceAll("\\[\\d+]", "[col\\$]").trim())
+                .map(str -> str.replaceAll("\\[\\d+, \\d+]", "[col\\$, col\\$]").trim())
+                .map(str -> str.replaceAll("\\[\\d+, \\d+, \\d+]", "[col\\$, col\\$, col\\$]").trim())
+                .map(str -> normalizeLogicalPlanPredicate(str))
+                .collect(Collectors.joining("\n"));
+    }
+
+    private static String normalizeNormalPlanSeparator(String predicate, String sep) {
+        String[] predicates = predicate.split(sep);
+        Preconditions.checkArgument(predicates.length == 2);
+        return predicates[0] + sep + Arrays.stream(predicates[1].split(",")).sorted().collect(Collectors.joining(","));
+    }
+
+    public static String normalizeNormalPlanPredicate(String predicate) {
+        if (predicate.contains(NORMAL_PLAN_PREDICATE_PREFIX)) {
+            return normalizeNormalPlanSeparator(predicate, NORMAL_PLAN_PREDICATE_PREFIX);
+        } else if (predicate.contains(LOWER_NORMAL_PLAN_PREDICATE_PREFIX)) {
+            return normalizeNormalPlanSeparator(predicate, LOWER_NORMAL_PLAN_PREDICATE_PREFIX);
+        } else {
+            return predicate;
+        }
+    }
+
+    public static String normalizeNormalPlan(String plan) {
+        return Stream.of(plan.split("\n")).filter(s -> !s.contains("tabletList"))
+                .map(str -> str.replaceAll("\\d+: ", "col\\$: ").trim())
+                .map(str -> normalizeNormalPlanPredicate(str))
+                .collect(Collectors.joining("\n"));
     }
 
     public static void assertContainsIgnoreColRefs(String text, String... pattern) {
-        String normT = Stream.of(text.split("\n"))
-                .map(str -> ignoreColRefs(str))
-                .collect(Collectors.joining("\n"));
+        String normT = normalizeNormalPlan(text);
         for (String s : pattern) {
             // If pattern contains multi lines, only check line by line.
-            for (String line : s.split("\n")) {
-                String normS = ignoreColRefs(line).trim();
-                Assert.assertTrue(text, normT.contains(normS));
+            String normS = normalizeNormalPlan(s);
+            for (String line : normS.split("\n")) {
+                Assert.assertTrue(text, normT.contains(line));
             }
         }
     }
@@ -640,44 +684,19 @@ public class PlanTestNoneDBBase {
     }
 
     private void checkWithIgnoreTabletList(String expect, String actual) {
-        expect = Stream.of(expect.split("\n")).
-                filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
         if (isIgnoreExplicitColRefIds()) {
-            checkWithIgnoreTabletListAndColRefIds(expect, actual);
+            String ignoreExpect = normalizeLogicalPlan(expect);
+            String ignoreActual = normalizeLogicalPlan(actual);
+            Assert.assertEquals(actual, ignoreExpect, ignoreActual);
         } else {
+            expect = Stream.of(expect.split("\n")).
+                    filter(s -> !s.contains("tabletList")).collect(Collectors.joining("\n"));
             expect = Stream.of(expect.split("\n")).filter(s -> !s.contains("tabletList"))
                     .collect(Collectors.joining("\n"));
             actual = Stream.of(actual.split("\n")).filter(s -> !s.contains("tabletList"))
                     .collect(Collectors.joining("\n"));
             Assert.assertEquals(expect, actual);
         }
-    }
-
-    private void checkWithIgnoreTabletListAndColRefIds(String expect, String actual) {
-        QueryDebugOptions queryDebugOptions =
-                connectContext.getSessionVariable().getQueryDebugOptions();
-        boolean isNormalizePredicate =
-                queryDebugOptions.enableNormalizePredicateAfterMVRewrite;
-
-        String ignoreExpect = Stream.of(expect.split("\n"))
-                .filter(s -> !s.contains("tabletList"))
-                .map(str -> str.replaceAll("\\d+", "").trim())
-                .map(str -> {
-                    return isNormalizePredicate ?
-                            Arrays.stream(str.split("")).sorted().collect(Collectors.joining())
-                            : str;
-                })
-                .collect(Collectors.joining("\n"));
-        String ignoreActual = Stream.of(actual.split("\n"))
-                .filter(s -> !s.contains("tabletList"))
-                .map(str -> str.replaceAll("\\d+", "").trim())
-                .map(str -> {
-                    return isNormalizePredicate ?
-                            Arrays.stream(str.split("")).sorted().collect(Collectors.joining())
-                            : str;
-                })
-                .collect(Collectors.joining("\n"));
-        Assert.assertEquals(actual, ignoreExpect, ignoreActual);
     }
 
     protected void assertPlanContains(String sql, String... explain) throws Exception {
@@ -734,13 +753,13 @@ public class PlanTestNoneDBBase {
         return (OlapTable) getTable(t);
     }
 
-    public static List<Pair<String, String>> zipSqlAndPlan(List<String> sqls, List<String> plans) {
+    public static List<Arguments> zipSqlAndPlan(List<String> sqls, List<String> plans) {
         Preconditions.checkState(sqls.size() == plans.size(), "sqls and plans should have same size");
-        List<Pair<String, String>> zips = Lists.newArrayList();
+        List<Arguments> arguments = Lists.newArrayList();
         for (int i = 0; i < sqls.size(); i++) {
-            zips.add(Pair.create(sqls.get(i), plans.get(i)));
+            arguments.add(Arguments.of(sqls.get(i), plans.get(i)));
         }
-        return zips;
+        return arguments;
     }
 
     protected static void createTables(String dirName, List<String> fileNames) {
