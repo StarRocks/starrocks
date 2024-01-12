@@ -240,18 +240,22 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitInsertStatement(InsertStmt statement, ConnectContext context) {
+        boolean hasInsertPrivOnTargetTable = false;
+        boolean hasInsertPrivOnTargetCol = false;
+        Set<String> columnNames = null;
         // For table just created by CTAS statement, we ignore the check of 'INSERT' privilege on it.
         if (!statement.isForCTAS()) {
             try {
-                List<String> columnNames = statement.getTargetColumnNames();
+                columnNames = statement.getTargetColumnNames() == null ? Collections.singleton("*") :
+                        new HashSet<>(statement.getTargetColumnNames());
                 Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        statement.getTableName(),
-                        columnNames == null ? Collections.singleton("*") : new HashSet<>(columnNames),
-                        PrivilegeType.INSERT);
+                        statement.getTableName(), columnNames, PrivilegeType.INSERT);
+                hasInsertPrivOnTargetCol = true;
             } catch (AccessDeniedException e) {
                 try {
                     Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                             statement.getTableName(), PrivilegeType.INSERT);
+                    hasInsertPrivOnTargetTable = true;
                 } catch (AccessDeniedException exception) {
                     AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
                             context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -260,7 +264,20 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
             }
         }
 
-        visit(statement.getQueryStatement(), context);
+        Map<TableName, Relation> allTablesRelations = AnalyzerUtils.collectAllTableAndViewRelations(statement);
+        Map<TableName, Set<String>> allTouchedColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
+        try {
+            // no need to check COLUMN SELECT privilege when user already has COLUMN INSERT privilege
+            if (hasInsertPrivOnTargetCol && allTouchedColumns.containsKey(statement.getTableName())) {
+                allTouchedColumns.get(statement.getTableName()).removeAll(columnNames);
+            }
+            checkCanSelectFromColumns(context, allTouchedColumns, allTablesRelations);
+        } catch (AccessDeniedException e) {
+            if (hasInsertPrivOnTargetTable || !allTouchedColumns.containsKey(statement.getTableName())) {
+                allTablesRelations.remove(statement.getTableName());
+            }
+            checkSelectTableAction(context, allTablesRelations);
+        }
         return null;
     }
 
@@ -289,11 +306,13 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitUpdateStatement(UpdateStmt statement, ConnectContext context) {
         boolean hasUpdatePrivOnTargetTable = false;
+        boolean hasUpdatePrivOnTargetCol = false;
+        Set<String> assignmentColumn = statement.getAssignments().stream()
+                .map(columnAssignment -> columnAssignment.getColumn()).collect(Collectors.toSet());
         try {
-            Set<String> assignmentColumn = statement.getAssignments().stream()
-                    .map(columnAssignment -> columnAssignment.getColumn()).collect(Collectors.toSet());
             Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     statement.getTableName(), assignmentColumn, PrivilegeType.UPDATE);
+            hasUpdatePrivOnTargetCol = true;
         } catch (AccessDeniedException e) {
             try {
                 Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -308,6 +327,10 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         Map<TableName, Relation> allTouchedTables = AnalyzerUtils.collectAllTableAndViewRelations(statement);
         Map<TableName, Set<String>> tableColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
         try {
+            // no need to check COLUMN SELECT privilege when user already has COLUMN UPDATE privilege
+            if (hasUpdatePrivOnTargetCol && tableColumns.containsKey(statement.getTableName())) {
+                tableColumns.get(statement.getTableName()).removeAll(assignmentColumn);
+            }
             checkCanSelectFromColumns(context, tableColumns, allTouchedTables);
         } catch (AccessDeniedException e) {
             if (hasUpdatePrivOnTargetTable || !tableColumns.containsKey(statement.getTableName())) {
