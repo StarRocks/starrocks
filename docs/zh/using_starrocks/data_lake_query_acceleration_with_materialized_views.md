@@ -94,7 +94,7 @@ StarRocks 支持基于 External Catalog，如 Hive Catalog、Iceberg Catalog、H
 
 目前，StarRocks 无法检测 Hudi Catalog 中的分区级别数据更改。因此，一旦触发刷新任务，将执行全量刷新。
 
-对于 Hive Catalog、Iceberg Catalog (从 v3.1.4 版本起)、JDBC Catalog (从 v3.1.4 版本起，仅支持 MySQL Range 分区) 和 Paimon Catalog (从 v3.2.1 版本起), StarRocks 支持检测分区级别数据更改。从而，StarRocks 可以: 
+对于 Hive Catalog、Iceberg Catalog (从 v3.1.4 版本起)、JDBC Catalog (从 v3.1.4 版本起，且仅支持 MySQL Range 分区) 和 Paimon Catalog (从 v3.2.1 版本起), StarRocks 支持检测分区级别数据更改。从而，StarRocks 可以: 
 
 - 仅刷新数据有更改的分区，避免全量刷新，减少刷新导致的资源消耗。
 - 在查询改写期间在一定程度上确保数据一致性。如果数据湖中的基表发生数据更改，查询将不会被改写至使用物化视图。
