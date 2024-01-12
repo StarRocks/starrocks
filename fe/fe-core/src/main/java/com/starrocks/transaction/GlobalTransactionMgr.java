@@ -43,6 +43,7 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.meta.lock.LockTimeoutException;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
@@ -357,9 +358,11 @@ public class GlobalTransactionMgr {
         while (true) {
             try {
                 return commitTransactionUnderDatabaseWLock(db, transactionId, tabletCommitInfos, tabletFailInfos,
-                        txnCommitAttachment);
+                        txnCommitAttachment, timeoutMs);
             } catch (CommitRateExceededException e) {
                 throttleCommitOnRateExceed(e, startTime, timeoutMs);
+            } catch (LockTimeoutException e) {
+                throw e;
             } catch (Exception e) {
                 throw new UserException("fail to execute commit task: " + e.getMessage(), e);
             }
@@ -387,9 +390,12 @@ public class GlobalTransactionMgr {
     private VisibleStateWaiter commitTransactionUnderDatabaseWLock(
             @NotNull Database db, long transactionId, @NotNull List<TabletCommitInfo> tabletCommitInfos,
             @NotNull List<TabletFailInfo> tabletFailInfos,
-            @Nullable TxnCommitAttachment attachment) throws UserException {
+            @Nullable TxnCommitAttachment attachment, long timeoutMs) throws UserException {
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.WRITE);
+        if (!locker.tryLockDatabase(db, LockType.WRITE, timeoutMs)) {
+            throw new LockTimeoutException(
+                    "get database write lock timeout, database=" + db.getFullName() + ", timeout=" + timeoutMs + "ms");
+        }
         try {
             return commitTransaction(db.getId(), transactionId, tabletCommitInfos, tabletFailInfos, attachment);
         } finally {
