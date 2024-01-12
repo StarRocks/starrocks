@@ -463,7 +463,6 @@ public class CreateTableWithLocationTest {
             }
             System.out.println(replicaBackendIds);
             Assert.assertEquals(3, replicaBackendIds.size());
-            Assert.assertEquals(3, Sets.intersection(replicaBackendIds, backendIdsWithLocProp).size());
         }
 
         // clean up

@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.DropBackendClause;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.NodeSelector;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mock;
@@ -444,7 +445,7 @@ public class SystemInfoServiceTest {
                 return RunMode.SHARED_DATA;
             }
         };
-        new MockUp<SystemInfoService>() {
+        new MockUp<NodeSelector>() {
             @Mock
             public List<Long> seqChooseComputeNodes(int computeNodeNum,
                                                     boolean needAvailable, boolean isCreate) {
