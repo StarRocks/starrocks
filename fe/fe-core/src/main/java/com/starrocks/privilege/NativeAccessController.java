@@ -125,7 +125,7 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkAnyActionOnAnyView(UserIdentity currentUser, Set<Long> roleIds, String catalog, String db)
             throws AccessDeniedException {
-        checkAnyActionOnView(currentUser, roleIds, new TableName(db, "*"));
+        checkAnyActionOnView(currentUser, roleIds, new TableName(catalog, db, "*"));
     }
 
     @Override
