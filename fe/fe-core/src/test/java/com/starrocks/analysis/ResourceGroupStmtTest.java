@@ -379,7 +379,7 @@ public class ResourceGroupStmtTest {
         }).distinct().collect(Collectors.toList());
         String ids = String.join(",", classifierIds);
         String alterSql = String.format("ALTER RESOURCE GROUP %s DROP (%s)", rgName, ids);
-        if (ResourceGroup.isDefaultWgOrMvWg(rgName)) {
+        if (ResourceGroup.isDefault(rgName)) {
             Assert.assertThrows("Default resource group does default_mv_wg not support change.",
                     DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(alterSql));
         } else {
@@ -418,7 +418,7 @@ public class ResourceGroupStmtTest {
             }
             String alterSql = String.format("ALTER RESOURCE GROUP %s DROP (%s)", rgName, id);
 
-            if (ResourceGroup.isDefaultWgOrMvWg(rgName)) {
+            if (ResourceGroup.isDefault(rgName)) {
                 Assert.assertThrows(String.format("Default resource group does %s not support change.", rgName),
                         DdlException.class, () -> starRocksAssert.executeResourceGroupDdlSql(alterSql));
 

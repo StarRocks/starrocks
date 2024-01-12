@@ -308,7 +308,7 @@ public class ResourceGroup {
         this.classifiers = classifiers;
     }
 
-    public static boolean isDefaultWgOrMvWg(String rgName) {
+    public static boolean isDefault(String rgName) {
         if (DEFAULT_RESOURCE_GROUP_NAME.equals(rgName)) {
             return true;
         }
