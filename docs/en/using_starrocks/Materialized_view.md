@@ -54,7 +54,7 @@ The following table compares the asynchronous materialized views (ASYNC MV) and 
 
   > **NOTE**
   >
-  > Asynchronous materialized views created on base tables in a [JDBC catalog](../data_source/catalog/jdbc_catalog.md) do not support query rewrite.
+  > Asynchronous materialized views created on base tables in a JDBC catalog or a Hudi catalog do not support query rewrite.
 
 ## Decide when to create a materialized view
 
