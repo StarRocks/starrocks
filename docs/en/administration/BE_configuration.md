@@ -361,6 +361,11 @@ BE dynamic parameters are as follows.
 - **Description:** Whether to allow compaction tasks to cache data on local disks in a shared-data cluster.
 - **Introduced in:** 3.1.7, 3.2.3
 
+#### compact_threads
+
+- **Default:** 4
+- **Description:** The number of threads used for concurrent compaction tasks. Each threads corresponds to a compaction task queue. Idle threads can obtain and process compaction tasks from the task queues of the in-use threads.
+
 #### update_compaction_ratio_threshold
 
 - **Default:** 0.5
