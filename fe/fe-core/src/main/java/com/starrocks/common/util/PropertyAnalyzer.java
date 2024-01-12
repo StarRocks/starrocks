@@ -211,15 +211,16 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_DEFAULT_PREFIX = "default.";
 
     /**
-     * matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
+     * Matches location labels like : ["*", "a:*", "bcd_123:*", "123bcd_:val_123", "  a :  b  "],
      * leading and trailing space of key and value will be ignored.
      */
     public static final String SINGLE_LOCATION_LABEL_REGEX = "(\\*|\\s*[a-z_0-9]+\\s*:\\s*(\\*|[a-z_0-9]+)\\s*)";
     /**
-     * matches location labels like: ["*, a: b,  c:d", "*, a:b, *", etc.]
+     * Matches location labels like: ["*, a: b,  c:d", "*, a:b, *", etc.].
+     * Limit the occurrences of single location label to 10 to avoid regex overflowing the stack.
      */
     public static final String MULTI_LOCATION_LABELS_REGEX = "\\s*" + SINGLE_LOCATION_LABEL_REGEX +
-            "\\s*(,\\s*" + SINGLE_LOCATION_LABEL_REGEX + ")*\\s*";
+            "\\s*(,\\s*" + SINGLE_LOCATION_LABEL_REGEX + "){0,9}\\s*";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties,
                                                    DataProperty inferredDataProperty,
