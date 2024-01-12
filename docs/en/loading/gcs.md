@@ -19,7 +19,7 @@ StarRocks provides the following options for loading data from GCS:
 
 Make sure the source data you want to load into StarRocks is properly stored in a GCS bucket. You may also consider where the data and the database are located, because data transfer costs are much lower when your bucket and your StarRocks cluster are located in the same region.
 
-In this topic, we provide you with a sample dataset in a GCS bucket, `gs://``starrocks-samples``/user_behavior_ten_million_rows.parquet`. You can access that dataset with any valid credentials as the object is readable by any GCP user.
+In this topic, we provide you with a sample dataset in a GCS bucket, `gs://starrocks-samples/user_behavior_ten_million_rows.parquet`. You can access that dataset with any valid credentials as the object is readable by any GCP user.
 
 ### Check privileges
 
