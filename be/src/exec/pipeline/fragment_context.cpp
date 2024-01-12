@@ -80,7 +80,10 @@ void FragmentContext::set_data_sink(std::unique_ptr<DataSink> data_sink) {
 }
 
 void FragmentContext::count_down_pipeline(RuntimeState* state, size_t val) {
-    bool all_pipelines_finished = _num_finished_pipelines.fetch_add(val) + val == _pipelines.size();
+    // Note that _pipelines may be destructed after fetch_add
+    // memory_order_seq_cst semantics ensure that previous code does not reorder after fetch_add
+    size_t total_pipelines = _pipelines.size();
+    bool all_pipelines_finished = _num_finished_pipelines.fetch_add(val) + val == total_pipelines;
     if (!all_pipelines_finished) {
         return;
     }
