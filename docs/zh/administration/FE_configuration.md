@@ -590,12 +590,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### tablet_sched_balance_load_disk_safe_threshold
 
-- 含义：判断 BE 磁盘使用率是否均衡的阈值。<br />如果所有 BE 的磁盘使用率低于 50%，认为磁盘使用均衡。<br />如果最大和最小 BE 磁盘使用率之差高于 10%，认为磁盘使用不均衡，会触发 tablet 重新均衡。参数别名`balance_load_disk_safe_threshold`。
+- 含义：判断 BE 磁盘使用率是否均衡的百分比阈值。如果所有 BE 的磁盘使用率低于该值，认为磁盘使用均衡。当有 BE 磁盘使用率超过该阈值时，如果最大和最小 BE 磁盘使用率之差高于 10%，则认为磁盘使用不均衡，会触发 Tablet 重新均衡。参数别名`balance_load_disk_safe_threshold`。
 - 默认值：0.5
 
 #### tablet_sched_balance_load_score_threshold
 
-- 含义：用于判断 BE 负载是否均衡。<br />负载比平均负载低 10% 的 BE 处于低负载状态，比平均负载高 10% 的 BE 处于高负载状态。参数别名 `balance_load_score_threshold`。
+- 含义：用于判断 BE 负载是否均衡的百分比阈值。如果一个 BE 的负载低于所有 BE 的平均负载，且差值大于该阈值，则认为该 BE 处于低负载状态。相反，如果一个 BE 的负载比平均负载高且差值大于该阈值，则认为该 BE 处于高负载状态。参数别名 `balance_load_score_threshold`。
 - 默认值：0.1
 
 #### tablet_sched_repair_delay_factor_second
