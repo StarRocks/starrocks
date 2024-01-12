@@ -34,6 +34,9 @@ void HiveTableSinkOperator::close(RuntimeState* state) {
         if (!writer.second->closed()) {
             WARN_IF_ERROR(writer.second->close(state), "close writer failed");
         }
+        if (_rollback) {
+            WARN_IF_ERROR(writer.second->rollback(state), "writer rollback failed");
+        }
     }
     Operator::close(state);
 }
@@ -79,9 +82,7 @@ bool HiveTableSinkOperator::pending_finish() const {
 }
 
 Status HiveTableSinkOperator::set_cancelled(RuntimeState* state) {
-    for (const auto& writer : _partition_writers) {
-        RETURN_IF_ERROR(writer.second->cancel(state));
-    }
+    _rollback = true;
     return Status::OK();
 }
 

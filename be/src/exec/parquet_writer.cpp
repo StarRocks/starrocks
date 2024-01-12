@@ -88,11 +88,13 @@ Status RollingAsyncParquetWriter::append_chunk(Chunk* chunk, RuntimeState* state
     return _writer->write(chunk);
 }
 
-Status RollingAsyncParquetWriter::cancel(RuntimeState* state) {
-    if (_writer != nullptr) {
-        auto st = _fs->delete_file(_writer->file_location());
-        if (!st.ok()) {
-            return st;
+Status RollingAsyncParquetWriter::rollback(RuntimeState* state) {
+    for (auto& writer : _pending_commits) {
+        if (writer != nullptr) {
+            auto st = _fs->delete_file(writer->file_location());
+            if (!st.ok()) {
+                return st;
+            }
         }
     }
     return Status::OK();

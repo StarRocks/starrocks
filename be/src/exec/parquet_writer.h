@@ -57,8 +57,8 @@ public:
 
     Status append_chunk(Chunk* chunk, RuntimeState* state);
     Status init();
-    Status cancel(RuntimeState* state);
     Status close(RuntimeState* state);
+    Status rollback(RuntimeState* state);
     bool writable() const { return _writer == nullptr || _writer->writable(); }
     bool closed();
 
