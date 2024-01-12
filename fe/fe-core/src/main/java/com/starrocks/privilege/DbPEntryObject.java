@@ -26,7 +26,6 @@ import com.starrocks.sql.common.MetaNotFoundException;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 
 public class DbPEntryObject implements PEntryObject {
     @SerializedName(value = "ci")
