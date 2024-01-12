@@ -419,13 +419,13 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：存算分离集群下，是否允许 Compaction 任务在执行时缓存数据到本地磁盘上。
 - 默认值：false
-- 引入版本：3.1.7、3.2.3
+- 引入版本：v3.1.7、v3.2.3
 
 #### compact_threads
 
-- 含义：并发 Compaction 任务的最大线程数。
+- 含义：并发 Compaction 任务的最大线程数。自 v3.1.7，v3.2.2 起变为动态参数。
 - 默认值：4
-- 引入版本：
+- 引入版本：v3.0.0
 
 #### update_compaction_ratio_threshold
 
