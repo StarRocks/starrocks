@@ -381,8 +381,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             Table table = baseTableInfo.getTable();
             if (table == null) {
-                LOG.warn("table {} do not exist when refreshing materialized view:{}",
-                        baseTableInfo.getTableInfoStr(), materializedView.getName());
                 LocalMetastore.inactiveRelatedMaterializedView(db, materializedView,
                         MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
                 throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
