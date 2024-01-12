@@ -32,7 +32,7 @@ public class SkewJoinTest extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
         starRocksAssert.withTable("create table struct_tbl(c0 INT, " +
                 "c1 struct<a int, b array<struct<a int, b int>>>," +
                 "c2 struct<a int, b int>," +

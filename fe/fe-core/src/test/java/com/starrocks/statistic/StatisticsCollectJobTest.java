@@ -69,7 +69,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     public static void beforeClass() throws Exception {
         PlanTestNoneDBBase.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
 
         String dbName = "test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);

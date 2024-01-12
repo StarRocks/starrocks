@@ -89,7 +89,7 @@ public class StatisticsCalculatorTest {
         optimizerContext = new OptimizerContext(new Memo(), columnRefFactory, connectContext);
 
         starRocksAssert = new StarRocksAssert(connectContext);
-        ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
 
         String dbName = "statistics_test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);

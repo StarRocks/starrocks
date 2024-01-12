@@ -28,8 +28,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
@@ -87,45 +85,22 @@ public class MvRewriteTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        Config.dynamic_partition_check_interval_seconds = 10000;
-        Config.bdbje_heartbeat_timeout_second = 60;
-        Config.bdbje_replica_ack_timeout_second = 60;
-        Config.bdbje_lock_timeout_second = 60;
-        // set some parameters to speedup test
-        Config.tablet_sched_checker_interval_seconds = 1;
-        Config.tablet_sched_repair_delay_factor_second = 1;
-        Config.enable_new_publish_mechanism = true;
-        Config.alter_scheduler_interval_millisecond = 100;
-        FeConstants.enablePruneEmptyOutputScan = false;
-        FeConstants.runningUnitTest = true;
         startSuiteTime = Instant.now().getEpochSecond();
 
-        // build a small cache for test
-        Config.mv_plan_cache_max_size = 10;
         CachingMvPlanContextBuilder.getInstance().rebuildCache();
 
-        // Use sync analyze
-        Config.mv_auto_analyze_async = false;
-
-        // Default REFRESH DEFERRED
-        Config.default_mv_refresh_immediate = false;
-
-        PseudoCluster.getOrCreateWithRandomPort(true, 3);
-        GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
+        PseudoCluster.getOrCreateWithRandomPort(true, 1);
+        GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(500);
         cluster = PseudoCluster.getInstance();
 
         connectContext = UtFrameUtils.createDefaultCtx();
-
-        // 300s: 5min
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000 * 100);
-        // 300s: 5min
-        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(3000 * 100);
-        connectContext.getSessionVariable().setEnableShortCircuit(false);
-        connectContext.getSessionVariable().setOptimizerMaterializedViewTimeLimitMillis(30000000);
-
-        ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
 
         new MockUp<StmtExecutor>() {
             @Mock

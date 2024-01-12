@@ -35,6 +35,8 @@ import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.DropCatalogStmt;
 import io.delta.standalone.DeltaLog;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.paimon.catalog.Catalog;
@@ -75,10 +77,10 @@ public class ConnectorPlanTestBase extends PlanTestBase {
     public static void doInit(String warehouse) throws Exception {
         PlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
-        mockCatalog(connectContext, warehouse);
+        mockAllCatalogs(connectContext, warehouse);
     }
 
-    public static void mockCatalog(ConnectContext ctx, String warehouse) throws Exception {
+    public static void mockAllCatalogs(ConnectContext ctx, String warehouse) throws Exception {
         GlobalStateMgr gsmMgr = ctx.getGlobalStateMgr();
         MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
         gsmMgr.setMetadataMgr(metadataMgr);
@@ -87,6 +89,48 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         mockIcebergCatalogImpl(metadataMgr);
         mockPaimonCatalogImpl(metadataMgr, warehouse);
         mockDeltaLakeCatalog(metadataMgr);
+    }
+
+    public static void mockCatalog(ConnectContext ctx, String catalogName) throws Exception {
+        mockCatalog(ctx, catalogName, "");
+    }
+
+    public static void mockCatalog(ConnectContext ctx, String catalogName, String warehouse) throws Exception {
+        GlobalStateMgr gsmMgr = ctx.getGlobalStateMgr();
+        MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
+        gsmMgr.setMetadataMgr(metadataMgr);
+        switch (catalogName) {
+            case MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME:
+                mockHiveCatalogImpl(metadataMgr);
+                break;
+            case MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME:
+                mockJDBCCatalogImpl(metadataMgr);
+                break;
+            case MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME:
+                mockIcebergCatalogImpl(metadataMgr);
+                break;
+            case MockedDeltaLakeMetadata.MOCKED_CATALOG_NAME:
+                mockDeltaLakeCatalog(metadataMgr);
+                break;
+            default:
+                throw new SemanticException("Unsupported catalog type:" + catalogName);
+        }
+    }
+
+    public static void dropAllCatalogs() {
+        try {
+            dropCatalog(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME);
+            dropCatalog(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
+            dropCatalog(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
+            dropCatalog(MockedDeltaLakeMetadata.MOCKED_CATALOG_NAME);
+        } catch (Exception e) {
+            // ignore error
+            e.printStackTrace();
+        }
+    }
+
+    public static void dropCatalog(String catalog) {
+        GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(new DropCatalogStmt(catalog));
     }
 
     public static void mockHiveCatalog(ConnectContext ctx) throws DdlException {
