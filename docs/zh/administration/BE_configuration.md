@@ -421,6 +421,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 默认值：false
 - 引入版本：3.1.7、3.2.3
 
+#### compact_threads
+
+- 含义：并发 Compaction 任务的最大线程数。
+- 默认值：4
+- 引入版本：
+
 #### update_compaction_ratio_threshold
 
 - 含义：存算分离集群下主键模型表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
