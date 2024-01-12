@@ -355,6 +355,12 @@ BE dynamic parameters are as follows.
 - **Default:** 10 (Number of Threads)
 - **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs.
 
+#### lake_enable_vertical_compaction_fill_data_cache
+
+- **Default:** false
+- **Description:** Whether to allow compaction tasks to cache data on local disks in a shared-data cluster.
+- **Introduced in:** 3.1.7, 3.2.3
+
 #### update_compaction_ratio_threshold
 
 - **Default:** 0.5
