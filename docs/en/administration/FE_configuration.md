@@ -659,7 +659,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 - **Unit**: -
 - **Default**: 0.5
-- **Description**: The percentage threshold for determining whether the disk usage of a BE is balanced. If the disk usage of all BEs is lower than this value, it is considered balanced. If the disk usage is greater than this value and the difference between the highest and lowest BE disk usage is greater than 10%, the disk usage is considered unbalanced and a tablet re-balancing is triggered. The alias is `balance_load_disk_safe_threshold`.
+- **Description**: The percentage threshold for determining whether the disk usage of BEs is balanced. If the disk usage of all BEs is lower than this value, it is considered balanced. If the disk usage is greater than this value and the difference between the highest and lowest BE disk usage is greater than 10%, the disk usage is considered unbalanced and a tablet re-balancing is triggered. The alias is `balance_load_disk_safe_threshold`.
 
 #### tablet_sched_balance_load_score_threshold
 
