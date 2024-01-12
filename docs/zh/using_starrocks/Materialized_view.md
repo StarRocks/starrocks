@@ -54,7 +54,7 @@ StarRocks v2.4 之前的版本提供了一种同步更新的同步物化视图�
 
   > **说明**
   >
-  > 基于 [JDBC Catalog](../data_source/catalog/jdbc_catalog.md) 表构建的异步物化视图暂不支持查询改写。
+  > 基于 JDBC Catalog 和 Hudi Catalog 表构建的异步物化视图暂不支持查询改写。
 
 ## 使用场景
 
