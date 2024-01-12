@@ -171,13 +171,8 @@ public class MvRewritePreprocessor {
                 continue;
             }
             if (!mvPlanContext.isValidMvPlan()) {
-                if (mvPlanContext.getLogicalPlan() != null) {
-                    logMVPrepare(connectContext, mv, "MV plan is not valid: {}, plan:\n {}",
-                            mv.getName(), mvPlanContext.getLogicalPlan());
-                } else {
-                    logMVPrepare(connectContext, mv, "MV plan is not valid: {}",
-                            mv.getName());
-                }
+                logMVPrepare(connectContext, mv, "MV plan is not valid: "
+                        + mvPlanContext.getInvalidReason());
                 continue;
             }
 
