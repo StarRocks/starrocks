@@ -108,7 +108,7 @@ public class ShortCircuitTest extends PlanTestBase {
 
     @AfterClass
     public static void afterClass() {
-        FeConstants.runningUnitTest = true;
+        FeConstants.runningUnitTest = false;
     }
 
 }
