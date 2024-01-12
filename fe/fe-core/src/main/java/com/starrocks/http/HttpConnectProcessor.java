@@ -62,8 +62,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
         ctx.getAuditEventBuilder().reset();
         ctx.getAuditEventBuilder()
                 .setTimestamp(System.currentTimeMillis())
-                .setClientIp(
-                        ((HttpConnectContext) ctx).getRemoteIP())
+                .setClientIp(ctx.getRemoteIP())
                 .setUser(ctx.getQualifiedUser())
                 .setAuthorizedUser(
                         ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
@@ -94,6 +93,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
             // Client failed.
             LOG.warn("Process one query failed because IOException: ", e);
             ctx.getState().setError("StarRocks process failed");
+            ctx.getState().setErrType(QueryState.ErrType.IO_ERR);
         } catch (UserException e) {
             LOG.warn("Process one query failed. SQL: " + sql + ", because.", e);
             ctx.getState().setError(e.getMessage());
@@ -106,7 +106,9 @@ public class HttpConnectProcessor extends ConnectProcessor {
             ctx.getState().setError("Unexpected exception: " + e.getMessage());
             if (parsedStmt instanceof KillStmt) {
                 // ignore kill stmt execute err(not monitor it)
-                ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                ctx.getState().setErrType(QueryState.ErrType.IGNORE_ERR);
+            } else {
+                ctx.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
             }
         } finally {
             Tracers.close();
