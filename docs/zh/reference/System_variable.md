@@ -191,6 +191,12 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 是否开启基于规则的物化视图查询改写功能，主要用于处理单表查询改写。默认值：`true`。
 
+### enable_strict_order_by
+
+是否校验 ORDER BY 引用列是否有歧义。设置为默认值 `TRUE` 时，如果查询中的输出列存在不同的表达式使用重复别名的情况，且按照该别名进行排序，查询会报错，例如 `select distinct t1.* from tbl1 t1 order by t1.k1;`。该行为和 2.3 及之前版本的逻辑一致。如果取值为 `FALSE`，采用宽松的去重机制，把这类查询作为有效 SQL 处理。
+
+该变量从 2.5.18，3.1.7 版本开始支持。
+
 ### enable_profile
 
 用于设置是否需要查看查询的 profile。默认为 `false`，即不需要查看 profile。2.5 版本之前，该变量名称为 `is_report_success`，2.5 版本之后更名为 `enable_profile`。
