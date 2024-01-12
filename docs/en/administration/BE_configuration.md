@@ -359,13 +359,13 @@ BE dynamic parameters are as follows.
 
 - **Default:** false
 - **Description:** Whether to allow compaction tasks to cache data on local disks in a shared-data cluster.
-- **Introduced in:** 3.1.7, 3.2.3
+- **Introduced in:** v3.1.7, v3.2.3
 
 #### compact_threads
 
 - **Default:** 4
-- **Description:** The maximum number of threads used for concurrent compaction tasks.
-- **Introduced in:** 3.0.0
+- **Description:** The maximum number of threads used for concurrent compaction tasks. This configuration is changed from dynamic from v3.1.7 and v3.2.2.
+- **Introduced in:** v3.0.0
 
 #### update_compaction_ratio_threshold
 
