@@ -351,19 +351,6 @@ EOF
 sysctl -p
 ```
 
-### max_map_count
-
-进程可以拥有的 VMA（虚拟内存区域）的数量。将该值调整为 `262144`：
-
-```bash
-# 修改配置文件。
-cat >> /etc/sysctl.conf << EOF
-vm.max_map_count = 262144
-EOF
-# 使修改生效。
-sysctl -p
-```
-
 ## NTP 设置
 
 需要在 StarRocks 集群各节点之间配置时间同步，从而保证事务的线性一致性。您可以使用 pool.ntp.org 提供的互联网时间服务，也可以使用离线环境内置的 NTP 服务。例如，您可以使用云服务提供商提供的 NTP 服务。
@@ -408,7 +395,22 @@ sysctl -p
 
 ## 高并发配置
 
-如果您的 StarRocks 集群负载并发较高，建议您进行如下配置：
+如果您的 StarRocks 集群负载并发较高，建议您进行如下配置.
+
+### max_map_count
+
+进程可以拥有的 VMA（虚拟内存区域）的数量。将该值调整为 `262144`：
+
+```bash
+# 修改配置文件。
+cat >> /etc/sysctl.conf << EOF
+vm.max_map_count = 262144
+EOF
+# 使修改生效。
+sysctl -p
+```
+
+### 其他
 
 ```Bash
 echo 120000 > /proc/sys/kernel/threads-max

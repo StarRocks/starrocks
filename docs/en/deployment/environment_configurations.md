@@ -352,19 +352,6 @@ EOF
 sysctl -p
 ```
 
-### max_map_count
-
-Specify the maximum number of memory map areas a process may have as `262144`:
-
-```bash
-# Modify the configuration file.
-cat >> /etc/sysctl.conf << EOF
-vm.max_map_count = 262144
-EOF
-# Bring the change into effect.
-sysctl -p
-```
-
 ## NTP configuration
 
 You must configure time synchronization between nodes within your StarRocks cluster to ensure linear consistency of transactions. You can either use the internet time service provided by pool.ntp.org, or use the NTP service built in an offline environment. For example, you can use the NTP service provided by your cloud service provider.
@@ -410,7 +397,22 @@ You must configure time synchronization between nodes within your StarRocks clus
 
 ## High concurrency configurations
 
-If your StarRocks cluster has a high load concurrency, we recommend you set the following configurations:
+If your StarRocks cluster has a high load concurrency, we recommend you set the following configurations.
+
+### max_map_count
+
+Specify the maximum number of memory map areas a process may have as `262144`:
+
+```bash
+# Modify the configuration file.
+cat >> /etc/sysctl.conf << EOF
+vm.max_map_count = 262144
+EOF
+# Bring the change into effect.
+sysctl -p
+```
+
+### Other
 
 ```Bash
 echo 120000 > /proc/sys/kernel/threads-max
