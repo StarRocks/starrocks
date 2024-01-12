@@ -72,6 +72,7 @@ bool UnorderedMemTable::is_empty() {
 Status UnorderedMemTable::append(ChunkPtr chunk) {
     _tracker->consume(chunk->memory_usage());
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, chunk->memory_usage());
+    _num_rows += chunk->num_rows();
     _chunks.emplace_back(std::move(chunk));
     return Status::OK();
 }
@@ -86,6 +87,7 @@ Status UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* ind
     Chunk* current = _chunks.back().get();
     size_t mem_usage = current->memory_usage();
     current->append_selective(src, indexes, from, size);
+    _num_rows += size;
     mem_usage = current->memory_usage() - mem_usage;
 
     _tracker->consume(mem_usage);
@@ -123,6 +125,13 @@ Status UnorderedMemTable::flush(FlushCallBack callback) {
     _chunks.clear();
     return Status::OK();
 }
+void UnorderedMemTable::reset() {
+    _num_rows = 0;
+    int64_t consumption = _tracker->consumption();
+    _tracker->release(consumption);
+    COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, -consumption);
+    _chunks.clear();
+}
 
 StatusOr<std::shared_ptr<SpillInputStream>> UnorderedMemTable::as_input_stream(bool shared) {
     if (shared) {
@@ -142,6 +151,7 @@ Status OrderedMemTable::append(ChunkPtr chunk) {
     }
     int64_t old_mem_usage = _chunk->memory_usage();
     _chunk->append(*chunk);
+    _num_rows += chunk->num_rows();
     int64_t new_mem_usage = _chunk->memory_usage();
     _tracker->set(_chunk->memory_usage());
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, new_mem_usage - old_mem_usage);
@@ -156,6 +166,7 @@ Status OrderedMemTable::append_selective(const Chunk& src, const uint32_t* index
     Chunk* current = _chunk.get();
     size_t mem_usage = current->memory_usage();
     _chunk->append_selective(src, indexes, from, size);
+    _num_rows += size;
     mem_usage = current->memory_usage() - mem_usage;
 
     _tracker->consume(mem_usage);
@@ -205,6 +216,13 @@ Status OrderedMemTable::done() {
     ASSIGN_OR_RETURN(_chunk, _do_sort(_chunk));
     _chunk_slice.reset(_chunk);
     return Status::OK();
+}
+
+void OrderedMemTable::reset() {
+    _num_rows = 0;
+    int64_t consumption = _tracker->consumption();
+    _tracker->release(consumption);
+    COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, -consumption);
 }
 
 StatusOr<ChunkPtr> OrderedMemTable::_do_sort(const ChunkPtr& chunk) {

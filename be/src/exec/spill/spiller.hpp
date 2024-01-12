@@ -313,6 +313,8 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         // mark done for all partitiones need spill
         for (auto partition : spilling_partitions) {
             auto mem_table = partition->spill_writer->mem_table();
+            LOG(INFO) << "mark done partition: " << partition->debug_string()
+                      << ", mem table rows:" << mem_table->num_rows() << ", mem:" << mem_table->mem_usage();
             RETURN_IF_ERROR(mem_table->finalize());
             // allocate block here
             DCHECK(partition->spill_writer->block() == nullptr)

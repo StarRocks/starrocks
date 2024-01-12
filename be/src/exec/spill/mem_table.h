@@ -108,7 +108,7 @@ public:
     Status finalize() override;
     Status done() override { return Status::OK(); };
     Status flush(FlushCallBack callback) override;
-    void reset() override {}
+    void reset() override;
 
     StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) override;
 
@@ -132,7 +132,7 @@ public:
     Status finalize() override;
     Status done() override;
     Status flush(FlushCallBack callback) override;
-    void reset() override {}
+    void reset() override;
 
 private:
     StatusOr<ChunkPtr> _do_sort(const ChunkPtr& chunk);
