@@ -92,8 +92,10 @@ public class ReplicationMgrTest {
 
     @Before
     public void setUp() throws Exception {
-        srcTable.getPartitions().iterator().next()
-                .updateVisibleVersion(table.getPartitions().iterator().next().getCommittedVersion() + 100);
+        Partition partition = table.getPartitions().iterator().next();
+        Partition srcPartition = srcTable.getPartitions().iterator().next();
+        partition.updateVersionForRestore(10);
+        srcPartition.updateVersionForRestore(partition.getCommittedVersion() + 100);
 
         job = new ReplicationJob("test_token", db.getId(), table, srcTable, GlobalStateMgr.getCurrentSystemInfo());
         replicationMgr = new ReplicationMgr();
