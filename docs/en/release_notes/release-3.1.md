@@ -4,6 +4,38 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.1
 
+## 3.1.7
+
+Release date: January 12, 2024
+
+### Behavior Change
+
+- Added the session variable `enable_materialized_view_for_insert`, which controls whether materialized views rewrite the queries in INSERT INTO SELECT statements. The default value is `false`. [#37505](https://github.com/StarRocks/starrocks/pull/37505)
+- The FE dynamic parameter `enable_new_publish_mechanism` is changed to a static parameter. You must restart the FE after you modify the parameter settings. [#35338](https://github.com/StarRocks/starrocks/pull/35338)
+- Added the session variable `enable_strict_order_by`. When this variable is set to the default value `TRUE`, an error is reported for such a query pattern: Duplicate alias is used in different expressions of the query and this alias is also a sorting field in ORDER BY, for example, `select distinct t1.* from tbl1 t1 order by t1.k1;`. The logic is the same as that in v2.3 and earlier. When this variable is set to `FALSE`, a loose deduplication mechanism is used, which processes such queries as valid SQL queries. [#37910](https://github.com/StarRocks/starrocks/pull/37910)
+
+### FE parameters
+
+- Added the FE configuration item `routine_load_unstable_threshold_second`. [#36222](https://github.com/StarRocks/starrocks/pull/36222)
+
+### Improvements
+
+- The result returned by the [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/3.1/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) statement now includes the timestamps of consumption messages from each partition. [#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- The scheduling policy for Routine Load is optimized, so that slow tasks do not block the execution of the other normal tasks. [#37638](https://github.com/StarRocks/starrocks/pull/37638)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- The execution of [ANALYZE TABLE](https://docs.starrocks.io/docs/3.1/sql-reference/sql-statements/data-definition/ANALYZE_TABLE/) gets stuck occasionally. [#36836](https://github.com/StarRocks/starrocks/pull/36836)
+- The memory consumption by PageCache exceeds the threshold specified by the BE dynamic parameter `storage_page_cache_limit` in certain circumstances. [#37740](https://github.com/StarRocks/starrocks/pull/37740)
+- Hive metadata in [Hive catalogs](https://docs.starrocks.io/docs/3.1/data_source/catalog/hive_catalog/) is not automatically refreshed when new fields are added to Hive tables. [#37668](https://github.com/StarRocks/starrocks/pull/37668)
+- In some cases, `bitmap_to_string` may return incorrect results due to data type overflow. [#37405](https://github.com/StarRocks/starrocks/pull/37405)
+- Executing the DELETE statement on an empty table returns "ERROR 1064 (HY000): Index: 0, Size: 0". [#37461](https://github.com/StarRocks/starrocks/pull/37461)
+- When the FE dynamic parameter `enable_sync_publish` is set to `TRUE`, queries on data that is written after the BEs crash and then restart may fail. [#37398](https://github.com/StarRocks/starrocks/pull/37398)
+- The value of the `TABLE_CATALOG` field in `views` of the StarRocks Information Schema is `null`. [#37570](https://github.com/StarRocks/starrocks/pull/37570)
+- When `SELECT ... FROM ... INTO OUTFILE` is executed to export data into CSV files, the error "Unmatched number of columns" is reported if the FROM clause contains multiple constants. [#38045](https://github.com/StarRocks/starrocks/pull/38045)
+
 ## 3.1.6
 
 Release date: December 18, 2023

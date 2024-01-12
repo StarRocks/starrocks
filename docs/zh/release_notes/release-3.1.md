@@ -4,6 +4,38 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.1
 
+## 3.1.7
+
+发布日期：2024 年 1 月 12日
+
+### 行为变更
+
+- 新增 Session 变量 `enable_materialized_view_for_insert`，默认值为 `FALSE`，表示物化视图不再改写 INSERT INTO SELECT 语句中的查询。[#37505](https://github.com/StarRocks/starrocks/pull/37505)
+- 将 FE 配置项 `enable_new_publish_mechanism` 改为静态参数，修改后必须重启 FE 才可以生效。[#35338](https://github.com/StarRocks/starrocks/pull/35338)
+- 新增 Session 变量 `enable_strict_order_by`。当取值为默认值 `TRUE` 时，如果查询中的输出列存在不同的表达式使用重复别名的情况，且按照该别名进行排序，查询会报错，例如 `select distinct t1.* from tbl1 t1 order by t1.k1;`。该行为和 2.3 及之前版本的逻辑一致。如果取值为 `FALSE`，采用宽松的去重机制，把这类查询作为有效 SQL 处理。[#37910](https://github.com/StarRocks/starrocks/pull/37910)
+
+### 参数变更
+
+- 增加 FE 配置项 `routine_load_unstable_threshold_second`。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
+
+### 功能优化
+
+- [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/3.1/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加时间戳进度信息，展示各个分区当前消费消息的时间戳。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- 优化 Rountine Load 的调度策略，慢任务不阻塞其他正常任务的执行。[#37638](https://github.com/StarRocks/starrocks/pull/37638)
+
+### 问题修复
+
+修复了如下问题：
+
+- [ANALYZE TABLE](https://docs.starrocks.io/zh/docs/3.1/sql-reference/sql-statements/data-definition/ANALYZE_TABLE/) 偶尔会出现卡住的问题。[#36836](https://github.com/StarRocks/starrocks/pull/36836)
+- PageCache 内存占用在有些情况下会超过 BE 动态参数 `storage_page_cache_limit` 设定的阈值。[#37740](https://github.com/StarRocks/starrocks/pull/37740)
+- [Hive Catalog](https://docs.starrocks.io/zh/docs/3.1/data_source/catalog/hive_catalog/) 的元数据在 Hive 表新增字段后不会自动刷新。[#37668](https://github.com/StarRocks/starrocks/pull/37668)
+- 某些情况下 `bitmap_to_string` 会因为转换时数据类型溢出导致查询结果错误。[#37405](https://github.com/StarRocks/starrocks/pull/37405)
+- 空表执行 DELETE 报错“ERROR 1064 (HY000): Index: 0, Size: 0”。[#37461](https://github.com/StarRocks/starrocks/pull/37461)
+- 当 FE 动态参数 `enable_sync_publish` 设置为 `TRUE` 时，BE Crash 重启后写入数据可能会出现无法查询的情况。[#37398](https://github.com/StarRocks/starrocks/pull/37398)
+- Information Schema 里的视图 `views` 中 `TABLE_CATALOG` 字段取值是 `null`。[#37570](https://github.com/StarRocks/starrocks/pull/37570)
+- `SELECT ... FROM ... INTO OUTFILE` 导出至 CSV 时，如果 FROM 子句中包含多个常量，执行时会报错："Unmatched number of columns"。[#38045](https://github.com/StarRocks/starrocks/pull/38045)
+
 ## 3.1.6
 
 发布日期：2023 年 12 月 18 日
