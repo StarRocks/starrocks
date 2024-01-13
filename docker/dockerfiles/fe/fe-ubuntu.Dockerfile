@@ -32,7 +32,7 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
         rm -rf /var/lib/apt/lists/*
 RUN echo "export PATH=/usr/lib/linux-tools/5.15.0-60-generic:$PATH" >> /etc/bash.bashrc && \
         touch /.dockerenv
-ENV JAVA_HOME=/lib/jvm/default-java
+ENV JAVA_HOME=/usr/lib/jvm/java-11-openjdk-arm64
 
 WORKDIR $STARROCKS_ROOT
 
