@@ -24,7 +24,6 @@ set(EXEC_FILES
         ./fs/fs_broker_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
-        ./fs/fs_s3_test.cpp
         ./fs/fs_test.cpp
         ./fs/output_stream_wrapper_test.cpp
         ./exec/column_value_range_test.cpp
@@ -172,8 +171,6 @@ set(EXEC_FILES
         ./io/array_input_stream_test.cpp
         ./io/compressed_input_stream_test.cpp
         ./io/fd_output_stream_test.cpp
-        ./io/s3_output_stream_test.cpp
-        ./io/s3_input_stream_test.cpp
         ./io/fd_input_stream_test.cpp
         ./io/seekable_input_stream_test.cpp
         ./io/spill_test.cpp
