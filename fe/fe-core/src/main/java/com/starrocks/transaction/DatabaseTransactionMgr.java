@@ -322,7 +322,7 @@ public class DatabaseTransactionMgr {
             transactionState.setPrepareTime(System.currentTimeMillis());
             unprotectUpsertTransactionState(transactionState, false);
 
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_BEGIN.increase(1L);
             }
 
@@ -330,7 +330,7 @@ public class DatabaseTransactionMgr {
         } catch (DuplicatedRequestException e) {
             throw e;
         } catch (Exception e) {
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_REJECT.increase(1L);
             }
             throw e;
