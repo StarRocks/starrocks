@@ -118,7 +118,6 @@ public class ConcurrentDDLTest {
 
         List<List<Long>> bucketSeq = GlobalStateMgr.getCurrentState().getColocateTableIndex().getBackendsPerBucketSeq(
                 GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(table.getId()));
-        System.out.println(bucketSeq);
         // check all created colocate tables has same tablet distribution as the bucket seq in colocate group
         for (long threadId : threadIds) {
             table = db.getTable("test_tbl_" + threadId);
@@ -127,7 +126,6 @@ public class ConcurrentDDLTest {
                     .map(id -> GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(id))
                     .map(replicaList -> replicaList.get(0).getBackendId())
                     .collect(Collectors.toList());
-            System.out.println(backendIdList);
             Assert.assertEquals(bucketSeq, backendIdList.stream().map(Arrays::asList).collect(Collectors.toList()));
         }
     }
@@ -170,7 +168,6 @@ public class ConcurrentDDLTest {
                                 (ShowTableStmt) UtFrameUtils.parseStmtWithNewParser(
                                         "show tables from concurrent_test_db", connectContext);
                         ShowExecutor showExecutor = new ShowExecutor(connectContext, showTableStmt);
-                        System.out.println("show tables result: " + showExecutor.execute().getResultRows());
                         starRocksAssert.dropDatabase("concurrent_test_db");
                         System.out.println("concurrent_test_db dropped");
                     } catch (Exception e) {
@@ -207,19 +204,20 @@ public class ConcurrentDDLTest {
                         try {
                             if (idx == 0) { // create table
                                 sql = createTableSqlFormat.replaceAll("RRR", randomStr);
-                                // System.out.println(sql);
                                 starRocksAssert.withTable(sql);
                             } else if (idx == 1) { // create view
                                 sql = createViewSqlFormat.replaceAll("RRR", randomStr);
-                                // System.out.println(sql);
                                 starRocksAssert.withView(sql);
                             } else { // create mv
                                 sql = createMVSqlFormat.replaceAll("RRR", randomStr);
-                                // System.out.println(sql);
                                 starRocksAssert.withMaterializedView(sql);
                             }
                         } catch (Exception e) {
+<<<<<<< HEAD
                             // System.out.println(sql + " failed, msg: " + e.getMessage());
+=======
+                            // do nothing
+>>>>>>> 5ca5ff0108 ([UT] Remove too much useless ut stdout logs (#39095))
                         }
                     }
                 });
@@ -265,7 +263,6 @@ public class ConcurrentDDLTest {
                                 " distributed by hash(id) buckets 5183 " +
                                 "properties(\"replication_num\"=\"1\", \"colocate_with\"=\"test_cg_001\");");
                     } catch (Exception e) {
-                        System.out.println(e.getMessage());
                         errorCount.incrementAndGet();
                     }
                     System.out.println("end to create table same_tbl");
