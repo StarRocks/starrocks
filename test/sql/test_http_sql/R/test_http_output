@@ -76,7 +76,7 @@ INSERT INTO duplicate_table_with_null VALUES("2020-01-26",
 shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select * from duplicate_table_with_null order by k6;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" 
 -- result:
 0
-{"meta":[{"name":"k1","type":"date"},{"name":"k2","type":"datetime"},{"name":"k3","type":"varchar"},{"name":"k4","type":"varchar"},{"name":"k5","type":"boolean"},{"name":"k6","type":"tinyint(4)"},{"name":"k7","type":"smallint(6)"},{"name":"k8","type":"int(11)"},{"name":"k9","type":"bigint(20)"},{"name":"k10","type":"largeint(40)"},{"name":"k11","type":"float"},{"name":"k12","type":"double"},{"name":"k13","type":"decimal128(27, 9)"}]}
+{"meta":[{"name":"k1","type":"date"},{"name":"k2","type":"datetime"},{"name":"k3","type":"varchar"},{"name":"k4","type":"varchar"},{"name":"k5","type":"boolean"},{"name":"k6","type":"tinyint(4)"},{"name":"k7","type":"smallint(6)"},{"name":"k8","type":"int(11)"},{"name":"k9","type":"bigint(20)"},{"name":"k10","type":"largeint(40)"},{"name":"k11","type":"float"},{"name":"k12","type":"double"},{"name":"k13","type":"decimal(27, 9)"}]}
 {"data":[null,null,null,null,null,null,null,null,null,null,null,null,null]}
 {"data":["2020-01-25","2022-12-26 09:06:09","anhui","anhui",0,-127,1,-2147450879,-9223372036854743039,"-18446744073709518847",3273.800048828125,324.55,"29.628000000"]}
 {"data":["2020-01-26","2022-12-26 09:06:10","beijin","beijin",1,-126,2,-2147450878,-9223372036854743038,"-18446744073709518846",3273.89990234375,324.56,"29.628000001"]}
@@ -85,6 +85,17 @@ shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/s
 sync;
 -- result:
 -- !result
+<<<<<<< HEAD
+=======
+shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "show create table duplicate_table_with_null;"}' --header "Content-Type: application/json"  
+-- result:
+0
+{"meta":[{"name":"Table","type":"varchar(20)"},{"name":"Create Table","type":"varchar(30)"}],"data":[{"Table":"duplicate_table_with_null","Create Table":"CREATE TABLE `duplicate_table_with_null` (\n  `k1` date NULL COMMENT \"\",\n  `k2` datetime NULL COMMENT \"\",\n  `k3` char(20) NULL COMMENT \"\",\n  `k4` varchar(20) NULL COMMENT \"\",\n  `k5` boolean NULL COMMENT \"\",\n  `k6` tinyint(4) NULL COMMENT \"\",\n  `k7` smallint(6) NULL COMMENT \"\",\n  `k8` int(11) NULL COMMENT \"\",\n  `k9` bigint(20) NULL COMMENT \"\",\n  `k10` largeint(40) NULL COMMENT \"\",\n  `k11` float NULL COMMENT \"\",\n  `k12` double NULL COMMENT \"\",\n  `k13` decimal(27, 9) NULL COMMENT \"\"\n) ENGINE=OLAP \nDUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY RANDOM\nPROPERTIES (\n\"replication_num\" = \"1\",\n\"bucket_size\" = \"4294967296\",\n\"in_memory\" = \"false\",\n\"enable_persistent_index\" = \"false\",\n\"replicated_storage\" = \"true\",\n\"fast_schema_evolution\" = \"true\",\n\"compression\" = \"LZ4\"\n);"}],"statistics":{"scanRows":0,"scanBytes":0,"returnRows":1}}
+-- !result
+sync;
+-- result:
+-- !result
+>>>>>>> 9cfa912818 ([Enhancement] The decimal creation type is consistent with the display type (#38639))
 shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "show variables like \"broadcast_row_limit\";", "sessionVariables":{"broadcast_row_limit":14000000}}' --header "Content-Type: application/json"  
 -- result:
 0

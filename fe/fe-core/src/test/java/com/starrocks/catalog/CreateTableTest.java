@@ -607,7 +607,7 @@ public class CreateTableTest {
                 .getTable("aggregate_table_sum");
         String columns = table.getColumns().toString();
         System.out.println("columns = " + columns);
-        Assert.assertTrue(columns.contains("`sum_decimal` decimal128(38, 4) SUM"));
+        Assert.assertTrue(columns.contains("`sum_decimal` decimal(38, 4) SUM"));
         Assert.assertTrue(columns.contains("`sum_bigint` bigint(20) SUM "));
     }
 
