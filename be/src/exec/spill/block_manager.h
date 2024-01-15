@@ -50,9 +50,12 @@ public:
     virtual std::string debug_string() const = 0;
 
     size_t size() const { return _size; }
+    bool is_remote() const { return _is_remote; }
+    void set_is_remote(bool is_remote) { _is_remote = is_remote; }
 
 protected:
     size_t _size{};
+    bool _is_remote = false;
 };
 
 using BlockPtr = std::shared_ptr<Block>;
