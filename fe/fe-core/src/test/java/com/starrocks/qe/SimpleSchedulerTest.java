@@ -320,7 +320,7 @@ public class SimpleSchedulerTest {
                 times = 2;
 
                 // backend 10001 will be removed
-                systemInfoService.getBackend(10001L);
+                systemInfoService.getBackendOrComputeNode(10001L);
                 result = null;
                 times = 1;
 
@@ -330,11 +330,11 @@ public class SimpleSchedulerTest {
                 backend1.setHost("host10002");
                 backend1.setBrpcPort(10002);
                 backend1.setHttpPort(10012);
-                systemInfoService.getBackend(10002L);
+                systemInfoService.getBackendOrComputeNode(10002L);
                 result = backend1;
                 times = 1;
 
-                systemInfoService.checkBackendAvailable(10002L);
+                systemInfoService.checkNodeAvailable(backend1);
                 result = true;
                 times = 1;
 
@@ -348,11 +348,11 @@ public class SimpleSchedulerTest {
                 backend2.setHost("host10003");
                 backend2.setBrpcPort(10003);
                 backend2.setHttpPort(10013);
-                systemInfoService.getBackend(10003L);
+                systemInfoService.getBackendOrComputeNode(10003L);
                 result = backend2;
                 times = 2;
 
-                systemInfoService.checkBackendAvailable(10003L);
+                systemInfoService.checkNodeAvailable(backend2);
                 result = false;
                 times = 2;
             }

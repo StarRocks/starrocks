@@ -214,15 +214,15 @@ public class SimpleScheduler {
         for (Map.Entry<Long, Integer> entry : BLOCKLIST_NODES.entrySet()) {
             Long nodeId = entry.getKey();
 
-            // 1. If the backend is null, means that the backend has been removed.
+            // 1. If the node is null, means that the node has been removed.
             // 2. check the all ports of the backend
             // 3. retry Config.heartbeat_timeout_second + 1 times
-            // If both of the above conditions are met, the backend is removed from the blocklist
+            // If both of the above conditions are met, the node is removed from the blocklist
             ComputeNode node = clusterInfoService.getBackendOrComputeNode(nodeId);
             if (node == null) {
                 removedNodes.add(nodeId);
                 LOG.warn("remove nodeID {} from blacklist", nodeId);
-            } else if (clusterInfoService.checkBackendAvailable(nodeId)) {
+            } else if (clusterInfoService.checkNodeAvailable(node)) {
                 String host = node.getHost();
                 List<Integer> ports = new ArrayList<Integer>();
                 Collections.addAll(ports, node.getBePort(), node.getBrpcPort(), node.getHttpPort());
