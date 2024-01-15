@@ -15,6 +15,7 @@
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
@@ -44,6 +45,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.HiveTableSink;
@@ -68,6 +70,8 @@ import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -114,6 +118,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
@@ -139,32 +144,6 @@ public class InsertPlanner {
     }
 
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
-        // Pessimistic path
-        if (!useOptimisticLock) {
-            return planImpl(insertStmt, session);
-        }
-
-        // Optimistic Lock Optimization
-        boolean isSchemaValid = true;
-        Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(insertStmt, dbs);
-        for (int i = 0; i < Config.max_query_retry_time; i++) {
-            long planStartTime = OptimisticVersion.generate();
-            if (!isSchemaValid) {
-                olapTables = StatementPlanner.reAnalyzeStmt(insertStmt, dbs, session);
-            }
-            ExecPlan plan = planImpl(insertStmt, session);
-
-            isSchemaValid =
-                    olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
-            if (isSchemaValid) {
-                return plan;
-            }
-        }
-        throw new SemanticException("got concurrent metadata modification during query planning, " +
-                "please retry this query");
-    }
-
-    private ExecPlan planImpl(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         List<ColumnRefOperator> outputColumns = new ArrayList<>();
         Table targetTable = insertStmt.getTargetTable();
@@ -219,31 +198,13 @@ public class InsertPlanner {
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
             session.getSessionVariable().setEnableMaterializedViewRewrite(enableMVRewrite);
 
-            Optimizer optimizer = new Optimizer();
-            PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns,
-                    session.getSessionVariable());
-
-            LOG.debug("property {}", requiredPropertySet);
-            OptExpression optimizedPlan;
-
-            try (Timer ignore2 = Tracers.watchScope("Optimizer")) {
-                optimizedPlan = optimizer.optimize(
-                        session,
-                        logicalPlan.getRoot(),
-                        requiredPropertySet,
-                        new ColumnRefSet(logicalPlan.getOutputColumn()),
-                        columnRefFactory);
-            }
-
-            //8. Build fragment exec plan
-            boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
-                    || targetTable instanceof MysqlTable);
-            ExecPlan execPlan;
-            try (Timer ignore3 = Tracers.watchScope("PlanBuilder")) {
-                execPlan = PlanFragmentBuilder.createPhysicalPlan(
-                        optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                        queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
-            }
+            ExecPlan execPlan =
+                    useOptimisticLock ?
+                            buildExecPlanWithRetry(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
+                                    queryRelation, targetTable) :
+                            buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
+                                    queryRelation,
+                                    targetTable);
 
             DescriptorTable descriptorTable = execPlan.getDescTbl();
             TupleDescriptor tupleDesc = descriptorTable.createTupleDescriptor();
@@ -385,6 +346,72 @@ public class InsertPlanner {
             }
             session.getSessionVariable().setEnableMaterializedViewRewrite(previousMVRewrite);
         }
+    }
+
+    /**
+     * The workhorse of InsertPlanner, which may takes a lot of time, so we would release the lock during planning
+     */
+    private ExecPlan buildExecPlanWithRetry(InsertStmt insertStmt, ConnectContext session,
+                                            List<ColumnRefOperator> outputColumns,
+                                            LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
+                                            QueryRelation queryRelation, Table targetTable) {
+        boolean isSchemaValid = true;
+        Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(insertStmt, dbs);
+        Locker locker = new Locker();
+        Stopwatch watch = Stopwatch.createStarted();
+
+        for (int i = 0; i < Config.max_query_retry_time; i++) {
+            long planStartTime = OptimisticVersion.generate();
+            if (!isSchemaValid) {
+                olapTables = StatementPlanner.reAnalyzeStmt(insertStmt, dbs, session);
+            }
+
+            // Release the lock during planning, and reacquire the lock before validating
+            StatementPlanner.unLock(locker, dbs);
+            ExecPlan plan;
+            try {
+                plan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory, queryRelation,
+                        targetTable);
+            } finally {
+                StatementPlanner.lock(locker, dbs);
+            }
+            isSchemaValid =
+                    olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
+            if (isSchemaValid) {
+                return plan;
+            }
+        }
+        throw new StarRocksPlannerException(String.format("failed to generate plan for the statement after %dms",
+                watch.elapsed(TimeUnit.MILLISECONDS)), ErrorType.INTERNAL_ERROR);
+    }
+
+    private ExecPlan buildExecPlan(InsertStmt insertStmt, ConnectContext session, List<ColumnRefOperator> outputColumns,
+                                   LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
+                                   QueryRelation queryRelation, Table targetTable) {
+        Optimizer optimizer = new Optimizer();
+        PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns,
+                session.getSessionVariable());
+        OptExpression optimizedPlan;
+
+        try (Timer ignore2 = Tracers.watchScope("Optimizer")) {
+            optimizedPlan = optimizer.optimize(
+                    session,
+                    logicalPlan.getRoot(),
+                    requiredPropertySet,
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
+        }
+
+        //8. Build fragment exec plan
+        boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
+                || targetTable instanceof MysqlTable);
+        ExecPlan execPlan;
+        try (Timer ignore3 = Tracers.watchScope("PlanBuilder")) {
+            execPlan = PlanFragmentBuilder.createPhysicalPlan(
+                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                    queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+        }
+        return execPlan;
     }
 
     private void castLiteralToTargetColumnsType(InsertStmt insertStatement) {
