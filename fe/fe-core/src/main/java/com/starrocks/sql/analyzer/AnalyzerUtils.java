@@ -36,6 +36,7 @@ import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
@@ -86,6 +87,8 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.ListPartitionDesc;
@@ -120,6 +123,8 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -376,6 +381,212 @@ public class AnalyzerUtils {
             }
             dbs.put(db.getFullName(), db);
         }
+    }
+
+    // Get all the selected table columns
+    public static Map<TableName, Set<String>> collectAllSelectTableColumns(StatementBase statementBase) {
+        SelectTableColumnCollector selectTableColumnCollector = null;
+        if (statementBase instanceof UpdateStmt) {
+            selectTableColumnCollector = new UpdateStmtSelectTableColumnCollector((UpdateStmt) statementBase);
+        } else {
+            selectTableColumnCollector = new SelectTableColumnCollector();
+        }
+        selectTableColumnCollector.visit(statementBase);
+        return selectTableColumnCollector.getTableColumns();
+    }
+
+    private static class UpdateStmtSelectTableColumnCollector extends SelectTableColumnCollector {
+
+        private Table updateTable;
+        private TableName updateTableName;
+
+        public UpdateStmtSelectTableColumnCollector(UpdateStmt updateStmt) {
+            this.updateTable = updateStmt.getTable();
+            this.updateTableName = updateStmt.getTableName();
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            List<Expr> outputExpression = node.getOutputExpression();
+            Relation relation = node.getRelation();
+            if (relation instanceof TableRelation || relation instanceof ViewRelation) {
+                if (outputExpression.stream().allMatch(expr -> expr instanceof FieldReference)) {
+                    put(relation.getResolveTableName(), "*");
+                }
+            }
+            if (node.hasWithClause()) {
+                node.getCteRelations().forEach(this::visit);
+            }
+
+            if (node.getOrderBy() != null) {
+                for (OrderByElement orderByElement : node.getOrderBy()) {
+                    visit(orderByElement.getExpr());
+                }
+            }
+
+            // In the UpdateStatement, columns other than those in the assignment are taken as outputExpression for
+            // the SelectRelation (even if these columns are not mentioned in the SQL),
+            // which is not inline with expectations.
+            boolean skipOutputExpr = (relation instanceof JoinRelation) ||
+                    (relation instanceof TableRelation && ((TableRelation) relation).getTable().equals(updateTable));
+            if (node.getOutputExpression() != null) {
+                if (skipOutputExpr) {
+                    node.getOutputExpression().stream()
+                            .filter(expr -> !(expr instanceof SlotRef &&
+                                    ((SlotRef) expr).getTblNameWithoutAnalyzed().equals(updateTableName)))
+                            .forEach(this::visit);
+                } else {
+                    node.getOutputExpression().forEach(this::visit);
+                }
+            }
+
+            if (node.getPredicate() != null) {
+                visit(node.getPredicate());
+            }
+
+            if (node.getGroupBy() != null) {
+                node.getGroupBy().forEach(this::visit);
+            }
+
+            if (node.getAggregate() != null) {
+                node.getAggregate().forEach(this::visit);
+            }
+
+            if (node.getHaving() != null) {
+                visit(node.getHaving());
+            }
+
+            return visit(node.getRelation());
+        }
+    }
+
+    private static class SelectTableColumnCollector extends AstTraverser<Void, Void> {
+        protected Map<TableName, Set<String>> tableColumns;
+        protected Map<String, TableName> aliasMap;
+        protected Set<TableName> ctes;
+        protected Set<TableName> realTableAndViews;
+
+        public SelectTableColumnCollector() {
+            this.tableColumns = Maps.newHashMap();
+            this.aliasMap = Maps.newHashMap();
+            this.ctes = Sets.newHashSet();
+            this.realTableAndViews = Sets.newHashSet();
+        }
+
+        public Map<TableName, Set<String>> getTableColumns() {
+            Map<TableName, Set<String>> added = Maps.newHashMap();
+            Iterator<TableName> iterator = tableColumns.keySet().iterator();
+            while (iterator.hasNext()) {
+                TableName next = iterator.next();
+                if (aliasMap.containsKey(next.getTbl())) {
+                    Set<String> columns = tableColumns.get(next);
+                    iterator.remove();
+                    added.put(aliasMap.get(next.getTbl()), columns);
+                }
+            }
+            tableColumns.putAll(added);
+            for (TableName cte : ctes) {
+                // policy rewrite node tblName maybe real Table/View
+                if (!realTableAndViews.contains(cte)) {
+                    tableColumns.remove(cte);
+                }
+            }
+            return tableColumns;
+        }
+
+        @Override
+        public Void visitCTE(CTERelation node, Void context) {
+            ctes.add(node.getResolveTableName());
+            return super.visitCTE(node, context);
+        }
+
+        @Override
+        public Void visitSubquery(SubqueryRelation node, Void context) {
+            ctes.add(node.getResolveTableName());
+            return super.visitSubquery(node, context);
+        }
+
+        private void visitTableAndView(TableName alias, TableName realName, boolean createByPolicyRewritten) {
+            if (alias != null) {
+                aliasMap.put(alias.getTbl(), realName);
+            }
+            if (!createByPolicyRewritten) {
+                realTableAndViews.add(realName);
+            } else {
+                // policy rewritten node should be ignored
+                ctes.add(realName);
+            }
+        }
+
+        @Override
+        public Void visitTable(TableRelation node, Void context) {
+            visitTableAndView(node.getAlias(), node.getName(), node.isCreateByPolicyRewritten());
+            return super.visitTable(node, context);
+        }
+
+        @Override
+        public Void visitView(ViewRelation node, Void context) {
+            visitTableAndView(node.getAlias(), node.getName(), node.isCreateByPolicyRewritten());
+            // block view definition drill-down
+            return null;
+        }
+
+        // handle 'select * from a,b,c' situation
+        private boolean fillStarRelation(Relation relation, Set<TableName> starRelationNames) {
+            if (relation instanceof TableRelation || relation instanceof ViewRelation) {
+                if (!(relation instanceof FileTableFunctionRelation)) {
+                    starRelationNames.add(relation.getResolveTableName());
+                }
+                return true;
+            } else if (relation instanceof JoinRelation) {
+                JoinRelation joinRelation = (JoinRelation) relation;
+                boolean leftResult = fillStarRelation(joinRelation.getLeft(), starRelationNames);
+                boolean rightResult = fillStarRelation(joinRelation.getRight(), starRelationNames);
+                return leftResult && rightResult;
+            } else {
+                return false;
+            }
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            Relation relation = node.getRelation();
+            if (node.getOutputExpression().stream().allMatch(expr -> expr instanceof FieldReference)) {
+                if ((relation instanceof TableRelation && !(relation instanceof FileTableFunctionRelation))
+                        || relation instanceof ViewRelation) {
+                    put(relation.getResolveTableName(), "*");
+                } else {
+                    Set<TableName> starRelationNames = Sets.newHashSet();
+                    if (fillStarRelation(relation, starRelationNames)) {
+                        starRelationNames.forEach(name -> put(name, "*"));
+                    }
+                }
+            }
+            return super.visitSelect(node, context);
+        }
+
+        protected void put(TableName tableName, String column) {
+            tableColumns.compute(tableName, (k, v) -> {
+                if (v == null) {
+                    HashSet<String> strings = new HashSet<>();
+                    strings.add(column);
+                    return strings;
+                } else {
+                    v.add(column);
+                    return v;
+                }
+            });
+        }
+
+        @Override
+        public Void visitSlot(SlotRef slotRef, Void context) {
+            // filter _LAMBDA_TABLE && alias SlotRef
+            if (!slotRef.isFromLambda() && slotRef.getTblNameWithoutAnalyzed() != null) {
+                put(slotRef.getTblNameWithoutAnalyzed(), slotRef.getColumnName());
+            }
+            return null;
+        }
+
     }
 
     //Get all the table used

@@ -206,9 +206,12 @@ import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
 
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
@@ -224,7 +227,12 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitQueryStatement(QueryStatement statement, ConnectContext context) {
         Map<TableName, Relation> allTablesRelations = AnalyzerUtils.collectAllTableAndViewRelations(statement);
-        checkSelectTableAction(context, allTablesRelations);
+        try {
+            Map<TableName, Set<String>> allTouchedColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
+            checkCanSelectFromColumns(context, allTouchedColumns, allTablesRelations);
+        } catch (AccessDeniedException e) {
+            checkSelectTableAction(context, allTablesRelations);
+        }
         return null;
     }
 
@@ -232,19 +240,44 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitInsertStatement(InsertStmt statement, ConnectContext context) {
+        boolean hasInsertPrivOnTargetTable = false;
+        boolean hasInsertPrivOnTargetCol = false;
+        Set<String> columnNames = null;
         // For table just created by CTAS statement, we ignore the check of 'INSERT' privilege on it.
         if (!statement.isForCTAS()) {
             try {
-                Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        statement.getTableName(), PrivilegeType.INSERT);
+                columnNames = statement.getTargetColumnNames() == null ? Collections.singleton("*") :
+                        new HashSet<>(statement.getTargetColumnNames());
+                Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        statement.getTableName(), columnNames, PrivilegeType.INSERT);
+                hasInsertPrivOnTargetCol = true;
             } catch (AccessDeniedException e) {
-                AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
-                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+                try {
+                    Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            statement.getTableName(), PrivilegeType.INSERT);
+                    hasInsertPrivOnTargetTable = true;
+                } catch (AccessDeniedException exception) {
+                    AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
+                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.INSERT.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+                }
             }
         }
 
-        visit(statement.getQueryStatement(), context);
+        Map<TableName, Relation> allTablesRelations = AnalyzerUtils.collectAllTableAndViewRelations(statement);
+        Map<TableName, Set<String>> allTouchedColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
+        try {
+            // no need to check COLUMN SELECT privilege when user already has COLUMN INSERT privilege
+            if (hasInsertPrivOnTargetCol && allTouchedColumns.containsKey(statement.getTableName())) {
+                allTouchedColumns.get(statement.getTableName()).removeAll(columnNames);
+            }
+            checkCanSelectFromColumns(context, allTouchedColumns, allTablesRelations);
+        } catch (AccessDeniedException e) {
+            if (hasInsertPrivOnTargetTable || !allTouchedColumns.containsKey(statement.getTableName())) {
+                allTablesRelations.remove(statement.getTableName());
+            }
+            checkSelectTableAction(context, allTablesRelations);
+        }
         return null;
     }
 
@@ -260,23 +293,51 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         }
         Map<TableName, Relation> allTouchedTables = AnalyzerUtils.collectAllTableAndViewRelations(statement);
         allTouchedTables.remove(statement.getTableName());
-        checkSelectTableAction(context, allTouchedTables);
+        try {
+            Map<TableName, Set<String>> tableColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
+            tableColumns.remove(statement.getTableName());
+            checkCanSelectFromColumns(context, tableColumns, allTouchedTables);
+        } catch (AccessDeniedException e) {
+            checkSelectTableAction(context, allTouchedTables);
+        }
         return null;
     }
 
     @Override
     public Void visitUpdateStatement(UpdateStmt statement, ConnectContext context) {
+        boolean hasUpdatePrivOnTargetTable = false;
+        boolean hasUpdatePrivOnTargetCol = false;
+        Set<String> assignmentColumn = statement.getAssignments().stream()
+                .map(columnAssignment -> columnAssignment.getColumn()).collect(Collectors.toSet());
         try {
-            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    statement.getTableName(), PrivilegeType.UPDATE);
+            Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                    statement.getTableName(), assignmentColumn, PrivilegeType.UPDATE);
+            hasUpdatePrivOnTargetCol = true;
         } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.UPDATE.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+            try {
+                Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        statement.getTableName(), PrivilegeType.UPDATE);
+                hasUpdatePrivOnTargetTable = true;
+            } catch (AccessDeniedException exception) {
+                AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.UPDATE.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+            }
         }
         Map<TableName, Relation> allTouchedTables = AnalyzerUtils.collectAllTableAndViewRelations(statement);
-        allTouchedTables.remove(statement.getTableName());
-        checkSelectTableAction(context, allTouchedTables);
+        Map<TableName, Set<String>> tableColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
+        try {
+            // no need to check COLUMN SELECT privilege when user already has COLUMN UPDATE privilege
+            if (hasUpdatePrivOnTargetCol && tableColumns.containsKey(statement.getTableName())) {
+                tableColumns.get(statement.getTableName()).removeAll(assignmentColumn);
+            }
+            checkCanSelectFromColumns(context, tableColumns, allTouchedTables);
+        } catch (AccessDeniedException e) {
+            if (hasUpdatePrivOnTargetTable || !tableColumns.containsKey(statement.getTableName())) {
+                allTouchedTables.remove(statement.getTableName());
+            }
+            checkSelectTableAction(context, allTouchedTables);
+        }
         return null;
     }
 
@@ -331,6 +392,28 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                                 PrivilegeType.SELECT.name(), ObjectType.TABLE.name(), tableName.getTbl());
                     }
                 }
+            }
+        }
+    }
+
+    private void checkCanSelectFromColumns(ConnectContext context, Map<TableName, Set<String>> allTouchedTableColumns,
+                                           Map<TableName, Relation> allTouchedTables) throws AccessDeniedException {
+        for (Map.Entry<TableName, Set<String>> tableColumns : allTouchedTableColumns.entrySet()) {
+            TableName tableName = tableColumns.getKey();
+            Set<String> columns = tableColumns.getValue();
+            Relation relation = allTouchedTables.get(tableName);
+            Table table;
+            if (relation instanceof TableRelation) {
+                table = ((TableRelation) relation).getTable();
+            } else {
+                table = ((ViewRelation) relation).getView();
+            }
+            if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
+                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.OPERATE);
+            } else {
+                Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        tableName, columns, PrivilegeType.SELECT);
             }
         }
     }
