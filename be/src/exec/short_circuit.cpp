@@ -191,8 +191,14 @@ Status ShortCircuitExecutor::execute() {
             break;
         }
         RETURN_IF_ERROR(_source->get_next(runtime_state(), &chunk, &eos));
+        if (nullptr == chunk) {
+            break;
+        }
         eos = true;
         if (!_results.empty()) {
+            _source->close(runtime_state());
+            _finish = true;
+            close();
             return Status::NotSupported("Not support multi result set yet");
         }
         RETURN_IF_ERROR(_sink->send_chunk(runtime_state(), chunk.get()));
