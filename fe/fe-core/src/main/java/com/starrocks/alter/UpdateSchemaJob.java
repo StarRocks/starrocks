@@ -50,7 +50,9 @@ import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.gson.GsonUtils;
@@ -79,6 +81,7 @@ public class UpdateSchemaJob extends AlterJobV2 {
 
     private Table<Long, Long, List<Long>> backendToIndexTabletMap = HashBasedTable.create();
     private Map<Long, TOlapTableColumnParam> indexToColumnParam = Maps.newHashMap();
+    private long failedTimes = 0;
 
 
     public UpdateSchemaJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
@@ -308,7 +311,21 @@ public class UpdateSchemaJob extends AlterJobV2 {
 
     @Override
     protected void getInfo(List<List<Comparable>> infos) {
-        // TODO(zhangqiang)
+        String progress = FeConstants.NULL_STRING;
+        if (jobState == JobState.RUNNING && updateSchemaBatchTask.getTaskNum() > 0) {
+            progress = updateSchemaBatchTask.getFinishedTaskNum() + "/" + updateSchemaBatchTask.getTaskNum();
+        }
+
+        List<Comparable> info = Lists.newArrayList();
+        info.add(jobId);
+        info.add(tableName);
+        info.add(TimeUtils.longToTimeString(createTimeMs));
+        info.add(TimeUtils.longToTimeString(finishedTimeMs));
+        info.add(jobState.name());
+        info.add(errMsg);
+        info.add(progress);
+        info.add(timeoutMs / 1000);
+        infos.add(info);
     }
 
     @Override
@@ -328,6 +345,19 @@ public class UpdateSchemaJob extends AlterJobV2 {
         return Optional.of(Long.valueOf(-1));
     }
 
-
-
+    public List<List<String>> getUnfinishedTasks(int limit) {
+        List<List<String>> taskInfos = Lists.newArrayList();
+        if (jobState == JobState.RUNNING) {
+            List<AgentTask> tasks = updateSchemaBatchTask.getUnfinishedTasks(limit);
+            for (AgentTask agentTask : tasks) {
+                UpdateSchemaTask task = (UpdateSchemaTask) agentTask;
+                List<String> info = Lists.newArrayList();
+                info.add(String.valueOf(task.getBackendId()));
+                info.add(String.valueOf(task.getTableId()));
+                info.add(String.valueOf(task.getSignature()));
+                taskInfos.add(info);
+            }
+        }
+        return taskInfos;
+    }
 } 

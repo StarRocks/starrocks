@@ -63,6 +63,7 @@ public class JobsProcDir implements ProcDirInterface {
     private static final String SCHEMA_CHANGE = "schema_change";
     private static final String EXPORT = "export";
     private static final String OPTIMIZE = "optimize";
+    private static final String UPDATE_SCHEMA = "schema";
 
     private GlobalStateMgr globalStateMgr;
     private Database db;
@@ -96,6 +97,8 @@ public class JobsProcDir implements ProcDirInterface {
             return new OptimizeProcDir(globalStateMgr.getSchemaChangeHandler(), db);
         } else if (jobTypeName.equals(EXPORT)) {
             return new ExportProcNode(globalStateMgr.getExportMgr(), db);
+        } else if (jobTypeName.equals(UPDATE_SCHEMA)) {
+            return new UpdateSchemaProcDir(globalStateMgr.getUpdateSchemaHandler(), db);
         } else {
             throw new AnalysisException("Invalid job type: " + jobTypeName);
         }

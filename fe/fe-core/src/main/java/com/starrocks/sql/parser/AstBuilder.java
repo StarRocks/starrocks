@@ -1226,6 +1226,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             alterType = ShowAlterStmt.AlterType.MATERIALIZED_VIEW;
         } else if (context.OPTIMIZE() != null) {
             alterType = ShowAlterStmt.AlterType.OPTIMIZE;
+        } else if (context.SCHEMA() != null) {
+            alterType = ShowAlterStmt.AlterType.SCHEMA;
         } else {
             alterType = ShowAlterStmt.AlterType.COLUMN;
         }

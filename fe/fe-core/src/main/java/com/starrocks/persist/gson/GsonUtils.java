@@ -67,6 +67,7 @@ import com.starrocks.alter.LakeTableSchemaChangeJob;
 import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
+import com.starrocks.alter.UpdateSchemaJob;
 import com.starrocks.authentication.LDAPSecurityIntegration;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.backup.AbstractJob;
@@ -251,6 +252,7 @@ public class GsonUtils {
                     .registerSubtype(RollupJobV2.class, "RollupJobV2")
                     .registerSubtype(SchemaChangeJobV2.class, "SchemaChangeJobV2")
                     .registerSubtype(OptimizeJobV2.class, "OptimizeJobV2")
+                    .registerSubtype(UpdateSchemaJob.class, "UpdateSchemaJob")
                     .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
                     .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob");
 

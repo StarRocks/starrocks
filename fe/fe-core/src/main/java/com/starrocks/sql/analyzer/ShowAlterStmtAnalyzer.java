@@ -79,6 +79,8 @@ public class ShowAlterStmtAnalyzer {
                 sb.append("/rollup");
             } else if (type == ShowAlterStmt.AlterType.OPTIMIZE) {
                 sb.append("/optimize");
+            } else if (type == ShowAlterStmt.AlterType.SCHEMA) {
+                sb.append("/schema");
             }
 
             // create show proc stmt

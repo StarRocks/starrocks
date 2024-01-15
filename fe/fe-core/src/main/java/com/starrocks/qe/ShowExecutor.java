@@ -94,6 +94,7 @@ import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.SchemaChangeProcDir;
+import com.starrocks.common.proc.UpdateSchemaProcDir;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListComparator;
@@ -1659,6 +1660,8 @@ public class ShowExecutor {
         } else if (procNodeI instanceof OptimizeProcDir) {
             rows = ((OptimizeProcDir) procNodeI).fetchResultByFilter(showStmt.getFilterMap(),
                     showStmt.getOrderPairs(), showStmt.getLimitElement()).getRows();
+        } else if (procNodeI instanceof UpdateSchemaProcDir) {
+            rows = ((UpdateSchemaProcDir) procNodeI).fetchResult().getRows();
         } else {
             rows = procNodeI.fetchResult().getRows();
         }

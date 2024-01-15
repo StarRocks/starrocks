@@ -34,6 +34,7 @@
 
 package com.starrocks.alter;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -41,6 +42,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.ListComparator;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CancelStmt;
@@ -49,6 +52,7 @@ import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.RejectedExecutionException;
@@ -115,5 +119,38 @@ public class UpdateSchemaHandler extends AlterHandler {
         } else {
             existingJob.replay(alterJob);
         }
+    }
+
+    private void getUpdateSchemaJobInfos(Database db, AlterJobV2.JobType type, List<List<Comparable>> updateSchemaJobInfos) {
+        List<AlterJobV2> immutableUpdateSchemaJobs = ImmutableList.copyOf(updateSchemaJobs.values());
+        ConnectContext ctx = ConnectContext.get();
+        for (AlterJobV2 updateSchemaJob : immutableUpdateSchemaJobs) {
+            if (updateSchemaJob.getDbId() != db.getId()) {
+                continue;
+            }
+            if (updateSchemaJob.getType() != type) {
+                continue;
+            }
+            updateSchemaJob.getInfo(updateSchemaJobInfos);
+        }
+    }
+
+    public List<List<Comparable>> getUpdateSchemaJobInfosByDb(Database db) {
+        List<List<Comparable>> updateSchemaJobInfos = new LinkedList<>();
+        getUpdateSchemaJobInfos(db, AlterJobV2.JobType.UPDATE_SCHEMA, updateSchemaJobInfos);
+
+        // sort by "JobId", "PartitionName", "CreateTime", "FinishTime"
+        ListComparator<List<Comparable>> comparator = new ListComparator<List<Comparable>>(0, 1, 2, 3);
+        updateSchemaJobInfos.sort(comparator);
+        return updateSchemaJobInfos;        
+    }
+
+    public AlterJobV2 getUnfinishedUpdateSchemaJobV2ByJobId(long jobId) {
+        for (AlterJobV2 job : updateSchemaJobs.values()) {
+            if (job.getJobId() == jobId && !job.isDone()) {
+                return job;
+            }
+        }
+        return null;
     }
 }

@@ -26,6 +26,7 @@ import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.RollupProcDir;
 import com.starrocks.common.proc.SchemaChangeProcDir;
+import com.starrocks.common.proc.UpdateSchemaProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.parser.NodePosition;
@@ -43,7 +44,7 @@ import java.util.List;
 public class ShowAlterStmt extends ShowStmt {
 
     public enum AlterType {
-        COLUMN, ROLLUP, MATERIALIZED_VIEW, OPTIMIZE
+        COLUMN, ROLLUP, MATERIALIZED_VIEW, OPTIMIZE, SCHEMA
     }
 
     private final AlterType type;
@@ -134,6 +135,8 @@ public class ShowAlterStmt extends ShowStmt {
             titleNames = SchemaChangeProcDir.TITLE_NAMES;
         } else if (type == AlterType.OPTIMIZE) {
             titleNames = OptimizeProcDir.TITLE_NAMES;
+        } else if (type == AlterType.SCHEMA) {
+            titleNames = UpdateSchemaProcDir.TITLE_NAMES;
         }
 
         for (String title : titleNames) {
