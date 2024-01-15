@@ -308,7 +308,7 @@ public:
 
     lake::TabletManager* lake_tablet_manager() const { return _lake_tablet_manager; }
 
-    lake::LocationProvider* lake_location_provider() const { return _lake_location_provider; }
+    std::shared_ptr<lake::LocationProvider> lake_location_provider() const { return _lake_location_provider; }
 
     lake::UpdateManager* lake_update_manager() const { return _lake_update_manager; }
 
@@ -379,7 +379,7 @@ private:
     ProfileReportWorker* _profile_report_worker = nullptr;
 
     lake::TabletManager* _lake_tablet_manager = nullptr;
-    lake::LocationProvider* _lake_location_provider = nullptr;
+    std::shared_ptr<lake::LocationProvider> _lake_location_provider;
     lake::UpdateManager* _lake_update_manager = nullptr;
     lake::ReplicationTxnManager* _lake_replication_txn_manager = nullptr;
 

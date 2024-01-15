@@ -51,7 +51,7 @@ public:
         std::vector<starrocks::StorePath> paths;
         CHECK_OK(starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths));
         _test_dir = paths[0].path + "/lake";
-        _location_provider = new lake::FixedLocationProvider(_test_dir);
+        _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->metadata_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->txn_log_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(1)));
@@ -61,13 +61,12 @@ public:
 
     void TearDown() override {
         delete _tablet_manager;
-        delete _location_provider;
         (void)FileSystem::Default()->delete_dir_recursive(_test_dir);
     }
 
     starrocks::lake::TabletManager* _tablet_manager{nullptr};
     std::string _test_dir;
-    lake::LocationProvider* _location_provider{nullptr};
+    std::shared_ptr<lake::LocationProvider> _location_provider{nullptr};
     std::unique_ptr<lake::UpdateManager> _update_manager;
 };
 
@@ -537,8 +536,8 @@ TCreateTabletReq build_create_tablet_request(int64_t tablet_id, int64_t index_id
 TEST_F(LakeTabletManagerTest, test_multi_partition_schema_file) {
     const static int kNumPartition = 4;
     const static int64_t kIndexId = 123454321;
-    auto lp = std::make_unique<PartitionedLocationProvider>(_test_dir, kNumPartition);
-    _tablet_manager->TEST_set_location_provider(lp.get());
+    auto lp = std::make_shared<PartitionedLocationProvider>(_test_dir, kNumPartition);
+    _tablet_manager->TEST_set_location_provider(lp);
     for (int i = 0; i < 10; i++) {
         auto req = build_create_tablet_request(next_id(), kIndexId);
         ASSERT_OK(_tablet_manager->create_tablet(req));

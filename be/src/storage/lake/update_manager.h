@@ -53,7 +53,7 @@ private:
 
 class UpdateManager {
 public:
-    UpdateManager(LocationProvider* location_provider, MemTracker* mem_tracker = nullptr);
+    UpdateManager(std::shared_ptr<LocationProvider> location_provider, MemTracker* mem_tracker = nullptr);
     ~UpdateManager();
     void set_tablet_mgr(TabletManager* tablet_mgr) { _tablet_mgr = tablet_mgr; }
     void set_cache_expire_ms(int64_t expire_ms) { _cache_expire_ms = expire_ms; }
@@ -192,7 +192,7 @@ private:
     // compaction cache
     DynamicCache<string, CompactionState> _compaction_cache;
     std::atomic<int64_t> _last_clear_expired_cache_millis = 0;
-    LocationProvider* _location_provider = nullptr;
+    std::shared_ptr<LocationProvider> _location_provider;
     TabletManager* _tablet_mgr = nullptr;
 
     // memory checkers

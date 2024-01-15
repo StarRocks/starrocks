@@ -63,9 +63,9 @@ class SchemaChangeTest : public testing::Test, public testing::WithParamInterfac
 public:
     SchemaChangeTest(const std::string& test_dir) {
         _mem_tracker = std::make_unique<MemTracker>(-1);
-        _location_provider = std::make_unique<FixedLocationProvider>(test_dir);
-        _update_manager = std::make_unique<UpdateManager>(_location_provider.get());
-        _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), _update_manager.get(), 1024 * 1024);
+        _location_provider = std::make_shared<FixedLocationProvider>(test_dir);
+        _update_manager = std::make_unique<UpdateManager>(_location_provider);
+        _tablet_manager = std::make_unique<TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
     }
 
 protected:
@@ -101,7 +101,7 @@ protected:
     }
 
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<FixedLocationProvider> _location_provider;
+    std::shared_ptr<FixedLocationProvider> _location_provider;
     std::unique_ptr<UpdateManager> _update_manager;
     std::unique_ptr<TabletManager> _tablet_manager;
 

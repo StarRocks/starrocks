@@ -55,10 +55,9 @@ public:
     LakeTabletsChannelTest() {
         _schema_id = next_id();
         _mem_tracker = std::make_unique<MemTracker>(-1);
-        _location_provider = std::make_unique<lake::FixedLocationProvider>(kTestGroupPath);
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider.get());
-        _tablet_manager =
-                std::make_unique<lake::TabletManager>(_location_provider.get(), _update_manager.get(), 1024 * 1024);
+        _location_provider = std::make_shared<lake::FixedLocationProvider>(kTestGroupPath);
+        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider);
+        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 1024 * 1024);
 
         _load_channel_mgr = std::make_unique<LoadChannelMgr>();
 
@@ -243,11 +242,10 @@ protected:
 
     int64_t _schema_id;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<lake::FixedLocationProvider> _location_provider;
+    std::shared_ptr<lake::FixedLocationProvider> _location_provider;
     std::unique_ptr<lake::UpdateManager> _update_manager;
     std::unique_ptr<lake::TabletManager> _tablet_manager;
     std::unique_ptr<LoadChannelMgr> _load_channel_mgr;
-    lake::LocationProvider* _backup_location_provider;
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
     std::shared_ptr<OlapTableSchemaParam> _schema_param;

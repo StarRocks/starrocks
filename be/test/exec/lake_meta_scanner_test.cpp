@@ -50,9 +50,9 @@ class LakeMetaScannerTest : public ::testing::Test {
 public:
     LakeMetaScannerTest() : _tablet_id(next_id()) {
         // setup TabletManager
-        _location_provider = std::make_unique<lake::FixedLocationProvider>(kRootLocation);
+        _location_provider = std::make_shared<lake::FixedLocationProvider>(kRootLocation);
         _tablet_mgr = ExecEnv::GetInstance()->lake_tablet_manager();
-        _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider.get());
+        _backup_location_provider = _tablet_mgr->TEST_set_location_provider(_location_provider);
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kSegmentDirectoryName));
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kMetadataDirectoryName));
         FileSystem::Default()->create_dir_recursive(lake::join_path(kRootLocation, lake::kTxnLogDirectoryName));
@@ -115,8 +115,8 @@ public:
 public:
     constexpr static const char* const kRootLocation = "./LakeMetaScannerTest";
     lake::TabletManager* _tablet_mgr;
-    std::unique_ptr<lake::LocationProvider> _location_provider;
-    lake::LocationProvider* _backup_location_provider;
+    std::shared_ptr<lake::LocationProvider> _location_provider;
+    std::shared_ptr<lake::LocationProvider> _backup_location_provider;
     int64_t _tablet_id;
 
     ObjectPool _pool;

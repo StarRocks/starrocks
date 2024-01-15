@@ -56,12 +56,12 @@ public:
         std::vector<starrocks::StorePath> paths;
         CHECK_OK(starrocks::parse_conf_store_paths(starrocks::config::storage_root_path, &paths));
         _test_dir = paths[0].path + "/lake";
-        _location_provider = std::make_unique<lake::FixedLocationProvider>(_test_dir);
+        _location_provider = std::make_shared<lake::FixedLocationProvider>(_test_dir);
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->metadata_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->txn_log_root_location(1)));
         CHECK_OK(FileSystem::Default()->create_dir_recursive(_location_provider->segment_root_location(1)));
-        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider.get());
-        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider.get(), _update_manager.get(), 16384);
+        _update_manager = std::make_unique<lake::UpdateManager>(_location_provider);
+        _tablet_manager = std::make_unique<lake::TabletManager>(_location_provider, _update_manager.get(), 16384);
         _replication_txn_manager = std::make_unique<lake::ReplicationTxnManager>(_tablet_manager.get());
 
         ASSERT_TRUE(_tablet_manager->create_tablet(get_create_tablet_req(_tablet_id, _version, _schema_hash)).ok());
@@ -199,7 +199,7 @@ public:
 protected:
     std::unique_ptr<starrocks::lake::TabletManager> _tablet_manager;
     std::string _test_dir;
-    std::unique_ptr<lake::LocationProvider> _location_provider;
+    std::shared_ptr<lake::LocationProvider> _location_provider;
     std::unique_ptr<lake::UpdateManager> _update_manager;
     std::unique_ptr<lake::ReplicationTxnManager> _replication_txn_manager;
 

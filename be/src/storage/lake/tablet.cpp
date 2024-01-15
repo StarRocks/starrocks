@@ -72,23 +72,26 @@ StatusOr<TxnLogPtr> Tablet::get_txn_vlog(int64_t version) {
 
 StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int64_t txn_id,
                                                            uint32_t max_rows_per_segment) {
+    std::unique_ptr<TabletWriter> tablet_writer;
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         if (type == kHorizontal) {
-            return std::make_unique<HorizontalPkTabletWriter>(_mgr, _id, tablet_schema, txn_id);
+            tablet_writer = std::make_unique<HorizontalPkTabletWriter>(_id, tablet_schema, txn_id);
         } else {
             DCHECK(type == kVertical);
-            return std::make_unique<VerticalPkTabletWriter>(_mgr, _id, tablet_schema, txn_id, max_rows_per_segment);
+            tablet_writer = std::make_unique<VerticalPkTabletWriter>(_id, tablet_schema, txn_id, max_rows_per_segment);
         }
     } else {
         if (type == kHorizontal) {
-            return std::make_unique<HorizontalGeneralTabletWriter>(_mgr, _id, tablet_schema, txn_id);
+            tablet_writer = std::make_unique<HorizontalGeneralTabletWriter>(_id, tablet_schema, txn_id);
         } else {
             DCHECK(type == kVertical);
-            return std::make_unique<VerticalGeneralTabletWriter>(_mgr, _id, tablet_schema, txn_id,
-                                                                 max_rows_per_segment);
+            tablet_writer =
+                    std::make_unique<VerticalGeneralTabletWriter>(_id, tablet_schema, txn_id, max_rows_per_segment);
         }
     }
+    tablet_writer->set_location_provider(_mgr->location_provider());
+    return tablet_writer;
 }
 
 StatusOr<std::shared_ptr<const TabletSchema>> Tablet::get_schema() {

@@ -21,6 +21,7 @@
 #include "fs/fs.h" // FileInfo
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/lake/location_provider.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
@@ -37,13 +38,10 @@ enum WriterType : int { kHorizontal = 0, kVertical = 1 };
 // Basic interface for tablet writers.
 class TabletWriter {
 public:
-    explicit TabletWriter(TabletManager* tablet_mgr, int64_t tablet_id, std::shared_ptr<const TabletSchema> schema,
-                          int64_t txn_id)
-            : _tablet_mgr(tablet_mgr), _tablet_id(tablet_id), _schema(std::move(schema)), _txn_id(txn_id) {}
+    explicit TabletWriter(int64_t tablet_id, std::shared_ptr<const TabletSchema> schema, int64_t txn_id)
+            : _tablet_id(tablet_id), _schema(std::move(schema)), _txn_id(txn_id) {}
 
     virtual ~TabletWriter() = default;
-
-    TabletManager* tablet_manager() const { return _tablet_mgr; }
 
     int64_t tablet_id() const { return _tablet_id; }
 
@@ -109,8 +107,12 @@ public:
     // allow to set custom tablet schema for writer, used in partial update
     void set_tablet_schema(TabletSchemaCSPtr schema) { _schema = std::move(schema); }
 
+    void set_location_provider(const std::shared_ptr<LocationProvider> provider) {
+        _location_provider = std::move(provider);
+    }
+    const std::shared_ptr<LocationProvider> location_provider() { return _location_provider; }
+
 protected:
-    TabletManager* _tablet_mgr;
     int64_t _tablet_id;
     TabletSchemaCSPtr _schema;
     int64_t _txn_id;
@@ -119,6 +121,7 @@ protected:
     int64_t _data_size = 0;
     uint32_t _seg_id = 0;
     bool _finished = false;
+    std::shared_ptr<LocationProvider> _location_provider;
 };
 
 } // namespace lake

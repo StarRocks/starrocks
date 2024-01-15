@@ -52,9 +52,9 @@ protected:
             : _test_dir(std::move(test_dir)),
               _parent_tracker(std::make_unique<MemTracker>(-1)),
               _mem_tracker(std::make_unique<MemTracker>(-1, "", _parent_tracker.get())),
-              _lp(std::make_unique<FixedLocationProvider>(_test_dir)),
-              _update_mgr(std::make_unique<UpdateManager>(_lp.get(), _mem_tracker.get())),
-              _tablet_mgr(std::make_unique<TabletManager>(_lp.get(), _update_mgr.get(), cache_limit)) {}
+              _lp(std::make_shared<FixedLocationProvider>(_test_dir)),
+              _update_mgr(std::make_unique<UpdateManager>(_lp, _mem_tracker.get())),
+              _tablet_mgr(std::make_unique<TabletManager>(_lp, _update_mgr.get(), cache_limit)) {}
 
     void remove_test_dir_or_die() { ASSERT_OK(fs::remove_all(_test_dir)); }
 
@@ -81,7 +81,7 @@ protected:
     std::string _test_dir;
     std::unique_ptr<MemTracker> _parent_tracker;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<LocationProvider> _lp;
+    std::shared_ptr<LocationProvider> _lp;
     std::unique_ptr<UpdateManager> _update_mgr;
     std::unique_ptr<TabletManager> _tablet_mgr;
 };

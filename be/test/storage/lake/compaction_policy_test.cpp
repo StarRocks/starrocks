@@ -18,7 +18,6 @@
 
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
-#include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
@@ -107,7 +106,6 @@ protected:
         std::cout << "delete rowset: " << id << std::endl;
     }
 
-    LocationProvider* _backup_location_provider;
     std::shared_ptr<TabletMetadata> _tablet_metadata;
 };
 
