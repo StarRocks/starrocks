@@ -106,6 +106,8 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
             }
         }
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, result_chunk.get()));
+    } else {
+        *eos = true;
     }
     *chunk = std::move(result_chunk);
     return Status::OK();
