@@ -57,6 +57,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -97,7 +98,7 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class BackupHandler extends FrontendDaemon implements Writable {
+public class BackupHandler extends FrontendDaemon implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(BackupHandler.class);
 
     public static final int SIGNATURE_VERSION = 1;
@@ -746,6 +747,11 @@ public class BackupHandler extends FrontendDaemon implements Writable {
         } finally {
             seqlock.unlock();
         }
+    }
+
+    @Override
+    public long estimateCount() {
+        return dbIdToBackupOrRestoreJob.size();
     }
 }
 

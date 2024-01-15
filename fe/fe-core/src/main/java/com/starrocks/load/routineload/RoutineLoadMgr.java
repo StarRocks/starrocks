@@ -50,6 +50,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -88,7 +89,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public class RoutineLoadMgr implements Writable {
+public class RoutineLoadMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadMgr.class);
 
     // be => running tasks num
@@ -732,4 +733,10 @@ public class RoutineLoadMgr implements Writable {
             putJob(routineLoadJob);
         }
     }
+
+    @Override
+    public long estimateCount() {
+        return idToRoutineLoadJob.size();
+    }
+
 }

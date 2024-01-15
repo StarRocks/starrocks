@@ -46,6 +46,7 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
@@ -78,7 +79,7 @@ import java.util.stream.Collectors;
  * Checkpoint thread is no need to modify this inverted index, because this inverted index will not be written
  * into image, all metadata are in globalStateMgr, and the inverted index will be rebuilt when FE restart.
  */
-public class TabletInvertedIndex {
+public class TabletInvertedIndex implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(TabletInvertedIndex.class);
 
     public static final int NOT_EXIST_VALUE = -1;
@@ -872,6 +873,11 @@ public class TabletInvertedIndex {
         } finally {
             writeUnlock();
         }
+    }
+
+    @Override
+    public long estimateCount() {
+        return tabletMetaMap.size();
     }
 }
 

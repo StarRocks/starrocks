@@ -69,6 +69,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.datacache.DataCacheMetrics;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.GaugeMetric;
@@ -117,6 +118,7 @@ import org.apache.commons.lang3.tuple.ImmutableTriple;
 import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.spark.util.SizeEstimator;
 import org.apache.thrift.TException;
 
 import java.util.ArrayList;
@@ -128,7 +130,21 @@ import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.stream.Collectors;
 
-public class ReportHandler extends Daemon {
+public class ReportHandler extends Daemon implements MemoryTrackable {
+    @Override
+    public long estimateSize() {
+        return SizeEstimator.estimate(reportQueue) + SizeEstimator.estimate(pendingTaskMap);
+    }
+
+    @Override
+    public long estimateCount() {
+        long count = 0;
+        for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
+            count += taskMap.size();
+        }
+        return count;
+    }
+
     public enum ReportType {
         UNKNOWN_REPORT,
         TABLET_REPORT,

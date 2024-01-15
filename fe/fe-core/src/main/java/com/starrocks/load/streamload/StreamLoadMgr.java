@@ -29,6 +29,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.http.rest.TransactionResult;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -54,7 +55,7 @@ import java.util.Map;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public class StreamLoadMgr {
+public class StreamLoadMgr implements MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(StreamLoadMgr.class);
 
     // label -> streamLoadTask
@@ -642,5 +643,10 @@ public class StreamLoadMgr {
 
             addLoadTask(loadTask);
         }
+    }
+
+    @Override
+    public long estimateCount() {
+        return idToStreamLoadTask.size();
     }
 }

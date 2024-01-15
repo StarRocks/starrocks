@@ -54,6 +54,7 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
 import com.starrocks.load.FailMsg.CancelType;
 import com.starrocks.load.Load;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -102,7 +103,7 @@ import java.util.stream.Collectors;
  * LoadManager.lock
  * LoadJob.lock
  */
-public class LoadMgr implements Writable {
+public class LoadMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(LoadMgr.class);
 
     private final Map<Long, LoadJob> idToLoadJob = Maps.newConcurrentMap();
@@ -804,5 +805,10 @@ public class LoadMgr implements Writable {
             writer.writeJson(loadJob);
         }
         writer.close();
+    }
+
+    @Override
+    public long estimateCount() {
+        return idToLoadJob.size();
     }
 }

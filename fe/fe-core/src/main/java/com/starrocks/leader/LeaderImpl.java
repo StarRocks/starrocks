@@ -77,6 +77,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.OlapDeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
+import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
 import com.starrocks.rpc.FrontendServiceProxy;
@@ -171,6 +172,7 @@ public class LeaderImpl {
 
     public LeaderImpl() {
         reportHandler.start();
+        MemoryUsageTracker.registerMemoryReference("Report", reportHandler);
     }
 
     public TMasterResult finishTask(TFinishTaskRequest request) {

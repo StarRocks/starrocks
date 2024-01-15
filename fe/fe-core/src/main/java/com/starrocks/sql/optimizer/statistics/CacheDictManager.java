@@ -23,6 +23,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.ColumnIdentifier;
@@ -42,7 +43,7 @@ import java.util.concurrent.Executor;
 
 import static com.starrocks.statistic.StatisticExecutor.queryDictSync;
 
-public class CacheDictManager implements IDictManager {
+public class CacheDictManager implements IDictManager, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(CacheDictManager.class);
     private static final Set<ColumnIdentifier> NO_DICT_STRING_COLUMNS = Sets.newConcurrentHashSet();
     private static final Set<Long> FORBIDDEN_DICT_TABLE_IDS = Sets.newConcurrentHashSet();
@@ -288,5 +289,10 @@ public class CacheDictManager implements IDictManager {
             }
         }
         return Optional.empty();
+    }
+
+    @Override
+    public long estimateCount() {
+        return dictStatistics.asMap().size();
     }
 }

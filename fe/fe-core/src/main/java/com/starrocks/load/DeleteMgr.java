@@ -79,6 +79,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.delete.LakeDeleteJob;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.gson.GsonUtils;
@@ -118,7 +119,7 @@ import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
-public class DeleteMgr implements Writable {
+public class DeleteMgr implements Writable, MemoryTrackable {
     private static final Logger LOG = LogManager.getLogger(DeleteMgr.class);
 
     // TransactionId -> DeleteJob
@@ -863,4 +864,14 @@ public class DeleteMgr implements Writable {
             dbToDeleteInfos.put(dbId, multiDeleteInfos);
         }
     }
+
+    @Override
+    public long estimateCount() {
+        int count = 0;
+        for (List<MultiDeleteInfo> value : dbToDeleteInfos.values()) {
+            count += value.size();
+        }
+        return count;
+    }
+
 }

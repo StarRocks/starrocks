@@ -21,6 +21,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
@@ -37,7 +38,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.PriorityBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-public class TaskRunManager {
+public class TaskRunManager implements MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(TaskRunManager.class);
 
@@ -308,5 +309,17 @@ public class TaskRunManager {
 
     public long getHistoryTaskRunCount() {
         return taskRunHistory.getTaskRunCount();
+    }
+
+    @Override
+    public long estimateCount() {
+        int validPendingCount = 0;
+        for (Long taskId : pendingTaskRunMap.keySet()) {
+            PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
+            if (taskRuns != null && !taskRuns.isEmpty()) {
+                validPendingCount += taskRuns.size();
+            }
+        }
+        return validPendingCount + runningTaskRunMap.size() + taskRunHistory.getTaskRunCount();
     }
 }
