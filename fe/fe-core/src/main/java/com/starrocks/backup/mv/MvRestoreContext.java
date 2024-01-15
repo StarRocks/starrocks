@@ -99,7 +99,7 @@ public class MvRestoreContext {
         }
     }
 
-    public void discordExpiredBackupTableInfo(AbstractJob job) {
+    public void discardExpiredBackupTableInfo(AbstractJob job) {
         if (!(job instanceof RestoreJob)) {
             return;
         }
