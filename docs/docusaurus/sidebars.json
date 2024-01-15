@@ -82,7 +82,7 @@
           "type": "category",
           "label": "Load from Object Storage",
           "link": {"type": "doc", "id": "loading/objectstorage"},
-          "items": ["loading/s3", "loading/gcs", "loading/minio", "loading/cloud_storage_load"]
+          "items": ["loading/s3", "loading/azure", "loading/gcs", "loading/minio", "loading/cloud_storage_load"]
         },
         "loading/StreamLoad",
         "loading/hdfs_load",
@@ -840,7 +840,7 @@
           "type": "category",
           "label": "从对象存储导入",
           "link": {"type": "doc", "id": "loading/objectstorage"},
-          "items": ["loading/s3"]
+          "items": ["loading/s3", "loading/azure", "loading/gcs"]
         },
         "loading/StreamLoad",
         "loading/hdfs_load",
