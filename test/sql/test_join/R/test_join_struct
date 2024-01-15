@@ -181,7 +181,7 @@ E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. 
 -- !result
 select s1 from struct_test t where exists (select 1 from struct_test s where t.s1 = s.s5) order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 decimal64(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 decimal(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
 -- !result
 select s2 from struct_test t where exists (select 1 from struct_test s where t.s2 = s.s5) order by t.pk;
 -- result:
@@ -205,15 +205,15 @@ E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 88. 
 -- !result
 select s0 from struct_test t where exists (select 1 from struct_test s where t.s0 < s.s1) order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 int(11), c1 varchar(65533)> does not support binary predicate operation with type struct<c0 decimal64(16, 3), c1 varchar(30)>.')
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 int(11), c1 varchar(65533)> does not support binary predicate operation with type struct<c0 decimal(16, 3), c1 varchar(30)>.')
 -- !result
 select s1 from struct_test t where exists (select 1 from struct_test s where t.s1 < s.s1) order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 decimal64(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 decimal64(16, 3), c1 varchar(30)>.')
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 decimal(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 decimal(16, 3), c1 varchar(30)>.')
 -- !result
 select s2 from struct_test t where exists (select 1 from struct_test s where t.s2 < s.s1) order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 int(11), c1 array<varchar(65533)>> does not support binary predicate operation with type struct<c0 decimal64(16, 3), c1 varchar(30)>.')
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 int(11), c1 array<varchar(65533)>> does not support binary predicate operation with type struct<c0 decimal(16, 3), c1 varchar(30)>.')
 -- !result
 select s2 from struct_test t where not exists (select 1 from struct_test s where t.s2 <=> s.s5) order by t.pk;
 -- result:
@@ -288,11 +288,11 @@ None	None
 -- !result
 select t.s1, s.s2 from struct_test t left join struct_test s on s.s1 = t.s2 order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 64 to line 1, column 73. Detail message: Column type struct<c0 decimal64(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 int(11), c1 array<varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 64 to line 1, column 73. Detail message: Column type struct<c0 decimal(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 int(11), c1 array<varchar(65533)>>.')
 -- !result
 select t.s1, s.s3 from struct_test t left join struct_test s on s.s1 < t.s3 order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 64 to line 1, column 73. Detail message: Column type struct<c0 decimal64(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 64 to line 1, column 73. Detail message: Column type struct<c0 decimal(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>>.')
 -- !result
 select t.s0, s.s0 from struct_test t left join struct_test s where s.s0 = t.s0 order by t.pk;
 -- result:
@@ -316,11 +316,11 @@ None	None
 -- !result
 select t.s1, s.s2 from struct_test t right join struct_test s on s.s1 = t.s2 order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 65 to line 1, column 74. Detail message: Column type struct<c0 decimal64(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 int(11), c1 array<varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 65 to line 1, column 74. Detail message: Column type struct<c0 decimal(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 int(11), c1 array<varchar(65533)>>.')
 -- !result
 select t.s1, s.s3 from struct_test t right join struct_test s on s.s1 < t.s3 order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 65 to line 1, column 74. Detail message: Column type struct<c0 decimal64(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 65 to line 1, column 74. Detail message: Column type struct<c0 decimal(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>>.')
 -- !result
 select t.s0, s.s0 from struct_test t right join struct_test s on s.s0 = t.s0 order by t.pk;
 -- result:
@@ -349,11 +349,11 @@ None	None
 -- !result
 select t.s1, s.s2 from struct_test t full join struct_test s on s.s1 = t.s2 order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 64 to line 1, column 73. Detail message: Column type struct<c0 decimal64(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 int(11), c1 array<varchar(65533)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 64 to line 1, column 73. Detail message: Column type struct<c0 decimal(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 int(11), c1 array<varchar(65533)>>.')
 -- !result
 select t.s1, s.s3 from struct_test t full join struct_test s on s.s1 < t.s3 order by t.pk;
 -- result:
-E: (1064, 'Getting analyzing error from line 1, column 64 to line 1, column 73. Detail message: Column type struct<c0 decimal64(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>>.')
+E: (1064, 'Getting analyzing error from line 1, column 64 to line 1, column 73. Detail message: Column type struct<c0 decimal(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>>.')
 -- !result
 select t.s0, s.s0 from struct_test t full join struct_test s where s.s0 = t.s0 order by t.pk;
 -- result:

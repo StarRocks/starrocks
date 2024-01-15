@@ -226,7 +226,7 @@ public class TypeTest {
         Object[][] testCases = new Object[][] {
                 {ScalarType.createType(PrimitiveType.BOOLEAN), "tinyint(1)"},
                 {ScalarType.createType(PrimitiveType.LARGEINT), "bigint(20) unsigned"},
-                {ScalarType.createDecimalV3NarrowestType(18, 4), "decimal64(18, 4)"},
+                {ScalarType.createDecimalV3NarrowestType(18, 4), "decimal(18, 4)"},
                 {new ArrayType(Type.INT), "array<int(11)>"},
                 {new MapType(Type.INT, Type.INT), "map<int(11),int(11)>"},
                 {new StructType(Lists.newArrayList(Type.INT)), "struct<col1 int(11)>"},

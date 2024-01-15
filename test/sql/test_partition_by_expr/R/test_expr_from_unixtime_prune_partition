@@ -22,8 +22,8 @@ insert into partition_unixtime values(unix_timestamp('2021-01-06'),'1',1.1,1);
 select * from partition_unixtime;
 -- result:
 1609689600	1	1	1
-1609776000	1	1	1
 1609862400	1	1	1
+1609776000	1	1	1
 -- !result
 select * from partition_unixtime where create_time=1609776000;
 -- result:
@@ -60,8 +60,8 @@ insert into partition_unixtime_ms values(unix_timestamp('2021-01-06')*1000,'1',1
 -- !result
 select * from partition_unixtime_ms;
 -- result:
-1609862400000	1	1	1
 1609689600000	1	1	1
+1609862400000	1	1	1
 1609776000000	1	1	1
 -- !result
 select * from partition_unixtime_ms where create_time=1609776000000;
