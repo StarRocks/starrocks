@@ -1,0 +1,24 @@
+name: CI COMMENT TOOLS
+
+on:
+  issue_comment:
+    types: [ created ]
+
+jobs:
+
+  close:
+    name: CLOSE PR
+    runs-on: ubuntu-latest
+    if: >
+      ${{ github.event.issue.pull_request }} &&
+      (contains(github.event.comment.body, '@Mergify close') ||
+      contains(github.event.comment.body, '@Mergifyio close'))
+
+    env:
+      PR_NUMBER: ${{ github.event.issue.number }}
+      GITHUB_TOKEN: ${{ secrets.PAT }}
+
+    steps:
+      - name: CLOSE
+        run: |
+          gh pr close ${PR_NUMBER} -R ${{ github.repository }} -c "PR was manually closed."
