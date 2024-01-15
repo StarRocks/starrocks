@@ -693,7 +693,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
   用于指定作为更新生效条件的列名。这样只有当导入的数据中该列的值大于等于当前值的时候，更新才会生效。
   
-  Broker Load 自 3.0 版本起支持条件更新。参见[通过导入实现数据变更](../../../loading/Load_to_Primary_Key_tables.md#条件更新)。
+  Broker Load 自 3.1 版本起支持条件更新。参见[通过导入实现数据变更](../../../loading/Load_to_Primary_Key_tables.md#条件更新)。
   
   > **说明**
   >
