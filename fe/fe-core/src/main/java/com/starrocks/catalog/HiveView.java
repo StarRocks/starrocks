@@ -122,7 +122,7 @@ public class HiveView extends Table {
 
     @Override
     public String getUUID() {
-        return String.join(".", catalogName, dbName, name, Long.toString(createTime));
+        return String.join(".", catalogName, dbName, name);
     }
 
     public static Builder builder() {
