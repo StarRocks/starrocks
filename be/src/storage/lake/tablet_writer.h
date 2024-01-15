@@ -27,6 +27,7 @@ namespace starrocks {
 class Chunk;
 class Column;
 class TabletSchema;
+class ThreadPool;
 
 namespace lake {
 
@@ -38,8 +39,12 @@ enum WriterType : int { kHorizontal = 0, kVertical = 1 };
 class TabletWriter {
 public:
     explicit TabletWriter(TabletManager* tablet_mgr, int64_t tablet_id, std::shared_ptr<const TabletSchema> schema,
-                          int64_t txn_id)
-            : _tablet_mgr(tablet_mgr), _tablet_id(tablet_id), _schema(std::move(schema)), _txn_id(txn_id) {}
+                          int64_t txn_id, ThreadPool* flush_pool = nullptr)
+            : _tablet_mgr(tablet_mgr),
+              _tablet_id(tablet_id),
+              _schema(std::move(schema)),
+              _txn_id(txn_id),
+              _flush_pool(flush_pool) {}
 
     virtual ~TabletWriter() = default;
 
@@ -114,6 +119,7 @@ protected:
     int64_t _tablet_id;
     TabletSchemaCSPtr _schema;
     int64_t _txn_id;
+    ThreadPool* _flush_pool;
     std::vector<FileInfo> _files;
     int64_t _num_rows = 0;
     int64_t _data_size = 0;

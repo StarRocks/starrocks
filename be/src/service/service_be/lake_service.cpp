@@ -34,7 +34,6 @@
 #include "storage/lake/transactions.h"
 #include "storage/lake/vacuum.h"
 #include "testutil/sync_point.h"
-#include "util/bthreads/semaphore.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
 #include "util/thread.h"
@@ -119,38 +118,6 @@ bvar::PassiveStatus<int> g_publish_version_active_tasks("lake_publish_version_ac
                                                         get_num_publish_active_tasks, nullptr);
 bvar::PassiveStatus<int> g_vacuum_queued_tasks("lake_vacuum_queued_tasks", get_num_vacuum_queued_tasks, nullptr);
 bvar::PassiveStatus<int> g_vacuum_active_tasks("lake_vacuum_active_tasks", get_num_vacuum_active_tasks, nullptr);
-
-// A class use to limit the number of tasks submitted to the thread pool.
-class ConcurrencyLimitedThreadPoolToken {
-public:
-    explicit ConcurrencyLimitedThreadPoolToken(ThreadPool* pool, int max_concurrency)
-            : _pool(pool), _sem(std::make_shared<bthreads::CountingSemaphore<>>(max_concurrency)) {}
-
-    DISALLOW_COPY_AND_MOVE(ConcurrencyLimitedThreadPoolToken);
-
-    Status submit_func(std::function<void()> task, std::chrono::system_clock::time_point deadline) {
-        if (!_sem->try_acquire_until(deadline)) {
-            auto t = MilliSecondsSinceEpochFromTimePoint(deadline);
-            return Status::TimedOut(fmt::format("acquire semaphore reached deadline={}", t));
-        }
-        auto task_with_semaphore_release = [sem = _sem, task = std::move(task)]() {
-            task();
-            // The `ConcurrencyLimitedThreadPoolToken` object may have been destroyed
-            // before `release()` the semaphore, so we use `std::shared_ptr` to manage
-            // the semaphore to ensure it's still alive when calling `release()`.
-            sem->release();
-        };
-        auto st = _pool->submit_func(std::move(task_with_semaphore_release));
-        if (!st.ok()) {
-            _sem->release();
-        }
-        return st;
-    }
-
-private:
-    ThreadPool* _pool;
-    std::shared_ptr<bthreads::CountingSemaphore<>> _sem;
-};
 
 } // namespace
 
