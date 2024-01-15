@@ -135,10 +135,22 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                 min_chunk->columns()[i]->append_nulls(1);
                 max_chunk->columns()[i]->append_nulls(1);
             } else {
+<<<<<<< HEAD:be/src/exec/vectorized/hdfs_scanner_orc.cpp
                 auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(
                         _scanner_ctx.partition_values[part_idx]);
                 min_chunk->columns()[i]->append(*const_column->data_column(), 0, 1);
                 max_chunk->columns()[i]->append(*const_column->data_column(), 0, 1);
+=======
+                auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(_scanner_ctx.partition_values[part_idx]);
+                ColumnPtr data_column = const_column->data_column();
+                if (data_column->is_nullable()) {
+                    min_chunk->columns()[i]->append_nulls(1);
+                    max_chunk->columns()[i]->append_nulls(1);
+                } else {
+                    min_chunk->columns()[i]->append(*data_column, 0, 1);
+                    max_chunk->columns()[i]->append(*data_column, 0, 1);
+                }
+>>>>>>> 69599d183a ([BugFix]support null partition_value to avoid crash (backport #38888) (#39005)):be/src/exec/hdfs_scanner_orc.cpp
             }
         }
     }
