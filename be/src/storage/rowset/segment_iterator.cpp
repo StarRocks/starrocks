@@ -528,7 +528,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         auto tablet_schema = _opts.tablet_schema ? _opts.tablet_schema : _segment->tablet_schema_share_ptr();
         const auto& col = tablet_schema->column(cid);
         ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, access_path));
-        ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_name()));
+        ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_info()));
         iter_opts.read_file = rfile.get();
         _column_files[cid] = std::move(rfile);
     } else {
