@@ -83,10 +83,12 @@ import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
+import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
@@ -1185,5 +1187,34 @@ public class IcebergMetadataTest extends TableTestBase {
         ModifyTablePropertiesClause invalidCompressionClause = new ModifyTablePropertiesClause(invalidProperties);
         clauses.add(invalidCompressionClause);
         Assert.assertThrows(DdlException.class, () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
+    }
+
+    @Test
+    public void testGetIcebergMetricsConfig() {
+        List<Column> columns = Lists.newArrayList(new Column("k1", INT),
+                new Column("k2", STRING),
+                new Column("k3", STRING),
+                new Column("k4", STRING),
+                new Column("k5", STRING));
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", columns, mockedNativeTableH, Maps.newHashMap());
+        Assert.assertEquals(0, IcebergMetadata.getIcebergMetricsConfig(icebergTable).size());
+        Map<String, String> icebergProperties = Maps.newHashMap();
+        icebergProperties.put("write.metadata.metrics.column.k1", "none");
+        icebergProperties.put("write.metadata.metrics.column.k2", "counts");
+        icebergProperties.put("write.metadata.metrics.column.k3", "truncate(16)");
+        icebergProperties.put("write.metadata.metrics.column.k4", "truncate(32)");
+        icebergProperties.put("write.metadata.metrics.column.k5", "full");
+        UpdateProperties updateProperties = mockedNativeTableH.updateProperties();
+        icebergProperties.forEach(updateProperties::set);
+        updateProperties.commit();
+        Map<String, MetricsModes.MetricsMode> actual2 = IcebergMetadata.getIcebergMetricsConfig(icebergTable);
+        Assert.assertEquals(4, actual2.size());
+        Map<String, MetricsModes.MetricsMode> expected2 = Maps.newHashMap();
+        expected2.put("k1", MetricsModes.None.get());
+        expected2.put("k2", MetricsModes.Counts.get());
+        expected2.put("k4", MetricsModes.Truncate.withLength(32));
+        expected2.put("k5", MetricsModes.Full.get());
+        Assert.assertEquals(expected2, actual2);
     }
 }
