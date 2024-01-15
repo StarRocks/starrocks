@@ -286,6 +286,7 @@ public class TableQueryPlanAction extends RestBaseAction {
         }
 
         TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
+        tQueryPlanInfo.output_names = execPlan.getColNames();
 
         // acquire TPlanFragment
         TPlanFragment tPlanFragment = fragments.get(0).toThrift();

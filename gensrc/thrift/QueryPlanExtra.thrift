@@ -55,4 +55,5 @@ struct TQueryPlanInfo {
   3: required Descriptors.TDescriptorTable desc_tbl
   // all tablet scan should share one query_id
   4: required Types.TUniqueId query_id
+  5: required list<string> output_names
 }
