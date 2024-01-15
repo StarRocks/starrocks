@@ -130,7 +130,7 @@ public class EditLog {
     public static final Logger LOG = LogManager.getLogger(EditLog.class);
     private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
-    private BlockingQueue<JournalTask> journalQueue;
+    private final BlockingQueue<JournalTask> journalQueue;
 
     public EditLog(BlockingQueue<JournalTask> journalQueue) {
         this.journalQueue = journalQueue;
@@ -607,7 +607,7 @@ public class EditLog {
                 case OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH: {
                     final TransactionStateBatch stateBatch = (TransactionStateBatch) journal.getData();
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionStateBatch(stateBatch);
-                    LOG.debug("opcode: {}, tids: {}", opCode, stateBatch.getTxnIds());
+                    LOG.debug("opcode: {}, txn ids: {}", opCode, stateBatch.getTxnIds());
                     break;
                 }
                 case OperationType.OP_DELETE_TRANSACTION_STATE: {
@@ -810,6 +810,10 @@ public class EditLog {
                             globalStateMgr.getRollupHandler().replayAlterJobV2(alterJob);
                             break;
                         case SCHEMA_CHANGE:
+<<<<<<< HEAD
+=======
+                        case OPTIMIZE:
+>>>>>>> 4d38871b1e ([Refactor] Add slow log for edit log write and refine some code warnings (backport #39024) (#39085))
                             globalStateMgr.getSchemaChangeHandler().replayAlterJobV2(alterJob);
                             break;
                         default:
@@ -833,7 +837,7 @@ public class EditLog {
                 }
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_MODIFY_IN_MEMORY:
-                case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
+                case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
@@ -1119,7 +1123,7 @@ public class EditLog {
      * submit log in queue and return immediately
      */
     private Future<Boolean> submitLog(short op, Writable writable, long maxWaitIntervalMs) {
-        // do not check whether global state mgr is leader in non shared nothing mode,
+        // do not check whether global state mgr is leader in non shared-nothing mode,
         // because starmgr state change happens before global state mgr state change,
         // it will write log before global state mgr becomes leader
         Preconditions.checkState(RunMode.getCurrentRunMode() != RunMode.SHARED_NOTHING ||
@@ -1135,7 +1139,7 @@ public class EditLog {
             entity.write(buffer);
         } catch (IOException e) {
             // The old implementation swallow exception like this
-            LOG.info("failed to serialized: {}", e);
+            LOG.info("failed to serialize, ", e);
         }
         JournalTask task = new JournalTask(buffer, maxWaitIntervalMs);
 
@@ -1186,7 +1190,7 @@ public class EditLog {
 
         // for now if journal writer fails, it will exit directly, so this property should always be true.
         assert (result);
-        if (MetricRepo.isInit) {
+        if (MetricRepo.hasInit) {
             MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTime) / 1000000);
         }
     }
@@ -1580,13 +1584,11 @@ public class EditLog {
     public void logExportUpdateState(long jobId, ExportJob.JobState newState, long stateChangeTime,
                                      List<Pair<TNetworkAddress, String>> snapshotPaths, String exportTempPath,
                                      Set<String> exportedFiles, ExportFailMsg failMsg) {
+        ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState, stateChangeTime,
+                snapshotPaths, exportTempPath, exportedFiles, failMsg);
         if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState, stateChangeTime,
-                    snapshotPaths, exportTempPath, exportedFiles, failMsg);
             logJsonObject(OperationType.OP_EXPORT_UPDATE_INFO_V2, updateInfo);
         } else {
-            ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState, stateChangeTime,
-                    snapshotPaths, exportTempPath, exportedFiles, failMsg);
             logEdit(OperationType.OP_EXPORT_UPDATE_INFO, updateInfo);
         }
     }
@@ -1704,8 +1706,8 @@ public class EditLog {
         }
     }
 
-    public void logSetHasForbitGlobalDict(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_SET_FORBIT_GLOBAL_DICT, info);
+    public void logSetHasForbiddenGlobalDict(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT, info);
     }
 
     public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {

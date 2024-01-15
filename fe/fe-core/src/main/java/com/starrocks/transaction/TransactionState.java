@@ -488,13 +488,13 @@ public class TransactionState implements Writable {
 
         // after status changed
         if (transactionStatus == TransactionStatus.VISIBLE) {
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_SUCCESS.increase(1L);
             }
             txnSpan.addEvent("set_visible");
             txnSpan.end();
         } else if (transactionStatus == TransactionStatus.ABORTED) {
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_FAILED.increase(1L);
             }
             txnSpan.setAttribute("state", "aborted");
