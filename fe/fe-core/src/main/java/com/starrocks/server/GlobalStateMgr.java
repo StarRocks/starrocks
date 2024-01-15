@@ -3830,7 +3830,7 @@ public class GlobalStateMgr {
             table = metadataMgr.getTable(catalogName, dbName, tblName);
             if (!(table instanceof HiveMetaStoreTable) && !(table instanceof HiveView) && !(table instanceof IcebergTable)) {
                 throw new StarRocksConnectorException(
-                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg external table/view");
+                        "table : " + tableName + " not exists, or is not hive/hudi/iceberg/odps external table/view");
             }
         } finally {
             db.readUnlock();
