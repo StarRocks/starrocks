@@ -972,6 +972,12 @@ DROP Catalog iceberg_catalog_glue;
 
 ---
 
+### Change the schema of an Iceberg table
+
+From xx onwards, Iceberg catalogs support schema changes. For more information, see [ALTER TABLE > Syntax > Schema change](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md)
+
+---
+
 ### View the schema of an Iceberg table
 
 You can use one of the following syntaxes to view the schema of an Iceberg table:

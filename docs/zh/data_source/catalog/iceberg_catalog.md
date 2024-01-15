@@ -835,6 +835,10 @@ SHOW CREATE CATALOG iceberg_catalog_glue;
 DROP Catalog iceberg_catalog_glue;
 ```
 
+## 更改 Iceberg 表结构
+
+Iceberg Catalog 自 xx 版本起支持表结构变更。具体请参见 [ALTER TABLE > 语法 > Schema change](../../sql-reference/sql-statements/data-definition/ALTER_TABLE.md)。
+
 ## 查看 Iceberg 表结构
 
 您可以通过如下方法查看 Iceberg 表的表结构：
