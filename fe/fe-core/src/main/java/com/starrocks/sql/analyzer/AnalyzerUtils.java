@@ -604,7 +604,6 @@ public class AnalyzerUtils {
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
             super.visitInsertStatement(node, context);
-
             Table copied = copyTable(node.getTargetTable());
             if (copied != null) {
                 node.setTargetTable(copied);

@@ -135,7 +135,8 @@ public class StatementPlanner {
             } else if (stmt instanceof InsertStmt) {
                 InsertStmt insertStmt = (InsertStmt) stmt;
                 boolean isSelect = !(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
-                boolean useOptimisticLock = isOnlyOlapTableQueries && isSelect &&
+                boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
+                boolean useOptimisticLock = isOnlyOlapTableQueries && isSelect && isLeader &&
                         !session.getSessionVariable().isCboUseDBLock();
                 return new InsertPlanner(dbs, useOptimisticLock).plan((InsertStmt) stmt, session);
             } else if (stmt instanceof UpdateStmt) {
