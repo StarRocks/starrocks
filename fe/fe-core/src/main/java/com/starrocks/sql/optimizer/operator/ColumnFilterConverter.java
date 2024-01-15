@@ -161,6 +161,11 @@ public class ColumnFilterConverter {
 
     public static void convertColumnFilter(ScalarOperator predicate, Map<String, PartitionColumnFilter> result,
                                            Table table) {
+        // convert bool_col predicate to bool_col = true
+        if (predicate instanceof ColumnRefOperator) {
+            predicate = new BinaryPredicateOperator(BinaryType.EQ, predicate, ConstantOperator.TRUE);
+        }
+
         if (CollectionUtils.isEmpty(predicate.getChildren())) {
             return;
         }
