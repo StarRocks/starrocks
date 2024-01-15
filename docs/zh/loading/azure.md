@@ -3,13 +3,13 @@ displayed_sidebar: "Chinese"
 toc_max_heading_level: 4
 ---
 
-# 从 GCS 导入
+# 从 Microsoft Azure Storage 导入
 
 import LoadMethodIntro from '../assets/commonMarkdown/loadMethodIntro.md'
 
 import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
-StarRocks 支持通过以下方式从 GCS 导入数据：
+StarRocks 支持通过以下方式从 AWS S3 导入数据：
 
 <LoadMethodIntro />
 
@@ -17,9 +17,9 @@ StarRocks 支持通过以下方式从 GCS 导入数据：
 
 ### 准备数据源
 
-确保待导入数据已保存在 GCS 存储桶。建议您将数据保存在与 StarRocks 集群同处一个地域（Region）的 存储桶，这样可以降低数据传输成本。
+确保待导入数据已保存在您 Azure 服务账号（Service Account）下的容器（Container）。
 
-本文中，我们提供了样例数据集 `gs://starrocks-samples/user_behavior_ten_million_rows.parquet`，对所有合法的 GCP 用户开放。您只要配置真实有效的安全凭证，即可访问该数据集。
+本文中，我们提供了 Parquet 格式的样例数据集 `user_behavior_ten_million_rows.parquet`，保存在 Azure Data Lake Storage Gen2（简称 ADLS Gen2）服务账号 (`starrocks`) 下容器 (`starrocks-container`) 的根目录里。
 
 ### 查看权限
 
@@ -27,14 +27,14 @@ StarRocks 支持通过以下方式从 GCS 导入数据：
 
 ### 获取资源访问配置
 
-本文的示例均使用基于 Service Account 的认证方式，您需要提前获取以下 CGS 资源信息：
+本文的示例使用基于 Shared Key 的认证方式。为确保您能顺利访问存储在 ADLS Gen2 中的数据，建议您参照“[Azure Data Lake Storage Gen2 > Shared Key (access key of storage account)](../integrations/authenticate_to_azure_storage.md#基于-shared-key-认证鉴权) 中的介绍，理解该认证方式下需要配置哪些认证参数。
 
-- 数据所在的 GCS 存储桶
-- GCS 对象键（或“对象名称”）（只在访问 GCS 存储桶中某个特定数据对象时才需要。注意，如果要访问的数据对象保存在子文件夹下，其名称可以包含前缀。）
-- GCS 存储桶所在的 GCS 地域（Region）
-- Google Cloud 服务账号的 `private_ key_id`、`private_key`、及 `client_email`。
+概括来说，如果选择基于 Shared Key 的认证方式，您需要提前获取以下资源信息：
 
-有关 StarRocks 支持的其他认证方式，参见 [配置 GCS 认证信息](../integrations/authenticate_to_gcs.md)。
+- ADLS Gen2 存储账号的用户名
+- ADLS Gen2 账号的 Shared Key（即 Access Key）
+
+有关 StarRocks 支持的其他认证方式，参见 [Authenticate to Azure cloud storage](../integrations/authenticate_to_azure_storage.md)。
 
 ## 通过 INSERT+FILES() 导入
 
@@ -46,39 +46,34 @@ StarRocks 支持通过以下方式从 GCS 导入数据：
 
 通过 `FILES()`，您可以：
 
-- 使用 [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) 语句直接从 GCS 查询数据。
+- 使用 [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) 语句直接从 AWS S3 查询数据。
 - 通过 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md)（简称 CTAS）语句实现自动建表和导入数据。
-- 手动建表，然后通过 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md) 导入数据。
+- 手动建表，然后通过 [INSERT](../sql-reference/sql-statements/data-manipulation/SELECT.md) 导入数据。
 
 ### 操作示例
 
 #### 通过 SELECT 直接查询数据
 
-您可以通过 SELECT+`FILES()` 直接查询 GCS 里的数据，从而在建表前对待导入数据有一个整体的了解，其优势包括：
+您可以通过 SELECT+`FILES()` 直接查询 Azure 里的数据，从而在建表前对待导入数据有一个整体的了解，其优势包括：
 
 - 您不需要存储数据就可以对其进行查看。
 - 您可以查看数据的最大值、最小值，并确定需要使用哪些数据类型。
 - 您可以检查数据中是否包含 `NULL` 值。
 
-例如，查询样例数据集 `gs://starrocks-samples/user_behavior_ten_million_rows.parquet` 中的数据：
+例如，查询样例数据集 `user_behavior_ten_million_rows.parquet` 中的数据：
 
 ```SQL
 SELECT * FROM FILES
 (
-    "path" = "gs://starrocks-samples/user_behavior_ten_million_rows.parquet",
+    "path" = "abfss://starrocks-container@starrocks.dfs.core.windows.net/user_behavior_ten_million_rows.parquet",
     "format" = "parquet",
-    "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
-    "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+    "azure.adls2.storage_account" = "starrocks",
+    "azure.adls2.shared_key" = "xxxxxxxxxxxxxxxxxx"
 )
 LIMIT 3;
 ```
 
-> **说明**
->
-> 把上面命令示例中的访问凭证替换成您自己的访问凭证。由于这里使用的数据对象对所有合法的 GCP 用户开放，因此您填入任何真实有效的 Service Account 的 Email、Private Key ID 和 Private Key 都可以。
-
-系统返回类似如下查询结果：
+系统返回如下类似查询结果：
 
 ```Plain
 +--------+---------+------------+--------------+---------------------+
@@ -113,23 +108,18 @@ CREATE DATABASE IF NOT EXISTS mydatabase;
 USE mydatabase;
 ```
 
-通过 CTAS 自动创建表、并把样例数据集 `gs://starrocks-samples/user_behavior_ten_million_rows.parquet` 中的数据导入到新建表中：
+通过 CTAS 自动创建表、并把样例数据集 `user_behavior_ten_million_rows.parquet` 中的数据导入到新建表中：
 
 ```SQL
 CREATE TABLE user_behavior_inferred AS
 SELECT * FROM FILES
 (
-    "path" = "gs://starrocks-samples/user_behavior_ten_million_rows.parquet",
+    "path" = "abfss://starrocks-container@starrocks.dfs.core.windows.net/user_behavior_ten_million_rows.parquet",
     "format" = "parquet",
-    "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
-    "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+    "azure.adls2.storage_account" = "starrocks",
+    "azure.adls2.shared_key" = "xxxxxxxxxxxxxxxxxx"
 );
 ```
-
-> **说明**
->
-> 把上面命令示例中的访问凭证替换成您自己的访问凭证。由于这里使用的数据对象对所有合法的 GCP 用户开放，因此您填入任何真实有效的 Service Account 的 Email、Private Key ID 和 Private Key 都可以。
 
 建表完成后，您可以通过 [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) 查看新建表的表结构：
 
@@ -137,7 +127,7 @@ SELECT * FROM FILES
 DESCRIBE user_behavior_inferred;
 ```
 
-系统返回类似如下查询结果：
+系统返回如下查询结果：
 
 ```Plain
 +--------------+-----------+------+-------+---------+-------+
@@ -189,7 +179,7 @@ SELECT * from user_behavior_inferred LIMIT 3;
 >
 > 要实现高效的表结构设计，您需要深度了解表中数据的用途、以及表中各列的内容。本文不对表设计做过多赘述，有关表设计的详细信息，参见[表设计](../table_design/StarRocks_table_design.md)。
 
-该示例主要演示如何根据源 Parquet 格式文件中数据的特点、以及目标表未来的查询用途等对目标表进行定义和创建。在创建表之前，您可以先查看一下保存在 GCS 中的源文件，从而了解源文件中数据的特点，例如：
+该示例主要演示如何根据源 Parquet 格式文件中数据的特点、以及目标表未来的查询用途等对目标表进行定义和创建。在创建表之前，您可以先查看一下保存在 Azure 中的源文件，从而了解源文件中数据的特点，例如：
 
 - 源文件中包含一个数据类型为 VARBINARY 的 `Timestamp` 列，因此建表语句中也应该定义这样一个数据类型为 VARBINARY 的 `Timestamp` 列。
 - 源文件中的数据中没有 `NULL` 值，因此建表语句中也不需要定义任何列为允许 `NULL` 值。
@@ -202,7 +192,7 @@ CREATE DATABASE IF NOT EXISTS mydatabase;
 USE mydatabase;
 ```
 
-通过如下语句手动创建表（建议表结构与您在 GCS 存储的待导入数据结构一致）：
+通过如下语句手动创建表（建议表结构与您在 Azure 存储的待导入数据结构一致）：
 
 ```SQL
 CREATE TABLE user_behavior_declared
@@ -222,19 +212,14 @@ DISTRIBUTED BY HASH(UserID);
 
 ```SQL
 INSERT INTO user_behavior_declared
-  SELECT * FROM FILES
-  (
-    "path" = "gs://starrocks-samples/user_behavior_ten_million_rows.parquet",
+SELECT * FROM FILES
+(
+    "path" = "abfss://starrocks-container@starrocks.dfs.core.windows.net/user_behavior_ten_million_rows.parquet",
     "format" = "parquet",
-    "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
-    "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
+    "azure.adls2.storage_account" = "starrocks",
+    "azure.adls2.shared_key" = "xxxxxxxxxxxxxxxxxx"
 );
 ```
-
-> **说明**
->
-> 把上面命令示例中的访问凭证替换成您自己的访问凭证。由于这里使用的数据对象对所有合法的 GCP 用户开放，因此您填入任何真实有效的 Service Account 的 Email、Private Key ID 和 Private Key 都可以。
 
 导入完成后，您可以查询新建表中的数据，验证数据已成功导入。例如：
 
@@ -245,7 +230,7 @@ SELECT * from user_behavior_declared LIMIT 3;
 系统返回类似如下查询结果，表明数据已成功导入：
 
 ```Plain
-+--------+---------+------------+--------------+---------------------+
+ +--------+---------+------------+--------------+---------------------+
 | UserID | ItemID  | CategoryID | BehaviorType | Timestamp           |
 +--------+---------+------------+--------------+---------------------+
 |    142 | 2869980 |    2939262 | pv           | 2017-11-25 03:43:22 |
@@ -300,7 +285,7 @@ REJECTED_RECORD_PATH: NULL
 
 ## 通过 Broker Load 导入
 
-作为一种异步的导入方式，Broker Load 负责建立与 GCS 的连接、拉取数据、并将数据存储到 StarRocks 中。
+作为一种异步的导入方式，Broker Load 负责建立与 Azure 的连接、拉取数据、并将数据存储到 StarRocks 中。
 
 当前支持以下文件格式：
 
@@ -325,18 +310,18 @@ REJECTED_RECORD_PATH: NULL
 
 ### 操作示例
 
-创建 StarRocks 表，启动导入作业从 AGCS 拉取样例数据集  `gs://starrocks-samples/user_behavior_ten_million_rows.parquet` 的数据，然后验证导入过程和结果是否成功。
+创建 StarRocks 表，启动导入作业从 Azure 拉取样例数据集 `user_behavior_ten_million_rows.parquet` 的数据，然后验证导入过程和结果是否成功。
 
 #### 建库建表
 
-通过如下语句创建数据库、并切换至该数据库：
+登录目标 StarRocks 集群，然后通过如下语句创建数据库、并切换至该数据库：
 
 ```SQL
 CREATE DATABASE IF NOT EXISTS mydatabase;
 USE mydatabase;
 ```
 
-通过如下语句手动创建表（建议表结构与您在 GCS 存储的待导入数据结构一致）：
+通过如下语句手动创建表（建议表结构与您在 Azure 存储的待导入数据结构一致）：
 
 ```SQL
 CREATE TABLE user_behavior
@@ -349,37 +334,30 @@ CREATE TABLE user_behavior
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES;
+DISTRIBUTED BY HASH(UserID);
 ```
 
 #### 提交导入作业
 
-执行如下命令创建 Broker Load 作业，把样例数据集 `gs://starrocks-samples/user_behavior_ten_million_rows.parquet` 中的数据导入到表 `user_behavior` 中：
+执行如下命令创建 Broker Load 作业，把样例数据集 `user_behavior_ten_million_rows.parquet` 中的数据导入到表 `user_behavior`中：
 
 ```SQL
 LOAD LABEL user_behavior
 (
-    DATA INFILE("gs://starrocks-samples/user_behavior_ten_million_rows.parquet")
+    DATA INFILE("abfss://starrocks-container@starrocks.dfs.core.windows.net/user_behavior_ten_million_rows.parquet")
     INTO TABLE user_behavior
     FORMAT AS "parquet"
- )
- WITH BROKER
- (
- 
-    "gcp.gcs.service_account_email" = "sampledatareader@xxxxx-xxxxxx-000000.iam.gserviceaccount.com",
-    "gcp.gcs.service_account_private_key_id" = "baaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "gcp.gcs.service_account_private_key" = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
- )
+)
+WITH BROKER
+(
+    "azure.adls2.storage_account" = "starrocks",
+    "azure.adls2.shared_key" = "xxxxxxxxxxxxxxxxxx"
+)
 PROPERTIES
 (
-    "timeout" = "72000"
+    "timeout" = "3600"
 );
 ```
-
-> **NOTE**
->
-> 把上面命令示例中的访问凭证替换成您自己的访问凭证。由于这里使用的数据对象对所有合法的 GCP 用户开放，因此您填入任何真实有效的 Service Account 的 Email、Private Key ID 和 Private Key 都可以。
 
 导入语句包含四个部分：
 
@@ -392,31 +370,43 @@ PROPERTIES
 
 #### 查看导入进度
 
-通过 `information_schema.loads` 视图查看导入作业的进度。该功能自 3.1 版本起支持。
+通过 StarRocks Information Schema 库中的 [`loads`](../reference/information_schema/loads.md) 视图查看导入作业的进度。该功能自 3.1 版本起支持。
 
 ```SQL
-SELECT * FROM information_schema.loads;
+SELECT * FROM information_schema.loads \G
 ```
-
-有关 `loads` 视图提供的字段详情，参见 `information_schema.loads`。
 
 如果您提交了多个导入作业，您可以通过 `LABEL` 过滤出想要查看的作业。例如：
 
 ```SQL
-SELECT * FROM information_schema.loads WHERE LABEL = 'user_behavior';
+SELECT * FROM information_schema.loads WHERE LABEL = 'user_behavior' \G
+*************************** 1. row ***************************
+              JOB_ID: 10250
+               LABEL: user_behavior
+       DATABASE_NAME: mydatabase
+               STATE: FINISHED
+            PROGRESS: ETL:100%; LOAD:100%
+                TYPE: BROKER
+            PRIORITY: NORMAL
+           SCAN_ROWS: 10000000
+       FILTERED_ROWS: 0
+     UNSELECTED_ROWS: 0
+           SINK_ROWS: 10000000
+            ETL_INFO:
+           TASK_INFO: resource:N/A; timeout(s):3600; max_filter_ratio:0.0
+         CREATE_TIME: 2023-12-28 16:15:19
+      ETL_START_TIME: 2023-12-28 16:15:25
+     ETL_FINISH_TIME: 2023-12-28 16:15:25
+     LOAD_START_TIME: 2023-12-28 16:15:25
+    LOAD_FINISH_TIME: 2023-12-28 16:16:31
+         JOB_DETAILS: {"All backends":{"6a8ef4c0-1009-48c9-8d18-c4061d2255bf":[10121]},"FileNumber":1,"FileSize":132251298,"InternalTableLoadBytes":311710786,"InternalTableLoadRows":10000000,"ScanBytes":132251298,"ScanRows":10000000,"TaskNumber":1,"Unfinished backends":{"6a8ef4c0-1009-48c9-8d18-c4061d2255bf":[]}}
+           ERROR_MSG: NULL
+        TRACKING_URL: NULL
+        TRACKING_SQL: NULL
+REJECTED_RECORD_PATH: NULL
 ```
 
-例如，在下面的返回结果中，有两条关于导入作业 `user_behavior` 的记录：
-
-- 第一条记录显示导入作业的状态为 `CANCELLED`。通过记录中的 `ERROR_MSG` 字段，可以确定导致作业出错的原因是 `listPath failed`。
-- 第二条记录显示导入作业的状态为 `FINISHED`，表示作业成功。
-
-```Plain
-JOB_ID|LABEL                                      |DATABASE_NAME|STATE    |PROGRESS           |TYPE  |PRIORITY|SCAN_ROWS|FILTERED_ROWS|UNSELECTED_ROWS|SINK_ROWS|ETL_INFO|TASK_INFO                                           |CREATE_TIME        |ETL_START_TIME     |ETL_FINISH_TIME    |LOAD_START_TIME    |LOAD_FINISH_TIME   |JOB_DETAILS                                                                                                                                                                                                                                                    |ERROR_MSG                             |TRACKING_URL|TRACKING_SQL|REJECTED_RECORD_PATH|
-------+-------------------------------------------+-------------+---------+-------------------+------+--------+---------+-------------+---------------+---------+--------+----------------------------------------------------+-------------------+-------------------+-------------------+-------------------+-------------------+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------+--------------------------------------+------------+------------+--------------------+
- 10121|user_behavior                              |mydatabase   |CANCELLED|ETL:N/A; LOAD:N/A  |BROKER|NORMAL  |        0|            0|              0|        0|        |resource:N/A; timeout(s):72000; max_filter_ratio:0.0|2023-08-10 14:59:30|                   |                   |                   |2023-08-10 14:59:34|{"All backends":{},"FileNumber":0,"FileSize":0,"InternalTableLoadBytes":0,"InternalTableLoadRows":0,"ScanBytes":0,"ScanRows":0,"TaskNumber":0,"Unfinished backends":{}}                                                                                        |type:ETL_RUN_FAIL; msg:listPath failed|            |            |                    |
- 10106|user_behavior                              |mydatabase   |FINISHED |ETL:100%; LOAD:100%|BROKER|NORMAL  | 86953525|            0|              0| 86953525|        |resource:N/A; timeout(s):72000; max_filter_ratio:0.0|2023-08-10 14:50:15|2023-08-10 14:50:19|2023-08-10 14:50:19|2023-08-10 14:50:19|2023-08-10 14:55:10|{"All backends":{"a5fe5e1d-d7d0-4826-ba99-c7348f9a5f2f":[10004]},"FileNumber":1,"FileSize":1225637388,"InternalTableLoadBytes":2710603082,"InternalTableLoadRows":86953525,"ScanBytes":1225637388,"ScanRows":86953525,"TaskNumber":1,"Unfinished backends":{"a5|                                      |            |            |                    |
-```
+有关 `loads` 视图提供的字段详情，参见 [`loads`](../reference/information_schema/loads.md)。
 
 导入作业完成后，您可以从表内查询数据，验证数据是否已成功导入。例如：
 
@@ -426,7 +416,7 @@ SELECT * from user_behavior LIMIT 3;
 
 系统返回类似如下查询结果，表明数据已经成功导入：
 
-```Plain
+```SQL
 +--------+---------+------------+--------------+---------------------+
 | UserID | ItemID  | CategoryID | BehaviorType | Timestamp           |
 +--------+---------+------------+--------------+---------------------+
