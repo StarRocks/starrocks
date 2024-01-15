@@ -324,12 +324,7 @@ public class MvUtils {
         if (isLogicalSPJ(root)) {
             return true;
         }
-        if (isLogicalSPJG(root)) {
-            LogicalAggregationOperator agg = (LogicalAggregationOperator) root.getOp();
-            // having is not supported now
-            return agg.getPredicate() == null;
-        }
-        return false;
+        return isLogicalSPJG(root);
     }
 
     public static String getInvalidReason(OptExpression expr) {
