@@ -296,6 +296,7 @@ struct OlapReaderStatistics {
 
     // ------ for json type, to count flat column ------
     // key: json absolute path, value: count
+    int64_t json_flatten_ns = 0;
     std::unordered_map<std::string, int64_t> flat_json_hits;
     std::unordered_map<std::string, int64_t> dynamic_json_hits;
 };

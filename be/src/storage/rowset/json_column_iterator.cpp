@@ -30,6 +30,7 @@
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/scalar_column_iterator.h"
 #include "util/json_util.h"
+#include "util/runtime_profile.h"
 
 namespace starrocks {
 
@@ -75,6 +76,7 @@ private:
 };
 
 Status JsonFlatColumnIterator::init(const ColumnIteratorOptions& opts) {
+    RETURN_IF_ERROR(ColumnIterator::init(opts));
     if (_null_iter != nullptr) {
         RETURN_IF_ERROR(_null_iter->init(opts));
     }
@@ -237,6 +239,7 @@ private:
 };
 
 Status JsonDynamicFlatIterator::init(const ColumnIteratorOptions& opts) {
+    RETURN_IF_ERROR(ColumnIterator::init(opts));
     DCHECK(_path != nullptr);
     auto abs_path = _path->absolute_path();
     if (opts.stats->dynamic_json_hits.count(abs_path) == 0) {
@@ -248,6 +251,7 @@ Status JsonDynamicFlatIterator::init(const ColumnIteratorOptions& opts) {
 }
 
 Status JsonDynamicFlatIterator::_flat_json(Column* input, Column* output) {
+    SCOPED_RAW_TIMER(&_opts.stats->json_flatten_ns);
     JsonColumn* json_data = nullptr;
 
     // 1. null column handle

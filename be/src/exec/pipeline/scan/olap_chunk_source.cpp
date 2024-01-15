@@ -164,6 +164,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     // IOTime
     _io_timer = ADD_CHILD_TIMER(_runtime_profile, "IOTime", IO_TASK_EXEC_TIMER_NAME);
 
+    _json_flatten_timer = ADD_CHILD_TIMER(_runtime_profile, "JsonFlattern", segment_read_name);
     _access_path_hits_counter = ADD_COUNTER(_runtime_profile, "AccessPathHits", TUnit::UNIT);
     _access_path_unhits_counter = ADD_COUNTER(_runtime_profile, "AccessPathUnhits", TUnit::UNIT);
 }
@@ -575,8 +576,10 @@ void OlapChunkSource::_update_counter() {
             total += v;
             COUNTER_UPDATE(path_counter, v);
         }
-        COUNTER_SET(_access_path_unhits_counter, total);
+        COUNTER_UPDATE(_access_path_unhits_counter, total);
     }
+
+    COUNTER_UPDATE(_json_flatten_timer, _reader->stats().json_flatten_ns);
 }
 
 } // namespace starrocks::pipeline
