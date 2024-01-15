@@ -49,9 +49,8 @@ TOP-N (order by [[29: substring ASC NULLS FIRST]])
                             HIVE SCAN (columns{1,5,6} predicate[substring(5: c_phone, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
                             EXCHANGE BROADCAST
                                 ASSERT LE 1
-                                    AGGREGATE ([GLOBAL] aggregate [{: count=sum(: count), : sum=sum(: sum)}] group by [[]] having [null]
+                                    AGGREGATE ([GLOBAL] aggregate [{97: count=sum(97: count), 96: sum=sum(96: sum)}] group by [[]] having [null]
                                         EXCHANGE GATHER
-                                            AGGREGATE ([LOCAL] aggregate [{95: sum=sum(84: c_sum), 96: count=sum(83: c_count)}] group by [[]] having [null]
-                                                SCAN (mv[customer_agg_mv1] columns[81: c_acctbal, 82: substring_phone, 83: c_count, 84: c_sum] predicate[81: c_acctbal > 0.00 AND 82: substring_phone IN (21, 24, 28, 32, 34, 35, 37)])
+                                            AGGREGATE ([LOCAL] aggregate [{97: count=sum(36: c_count), 96: sum=sum(37: c_sum)}] group by [[]] having [null]
+                                                SCAN (mv[customer_agg_mv1] columns[34: c_acctbal, 35: substring_phone, 36: c_count, 37: c_sum] predicate[34: c_acctbal > 0.00 AND 35: substring_phone IN (21, 24, 28, 32, 34, 35, 37)])
 [end]
-

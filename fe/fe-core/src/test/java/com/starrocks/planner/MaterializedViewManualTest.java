@@ -298,8 +298,8 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
             {
                 sql(query, true).match("mv0")
                         .contains("1:t1a := 12:t1a\n" +
-                                "            2:t1b := 14:t1b\n" +
-                                "            11:sum := 13:total");
+                                "            2:t1b := 13:t1b\n" +
+                                "            11:sum := 14:total");
             }
             starRocksAssert.dropMaterializedView("mv0");
         }
