@@ -55,21 +55,21 @@ public class OperationType {
     //Added OP_CREATE_DB_V2 in version 3.1, can be removed in version 3.2
     public static final short OP_CREATE_DB = 1;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_DB = 2;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ALTER_DB = 3;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ERASE_DB = 4;
 
     @Deprecated
     public static final short OP_RECOVER_DB = 5;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_RENAME_DB = 6;
 
     // 10~19 110~119 210~219 ...
@@ -79,24 +79,24 @@ public class OperationType {
     public static final short OP_CREATE_TABLE = 10;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_TABLE = 11;
 
     @Deprecated
     public static final short OP_ADD_PARTITION = 12;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_PARTITION = 13;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_PARTITION = 14;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ERASE_TABLE = 15;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ERASE_PARTITION = 16;
 
     @Deprecated
@@ -106,15 +106,15 @@ public class OperationType {
     public static final short OP_RECOVER_PARTITION = 18;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_RENAME_TABLE = 19;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_RENAME_PARTITION = 110;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_BACKUP_JOB = 116;
 
     @Deprecated
@@ -122,12 +122,12 @@ public class OperationType {
 
     public static final short OP_TRUNCATE_TABLE = 118;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_VIEW_DEF = 119;
 
     public static final short OP_REPLACE_TEMP_PARTITION = 210;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_BATCH_MODIFY_PARTITION = 211;
 
     // 20~29 120~129 220~229 ...
@@ -141,7 +141,7 @@ public class OperationType {
     public static final short OP_CANCEL_ROLLUP = 23;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_ROLLUP = 24;
 
     @Deprecated
@@ -154,45 +154,45 @@ public class OperationType {
     public static final short OP_CANCEL_SCHEMA_CHANGE = 27;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CLEAR_ROLLUP_INFO = 28;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_FINISH_CONSISTENCY_CHECK = 29;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_RENAME_ROLLUP = 120;
 
     public static final short OP_ALTER_JOB_V2 = 121;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_DISTRIBUTION_TYPE = 122;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_BATCH_ADD_ROLLUP = 123;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_BATCH_DROP_ROLLUP = 124;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_REMOVE_ALTER_JOB_V2 = 125;
 
     // 30~39 130~139 230~239 ...
     // load job for only hadoop load
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_EXPORT_CREATE = 36;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_EXPORT_UPDATE_STATE = 37;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_EXPORT_UPDATE_INFO = 38;
 
     @Deprecated
@@ -205,7 +205,7 @@ public class OperationType {
     public static final short OP_ADD_REPLICA = 42;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DELETE_REPLICA = 43;
 
     @Deprecated
@@ -223,11 +223,11 @@ public class OperationType {
     public static final short OP_ADD_BACKEND = 50;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_BACKEND = 51;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_BACKEND_STATE_CHANGE = 52;
 
     @Deprecated
@@ -243,50 +243,50 @@ public class OperationType {
     public static final short OP_ADD_FIRST_FRONTEND = 56;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_REMOVE_FRONTEND = 57;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_SET_LOAD_ERROR_HUB = 58;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_HEARTBEAT = 59;
 
     @Deprecated
     public static final short OP_CREATE_USER = 62;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_NEW_DROP_USER = 63;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_GRANT_PRIV = 64;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_REVOKE_PRIV = 65;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_SET_PASSWORD = 66;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_ROLE = 67;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_ROLE = 68;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_UPDATE_USER_PROPERTY = 69;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_TIMESTAMP = 70;
 
     @Deprecated
@@ -297,59 +297,59 @@ public class OperationType {
 
     @Deprecated
     // replaced by OP_GLOBAL_VARIABLE_V2
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_GLOBAL_VARIABLE = 73;
 
     @Deprecated
     public static final short OP_CREATE_CLUSTER = 74;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_GLOBAL_VARIABLE_V2 = 84;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ADD_BROKER = 85;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_BROKER = 86;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_ALL_BROKER = 87;
 
     @Deprecated
     public static final short OP_UPDATE_CLUSTER_AND_BACKENDS = 88;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_REPOSITORY = 89;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_REPOSITORY = 90;
 
     //colocate table
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_COLOCATE_ADD_TABLE = 94;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_COLOCATE_REMOVE_TABLE = 95;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_COLOCATE_BACKENDS_PER_BUCKETSEQ = 96;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_COLOCATE_MARK_UNSTABLE = 97;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_COLOCATE_MARK_STABLE = 98;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_TABLE_COLOCATE = 99;
 
     //real time load 100 -108
@@ -357,7 +357,7 @@ public class OperationType {
     public static final short OP_UPSERT_TRANSACTION_STATE = 100;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DELETE_TRANSACTION_STATE = 101;
 
     @Deprecated
@@ -371,227 +371,227 @@ public class OperationType {
 
     public static final short OP_SAVE_AUTO_INCREMENT_ID = 105;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DELETE_AUTO_INCREMENT_ID = 106;
 
     // light schema change for add and drop columns
     public static final short OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS = 107;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ALTER_ROUTINE_LOAD_JOB = 111;
 
     // UDF 130-140
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ADD_FUNCTION = 130;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_FUNCTION = 131;
 
     // routine load 200
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_ROUTINE_LOAD_JOB = 200;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CHANGE_ROUTINE_LOAD_JOB = 201;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_REMOVE_ROUTINE_LOAD_JOB = 202;
 
     // load job v2 for broker load 230~250
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_LOAD_JOB = 230;
 
     // this finish op include finished and cancelled
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_END_LOAD_JOB = 231;
 
     // update job info, used by spark load
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_UPDATE_LOAD_JOB = 232;
 
     // small files 251~260
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_SMALL_FILE = 251;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_SMALL_FILE = 252;
 
     // dynamic partition 261~265
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DYNAMIC_PARTITION = 261;
 
     // set table replication_num config 266
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_REPLICATION_NUM = 266;
 
     // set table in memory
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_IN_MEMORY = 267;
 
     // global dict
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_SET_FORBIDDEN_GLOBAL_DICT = 268;
 
     // plugin 270~275
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_INSTALL_PLUGIN = 270;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_UNINSTALL_PLUGIN = 271;
 
     // resource 276~290
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_RESOURCE = 276;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_RESOURCE = 277;
 
     // NOTICE newly added type starts from 10000, to avoid conflicting with community added type
 
     public static final short OP_META_VERSION_V2 = 10000;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_SWAP_TABLE = 10001;
 
     @Deprecated
     public static final short OP_ADD_PARTITIONS = 10002;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_FINISH_MULTI_DELETE = 10003;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ERASE_MULTI_TABLES = 10004;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_ENABLE_PERSISTENT_INDEX = 10005;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_WRITE_QUORUM = 10006;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_REPLICATED_STORAGE = 10007;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_BINLOG_CONFIG = 10008;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_BINLOG_AVAILABLE_VERSION = 10009;
 
     // statistic 10010 ~ 10020
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ADD_ANALYZER_JOB = 10010;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_REMOVE_ANALYZER_JOB = 10011;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ADD_ANALYZE_STATUS = 10012;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ADD_BASIC_STATS_META = 10013;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ADD_HISTOGRAM_STATS_META = 10014;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_REMOVE_BASIC_STATS_META = 10015;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_REMOVE_HISTOGRAM_STATS_META = 10016;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_REMOVE_ANALYZE_STATUS = 10017;
 
     // workgroup 10021 ~ 10030
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_RESOURCE_GROUP = 10021;
 
     // external hive table column change
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_HIVE_TABLE_COLUMN = 10031;
 
     // New version of heartbeat
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_HEARTBEAT_V2 = 10041; // V2 version of heartbeat
 
     // create external catalog
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_CATALOG = 10051;
 
     // drop catalog
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_CATALOG = 10061;
 
     // grant & revoke impersonate
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_GRANT_IMPERSONATE = 10062;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_REVOKE_IMPERSONATE = 10063;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_GRANT_ROLE = 10064;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_REVOKE_ROLE = 10065;
 
     // task 10071 ~ 10090
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_TASK = 10071;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_TASKS = 10072;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_TASK_RUN = 10081;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_UPDATE_TASK_RUN = 10082;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_TASK_RUNS = 10083;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_UPDATE_TASK_RUN_STATE = 10084;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ALTER_TASK = 10085;
 
     // materialized view 10091 ~ 10100
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME = 10092;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ALTER_MATERIALIZED_VIEW_PROPERTIES = 10093;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_MATERIALIZED_VIEW = 10094;
 
     public static final short OP_CREATE_INSERT_OVERWRITE = 10095;
 
     public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10096;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ALTER_MATERIALIZED_VIEW_STATUS = 10097;
     public static final short OP_ALTER_MATERIALIZED_VIEW_BASE_TABLE_INFOS = 10098;
 
@@ -601,10 +601,10 @@ public class OperationType {
 
     // manage compute node 10201 ~ 10220
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ADD_COMPUTE_NODE = 10201;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_COMPUTE_NODE = 10202;
 
     // shard operate 10221 ~ 10240. Deprecated
@@ -616,7 +616,7 @@ public class OperationType {
     // new operator for add partition 10241 ~ 10260
     public static final short OP_ADD_PARTITION_V2 = 10241;
     public static final short OP_ADD_PARTITIONS_V2 = 10242;
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_PARTITION_V2 = 10243;
 
     public static final short OP_ADD_SUB_PARTITIONS_V2 = 10244;
@@ -625,28 +625,28 @@ public class OperationType {
 
     public static final short OP_CREATE_USER_V2 = 10261;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_UPDATE_USER_PRIVILEGE_V2 = 10262;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ALTER_USER_V2 = 10263;
 
     @Deprecated
     public static final short OP_DROP_USER_V2 = 10264;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_UPDATE_ROLE_PRIVILEGE_V2 = 10265;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_ROLE_V2 = 10266;
 
     public static final short OP_AUTH_UPGRADE_V2 = 10267;
 
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_UPDATE_USER_PROP_V2 = 10268;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_SECURITY_INTEGRATION = 10269;
 
     // integrate with starmgr
@@ -654,75 +654,75 @@ public class OperationType {
 
     // stream load
     @Deprecated
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_STREAM_LOAD_TASK = 11020;
 
     // MaterializedView Maintenance
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MV_EPOCH_UPDATE = 11030;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MV_JOB_STATE = 11031;
 
     // alter load
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ALTER_LOAD_JOB = 11100;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ALTER_TABLE_PROPERTIES = 11101;
 
 
     // constraint properties
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;
 
     // modify table property bucket size
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_BUCKET_SIZE = 11140;
 
     // external table analyze
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ADD_EXTERNAL_ANALYZE_STATUS = 11200;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_REMOVE_EXTERNAL_ANALYZE_STATUS = 11201;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ADD_EXTERNAL_ANALYZER_JOB = 11202;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_REMOVE_EXTERNAL_ANALYZER_JOB = 11203;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ADD_EXTERNAL_BASIC_STATS_META = 11204;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_REMOVE_EXTERNAL_BASIC_STATS_META = 11205;
 
     //Database json format log
     public static final short OP_CREATE_DB_V2 = 12001;
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ALTER_DB_V2 = 12002;
     public static final short OP_RECOVER_DB_V2 = 12003;
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_RENAME_DB_V2 = 12004;
 
     //Load Job json format log
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_LOAD_JOB_V2 = 12100;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_END_LOAD_JOB_V2 = 12101;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_ROUTINE_LOAD_JOB_V2 = 12102;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CHANGE_ROUTINE_LOAD_JOB_V2 = 12103;
 
     //Txn json format log
@@ -731,85 +731,85 @@ public class OperationType {
     public static final short OP_UPSERT_TRANSACTION_STATE_BATCH = 12112;
 
     //colocate table json format log
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_COLOCATE_ADD_TABLE_V2 = 12130;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_COLOCATE_BACKENDS_PER_BUCKETSEQ_V2 = 12131;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_COLOCATE_MARK_UNSTABLE_V2 = 12132;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_COLOCATE_MARK_STABLE_V2 = 12133;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_TABLE_COLOCATE_V2 = 12134;
 
     //Export json format log
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_EXPORT_CREATE_V2 = 12120;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_EXPORT_UPDATE_INFO_V2 = 12121;
 
     // small files json format log
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_SMALL_FILE_V2 = 12140;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_SMALL_FILE_V2 = 12141;
 
     //Backup/Restore json format log
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_BACKUP_JOB_V2 = 12150;
 
     public static final short OP_RESTORE_JOB_V2 = 12151;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_REPOSITORY_V2 = 12152;
 
     //Table/Partition json format log
 
     public static final short OP_CREATE_TABLE_V2 = 13000;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_TABLE_V2 = 13001;
 
     public static final short OP_RECOVER_TABLE_V2 = 13002;
 
     public static final short OP_RECOVER_PARTITION_V2 = 13003;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_RENAME_TABLE_V2 = 13004;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_RENAME_PARTITION_V2 = 13005;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_RENAME_COLUMN_V2 = 13006;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_ROLLUP_V2 = 13010;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_FINISH_CONSISTENCY_CHECK_V2 = 13011;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_RENAME_ROLLUP_V2 = 13012;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_DISTRIBUTION_TYPE_V2 = 13014;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_BATCH_ADD_ROLLUP_V2 = 13015;
 
     public static final short OP_ADD_REPLICA_V2 = 13020;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DELETE_REPLICA_V2 = 13021;
 
     public static final short OP_UPDATE_REPLICA_V2 = 13022;
@@ -818,99 +818,99 @@ public class OperationType {
 
     public static final short OP_ADD_BACKEND_V2 = 13024;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_BACKEND_V2 = 13025;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_BACKEND_STATE_CHANGE_V2 = 13026;
 
     public static final short OP_ADD_FRONTEND_V2 = 13027;
 
     public static final short OP_ADD_FIRST_FRONTEND_V2 = 13028;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_REMOVE_FRONTEND_V2 = 13029;
 
     public static final short OP_UPDATE_FRONTEND_V2 = 13030;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ADD_BROKER_V2 = 13031;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_BROKER_V2 = 13032;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DECOMMISSION_DISK = 13033;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CANCEL_DECOMMISSION_DISK = 13034;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DISABLE_DISK = 13035;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CANCEL_DISABLE_DISK = 13036;
 
     public static final short OP_BATCH_DELETE_REPLICA = 13037;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_TIMESTAMP_V2 = 13040;
 
     public static final short OP_LEADER_INFO_CHANGE_V2 = 13041;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ADD_FUNCTION_V2 = 13050;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_FUNCTION_V2 = 13051;
 
     public static final short OP_DROP_USER_V3 = 13060;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_UPDATE_USER_PROP_V3 = 13061;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_STREAM_LOAD_TASK_V2 = 13070;
 
     // storage volume
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_SET_DEFAULT_STORAGE_VOLUME = 13100;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_STORAGE_VOLUME = 13101;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_UPDATE_STORAGE_VOLUME = 13102;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_STORAGE_VOLUME = 13103;
 
     // Pipe operations log
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_PIPE = 12200;
 
     // Primary key
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_PRIMARY_INDEX_CACHE_EXPIRE_SEC = 13200;
 
     // alter catalog
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_ALTER_CATALOG = 13300;
 
     // Dictionary
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_CREATE_DICTIONARY = 13400;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_DROP_DICTIONARY = 13401;
 
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_MODIFY_DICTIONARY_MGR = 13402;
 
     // Replication job
-    @RecoverableOnReplayFailed
+    @IgnorableOnReplayFailed
     public static final short OP_REPLICATION_JOB = 13500;
 
     /**
@@ -918,9 +918,9 @@ public class OperationType {
      */
     public static final short OP_TYPE_EOF = 20000;
 
-    public static final ImmutableSet<Short> RECOVERABLE_OPERATIONS = buildRecoverableOperations();
+    public static final ImmutableSet<Short> IGNORABLE_OPERATIONS = buildIgnorableOperations();
 
-    private static ImmutableSet<Short> buildRecoverableOperations() {
+    private static ImmutableSet<Short> buildIgnorableOperations() {
         ImmutableSet.Builder<Short> builder = ImmutableSet.builder();
         Set<Short> allOperations = new HashSet<>();
 
@@ -947,7 +947,7 @@ public class OperationType {
                 System.exit(-1);
             }
 
-            Annotation annotation = field.getAnnotation(RecoverableOnReplayFailed.class);
+            Annotation annotation = field.getAnnotation(IgnorableOnReplayFailed.class);
             if (annotation != null) {
                 builder.add(opType);
             }

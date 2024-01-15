@@ -2480,10 +2480,10 @@ public class Config extends ConfigBase {
     public static String metadata_journal_skip_bad_journal_ids = "";
 
     /**
-     * Set this configuration to true to ignore specific operation (with RecoverableOnReplayFailed annotation) replay failures.
+     * Set this configuration to true to ignore specific operation (with IgnorableOnReplayFailed annotation) replay failures.
      */
     @ConfField
-    public static boolean recover_on_load_journal_failed = false;
+    public static boolean ignore_journal_replay_failure = false;
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.

@@ -19,7 +19,14 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+/**
+ * Add this annotation for OperationTypes whose failure will not damage cluster data.
+ * For example OP_CREATE_TABLE_V2 cannot be annotated as IgnorableOnReplayFailed,
+ * because if the table creation fails, the table data will be lost.
+ * But OP_ADD_ANALYZER_JOB can be annotated as IgnorableOnReplayFailed,
+ * because the loss of the analyze job will not affect the cluster data, and the analyze job can be easily recreated
+ */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.FIELD)
-public @interface RecoverableOnReplayFailed {
+public @interface IgnorableOnReplayFailed {
 }
