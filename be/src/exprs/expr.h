@@ -182,6 +182,10 @@ public:
                                                         Expr* parent, int* node_idx, Expr** root_expr,
                                                         ExprContext** ctx, RuntimeState* state);
 
+    static Status create_tree_from_thrift_with_jit(ObjectPool* pool, const std::vector<TExprNode>& nodes, Expr* parent,
+                                                   int* node_idx, Expr** root_expr, ExprContext** ctx,
+                                                   RuntimeState* state);
+
     /// Convenience function for preparing multiple expr trees.
     [[nodiscard]] static Status prepare(const std::vector<ExprContext*>& ctxs, RuntimeState* state);
 
