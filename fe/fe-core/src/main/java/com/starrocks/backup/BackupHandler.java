@@ -734,7 +734,7 @@ public class BackupHandler extends FrontendDaemon implements Writable {
                 AbstractJob job = iterator.next().getValue();
                 if (isJobExpired(job, currentTimeMs)) {
                     // discard mv backup table info if needed.
-                    mvRestoreContext.discordExpiredBackupTableInfo(job);
+                    mvRestoreContext.discardExpiredBackupTableInfo(job);
 
                     LOG.warn("discard expired job {}", job);
                     iterator.remove();
