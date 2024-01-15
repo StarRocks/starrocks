@@ -441,8 +441,8 @@ if [ ${BUILD_BE} -eq 1 ]; then
         # strip be binary
         # if eu-strip is available, can replace following three lines into `eu-strip -g -f starrocks_be.debuginfo starrocks_be`
         objcopy --only-keep-debug $BE_BIN $BE_BIN_DEBUGINFO
-        strip --strip-debug $BE_BIN
-        objcopy --add-gnu-debuglink=$BE_BIN_DEBUGINFO $BE_BIN
+        #strip --strip-debug $BE_BIN
+        #objcopy --add-gnu-debuglink=$BE_BIN_DEBUGINFO $BE_BIN
         popd &>/dev/null
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/www/* ${STARROCKS_OUTPUT}/be/www/
