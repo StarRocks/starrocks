@@ -2,15 +2,8 @@
 // Created by Letian Jiang on 2024/1/15.
 //
 
-#ifndef ORC_FILE_WRITER_H
-#define ORC_FILE_WRITER_H
+#pragma once
+
+#include "exec/pipeline/sink/rolling_file_writer.h"
 
 
-
-class orc_file_writer {
-
-};
-
-
-
-#endif //ORC_FILE_WRITER_H

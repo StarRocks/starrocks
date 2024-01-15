@@ -460,10 +460,7 @@ Status AsyncFileWriter::_flush_row_group() {
         _rg_writer_closing = true;
     }
 
-    std::promise<int> promise;
-    std::future<int> future = promise.get_future();
-
-    bool ok = _executor_pool->try_offer([& , promise = std::move(promise)]{
+    bool ok = _executor_pool->try_offer([&]{
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_state->instance_mem_tracker());
         SCOPED_TIMER(_io_timer);
         if (_chunk_writer != nullptr) {
@@ -480,7 +477,6 @@ Status AsyncFileWriter::_flush_row_group() {
             _rg_writer_closing = false;
         }
         _cv.notify_one();
-        promise.set_value(1);
     });
 
     if (!ok) {
@@ -537,39 +533,67 @@ Status AsyncFileWriter::close(RuntimeState* state,
     return Status::OK();
 }
 
-std::future<Status> ParquetFileWriter::write(ChunkPtr chunk) {
-    auto status = _rowgroup_writer->write(chunk.get());
-    if (_rowgroup_writer->estimated_buffered_bytes() > 100) {
-        return _flush_row_group();
+ParquetFileWriter::ParquetFileWriter(std::unique_ptr<WritableFile> writable_file,
+    std::shared_ptr<::parquet::WriterProperties> properties, std::shared_ptr<::parquet::schema::GroupNode> schema,
+    const std::vector<ExprContext*>& output_expr_ctxs, int64_t _max_file_size)
+    : _properties(std::move(properties)),
+    _schema(std::move(schema)) {
+    _output_stream = std::make_shared<ParquetOutputStream>(std::move(writable_file));
+    _type_descs.reserve(output_expr_ctxs.size());
+    for (auto expr : output_expr_ctxs) {
+        _type_descs.push_back(expr->root()->type());
     }
-    return std::move(NON_BLOCKED_OK);
+    _eval_func = [output_expr_ctxs](Chunk* chunk, size_t col_idx) {
+        return output_expr_ctxs[col_idx]->evaluate(chunk);
+    };
+    _executors = ExecEnv::GetInstance()->pipeline_sink_io_pool();
 }
 
-void ParquetFileWriter::commitAsync(std::function<void(StatusOr<pipeline::FileMetrics>)> callback) {
-    if (bool ok = _executors->try_offer([&, writer = std::move(_writer), output_stream = std::move(_output_stream)]{
+ParquetFileWriter::~ParquetFileWriter() = default;
+
+std::future<Status> ParquetFileWriter::write(ChunkPtr chunk) {
+    // TOD): init rowgroup writer
+    if (_rowgroup_writer == nullptr) {
+        _rowgroup_writer = std::make_unique<ChunkWriter>(_writer->AppendBufferedRowGroup(), _type_descs, _schema, _eval_func);
+    }
+    auto status = _rowgroup_writer->write(chunk.get());
+    if (_rowgroup_writer->estimated_buffered_bytes() > 1 << 28) {
+        return _flush_row_group();
+    }
+    return make_completed_future(Status::OK());
+}
+
+void ParquetFileWriter::commitAsync(std::function<void(CommitResult)> callback) {
+    if (bool ok = _executors->try_offer([writer = _writer, output_stream = _output_stream, callback]{
         try {
             writer->Close();
-            _set_metrics(writer->metadata().get());
+            LOG(INFO) << "close writer";
+            // _set_metrics(writer->metadata().get());
         } catch (const ::parquet::ParquetStatusException& e) {
             auto exception = Status::IOError(fmt::format("{}: {}", "close writer error", e.what()));
             LOG(WARNING) << exception;
-            callback(exception);
+            callback({.io_status = exception});
             return;
         }
 
         if (auto st = output_stream->Close(); !st.ok()) {
             auto exception = Status::IOError(fmt::format("{}: {}", "close output stream error", st.message()));
             LOG(WARNING) << exception;
-            callback(exception);
+            callback({.io_status = exception});
             return;
         }
+        LOG(INFO) << "close output stream";
 
         // io task succeed
-        callback(_metrics.value());
+        callback(CommitResult{
+            .io_status = Status::OK(),
+            .file_metrics = FileMetrics{.record_count = writer->metadata()->num_rows()}, // TODO
+            .rollback_action = []() {}, // TODO
+        });
     }); !ok) {
         auto exception = Status::ResourceBusy("submit flush row group task fails");
         LOG(WARNING) << exception;
-        callback(exception);
+        callback({.io_status = exception});
     }
 }
 
@@ -577,35 +601,39 @@ void ParquetFileWriter::rollback() {
     // necessary?
 }
 
-void ParquetFileWriter::close() {
-    // necessary?
+Status ParquetFileWriter::init() {
+    _writer = ::parquet::ParquetFileWriter::Open(_output_stream, _schema, _properties);
+    return Status::OK();
 }
 
-pipeline::FileMetrics ParquetFileWriter::metrics() {
-    DCHECK(_metrics.has_value()) << "shall be invoked after commit";
-    return _metrics.value();
+int64_t ParquetFileWriter::getWrittenBytes() {
+    return 0;
 }
 
 std::future<Status> ParquetFileWriter::_flush_row_group() {
     DCHECK(_rowgroup_writer != nullptr);
-    std::promise<Status> promise;
-    std::future<Status> future = promise.get_future();
+    auto promise = std::make_shared<std::promise<Status>>();
+    std::future<Status> future = promise->get_future();
 
-    if (bool ok = _executors->try_offer([& , rowgroup_writer = std::move(_rowgroup_writer), promise = std::move(promise)]{
+    if (bool ok = _executors->try_offer([rowgroup_writer = _rowgroup_writer, p = promise] {
         try {
             rowgroup_writer->close();
         } catch (const ::parquet::ParquetStatusException& e) {
-            auto exception = Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what()));
+            Status exception = Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what()));
             LOG(WARNING) << exception;
-            promise.set_value(exception);
+            p->set_value(Status::OK());
+            return;
         }
+        p->set_value(Status::OK());
     }); !ok) {
-        auto exception = Status::ResourceBusy("submit flush row group task fails");
+        Status exception = Status::ResourceBusy("submit flush row group task fails");
         LOG(WARNING) << exception;
-        promise.set_value(exception);
+        promise->set_value(Status::OK());
     }
 
-    return std::move(future);
+    _rowgroup_writer = nullptr;
+
+    return future;
 }
 
 #define MERGE_STATS_CASE(ParquetType)                                                                              \

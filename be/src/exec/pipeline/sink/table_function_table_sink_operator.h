@@ -98,7 +98,12 @@ private:
     std::atomic<bool> _is_finished = false;
 
     std::unique_ptr<FileWriter> _file_writer;
+    int _next_id = 0;
+    // TODO: need lock?
     mutable std::queue<std::future<Status>> _blocking_futures;
+
+    // TODO: lock
+    std::queue<std::function<void()>> _rollback_actions;
 };
 
 class TableFunctionTableSinkOperatorFactory final : public OperatorFactory {

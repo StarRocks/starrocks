@@ -37,26 +37,33 @@ struct FileMetrics {
 
 class FileWriter {
 public:
+    struct FileMetrics {
+        std::string file_location;
+        std::string partition_location;
+        int64_t record_count;
+        int64_t file_size;
+        std::optional<std::vector<int64_t>> split_offsets;
+        // field id to statitics
+        std::optional<std::map<int32_t, int64_t>> column_sizes;
+        std::optional<std::map<int32_t, int64_t>> value_counts;
+        std::optional<std::map<int32_t, int64_t>> null_value_counts;
+        std::optional<std::map<int32_t, std::string>> lower_bounds;
+        std::optional<std::map<int32_t, std::string>> upper_bounds;
+    };
+
+    struct CommitResult {
+        Status io_status;
+        FileMetrics file_metrics;
+        std::function<void()> rollback_action;
+    };
+
     virtual ~FileWriter() = default;
+    virtual Status init() = 0;
     virtual int64_t getWrittenBytes() = 0;
     virtual std::future<Status> write(ChunkPtr chunk) = 0;
-    virtual std::future<StatusOr<FileMetrics>> commit() = 0;
-    virtual void commitAsync(std::function<void(StatusOr<FileMetrics>)> callback) = 0;
+    // virtual std::future<CommitResult> commit() = 0;
+    virtual void commitAsync(std::function<void(CommitResult)> callback) = 0;
     virtual void rollback() = 0;
-    virtual void close() = 0;
-    virtual FileMetrics metrics() = 0;
-};
-
-// TODO(me): do we need this intermediate class?
-class RollingFileWriter {
-public:
-    std::future<Status> write(ChunkPtr chunk) {
-        if (_file_writer->getWrittenBytes() < 100) {
-            _file_writer->commit();
-        }
-    }
-private:
-    std::unique_ptr<FileWriter> _file_writer;
 };
 
 } // namespace starrocks::pipeline

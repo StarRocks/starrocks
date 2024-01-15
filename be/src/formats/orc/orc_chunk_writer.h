@@ -15,9 +15,11 @@
 #pragma once
 
 #include <functional>
+#include <formats/parquet/file_writer.h>
 
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
+#include "exec/pipeline/sink/rolling_file_writer.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "formats/orc/utils.h"
@@ -148,5 +150,29 @@ private:
     std::mutex _lock;
     bool _batch_closing = false;
 };
+
+// class OrcFileWriter final : public pipeline::FileWriter {
+// public:
+//     OrcFileWriter();
+//
+//     ~OrcFileWriter() override;
+//
+//     std::future<Status> write(ChunkPtr chunk) override;
+//
+//     void commitAsync(std::function<void(CommitResult)> callback) override;
+//
+//     void rollback() override;
+//
+//     void close() override;
+//
+// private:
+//
+//     std::unique_ptr<OrcChunkWriter> _writer;
+//     std::unique_ptr<OrcOutputStream> _output_stream;
+//     std::optional<pipeline::FileMetrics> _metrics; // set metrics after commit
+//     PriorityThreadPool* _executors;
+//
+//     inline static std::future<Status> NON_BLOCKED_OK = parquet::make_completed_future(Status::OK());
+// };
 
 } // namespace starrocks

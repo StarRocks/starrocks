@@ -243,28 +243,38 @@ std::future<T> make_completed_future(T&& t) {
 
 class ParquetFileWriter final : public pipeline::FileWriter {
 public:
-    ParquetFileWriter();
+    ParquetFileWriter(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
+                   std::shared_ptr<::parquet::schema::GroupNode> schema,
+                   const std::vector<ExprContext*>& output_expr_ctxs, int64_t _max_file_size);
 
     ~ParquetFileWriter() override;
 
     std::future<Status> write(ChunkPtr chunk) override;
 
-    void commitAsync(std::function<void(StatusOr<pipeline::FileMetrics>)> callback) override;
+    void commitAsync(std::function<void(CommitResult)> callback) override;
 
     void rollback() override;
 
-    void close() override;
+    Status init() override;
 
-    pipeline::FileMetrics metrics() override;
+    int64_t getWrittenBytes() override;
 
 private:
     std::future<Status> _flush_row_group();
 
     void _set_metrics(::parquet::FileMetaData* meta_data);
 
-    std::unique_ptr<::parquet::ParquetFileWriter> _writer;
-    std::unique_ptr<ChunkWriter> _rowgroup_writer;
-    std::unique_ptr<ParquetOutputStream> _output_stream;
+private:
+    std::shared_ptr<::parquet::WriterProperties> _properties;
+    std::shared_ptr<::parquet::schema::GroupNode> _schema;
+
+    std::vector<TypeDescriptor> _type_descs;
+    std::function<StatusOr<ColumnPtr>(Chunk*, size_t)> _eval_func;
+    std::shared_ptr<::parquet::FileMetaData> _file_metadata;
+
+    std::shared_ptr<::parquet::ParquetFileWriter> _writer;
+    std::shared_ptr<ChunkWriter> _rowgroup_writer;
+    std::shared_ptr<ParquetOutputStream> _output_stream;
     std::optional<pipeline::FileMetrics> _metrics; // set metrics after commit
     PriorityThreadPool* _executors;
 

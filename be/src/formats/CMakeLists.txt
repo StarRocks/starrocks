@@ -70,6 +70,10 @@ add_library(Formats STATIC
         parquet/column_chunk_writer.cpp
         parquet/column_read_order_ctx.cpp
         utils.h
-        )
+        orc/orc_file_writer.cpp
+        orc/orc_file_writer.h
+        csv/csv_file_writer.cpp
+        csv/csv_file_writer.h
+)
 
 add_subdirectory(orc/apache-orc)

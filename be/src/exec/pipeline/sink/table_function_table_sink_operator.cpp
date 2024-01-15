@@ -95,6 +95,11 @@ bool is_ready(std::future<R> const& f) {
 }
 
 bool TableFunctionTableSinkOperator::need_input() const {
+    if (_is_finished) {
+        return false;
+    }
+
+    // LOG(INFO) << "need input";
     while (!_blocking_futures.empty()) {
         // return if any future is not ready, check in order of FIFO
         if (!is_ready(_blocking_futures.front())) {
@@ -105,6 +110,7 @@ bool TableFunctionTableSinkOperator::need_input() const {
             _fragment_ctx->cancel(st);
             return false;
         }
+        _blocking_futures.pop();
     }
 
     return true;
@@ -121,33 +127,26 @@ bool TableFunctionTableSinkOperator::need_input() const {
 }
 
 bool TableFunctionTableSinkOperator::is_finished() const {
-    if (_partition_writers.size() == 0) {
-        return _is_finished.load();
+    // LOG(INFO) << "is finished";
+    if (!_is_finished) {
+        return false;
     }
-    for (const auto& writer : _partition_writers) {
-        if (!writer.second->closed()) {
-            return false;
-        }
-
-        auto st = writer.second->get_io_status();
-        if (!st.ok()) {
-            LOG(WARNING) << "cancel fragment: " << st.message();
-            _fragment_ctx->cancel(st);
-        }
-    }
-
-    return true;
+    return _next_id == _rollback_actions.size();
 }
 
 Status TableFunctionTableSinkOperator::set_finishing(RuntimeState* state) {
-    for (const auto& writer : _partition_writers) {
-        if (!writer.second->closed()) {
-            WARN_IF_ERROR(writer.second->close(state), "close writer failed");
+    _is_finished = true;
+    LOG(INFO) << "set finishing";
+    if (_file_writer != nullptr) {
+        _file_writer->commitAsync([&, fragment_ctx = _fragment_ctx, state = state](FileWriter::CommitResult result) {
+        if (!result.io_status.ok()) {
+            LOG(WARNING) << "cancel fragment instance " << state->fragment_instance_id() << ": " << result.io_status;
+            fragment_ctx->cancel(result.io_status);
+            return;
         }
-    }
-
-    if (_partition_writers.size() == 0) {
-        _is_finished = true;
+        state->update_num_rows_load_sink(result.file_metrics.record_count);
+        _rollback_actions.push(result.rollback_action);
+        });
     }
     return Status::OK();
 }
@@ -157,6 +156,7 @@ bool TableFunctionTableSinkOperator::pending_finish() const {
 }
 
 Status TableFunctionTableSinkOperator::set_cancelled(RuntimeState* state) {
+    LOG(INFO) << "set cancelled";
     return Status::OK();
 }
 
@@ -165,6 +165,7 @@ StatusOr<ChunkPtr> TableFunctionTableSinkOperator::pull_chunk(RuntimeState* stat
 }
 
 Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    LOG(INFO) << "push chunk";
     auto future_handler = [&](auto&& future) {
         if (is_ready(future)) {
             RETURN_IF_ERROR(future.get());
@@ -174,50 +175,38 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
         return Status::OK();
     };
 
+    if (_file_writer == nullptr) {
+        string location = _path + "_" + std::to_string(_next_id++);
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(location, FSOptions(&_cloud_conf)));
+        WritableFileOptions options{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_RETURN(auto writable_file, fs->new_writable_file(options, location));
+        _file_writer = std::make_unique<parquet::ParquetFileWriter>(std::move(writable_file), ::parquet::default_writer_properties(), _parquet_file_schema, _output_exprs, 1 << 30);
+        RETURN_IF_ERROR(_file_writer->init());
+    }
+
     // poc: unpartitoned writer
-    if (_file_writer->getWrittenBytes() > 100) {
-        RETURN_IF_ERROR(future_handler(_file_writer->commit()));
+    // commit writer if exceeds target file size
+    if (_file_writer->getWrittenBytes() > 1 << 30) {
+        _file_writer->commitAsync([&, fragment_ctx = _fragment_ctx, state = state](FileWriter::CommitResult result) {
+            if (!result.io_status.ok()) {
+                LOG(WARNING) << "cancel fragment instance " << state->fragment_instance_id() << ": " << result.io_status;
+                fragment_ctx->cancel(result.io_status);
+                return;
+            }
+            state->update_num_rows_load_sink(result.file_metrics.record_count);
+            _rollback_actions.push(result.rollback_action);
+        });
+
+        string location = _path + "_" + std::to_string(_next_id++);
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(location, FSOptions(&_cloud_conf)));
+        WritableFileOptions options{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_RETURN(auto writable_file, fs->new_writable_file(options, location));
+        _file_writer = std::make_unique<parquet::ParquetFileWriter>(std::move(writable_file), ::parquet::default_writer_properties(), _parquet_file_schema, _output_exprs, 1 << 30);
+        RETURN_IF_ERROR(_file_writer->init());
     }
 
-    _file_writer = std::make_unique<parquet::ParquetFileWriter>();
     RETURN_IF_ERROR(future_handler(_file_writer->write(chunk)));
-
     return Status::OK();
-
-    /*
-    if (_partition_exprs.empty()) {
-        if (_partition_writers.empty()) {
-            auto writer = std::make_unique<RollingAsyncParquetWriter>(_make_table_info(_path), _output_exprs,
-                                                                      _common_metrics.get(), add_commit_info, state,
-                                                                      _driver_sequence);
-            RETURN_IF_ERROR(writer->init());
-            _partition_writers.insert({"default writer", std::move(writer)});
-        }
-        return _partition_writers["default writer"]->append_chunk(chunk.get(), state);
-    }
-
-    // compute partition values and correspondent location
-    std::vector<std::string> partition_column_values(_partition_exprs.size());
-    for (size_t i = 0; i < _partition_exprs.size(); ++i) {
-        ASSIGN_OR_RETURN(auto column, _partition_exprs[i]->evaluate(chunk.get()));
-        ASSIGN_OR_RETURN(partition_column_values[i], column_to_string(_partition_exprs[i]->root()->type(), column))
-    }
-    string partition_location = get_partition_location(_path, _partition_column_names, partition_column_values);
-
-    auto partition_writer = _partition_writers.find(partition_location);
-    // create writer for current partition if not exists
-    if (partition_writer == _partition_writers.end()) {
-        auto writer = std::make_unique<RollingAsyncParquetWriter>(_make_table_info(partition_location), _output_exprs,
-                                                                  _common_metrics.get(), add_commit_info, state,
-                                                                  _driver_sequence);
-        RETURN_IF_ERROR(writer->init());
-        RETURN_IF_ERROR(writer->append_chunk(chunk.get(), state));
-        _partition_writers.insert({partition_location, std::move(writer)});
-        return Status::OK();
-    }
-
-    return _partition_writers[partition_location]->append_chunk(chunk.get(), state);
-    */
 }
 
 TableInfo TableFunctionTableSinkOperator::_make_table_info(const string& partition_location) const {
@@ -250,6 +239,7 @@ TableFunctionTableSinkOperatorFactory::TableFunctionTableSinkOperatorFactory(
           _fragment_ctx(fragment_ctx) {}
 
 Status TableFunctionTableSinkOperatorFactory::prepare(RuntimeState* state) {
+    LOG(INFO) << "prepare";
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
 
     RETURN_IF_ERROR(Expr::prepare(_output_exprs, state));
