@@ -88,6 +88,10 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
      */
     private long visibleTxnId = -1;
 
+    private volatile long lastVacuumTime = 0;
+
+    private volatile long minRetainVersion = 0;
+
     public PhysicalPartitionImpl(long id, long parentId, long sharedGroupId, MaterializedIndex baseIndex) {
         this.id = id;
         this.parentId = parentId;
@@ -137,6 +141,26 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     @Override
     public boolean isImmutable() {
         return this.isImmutable.get();
+    }
+
+    @Override
+    public long getLastVacuumTime() {
+        return lastVacuumTime;
+    }
+
+    @Override
+    public void setLastVacuumTime(long lastVacuumTime) {
+        this.lastVacuumTime = lastVacuumTime;
+    }
+
+    @Override
+    public long getMinRetainVersion() {
+        return minRetainVersion;
+    }
+
+    @Override
+    public void setMinRetainVersion(long minRetainVersion) {
+        this.minRetainVersion = minRetainVersion;
     }
 
     /*

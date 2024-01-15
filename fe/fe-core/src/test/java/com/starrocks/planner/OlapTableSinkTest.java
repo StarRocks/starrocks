@@ -54,6 +54,8 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TOlapTableLocationParam;
+import com.starrocks.thrift.TOlapTablePartition;
+import com.starrocks.thrift.TOlapTablePartitionParam;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletLocation;
@@ -113,16 +115,18 @@ public class OlapTableSinkTest {
                 2, Lists.newArrayList(new Column("k1", Type.BIGINT)));
         Partition partition = new Partition(2, "p1", index, distInfo);
 
-        new Expectations() {{
-            dstTable.getId();
-            result = 1;
-            dstTable.getPartitionInfo();
-            result = partInfo;
-            dstTable.getPartitions();
-            result = Lists.newArrayList(partition);
-            dstTable.getPartition(2L);
-            result = partition;
-        }};
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+            }
+        };
 
         OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
                 TWriteQuorumType.MAJORITY, false, false, false);
@@ -147,20 +151,22 @@ public class OlapTableSinkTest {
         Partition p1 = new Partition(1, "p1", index, distInfo);
         Partition p2 = new Partition(2, "p2", index, distInfo);
 
-        new Expectations() {{
-            dstTable.getId();
-            result = 1;
-            dstTable.getPartitionInfo();
-            result = partInfo;
-            partInfo.getType();
-            result = PartitionType.RANGE;
-            partInfo.getPartitionColumns();
-            result = Lists.newArrayList(partKey);
-            dstTable.getPartitions();
-            result = Lists.newArrayList(p1, p2);
-            dstTable.getPartition(p1.getId());
-            result = p1;
-        }};
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                partInfo.getType();
+                result = PartitionType.RANGE;
+                partInfo.getPartitionColumns();
+                result = Lists.newArrayList(partKey);
+                dstTable.getPartitions();
+                result = Lists.newArrayList(p1, p2);
+                dstTable.getPartition(p1.getId());
+                result = p1;
+            }
+        };
 
         OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(p1.getId()),
                 TWriteQuorumType.MAJORITY, false, false, false);
@@ -181,10 +187,12 @@ public class OlapTableSinkTest {
         TupleDescriptor tuple = getTuple();
 
         long unknownPartId = 12345L;
-        new Expectations() {{
-            dstTable.getPartition(unknownPartId);
-            result = null;
-        }};
+        new Expectations() {
+            {
+                dstTable.getPartition(unknownPartId);
+                result = null;
+            }
+        };
 
         OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(unknownPartId),
                 TWriteQuorumType.MAJORITY, false, false, false);
@@ -196,7 +204,7 @@ public class OlapTableSinkTest {
 
     @Test
     public void testCreateLocationWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
-                                                  @Mocked SystemInfoService systemInfoService) throws Exception {
+            @Mocked SystemInfoService systemInfoService) throws Exception {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -260,9 +268,14 @@ public class OlapTableSinkTest {
             }
         };
 
+        TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
+        TOlapTablePartition tPartition = new TOlapTablePartition();
+        tPartition.setId(partitionId);
+        partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
-                table, table.getClusterId(), Lists.newArrayList(partitionId), false, 
+                table, table.getClusterId(), partitionParam, false, 
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
+
         System.out.println(param);
 
         // Check
@@ -344,9 +357,14 @@ public class OlapTableSinkTest {
             }
         };
 
+        TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
+        TOlapTablePartition tPartition = new TOlapTablePartition();
+        tPartition.setId(partitionId);
+        partitionParam.addToPartitions(tPartition);
         TOlapTableLocationParam param = OlapTableSink.createLocation(
-                table, table.getClusterId(), Lists.newArrayList(partitionId), true,
+                table, table.getClusterId(), partitionParam, true,
                 WarehouseManager.DEFAULT_WAREHOUSE_ID);
+
         System.out.println(param);
 
         // Check
@@ -360,34 +378,36 @@ public class OlapTableSinkTest {
 
             beCount.put(nodes.get(0), beCount.getOrDefault(nodes.get(0), 0) + 1);
         }
-        
+
         for (Integer v : beCount.values()) {
             Assert.assertEquals(3, v.longValue());
         }
     }
 
     @Test
-    public void testSingleListPartition() throws UserException{
+    public void testSingleListPartition() throws UserException {
         TupleDescriptor tuple = getTuple();
         ListPartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST,
-                Lists.newArrayList(new Column("province",Type.STRING)));
-        listPartitionInfo.setValues(1,Lists.newArrayList("beijing","shanghai"));
+                Lists.newArrayList(new Column("province", Type.STRING)));
+        listPartitionInfo.setValues(1, Lists.newArrayList("beijing", "shanghai"));
         listPartitionInfo.setReplicationNum(1, (short) 3);
         MaterializedIndex index = new MaterializedIndex(1, MaterializedIndex.IndexState.NORMAL);
         HashDistributionInfo distInfo = new HashDistributionInfo(
                 3, Lists.newArrayList(new Column("id", Type.BIGINT)));
         Partition partition = new Partition(1, "p1", index, distInfo);
 
-        new Expectations() {{
-            dstTable.getId();
-            result = 1;
-            dstTable.getPartitions();
-            result = Lists.newArrayList(partition);
-            dstTable.getPartition(1L);
-            result = partition;
-            dstTable.getPartitionInfo();
-            result = listPartitionInfo;
-        }};
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(1L);
+                result = partition;
+                dstTable.getPartitionInfo();
+                result = listPartitionInfo;
+            }
+        };
 
         OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(1L),
                 TWriteQuorumType.MAJORITY, false, false, false);
@@ -415,16 +435,18 @@ public class OlapTableSinkTest {
 
         LOG.info("partition is {}", partition);
 
-        new Expectations() {{
-            dstTable.getId();
-            result = 1;
-            dstTable.getPartitionInfo();
-            result = partInfo;
-            dstTable.getPartitions();
-            result = Lists.newArrayList(partition);
-            dstTable.getPartition(2L);
-            result = partition;
-        }};
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+            }
+        };
 
         OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
                 TWriteQuorumType.MAJORITY, false, false, false);

@@ -41,7 +41,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -513,7 +512,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 return true;
             }
 
-            Partition partition = table.getPartition(partitionId);
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.info("partition is null in publish partition batch");
                 return true;
@@ -583,9 +582,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 stateBatch.setCompactionScore(tableId, partitionId, quantiles);
                 stateBatch.putBeTablets(partitionId, nodeToTablets);
             }
-        } catch (Throwable e) {
-            LOG.error("Fail to publish partition {} of txnIds {}: {}", partitionId,
-                    txnIds, e.getMessage());
+        } catch (Exception e) {
+            LOG.error("Fail to publish partition {} of txnIds {}:", partitionId,
+                    txnIds, e);
             return false;
         }
 

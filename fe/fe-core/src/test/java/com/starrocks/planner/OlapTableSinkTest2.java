@@ -21,6 +21,8 @@ import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TOlapTablePartition;
+import com.starrocks.thrift.TOlapTablePartitionParam;
 import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -61,8 +63,14 @@ public class OlapTableSinkTest2 {
 
         List<Long> partitionIds = olapTable.getAllPartitionIds();
 
+        TOlapTablePartitionParam partitionParam = new TOlapTablePartitionParam();
+        TOlapTablePartition tPartition = new TOlapTablePartition();
+        for (Long partitionId : partitionIds) {
+            tPartition.setId(partitionId);
+            partitionParam.addToPartitions(tPartition);
+        }
         try {
-            OlapTableSink.createLocation(olapTable, -1, partitionIds, false);
+            OlapTableSink.createLocation(olapTable, -1, partitionParam, false);
         } catch (UserException e) {
             System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("replicas: 10001:1/-1/1/0:NORMAL:ALIVE"));
