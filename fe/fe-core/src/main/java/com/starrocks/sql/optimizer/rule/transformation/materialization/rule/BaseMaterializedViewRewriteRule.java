@@ -90,6 +90,16 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
 
     @Override
     public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
+        try {
+            return doTransform(queryExpression, context);
+        } catch (Exception e) {
+            // for mv rewrite rules, do not disturb query when exception.
+            logMVRewrite(context, this, "mv rewrite exception, exception message:{}", e.getMessage());
+            return Lists.newArrayList();
+        }
+    }
+
+    private List<OptExpression> doTransform(OptExpression queryExpression, OptimizerContext context) {
         List<MaterializationContext> mvCandidateContexts = Lists.newArrayList();
         if (queryExpression.getGroupExpression() != null) {
             int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
