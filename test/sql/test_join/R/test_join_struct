@@ -1,0 +1,365 @@
+-- name: test_join_struct
+CREATE TABLE struct_test (
+pk bigint not null,
+s0  struct<c0 int,c1 string>,
+s1  struct<c0 DECIMAL(16, 3),c1 varchar(30)>,
+s2  struct<c0 int,c1 array<string>>,
+s3  struct<c0 string,c1 map<int, varchar(30)>>,
+s4  struct<c0 int,c1 json>,
+s5  struct<c0 INT,c1 STRUCT<c INT, b string>>
+) ENGINE=OLAP
+DUPLICATE KEY(pk)
+DISTRIBUTED BY HASH(pk) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false"
+);
+-- result:
+-- !result
+insert into struct_test (pk,s0) values (7,row(3,'',null,null));
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Cannot cast 'row(3, '', NULL, NULL)' from struct<col1 tinyint(4), col2 varchar, col3 boolean, col4 boolean> to struct<c0 int(11), c1 varchar(65533)>.")
+-- !result
+insert into struct_test values (0, row(0,'ab'),row(0,'ab'),row(0,['1','2']),row('1',map(1,'abc')),row(1,json_object('name','abc','age',23)),row(0, row(1,'a')));
+-- result:
+-- !result
+insert into struct_test values (1, row(1, null),row(null,''),row(1,[]),row('11',map(1,'abc','',null)),row(null,json_object('name',null)),row(null, row(null,null)));
+-- result:
+-- !result
+insert into struct_test values (2, row(null,null),row(null,null),row(null,null),row(null,map(null,null)),row(null,null),row(null, row(null,null)));
+-- result:
+-- !result
+insert into struct_test values (3, row(3,''),row(3,''),row(3,['3',null, null,null]),row('3',map(3,'a33c',null,null)),row(null,json_object('name','abc','age',23)),row(null, row(3,'a')));
+-- result:
+-- !result
+insert into struct_test values (4, null,null,null,null,null,null);
+-- result:
+-- !result
+select t.s0, s.s0 from struct_test t join struct_test s on s.s0 = t.s0 order by t.pk;
+-- result:
+{"c0":0,"c1":"ab"}	{"c0":0,"c1":"ab"}
+{"c0":1,"c1":null}	{"c0":1,"c1":null}
+{"c0":null,"c1":null}	{"c0":null,"c1":null}
+{"c0":3,"c1":""}	{"c0":3,"c1":""}
+-- !result
+select t.s1, s.s1 from struct_test t join struct_test s on s.s1 = t.s1 order by t.pk;
+-- result:
+{"c0":0.000,"c1":"ab"}	{"c0":0.000,"c1":"ab"}
+{"c0":null,"c1":""}	{"c0":null,"c1":""}
+{"c0":null,"c1":null}	{"c0":null,"c1":null}
+{"c0":3.000,"c1":""}	{"c0":3.000,"c1":""}
+-- !result
+select t.s2, s.s2 from struct_test t join struct_test s on s.s2 = t.s2 order by t.pk;
+-- result:
+{"c0":0,"c1":["1","2"]}	{"c0":0,"c1":["1","2"]}
+{"c0":1,"c1":[]}	{"c0":1,"c1":[]}
+{"c0":null,"c1":null}	{"c0":null,"c1":null}
+{"c0":3,"c1":["3",null,null,null]}	{"c0":3,"c1":["3",null,null,null]}
+-- !result
+select t.s5, s.s5 from struct_test t join struct_test s on s.s5 = t.s5 order by t.pk;
+-- result:
+{"c0":0,"c1":{"c":1,"b":"a"}}	{"c0":0,"c1":{"c":1,"b":"a"}}
+{"c0":null,"c1":{"c":null,"b":null}}	{"c0":null,"c1":{"c":null,"b":null}}
+{"c0":null,"c1":{"c":null,"b":null}}	{"c0":null,"c1":{"c":null,"b":null}}
+{"c0":null,"c1":{"c":null,"b":null}}	{"c0":null,"c1":{"c":null,"b":null}}
+{"c0":null,"c1":{"c":null,"b":null}}	{"c0":null,"c1":{"c":null,"b":null}}
+{"c0":null,"c1":{"c":3,"b":"a"}}	{"c0":null,"c1":{"c":3,"b":"a"}}
+-- !result
+select t.s0, s.s0 from struct_test t join struct_test s where s.s0 = t.s0 order by t.pk;
+-- result:
+{"c0":0,"c1":"ab"}	{"c0":0,"c1":"ab"}
+{"c0":1,"c1":null}	{"c0":1,"c1":null}
+{"c0":null,"c1":null}	{"c0":null,"c1":null}
+{"c0":3,"c1":""}	{"c0":3,"c1":""}
+-- !result
+select t.s1, s.s1 from struct_test t join struct_test s where s.s1 = t.s1 order by t.pk;
+-- result:
+{"c0":0.000,"c1":"ab"}	{"c0":0.000,"c1":"ab"}
+{"c0":null,"c1":""}	{"c0":null,"c1":""}
+{"c0":null,"c1":null}	{"c0":null,"c1":null}
+{"c0":3.000,"c1":""}	{"c0":3.000,"c1":""}
+-- !result
+select t.s2, s.s2 from struct_test t join struct_test s where s.s2 = t.s2 order by t.pk;
+-- result:
+{"c0":0,"c1":["1","2"]}	{"c0":0,"c1":["1","2"]}
+{"c0":1,"c1":[]}	{"c0":1,"c1":[]}
+{"c0":null,"c1":null}	{"c0":null,"c1":null}
+{"c0":3,"c1":["3",null,null,null]}	{"c0":3,"c1":["3",null,null,null]}
+-- !result
+select t.s3, s.s3 from struct_test t join struct_test s where s.s3 = t.s3 order by t.pk;
+-- result:
+{"c0":"1","c1":{1:"abc"}}	{"c0":"1","c1":{1:"abc"}}
+{"c0":"11","c1":{null:null,1:"abc"}}	{"c0":"11","c1":{null:null,1:"abc"}}
+{"c0":null,"c1":{null:null}}	{"c0":null,"c1":{null:null}}
+{"c0":"3","c1":{null:null,3:"a33c"}}	{"c0":"3","c1":{null:null,3:"a33c"}}
+-- !result
+select t.s2, s.s3 from struct_test t join struct_test s where s.s2 = t.s3 order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 71. Detail message: Column type struct<c0 int(11), c1 array<varchar(65533)>> does not support binary predicate operation with type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>>.')
+-- !result
+select t.s0, s.s0 from struct_test t join struct_test s on s.s0 <=> t.s0 order by t.pk;
+-- result:
+{"c0":0,"c1":"ab"}	{"c0":0,"c1":"ab"}
+{"c0":1,"c1":null}	{"c0":1,"c1":null}
+{"c0":null,"c1":null}	{"c0":null,"c1":null}
+{"c0":3,"c1":""}	{"c0":3,"c1":""}
+None	None
+-- !result
+select t.s1, s.s1 from struct_test t join struct_test s on s.s1 <=> t.s1 order by t.pk;
+-- result:
+{"c0":0.000,"c1":"ab"}	{"c0":0.000,"c1":"ab"}
+{"c0":null,"c1":""}	{"c0":null,"c1":""}
+{"c0":null,"c1":null}	{"c0":null,"c1":null}
+{"c0":3.000,"c1":""}	{"c0":3.000,"c1":""}
+None	None
+-- !result
+select t.s5, s.s5 from struct_test t join struct_test s on s.s5 <=> t.s5 order by t.pk;
+-- result:
+{"c0":0,"c1":{"c":1,"b":"a"}}	{"c0":0,"c1":{"c":1,"b":"a"}}
+{"c0":null,"c1":{"c":null,"b":null}}	{"c0":null,"c1":{"c":null,"b":null}}
+{"c0":null,"c1":{"c":null,"b":null}}	{"c0":null,"c1":{"c":null,"b":null}}
+{"c0":null,"c1":{"c":null,"b":null}}	{"c0":null,"c1":{"c":null,"b":null}}
+{"c0":null,"c1":{"c":null,"b":null}}	{"c0":null,"c1":{"c":null,"b":null}}
+{"c0":null,"c1":{"c":3,"b":"a"}}	{"c0":null,"c1":{"c":3,"b":"a"}}
+None	None
+-- !result
+select t.s0, s.s0 from struct_test t join struct_test s where s.s0 <=> t.s0 order by t.pk;
+-- result:
+{"c0":0,"c1":"ab"}	{"c0":0,"c1":"ab"}
+{"c0":1,"c1":null}	{"c0":1,"c1":null}
+{"c0":null,"c1":null}	{"c0":null,"c1":null}
+{"c0":3,"c1":""}	{"c0":3,"c1":""}
+None	None
+-- !result
+select t.s1, s.s1 from struct_test t join struct_test s where s.s1 <=> t.s1 order by t.pk;
+-- result:
+{"c0":0.000,"c1":"ab"}	{"c0":0.000,"c1":"ab"}
+{"c0":null,"c1":""}	{"c0":null,"c1":""}
+{"c0":null,"c1":null}	{"c0":null,"c1":null}
+{"c0":3.000,"c1":""}	{"c0":3.000,"c1":""}
+None	None
+-- !result
+select t.s2, s.s2 from struct_test t join struct_test s where s.s2 <=> t.s2 order by t.pk;
+-- result:
+{"c0":0,"c1":["1","2"]}	{"c0":0,"c1":["1","2"]}
+{"c0":1,"c1":[]}	{"c0":1,"c1":[]}
+{"c0":null,"c1":null}	{"c0":null,"c1":null}
+{"c0":3,"c1":["3",null,null,null]}	{"c0":3,"c1":["3",null,null,null]}
+None	None
+-- !result
+select t.s3, s.s3 from struct_test t join struct_test s where s.s3 <=> t.s3 order by t.pk;
+-- result:
+{"c0":"1","c1":{1:"abc"}}	{"c0":"1","c1":{1:"abc"}}
+{"c0":"11","c1":{null:null,1:"abc"}}	{"c0":"11","c1":{null:null,1:"abc"}}
+{"c0":null,"c1":{null:null}}	{"c0":null,"c1":{null:null}}
+{"c0":"3","c1":{null:null,3:"a33c"}}	{"c0":"3","c1":{null:null,3:"a33c"}}
+None	None
+-- !result
+select t.s4, s.s5 from struct_test t join struct_test s where s.s4 <=> t.s5 order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 73. Detail message: Column type struct<c0 int(11), c1 json> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
+-- !result
+select t.s0, s.s0 from struct_test t join struct_test s on s.s0 < t.s0 order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 59 to line 1, column 68. Detail message: Column type struct<c0 int(11), c1 varchar(65533)> does not support binary predicate operation with type struct<c0 int(11), c1 varchar(65533)>.')
+-- !result
+select t.s4, s.s4 from struct_test t join struct_test s where s.s4 > t.s4 order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 71. Detail message: Column type struct<c0 int(11), c1 json> does not support binary predicate operation with type struct<c0 int(11), c1 json>.')
+-- !result
+select t.s0, s.s0 from struct_test t join struct_test s on s.s0 >= t.s0 order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 59 to line 1, column 69. Detail message: Column type struct<c0 int(11), c1 varchar(65533)> does not support binary predicate operation with type struct<c0 int(11), c1 varchar(65533)>.')
+-- !result
+select t.s4, s.s5 from struct_test t join struct_test s where s.s4 >= t.s5 order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 62 to line 1, column 72. Detail message: Column type struct<c0 int(11), c1 json> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
+-- !result
+select s0 from struct_test t where exists (select 1 from struct_test s where t.s0 = s.s5) order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 int(11), c1 varchar(65533)> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
+-- !result
+select s1 from struct_test t where exists (select 1 from struct_test s where t.s1 = s.s5) order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 decimal(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
+-- !result
+select s2 from struct_test t where exists (select 1 from struct_test s where t.s2 = s.s5) order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 int(11), c1 array<varchar(65533)>> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
+-- !result
+select s2 from struct_test t where exists (select 1 from struct_test s where t.s2 <=> s.s2) order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Not support exists correlation subquery with Non-EQ predicate.')
+-- !result
+select s3 from struct_test t where exists (select 1 from struct_test s where t.s3 <=> s.s2) order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 88. Detail message: Column type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>> does not support binary predicate operation with type struct<c0 int(11), c1 array<varchar(65533)>>.')
+-- !result
+select s4 from struct_test t where exists (select 1 from struct_test s where t.s4 <=> s.s2) order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 88. Detail message: Column type struct<c0 int(11), c1 json> does not support binary predicate operation with type struct<c0 int(11), c1 array<varchar(65533)>>.')
+-- !result
+select s5 from struct_test t where exists (select 1 from struct_test s where t.s5 <=> s.s2) order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 88. Detail message: Column type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>> does not support binary predicate operation with type struct<c0 int(11), c1 array<varchar(65533)>>.')
+-- !result
+select s0 from struct_test t where exists (select 1 from struct_test s where t.s0 < s.s1) order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 int(11), c1 varchar(65533)> does not support binary predicate operation with type struct<c0 decimal(16, 3), c1 varchar(30)>.')
+-- !result
+select s1 from struct_test t where exists (select 1 from struct_test s where t.s1 < s.s1) order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 decimal(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 decimal(16, 3), c1 varchar(30)>.')
+-- !result
+select s2 from struct_test t where exists (select 1 from struct_test s where t.s2 < s.s1) order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 77 to line 1, column 86. Detail message: Column type struct<c0 int(11), c1 array<varchar(65533)>> does not support binary predicate operation with type struct<c0 decimal(16, 3), c1 varchar(30)>.')
+-- !result
+select s2 from struct_test t where not exists (select 1 from struct_test s where t.s2 <=> s.s5) order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 81 to line 1, column 92. Detail message: Column type struct<c0 int(11), c1 array<varchar(65533)>> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
+-- !result
+select s3 from struct_test t where not exists (select 1 from struct_test s where t.s3 <=> s.s5) order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 81 to line 1, column 92. Detail message: Column type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
+-- !result
+select s4 from struct_test t where not exists (select 1 from struct_test s where t.s4 <=> s.s5) order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 81 to line 1, column 92. Detail message: Column type struct<c0 int(11), c1 json> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
+-- !result
+select s5 from struct_test t where not exists (select 1 from struct_test s where t.s5 <=> s.s5) order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Not support exists correlation subquery with Non-EQ predicate.')
+-- !result
+select s2 from struct_test t where s2 in (select s0 from struct_test s) order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 38 to line 1, column 70. Detail message: The input types (struct<c0 int(11), c1 array<varchar(65533)>>,struct<c0 int(11), c1 varchar(65533)>) of in predict are not compatible.')
+-- !result
+select s4 from struct_test t where s4 in (select s1 from struct_test s) order by t.pk;
+-- result:
+{"c0":null,"c1":null}
+-- !result
+select s0 from struct_test t where s0 in (select s5 from struct_test s) order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 38 to line 1, column 70. Detail message: The input types (struct<c0 int(11), c1 varchar(65533)>,struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>) of in predict are not compatible.')
+-- !result
+select s5 from struct_test t where s5 not in (select s5 from struct_test s) order by t.pk;
+-- result:
+-- !result
+select s0 from struct_test t where s0 not in (select s5 from struct_test s) order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 38 to line 1, column 74. Detail message: The input types (struct<c0 int(11), c1 varchar(65533)>,struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>) of in predict are not compatible.')
+-- !result
+select s0 in (select s0 from struct_test s) from struct_test order by t.pk;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column '`t`.`pk`' cannot be resolved.")
+-- !result
+select s0 in (select s1 from struct_test s) from struct_test order by t.pk;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column '`t`.`pk`' cannot be resolved.")
+-- !result
+select s5 in (select s5 from struct_test s) from struct_test order by t.pk;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column '`t`.`pk`' cannot be resolved.")
+-- !result
+select s0 not in (select s0 from struct_test s) from struct_test order by t.pk;
+-- result:
+E: (1064, "Getting analyzing error. Detail message: Column '`t`.`pk`' cannot be resolved.")
+-- !result
+select s0 not in (select s2 from struct_test s) from struct_test order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 10 to line 1, column 46. Detail message: The input types (struct<c0 int(11), c1 varchar(65533)>,struct<c0 int(11), c1 array<varchar(65533)>>) of in predict are not compatible.')
+-- !result
+select s0 not in (select s5 from struct_test s) from struct_test order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 10 to line 1, column 46. Detail message: The input types (struct<c0 int(11), c1 varchar(65533)>,struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>) of in predict are not compatible.')
+-- !result
+select t.s4, s.s5 from struct_test t left join struct_test s where s.s4 <=> t.s5 order by t.pk;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 61. Detail message: Unexpected input 'where', the most similar input is {'ON', 'USING'}.")
+-- !result
+select t.s0, s.s0 from struct_test t left join struct_test s on s.s0 = t.s0 order by t.pk;
+-- result:
+{"c0":0,"c1":"ab"}	{"c0":0,"c1":"ab"}
+{"c0":1,"c1":null}	{"c0":1,"c1":null}
+{"c0":null,"c1":null}	{"c0":null,"c1":null}
+{"c0":3,"c1":""}	{"c0":3,"c1":""}
+None	None
+-- !result
+select t.s1, s.s2 from struct_test t left join struct_test s on s.s1 = t.s2 order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 64 to line 1, column 73. Detail message: Column type struct<c0 decimal(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 int(11), c1 array<varchar(65533)>>.')
+-- !result
+select t.s1, s.s3 from struct_test t left join struct_test s on s.s1 < t.s3 order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 64 to line 1, column 73. Detail message: Column type struct<c0 decimal(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>>.')
+-- !result
+select t.s0, s.s0 from struct_test t left join struct_test s where s.s0 = t.s0 order by t.pk;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 61. Detail message: Unexpected input 'where', the most similar input is {'ON', 'USING'}.")
+-- !result
+select t.s1, s.s1 from struct_test t left join struct_test s where s.s1 <= t.s1 order by t.pk;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 61. Detail message: Unexpected input 'where', the most similar input is {'ON', 'USING'}.")
+-- !result
+select t.s4, s.s5 from struct_test t right join struct_test s where s.s4 <=> t.s5 order by t.pk;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 62. Detail message: Unexpected input 'where', the most similar input is {'ON', 'USING'}.")
+-- !result
+select t.s0, s.s0 from struct_test t right join struct_test s on s.s0 = t.s0 order by t.pk;
+-- result:
+None	None
+{"c0":0,"c1":"ab"}	{"c0":0,"c1":"ab"}
+{"c0":1,"c1":null}	{"c0":1,"c1":null}
+{"c0":null,"c1":null}	{"c0":null,"c1":null}
+{"c0":3,"c1":""}	{"c0":3,"c1":""}
+-- !result
+select t.s1, s.s2 from struct_test t right join struct_test s on s.s1 = t.s2 order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 65 to line 1, column 74. Detail message: Column type struct<c0 decimal(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 int(11), c1 array<varchar(65533)>>.')
+-- !result
+select t.s1, s.s3 from struct_test t right join struct_test s on s.s1 < t.s3 order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 65 to line 1, column 74. Detail message: Column type struct<c0 decimal(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>>.')
+-- !result
+select t.s0, s.s0 from struct_test t right join struct_test s on s.s0 = t.s0 order by t.pk;
+-- result:
+None	None
+{"c0":0,"c1":"ab"}	{"c0":0,"c1":"ab"}
+{"c0":1,"c1":null}	{"c0":1,"c1":null}
+{"c0":null,"c1":null}	{"c0":null,"c1":null}
+{"c0":3,"c1":""}	{"c0":3,"c1":""}
+-- !result
+select t.s1, s.s1 from struct_test t right join struct_test s where s.s1 <= t.s1 order by t.pk;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 62. Detail message: Unexpected input 'where', the most similar input is {'ON', 'USING'}.")
+-- !result
+select t.s4, s.s5 from struct_test t full join struct_test s on s.s4 <=> t.s5 order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 64 to line 1, column 75. Detail message: Column type struct<c0 int(11), c1 json> does not support binary predicate operation with type struct<c0 int(11), c1 struct<c int(11), b varchar(65533)>>.')
+-- !result
+select t.s0, s.s0 from struct_test t full join struct_test s on s.s0 = t.s0 order by t.pk;
+-- result:
+None	None
+{"c0":0,"c1":"ab"}	{"c0":0,"c1":"ab"}
+{"c0":1,"c1":null}	{"c0":1,"c1":null}
+{"c0":null,"c1":null}	{"c0":null,"c1":null}
+{"c0":3,"c1":""}	{"c0":3,"c1":""}
+None	None
+-- !result
+select t.s1, s.s2 from struct_test t full join struct_test s on s.s1 = t.s2 order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 64 to line 1, column 73. Detail message: Column type struct<c0 decimal(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 int(11), c1 array<varchar(65533)>>.')
+-- !result
+select t.s1, s.s3 from struct_test t full join struct_test s on s.s1 < t.s3 order by t.pk;
+-- result:
+E: (1064, 'Getting analyzing error from line 1, column 64 to line 1, column 73. Detail message: Column type struct<c0 decimal(16, 3), c1 varchar(30)> does not support binary predicate operation with type struct<c0 varchar(65533), c1 map<int(11),varchar(30)>>.')
+-- !result
+select t.s0, s.s0 from struct_test t full join struct_test s where s.s0 = t.s0 order by t.pk;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 61. Detail message: Unexpected input 'where', the most similar input is {'ON', 'USING'}.")
+-- !result
+select t.s1, s.s1 from struct_test t full join struct_test s where s.s1 <= t.s1 order by t.pk;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 61. Detail message: Unexpected input 'where', the most similar input is {'ON', 'USING'}.")
+-- !result

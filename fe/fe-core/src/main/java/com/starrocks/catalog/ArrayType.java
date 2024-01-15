@@ -58,7 +58,15 @@ public class ArrayType extends Type {
         if (depth >= MAX_NESTING_DEPTH) {
             return "ARRAY<...>";
         }
+<<<<<<< HEAD
         return String.format("ARRAY<%s>", itemType.toSql(depth + 1));
+=======
+        if (itemType.isDecimalOfAnyVersion()) {
+            return String.format("array<%s>", itemType);
+        } else {
+            return String.format("array<%s>", itemType.toSql(depth + 1));
+        }
+>>>>>>> 9cfa912818 ([Enhancement] The decimal creation type is consistent with the display type (#38639))
     }
 
     @Override

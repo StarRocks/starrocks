@@ -46,8 +46,13 @@ TOP-N (order by [[29: substring ASC NULLS FIRST]])
                         EXCHANGE SHUFFLE[20]
                             SCAN (columns{20} predicate[null])
                         EXCHANGE SHUFFLE[1]
+<<<<<<< HEAD
                             INNER JOIN (join-predicate [cast(6: c_acctbal as decimal128(38, 8)) > 17: avg] post-join-predicate [null])
                                 SCAN (columns{1,5,6} predicate[substring(5: c_phone, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
+=======
+                            INNER JOIN (join-predicate [cast(6: c_acctbal as DECIMAL128(38,8)) > 17: avg] post-join-predicate [null])
+                                HIVE SCAN (columns{1,5,6} predicate[substring(5: c_phone, 1, 2) IN (21, 28, 24, 32, 35, 34, 37)])
+>>>>>>> 9cfa912818 ([Enhancement] The decimal creation type is consistent with the display type (#38639))
                                 EXCHANGE BROADCAST
                                     ASSERT LE 1
                                         AGGREGATE ([GLOBAL] aggregate [{97: count=sum(97: count), 96: sum=sum(96: sum)}] group by [[]] having [null]
