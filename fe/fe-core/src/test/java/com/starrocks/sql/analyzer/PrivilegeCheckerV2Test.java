@@ -37,6 +37,11 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.privilege.AuthorizationMgr;
+<<<<<<< HEAD:fe/fe-core/src/test/java/com/starrocks/sql/analyzer/PrivilegeCheckerV2Test.java
+=======
+import com.starrocks.privilege.DbPEntryObject;
+import com.starrocks.privilege.PipePEntryObject;
+>>>>>>> 9d4c4e8c80 ([BugFix] Do not validate pentry of external database/table (#38988)):fe/fe-core/src/test/java/com/starrocks/sql/analyzer/PrivilegeCheckerTest.java
 import com.starrocks.privilege.PrivObjNotFoundException;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.TablePEntryObject;
@@ -461,6 +466,16 @@ public class PrivilegeCheckerV2Test {
         System.out.println(res.getResultRows());
         Assert.assertEquals(2, res.getResultRows().size());
         Assert.assertEquals("test_ex_catalog3", res.getResultRows().get(1).get(0));
+    }
+
+    @Test
+    public void testExternalDBAndTablePEntryObject() throws Exception {
+        starRocksAssert.withCatalog("create external catalog test_iceberg properties (\"type\"=\"iceberg\")");
+        DbPEntryObject dbPEntryObject = DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "*"));
+        Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
+        TablePEntryObject tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
+                List.of("test_iceberg", "*", "*"));
+        Assert.assertTrue(tablePEntryObject.validate(GlobalStateMgr.getCurrentState()));
     }
 
     @Test
