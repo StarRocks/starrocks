@@ -913,6 +913,10 @@ public class OlapTable extends Table {
         return getColumns().stream().filter(Column::isKey).collect(Collectors.toList());
     }
 
+    public List<Column> getKeyColumnsInOrder() {
+        return getFullSchema().stream().filter(Column::isKey).collect(Collectors.toList());
+    }
+
     public List<Column> getKeyColumnsByIndexId(Long indexId) {
         ArrayList<Column> keyColumns = Lists.newArrayList();
         List<Column> allColumns = this.getSchemaByIndexId(indexId);
