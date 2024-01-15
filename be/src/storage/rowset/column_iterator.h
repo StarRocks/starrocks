@@ -34,7 +34,9 @@
 
 #pragma once
 
+#include "column_reader.h"
 #include "common/status.h"
+#include "io/shared_buffered_input_stream.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
 #include "storage/range.h"
@@ -53,7 +55,9 @@ class ColumnReader;
 class RandomAccessFile;
 
 struct ColumnIteratorOptions {
-    RandomAccessFile* read_file = nullptr;
+    //RandomAccessFile* read_file = nullptr;
+    io::SeekableInputStream* read_file = nullptr;
+    bool is_lake = false;
     // reader statistics
     OlapReaderStatistics* stats = nullptr;
     bool use_page_cache = false;
@@ -99,6 +103,34 @@ public:
 
     [[nodiscard]] virtual Status next_batch(const SparseRange<>& range, Column* dst) {
         return Status::NotSupported("ColumnIterator Not Support batch read");
+    }
+
+    Status convert_sparse_range_to_io_range(const SparseRange<>& range) {
+        auto reader = get_column_reader();
+        std::vector<io::SharedBufferedInputStream::IORange> result;
+        for (auto index = 0; index < range.size(); index++) {
+            auto row_start = range[index].begin();
+            auto row_end = range[index].end() - 1;
+            OrdinalPageIndexIterator* iter_start = nullptr;
+            OrdinalPageIndexIterator* iter_end = nullptr;
+            RETURN_IF_ERROR(reader->seek_at_or_before(row_start, iter_start));
+            RETURN_IF_ERROR(reader->seek_at_or_before(row_end, iter_end));
+            for (auto j = iter_start->page_index(); j < iter_end->page_index(); j++) {
+                OrdinalPageIndexIterator* iter = nullptr;
+                RETURN_IF_ERROR(reader->seek_by_page_index(j, iter));
+                auto page_pointer = iter->page();
+                io::SharedBufferedInputStream::IORange io_range(page_pointer.offset, page_pointer.size);
+                result.emplace_back(io_range);
+            }
+        }
+
+        if (auto sharedBufferStream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+            sharedBufferStream != nullptr) {
+            return sharedBufferStream->set_io_ranges(result);
+        } else {
+            // should't happen
+            return Status::InternalError("io coalesce failed");
+        }
     }
 
     virtual ordinal_t get_current_ordinal() const = 0;
@@ -197,6 +229,7 @@ public:
 
 protected:
     ColumnIteratorOptions _opts;
+    virtual ColumnReader* get_column_reader() { return nullptr; };
 };
 
 } // namespace starrocks

@@ -29,6 +29,7 @@
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "gutil/stl_util.h"
+#include "io/shared_buffered_input_stream.h"
 #include "segment_options.h"
 #include "simd/simd.h"
 #include "storage/chunk_helper.h"
@@ -438,6 +439,14 @@ Status SegmentIterator::_init() {
 
     _range_iter = _scan_range.new_iterator();
 
+    // _segment->lake_tabelt_manager() != nullptr means that be run in shard_data mode
+    if (config::io_coalesce_lake_read_enable && _segment->lake_tablet_manager() != nullptr) {
+        // init io::range of columnt iterator
+        for (auto& column_iterator : _column_iterators) {
+            RETURN_IF_ERROR(column_iterator->convert_sparse_range_to_io_range(_scan_range));
+        }
+    }
+
     return Status::OK();
 }
 
@@ -538,10 +547,18 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         const auto& col = tablet_schema->column(cid);
         ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, access_path));
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_info()));
-        iter_opts.read_file = rfile.get();
-        _column_files[cid] = std::move(rfile);
+        if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col)) {
+            auto buffer_stream = std::make_unique<io::SharedBufferedInputStream>(rfile->stream(), _segment->file_name(),
+                                                                                 rfile->get_size().value());
+            iter_opts.read_file = buffer_stream.release();
+            _column_files[cid] = std::move(rfile);
+        } else {
+            iter_opts.read_file = rfile.get();
+            _column_files[cid] = std::move(rfile);
+        }
     } else {
         // create delta column iterator
+        // TODO io_coalesce
         _column_iterators[cid] = std::move(col_iter);
         ASSIGN_OR_RETURN(auto dcg_file, _opts.fs->new_random_access_file(opts, dcg_filename));
         iter_opts.read_file = dcg_file.get();

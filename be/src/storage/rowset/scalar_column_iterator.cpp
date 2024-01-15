@@ -206,6 +206,13 @@ Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
             bool eos = false;
             RETURN_IF_ERROR(_load_next_page(&eos));
             if (eos) {
+                // release shareBufferStream
+                if (config::io_coalesce_lake_read_enable && _opts.is_lake) {
+                    auto shared_buffer_stream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+                    if (shared_buffer_stream != nullptr) {
+                        shared_buffer_stream->release();
+                    }
+                }
                 break;
             }
         }
@@ -243,6 +250,13 @@ Status ScalarColumnIterator::next_batch(const SparseRange<>& range, Column* dst)
             bool eos = false;
             RETURN_IF_ERROR(_load_next_page(&eos));
             if (eos) {
+                // release shareBufferStream
+                if (config::io_coalesce_lake_read_enable && _opts.is_lake) {
+                    auto shared_buffer_stream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+                    if (shared_buffer_stream != nullptr) {
+                        shared_buffer_stream->release();
+                    }
+                }
                 break;
             }
             end_ord = _page->first_ordinal() + _page->num_rows();
