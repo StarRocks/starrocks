@@ -377,8 +377,6 @@ public class OperationType {
     // light schema change for add and drop columns
     public static final short OP_MODIFY_TABLE_ADD_OR_DROP_COLUMNS = 107;
 
-    public static final short OP_UPSERT_TRANSACTION_STATE_BATCH = 108;
-
     @Deprecated
     @RecoverableOnReplayFailed
     public static final short OP_ALTER_ROUTINE_LOAD_JOB = 111;
