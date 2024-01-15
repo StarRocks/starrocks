@@ -80,7 +80,7 @@
           "type": "category",
           "label": "Load from Object Storage",
           "link": {"type": "doc", "id": "loading/s3"},
-          "items": ["loading/s3", "loading/gcs", "loading/cloud_storage_load"]
+          "items": ["loading/s3", "loading/azure", "loading/gcs", "loading/cloud_storage_load"]
         },
         "loading/StreamLoad",
         "loading/hdfs_load",
@@ -714,13 +714,18 @@
       "items": [
         {
           "type": "category",
+          "label": "Load from Object Storage",
+          "link": {"type": "doc", "id": "loading/s3"},
+          "items": ["loading/s3", "loading/azure", "loading/gcs", "loading/cloud_storage_load"]
+        },
+        {
+          "type": "category",
           "label": "概念介绍",
           "link": {"type": "doc", "id": "loading/load_concept/strict_mode"},
           "items": [ "loading/load_concept/strict_mode" ]
         },
         "loading/StreamLoad",
         "loading/hdfs_load",
-        "loading/cloud_storage_load",
         {
           "type": "category",
           "label": "从 Apache Kafka® 导入",
