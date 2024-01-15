@@ -30,16 +30,9 @@ order by
 TOP-N (order by [[18: sum DESC NULLS LAST]])
     TOP-N (order by [[18: sum DESC NULLS LAST]])
         INNER JOIN (join-predicate [cast(18: sum as double) > cast(37: expr as double)] post-join-predicate [null])
-<<<<<<< HEAD
-            AGGREGATE ([GLOBAL] aggregate [{: sum=sum(: sum)}] group by [[: ps_partkey]] having [null]
-                EXCHANGE SHUFFLE[]
-                    AGGREGATE ([LOCAL] aggregate [{: sum=sum(: expr)}] group by [[: ps_partkey]] having [null]
-                        SCAN (mv[partsupp_mv] columns[: n_name, : ps_partkey, : ps_partvalue] predicate[: n_name = PERU])
-=======
             AGGREGATE ([GLOBAL] aggregate [{18: sum=sum(17: expr)}] group by [[1: ps_partkey]] having [null]
                 EXCHANGE SHUFFLE[1]
                     SCAN (mv[partsupp_mv] columns[91: n_name, 95: ps_partkey, 105: ps_partvalue] predicate[91: n_name = PERU])
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
             EXCHANGE BROADCAST
                 ASSERT LE 1
                     AGGREGATE ([GLOBAL] aggregate [{36: sum=sum(36: sum)}] group by [[]] having [null]

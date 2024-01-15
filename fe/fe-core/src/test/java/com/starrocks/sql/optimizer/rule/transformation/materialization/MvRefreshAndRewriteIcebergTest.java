@@ -1495,11 +1495,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                         .collect(Collectors.toList());
         Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
-<<<<<<< HEAD
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
-=======
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
         {
             String query = "select t1.a, t2.b, t1.d, count(distinct t1.c)\n" +
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 \n" +

@@ -394,21 +394,8 @@ public class UtFrameUtils {
         }
     }
 
-<<<<<<< HEAD
     public static Pair<String, ExecPlan> getPlanAndFragment(ConnectContext connectContext, String originStmt)
             throws Exception {
-=======
-    private interface GetPlanHook<R> {
-        R apply(ConnectContext context, StatementBase statementBase, ExecPlan execPlan) throws Exception;
-    }
-
-    private static <R> R buildPlan(ConnectContext connectContext, String originStmt,
-                                   GetPlanHook<R> returnedSupplier) throws Exception {
-        connectContext.setQueryId(UUIDUtil.genUUID());
-        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
-        // connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
-        connectContext.setThreadLocalInfo();
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
         if (connectContext.getSessionVariable().getEnableQueryDump()) {
             connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
             connectContext.getDumpInfo().setOriginStmt(originStmt);

@@ -25,19 +25,11 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.ast.StatementBase;
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
-<<<<<<< HEAD
 import com.starrocks.utframe.StarRocksAssert;
-=======
-import com.starrocks.thrift.TExplainLevel;
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -255,31 +247,6 @@ public class MaterializedViewTestBase extends PlanTestBase {
             return this;
         }
 
-<<<<<<< HEAD
-        public MVRewriteChecker contains(String... expects) {
-            for (String expect: expects) {
-                Assert.assertTrue(this.rewritePlan.contains(expect));
-            }
-            return this;
-        }
-
-        public MVRewriteChecker contains(List<String> expects) {
-            for (String expect : expects) {
-                Assert.assertTrue(this.rewritePlan.contains(expect));
-            }
-            return this;
-        }
-
-        public MVRewriteChecker containsIgnoreColRefs(String expect) {
-            return contains(expect, true);
-        }
-
-        public MVRewriteChecker contains(String expect) {
-            return contains(expect, false);
-        }
-
-=======
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
         public MVRewriteChecker notContain(String expect) {
             Assert.assertTrue(this.rewritePlan != null);
             boolean contained = this.rewritePlan.contains(expect);

@@ -75,11 +75,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -497,18 +493,7 @@ public class MvUtils {
         return predicates;
     }
 
-<<<<<<< HEAD
-    public static List<ColumnRefOperator> getPredicateColumns(OptExpression root) {
-        List<ColumnRefOperator> res = Lists.newArrayList();
-        List<ScalarOperator> predicates = getAllValidPredicates(root);
-        ListUtils.emptyIfNull(predicates).forEach(x -> x.getColumnRefs(res));
-        return res;
-    }
-
-    public static List<ScalarOperator> getAllValidPredicates(ScalarOperator conjunct) {
-=======
     public static Set<ScalarOperator> getAllValidPredicates(ScalarOperator conjunct) {
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
         if (conjunct == null) {
             return Sets.newHashSet();
         }
@@ -516,19 +501,11 @@ public class MvUtils {
                 .collect(Collectors.toSet());
     }
 
-<<<<<<< HEAD
-    // get all predicates within and below root
-    public static List<ScalarOperator> getAllPredicates(OptExpression root) {
-        List<ScalarOperator> predicates = Lists.newArrayList();
-        getAllPredicates(root, x -> true, predicates);
-        return predicates;
-=======
     public static List<ColumnRefOperator> getPredicateColumns(OptExpression root) {
         List<ColumnRefOperator> res = Lists.newArrayList();
         Set<ScalarOperator> predicates = getAllValidPredicates(root);
         SetUtils.emptyIfNull(predicates).forEach(x -> x.getColumnRefs(res));
         return res;
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
     }
 
     // If join is not cross/inner join, MV Rewrite must rewrite, otherwise may cause bad results.
@@ -1048,39 +1025,19 @@ public class MvUtils {
      */
     public static ScalarOperator compensatePartitionPredicate(MaterializationContext mvContext,
                                                               ColumnRefFactory columnRefFactory,
-<<<<<<< HEAD
-                                                              boolean isCompensate) {
-        List<OptExpression> scanOptExpressions = MvUtils.getScanOptExpression(plan);
-        if (scanOptExpressions.isEmpty()) {
-=======
                                                               OptExpression queryExpression) {
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(queryExpression);
         if (scanOperators.isEmpty()) {
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
             return ConstantOperator.createBoolean(true);
         }
 
         List<ScalarOperator> partitionPredicates = Lists.newArrayList();
-<<<<<<< HEAD
-        for (OptExpression scanOptExpression : scanOptExpressions) {
-            Preconditions.checkState(scanOptExpression.getOp() instanceof LogicalScanOperator);
-            LogicalScanOperator scanOperator = (LogicalScanOperator) scanOptExpression.getOp();
-            List<ScalarOperator> partitionPredicate = null;
-            if (scanOperator instanceof LogicalOlapScanOperator) {
-                partitionPredicate = compensatePartitionPredicateForOlapScan((LogicalOlapScanOperator) scanOperator,
-                        columnRefFactory, isCompensate);
-            } else if (scanOperator instanceof LogicalHiveScanOperator) {
-                partitionPredicate = compensatePartitionPredicateForHiveScan((LogicalHiveScanOperator) scanOperator,
-                        isCompensate);
-            } else {
-=======
         boolean isCompensatePartition = mvContext.getOrInitCompensatePartitionPredicate(queryExpression);
         // Compensate partition predicates and add them into query predicate.
         Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> scanOperatorScalarOperatorMap =
                 mvContext.getScanOpToPartitionCompensatePredicates();
         for (LogicalScanOperator scanOperator : scanOperators) {
             if (!SUPPORTED_PARTITION_COMPENSATE_SCAN_TYPES.contains(scanOperator.getOpType())) {
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
                 continue;
             }
             List<ScalarOperator> partitionPredicate = scanOperatorScalarOperatorMap
@@ -1144,12 +1101,6 @@ public class MvUtils {
         if (scanOperators.isEmpty()) {
             return Optional.of(false);
         }
-<<<<<<< HEAD
-=======
-        if (scanOperators.stream().anyMatch(scan -> scan instanceof LogicalViewScanOperator)) {
-            return Optional.of(true);
-        }
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
 
         // If no partition table and columns, no need compensate
         MaterializedView mv = mvContext.getMv();
@@ -1338,8 +1289,6 @@ public class MvUtils {
         return null;
     }
 
-<<<<<<< HEAD
-=======
     public static List<ScalarOperator> getMVPrunedPartitionPredicates(MaterializedView mv,
                                                                       OptExpression mvPlan) {
         Pair<Table, Column> partitionTableAndColumns = mv.getBaseTableAndPartitionColumn();
@@ -1382,22 +1331,6 @@ public class MvUtils {
         }
     }
 
-    private static boolean isRefBaseTable(LogicalScanOperator scanOperator, Table refBaseTable) {
-        Table scanTable = scanOperator.getTable();
-        if (scanTable.isNativeTableOrMaterializedView() && !scanTable.equals(refBaseTable)) {
-            return false;
-        }
-        if (scanOperator instanceof LogicalViewScanOperator) {
-            return true;
-        }
-        if (!scanTable.isNativeTableOrMaterializedView() && !scanTable.getTableIdentifier().equals(
-                refBaseTable.getTableIdentifier())) {
-            return false;
-        }
-        return true;
-    }
-
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
     // convert varchar date to date type
     public static Range<PartitionKey> convertToDateRange(Range<PartitionKey> from) throws AnalysisException {
         if (from.hasLowerBound() && from.hasUpperBound()) {

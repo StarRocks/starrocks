@@ -39,7 +39,6 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.UniqueConstraint;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.StringUtils;
 import com.starrocks.qe.ConnectContext;
@@ -602,29 +601,27 @@ public class MaterializedViewRewriter {
      */
     private ScalarOperator compensateMVPartitionPredicate(Set<ScalarOperator> mvPredicates,
                                                           ReplaceColumnRefRewriter mvColumnRefRewriter) {
-        if (mvRewriteContext.isCompensatePartitionPredicate()
-                && materializationContext.getMvPartialPartitionPredicate() != null) {
+
+        ScalarOperator mvPrunedPartitionPredicate = getMVCompensatePartitionPredicate();
+        if (mvPrunedPartitionPredicate != null) {
             List<ScalarOperator> partitionPredicates =
                     getPartitionRelatedPredicates(mvPredicates, mvRewriteContext.getMaterializationContext().getMv());
             if (partitionPredicates.stream().noneMatch(p -> (p instanceof IsNullPredicateOperator)
                     && !((IsNullPredicateOperator) p).isNotNull())) {
                 // there is no partition column is null predicate
                 // add latest partition predicate to mv predicate
-                return mvColumnRefRewriter.rewrite(materializationContext.getMvPartialPartitionPredicate());
+                return mvColumnRefRewriter.rewrite(mvPrunedPartitionPredicate);
             }
         }
         return ConstantOperator.TRUE;
     }
 
-<<<<<<< HEAD
-=======
     private ScalarOperator getMVCompensatePartitionPredicate() {
         return  materializationContext.isCompensatePartitionPredicate() ?
                 materializationContext.getMvPartialPartitionPredicate() :
                 materializationContext.getMVPrunedPartitionPredicate();
     }
 
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
     private OptExpression rewriteViewDelta(List<Table> queryTables,
                                            List<Table> mvTables,
                                            PredicateSplit mvPredicateSplit,
@@ -1227,13 +1224,8 @@ public class MaterializedViewRewriter {
 
                 ScalarOperator normalizedPredicate = normalizePredicate(finalCompensationPredicate);
                 // Canonize predicates to make uts more stable.
-<<<<<<< HEAD
-                if (FeConstants.runningUnitTest && FeConstants.isCanonizePredicateAfterMVRewrite) {
-                    normalizedPredicate = MvUtils.canonizePredicateForRewrite(normalizedPredicate);
-=======
                 if (optimizerContext.getSessionVariable().getQueryDebugOptions().isEnableNormalizePredicateAfterMVRewrite()) {
                     normalizedPredicate = MvUtils.canonizePredicateForRewrite(queryMaterializationContext, normalizedPredicate);
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
                 }
                 newScanOpBuilder.setPredicate(normalizedPredicate);
 
@@ -2109,29 +2101,17 @@ public class MaterializedViewRewriter {
         return rewriter;
     }
 
-    private EquivalenceClasses createEquivalenceClasses(
-            ScalarOperator equalPredicate, OptExpression expression,
-            ReplaceColumnRefRewriter refRewriter, ColumnRewriter columnRewriter) {
-        List<ScalarOperator> outerJoinOnPredicate = MvUtils.collectOuterAntiJoinOnPredicate(expression);
-        final PredicateSplit outerJoinPredicateSplit = PredicateSplit.splitPredicate(Utils.compoundAnd(outerJoinOnPredicate));
-        // should use ReplaceColumnRefRewriter to rewrite outerJoinPredicateSplit to base tables
-        return createEquivalenceClasses(equalPredicate,
-                refRewriter.rewrite(outerJoinPredicateSplit.getEqualPredicates()), columnRewriter);
-    }
-
     // equalPredicates eg: t1.a = t2.b and t1.c = t2.d
-    private EquivalenceClasses createEquivalenceClasses(
-            ScalarOperator equalPredicates,
-            ScalarOperator outerJoinEqualPredicates,
-            ColumnRewriter columnRewriter) {
+    private EquivalenceClasses createEquivalenceClasses(ScalarOperator equalPredicates,
+                                                        OptExpression expression,
+                                                        ReplaceColumnRefRewriter refRewriter,
+                                                        ColumnRewriter columnRewriter) {
+
+        // should use ReplaceColumnRefRewriter to rewrite outerJoinPredicateSplit to base tables
         EquivalenceClasses ec = new EquivalenceClasses();
         if (equalPredicates == null) {
             return ec;
         }
-<<<<<<< HEAD
-        equalPredicates = MvUtils.canonizePredicateForRewrite(equalPredicates);
-        outerJoinEqualPredicates = MvUtils.canonizePredicateForRewrite(outerJoinEqualPredicates);
-=======
         equalPredicates = MvUtils.canonizePredicateForRewrite(queryMaterializationContext, equalPredicates);
 
         List<ScalarOperator> outerJoinOnPredicate = MvUtils.collectOuterAntiJoinOnPredicate(expression);
@@ -2139,7 +2119,7 @@ public class MaterializedViewRewriter {
         // should use ReplaceColumnRefRewriter to rewrite outerJoinPredicateSplit to base tables
         ScalarOperator outerJoinEqualPredicates = refRewriter.rewrite(outerJoinPredicateSplit.getEqualPredicates());
         outerJoinEqualPredicates = MvUtils.canonizePredicateForRewrite(queryMaterializationContext, outerJoinEqualPredicates);
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
+
         List<ScalarOperator> outerJoinConjuncts = Utils.extractConjuncts(outerJoinEqualPredicates);
         for (ScalarOperator equalPredicate : Utils.extractConjuncts(equalPredicates)) {
             if (outerJoinConjuncts.contains(equalPredicate)) {

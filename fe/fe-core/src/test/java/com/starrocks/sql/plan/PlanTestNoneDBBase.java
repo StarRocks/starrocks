@@ -549,19 +549,6 @@ public class PlanTestNoneDBBase {
         }
     }
 
-<<<<<<< HEAD
-    private void checkWithIgnoreTabletListAndColRefIds(String expect, String actual) {
-        expect = Stream.of(expect.split("\n")).filter(s -> !s.contains("tabletList"))
-                .map(str -> str.replaceAll("\\d+", "").trim())
-                .collect(Collectors.joining("\n"));
-        actual = Stream.of(actual.split("\n")).filter(s -> !s.contains("tabletList"))
-                .map(str -> str.replaceAll("\\d+", "").trim())
-                .collect(Collectors.joining("\n"));
-        Assert.assertEquals(expect, actual);
-    }
-
-=======
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
     protected void assertPlanContains(String sql, String... explain) throws Exception {
         String explainString = getFragmentPlan(sql);
 

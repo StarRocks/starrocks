@@ -386,10 +386,10 @@ public class MaterializationContext {
         }
     }
 
-<<<<<<< HEAD
     public Set<String> getRefTableUpdatePartitionNames() {
         return this.refTableUpdatePartitionNames;
-=======
+    }
+
     /**
      * What's the meaning of partition compensate in mv rewriting?
      * <p>
@@ -452,6 +452,5 @@ public class MaterializationContext {
 
     public Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> getScanOpToPartitionCompensatePredicates() {
         return scanOpToPartitionCompensatePredicates;
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
     }
 }

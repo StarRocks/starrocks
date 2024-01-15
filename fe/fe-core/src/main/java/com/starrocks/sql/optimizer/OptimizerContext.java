@@ -60,21 +60,11 @@ public class OptimizerContext {
     private final Stopwatch optimizerTimer = Stopwatch.createStarted();
     private final Map<RuleType, Stopwatch> ruleWatchMap = Maps.newHashMap();
 
-<<<<<<< HEAD
-=======
-    // used by view based mv rewrite
-    // query's logical plan with view
-    private OptExpression logicalTreeWithView;
-    // collect LogicalViewScanOperators
-    private List<LogicalViewScanOperator> viewScans;
-
-    private boolean isShortCircuit = false;
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
     // TODO: refactor materialized view's variables/contexts into this.
     private QueryMaterializationContext queryMaterializationContext;
 
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -237,32 +227,6 @@ public class OptimizerContext {
                 "3. enlarge new_planner_optimize_timeout session variable",
                 ErrorType.INTERNAL_ERROR);
     }
-<<<<<<< HEAD
-=======
-
-    public OptExpression getLogicalTreeWithView() {
-        return logicalTreeWithView;
-    }
-
-    public void setLogicalTreeWithView(OptExpression logicalTreeWithView) {
-        this.logicalTreeWithView = logicalTreeWithView;
-    }
-
-    public void setViewScans(List<LogicalViewScanOperator> viewScans) {
-        this.viewScans = viewScans;
-    }
-
-    public List<LogicalViewScanOperator> getViewScans() {
-        return viewScans;
-    }
-
-    public boolean isShortCircuit() {
-        return isShortCircuit;
-    }
-
-    public void setShortCircuit(boolean shortCircuit) {
-        isShortCircuit = shortCircuit;
-    }
 
     public void setQueryMaterializationContext(QueryMaterializationContext queryMaterializationContext) {
         this.queryMaterializationContext = queryMaterializationContext;
@@ -277,5 +241,4 @@ public class OptimizerContext {
             this.queryMaterializationContext.clear();
         }
     }
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
 }

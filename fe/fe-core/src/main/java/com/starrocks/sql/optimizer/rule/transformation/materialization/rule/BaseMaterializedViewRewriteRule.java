@@ -25,11 +25,8 @@ import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-<<<<<<< HEAD
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
-=======
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -132,21 +129,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         ConnectContext connectContext = ConnectContext.get();
         for (MaterializationContext mvContext : mvCandidateContexts) {
-<<<<<<< HEAD
             context.checkTimeout();
-
-            // 1. check whether to need compensate or not
-            // 2. `queryPredicateSplit` is different for each materialized view, so we can not cache it anymore.
-            boolean isCompensatePartitionPredicate = MvUtils.isNeedCompensatePartitionPredicate(queryExpression, mvContext);
-            PredicateSplit queryPredicateSplit = getQuerySplitPredicate(context, queryExpression, queryColumnRefFactory,
-                    queryColumnRefRewriter, isCompensatePartitionPredicate);
-            if (queryPredicateSplit == null) {
-                continue;
-            }
-            MvRewriteContext mvRewriteContext =
-                    new MvRewriteContext(mvContext, queryTables, queryExpression,
-                        queryColumnRefRewriter, queryPredicateSplit, onPredicates, this, isCompensatePartitionPredicate);
-=======
             PredicateSplit queryPredicateSplit = getQuerySplitPredicate(context, mvContext, queryExpression,
                     queryColumnRefFactory, queryColumnRefRewriter);
             if (queryPredicateSplit == null) {
@@ -154,7 +137,6 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             }
             MvRewriteContext mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
                         queryColumnRefRewriter, queryPredicateSplit, onPredicates, this);
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
 
             // rewrite query
             MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);

@@ -14,36 +14,28 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-<<<<<<< HEAD
-=======
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Pair;
-import com.starrocks.common.profile.Tracers;
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
 import com.starrocks.sql.plan.PlanTestBase;
 import org.apache.parquet.Strings;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
-<<<<<<< HEAD
-=======
 import java.util.List;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
 public class MvRewritePartitionTest extends MvRewriteTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         MvRewriteTestBase.beforeClass();
-<<<<<<< HEAD
-=======
         starRocksAssert.withTable(cluster, "table_with_day_partition");
         starRocksAssert.withTable(cluster, "table_with_day_partition1");
         starRocksAssert.withTable(cluster, "table_with_day_partition2");
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
         prepareDatas();
     }
 
@@ -502,9 +494,6 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
         }
         starRocksAssert.dropMaterializedView("test_partition_tbl_mv2");
     }
-<<<<<<< HEAD
-=======
-
 
     @Test
     public void testMVPartitionPruneWithMultiLeftOuterJoin() throws Exception {
@@ -724,5 +713,4 @@ public class MvRewritePartitionTest extends MvRewriteTestBase {
         }
         connectContext.getSessionVariable().setEnableMaterializedViewRewritePartitionCompensate(true);
     }
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
 }

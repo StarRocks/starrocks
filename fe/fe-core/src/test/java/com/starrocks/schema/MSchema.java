@@ -274,12 +274,8 @@ public class MSchema {
             T0,
             TABLE_WITH_PARTITION,
             TABLE_WITH_DAY_PARTITION,
-<<<<<<< HEAD
-=======
             TABLE_WITH_DAY_PARTITION1,
             TABLE_WITH_DAY_PARTITION2,
-            TABLE_WITH_DATETIME_PARTITION,
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
             TEST_BASE_PART,
             T1,
             JSON_TBL,

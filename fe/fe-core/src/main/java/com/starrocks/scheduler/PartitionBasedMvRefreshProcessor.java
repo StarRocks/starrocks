@@ -325,10 +325,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             StatementPlanner.unLock(dbs);
         }
 
-<<<<<<< HEAD
-=======
         QueryDebugOptions debugOptions = ctx.getSessionVariable().getQueryDebugOptions();
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
         // log the final mv refresh plan for each refresh for better trace and debug
         if (LOG.isDebugEnabled() || debugOptions.isEnableQueryTraceLog()) {
             LOG.info("MV Refresh Final Plan" +

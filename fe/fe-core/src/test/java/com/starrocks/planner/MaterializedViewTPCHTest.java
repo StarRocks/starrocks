@@ -15,7 +15,6 @@
 package com.starrocks.planner;
 
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.MockTpchStatisticStorage;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -77,13 +76,7 @@ public class MaterializedViewTPCHTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery7() {
-<<<<<<< HEAD
-        FeConstants.isCanonizePredicateAfterMVRewrite = true;
         runFileUnitTest("materialized-view/tpch/q7");
-        FeConstants.isCanonizePredicateAfterMVRewrite = false;
-=======
-        runFileUnitTest("materialized-view/tpch/q7");
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
     }
 
     @Test

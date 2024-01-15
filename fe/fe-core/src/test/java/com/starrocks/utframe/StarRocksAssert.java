@@ -523,9 +523,6 @@ public class StarRocksAssert {
 
     // Add materialized view to the schema
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
-<<<<<<< HEAD
-        return withMaterializedView(sql, false, false);
-=======
         // Only test mv rewrite in default 1 replica to avoid more occasional errors.
         return withMaterializedView(sql, true, false);
     }
@@ -577,7 +574,6 @@ public class StarRocksAssert {
             }
         }
         return this;
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
     }
 
     public void assertMVWithoutComplexExpression(String dbName, String tableName) {

@@ -14,7 +14,6 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.common.FeConstants;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -61,13 +60,7 @@ public class MaterializedViewHiveTPCHTest extends MaterializedViewTestBase {
 
     @Test
     public void testQuery7() {
-<<<<<<< HEAD
-        FeConstants.isCanonizePredicateAfterMVRewrite = true;
         runFileUnitTest("materialized-view/tpch-hive/q7");
-        FeConstants.isCanonizePredicateAfterMVRewrite = false;
-=======
-        runFileUnitTest("materialized-view/tpch-hive/q7");
->>>>>>> 0c5a5ccbe9 ([BugFix] Optimize partition compensate strategy for performance(Part1) (backport #36559) (#38555))
     }
 
     @Test
