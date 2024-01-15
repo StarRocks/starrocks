@@ -29,8 +29,6 @@ CompactionState::~CompactionState() {
     if (_update_manager != nullptr) {
         _update_manager->compaction_state_mem_tracker()->release(_memory_usage);
     }
-    // make sure segment iters release before `_stats`
-    _segment_iters.clear();
 }
 
 Status CompactionState::load_segments(Rowset* rowset, UpdateManager* update_manager,
