@@ -27,6 +27,7 @@
 #include <functional>
 #include <memory>
 #include <sstream>
+#include <thread>
 
 #include "common/object_pool.h"
 #include "gen_cpp/DataSinks_types.h"
@@ -128,6 +129,7 @@ public:
 
 private:
     void coordinator_callback(const Status& status, RuntimeProfile* profile, bool done);
+    Status report_exec_status(const TReportExecStatusParams& params);
 
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
 
@@ -220,6 +222,38 @@ std::string FragmentExecState::to_http_path(const std::string& file_name) {
     return url.str();
 }
 
+Status FragmentExecState::report_exec_status(const TReportExecStatusParams& params) {
+    TReportExecStatusResult res;
+    Status st;
+
+    FrontendServiceConnection coord(_exec_env->frontend_client_cache(), _coord_addr, &st);
+    if (!st.ok()) {
+        std::stringstream ss;
+        ss << "couldn't get a client for " << _coord_addr;
+        return Status::InternalError(ss.str());
+    }
+
+    VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
+    try {
+        try {
+            coord->reportExecStatus(res, params);
+        } catch (TTransportException& e) {
+            LOG(WARNING) << "Retrying ReportExecStatus due to: " << e.what();
+            RETURN_IF_ERROR_WITH_WARN(coord.reopen(), "reopen client:");
+            coord->reportExecStatus(res, params);
+        }
+
+        st = Status(res.status);
+    } catch (TException& e) {
+        std::stringstream msg;
+        msg << "ReportExecStatus() to " << _coord_addr << " failed:\n" << e.what();
+        LOG(WARNING) << msg.str();
+        return Status::InternalError(msg.str());
+    }
+    WARN_IF_ERROR(st, "reportExecStatus() error: ");
+    return st;
+}
+
 // There can only be one of these callbacks in-flight at any moment, because
 // it is only invoked from the executor's reporting thread.
 // Also, the reported status will always reflect the most recent execution status,
@@ -227,15 +261,6 @@ std::string FragmentExecState::to_http_path(const std::string& file_name) {
 void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfile* profile, bool done) {
     DCHECK(status.ok() || done); // if !status.ok() => done
     Status exec_status = update_status(status);
-
-    Status coord_status;
-    FrontendServiceConnection coord(_exec_env->frontend_client_cache(), _coord_addr, &coord_status);
-    if (!coord_status.ok()) {
-        std::stringstream ss;
-        ss << "couldn't get a client for " << _coord_addr;
-        update_status(Status::InternalError(ss.str()));
-        return;
-    }
 
     TReportExecStatusParams params;
     params.protocol_version = FrontendServiceVersion::V1;
@@ -300,37 +325,34 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
         params.__set_backend_id(_exec_env->master_info()->backend_id);
     }
 
-    TReportExecStatusResult res;
-    Status rpc_status;
-
-    VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
-    try {
-        try {
-            coord->reportExecStatus(res, params);
-        } catch (TTransportException& e) {
-            LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
-            rpc_status = coord.reopen();
-
-            if (!rpc_status.ok()) {
-                // we need to cancel the execution of this fragment
-                update_status(rpc_status);
-                _executor.cancel();
-                return;
-            }
-            coord->reportExecStatus(res, params);
-        }
-
-        rpc_status = Status(res.status);
-    } catch (TException& e) {
-        std::stringstream msg;
-        msg << "ReportExecStatus() to " << _coord_addr << " failed:\n" << e.what();
-        LOG(WARNING) << msg.str();
-        rpc_status = Status::InternalError(msg.str());
+    auto st = report_exec_status(params);
+    if (st.ok()) {
+        return;
     }
 
-    if (!rpc_status.ok()) {
+    LOG(WARNING) << "Failed to report exec status to coordinator, instance_id: " << print_id(_fragment_instance_id);
+
+    // Since the load coordinator is awaiting the result of fragment instance,
+    // we try our best to report the load status.
+    if (runtime_state->query_options().query_type == TQueryType::LOAD) {
+        for (size_t i = 0; i < config::max_load_status_report_retry_times; i++) {
+            st = report_exec_status(params);
+            if (st.ok()) {
+                return;
+            }
+            LOG(WARNING) << "Failed to report exec status to coordinator, instance_id: " << print_id(_fragment_instance_id)
+                      << ", retry: " << i + 1 << "/" << config::max_load_status_report_retry_times;
+            // sleep with backoff
+            std::this_thread::sleep_for(std::chrono::seconds((2 << i) * 10));
+        }
+    }
+
+    LOG(WARNING) << "Abort to report exec status to coordinator, instance_id: " << print_id(_fragment_instance_id)
+              << ", retry times:  " << config::max_load_status_report_retry_times;
+
+    if (!st.ok()) {
         // we need to cancel the execution of this fragment
-        update_status(rpc_status);
+        update_status(st);
         _executor.cancel();
     }
 }

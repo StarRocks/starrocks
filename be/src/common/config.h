@@ -721,4 +721,5 @@ CONF_mInt64(send_channel_buffer_limit, "67108864");
 
 CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache=128M}");
 
+CONF_Int32(max_load_status_report_retry_times, "5");
 } // namespace starrocks::config
