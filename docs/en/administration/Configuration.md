@@ -1862,6 +1862,20 @@ BE static parameters are as follows.
 - **Unit**: N/A
 - **Description**: The number of threads used for checking the consistency of tablets.
 
+#### object_storage_connect_timeout_ms
+
+- **Default**: `-1`, which means to use the default timeout duration of the SDK configurations.
+- **Unit** ms
+- **Description**: Timeout duration to establish socket connections with object storage.
+- **Introduced in:** 3.0.9
+
+#### object_storage_request_timeout_ms
+
+- **Default**: `-1`, which means to use the default timeout duration of the SDK configurations.
+- **Unit** ms
+- **Description**: Timeout duration to establish HTTP connections with object storage.
+- **Introduced in:** 3.0.9
+
 #### sys_log_dir
 
 - **Default**: `${STARROCKS_HOME}/log`
