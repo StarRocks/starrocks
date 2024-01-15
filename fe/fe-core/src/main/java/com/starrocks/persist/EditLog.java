@@ -810,10 +810,6 @@ public class EditLog {
                             globalStateMgr.getRollupHandler().replayAlterJobV2(alterJob);
                             break;
                         case SCHEMA_CHANGE:
-<<<<<<< HEAD
-=======
-                        case OPTIMIZE:
->>>>>>> 4d38871b1e ([Refactor] Add slow log for edit log write and refine some code warnings (backport #39024) (#39085))
                             globalStateMgr.getSchemaChangeHandler().replayAlterJobV2(alterJob);
                             break;
                         default:
