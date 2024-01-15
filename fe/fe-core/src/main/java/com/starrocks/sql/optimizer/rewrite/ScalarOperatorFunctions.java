@@ -337,6 +337,13 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
     }
 
+    @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true)
+    public static ConstantOperator toDate(ConstantOperator dateTime) {
+        LocalDateTime dt = dateTime.getDatetime();
+        dt.truncatedTo(ChronoUnit.DAYS);
+        return ConstantOperator.createDateOrNull(dt);
+    }
+
     @ConstantFunction(name = "years_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator yearsSub(ConstantOperator date, ConstantOperator year) {
         return ConstantOperator.createDatetime(date.getDatetime().minusYears(year.getInt()));
