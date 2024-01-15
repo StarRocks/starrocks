@@ -1153,8 +1153,10 @@ public:
 
             if constexpr ((lt_is_integer<FromType> || lt_is_float<FromType>)&&(lt_is_integer<ToType> ||
                                                                                lt_is_float<ToType>)) {
-                if constexpr (std::numeric_limits<RunTimeCppType<ToType>>::max() <
-                              std::numeric_limits<RunTimeCppType<FromType>>::max()) {
+                if constexpr ((std::numeric_limits<RunTimeCppType<ToType>>::max() <
+                               std::numeric_limits<RunTimeCppType<FromType>>::max()) ||
+                              (std::numeric_limits<RunTimeCppType<ToType>>::min() >
+                               std::numeric_limits<RunTimeCppType<FromType>>::min())) {
                     // Check overflow.
                     ASSIGN_OR_RETURN(auto cast_l, IRHelper::cast_to_type(b, datum.value, ToType, FromType));
                     llvm::Value* is_overflow = nullptr;

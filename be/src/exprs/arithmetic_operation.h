@@ -252,8 +252,11 @@ struct ArithmeticBinaryOperator {
                     auto* fpe = b.CreateAnd(cond_left, cond_right);
                     // modify r to prevent overflow.
                     adjusted_r = b.CreateSelect(fpe, llvm::ConstantInt::get(l->getType(), 1), adjusted_r);
+                    result.value = b.CreateSelect(fpe, llvm::ConstantInt::get(l->getType(), signed_minimum<ResultType>),
+                                                  b.CreateSDiv(l, adjusted_r));
+                } else {
+                    result.value = b.CreateSDiv(l, adjusted_r);
                 }
-                result.value = b.CreateSDiv(l, adjusted_r);
             }
             result.null_flag =
                     b.CreateSelect(r_is_zero, llvm::ConstantInt::get(result.null_flag->getType(), 1), result.null_flag);
