@@ -425,6 +425,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 |配置项|默认值|描述|
 |---|---|---|
+|object_storage_connect_timeout_ms        | -1     | 对象存储 Socket 连接的超时时间，默认取值 `-1`，表示使用 SDK 中的默认时间。该参数从 3.0.9 版本起支持。 |
+|object_storage_request_timeout_ms        | -1     | 对象存储 HTTP 连接的超时时间，默认取值 `-1`，表示使用 SDK 中的默认时间。该参数从 3.0.9 版本起支持。 |
 |hdfs_client_enable_hedged_read           | false  | 指定是否开启 Hedged Read 功能。该参数从 3.0 版本起支持。 |
 |hdfs_client_hedged_read_threadpool_size  | 128    | 指定 HDFS 客户端侧 Hedged Read 线程池的大小，即 HDFS 客户端侧允许有多少个线程用于服务 Hedged Read。该参数从 3.0 版本起支持，对应 HDFS 集群配置文件 `hdfs-site.xml` 中的 `dfs.client.hedged.read.threadpool.size` 参数。 |
 |hdfs_client_hedged_read_threshold_millis | 2500   | 指定发起 Hedged Read 请求前需要等待多少毫秒。例如，假设该参数设置为 `30`，那么如果一个 Read 任务未能在 30 毫秒内返回结果，则 HDFS 客户端会立即发起一个 Hedged Read，从目标数据块的副本上读取数据。该参数从 3.0 版本起支持，对应 HDFS 集群配置文件 `hdfs-site.xml` 中的 `dfs.client.hedged.read.threshold.millis` 参数。 |
