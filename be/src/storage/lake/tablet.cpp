@@ -107,10 +107,11 @@ Status Tablet::delete_tablet_metadata_lock(int64_t version, int64_t expire_time)
 }
 
 StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int64_t txn_id,
-                                                           uint32_t max_rows_per_segment) {
+                                                           uint32_t max_rows_per_segment, ThreadPool* flush_pool) {
     ASSIGN_OR_RETURN(auto tablet_schema, get_schema());
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         if (type == kHorizontal) {
+<<<<<<< HEAD
             return std::make_unique<HorizontalPkTabletWriter>(*this, tablet_schema, txn_id);
         } else {
             DCHECK(type == kVertical);
@@ -122,6 +123,21 @@ StatusOr<std::unique_ptr<TabletWriter>> Tablet::new_writer(WriterType type, int6
         } else {
             DCHECK(type == kVertical);
             return std::make_unique<VerticalGeneralTabletWriter>(*this, tablet_schema, txn_id, max_rows_per_segment);
+=======
+            return std::make_unique<HorizontalPkTabletWriter>(_mgr, _id, tablet_schema, txn_id, flush_pool);
+        } else {
+            DCHECK(type == kVertical);
+            return std::make_unique<VerticalPkTabletWriter>(_mgr, _id, tablet_schema, txn_id, max_rows_per_segment,
+                                                            flush_pool);
+        }
+    } else {
+        if (type == kHorizontal) {
+            return std::make_unique<HorizontalGeneralTabletWriter>(_mgr, _id, tablet_schema, txn_id, flush_pool);
+        } else {
+            DCHECK(type == kVertical);
+            return std::make_unique<VerticalGeneralTabletWriter>(_mgr, _id, tablet_schema, txn_id, max_rows_per_segment,
+                                                                 flush_pool);
+>>>>>>> bd9d3cbd0a ([Enhancement] Support async segment writer for lake compaction (#36630))
         }
     }
 }

@@ -30,6 +30,8 @@
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/memtable_flush_executor.h"
+#include "storage/storage_engine.h"
 #include "testutil/sync_point.h"
 #include "util/threadpool.h"
 
@@ -246,7 +248,15 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
                 return context->callback->has_error() || context->callback->timeout_exceeded();
             };
             TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
-            status.update(task_or.value()->execute(&context->progress, std::move(should_cancel)));
+            ThreadPool* flush_pool = nullptr;
+            if (config::lake_enable_compaction_async_write) {
+                // CAUTION: we reuse delta writer's memory table flush pool here
+                flush_pool = StorageEngine::instance()->memtable_flush_executor()->get_thread_pool();
+                if (UNLIKELY(flush_pool == nullptr)) {
+                    return Status::InternalError("Get memory table flush pool failed");
+                }
+            }
+            status.update(task_or.value()->execute(&context->progress, std::move(should_cancel), flush_pool));
         } else {
             status.update(task_or.status());
         }

@@ -24,9 +24,16 @@
 
 namespace starrocks::lake {
 
+<<<<<<< HEAD
 HorizontalPkTabletWriter::HorizontalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema,
                                                    int64_t txn_id)
         : HorizontalGeneralTabletWriter(tablet, std::move(schema), txn_id),
+=======
+HorizontalPkTabletWriter::HorizontalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
+                                                   std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
+                                                   ThreadPool* flush_pool)
+        : HorizontalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, flush_pool),
+>>>>>>> bd9d3cbd0a ([Enhancement] Support async segment writer for lake compaction (#36630))
           _rowset_txn_meta(std::make_unique<RowsetTxnMetaPB>()) {}
 
 HorizontalPkTabletWriter::~HorizontalPkTabletWriter() = default;
@@ -64,9 +71,17 @@ Status HorizontalPkTabletWriter::flush_segment_writer() {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 VerticalPkTabletWriter::VerticalPkTabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema,
                                                int64_t txn_id, uint32_t max_rows_per_segment)
         : VerticalGeneralTabletWriter(tablet, std::move(schema), txn_id, max_rows_per_segment) {}
+=======
+VerticalPkTabletWriter::VerticalPkTabletWriter(TabletManager* tablet_mgr, int64_t tablet_id,
+                                               std::shared_ptr<const TabletSchema> schema, int64_t txn_id,
+                                               uint32_t max_rows_per_segment, ThreadPool* flush_pool)
+        : VerticalGeneralTabletWriter(tablet_mgr, tablet_id, std::move(schema), txn_id, max_rows_per_segment,
+                                      flush_pool) {}
+>>>>>>> bd9d3cbd0a ([Enhancement] Support async segment writer for lake compaction (#36630))
 
 VerticalPkTabletWriter::~VerticalPkTabletWriter() = default;
 

@@ -31,7 +31,7 @@
 
 namespace starrocks::lake {
 
-Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_func) {
+Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_func, ThreadPool* flush_pool) {
     if (progress == nullptr) {
         return Status::InvalidArgument("progress is null");
     }
@@ -52,7 +52,11 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
 
     uint32_t max_rows_per_segment =
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _total_num_rows, _total_data_size);
+<<<<<<< HEAD
     ASSIGN_OR_RETURN(auto writer, _tablet->new_writer(kVertical, _txn_id, max_rows_per_segment));
+=======
+    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kVertical, _txn_id, max_rows_per_segment, flush_pool));
+>>>>>>> bd9d3cbd0a ([Enhancement] Support async segment writer for lake compaction (#36630))
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 

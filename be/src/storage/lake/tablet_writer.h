@@ -26,6 +26,7 @@ namespace starrocks {
 class Chunk;
 class Column;
 class TabletSchema;
+class ThreadPool;
 
 namespace lake {
 
@@ -34,8 +35,18 @@ enum WriterType : int { kHorizontal = 0, kVertical = 1 };
 // Basic interface for tablet writers.
 class TabletWriter {
 public:
+<<<<<<< HEAD
     explicit TabletWriter(Tablet tablet, std::shared_ptr<const TabletSchema> schema, int64_t txn_id)
             : _tablet(tablet), _schema(std::move(schema)), _txn_id(txn_id) {}
+=======
+    explicit TabletWriter(TabletManager* tablet_mgr, int64_t tablet_id, std::shared_ptr<const TabletSchema> schema,
+                          int64_t txn_id, ThreadPool* flush_pool = nullptr)
+            : _tablet_mgr(tablet_mgr),
+              _tablet_id(tablet_id),
+              _schema(std::move(schema)),
+              _txn_id(txn_id),
+              _flush_pool(flush_pool) {}
+>>>>>>> bd9d3cbd0a ([Enhancement] Support async segment writer for lake compaction (#36630))
 
     virtual ~TabletWriter() = default;
 
@@ -107,6 +118,7 @@ protected:
     Tablet _tablet;
     std::shared_ptr<const TabletSchema> _schema;
     int64_t _txn_id;
+    ThreadPool* _flush_pool;
     std::vector<FileInfo> _files;
     int64_t _num_rows = 0;
     int64_t _data_size = 0;
