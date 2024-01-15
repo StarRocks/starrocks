@@ -629,6 +629,16 @@ The following parameters are supported:
 
   StarRocks allows setting the `priority` parameter for a Broker Load job since v2.5.
 
+- `merge_condition`
+
+  Specifies the name of the column you want to use as the condition to determine whether updates can take effect. The update from a source record to a destination record takes effect only when the source data record has a greater or equal value than the destination data record in the specified column.
+  
+  Broker Load supports conditional updates since v3.1. For more information, see [Change data through loading](../../../loading/Load_to_Primary_Key_tables.md#conditional-updates).
+  
+  > **NOTE**
+  >
+  > The column that you specify cannot be a primary key column. Additionally, only tables that use the Primary Key table support conditional updates.
+
 ## Column mapping
 
 If the columns of the data file can be mapped one on one in sequence to the columns of the StarRocks table, you do not need to configure the column mapping between the data file and the StarRocks table.
