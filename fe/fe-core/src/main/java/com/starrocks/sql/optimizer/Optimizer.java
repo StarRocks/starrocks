@@ -128,11 +128,14 @@ public class Optimizer {
                                   ColumnRefFactory columnRefFactory) {
         prepare(connectContext, logicOperatorTree, columnRefFactory);
 
-        if (optimizerConfig.isRuleBased()) {
-            return optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
-        } else {
-            return optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
-        }
+        OptExpression result = optimizerConfig.isRuleBased() ?
+                optimizeByRule(connectContext, logicOperatorTree, requiredProperty, requiredColumns) :
+                optimizeByCost(connectContext, logicOperatorTree, requiredProperty, requiredColumns);
+
+        // clear caches in OptimizerContext
+        context.clear();
+
+        return result;
     }
 
     public void setQueryTables(Set<OlapTable> queryTables) {
@@ -256,6 +259,9 @@ public class Optimizer {
 
         // prepare related mvs if needed
         new MvRewritePreprocessor(connectContext, columnRefFactory, context).prepare(logicOperatorTree);
+        if (context.getCandidateMvs() != null && !context.getCandidateMvs().isEmpty()) {
+            context.setQueryMaterializationContext(new QueryMaterializationContext());
+        }
     }
 
     private void pruneTables(OptExpression tree, TaskContext rootTaskContext, ColumnRefSet requiredColumns) {

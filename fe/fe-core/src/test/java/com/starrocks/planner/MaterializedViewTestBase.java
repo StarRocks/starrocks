@@ -44,8 +44,6 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class MaterializedViewTestBase extends PlanTestBase {
     protected static final Logger LOG = LogManager.getLogger(MaterializedViewTestBase.class);
@@ -233,49 +231,20 @@ public class MaterializedViewTestBase extends PlanTestBase {
             return this;
         }
 
-        private MVRewriteChecker contains(String expect, boolean isIgnoreColRef) {
+        public MVRewriteChecker contains(String expect) {
             Assert.assertTrue(this.rewritePlan != null);
-            boolean contained = false;
-            if (isIgnoreColRef) {
-                expect = Stream.of(expect.split("\n")).filter(s -> !s.contains("tabletList"))
-                        .map(str -> str.replaceAll("\\d+", "").trim())
-                        .collect(Collectors.joining("\n"));
-                String actual = Stream.of(this.rewritePlan.split("\n")).filter(s -> !s.contains("tabletList"))
-                        .map(str -> str.replaceAll("\\d+", "").trim())
-                        .collect(Collectors.joining("\n"));
-                contained = actual.contains(expect);
-            } else {
-                contained = this.rewritePlan.contains(expect);
-            }
+            String normalizedExpect = normalizeNormalPlan(expect);
+            String actual = normalizeNormalPlan(this.rewritePlan);
+            boolean contained = actual.contains(normalizedExpect);
 
             if (!contained) {
                 LOG.warn("rewritePlan: \n{}", rewritePlan);
                 LOG.warn("expect: \n{}", expect);
+                LOG.warn("normalized rewritePlan: \n{}", actual);
+                LOG.warn("normalized expect: \n{}", normalizedExpect);
             }
             Assert.assertTrue(contained);
             return this;
-        }
-
-        public MVRewriteChecker contains(String... expects) {
-            for (String expect: expects) {
-                Assert.assertTrue(this.rewritePlan.contains(expect));
-            }
-            return this;
-        }
-
-        public MVRewriteChecker contains(List<String> expects) {
-            for (String expect : expects) {
-                Assert.assertTrue(this.rewritePlan.contains(expect));
-            }
-            return this;
-        }
-
-        public MVRewriteChecker containsIgnoreColRefs(String expect) {
-            return contains(expect, true);
-        }
-
-        public MVRewriteChecker contains(String expect) {
-            return contains(expect, false);
         }
 
         public MVRewriteChecker notContain(String expect) {
