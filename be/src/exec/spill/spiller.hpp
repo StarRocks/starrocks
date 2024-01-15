@@ -145,7 +145,6 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
     }
 
     RETURN_IF_ERROR(captured_mem_table->finalize());
-    // RETURN_IF_ERROR(captured_mem_table->done());
 
     ASSIGN_OR_RETURN(auto serialized_data, captured_mem_table->get_serialized_data());
     spill::AcquireBlockOptions opts;
@@ -155,7 +154,7 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
     opts.name = _spiller->options().name;
     opts.block_size = serialized_data.get_size();
     ASSIGN_OR_RETURN(auto block, _spiller->block_manager()->acquire_block(opts));
-    LOG(INFO) << fmt::format("allocate block [{}]", block->debug_string());
+    TRACE_SPILL_LOG << fmt::format("allocate block [{}]", block->debug_string());
 
     _running_flush_tasks++;
     // TODO: handle spill queue
@@ -310,11 +309,10 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
     _running_flush_tasks++;
 
     {
-        // mark done for all partitiones need spill
+        // finalize all mem tables of spilling_partitions and allocate blocks
         for (auto partition : spilling_partitions) {
             auto mem_table = partition->spill_writer->mem_table();
             RETURN_IF_ERROR(mem_table->finalize());
-            // allocate block here
             DCHECK(partition->spill_writer->block() == nullptr)
                     << fmt::format("block should be null, partition[{}]", partition->debug_string());
             ASSIGN_OR_RETURN(auto serialized_data, mem_table->get_serialized_data());

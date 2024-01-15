@@ -87,7 +87,7 @@ Status RawSpillerWriter::yieldable_flush_task(workgroup::YieldContext& yield_ctx
         RETURN_IF_ERROR(block->append({data}));
         RETURN_IF_ERROR(block->flush());
     }
-    LOG(INFO) << fmt::format("flush block[{}]", block->debug_string());
+    TRACE_SPILL_LOG << fmt::format("flush block[{}]", block->debug_string());
     RETURN_IF_ERROR(_spiller->block_manager()->release_block(block));
     mem_table->reset();
     {
@@ -258,7 +258,7 @@ Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush
             // partition not in memory
             if (!partition->in_mem && partition->level < config::spill_max_partition_level &&
                 mem_table->mem_usage() + partition->bytes > options().spill_mem_table_bytes_size) {
-                RETURN_IF_ERROR(mem_table->done());
+                RETURN_IF_ERROR(mem_table->finalize());
                 partition->in_mem = false;
                 partition->mem_size = 0;
                 partition->bytes += mem_table->mem_usage();

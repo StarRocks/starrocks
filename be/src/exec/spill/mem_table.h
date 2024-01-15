@@ -42,8 +42,9 @@ class MemoryBlock;
 // while (!mem_table->is_full()) {
 //     mem_table->append(next_chunk());
 // }
-// mem_table->done();
-// mem_table->flush();
+// mem_table->finalize();
+// auto serialized_data = mem_table->get_serialized_data();
+// ...
 
 class SpillableMemTable {
 public:
@@ -64,14 +65,9 @@ public:
     [[nodiscard]] virtual Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
                                                   uint32_t size) = 0;
 
+    // all data has been added, call `finalize` to serialize data
+    // after `finalize` is successfully called, we can get serialized data by `get_serialized_data`.
     virtual Status finalize() = 0;
-    // all of data has been added
-    // done will be called in pipeline executor threads
-    virtual Status done() = 0;
-    // flush all data to callback, then release the memory in memory table
-    // flush will be called in IO threads
-    // flush needs to be designed to be reentrant. Because callbacks can return Status::Yield.
-    virtual Status flush(FlushCallBack callback) = 0;
 
     virtual StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) {
         return Status::NotSupported("unsupport to call as_input_stream");
@@ -106,8 +102,6 @@ public:
                                           uint32_t size) override;
 
     Status finalize() override;
-    Status done() override { return Status::OK(); };
-    Status flush(FlushCallBack callback) override;
     void reset() override;
 
     StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) override;
@@ -130,8 +124,6 @@ public:
                                           uint32_t size) override;
 
     Status finalize() override;
-    Status done() override;
-    Status flush(FlushCallBack callback) override;
     void reset() override;
 
 private:
