@@ -94,7 +94,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             return doTransform(queryExpression, context);
         } catch (Exception e) {
             // for mv rewrite rules, do not disturb query when exception.
-            logMVRewrite(context, this, "mv rewrite exception, exception message:{}", e.getMessage());
+            logMVRewrite(context, this, "mv rewrite exception, exception message:{}", e.toString());
             return Lists.newArrayList();
         }
     }
