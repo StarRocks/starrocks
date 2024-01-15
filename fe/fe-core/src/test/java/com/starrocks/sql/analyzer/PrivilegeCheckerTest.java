@@ -3455,6 +3455,9 @@ public class PrivilegeCheckerTest {
             authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(),
                             Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any()))
                     .thenCallRealMethod();
+            authorizerMockedStatic.when(() -> Authorizer.checkColumnsAction(Mockito.any(), Mockito.any(),
+                            Mockito.any(), Mockito.any(), Mockito.any()))
+                    .thenCallRealMethod();
 
             String sql = "select * from db_for_ranger.tbl1";
 
