@@ -80,7 +80,7 @@ import com.starrocks.thrift.TLoadInfo;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
-import com.starrocks.transaction.BeginTransactionException;
+import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TableCommitInfo;
 import com.starrocks.transaction.TransactionException;
 import com.starrocks.transaction.TransactionState;
@@ -415,7 +415,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     }
 
     public void beginTxn()
-            throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
+            throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
     }
 
     /**
@@ -423,11 +423,11 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
      * if job has been cancelled, this step will be ignored
      *
      * @throws LabelAlreadyUsedException  the job is duplicated
-     * @throws BeginTransactionException  the limit of load job is exceeded
+     * @throws RunningTxnExceedException  the limit of load job is exceeded
      * @throws AnalysisException          there are error params in job
      * @throws DuplicatedRequestException
      */
-    public void execute() throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException,
+    public void execute() throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException,
             DuplicatedRequestException, LoadException {
         writeLock();
         try {
@@ -437,7 +437,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         }
     }
 
-    public void unprotectedExecute() throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException,
+    public void unprotectedExecute() throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException,
             DuplicatedRequestException, LoadException {
         // check if job state is pending
         if (state != JobState.PENDING) {
@@ -674,7 +674,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         state = JobState.FINISHED;
 
-        if (MetricRepo.isInit) {
+        if (MetricRepo.hasInit) {
             MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
         }
         // when load job finished, there is no need to hold the tasks which are the biggest memory consumers.

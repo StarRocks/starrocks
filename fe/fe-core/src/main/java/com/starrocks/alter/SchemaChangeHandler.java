@@ -1621,14 +1621,20 @@ public class SchemaChangeHandler extends AlterHandler {
                 fastSchemaEvolution);
 
         if (fastSchemaEvolution) {
-            long jobId = GlobalStateMgr.getCurrentState().getNextId();
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            long jobId = globalStateMgr.getNextId();
             long txnId = GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
             long startTime = ConnectContext.get().getStartTime();
             // for schema change add/drop value column optimize, direct modify table meta.
             // when modify this, please also pay attention to the OlapTable#copyOnlyForQuery() operation.
             // try to copy first before modifying, avoiding in-place changes.
+            Map<Long, Long> indexToNewSchemaId = new HashMap<Long, Long>();
+            for (Long alterIndexId : indexSchemaMap.keySet()) {
+                indexToNewSchemaId.put(alterIndexId, globalStateMgr.getNextId());
+            }
+            //for schema change add/drop value column optimize, direct modify table meta.
             modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, newIndexes, jobId, txnId, startTime,
-                                        addColumnsName, false);
+                                        addColumnsName, indexToNewSchemaId, false);
             return null;
         } else {
             return createJob(db.getId(), olapTable, indexSchemaMap, propertyMap, newIndexes);
@@ -2387,7 +2393,8 @@ public class SchemaChangeHandler extends AlterHandler {
     public void modifyTableAddOrDropColumns(Database db, OlapTable olapTable,
                                             Map<Long, LinkedList<Column>> indexSchemaMap,
                                             List<Index> indexes, long jobId, long txnId, long startTime,
-                                            Set<String> addColumnsName, boolean isReplay)
+                                            Set<String> addColumnsName, Map<Long, Long> indexToNewSchemaId, 
+                                            boolean isReplay)
             throws DdlException, NotImplementedException {
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
@@ -2418,7 +2425,12 @@ public class SchemaChangeHandler extends AlterHandler {
                 List<Column> alterSchema = indexSchemaMap.get(alterIndexId);
 
                 LOG.debug("index[{}] is changed. start checking...", alterIndexId);
-                // 1. check order: a) has key; b) value after key
+                // 1. check new schema id
+                if (indexToNewSchemaId != null && !indexToNewSchemaId.containsKey(alterIndexId)) {
+                    throw new DdlException("index[" + olapTable.getIndexNameById(alterIndexId) + "] does not assign" +
+                                           " new schema id");
+                }
+                // 2. check order: a) has key; b) value after key
                 boolean meetValue = false;
                 boolean hasKey = false;
                 for (Column column : alterSchema) {
@@ -2437,7 +2449,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     throw new DdlException("No key column left. index[" + olapTable.getIndexNameById(alterIndexId) + "]");
                 }
 
-                // 2. check partition key
+                // 3. check partition key
                 PartitionInfo partitionInfo = olapTable.getPartitionInfo();
                 if (partitionInfo.getType() == PartitionType.RANGE || partitionInfo.getType() == PartitionType.LIST) {
                     List<Column> partitionColumns = partitionInfo.getPartitionColumns();
@@ -2459,7 +2471,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     } // end for partitionColumns
                 }
 
-                // 3. check distribution key:
+                // 4. check distribution key:
                 DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
                 if (distributionInfo.getType() == DistributionInfoType.HASH) {
                     List<Column> distributionColumns = ((HashDistributionInfo) distributionInfo).getDistributionColumns();
@@ -2528,7 +2540,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 // upgrade from old version and replay task, addColumnsName maybe null
                 if (addColumnsName != null) {
                     for (String columnName : addColumnsName) {
-                        Optional<Column> col = indexSchema.stream().filter(c -> c.getName() == columnName).findFirst();
+                        Optional<Column> col = indexSchema.stream().filter(c -> c.nameEquals(columnName, true)).findFirst();
                         if (!col.isPresent()) {
                             continue;
                         }
@@ -2552,6 +2564,11 @@ public class SchemaChangeHandler extends AlterHandler {
                 currentIndexMeta.setSchemaVersion(newSchemaVersion);
                 // update the indexIdToMeta
                 olapTable.getIndexIdToMeta().put(idx, currentIndexMeta);
+                // if FE upgrade from old version and replay journal, the indexToNewSchemaId maybe null
+                if (indexToNewSchemaId != null) {
+                    currentIndexMeta.setSchemaId(indexToNewSchemaId.get(idx));
+                }
+
                 schemaChangeJob.addIndexSchema(idx, idx, olapTable.getIndexNameById(idx), newSchemaVersion,
                                                currentIndexMeta.getSchemaHash(), currentIndexMeta.getShortKeyColumnCount(),
                                                indexSchema);
@@ -2573,7 +2590,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
             if (!isReplay) {
                 TableAddOrDropColumnsInfo info = new TableAddOrDropColumnsInfo(db.getId(), olapTable.getId(),
-                        indexSchemaMap, indexes, jobId, txnId, startTime, addColumnsName);
+                        indexSchemaMap, indexes, jobId, txnId, startTime, addColumnsName, indexToNewSchemaId);
                 LOG.debug("logModifyTableAddOrDropColumns info:{}", info);
                 GlobalStateMgr.getCurrentState().getEditLog().logModifyTableAddOrDropColumns(info);
             }
@@ -2597,6 +2614,7 @@ public class SchemaChangeHandler extends AlterHandler {
         long dbId = info.getDbId();
         long tableId = info.getTableId();
         Map<Long, LinkedList<Column>> indexSchemaMap = info.getIndexSchemaMap();
+        Map<Long, Long> indexToNewSchemaId = info.getIndexToNewSchemaId();
         List<Index> indexes = info.getIndexes();
         long jobId = info.getJobId();
 
@@ -2608,8 +2626,9 @@ public class SchemaChangeHandler extends AlterHandler {
         Locker locker = new Locker();
         try {
             locker.lockDatabase(db, LockType.WRITE);
-            modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, indexes, jobId, info.getTxnId(), 
-                                        info.getStartTime(), info.getAddColumnsName(), true);
+            modifyTableAddOrDropColumns(db, olapTable, indexSchemaMap, indexes, jobId, info.getTxnId(),
+                                        info.getStartTime(), info.getAddColumnsName(), indexToNewSchemaId, 
+                                        true);
         } catch (DdlException e) {
             // should not happen
             LOG.warn("failed to replay modify table add or drop columns", e);

@@ -23,6 +23,7 @@
 #include <vector>
 
 #include "column/column_builder.h"
+#include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -150,11 +151,11 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
 
         datum.value = phi;
 
-        if (!expr->is_nullable()) {
+        if (expr->is_constant() || !expr->is_nullable()) {
             datums.emplace_back(datum);
             continue;
         }
-        if (input_exprs[i]->is_nullable()) {
+        if (!input_exprs[i]->is_constant() && input_exprs[i]->is_nullable()) {
             // TODO(Yueyang): check if need to trans null to Int1Ty.
 
             // Pseudo code: auto* is_null_n = nullable_n ? null_flags_n[counter] : false;
@@ -194,7 +195,7 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
     // values_last[counter] = result_value;
     // null_flags_last[counter] = result_null_flag;
     b.CreateStore(result.value, b.CreateInBoundsGEP(columns.back().value_type, columns.back().values, counter_phi));
-    if (expr->is_nullable()) {
+    if (!expr->is_constant() && expr->is_nullable()) {
         b.CreateStore(result.null_flag, b.CreateInBoundsGEP(b.getInt8Ty(), columns.back().null_flags, counter_phi));
     }
 
@@ -258,16 +259,16 @@ Status JITFunction::llvm_function(JITScalarFunction jit_function, const Columns&
     jit_columns.reserve(columns.size());
     // Extract data and null_data pointers from columns to generate JIT columns.
     for (const auto& column : columns) {
-        auto data_column = FunctionHelper::get_data_column_of_nullable(column);
+        auto data_column = ColumnHelper::get_data_column(column.get());
         auto datums = reinterpret_cast<const int8_t*>(data_column->raw_data());
 
         const int8_t* null_flags = nullptr;
-        if (column->is_nullable()) {
+        if (!column->is_constant() && column->is_nullable()) {
             null_flags = reinterpret_cast<const int8_t*>(
                     ColumnHelper::as_raw_column<NullableColumn>(column)->null_column()->raw_data());
         }
 
-        jit_columns.emplace_back(JITColumn{data_column->is_constant(), datums, null_flags});
+        jit_columns.emplace_back(JITColumn{column->is_constant(), datums, null_flags});
     }
 
     // Evaluate.

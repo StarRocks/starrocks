@@ -17,7 +17,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
-import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
@@ -138,7 +137,6 @@ public class AnalyzeAlterTableStatementTest {
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                 "PROPERTIES('replication_num' = '1');");
-        Config.enable_experimental_mv = true;
         AnalyzeTestUtil.getStarRocksAssert().withMaterializedView("CREATE MATERIALIZED VIEW mv1_partition_by_column \n" +
                 "PARTITION BY k1 \n" +
                 "distributed by hash(k2) \n" +

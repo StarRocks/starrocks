@@ -49,11 +49,11 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CUSTOM_PROPERTIES_PREFIX;
+import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static org.apache.iceberg.CatalogProperties.WAREHOUSE_LOCATION;
 
 public class IcebergHadoopCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(IcebergHadoopCatalog.class);
-    public static final String LOCATION_PROPERTY = "location";
 
     private final Configuration conf;
     private final HadoopCatalog delegate;
@@ -182,6 +182,11 @@ public class IcebergHadoopCatalog implements IcebergCatalog {
     @Override
     public boolean dropTable(String dbName, String tableName, boolean purge) {
         return delegate.dropTable(TableIdentifier.of(dbName, tableName), purge);
+    }
+
+    @Override
+    public void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException {
+        delegate.renameTable(TableIdentifier.of(dbName, tblName), TableIdentifier.of(dbName, newTblName));
     }
 
     @Override

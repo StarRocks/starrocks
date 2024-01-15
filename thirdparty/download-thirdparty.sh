@@ -302,6 +302,7 @@ fi
 if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.3.0" ]; then
     patch -p1 < $TP_PATCH_DIR/brpc-1.3.0.patch
     patch -p1 < $TP_PATCH_DIR/brpc-1.3.0-CVE-2023-31039.patch
+    patch -p1 < $TP_PATCH_DIR/brpc-1.3.0-2479.patch
     touch $PATCHED_MARK
 fi
 cd -

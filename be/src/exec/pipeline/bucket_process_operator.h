@@ -31,13 +31,22 @@ struct BucketProcessContext {
     std::atomic_bool finished{};
     std::atomic_bool all_input_finishing{};
     std::atomic_bool current_bucket_sink_finished{};
+    // The tokens BucketSink::set_finishing and BucketSource::pull_chunk may have races.
+    // the party that gets the token performs the final state recovery.
     std::atomic_bool token{};
+    // The final condition for reset_version and sink_complete_version needs to satisfy sink_complete_version = reset_version + 1.
+    // This value is incremented every time operator->reset_state is executed.
+    std::atomic_int reset_version{};
+    // This value is incremented every time operator->set_finishing is executed.
+    std::atomic_int sink_complete_version{};
 
     OperatorPtr source;
     OperatorPtr sink;
     SpillProcessChannelPtr spill_channel;
 
     Status reset_operator_state(RuntimeState* state);
+
+    Status finish_current_sink(RuntimeState* state);
 };
 using BucketProcessContextPtr = std::shared_ptr<BucketProcessContext>;
 

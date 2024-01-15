@@ -51,6 +51,7 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
@@ -162,6 +163,10 @@ public class BackupJob extends AbstractJob {
 
     public void setTestPrimaryKey() {
         testPrimaryKey = true;
+    }
+
+    public Path getLocalJobDirPath() {
+        return localJobDirPath;
     }
 
     public BackupJobState getState() {
@@ -508,6 +513,11 @@ public class BackupJob extends AbstractJob {
                 if (copiedTbl == null) {
                     status = new Status(ErrCode.COMMON_ERROR, "faild to copy table: " + tblName);
                     return;
+                }
+                if (copiedTbl.isMaterializedView()) {
+                    MaterializedView copiedMv = (MaterializedView) copiedTbl;
+                    copiedMv.setInactiveAndReason(String.format("Set the materialized view %s inactive in backup and " +
+                            "active it in restore if possible", copiedMv.getName()));
                 }
                 copiedTables.add(copiedTbl);
             }

@@ -154,16 +154,17 @@ public class ShortCircuitPlanner {
             }
             long cardinality = 1;
             for (String keyColumn : keyColumns) {
-                if (!filters.containsKey(keyColumn)) {
-                    return false;
-                }
-                PartitionColumnFilter filter = filters.get(keyColumn);
-                if (filter.getInPredicateLiterals() != null) {
-                    cardinality *= filter.getInPredicateLiterals().size();
-                    if (cardinality > MAX_RETURN_ROWS) {
+                if (filters.containsKey(keyColumn)) {
+                    PartitionColumnFilter filter = filters.get(keyColumn);
+                    if (filter.getInPredicateLiterals() != null) {
+                        cardinality *= filter.getInPredicateLiterals().size();
+                        if (cardinality > MAX_RETURN_ROWS) {
+                            return false;
+                        }
+                    } else if (!filter.isPoint()) {
                         return false;
                     }
-                } else if (!filter.isPoint()) {
+                } else {
                     return false;
                 }
             }

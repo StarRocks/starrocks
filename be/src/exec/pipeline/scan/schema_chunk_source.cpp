@@ -18,7 +18,6 @@
 
 #include "exec/schema_scanner.h"
 #include "exec/workgroup/work_group.h"
-#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
@@ -51,11 +50,7 @@ Status SchemaChunkSource::prepare(RuntimeState* state) {
     }
 
     RETURN_IF_ERROR(_schema_scanner->init(param, _ctx->object_pool()));
-    RETURN_IF_ERROR(_prepare_slot(state));
-    return _schema_scanner->start(state);
-}
 
-Status SchemaChunkSource::_prepare_slot(RuntimeState* state) {
     const std::vector<SlotDescriptor*>& src_slot_descs = _schema_scanner->get_slot_descs();
     const std::vector<SlotDescriptor*>& dest_slot_descs = _dest_tuple_desc->slots();
     int slot_num = dest_slot_descs.size();
@@ -85,7 +80,8 @@ Status SchemaChunkSource::_prepare_slot(RuntimeState* state) {
         _index_map[i] = j;
     }
     _accumulator.set_desired_size(state->chunk_size());
-    return {};
+
+    return _schema_scanner->start(state);
 }
 
 void SchemaChunkSource::close(RuntimeState* state) {}
@@ -131,14 +127,10 @@ Status SchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     bool scanner_eos = false;
     int32_t row_num = 0;
 
-    _schema_scanner->set_runtime_state(state);
     while (!scanner_eos && chunk_dst->is_empty()) {
         while (row_num < state->chunk_size()) {
-            Status st = _schema_scanner->get_next(&chunk_src, &scanner_eos);
-            if (st.is_eagain()) {
-                RETURN_IF_ERROR(_prepare_slot(state));
-                return st;
-            } else if (scanner_eos) {
+            RETURN_IF_ERROR(_schema_scanner->get_next(&chunk_src, &scanner_eos));
+            if (scanner_eos) {
                 if (row_num == 0) {
                     return Status::EndOfFile("end of file");
                 }

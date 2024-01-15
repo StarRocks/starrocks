@@ -15,8 +15,8 @@
 package com.starrocks.schema;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import org.apache.parquet.Strings;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -56,6 +56,24 @@ public class MTable {
         this.distCol = distCol;
         this.partCol = partCol;
         this.partKeys = partKeys;
+    }
+
+    public MTable copyWithName(String newTableName) {
+        MTable mTable = new MTable(newTableName, this.distCol, Lists.newArrayList(this.columns));
+        mTable.partCol = this.partCol;
+        mTable.duplicateKeys = this.duplicateKeys;
+        if (this.partKeys != null) {
+            mTable.partKeys = Lists.newArrayList(this.partKeys);
+        }
+        mTable.bucketNum = this.bucketNum;
+        mTable.replicateNum = this.replicateNum;
+        if (this.values != null) {
+            mTable.values = Lists.newArrayList(this.values);
+        }
+        if (this.properties != null) {
+            mTable.properties = Lists.newArrayList(this.properties);
+        }
+        return mTable;
     }
 
     public String getTableName() {

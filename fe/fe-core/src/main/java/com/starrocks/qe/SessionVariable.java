@@ -276,7 +276,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_GROUPBY_USE_OUTPUT_ALIAS = "enable_groupby_use_output_alias";
     public static final String ENABLE_QUERY_DUMP = "enable_query_dump";
     public static final String QUERY_DEBUG_OPTIONS = "query_debug_options";
+
+    // --------------------------- Limitations for Materialized View ------------------------------------ //
     public static final String OPTIMIZER_MATERIALIZED_VIEW_TIMELIMIT = "optimizer_materialized_view_timelimit";
+    public static final String CBO_MATERIALIZED_VIEW_REWRITE_RULE_OUTPUT_LIMIT =
+            "cbo_materialized_view_rewrite_rule_output_limit";
+    public static final String CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT =
+            "cbo_materialized_view_rewrite_candidate_limit";
 
     public static final String CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE = "cbo_max_reorder_node_use_exhaustive";
     public static final String CBO_ENABLE_DP_JOIN_REORDER = "cbo_enable_dp_join_reorder";
@@ -391,6 +397,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
     public static final String ENABLE_PER_BUCKET_OPTIMIZE = "enable_per_bucket_optimize";
     public static final String ENABLE_PARALLEL_MERGE = "enable_parallel_merge";
+    public static final String ENABLE_QUERY_QUEUE = "enable_query_queue";
 
     public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
 
@@ -412,6 +419,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CONNECTOR_IO_TASKS_SLOW_IO_LATENCY_MS = "connector_io_tasks_slow_io_latency_ms";
     public static final String SCAN_USE_QUERY_MEM_RATIO = "scan_use_query_mem_ratio";
     public static final String CONNECTOR_SCAN_USE_QUERY_MEM_RATIO = "connector_scan_use_query_mem_ratio";
+    public static final String CONNECTOR_SINK_COMPRESSION_CODEC = "connector_sink_compression_codec";
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
@@ -428,6 +436,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
+    public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE =
+            "enable_materialized_view_rewrite_partition_compensate";
 
     public static final String LARGE_DECIMAL_UNDERLYING_TYPE = "large_decimal_underlying_type";
 
@@ -520,6 +530,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String SPILL_OPERATOR_MAX_BYTES = "spill_operator_max_bytes";
     public static final String SPILL_REVOCABLE_MAX_BYTES = "spill_revocable_max_bytes";
     public static final String SPILL_ENABLE_DIRECT_IO = "spill_enable_direct_io";
+    // only used in test. spill_mode="RANDOM"
+    public static final String SPILL_RAND_RATIO = "spill_rand_ratio";
     public static final String SPILL_ENCODE_LEVEL = "spill_encode_level";
 
     // full_sort_max_buffered_{rows,bytes} are thresholds that limits input size of partial_sort
@@ -600,6 +612,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_EQ_BASE_TYPE = "cbo_eq_base_type";
 
     public static final String ENABLE_SHORT_CIRCUIT = "enable_short_circuit";
+
+    public static final String ENABLE_PREPARE_STMT = "enable_prepare_stmt";
 
     public static final String ENABLE_HYPERSCAN_VEC = "enable_hyperscan_vec";
 
@@ -957,6 +971,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     
     @VarAttr(name = SPILL_ENABLE_DIRECT_IO)
     private boolean spillEnableDirectIO = false;
+    
+    @VarAttr(name = SPILL_RAND_RATIO, flag = VariableMgr.INVISIBLE)
+    private double spillRandRatio = 0.1;
 
     @VarAttr(name = ENABLE_AGG_SPILL_PREAGGREGATION, flag = VariableMgr.INVISIBLE)
     public boolean enableAggSpillPreaggregation = true;
@@ -1205,6 +1222,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_PARALLEL_MERGE)
     private boolean enableParallelMerge = true;
 
+    @VarAttr(name = ENABLE_QUERY_QUEUE, flag = VariableMgr.INVISIBLE)
+    private boolean enableQueryQueue = true;
+
     // 1: sort based, 2: hash based
     @VarAttr(name = WINDOW_PARTITION_MODE, flag = VariableMgr.INVISIBLE)
     private int windowPartitionMode = 1;
@@ -1309,6 +1329,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableParallelMerge = enableParallelMerge;
     }
 
+    public boolean isEnableQueryQueue() {
+        return enableQueryQueue;
+    }
+
     @VariableMgr.VarAttr(name = ENABLE_SCAN_DATACACHE, alias = ENABLE_SCAN_BLOCK_CACHE)
     private boolean enableScanDataCache = false;
 
@@ -1335,6 +1359,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CONNECTOR_SCAN_USE_QUERY_MEM_RATIO)
     private double connectorScanUseQueryMemRatio = 0.3;
+
+    @VariableMgr.VarAttr(name = CONNECTOR_SINK_COMPRESSION_CODEC)
+    private String connectorSinkCompressionCodec = "uncompressed";
+
+    public String getConnectorSinkCompressionCodec() {
+        return connectorSinkCompressionCodec;
+    }
 
     @VariableMgr.VarAttr(name = ENABLE_FILE_METACACHE)
     private boolean enableFileMetaCache = true;
@@ -1381,6 +1412,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_UNION_REWRITE)
     private boolean enableMaterializedViewUnionRewrite = true;
 
+    /**
+     * Whether to compensate partition predicates in mv rewrite, see
+     * <code>Materialization#isCompensatePartitionPredicate</code> for more details.
+     * NOTE: if set it false, it will be rewritten by the mv defined sql with user's query and will not add
+     * extra compensated predicates which can rewrite more cases but may lose consistency check.
+     */
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE_PARTITION_COMPENSATE, flag = VariableMgr.INVISIBLE)
+    private boolean enableMaterializedViewRewritePartitionCompensate = true;
+
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableRuleBasedMaterializedViewRewrite = true;
 
@@ -1413,6 +1453,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_VIEW_BASED_MV_REWRITE)
     private boolean enableViewBasedMvRewrite = false;
+
+    /**
+     * Materialized view rewrite rule output limit: how many MVs would be chosen in a Rule for an OptExpr ?
+     */
+    @VarAttr(name = CBO_MATERIALIZED_VIEW_REWRITE_RULE_OUTPUT_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int cboMaterializedViewRewriteRuleOutputLimit = 3;
+
+    /**
+     * Materialized view rewrite candidate limit: how many MVs would be considered in a Rule for an OptExpr ?
+     */
+    @VarAttr(name = CBO_MATERIALIZED_VIEW_REWRITE_CANDIDATE_LIMIT, flag = VariableMgr.INVISIBLE)
+    private int cboMaterializedViewRewriteCandidateLimit = 12;
 
     @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
     private String queryExcludingMVNames = "";
@@ -1534,6 +1586,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_SHORT_CIRCUIT)
     private boolean enableShortCircuit = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_PREPARE_STMT)
+    private boolean enablePrepareStmt = true;
 
     @VarAttr(name = ENABLE_JIT)
     private boolean enableJit = true;
@@ -2223,6 +2278,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableQueryDump;
     }
 
+    public void setEnableQueryDump(boolean enable) {
+        this.enableQueryDump = enable;
+    }
+
     public boolean getEnableGlobalRuntimeFilter() {
         return enableGlobalRuntimeFilter;
     }
@@ -2711,6 +2770,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableRuleBasedMaterializedViewRewrite = enableRuleBasedMaterializedViewRewrite;
     }
 
+    public boolean isEnableMaterializedViewRewritePartitionCompensate() {
+        return enableMaterializedViewRewritePartitionCompensate;
+    }
+
+    public void setEnableMaterializedViewRewritePartitionCompensate(boolean enableMaterializedViewRewritePartitionCompensate) {
+        this.enableMaterializedViewRewritePartitionCompensate = enableMaterializedViewRewritePartitionCompensate;
+    }
+
     public boolean isEnableMaterializedViewViewDeltaRewrite() {
         return enableMaterializedViewViewDeltaRewrite;
     }
@@ -2754,6 +2821,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableViewBasedMvRewrite() {
         return this.enableViewBasedMvRewrite;
+    }
+
+    public int getCboMaterializedViewRewriteRuleOutputLimit() {
+        return cboMaterializedViewRewriteRuleOutputLimit;
+    }
+
+    public void setCboMaterializedViewRewriteRuleOutputLimit(int limit) {
+        this.cboMaterializedViewRewriteRuleOutputLimit = limit;
+    }
+
+    public int getCboMaterializedViewRewriteCandidateLimit() {
+        return cboMaterializedViewRewriteCandidateLimit;
+    }
+
+    public void setCboMaterializedViewRewriteCandidateLimit(int limit) {
+        this.cboMaterializedViewRewriteCandidateLimit = limit;
     }
 
     public String getQueryExcludingMVNames() {
@@ -2992,6 +3075,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboDeriveJoinIsNullPredicate;
     }
 
+    public void setCboEqBaseType(String cboEqBaseType) {
+        this.cboEqBaseType = cboEqBaseType;
+    }
+
     public boolean isAuditExecuteStmt() {
         return auditExecuteStmt;
     }
@@ -3002,6 +3089,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableShortCircuit() {
         return enableShortCircuit;
+    }
+
+    public boolean isEnablePrepareStmt() {
+        return enablePrepareStmt;
+    }
+
+    public void setEnablePrepareStmt(boolean enablePrepareStmt) {
+        this.enablePrepareStmt = enablePrepareStmt;
     }
 
     public void setLargeDecimalUnderlyingType(String type) {
@@ -3090,6 +3185,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setSpillable_operator_mask(spillableOperatorMask);
             tResult.setEnable_agg_spill_preaggregation(enableAggSpillPreaggregation);
             tResult.setSpill_enable_direct_io(spillEnableDirectIO);
+            tResult.setSpill_rand_ratio(spillRandRatio);
         }
 
         // Compression Type

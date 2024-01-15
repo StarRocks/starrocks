@@ -187,17 +187,21 @@ Status ShortCircuitExecutor::execute() {
     ChunkPtr chunk;
     bool eos = false;
     while (true) {
-        RETURN_IF_ERROR(_source->get_next(runtime_state(), &chunk, &eos));
         if (eos) {
-            if (chunk->has_rows()) {
-                RETURN_IF_ERROR(_sink->send_chunk(runtime_state(), chunk.get()));
-            }
             break;
         }
-        RETURN_IF_ERROR(_sink->send_chunk(runtime_state(), chunk.get()));
+        RETURN_IF_ERROR(_source->get_next(runtime_state(), &chunk, &eos));
+        if (nullptr == chunk) {
+            break;
+        }
+        eos = true;
         if (!_results.empty()) {
+            _source->close(runtime_state());
+            _finish = true;
+            close();
             return Status::NotSupported("Not support multi result set yet");
         }
+        RETURN_IF_ERROR(_sink->send_chunk(runtime_state(), chunk.get()));
     }
     _source->close(runtime_state());
     _finish = true;
@@ -234,6 +238,10 @@ Status ShortCircuitExecutor::build_source_exec_node(starrocks::ObjectPool* pool,
                 new ShortCircuitHybridScanNode(pool, t_node, descs, scan_range, _runtime_profile, *_common_request));
         break;
     }
+    case TPlanNodeType::PROJECT_NODE:
+    case TPlanNodeType::UNION_NODE: // values
+        RETURN_IF_ERROR(ExecNode::create_vectorized_node(runtime_state(), pool, t_node, descs, node));
+        break;
     default:
         return Status::InternalError(strings::Substitute("Short circuit not support node: $0", t_node.node_type));
     }

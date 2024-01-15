@@ -49,8 +49,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.catalog.TabletInvertedIndex;
-import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DuplicatedRequestException;
@@ -79,7 +77,6 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -98,7 +95,6 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
-
 /**
  * Transaction Manager in database level, as a component in GlobalTransactionMgr
  * DatabaseTransactionMgr mainly be responsible for the following content:
@@ -109,39 +105,48 @@ import javax.validation.constraints.NotNull;
  */
 
 public class DatabaseTransactionMgr {
-
     public static final String TXN_TIMEOUT_BY_MANAGER = "timeout by txn manager";
     private static final Logger LOG = LogManager.getLogger(DatabaseTransactionMgr.class);
     private final TransactionStateListenerFactory stateListenerFactory = new TransactionStateListenerFactory();
     private final TransactionLogApplierFactory txnLogApplierFactory = new TransactionLogApplierFactory();
-    private long dbId;
-    // the lock is used to control the access to transaction states
-    // no other locks should be inside this lock
-    private ReentrantReadWriteLock transactionLock = new ReentrantReadWriteLock(true);
-    // transactionId -> running TransactionState
-    private Map<Long, TransactionState> idToRunningTransactionState = Maps.newHashMap();
-    // transactionId -> final status TransactionState
-    private Map<Long, TransactionState> idToFinalStatusTransactionState = Maps.newHashMap();
-    // to store transtactionStates with final status
-    private ArrayDeque<TransactionState> finalStatusTransactionStateDeque = new ArrayDeque<>();
-    // store committed transactions' dependency relationships
-    private TransactionGraph transactionGraph = new TransactionGraph();
+    private final GlobalStateMgr globalStateMgr;
+    private final EditLog editLog;
 
-    // label -> txn ids
-    // this is used for checking if label already used. a label may correspond to multiple txns,
-    // and only one is success.
-    // this member should be consistent with idToTransactionState,
-    // which means if a txn exist in idToRunningTransactionState or idToFinalStatusTransactionState
-    // it must exists in dbIdToTxnLabels, and vice versa
-    private Map<String, Set<Long>> labelToTxnIds = Maps.newHashMap();
-    // count the number of running txns of database, except for the routine load txn
-    private int runningTxnNums = 0;
-    // count only the number of running routine load txns of database
-    private int runningRoutineLoadTxnNums = 0;
-    private GlobalStateMgr globalStateMgr;
-    private EditLog editLog;
+    // The id of the database that shapeless.the current transaction manager is responsible for
+    private final long dbId;
+
     // not realtime usedQuota value to make a fast check for database data quota
     private volatile long usedQuotaDataBytes = -1;
+
+    /*
+     * transactionLock is used to control the access to database transaction manager data
+     * Modifications to the following multiple data structures must be protected by this lock
+     * */
+    private final ReentrantReadWriteLock transactionLock = new ReentrantReadWriteLock(true);
+
+    // count the number of running transactions of database, except for shapeless.the routine load txn
+    private int runningTxnNums = 0;
+
+    // count only the number of running routine load transactions of database
+    private int runningRoutineLoadTxnNums = 0;
+
+    /*
+     * idToRunningTransactionState: transactionId -> running TransactionState
+     * idToFinalStatusTransactionState: transactionId -> final status TransactionState
+     * finalStatusTransactionStateDeque: to store transactionStates with final status
+     * */
+    private final Map<Long, TransactionState> idToRunningTransactionState = Maps.newHashMap();
+    private final Map<Long, TransactionState> idToFinalStatusTransactionState = Maps.newHashMap();
+    private final ArrayDeque<TransactionState> finalStatusTransactionStateDeque = new ArrayDeque<>();
+
+    // store committed transactions' dependency relationships
+    private final TransactionGraph transactionGraph = new TransactionGraph();
+
+    /*
+     * `labelToTxnIds` is used for checking if label already used. map label to transaction id
+     * One label may correspond to multiple transactions, and only one is success.
+     */
+    private final Map<String, Set<Long>> labelToTxnIds = Maps.newHashMap();
     private long maxCommitTs = 0;
 
     public DatabaseTransactionMgr(long dbId, GlobalStateMgr globalStateMgr) {
@@ -275,7 +280,7 @@ public class DatabaseTransactionMgr {
     public long beginTransaction(List<Long> tableIdList, String label, TUniqueId requestId,
                                  TransactionState.TxnCoordinator coordinator,
                                  TransactionState.LoadJobSourceType sourceType, long listenerId, long timeoutSecond)
-            throws DuplicatedRequestException, LabelAlreadyUsedException, BeginTransactionException, AnalysisException {
+            throws DuplicatedRequestException, LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException {
         checkDatabaseDataQuota();
         writeLock();
         try {
@@ -317,7 +322,7 @@ public class DatabaseTransactionMgr {
             checkRunningTxnExceedLimit(sourceType);
 
             long tid = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
-            LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listner id: {}",
+            LOG.info("begin transaction: txn_id: {} with label {} from coordinator {}, listener id: {}",
                     tid, label, coordinator, listenerId);
             TransactionState transactionState =
                     new TransactionState(dbId, tableIdList, tid, label, requestId, sourceType,
@@ -325,7 +330,7 @@ public class DatabaseTransactionMgr {
             transactionState.setPrepareTime(System.currentTimeMillis());
             unprotectUpsertTransactionState(transactionState, false);
 
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_BEGIN.increase(1L);
             }
 
@@ -333,7 +338,7 @@ public class DatabaseTransactionMgr {
         } catch (DuplicatedRequestException e) {
             throw e;
         } catch (Exception e) {
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_REJECT.increase(1L);
             }
             throw e;
@@ -355,8 +360,7 @@ public class DatabaseTransactionMgr {
         long dataQuotaBytes = db.getDataQuota();
         if (usedQuotaDataBytes >= dataQuotaBytes) {
             Pair<Double, String> quotaUnitPair = DebugUtil.getByteUint(dataQuotaBytes);
-            String readableQuota = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(quotaUnitPair.first) + " "
-                    + quotaUnitPair.second;
+            String readableQuota = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(quotaUnitPair.first) + " " + quotaUnitPair.second;
             throw new AnalysisException("Database[" + db.getOriginName()
                     + "] data size exceeds quota[" + readableQuota + "]");
         }
@@ -423,8 +427,6 @@ public class DatabaseTransactionMgr {
         Span txnSpan = transactionState.getTxnSpan();
         txnSpan.setAttribute("db", db.getOriginName());
         txnSpan.addEvent("commit_start");
-
-        ensureTableIdListIsPresent(transactionState, tabletCommitInfos);
 
         List<TransactionStateListener> stateListeners = populateTransactionStateListeners(transactionState, db);
 
@@ -519,10 +521,7 @@ public class DatabaseTransactionMgr {
 
         Span txnSpan = transactionState.getTxnSpan();
         txnSpan.setAttribute("db", db.getFullName());
-        StringBuilder tableListString = new StringBuilder();
         txnSpan.addEvent("pre_commit_start");
-
-        ensureTableIdListIsPresent(transactionState, tabletCommitInfos);
 
         List<TransactionStateListener> stateListeners = populateTransactionStateListeners(transactionState, db);
         String tableNames = stateListeners.stream().map(TransactionStateListener::getTableName)
@@ -589,7 +588,6 @@ public class DatabaseTransactionMgr {
         StringBuilder tableListString = new StringBuilder();
         txnSpan.addEvent("commit_start");
 
-        List<TransactionStateListener> stateListeners = Lists.newArrayList();
         for (Long tableId : transactionState.getTableIdList()) {
             Table table = db.getTable(tableId);
             if (table == null) {
@@ -722,7 +720,7 @@ public class DatabaseTransactionMgr {
         readLock();
         try {
             List<Long> txnIds = transactionGraph.getTxnsWithoutDependency();
-            return txnIds.stream().map(id -> idToRunningTransactionState.get(id)).collect(Collectors.toList());
+            return txnIds.stream().map(idToRunningTransactionState::get).collect(Collectors.toList());
         } finally {
             readUnlock();
         }
@@ -738,7 +736,7 @@ public class DatabaseTransactionMgr {
                 List<Long> txnsWithDependency = transactionGraph.getTxnsWithTxnDependencyBatch(
                         Config.lake_batch_publish_min_version_num,
                         Config.lake_batch_publish_max_version_num, txnId);
-                List<TransactionState> states = txnsWithDependency.stream().map(id -> idToRunningTransactionState.get(id))
+                List<TransactionState> states = txnsWithDependency.stream().map(idToRunningTransactionState::get)
                         .filter(Objects::nonNull)
                         .collect(Collectors.toList());
                 if (states.isEmpty()) {
@@ -1535,8 +1533,7 @@ public class DatabaseTransactionMgr {
         return infos;
     }
 
-    protected void checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType sourceType)
-            throws BeginTransactionException {
+    protected void checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType sourceType) throws RunningTxnExceedException {
         switch (sourceType) {
             case ROUTINE_LOAD_TASK:
                 // no need to check limit for routine load task:
@@ -1550,7 +1547,7 @@ public class DatabaseTransactionMgr {
                 break;
             default:
                 if (runningTxnNums >= Config.max_running_txn_num_per_db) {
-                    throw new BeginTransactionException("current running txns on db " + dbId + " is "
+                    throw new RunningTxnExceedException("current running txns on db " + dbId + " is "
                             + runningTxnNums + ", larger than limit " + Config.max_running_txn_num_per_db);
                 }
                 break;
@@ -1584,7 +1581,6 @@ public class DatabaseTransactionMgr {
         }
         return true;
     }
-
 
     // the write lock of database has been hold
     private boolean updateCatalogAfterVisibleBatch(TransactionStateBatch transactionStateBatch, Database db) {
@@ -1720,16 +1716,6 @@ public class DatabaseTransactionMgr {
         return infos;
     }
 
-    public void unprotectWriteAllTransactionStates(DataOutput out) throws IOException {
-        for (TransactionState transactionState : idToRunningTransactionState.values()) {
-            transactionState.write(out);
-        }
-
-        for (TransactionState transactionState : finalStatusTransactionStateDeque) {
-            transactionState.write(out);
-        }
-    }
-
     public void unprotectWriteAllTransactionStatesV2(SRMetaBlockWriter writer)
             throws IOException, SRMetaBlockException {
         for (TransactionState transactionState : idToRunningTransactionState.values()) {
@@ -1852,7 +1838,6 @@ public class DatabaseTransactionMgr {
         }
     }
 
-
     private void collectStatisticsForStreamLoadOnFirstLoadBatch(TransactionStateBatch txnStateBatch, Database db) {
         for (TransactionState txnState : txnStateBatch.getTransactionStates()) {
             collectStatisticsForStreamLoadOnFirstLoad(txnState, db);
@@ -1865,22 +1850,6 @@ public class DatabaseTransactionMgr {
             return "";
         }
         return transactionState.getPublishTimeoutDebugInfo();
-    }
-
-    private void ensureTableIdListIsPresent(@NotNull TransactionState transactionState,
-                                            @NotNull List<TabletCommitInfo> tabletCommitInfos) {
-        if (!transactionState.getTableIdList().isEmpty()) {
-            return;
-        }
-        Set<Long> tableSet = Sets.newHashSet();
-        List<Long> tabletIds = tabletCommitInfos.stream().map(TabletCommitInfo::getTabletId).collect(Collectors.toList());
-        List<TabletMeta> tabletMetaList = globalStateMgr.getTabletInvertedIndex().getTabletMetaList(tabletIds);
-        for (TabletMeta meta : tabletMetaList) {
-            if (meta != TabletInvertedIndex.NOT_EXIST_TABLET_META) {
-                tableSet.add(meta.getTableId());
-            }
-        }
-        transactionState.setTableIdList(Lists.newArrayList(tableSet));
     }
 
     @NotNull

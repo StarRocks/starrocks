@@ -114,6 +114,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
@@ -3801,7 +3802,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
             db.dropTable(oldTableName);
             db.registerTableUnlocked(olapTable);
-            inactiveRelatedMaterializedView(db, olapTable, String.format("based table %s renamed ", oldTableName));
+            inactiveRelatedMaterializedView(db, olapTable,
+                    MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(oldTableName));
         } finally {
             locker.unLockDatabase(db, LockType.WRITE);
         }
@@ -3828,7 +3830,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 mv.setInactiveAndReason(reason);
 
                 // recursive inactive
-                inactiveRelatedMaterializedView(db, mv, String.format("base table %s inactive", mv.getName()));
+                inactiveRelatedMaterializedView(db, mv,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableActive(mv.getName()));
             } else {
                 LOG.info("Ignore materialized view {} does not exists", mvId);
             }
@@ -3849,7 +3852,8 @@ public class LocalMetastore implements ConnectorMetadata {
             db.dropTable(tableName);
             table.setName(newTableName);
             db.registerTableUnlocked(table);
-            inactiveRelatedMaterializedView(db, table, String.format("base table {} renamed", tableName));
+            inactiveRelatedMaterializedView(db, table,
+                    MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(tableName));
 
             LOG.info("replay rename table[{}] to {}, tableId: {}", tableName, newTableName, table.getId());
         } finally {
@@ -4505,7 +4509,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
                 ModifyTablePropertyOperationLog info =
                         new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
-                GlobalStateMgr.getCurrentState().getEditLog().logSetHasForbitGlobalDict(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logSetHasForbiddenGlobalDict(info);
             }
         } finally {
             locker.unLockDatabase(db, LockType.READ);
@@ -4544,7 +4548,7 @@ public class LocalMetastore implements ConnectorMetadata {
         locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
-            if (opCode == OperationType.OP_SET_FORBIT_GLOBAL_DICT) {
+            if (opCode == OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT) {
                 String enAble = properties.get(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE);
                 Preconditions.checkState(enAble != null);
                 if (olapTable != null) {

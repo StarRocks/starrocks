@@ -16,18 +16,25 @@ package com.starrocks.planner;
 
 import com.google.api.client.util.Lists;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Maps;
+import com.starrocks.analysis.TableName;
+import com.starrocks.backup.Status;
+import com.starrocks.backup.mv.MVRestoreUpdater;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
+import org.apache.parquet.Strings;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 
 public class MaterializedViewTest extends MaterializedViewTestBase {
@@ -38,7 +45,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         MaterializedViewTestBase.beforeClass();
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
-        Config.default_replication_num = 1;
 
         starRocksAssert.useTable("depts");
         starRocksAssert.useTable("depts_null");
@@ -1232,8 +1238,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
-    // TODO: union all support
     public void testJoinAggregateMaterializationNoAggregateFuncs7() {
         testRewriteOK("select depts.deptno, dependents.empid\n"
                         + "from depts\n"
@@ -1270,8 +1274,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
-    // TODO: union all support
     public void testJoinAggregateMaterializationNoAggregateFuncs9() {
         testRewriteOK("select depts.deptno, dependents.empid\n"
                         + "from depts\n"
@@ -1317,7 +1319,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
-    @Ignore
     public void testJoinAggregateMaterializationAggregateFuncs2() {
         testRewriteOK("select empid, emps.deptno, count(*) as c, sum(empid) as s\n"
                         + "from emps join depts using (deptno)\n"
@@ -3851,33 +3852,31 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
 
     @Test
     public void testNestedAggregateBelowJoin2() throws Exception {
-        {
-            String mv1 = "create materialized view mv1 \n" +
-                    "distributed by random \n" +
-                    "refresh async\n" +
-                    "as select empid, deptno, locationid, \n" +
-                    " sum(salary) as total, count(salary)  as cnt\n" +
-                    " from emps group by empid, deptno, locationid ";
-            String mv2 = "create materialized view mv2 \n" +
-                    "distributed by random \n" +
-                    "refresh async\n" +
-                    "as select sum(total) as sum, t2.locationid, t2.empid, t2.deptno  from \n" +
-                    "(select empid, deptno, t.locationid, total, cnt from mv1 t join locations \n" +
-                    "on t.locationid = locations.locationid) t2\n" +
-                    "group by t2.locationid, t2.empid, t2.deptno";
-            starRocksAssert.withMaterializedView(mv1);
-            starRocksAssert.withMaterializedView(mv2);
+        String mv1 = "create materialized view mv1 \n" +
+                "distributed by random \n" +
+                "refresh async\n" +
+                "as select empid, deptno, locationid, \n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno, locationid ";
+        String mv2 = "create materialized view mv2 \n" +
+                "distributed by random \n" +
+                "refresh async\n" +
+                "as select sum(total) as sum, t2.locationid, t2.empid, t2.deptno  from \n" +
+                "(select empid, deptno, t.locationid, total, cnt from mv1 t join locations \n" +
+                "on t.locationid = locations.locationid) t2\n" +
+                "group by t2.locationid, t2.empid, t2.deptno";
+        starRocksAssert.withMaterializedView(mv1);
+        starRocksAssert.withMaterializedView(mv2);
 
-            sql("select sum(total) as sum, t.locationid  from \n" +
-                    "(select locationid, \n" +
-                    " sum(salary) as total, count(salary)  as cnt\n" +
-                    " from emps where empid = 2 and deptno = 10 group by locationid) t join locations \n" +
-                    "on t.locationid = locations.locationid\n" +
-                    "group by t.locationid")
-                    .match("mv2");
-            starRocksAssert.dropMaterializedView("mv1");
-            starRocksAssert.dropMaterializedView("mv2");
-        }
+        sql("select sum(total) as sum, t.locationid  from \n" +
+                "(select locationid, \n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps where empid = 2 and deptno = 10 group by locationid) t join locations \n" +
+                "on t.locationid = locations.locationid\n" +
+                "group by t.locationid")
+                .match("mv2");
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropMaterializedView("mv2");
     }
 
     @Test
@@ -5320,5 +5319,43 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 // ignore
             }
         });
+    }
+
+    @Test
+    public void testMvRestoreUpdater1() {
+        String mvName = "test0";
+        String mv = String.format("CREATE MATERIALIZED VIEW %s" +
+                " REFRESH DEFERRED MANUAL " +
+                " AS SELECT *  FROM lineorder", mvName);
+        starRocksAssert.withMaterializedView(mv,
+                () -> {
+                    MaterializedView mvTable = (MaterializedView) getTable(MATERIALIZED_DB_NAME, mvName);
+                    Pair<Status, Boolean> result = MVRestoreUpdater.checkMvDefinedQuery(mvTable, Maps.newHashMap(), Pair.create("", ""));
+                    Assert.assertTrue(result.first.ok());
+                });
+
+    }
+
+    @Test
+    public void testMvRestoreUpdater2() {
+        String mvName = "test0";
+        String mv = String.format("CREATE MATERIALIZED VIEW %s" +
+                " REFRESH DEFERRED MANUAL " +
+                " AS SELECT * FROM lineorder", mvName);
+
+        starRocksAssert.withMaterializedView(mv,
+                () -> {
+                    MaterializedView mvTable = (MaterializedView) getTable(MATERIALIZED_DB_NAME, mvName);
+                    Pair<String, String> newDefinedQueries = Pair.create("", "");
+                    Map<TableName, TableName> remoteToLocalTableName = Maps.newHashMap();
+                    remoteToLocalTableName.put(TableName.fromString("test.lineorder"),
+                            TableName.fromString("test.lineorder"));
+                    boolean result = MVRestoreUpdater.renewMvBaseTableNames(mvTable,
+                            remoteToLocalTableName, connectContext, newDefinedQueries);
+                    Assert.assertTrue(result);
+                    Assert.assertTrue(!Strings.isNullOrEmpty(newDefinedQueries.first));
+                    Assert.assertTrue(!Strings.isNullOrEmpty(newDefinedQueries.second));
+                });
+
     }
 }

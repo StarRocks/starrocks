@@ -150,8 +150,14 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                 max_chunk->columns()[i]->append_nulls(1);
             } else {
                 auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(_scanner_ctx.partition_values[part_idx]);
-                min_chunk->columns()[i]->append(*const_column->data_column(), 0, 1);
-                max_chunk->columns()[i]->append(*const_column->data_column(), 0, 1);
+                ColumnPtr data_column = const_column->data_column();
+                if (data_column->is_nullable()) {
+                    min_chunk->columns()[i]->append_nulls(1);
+                    max_chunk->columns()[i]->append_nulls(1);
+                } else {
+                    min_chunk->columns()[i]->append(*data_column, 0, 1);
+                    max_chunk->columns()[i]->append(*data_column, 0, 1);
+                }
             }
         }
     }

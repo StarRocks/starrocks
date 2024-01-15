@@ -57,6 +57,7 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadTaskInfo;
+import com.starrocks.meta.lock.LockTimeoutException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -134,7 +135,7 @@ public class GlobalTransactionMgrTest {
 
     @Test
     public void testBeginTransaction() throws LabelAlreadyUsedException, AnalysisException,
-            BeginTransactionException, DuplicatedRequestException {
+            RunningTxnExceedException, DuplicatedRequestException {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long transactionId = masterTransMgr
                 .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
@@ -152,7 +153,7 @@ public class GlobalTransactionMgrTest {
 
     @Test
     public void testBeginTransactionWithSameLabel() throws LabelAlreadyUsedException, AnalysisException,
-            BeginTransactionException, DuplicatedRequestException {
+            RunningTxnExceedException, DuplicatedRequestException {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long transactionId = 0;
         try {
@@ -758,7 +759,7 @@ public class GlobalTransactionMgrTest {
         File tempFile = File.createTempFile("GlobalTransactionMgrTest", ".image");
         System.err.println("write image " + tempFile.getAbsolutePath());
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(tempFile));
-        masterTransMgr.write(dos);
+        masterTransMgr.saveTransactionStateV2(dos);
         dos.close();
 
         masterTransMgr.removeDatabaseTransactionMgr(dbId);
@@ -767,7 +768,8 @@ public class GlobalTransactionMgrTest {
         // 4. read & check if expired
         DataInputStream dis = new DataInputStream(new FileInputStream(tempFile));
         Assert.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
-        masterTransMgr.readFields(dis);
+        SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReader(dis);
+        masterTransMgr.loadTransactionStateV2(srMetaBlockReader);
         dis.close();
         Assert.assertEquals(1, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
         tempFile.delete();
@@ -902,8 +904,20 @@ public class GlobalTransactionMgrTest {
     }
 
     @Test
+    public void testRetryCommitOnRateLimitExceededThrowLockTimeoutException()
+            throws UserException {
+        Database db = new Database(10L, "db0");
+        GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+        doThrow(LockTimeoutException.class)
+                .when(globalTransactionMgr)
+                .commitTransaction(10L, 1001L, Collections.emptyList(), Collections.emptyList(), null);
+        Assert.assertThrows(LockTimeoutException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001L,
+                Collections.emptyList(), Collections.emptyList(), 10L, null));
+    }
+
+    @Test
     public void testGetTransactionNumByCoordinateBe() throws LabelAlreadyUsedException, AnalysisException,
-            BeginTransactionException, DuplicatedRequestException {
+            RunningTxnExceedException, DuplicatedRequestException {
         masterTransMgr
                 .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
                         GlobalStateMgrTestUtil.testTxnLable1,

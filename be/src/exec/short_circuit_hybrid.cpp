@@ -56,6 +56,8 @@ Status ShortCircuitHybridScanNode::open(RuntimeState* state) {
     DCHECK(_tuple_desc != nullptr);
 
     // skips runtime filters in ScanNode::open
+    RETURN_IF_ERROR(ScanNode::init(_tnode, state));
+    RETURN_IF_ERROR(ScanNode::prepare(state));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
     return Status::OK();
 }
@@ -104,8 +106,9 @@ Status ShortCircuitHybridScanNode::get_next(RuntimeState* state, ChunkPtr* chunk
             }
         }
         RETURN_IF_ERROR(ExecNode::eval_conjuncts(_conjunct_ctxs, result_chunk.get()));
+    } else {
+        *eos = true;
     }
-    *eos = true;
     *chunk = std::move(result_chunk);
     return Status::OK();
 }
@@ -141,6 +144,9 @@ Status ShortCircuitHybridScanNode::_process_key_chunk() {
             RETURN_IF_ERROR(Expr::open(expr_ctxs, runtime_state()));
             auto& iteral_expr_ctx = expr_ctxs[0];
             ASSIGN_OR_RETURN(ColumnPtr value, iteral_expr_ctx->root()->evaluate_const(iteral_expr_ctx));
+            if (UNLIKELY(value == nullptr || value->only_null() || value->is_null(0))) {
+                return Status::EndOfFile("iteral_expr_ctx evaluated to null, won’t execute here");
+            }
             // add const column to chunk
             auto const_column = ColumnHelper::get_data_column(value.get());
             _key_chunk->get_column_by_index(j)->append(*const_column);
@@ -154,16 +160,15 @@ Status ShortCircuitHybridScanNode::_process_key_chunk() {
 // found vector value
 Status ShortCircuitHybridScanNode::_process_value_chunk(std::vector<bool>& found) {
     std::vector<string> value_field_names;
-    auto value_schema =
-            std::make_unique<Schema>(_tablet_schema->schema(), _tablet_schema->schema()->value_field_column_ids());
-
+    vector<starrocks::ColumnId> value_column_ids;
     for (auto slot_desc : _tuple_desc->slots()) {
-        auto field = value_schema->get_field_by_name(slot_desc->col_name());
+        auto field = _tablet_schema->schema()->get_field_by_name(slot_desc->col_name());
         if (field != nullptr && !field->is_key()) {
             value_field_names.emplace_back(field->name());
+            value_column_ids.emplace_back(field->id());
         }
     }
-
+    auto value_schema = std::make_unique<Schema>(_tablet_schema->schema(), value_column_ids);
     // tmp value_chunk, order not match key_chunk
     ChunkPtr value_chunk = ChunkHelper::new_chunk(*(value_schema), _num_rows);
     // final value_chunk, order match key_chunk

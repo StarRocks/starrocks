@@ -94,7 +94,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.DeleteAnalyzer;
 import com.starrocks.sql.ast.DeleteStmt;
-import com.starrocks.transaction.BeginTransactionException;
+import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
@@ -210,7 +210,7 @@ public class DeleteMgr implements Writable {
 
     private DeleteJob createJob(DeleteStmt stmt, List<Predicate> conditions, Database db, OlapTable olapTable,
                                 List<Partition> partitions)
-            throws DdlException, AnalysisException, BeginTransactionException {
+            throws DdlException, AnalysisException, RunningTxnExceedException {
         // check table state
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
             throw new DdlException("Table's state is not normal: " + olapTable.getName());

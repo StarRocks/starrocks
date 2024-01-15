@@ -70,10 +70,7 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
             if (chunk == nullptr) {
                 chunk = std::make_shared<Chunk>();
             }
-            if (_status.is_eagain()) {
-                _status = Status::OK();
-                continue;
-            } else if (!_status.ok()) {
+            if (!_status.ok()) {
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
                     chunk->owner_info().set_owner_id(owner_id, true);
@@ -81,10 +78,6 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
                 } else if (_status.is_time_out()) {
                     chunk->owner_info().set_owner_id(owner_id, false);
                     _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
-                    _status = Status::OK();
-                } else if (_status.is_resource_busy()) {
-                    // see ConnectorChunkSource::_read_chunk
-                    // there are too much io tasks which leads to failure of memory allocaiton
                     _status = Status::OK();
                 }
                 break;

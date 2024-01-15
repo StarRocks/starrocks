@@ -58,16 +58,22 @@ Status ConnectorScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (runtime_state()->query_ctx() != nullptr) {
         _mem_share_arb = runtime_state()->query_ctx()->connector_scan_operator_mem_share_arbitrator();
     }
+    if (_mem_share_arb != nullptr) {
+        _scan_mem_limit = _mem_share_arb->set_scan_mem_ratio(mem_ratio);
+
+        // we don't want scan mem limit to exceed global memory limit.
+        int64_t global_lowest = GlobalEnv::GetInstance()->connector_scan_pool_mem_tracker()->lowest_limit();
+        if (global_lowest > 0) {
+            _scan_mem_limit = std::min(_scan_mem_limit, global_lowest);
+        }
+    }
+
     _io_tasks_per_scan_operator = config::connector_io_tasks_per_scan_operator;
     if (query_options.__isset.connector_io_tasks_per_scan_operator) {
         _io_tasks_per_scan_operator = query_options.connector_io_tasks_per_scan_operator;
     }
-
     _estimate_scan_row_bytes();
 
-    if (_mem_share_arb != nullptr) {
-        _scan_mem_limit = _mem_share_arb->set_scan_mem_ratio(mem_ratio);
-    }
     return Status::OK();
 }
 
@@ -82,15 +88,14 @@ void ConnectorScanNode::_estimate_scan_row_bytes() {
     }
 }
 
-void ConnectorScanNode::_estimate_chunk_source_mem_bytes() {
+void ConnectorScanNode::_estimate_data_source_mem_bytes() {
     const TupleDescriptor* tuple_desc = _data_source_provider->tuple_descriptor(runtime_state());
     const auto& slots = tuple_desc->slots();
     int64_t estimated_size = slots.size() * _data_source_provider->PER_FIELD_MEM_BYTES;
     int64_t min_value = 0, max_value = 0;
     _data_source_provider->default_data_source_mem_bytes(&min_value, &max_value);
     estimated_size = std::min(std::max(estimated_size, min_value), max_value);
-    _estimated_chunk_source_mem_bytes = estimated_size;
-    _estimated_chunk_source_mem_bytes += _estimated_scan_row_bytes * runtime_state()->chunk_size();
+    _estimated_data_source_mem_bytes = estimated_size;
 }
 
 int ConnectorScanNode::_estimate_max_concurrent_chunks() const {
@@ -111,7 +116,7 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
 
     // we do estimated here is because we have peeked all scang ranges and gather more infomration
     // so only here we can make more accurate decision.
-    _estimate_chunk_source_mem_bytes();
+    _estimate_data_source_mem_bytes();
 
     // port from olap scan node. to control chunk buffer usage, we can control memory consumption to avoid OOM.
     size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
@@ -127,9 +132,12 @@ pipeline::OpFactories ConnectorScanNode::decompose_to_pipeline(pipeline::Pipelin
                                 context->next_operator_id(), this, runtime_state(), dop, std::move(buffer_limiter),
                                 is_stream_pipeline);
 
-    scan_op->set_chunk_source_mem_bytes(_estimated_chunk_source_mem_bytes);
-    scan_op->set_scan_mem_limit(_scan_mem_limit);
+    // order matters. we will use scan mem limit to limit chunk source mem bytes.
     scan_op->set_mem_share_arb(_mem_share_arb);
+    scan_op->set_scan_mem_limit(_scan_mem_limit);
+    scan_op->set_data_source_mem_bytes(_estimated_data_source_mem_bytes);
+    scan_op->set_chunk_source_mem_bytes(_estimated_data_source_mem_bytes +
+                                        _estimated_scan_row_bytes * runtime_state()->chunk_size());
 
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(1, std::move(this->runtime_filter_collector()));
     this->init_runtime_filter_for_operator(scan_op.get(), context, rc_rf_probe_collector);

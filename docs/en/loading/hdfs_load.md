@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+toc_max_heading_level: 4
 ---
 
 # Load data from HDFS
@@ -88,10 +89,10 @@ This is a continuation of the previous example. The previous query is wrapped in
 
 > **NOTE**
 >
-> The syntax of CREATE TABLE when using schema inference does not allow setting the number of replicas, so set it before creating the table. The example below is for a system with a single replica:
+> The syntax of CREATE TABLE when using schema inference does not allow setting the number of replicas, so set it before creating the table. The example below is for a system with three replicas:
 >
 > ```SQL
-> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "1");
+> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "3");
 > ```
 
 Create a database and switch to it:
@@ -123,16 +124,16 @@ DESCRIBE user_behavior_inferred;
 
 The system returns the following query result:
 
-```Plaintext
-+--------------+------------------+------+-------+---------+-------+
-| Field        | Type             | Null | Key   | Default | Extra |
-+--------------+------------------+------+-------+---------+-------+
-| UserID       | bigint           | YES  | true  | NULL    |       |
-| ItemID       | bigint           | YES  | true  | NULL    |       |
-| CategoryID   | bigint           | YES  | true  | NULL    |       |
-| BehaviorType | varchar(1048576) | YES  | false | NULL    |       |
-| Timestamp    | varchar(1048576) | YES  | false | NULL    |       |
-+--------------+------------------+------+-------+---------+-------+
+```Plain
++--------------+-----------+------+-------+---------+-------+
+| Field        | Type      | Null | Key   | Default | Extra |
++--------------+-----------+------+-------+---------+-------+
+| UserID       | bigint    | YES  | true  | NULL    |       |
+| ItemID       | bigint    | YES  | true  | NULL    |       |
+| CategoryID   | bigint    | YES  | true  | NULL    |       |
+| BehaviorType | varbinary | YES  | false | NULL    |       |
+| Timestamp    | varbinary | YES  | false | NULL    |       |
++--------------+-----------+------+-------+---------+-------+
 ```
 
 Compare the inferred schema with the schema created by hand:
@@ -175,7 +176,7 @@ You may want to customize the table that you are inserting into, for example, th
 
 In this example, we are creating a table based on knowledge of how the table will be queried and the data in the Parquet file. The knowledge of the data in the Parquet file can be gained by querying the file directly in HDFS.
 
-- Since a query of the dataset in HDFS indicates that the `Timestamp` column contains data that matches a `datetime` data type, the column type is specified in the following DDL.
+- Since a query of the dataset in HDFS indicates that the `Timestamp` column contains data that matches a VARBINARY data type, the column type is specified in the following DDL.
 - By querying the data in HDFS, you can find that there are no `NULL` values in the dataset, so the DDL does not set any columns as nullable.
 - Based on knowledge of the expected query types, the sort key and bucketing column are set to the column `UserID`. Your use case might be different for this data, so you might decide to use `ItemID` in addition to or instead of `UserID` for the sort key.
 
@@ -195,15 +196,11 @@ CREATE TABLE user_behavior_declared
     ItemID int(11),
     CategoryID int(11),
     BehaviorType varchar(65533),
-    Timestamp datetime
+    Timestamp varbinary
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 After creating the table, you can load it with INSERT INTO SELECT FROM FILES():
@@ -240,7 +237,7 @@ The following query result is returned, indicating that the data has been succes
 
 #### Check load progress
 
-You can query the progress of INSERT jobs from the `information_schema.loads` view. This feature is supported from v3.1 onwards. Example:
+You can query the progress of INSERT jobs from the [`loads`](../reference/information_schema/loads.md) view in the StarRocks Information Schema. This feature is supported from v3.1 onwards. Example:
 
 ```SQL
 SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
@@ -276,7 +273,7 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_0d86c3f9-851f-11ee-
 REJECTED_RECORD_PATH: NULL
 ```
 
-For information about the fields provided in the `loads` view, see [Information Schema](../reference/information_schema/loads.md).
+For information about the fields provided in the `loads` view, see [`loads`](../reference/information_schema/loads.md).
 
 > **NOTE**
 >
@@ -324,15 +321,11 @@ CREATE TABLE user_behavior
     ItemID int(11),
     CategoryID int(11),
     BehaviorType varchar(65533),
-    Timestamp datetime
+    Timestamp varbinary
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 #### Start a Broker Load
@@ -467,15 +460,11 @@ CREATE TABLE user_behavior_replica
     ItemID int(11),
     CategoryID int(11),
     BehaviorType varchar(65533),
-    Timestamp datetime
+    Timestamp varbinary
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 #### Start a Pipe job

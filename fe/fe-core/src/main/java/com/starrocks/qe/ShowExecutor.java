@@ -578,16 +578,19 @@ public class ShowExecutor {
         //     the base table and supports multi table in MV definition.
         //  2. Table's type is OLAP, this is the old MV type which the MV table is associated with the base
         //     table and only supports single table in MV definition.
-        Map<String, TaskRunStatus> mvNameTaskMap = Maps.newHashMap();
+        Map<String, List<TaskRunStatus>> mvNameTaskMap = Maps.newHashMap();
         if (!materializedViews.isEmpty()) {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
             TaskManager taskManager = globalStateMgr.getTaskManager();
-            mvNameTaskMap = taskManager.showMVLastRefreshTaskRunStatus(dbName);
+            Set<String> taskNames = materializedViews.stream()
+                    .map(mv -> TaskBuilder.getMvTaskName(mv.getId()))
+                    .collect(Collectors.toSet());
+            mvNameTaskMap = taskManager.listMVRefreshedTaskRunStatus(dbName, taskNames);
         }
         for (MaterializedView mvTable : materializedViews) {
             long mvId = mvTable.getId();
             ShowMaterializedViewStatus mvStatus = new ShowMaterializedViewStatus(mvId, dbName, mvTable.getName());
-            TaskRunStatus taskStatus = mvNameTaskMap.get(TaskBuilder.getMvTaskName(mvId));
+            List<TaskRunStatus> taskTaskStatusJob = mvNameTaskMap.get(TaskBuilder.getMvTaskName(mvId));
             // refresh_type
             MaterializedView.MvRefreshScheme refreshScheme = mvTable.getRefreshScheme();
             if (refreshScheme == null) {
@@ -607,7 +610,7 @@ public class ShowExecutor {
             // materialized view ddl
             mvStatus.setText(mvTable.getMaterializedViewDdlStmt(true));
             // task run status
-            mvStatus.setLastTaskRunStatus(taskStatus);
+            mvStatus.setLastJobTaskRunStatus(taskTaskStatusJob);
             rowSets.add(mvStatus);
         }
 
@@ -1124,6 +1127,11 @@ public class ShowExecutor {
             location = table.getTableLocation();
         } else if (table.isPaimonTable()) {
             location = table.getTableLocation();
+        }
+
+        // Comment
+        if (!Strings.isNullOrEmpty(table.getComment())) {
+            createTableSql.append("\nCOMMENT (\"").append(table.getComment()).append("\")");
         }
 
         if (!Strings.isNullOrEmpty(location)) {
@@ -1685,7 +1693,8 @@ public class ShowExecutor {
     private void handleShowData() {
         ShowDataStmt showStmt = (ShowDataStmt) stmt;
         String dbName = showStmt.getDbName();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                .getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
         if (db == null) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -1762,10 +1771,10 @@ public class ShowExecutor {
                     Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
                             connectContext.getCurrentRoleIds(), new TableName(dbName, tableName));
                 } catch (AccessDeniedException e) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR, "SHOW DATA",
-                            connectContext.getCurrentUserIdentity().getUser(),
-                            connectContext.getCurrentUserIdentity().getHost(),
-                            tableName);
+                    AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            connectContext.getCurrentUserIdentity(),
+                            connectContext.getCurrentRoleIds(),
+                            PrivilegeType.ANY.name(), ObjectType.TABLE.name(), tableName);
                 }
 
                 Table table = db.getTable(tableName);

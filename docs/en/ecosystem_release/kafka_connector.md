@@ -2,15 +2,17 @@
 displayed_sidebar: "English"
 ---
 
-# Kafka connector
+# Releases of StarRocks Connector for Kafka
 
 ## Notifications
 
 **User guide:** [Load data using Kafka connector](../loading/Kafka-connector-starrocks.md)
 
+**Source codes:** [starrocks-connector-for-kafka](https://github.com/StarRocks/starrocks-connector-for-kafka)
+
 **Naming format of the compressed file:** `starrocks-kafka-connector-${connector_version}.tar.gz`
 
-**Download link of the compressed file:** [starrocks-kafka-connector-1.0.0.tar.gz](https://releases.starrocks.io/starrocks/starrocks-kafka-connector-1.0.0.tar.gz)
+**Download link of the compressed file:** [starrocks-kafka-connector](https://github.com/StarRocks/starrocks-connector-for-kafka/releases)
 
 **Version requirements:**
 
@@ -22,7 +24,7 @@ displayed_sidebar: "English"
 
 ### 1.0
 
-**1.0.0**
+#### 1.0.0
 
 Release date: June 25, 2023
 

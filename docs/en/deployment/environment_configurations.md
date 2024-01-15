@@ -282,7 +282,7 @@ ulimit -n 655350
 You can set the maximum number of user processes by running the following command:
 
 ```Bash
-ulimit -u 40960
+ulimit -u 65535
 ```
 
 ## File system configuration

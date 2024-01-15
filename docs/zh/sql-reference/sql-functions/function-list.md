@@ -122,6 +122,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [char_length，character_length](./string-functions/char_length.md) | 返回字符串的长度。  |
 | [concat](./string-functions/concat.md) |  将多个字符串连接起来。 |
 | [concat_ws](./string-functions/concat_ws.md) | 使用分隔符将两个或以上的字符串拼接成一个新的字符串。  |
+| [crc32](./string-functions/crc32.md) | 返回字符串的 32 位循环冗余校验值。 |
 | [ends_with](./string-functions/ends_with.md) | 如果字符串以指定后缀结尾，返回 true，否则返回 false。  |
 | [find_in_set](./string-functions/find_in_set.md) | 返回指定的字符串在一系列字符串列表中第一次出现的位置。  |
 | [group_concat](./string-functions/group_concat.md) | 将结果集中的多行结果连接成一个字符串。  |
@@ -282,6 +283,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [array_sortby](./array-functions/array_sortby.md)| 对数组中的元素根据另外一个键值数组元素或者 Lambda 函数生成的键值数组元素进行升序排列。 |
 |  [array_sum](./array-functions/array_sum.md)| 对数组中的所有元素求和。 |
 |  [array_to_bitmap](./array-functions/array_to_bitmap.md)| 将 array 类型转化为 bitmap 类型。 |
+|  [array_unique_agg](./array-functions/array_unique_agg.md) | 将一列中的 distinct 值（包括空值 null）串联成一个数组（多行转一行）。  |
 |  [cardinality](./array-functions/cardinality.md)| 计算数组中的元素个数， |
 |  [element_at](./array-functions/element_at.md)| 获取 Array 数组中指定位置的元素。 |
 |  [reverse](./string-functions/reverse.md)| 将字符串或数组反转，返回的字符串或数组的顺序和源字符串或数组的顺序相反。 |
@@ -334,7 +336,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [cast](./json-functions/json-query-and-processing-functions/cast.md)| 实现 JSON 类型数据与 SQL 类型间的相互转换。|
 |  [get_json_double](./json-functions/json-query-and-processing-functions/get_json_double.md)| 解析并获取 JSON 字符串内指定路径中的浮点型内容。|
 |  [get_json_int](./json-functions/json-query-and-processing-functions/get_json_int.md)| 解析并获取 JSON 字符串内指定路径中的整型内容。|
-|  [get_json_string](./json-functions/json-query-and-processing-functions/get_json_string.md)| 解析并获取 JSON 字符串内指定路径中的字符串。|
+|  [get_json_string, get_json_object](./json-functions/json-query-and-processing-functions/get_json_string.md)| 解析并获取 JSON 字符串内指定路径中的字符串。|
 |  [json_each](./json-functions/json-query-and-processing-functions/json_each.md)| 将 JSON 对象的最外层按照键和值展开为两列，返回一行或多行数据的集合。|
 |  [json_exists](./json-functions/json-query-and-processing-functions/json_exists.md)| 查询 JSON 对象中指定路径是否存在满足特定条件的值。|
 |  [json_keys](./json-functions/json-query-and-processing-functions/json_keys.md)| 返回 JSON 对象中所有最上层成员 (key) 组成的数组。|
@@ -419,6 +421,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [like](./like-predicate-functions/like.md) | 判断字符串是否**模糊匹配**给定的模式 `pattern`。 |
 |  [regexp](./like-predicate-functions/regexp.md) | 判断字符串是否匹配给定的正则表达式 `pattern`。 |
 |  [regexp_extract](./like-predicate-functions/regexp_extract.md) | 对字符串进行正则匹配，抽取符合 pattern 的第 pos 个匹配部分，需要 pattern 完全匹配 str 中的某部分，才能返回 pattern 部分中需匹配部分，如果没有匹配就返回空字符串。 |
+|  [regexp_extract_all](./like-predicate-functions/regexp_extract_all.md) |  |
 |  [regexp_replace](./like-predicate-functions/regexp_replace.md) | 对字符串进行正则匹配，将命中 pattern 的部分使用 repl 来进行替换。 |
 
 ## 条件函数

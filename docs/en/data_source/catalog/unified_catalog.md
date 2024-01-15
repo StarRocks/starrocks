@@ -240,8 +240,8 @@ If you choose Blob Storage as storage, take one of the following actions:
 - To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.shared_key" = "<storage_account_shared_key>"
   ```
 
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
@@ -254,9 +254,9 @@ If you choose Blob Storage as storage, take one of the following actions:
 - To choose the SAS Token authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.container" = "<blob_container_name>",
-  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.container" = "<container_name>",
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
   The following table describes the parameters you need to configure in `StorageCredentialParams`.
@@ -266,6 +266,56 @@ If you choose Blob Storage as storage, take one of the following actions:
   | azure.blob.storage_account| Yes          | The username of your Blob Storage account.                   |
   | azure.blob.container      | Yes          | The name of the blob container that stores your data.        |
   | azure.blob.sas_token      | Yes          | The SAS token that is used to access your Blob Storage account. |
+
+###### Azure Data Lake Storage Gen2
+
+If you choose Data Lake Storage Gen2 as storage, take one of the following actions:
+
+- To choose the Managed Identity authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**                           | **Required** | **Description**                                              |
+  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_use_managed_identity | Yes          | Specifies whether to enable the Managed Identity authentication method. Set the value to `true`. |
+  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
+  | azure.adls2.oauth2_client_id            | Yes          | The client (application) ID of the managed identity.         |
+
+- To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>",
+  "azure.adls2.shared_key" = "<storage_account_shared_key>"
+  ```
+
+  The following table describes the parameters you need to configure in `StorageCredentialParams`.
+
+  | **Parameter**               | **Required** | **Description**                                              |
+  | --------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.storage_account | Yes          | The username of your Data Lake Storage Gen2 storage account. |
+  | azure.adls2.shared_key      | Yes          | The shared key of your Data Lake Storage Gen2 storage account. |
+
+- To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  ```
+
+  The following table describes the parameters you need to configure `in StorageCredentialParams`.
+
+  | **Parameter**                      | **Required** | **Description**                                              |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | Yes          | The client (application) ID of the service principal.        |
+  | azure.adls2.oauth2_client_secret   | Yes          | The value of the new client (application) secret created.    |
+  | azure.adls2.oauth2_client_endpoint | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
 
 ###### Azure Data Lake Storage Gen1
 
@@ -298,56 +348,6 @@ If you choose Data Lake Storage Gen1 as storage, take one of the following actio
   | azure.adls1.oauth2_client_id  | Yes          | The client (application) ID of the service principal.        |
   | azure.adls1.oauth2_credential | Yes          | The value of the new client (application) secret created.    |
   | azure.adls1.oauth2_endpoint   | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
-
-###### Azure Data Lake Storage Gen2
-
-If you choose Data Lake Storage Gen2 as storage, take one of the following actions:
-
-- To choose the Managed Identity authentication method, configure `StorageCredentialParams` as follows:
-
-  ```SQL
-  "azure.adls2.oauth2_use_managed_identity" = "true",
-  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
-  ```
-
-  The following table describes the parameters you need to configure in `StorageCredentialParams`.
-
-  | **Parameter**                           | **Required** | **Description**                                              |
-  | --------------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.oauth2_use_managed_identity | Yes          | Specifies whether to enable the Managed Identity authentication method. Set the value to `true`. |
-  | azure.adls2.oauth2_tenant_id            | Yes          | The ID of the tenant whose data you want to access.          |
-  | azure.adls2.oauth2_client_id            | Yes          | The client (application) ID of the managed identity.         |
-
-- To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
-
-  ```SQL
-  "azure.adls2.storage_account" = "<storage_account_name>",
-  "azure.adls2.shared_key" = "<shared_key>"
-  ```
-
-  The following table describes the parameters you need to configure in `StorageCredentialParams`.
-
-  | **Parameter**               | **Required** | **Description**                                              |
-  | --------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.storage_account | Yes          | The username of your Data Lake Storage Gen2 storage account. |
-  | azure.adls2.shared_key      | Yes          | The shared key of your Data Lake Storage Gen2 storage account. |
-
-- To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
-
-  ```SQL
-  "azure.adls2.oauth2_client_id" = "<service_client_id>",
-  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
-  ```
-
-  The following table describes the parameters you need to configure `in StorageCredentialParams`.
-
-  | **Parameter**                      | **Required** | **Description**                                              |
-  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.oauth2_client_id       | Yes          | The client (application) ID of the service principal.        |
-  | azure.adls2.oauth2_client_secret   | Yes          | The value of the new client (application) secret created.    |
-  | azure.adls2.oauth2_client_endpoint | Yes          | The OAuth 2.0 token endpoint (v1) of the service principal or application. |
 
 ##### Google GCS
 

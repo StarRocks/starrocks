@@ -4,7 +4,7 @@ on:
   pull_request_target:
     branches:
       - main
-      - 'branch-[0-9].[0-9]'
+      - 'branch-[0-9].[0-9]*'
 
     types:
       - opened
@@ -75,7 +75,7 @@ jobs:
           configuration_path: ".github/pr-title-checker-config.json"
 
       - name: update body
-        if: always() && github.base_ref != 'main' && github.event.action == 'opened'
+        if: always() && github.base_ref != 'main' && (github.event.action == 'opened' || github.event.action == 'reopened')
         env:
           GH_TOKEN: ${{ secrets.PAT }}
         run: |
@@ -188,7 +188,7 @@ jobs:
     runs-on: ubuntu-latest
     if: >
       !startsWith(github.event.pull_request.title, '[Doc]') &&
-      (!startsWith(github.head_ref, 'mergify/bp/') || github.event.action != 'opened')
+      (github.base_ref == 'main' || !startsWith(github.head_ref, 'mergify/bp/') || github.event.action != 'opened')
     steps:
       - name: Format Check
         id: check

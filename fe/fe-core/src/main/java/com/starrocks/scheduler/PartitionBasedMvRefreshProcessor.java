@@ -52,6 +52,7 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
@@ -103,6 +104,7 @@ import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.ListPartitionDiff;
 import com.starrocks.sql.common.PartitionDiffer;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -303,7 +305,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
 
         // refresh materialized view
-        doRefreshMaterializedView(mvToRefreshedPartitions, refTablePartitionNames);
+        doRefreshMaterializedViewWithRetry(mvToRefreshedPartitions, refTablePartitionNames);
 
         // insert execute successfully, update the meta of materialized view according to ExecPlan
         updateMeta(mvToRefreshedPartitions, mvContext.getExecPlan(), refTableRefreshPartitions);
@@ -322,8 +324,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return RefreshJobStatus.SUCCESS;
     }
 
-    private void doRefreshMaterializedView(Set<String> mvToRefreshedPartitions,
-                                           Map<String, Set<String>> refTablePartitionNames) throws DmlException {
+    /**
+     * Retry the `doRefreshMaterializedView` method to avoid insert fails in occasional cases.
+     */
+    private void doRefreshMaterializedViewWithRetry(Set<String> mvToRefreshedPartitions,
+                                                    Map<String, Set<String>> refTablePartitionNames) throws DmlException {
         // Use current connection variables instead of mvContext's session variables to be better debug.
         ConnectContext currConnectCtx = ConnectContext.get();
         int maxRefreshMaterializedViewRetryNum = 1;
@@ -339,10 +344,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         for (int i = 0; i < maxRefreshMaterializedViewRetryNum; i++) {
             boolean isRefreshFailed = false;
             try {
-                // Unlock current database and acquire lock for all databases referenced by the plan
-                InsertStmt insertStmt = prepareRefreshPlan(mvToRefreshedPartitions, refTablePartitionNames);
-                // execute the ExecPlan of insert outside lock
-                refreshMaterializedView(mvContext, mvContext.getExecPlan(), insertStmt);
+                doRefreshMaterializedView(mvToRefreshedPartitions, refTablePartitionNames);
             } catch (Throwable e) {
                 isRefreshFailed = true;
                 LOG.warn("Refresh materialized view {} at {}th retry time failed: {}",
@@ -352,6 +354,16 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (!isRefreshFailed) {
                 return;
             }
+
+            // sleep some time if it is not the last retry time
+            if (i < maxRefreshMaterializedViewRetryNum - 1) {
+                try {
+                    Thread.sleep(500);
+                } catch (InterruptedException e) {
+                    LOG.warn("InterruptedException: ", e);
+                    // ignore
+                }
+            }
         }
         if (lastException != null) {
             String errorMsg = lastException.getMessage();
@@ -359,10 +371,19 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 errorMsg = ExceptionUtils.getStackTrace(lastException);
             }
             // field ERROR_MESSAGE in information_schema.task_runs length is 65535
-            errorMsg = errorMsg.length() > MAX_FIELD_VARCHAR_LENGTH ? errorMsg.substring(0, MAX_FIELD_VARCHAR_LENGTH) : errorMsg;
+            errorMsg = errorMsg.length() > MAX_FIELD_VARCHAR_LENGTH ?
+                    errorMsg.substring(0, MAX_FIELD_VARCHAR_LENGTH) : errorMsg;
             throw new DmlException("Refresh materialized view %s failed after retrying %s times, error-msg : %s",
                     lastException, this.materializedView.getName(), maxRefreshMaterializedViewRetryNum, errorMsg);
         }
+    }
+
+    private void doRefreshMaterializedView(Set<String> mvToRefreshedPartitions,
+                                           Map<String, Set<String>> refTablePartitionNames) throws Exception {
+        // Unlock current database and acquire lock for all databases referenced by the plan
+        InsertStmt insertStmt = prepareRefreshPlan(mvToRefreshedPartitions, refTablePartitionNames);
+        // execute the ExecPlan of insert outside lock
+        refreshMaterializedView(mvContext, mvContext.getExecPlan(), insertStmt);
     }
 
     /**
@@ -403,17 +424,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             StatementPlanner.unLock(locker, dbs);
         }
 
-        // add trace info if needed
-        Tracers.log(Tracers.Module.MV,
-                args -> "[TRACE QUERY] MV: " + materializedView.getName() +
-                        "\nMV PartitionsToRefresh: " + String.join(",", (Set<String>) args[0]) +
-                        "\nBase PartitionsToScan:" + refTablePartitionNames +
-                        "\nInsert Plan:\n" +
-                        ((ExecPlan) args[1]).getExplainString(StatementBase.ExplainLevel.VERBOSE),
-                mvToRefreshedPartitions, execPlan);
+        QueryDebugOptions debugOptions = ctx.getSessionVariable().getQueryDebugOptions();
         // log the final mv refresh plan for each refresh for better trace and debug
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("MV Refresh Final Plan" +
+        if (LOG.isDebugEnabled() || debugOptions.isEnableQueryTraceLog()) {
+            LOG.info("MV Refresh Final Plan" +
                             "\nMV: {}" +
                             "\nMV PartitionsToRefresh: {}" +
                             "\nBase PartitionsToScan: {}" +
@@ -573,6 +587,14 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         newProperties.put(TaskRun.PARTITION_START, mvContext.getNextPartitionStart());
         newProperties.put(TaskRun.PARTITION_END, mvContext.getNextPartitionEnd());
+        if (mvContext.getStatus() != null) {
+            newProperties.put(TaskRun.START_TASK_RUN_ID, mvContext.getStatus().getStartTaskRunId());
+        }
+        updateTaskRunStatus(status -> {
+            MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
+            extraMessage.setNextPartitionStart(mvContext.getNextPartitionStart());
+            extraMessage.setNextPartitionEnd(mvContext.getNextPartitionEnd());
+        });
 
         // Partition refreshing task run should have the HIGHEST priority, and be scheduled before other tasks
         // Otherwise this round of partition refreshing would be staved and never got finished
@@ -608,7 +630,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (table == null) {
                 LOG.warn("table {} do not exist when refreshing materialized view:{}",
                         baseTableInfo.getTableInfoStr(), materializedView.getName());
-                materializedView.setInactiveAndReason(String.format("base-table dropped: %s", baseTableInfo));
+                materializedView.setInactiveAndReason(
+                        MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
                 throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
             }
 
@@ -816,7 +839,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
             // FIXME: If base table's partition has been dropped, should drop the according version partition too?
             // remove partition info of not-exist partition for snapshot table from version map
-            Set<String> partitionNames = Sets.newHashSet(PartitionUtil.getPartitionNames(baseTableInfo.getTable()));
+            Set<String> partitionNames =
+                    Sets.newHashSet(PartitionUtil.getPartitionNames(baseTableInfo.getTableChecked()));
             currentTablePartitionInfo.keySet().removeIf(partitionName -> !partitionNames.contains(partitionName));
         }
         if (!changedTablePartitionInfos.isEmpty()) {
@@ -867,6 +891,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // should keep up with the base tables, or it will return outdated result.
         oldTransactionVisibleWaitTimeout = context.ctx.getSessionVariable().getTransactionVisibleWaitTimeout();
         context.ctx.getSessionVariable().setTransactionVisibleWaitTimeout(Long.MAX_VALUE / 1000);
+
+        // Initialize status's job id which is used to track a batch of task runs.
+        String jobId = properties.containsKey(TaskRun.START_TASK_RUN_ID) ?
+                properties.get(TaskRun.START_TASK_RUN_ID) : context.getTaskRunId();
+        if (context.status != null) {
+            context.status.setStartTaskRunId(jobId);
+        }
 
         mvContext = new MvTaskRunContext(context);
     }

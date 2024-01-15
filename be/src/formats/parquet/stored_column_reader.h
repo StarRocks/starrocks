@@ -34,16 +34,12 @@ class NullableColumn;
 namespace starrocks::parquet {
 
 class ColumnChunkReader;
+
 class StoredColumnReader {
 public:
     static Status create(const ColumnReaderOptions& opts, const ParquetField* field,
                          const tparquet::ColumnChunk* _chunk_metadata, std::unique_ptr<StoredColumnReader>* out);
-    StoredColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
-
     virtual ~StoredColumnReader() = default;
-
-    // Reset internal state and ready for next read_values
-    virtual void reset() = 0;
 
     // If need_levels is set, client will get all levels through get_levels function.
     // If need_levels is not set, read_records may not records levels information, this will
@@ -53,26 +49,61 @@ public:
     // so currently we can't put need_parse_levels into StoredColumnReaderOptions.
     virtual void set_need_parse_levels(bool need_parse_levels) {}
 
-    // Try to read values that can assemble up to num_rows rows. For example if we want to read
-    // an array type, and stored value is [1, 2, 3], [4], [5, 6], when the input num_rows is 3,
-    // this function will fill (1, 2, 3, 4, 5, 6) into 'dst'.
-    Status read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) {
-        reset();
-        return do_read_records(num_rows, content_type, dst);
-    }
+    virtual Status read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) = 0;
 
-    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type, Column* dst);
+    virtual Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
+                              Column* dst) = 0;
 
     // This function can only be called after calling read_values. This function returns the
     // levels for last read_values.
     virtual void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) = 0;
 
-    virtual Status get_dict_values(Column* column) { return _reader->get_dict_values(column); }
+    virtual Status get_dict_values(Column* column) = 0;
 
     virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
-                                   Column* column) {
+                                   Column* column) = 0;
+
+    virtual Status load_dictionary_page() { return Status::InternalError("Not supported load_dictionary_page"); }
+
+    virtual Status load_specific_page(size_t cur_page_idx, uint64_t offset, uint64_t first_row) {
+        return Status::InternalError("Not supported load_specific_page");
+    }
+
+    virtual void set_page_num(size_t page_num) {}
+};
+
+class StoredColumnReaderImpl : public StoredColumnReader {
+public:
+    StoredColumnReaderImpl(const ColumnReaderOptions& opts) : _opts(opts) {}
+
+    virtual ~StoredColumnReaderImpl() = default;
+
+    // Reset internal state and ready for next read_values
+    virtual void reset() = 0;
+
+    // Try to read values that can assemble up to num_rows rows. For example if we want to read
+    // an array type, and stored value is [1, 2, 3], [4], [5, 6], when the input num_rows is 3,
+    // this function will fill (1, 2, 3, 4, 5, 6) into 'dst'.
+    Status read_records(size_t* num_rows, ColumnContentType content_type, Column* dst) override {
+        reset();
+        return do_read_records(num_rows, content_type, dst);
+    }
+
+    Status read_range(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
+                      Column* dst) override;
+
+    virtual Status get_dict_values(Column* column) override { return _reader->get_dict_values(column); }
+
+    virtual Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
+                                   Column* column) override {
         return _reader->get_dict_values(dict_codes, nulls, column);
     }
+
+    Status load_dictionary_page() override { return _reader->load_dictionary_page(); }
+
+    Status load_specific_page(size_t cur_page_idx, uint64_t offset, uint64_t first_row) override;
+
+    void set_page_num(size_t page_num) override { _reader->set_page_num(page_num); }
 
     static size_t get_level_to_decode_batch_size(size_t row, size_t num_values_left_in_cur_page, size_t decoded,
                                                  size_t parsed);

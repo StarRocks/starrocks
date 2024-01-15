@@ -50,12 +50,8 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     if (_is_prepared) {
         return Status::OK();
     }
-    if (prepared_times.fetch_add(1) > 0) {
-        LOG(ERROR) << "prepared more times";
-        return Status::RuntimeError("Prepared more times");
-    }
+    _is_prepared = true;
 
-    // TODO(Yueyang): remove this time cost.
     auto start = MonotonicNanos();
 
     // Compile the expression into native code and retrieve the function pointer.
@@ -75,8 +71,6 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
     }
 
     _jit_function = function.value_or(nullptr);
-    _is_prepared = true;
-
     return Status::OK();
 }
 
@@ -95,7 +89,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         if (column->only_null()) { // TODO(Yueyang): remove this when support ifnull expr.
             return ColumnHelper::align_return_type(column, type(), column->size(), true);
         }
-        args.emplace_back(ColumnHelper::unpack_and_duplicate_const_column(column->size(), column));
+        args.emplace_back(column);
     }
 
 #ifdef DEBUG
@@ -108,7 +102,8 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     }
 #endif
 
-    auto result_column = ColumnHelper::create_column(type(), is_nullable(), is_constant(), ptr->num_rows(), false);
+    auto result_column =
+            ColumnHelper::create_column(type(), !is_constant() && is_nullable(), is_constant(), ptr->num_rows(), false);
     args.emplace_back(result_column);
 
     RETURN_IF_ERROR(JITFunction::llvm_function(_jit_function, args));
@@ -120,16 +115,17 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     return result_column;
 }
 
-void JITExpr::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
-    auto* jit_engine = JITEngine::get_instance();
-    if (jit_engine->initialized()) {
-        auto status = jit_engine->remove_function(_expr->debug_string());
-        if (!status.ok()) {
-            LOG(WARNING) << "JIT: remove function failed, reason: " << status;
+// only unregister once
+JITExpr::~JITExpr() {
+    if (_is_prepared && _jit_function != nullptr) {
+        auto* jit_engine = JITEngine::get_instance();
+        if (jit_engine->initialized()) {
+            auto status = jit_engine->remove_function(_expr->debug_string());
+            if (!status.ok()) {
+                LOG(WARNING) << "JIT: remove function failed, reason: " << status;
+            }
         }
     }
-
-    Expr::close(state, context, scope);
 }
 
 } // namespace starrocks

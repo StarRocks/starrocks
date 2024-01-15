@@ -900,6 +900,31 @@ SELECT (k1 * k2 + v1) * v2 + v3 * v4 - v5 as result FROM jit_basic ORDER BY resu
 9223361033148563457
 9223372036854775807
 -- !result
+select bitnot(cast(power(-2,127) as largeint)+1);
+-- result:
+170141183460469231731687303715884105726
+-- !result
+create table num_test(c_dis int,c_tinyint tinyint,c_smallint smallint,c_int int,c_bigint bigint,
+            c_largeint largeint,c_float float,c_double double,c_dec32p1s0 decimal32(1,0),
+            c_dec32p9s9 decimal32(9,9),c_dec32p7s3 decimal(7,3),c_dec64p18s0 decimal64(18,0),
+            c_dec64p18s18 decimal64(18,18),c_dec64p10s5 decimal64(10,5),c_dec128p38s18 decimal128(38,18),
+            c_dec128p38s0 decimal(38,0),c_dec128p38s16 decimal128(38,16))
+            distributed by hash(c_dis)  properties("replication_num"="1");
+-- result:
+-- !result
+insert into num_test values(1,127,32767,2147483647,9223372036854775807,170141183460469231731687303715884105727,3.4E+38,1.79E+308,9,0.999999999,9999.999,999999999999999999,0.999999999999999999,99999.99999,99999999999999999999.999999999999999999,99999999999999999999999999999999999999,9999999999999999999999.9999999999999999);
+-- result:
+-- !result
+insert into num_test values(2,-128,-32768,-2147483648,-9223372036854775808,-170141183460469231731687303715884105728,-3.4E+38,-1.79E+308,-9,-0.999999999,-9999.999,-999999999999999999,-0.999999999999999999,-99999.99999,-99999999999999999999.999999999999999999,-99999999999999999999999999999999999999,-9999999999999999999999.9999999999999999);
+-- result:
+-- !result
+select a.c_dis,b.c_largeint + a.c_bigint + b.c_int + a.c_smallint + b.c_tinyint from num_test a left join num_test b
+                on b.c_largeint + b.c_bigint + b.c_int + b.c_smallint + b.c_tinyint = a.c_largeint + a.c_bigint + a.c_int + a.c_smallint + a.c_tinyint
+                order by 1;
+-- result:
+1	-170141183460469231722463931676881813381
+2	170141183460469231722463931676881813376
+-- !result
 DROP TABLE IF EXISTS `jit_basic`;
 -- result:
 -- !result

@@ -25,8 +25,11 @@ import com.google.common.collect.SetMultimap;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
+import com.starrocks.planner.PlanNode;
+import com.starrocks.planner.ProjectNode;
 import com.starrocks.proto.PExecShortCircuitResult;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.PBackendService;
@@ -46,9 +49,9 @@ import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.apache.thrift.TDeserializer;
 
-import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Queue;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -79,6 +82,8 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
         AtomicLong affectedRows = new AtomicLong();
 
         AtomicInteger i = new AtomicInteger();
+        MetricRepo.COUNTER_SHORTCIRCUIT_QUERY.increase(1L);
+        MetricRepo.COUNTER_SHORTCIRCUIT_RPC.increase((long) be2ShortCircuitRequests.size());
         be2ShortCircuitRequests.forEach((beAddress, tRequest) -> {
             PBackendService service = BrpcProxy.getBackendService(beAddress);
             try {
@@ -89,8 +94,10 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
                 PExecShortCircuitResult shortCircuitResult = future.get(
                         context.getSessionVariable().getQueryTimeoutS(), TimeUnit.SECONDS);
                 watch.stop();
+                long t = watch.elapsed().toMillis();
+                MetricRepo.HISTO_SHORTCIRCUIT_RPC_LATENCY.update(t);
                 if (LOG.isDebugEnabled()) {
-                    LOG.debug("exec short circuit time: " + watch.elapsed().toMillis() + "ms.");
+                    LOG.debug("exec short circuit time: " + t + "ms.");
                 }
 
                 TStatusCode code = TStatusCode.findByValue(shortCircuitResult.status.statusCode);
@@ -170,6 +177,7 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
 
     /**
      * compute all tablets per be
+     *
      * @return
      */
     private SetMultimap<TNetworkAddress, TabletWithVersion> assignTablet2Backends() {
@@ -193,50 +201,58 @@ public class ShortCircuitHybridExecutor extends ShortCircuitExecutor {
 
     private SetMultimap<TNetworkAddress, TExecShortCircuitParams> createRequests() {
         SetMultimap<TNetworkAddress, TExecShortCircuitParams> toSendRequests = HashMultimap.create();
+        getOlapScanNode().ifPresent(rootNode -> {
+            OlapScanNode olapScanNode = (OlapScanNode) rootNode;
+            // set literal exprs
+            List<List<LiteralExpr>> keyTuples = olapScanNode.getRowStoreKeyLiterals();
+            List<TKeyLiteralExpr> keyLiteralExprs = keyTuples.stream().map(keyTuple -> {
+                TKeyLiteralExpr keyLiteralExpr = new TKeyLiteralExpr();
+                keyLiteralExpr.setLiteral_exprs(keyTuple.stream()
+                        .map(Expr::treeToThrift)
+                        .collect(Collectors.toList()));
+                return keyLiteralExpr;
+            }).collect(Collectors.toList());
 
-        if (planFragment.getPlanRoot() != null) {
-            if (planFragment.getPlanRoot() instanceof OlapScanNode) {
-                OlapScanNode olapScanNode = (OlapScanNode) planFragment.getPlanRoot();
-                // set literal exprs
-                List<List<LiteralExpr>> keyTuples = olapScanNode.getRowStoreKeyLiterals();
-                List<TKeyLiteralExpr> keyLiteralExprs = new ArrayList<>();
-                keyTuples.forEach(keyTuple -> {
-                    TKeyLiteralExpr keyLiteralExpr = new TKeyLiteralExpr();
-                    keyLiteralExpr.setLiteral_exprs(keyTuple.stream()
-                            .map(Expr::treeToThrift)
-                            .collect(Collectors.toList()));
-                    keyLiteralExprs.add(keyLiteralExpr);
+            // fill tablet id and version , then bind be network
+            SetMultimap<TNetworkAddress, TabletWithVersion> be2Tablets = assignTablet2Backends();
+            olapScanNode.clearScanNodeForThriftBuild();
+            be2Tablets.forEach((addr, tableVersion) -> {
+                TExecShortCircuitParams commonRequest = new TExecShortCircuitParams();
+                commonRequest.setDesc_tbl(tDescriptorTable);
+                commonRequest.setOutput_exprs(planFragment.getOutputExprs().stream()
+                        .map(Expr::treeToThrift).collect(Collectors.toList()));
+                commonRequest.setIs_binary_row(isBinaryRow);
+                commonRequest.setEnable_profile(enableProfile);
+                if (planFragment.getSink() != null) {
+                    commonRequest.setData_sink(planFragment.sinkToThrift());
+                }
+                commonRequest.setKey_literal_exprs(keyLiteralExprs);
 
-                });
-
-                // fill tablet id and version , then bind be network
-                SetMultimap<TNetworkAddress, TabletWithVersion> be2Tablets = assignTablet2Backends();
-                olapScanNode.clearScanNodeForThriftBuild();
-                be2Tablets.forEach((addr, tableVersion) -> {
-                    TExecShortCircuitParams commonRequest = new TExecShortCircuitParams();
-                    commonRequest.setDesc_tbl(tDescriptorTable);
-                    commonRequest.setOutput_exprs(planFragment.getOutputExprs().stream()
-                            .map(Expr::treeToThrift).collect(Collectors.toList()));
-                    commonRequest.setIs_binary_row(isBinaryRow);
-                    commonRequest.setEnable_profile(enableProfile);
-                    if (planFragment.getSink() != null) {
-                        commonRequest.setData_sink(planFragment.sinkToThrift());
-                    }
-                    commonRequest.setKey_literal_exprs(keyLiteralExprs);
-
-                    List<Long> tabletIds = be2Tablets.get(addr).stream().map(TabletWithVersion::getTabletId)
-                            .collect(Collectors.toList());
-                    commonRequest.setTablet_ids(tabletIds);
-                    List<String> versions = be2Tablets.get(addr).stream().map(TabletWithVersion::getVersion)
-                            .collect(Collectors.toList());
-                    commonRequest.setVersions(versions);
-                    commonRequest.setPlan(olapScanNode.treeToThrift());
-                    toSendRequests.put(addr, commonRequest);
-                });
-            }
-        }
+                List<Long> tabletIds = be2Tablets.get(addr).stream().map(TabletWithVersion::getTabletId)
+                        .collect(Collectors.toList());
+                commonRequest.setTablet_ids(tabletIds);
+                List<String> versions = be2Tablets.get(addr).stream().map(TabletWithVersion::getVersion)
+                        .collect(Collectors.toList());
+                commonRequest.setVersions(versions);
+                commonRequest.setPlan(planFragment.getPlanRoot().treeToThrift());
+                toSendRequests.put(addr, commonRequest);
+            });
+        });
 
         return toSendRequests;
+    }
+
+    private Optional<PlanNode> getOlapScanNode() {
+        return Optional.ofNullable(planFragment.getPlanRoot()).map(rootNode -> {
+            if (rootNode instanceof OlapScanNode) {
+                return rootNode;
+            } else if (rootNode instanceof ProjectNode && rootNode.getChildren().size() == 1 &&
+                    rootNode.getChild(0) instanceof OlapScanNode) {
+                return rootNode.getChild(0);
+            } else {
+                return null;
+            }
+        });
     }
 
 }

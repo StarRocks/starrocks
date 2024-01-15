@@ -2636,7 +2636,7 @@
       ],
       "targets": [
         {
-          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", exported_job=\"load\", type=\"MINI\", instance=\"$fe_master\"}",
+          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", job=\"load\", type=\"MINI\", instance=\"$fe_master\"}",
           "format": "table",
           "instant": true,
           "intervalFactor": 1,
@@ -2721,7 +2721,7 @@
       ],
       "targets": [
         {
-          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", exported_job=\"load\", type=\"HADOOP\", instance=\"$fe_master\"}",
+          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", job=\"load\", type=\"HADOOP\", instance=\"$fe_master\"}",
           "format": "table",
           "instant": true,
           "intervalFactor": 2,
@@ -2806,7 +2806,7 @@
       ],
       "targets": [
         {
-          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", exported_job=\"load\", type=\"BROKER\", instance=\"$fe_master\"}",
+          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", job=\"load\", type=\"BROKER\", instance=\"$fe_master\"}",
           "format": "table",
           "instant": true,
           "intervalFactor": 2,
@@ -2891,7 +2891,7 @@
       ],
       "targets": [
         {
-          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", exported_job=\"load\", type=\"INSERT\", instance=\"$fe_master\"}",
+          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", job=\"load\", type=\"INSERT\", instance=\"$fe_master\"}",
           "format": "table",
           "instant": true,
           "intervalFactor": 2,
@@ -2951,7 +2951,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", exported_job=\"load\", type=\"MINI\", instance=\"$fe_master\", state=\"PENDING\"}",
+          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", job=\"load\", type=\"MINI\", instance=\"$fe_master\", state=\"PENDING\"}",
           "format": "time_series",
           "hide": false,
           "instant": false,
@@ -2960,7 +2960,7 @@
           "refId": "A"
         },
         {
-          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", exported_job=\"load\", type=\"MINI\", instance=\"$fe_master\", state=\"ETL\"}",
+          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", job=\"load\", type=\"MINI\", instance=\"$fe_master\", state=\"ETL\"}",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
@@ -2968,7 +2968,7 @@
           "refId": "B"
         },
         {
-          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", exported_job=\"load\", type=\"MINI\", instance=\"$fe_master\", state=\"LOADING\"}",
+          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", job=\"load\", type=\"MINI\", instance=\"$fe_master\", state=\"LOADING\"}",
           "format": "time_series",
           "hide": false,
           "intervalFactor": 1,
@@ -3063,21 +3063,21 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", exported_job=\"load\", type=\"HADOOP\", instance=\"$fe_master\", state=\"PENDING\"}",
+          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", job=\"load\", type=\"HADOOP\", instance=\"$fe_master\", state=\"PENDING\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "PENDING",
           "refId": "A"
         },
         {
-          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", exported_job=\"load\", type=\"HADOOP\", instance=\"$fe_master\", state=\"ETL\"}",
+          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", job=\"load\", type=\"HADOOP\", instance=\"$fe_master\", state=\"ETL\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "ETL",
           "refId": "B"
         },
         {
-          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", exported_job=\"load\", type=\"HADOOP\", instance=\"$fe_master\", state=\"LOADING\"}",
+          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", job=\"load\", type=\"HADOOP\", instance=\"$fe_master\", state=\"LOADING\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "LOADING",
@@ -3174,21 +3174,21 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", exported_job=\"load\", type=\"BROKER\", instance=\"$fe_master\", state=\"PENDING\"}",
+          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", job=\"load\", type=\"BROKER\", instance=\"$fe_master\", state=\"PENDING\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "PENDING",
           "refId": "A"
         },
         {
-          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", exported_job=\"load\", type=\"BROKER\", instance=\"$fe_master\", state=\"ETL\"}",
+          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", job=\"load\", type=\"BROKER\", instance=\"$fe_master\", state=\"ETL\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "ETL",
           "refId": "B"
         },
         {
-          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", exported_job=\"load\", type=\"BROKER\", instance=\"$fe_master\", state=\"LOADING\"}",
+          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", job=\"load\", type=\"BROKER\", instance=\"$fe_master\", state=\"LOADING\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "LOADING",
@@ -3285,21 +3285,21 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", exported_job=\"load\", type=\"INSERT\", instance=\"$fe_master\", state=\"PENDING\"}",
+          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", job=\"load\", type=\"INSERT\", instance=\"$fe_master\", state=\"PENDING\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "PENDING",
           "refId": "A"
         },
         {
-          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", exported_job=\"load\", type=\"INSERT\", instance=\"$fe_master\", state=\"ETL\"}",
+          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", job=\"load\", type=\"INSERT\", instance=\"$fe_master\", state=\"ETL\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "ETL",
           "refId": "B"
         },
         {
-          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", exported_job=\"load\", type=\"INSERT\", instance=\"$fe_master\", state=\"LOADING\"}",
+          "expr": "starrocks_fe_job{namespace=\"$namespace\", service=\"$feservice\", job=\"load\", type=\"INSERT\", instance=\"$fe_master\", state=\"LOADING\"}",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "LOADING",
@@ -4146,28 +4146,28 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(starrocks_be_txn_request{group=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"begin\"})",
+          "expr": "sum(starrocks_be_txn_request{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"begin\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "begin",
           "refId": "A"
         },
         {
-          "expr": "sum(starrocks_be_txn_request{group=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"exec\"})",
+          "expr": "sum(starrocks_be_txn_request{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"exec\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "exec",
           "refId": "B"
         },
         {
-          "expr": "sum(starrocks_be_txn_request{group=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"commit\"})",
+          "expr": "sum(starrocks_be_txn_request{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"commit\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "commit",
           "refId": "C"
         },
         {
-          "expr": "sum(starrocks_be_txn_request{group=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"rollback\"})",
+          "expr": "sum(starrocks_be_txn_request{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"rollback\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "rollback",
@@ -4266,14 +4266,14 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(starrocks_be_stream_load{group=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"receive_bytes\"}[$interval]))",
+          "expr": "sum(rate(starrocks_be_stream_load{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"receive_bytes\"}[$interval]))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "bytes",
           "refId": "A"
         },
         {
-          "expr": "sum(rate(starrocks_be_stream_load{group=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"load_rows\"}[$interval]))",
+          "expr": "sum(rate(starrocks_be_stream_load{app_kubernetes_io_component=\"be\", namespace=\"$namespace\", service=\"$beservice\", type=\"load_rows\"}[$interval]))",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "rows",
@@ -5669,7 +5669,7 @@
         "current": true,
         "max": false,
         "min": false,
-        "rightSide": true,
+        "rightSide": false,
         "show": true,
         "total": false,
         "values": true
@@ -8312,7 +8312,7 @@
         "name": "namespace",
         "options": [],
         "query": {
-          "query": "label_values(kube_service_info{service=~\".*-fe-search\"}, namespace)",
+          "query": "label_values(kube_service_info{service=~\".*-fe-service\"}, namespace)",
           "refId": "prometheus-namespace-Variable-Query"
         },
         "refresh": 2,
@@ -8339,7 +8339,7 @@
         "name": "feservice",
         "options": [],
         "query": {
-          "query": "label_values(kube_service_info{namespace=\"$namespace\", service=~\".*-fe-search\"}, service)",
+          "query": "label_values(kube_service_info{namespace=\"$namespace\", service=~\".*-fe-service\"}, service)",
           "refId": "prometheus-feservice-Variable-Query"
         },
         "refresh": 2,
@@ -8366,7 +8366,7 @@
         "name": "beservice",
         "options": [],
         "query": {
-          "query": "label_values(kube_service_info{namespace=\"$namespace\", service=~\".*-be-search\"}, service)",
+          "query": "label_values(kube_service_info{namespace=\"$namespace\", service=~\".*-be-service\"}, service)",
           "refId": "prometheus-beservice-Variable-Query"
         },
         "refresh": 2,
@@ -8501,8 +8501,8 @@
         "auto_min": "10s",
         "current": {
           "selected": false,
-          "text": "1m",
-          "value": "1m"
+          "text": "2m",
+          "value": "2m"
         },
         "description": null,
         "error": null,

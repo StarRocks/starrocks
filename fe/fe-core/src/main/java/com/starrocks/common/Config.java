@@ -229,6 +229,13 @@ public class Config extends ConfigBase {
     public static boolean log_plan_cancelled_by_crash_be = true;
 
     /**
+     * In high-concurrency scenarios, the logging of register and unregister query ID can become a bottleneck.
+     * In such cases, it is possible to disable this switch.
+     */
+    @ConfField(mutable = true)
+    public static boolean log_register_and_unregister_query_id = true;
+
+    /**
      * Used to limit the maximum number of partitions that can be created when creating a dynamic partition table,
      * to avoid creating too many partitions at one time.
      */
@@ -359,6 +366,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int edit_log_roll_num = 50000;
+
+    @ConfField(mutable = true)
+    public static int edit_log_write_slow_log_threshold_ms = 2000;
 
     /**
      * whether ignore unknown log id
@@ -635,6 +645,13 @@ public class Config extends ConfigBase {
     public static boolean http_web_page_display_hardware = true;
 
     /**
+     * Whether to enable the detail metrics for http. It may be expensive
+     * to get those metrics, and only enable it for debug in general.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_http_detail_metrics = false;
+
+    /**
      * Cluster name will be shown as the title of web page
      */
     @ConfField
@@ -890,7 +907,7 @@ public class Config extends ConfigBase {
     public static int prepared_transaction_default_timeout_second = 86400; // 1day
 
     /**
-     * Max load timeout applicable to all type of load except for stream load
+     * Max load timeout applicable to all type of load except for stream load and lake compaction
      */
     @ConfField(mutable = true)
     public static int max_load_timeout_second = 259200; // 3days
@@ -1131,6 +1148,13 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_backup_materialized_view = true;
+
+    /**
+     * Whether to display all task runs or only the newest task run in ShowMaterializedViews command to be
+     * compatible with old version.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_show_materialized_views_include_all_task_runs = true;
 
     /**
      * The smaller schedule time is, the higher frequency TaskManager schedule which means
@@ -2381,6 +2405,13 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "the max number of threads for lake table delete txnLog when enable batch publish")
     public static int lake_publish_delete_txnlog_max_threads = 16;
 
+    /**
+     * Default lake compaction txn timeout
+     */
+    @ConfField(mutable = true)
+    public static int lake_compaction_default_timeout_second = 86400; // 1 day
+
+
     @ConfField(mutable = true, comment = "the max number of previous version files to keep")
     public static int lake_autovacuum_max_previous_versions = 0;
 
@@ -2696,6 +2727,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long mv_plan_cache_max_size = 1000;
+
+    @ConfField(mutable = true, comment = "Max materialized view rewrite cache size during one query's lifecycle " +
+            "so can avoid repeating compute to reduce optimizer time in materialized view rewrite, " +
+            "but may occupy some extra FE's memory. It's well-done when there are many relative " +
+            "materialized views(>10) or query is complex(multi table joins).")
+    public static long mv_query_context_cache_max_size = 1000;
 
     /**
      * Checking the connectivity of port opened by FE,

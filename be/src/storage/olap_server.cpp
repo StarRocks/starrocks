@@ -404,9 +404,11 @@ void* StorageEngine::_pk_index_major_compaction_thread_callback(void* arg) {
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
         SLEEP_IN_BG_WORKER(1);
         // schedule persistent index compaction
-        _update_manager->get_pindex_compaction_mgr()->schedule([&]() {
-            return StorageEngine::instance()->tablet_manager()->pick_tablets_to_do_pk_index_major_compaction();
-        });
+        if (config::enable_pindex_minor_compaction) {
+            _update_manager->get_pindex_compaction_mgr()->schedule([&]() {
+                return StorageEngine::instance()->tablet_manager()->pick_tablets_to_do_pk_index_major_compaction();
+            });
+        }
     }
 
     return nullptr;

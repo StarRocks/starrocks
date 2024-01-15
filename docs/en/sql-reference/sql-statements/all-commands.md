@@ -151,13 +151,19 @@ Manages clusters, including FEs, BEs, compute nodes, brokers, resource groups, s
 ### Other load
 
 - [ALTER LOAD](./data-manipulation/ALTER_LOAD.md)
+- [ALTER PIPE](./data-manipulation/ALTER_PIPE.md)
 - [BROKER LOAD](./data-manipulation/BROKER_LOAD.md)
 - [CANCEL LOAD](./data-manipulation/CANCEL_LOAD.md)
+- [CREATE PIPE](./data-manipulation/CREATE_PIPE.md)
+- [DROP PIPE](./data-manipulation/DROP_PIPE.md)
 - [INSERT](./data-manipulation/INSERT.md)
+- [RETRY FILE](./data-manipulation/RETRY_FILE.md)
 - [SHOW LOAD](./data-manipulation/SHOW_LOAD.md)
+- [SHOW PIPES](./data-manipulation/SHOW_PIPES.md)
 - [SHOW TRANSACTION](./data-manipulation/SHOW_TRANSACTION.md)
 - [SPARK LOAD](./data-manipulation/SPARK_LOAD.md)
 - [STREAM LOAD](./data-manipulation/STREAM_LOAD.md)
+- [SUSPEND or RESUME PIPE](./data-manipulation/SUSPEND_or_RESUME_PIPE.md)
 
 ### Unloading
 
