@@ -115,6 +115,7 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
@@ -123,6 +124,7 @@ import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DeallocateStmt;
+import com.starrocks.sql.ast.DelBackendBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DmlStmt;
@@ -169,6 +171,7 @@ import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatisticsCollectJobFactory;
 import com.starrocks.statistic.StatsConstants;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TExplainLevel;
@@ -650,6 +653,10 @@ public class StmtExecutor {
                 handlePrepareStmt(execPlan);
             } else if (parsedStmt instanceof DeallocateStmt) {
                 handleDeallocateStmt();
+            } else if (parsedStmt instanceof AddBackendBlackListStmt) {
+                handleAddBackendBlackListStmt();
+            } else if (parsedStmt instanceof DelBackendBlackListStmt) {
+                handleDelBackendBlackListStmt();
             } else {
                 context.getState().setError("Do not support this query.");
             }
@@ -891,7 +898,8 @@ public class StmtExecutor {
         resolveParseStmtForForward();
         redirectStatus = parsedStmt.getRedirectStatus();
 
-        // yiguolei: insertstmt's grammar analysis will write editlog, so that we check if the stmt should be forward to master here
+        // yiguolei: insertstmt's grammar analysis will write editlog, so that we check if the stmt should be forward to master
+        // here
         // if the stmt should be forward to master, then just return here and the master will do analysis again
         if (isForwardToLeader()) {
             return;
@@ -1339,6 +1347,23 @@ public class StmtExecutor {
             for (long id : indexs) {
                 SqlBlackList.getInstance().delete(id);
             }
+        }
+    }
+
+    private void handleAddBackendBlackListStmt() throws UserException {
+        AddBackendBlackListStmt addBackendBlackListStmt = (AddBackendBlackListStmt) parsedStmt;
+        long beId = addBackendBlackListStmt.getBackendId();
+        SystemInfoService sis = GlobalStateMgr.getCurrentSystemInfo();
+        if (sis.getBackend(beId) == null) {
+            throw new UserException("Not found backend: " + beId);
+        }
+        SimpleScheduler.getHostBlacklist().addByManual(beId);
+    }
+
+    private void handleDelBackendBlackListStmt() {
+        DelBackendBlackListStmt delBackendBlackListStmt = (DelBackendBlackListStmt) parsedStmt;
+        for (Long backendId : delBackendBlackListStmt.getBackendIds()) {
+            SimpleScheduler.getHostBlacklist().remove(backendId);
         }
     }
 

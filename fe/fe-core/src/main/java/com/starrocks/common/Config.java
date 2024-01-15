@@ -2782,4 +2782,10 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long jdbc_meta_default_cache_expire_sec = 600L;
+
+    @ConfField(mutable = true)
+    public static long black_host_history_sec = 2 * 60; // 2min
+
+    @ConfField(mutable = true)
+    public static long black_host_connect_failures_within_time = 5;
 }
