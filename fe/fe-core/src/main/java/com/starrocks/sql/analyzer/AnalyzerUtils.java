@@ -543,7 +543,9 @@ public class AnalyzerUtils {
                 boolean leftResult = fillStarRelation(joinRelation.getLeft(), starRelationNames);
                 boolean rightResult = fillStarRelation(joinRelation.getRight(), starRelationNames);
                 return leftResult && rightResult;
-            } else return false;
+            } else {
+                return false;
+            }
         }
 
         @Override
