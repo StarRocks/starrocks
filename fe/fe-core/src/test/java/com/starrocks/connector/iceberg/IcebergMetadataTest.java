@@ -67,9 +67,11 @@ import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
+import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
@@ -1087,4 +1089,115 @@ public class IcebergMetadataTest extends TableTestBase {
                 "table_name", new ArrayList<>(), mockedNativeTableD, Maps.newHashMap());
         metadata.refreshTable("db", icebergTable, null, true);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testAlterTable(@Mocked IcebergHiveCatalog icebergHiveCatalog) throws UserException {
+        IcebergMetadata metadata = new IcebergMetadata(CATALOG_NAME, HDFS_ENVIRONMENT, icebergHiveCatalog,
+                Executors.newSingleThreadExecutor(), Executors.newSingleThreadExecutor());
+
+        TableName tableName = new TableName("db", "tbl");
+        ColumnDef c1 = new ColumnDef("col1", TypeDef.create(PrimitiveType.INT), true);
+        AddColumnClause addColumnClause = new AddColumnClause(c1, null, null, new HashMap<>());
+
+        ColumnDef c2 = new ColumnDef("col2", TypeDef.create(PrimitiveType.BIGINT), true);
+        ColumnDef c3 = new ColumnDef("col3", TypeDef.create(PrimitiveType.VARCHAR), true);
+        List<ColumnDef> cols = new ArrayList<>();
+        cols.add(c2);
+        cols.add(c3);
+        AddColumnsClause addColumnsClause = new AddColumnsClause(cols, null, new HashMap<>());
+
+        List<AlterClause> clauses = Lists.newArrayList();
+        clauses.add(addColumnClause);
+        clauses.add(addColumnsClause);
+        AlterTableStmt stmt = new AlterTableStmt(tableName, clauses);
+        metadata.alterTable(stmt);
+        clauses.clear();
+
+        // must be default null
+        ColumnDef c4 = new ColumnDef("col4", TypeDef.create(PrimitiveType.INT), false);
+        AddColumnClause addC4 = new AddColumnClause(c4, null, null, new HashMap<>());
+        clauses.add(addC4);
+        AlterTableStmt stmtC4 = new AlterTableStmt(tableName, clauses);
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(stmtC4));
+        clauses.clear();
+
+        // drop/rename/modify column
+        DropColumnClause dropColumnClause = new DropColumnClause("col1", null, new HashMap<>());
+        ColumnRenameClause columnRenameClause = new ColumnRenameClause("col2", "col22");
+        ColumnDef newCol = new ColumnDef("col1", TypeDef.create(PrimitiveType.BIGINT), true);
+        Map<String, String> properties = new HashMap<>();
+        ModifyColumnClause modifyColumnClause =
+                new ModifyColumnClause(newCol, ColumnPosition.FIRST, null, properties);
+        clauses.add(dropColumnClause);
+        clauses.add(columnRenameClause);
+        clauses.add(modifyColumnClause);
+        metadata.alterTable(new AlterTableStmt(tableName, clauses));
+
+        // rename table
+        clauses.clear();
+        TableRenameClause tableRenameClause = new TableRenameClause("newTbl");
+        clauses.add(tableRenameClause);
+        metadata.alterTable(new AlterTableStmt(tableName, clauses));
+
+        // modify table properties/comment
+        clauses.clear();
+        Map<String, String> newProperties = new HashMap<>();
+        newProperties.put(FILE_FORMAT, "orc");
+        newProperties.put(LOCATION_PROPERTY, "new location");
+        newProperties.put(COMPRESSION_CODEC, "gzip");
+        newProperties.put(TableProperties.ORC_BATCH_SIZE, "10240");
+        ModifyTablePropertiesClause modifyTablePropertiesClause = new ModifyTablePropertiesClause(newProperties);
+        AlterTableCommentClause alterTableCommentClause = new AlterTableCommentClause("new comment", NodePosition.ZERO);
+        clauses.add(modifyTablePropertiesClause);
+        clauses.add(alterTableCommentClause);
+        metadata.alterTable(new AlterTableStmt(tableName, clauses));
+
+        // modify empty properties
+        clauses.clear();
+        Map<String, String> emptyProperties = new HashMap<>();
+        ModifyTablePropertiesClause emptyPropertiesClause = new ModifyTablePropertiesClause(emptyProperties);
+        clauses.add(emptyPropertiesClause);
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
+
+        // modify unsupported properties
+        clauses.clear();
+        Map<String, String> invalidProperties = new HashMap<>();
+        invalidProperties.put(FILE_FORMAT, "parquet");
+        invalidProperties.put(COMPRESSION_CODEC, "zzz");
+        ModifyTablePropertiesClause invalidCompressionClause = new ModifyTablePropertiesClause(invalidProperties);
+        clauses.add(invalidCompressionClause);
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
+    }
+
+    @Test
+    public void testGetIcebergMetricsConfig() {
+        List<Column> columns = Lists.newArrayList(new Column("k1", INT),
+                new Column("k2", STRING),
+                new Column("k3", STRING),
+                new Column("k4", STRING),
+                new Column("k5", STRING));
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", columns, mockedNativeTableH, Maps.newHashMap());
+        Assert.assertEquals(0, IcebergMetadata.getIcebergMetricsConfig(icebergTable).size());
+        Map<String, String> icebergProperties = Maps.newHashMap();
+        icebergProperties.put("write.metadata.metrics.column.k1", "none");
+        icebergProperties.put("write.metadata.metrics.column.k2", "counts");
+        icebergProperties.put("write.metadata.metrics.column.k3", "truncate(16)");
+        icebergProperties.put("write.metadata.metrics.column.k4", "truncate(32)");
+        icebergProperties.put("write.metadata.metrics.column.k5", "full");
+        UpdateProperties updateProperties = mockedNativeTableH.updateProperties();
+        icebergProperties.forEach(updateProperties::set);
+        updateProperties.commit();
+        Map<String, MetricsModes.MetricsMode> actual2 = IcebergMetadata.getIcebergMetricsConfig(icebergTable);
+        Assert.assertEquals(4, actual2.size());
+        Map<String, MetricsModes.MetricsMode> expected2 = Maps.newHashMap();
+        expected2.put("k1", MetricsModes.None.get());
+        expected2.put("k2", MetricsModes.Counts.get());
+        expected2.put("k4", MetricsModes.Truncate.withLength(32));
+        expected2.put("k5", MetricsModes.Full.get());
+        Assert.assertEquals(expected2, actual2);
+    }
+>>>>>>> 0cdbfddf0c ([Enhancement] Add ICEBERG.MetricsConfig in query profile for Iceberg tables (#37787))
 }
