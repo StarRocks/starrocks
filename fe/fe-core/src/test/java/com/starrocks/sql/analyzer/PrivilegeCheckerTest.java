@@ -46,6 +46,7 @@ import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.privilege.DbPEntryObject;
 import com.starrocks.privilege.PipePEntryObject;
 import com.starrocks.privilege.PrivObjNotFoundException;
 import com.starrocks.privilege.PrivilegeException;
@@ -479,6 +480,16 @@ public class PrivilegeCheckerTest {
         System.out.println(res.getResultRows());
         Assert.assertEquals(2, res.getResultRows().size());
         Assert.assertEquals("test_ex_catalog3", res.getResultRows().get(1).get(0));
+    }
+
+    @Test
+    public void testExternalDBAndTablePEntryObject() throws Exception {
+        starRocksAssert.withCatalog("create external catalog test_iceberg properties (\"type\"=\"iceberg\")");
+        DbPEntryObject dbPEntryObject = DbPEntryObject.generate(GlobalStateMgr.getCurrentState(), List.of("test_iceberg", "*"));
+        Assert.assertTrue(dbPEntryObject.validate(GlobalStateMgr.getCurrentState()));
+        TablePEntryObject tablePEntryObject = TablePEntryObject.generate(GlobalStateMgr.getCurrentState(),
+                List.of("test_iceberg", "*", "*"));
+        Assert.assertTrue(tablePEntryObject.validate(GlobalStateMgr.getCurrentState()));
     }
 
     @Test
