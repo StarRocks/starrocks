@@ -279,18 +279,21 @@ Status JsonDynamicFlatIterator::_flat_json(Column* input, Column* output) {
 Status JsonDynamicFlatIterator::next_batch(size_t* n, Column* dst) {
     auto proxy = dst->clone_empty();
     RETURN_IF_ERROR(_json_iter->next_batch(n, proxy.get()));
+    dst->set_delete_state(proxy->delete_state());
     return _flat_json(proxy.get(), dst);
 }
 
 Status JsonDynamicFlatIterator::next_batch(const SparseRange<>& range, Column* dst) {
     auto proxy = dst->clone_empty();
     RETURN_IF_ERROR(_json_iter->next_batch(range, proxy.get()));
+    dst->set_delete_state(proxy->delete_state());
     return _flat_json(proxy.get(), dst);
 }
 
 Status JsonDynamicFlatIterator::fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) {
     auto proxy = values->clone_empty();
     RETURN_IF_ERROR(_json_iter->fetch_values_by_rowid(rowids, size, proxy.get()));
+    values->set_delete_state(proxy->delete_state());
     return _flat_json(proxy.get(), values);
 }
 
