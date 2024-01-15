@@ -3557,7 +3557,8 @@ Status PersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
     return _get_from_immutable_index(n, keys, values, not_founds_by_key_size, nullptr);
 }
 
-Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values) {
+Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values,
+                                                     std::vector<size_t>* replace_idxes) {
     bool need_flush_advance = _need_flush_advance();
     _flushed |= need_flush_advance;
 
@@ -3570,7 +3571,11 @@ Status PersistentIndex::_flush_advance_or_append_wal(size_t n, const Slice* keys
     } else if (!_flushed) {
         _dump_snapshot |= _can_dump_directly();
         if (!_dump_snapshot) {
-            RETURN_IF_ERROR(_l0->append_wal(n, keys, values));
+            if (replace_idxes == nullptr) {
+                RETURN_IF_ERROR(_l0->append_wal(n, keys, values));
+            } else {
+                RETURN_IF_ERROR(_l0->append_wal(keys, values, *replace_idxes));
+            }
         }
     }
 
@@ -3657,7 +3662,7 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
     }
 
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
-    Status st = _flush_advance_or_append_wal(n, keys, values);
+    Status st = _flush_advance_or_append_wal(n, keys, values, nullptr);
     if (stat != nullptr) {
         stat->flush_or_wal_cost += watch.elapsed_time();
     }
@@ -3696,7 +3701,7 @@ Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* va
     }
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
 
-    return _flush_advance_or_append_wal(n, keys, values);
+    return _flush_advance_or_append_wal(n, keys, values, nullptr);
 }
 
 Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_values) {
@@ -3722,7 +3727,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
     }
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
 
-    return _flush_advance_or_append_wal(n, keys, nullptr);
+    return _flush_advance_or_append_wal(n, keys, nullptr, nullptr);
 }
 
 [[maybe_unused]] Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values,
@@ -3741,11 +3746,7 @@ Status PersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_value
         }
     }
     RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
-    _dump_snapshot |= _can_dump_directly();
-    if (!_dump_snapshot) {
-        RETURN_IF_ERROR(_l0->append_wal(keys, values, replace_idxes));
-    }
-    return Status::OK();
+    return _flush_advance_or_append_wal(n, keys, values, &replace_idxes);
 }
 
 Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
@@ -3763,11 +3764,7 @@ Status PersistentIndex::try_replace(size_t n, const Slice* keys, const IndexValu
         }
     }
     RETURN_IF_ERROR(_l0->replace(keys, values, replace_idxes));
-    _dump_snapshot |= _can_dump_directly();
-    if (!_dump_snapshot) {
-        RETURN_IF_ERROR(_l0->append_wal(keys, values, replace_idxes));
-    }
-    return Status::OK();
+    return _flush_advance_or_append_wal(n, keys, values, &replace_idxes);
 }
 
 Status PersistentIndex::flush_advance() {
