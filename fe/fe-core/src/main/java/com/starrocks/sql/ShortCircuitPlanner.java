@@ -30,8 +30,10 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 public class ShortCircuitPlanner {
@@ -149,22 +151,30 @@ public class ShortCircuitPlanner {
         protected static boolean isPointScan(Table table, List<String> keyColumns, List<ScalarOperator> conjuncts) {
             Map<String, PartitionColumnFilter> filters = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
             filters.putAll(ColumnFilterConverter.convertColumnFilter(conjuncts, table));
+            Set<String> boolKeyColumns = new HashSet<>();
+            for (ScalarOperator conjunct : conjuncts) {
+                if (conjunct instanceof ColumnRefOperator) {
+                    boolKeyColumns.add(((ColumnRefOperator) conjunct).getName());
+                }
+            }
             if (keyColumns == null || keyColumns.isEmpty()) {
                 return false;
             }
             long cardinality = 1;
             for (String keyColumn : keyColumns) {
-                if (!filters.containsKey(keyColumn)) {
+                if (!filters.containsKey(keyColumn) && !boolKeyColumns.contains(keyColumn)) {
                     return false;
                 }
-                PartitionColumnFilter filter = filters.get(keyColumn);
-                if (filter.getInPredicateLiterals() != null) {
-                    cardinality *= filter.getInPredicateLiterals().size();
-                    if (cardinality > MAX_RETURN_ROWS) {
+                if (filters.containsKey(keyColumn)) {
+                    PartitionColumnFilter filter = filters.get(keyColumn);
+                    if (filter.getInPredicateLiterals() != null) {
+                        cardinality *= filter.getInPredicateLiterals().size();
+                        if (cardinality > MAX_RETURN_ROWS) {
+                            return false;
+                        }
+                    } else if (!filter.isPoint()) {
                         return false;
                     }
-                } else if (!filter.isPoint()) {
-                    return false;
                 }
             }
             return true;
