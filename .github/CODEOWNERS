@@ -4,6 +4,9 @@
 # /docs/ belong to docs-maintainer
 /docs/  @StarRocks/docs-maintainer
 
+# /docker
+/docker/  @StarRocks/docker-maintainer
+
 # parser
 /fe/fe-core/src/main/java/com/starrocks/planner/  @StarRocks/parser
 /fe/fe-core/src/main/java/com/starrocks/sql/ast/ @StarRocks/parser
