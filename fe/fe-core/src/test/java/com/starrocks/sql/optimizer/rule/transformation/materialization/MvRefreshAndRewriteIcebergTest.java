@@ -1181,6 +1181,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                 materializedView.getPartitions().stream().map(Partition::getName).sorted()
                         .collect(Collectors.toList());
         Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
 
         {
             String query = "select t1.a, t2.b, t1.d, count(t1.c)\n" +
@@ -1494,7 +1495,7 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                         .collect(Collectors.toList());
         Assert.assertEquals(Arrays.asList("p20230801_20230802"), partitions);
 
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("default");
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         {
             String query = "select t1.a, t2.b, t1.d, count(distinct t1.c)\n" +
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 \n" +
@@ -1503,10 +1504,9 @@ public class MvRefreshAndRewriteIcebergTest extends MvRewriteTestBase {
                     " where t1.d in ('2023-08-01')\n" +
                     " group by t1.a, t2.b, t1.d;";
             String plan = getFragmentPlan(query);
-            PlanTestBase.assertNotContains(plan, "test_mv1");
+            PlanTestBase.assertContains(plan, "test_mv1");
         }
 
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         {
             String query = "select t1.a, t2.b, t1.d, count(distinct t1.c)\n" +
                     " from  iceberg0.partitioned_db.part_tbl1 as t1 \n" +

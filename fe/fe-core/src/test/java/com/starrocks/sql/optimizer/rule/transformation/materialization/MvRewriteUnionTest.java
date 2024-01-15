@@ -464,7 +464,7 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 "  |  predicates: 1: k1 > 1, 2: k2 LIKE 'a%'";
         String p =
                 "7:SELECT\n" +
-                "  |   predicates: 2: k2 LIKE 'a%', 1: k1 > 1";
+                "  |  predicates: 2: k2 LIKE 'a%', 1: k1 > 1";
         PlanTestBase.assertContainsIgnoreColRefs(p1, p);
     }
 }
