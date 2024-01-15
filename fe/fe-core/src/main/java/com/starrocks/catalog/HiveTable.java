@@ -82,6 +82,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
@@ -233,6 +234,13 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public List<Column> getPartitionColumns() {
         return partColumnNames.stream()
                 .map(name -> nameToColumn.get(name))
+                .collect(Collectors.toList());
+    }
+
+    public List<Integer> getPartitionColumnIDs() {
+        return IntStream.range(0, fullSchema.size())
+                .filter(i -> partColumnNames.contains(fullSchema.get(i).getName()))
+                .boxed()
                 .collect(Collectors.toList());
     }
 

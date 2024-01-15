@@ -156,7 +156,7 @@ private:
     std::vector<int> _channel_indices;
     // Index of current channel to send to if _part_type == RANDOM.
     int32_t _curr_random_channel_idx = 0;
-
+    int32_t _curr_channel_sequence = 0;
     // Only used when broadcast
     PTransmitChunkParamsPtr _chunk_request;
     size_t _current_request_bytes = 0;

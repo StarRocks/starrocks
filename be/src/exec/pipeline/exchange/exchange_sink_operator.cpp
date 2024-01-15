@@ -97,6 +97,9 @@ public:
 
     bool use_pass_through() const { return _use_pass_through; }
 
+    std::string get_dest_address() { return _brpc_dest_addr.hostname; }
+    size_t _channel_total_bytes = 0;
+
     bool is_local();
 
 private:
@@ -252,7 +255,6 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
             _current_request_bytes += pchunk->data().size();
         }
     }
-
     // Try to accumulate enough bytes before sending a RPC. When eos is true we should send
     // last packet
     if (_current_request_bytes > config::max_transmit_batched_bytes || eos) {
@@ -434,7 +436,18 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     // Initialize a std::mt19937 random number generator with a seed from std::random_device.
     // This is preferred over std::srand and std::rand as it provides better randomization
     // and is thread-safe without locking overhead.
-    std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
+    if (_part_type == TPartitionType::RANDOM_SCALE) {
+        // For Connector Sink Only
+        std::string query_id = print_id(state->query_id());
+        std::hash<std::string> hasher;
+        unsigned int seed = static_cast<unsigned int>(hasher(query_id));
+        // Ensure that all backends get the same shuffle result
+        std::sort(_channels.begin(), _channels.end());
+        std::mt19937 rng(seed);
+        std::shuffle(_channels.begin(), _channels.end(), rng);
+    } else {
+        std::shuffle(_channel_indices.begin(), _channel_indices.end(), std::mt19937(std::random_device()()));
+    }
 
     _bytes_pass_through_counter = ADD_COUNTER(_unique_metrics, "BytesPassThrough", TUnit::BYTES);
     _sender_input_bytes_counter = ADD_COUNTER(_unique_metrics, "SenderInputBytes", TUnit::BYTES);
@@ -537,26 +550,49 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chu
                 _chunk_request.reset();
             }
         }
-    } else if (_part_type == TPartitionType::RANDOM) {
-        // Round-robin batches among channels. Wait for the current channel to finish its
-        // rpc before overwriting its batch.
-        // 1. Get request of that channel
-        std::vector<Channel*> local_channels;
-        for (const auto& channel : _channels) {
-            if (channel->is_local()) {
-                local_channels.emplace_back(channel);
+    } else if (_part_type == TPartitionType::RANDOM_SCALE || _part_type == TPartitionType::RANDOM) {
+        int64_t buffer_size = state->query_options().__isset.connector_sink_shuffle_buffer_size_mb
+                                      ? state->query_options().connector_sink_shuffle_buffer_size_mb
+                                      : 0;
+        if (_part_type == TPartitionType::RANDOM_SCALE && buffer_size > 0 &&
+            _curr_channel_sequence < _channels.size()) {
+            int32_t current_channel_size = 1;
+            for (int i = 0; i < _channels.size() && _buffer->connector_sink_need_scaling(buffer_size, i); ++i) {
+                current_channel_size = i + 1;
             }
-        }
+            auto& channel = _channels[_curr_channel_sequence];
+            bool real_sent = false;
+            RETURN_IF_ERROR(channel->send_one_chunk(state, send_chunk, DEFAULT_DRIVER_SEQUENCE, false, &real_sent));
+            if (real_sent) {
+                if (_channels.size() == current_channel_size) {
+                    // Stop scaling once BE counts equals to channel size. E.g. if there are 3 BEs, when we need to use
+                    // 3 channels, we will go back to the default strategy, which only shuffle to local channels.
+                    _curr_channel_sequence = current_channel_size;
+                } else {
+                    _curr_channel_sequence = (_curr_channel_sequence + 1) % current_channel_size;
+                }
+            }
+        } else {
+            // Round-robin batches among channels. Wait for the current channel to finish its
+            // rpc before overwriting its batch.
+            // 1. Get request of that channel
+            std::vector<Channel*> local_channels;
+            for (const auto& channel : _channels) {
+                if (channel->is_local()) {
+                    local_channels.emplace_back(channel);
+                }
+            }
 
-        if (local_channels.empty()) {
-            local_channels = _channels;
-        }
+            if (local_channels.empty()) {
+                local_channels = _channels;
+            }
 
-        auto& channel = local_channels[_curr_random_channel_idx];
-        bool real_sent = false;
-        RETURN_IF_ERROR(channel->send_one_chunk(state, send_chunk, DEFAULT_DRIVER_SEQUENCE, false, &real_sent));
-        if (real_sent) {
-            _curr_random_channel_idx = (_curr_random_channel_idx + 1) % local_channels.size();
+            auto& channel = local_channels[_curr_random_channel_idx];
+            bool real_sent = false;
+            RETURN_IF_ERROR(channel->send_one_chunk(state, send_chunk, DEFAULT_DRIVER_SEQUENCE, false, &real_sent));
+            if (real_sent) {
+                _curr_random_channel_idx = (_curr_random_channel_idx + 1) % local_channels.size();
+            }
         }
     } else if (_part_type == TPartitionType::HASH_PARTITIONED ||
                _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {

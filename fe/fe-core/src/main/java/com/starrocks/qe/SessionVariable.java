@@ -394,6 +394,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String HIVE_PARTITION_STATS_SAMPLE_SIZE = "hive_partition_stats_sample_size";
 
     public static final String ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE = "enable_connector_sink_global_shuffle";
+    public static final String CONNECTOR_SINK_SHUFFLE_BUFFER_SIZE_MB = "connector_sink_shuffle_buffer_size_mb";
     public static final String PIPELINE_SINK_DOP = "pipeline_sink_dop";
     public static final String ENABLE_ADAPTIVE_SINK_DOP = "enable_adaptive_sink_dop";
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
@@ -937,6 +938,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // Add a global shuffle between the connector sink fragment and its child fragment.
     @VariableMgr.VarAttr(name = ENABLE_CONNECTOR_SINK_GLOBAL_SHUFFLE, flag = VariableMgr.INVISIBLE)
     private boolean enableConnectorSinkGlobalShuffle = true;
+
+    @VariableMgr.VarAttr(name = CONNECTOR_SINK_SHUFFLE_BUFFER_SIZE_MB)
+    private long connectorSinkShuffleBufferSizeMb = 0;
 
     /*
      * The maximum pipeline dop limit which only takes effect when pipeline_dop=0.
@@ -2614,6 +2618,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableConnectorSinkGlobalShuffle;
     }
 
+    public long isExternalSinkShuffleBufferSizeMb() {
+        return connectorSinkShuffleBufferSizeMb;
+    }
+
     public void setPipelineSinkDop(int pipelineSinkDop) {
         this.pipelineSinkDop = pipelineSinkDop;
     }
@@ -3470,6 +3478,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setIo_tasks_per_scan_operator(ioTasksPerScanOperator);
         tResult.setConnector_io_tasks_per_scan_operator(connectorIoTasksPerScanOperator);
         tResult.setEnable_dynamic_prune_scan_range(enableDynamicPruneScanRange);
+        if (connectorSinkShuffleBufferSizeMb != 0) {
+            tResult.setConnector_sink_shuffle_buffer_size_mb(connectorSinkShuffleBufferSizeMb);
+        }
         tResult.setUse_page_cache(usePageCache);
 
         tResult.setEnable_connector_adaptive_io_tasks(enableConnectorAdaptiveIoTasks);

@@ -44,6 +44,8 @@ enum TPartitionType {
   // round-robin partition
   RANDOM,
 
+  RANDOM_SCALE,
+
   // unordered partition on a set of exprs
   // (partition bounds overlap)
   HASH_PARTITIONED,

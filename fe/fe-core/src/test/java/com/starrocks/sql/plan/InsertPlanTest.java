@@ -909,7 +909,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "select 1 as k1");
         String expected = "PLAN FRAGMENT 0\n" +
                 " OUTPUT EXPRS:2: expr\n" +
-                "  PARTITION: RANDOM\n" +
+                "  PARTITION: RANDOM_SCALE\n" +
                 "\n" +
                 "  TABLE FUNCTION TABLE SINK\n" +
                 "    PATH: hdfs://127.0.0.1:9000/files/data_\n" +
@@ -926,7 +926,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
-                "    RANDOM\n" +
+                "    RANDOM_SCALE\n" +
                 "\n" +
                 "  1:Project\n" +
                 "  |  <slot 2> : 1\n" +

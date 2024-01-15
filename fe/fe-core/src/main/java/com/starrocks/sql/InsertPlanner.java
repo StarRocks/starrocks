@@ -784,6 +784,26 @@ public class InsertPlanner {
             return PhysicalPropertySet.EMPTY;
         }
 
+        if (targetTable instanceof HiveTable) {
+            HiveTable table = (HiveTable) targetTable;
+
+            if (session.isEnableConnectorSinkGlobalShuffle()) {
+                // use random shuffle for unpartitioned table
+                if (table.getPartitionColumnNames().isEmpty()) {
+                    return new PhysicalPropertySet(DistributionProperty
+                            .createProperty(new RoundRobinDistributionSpec()));
+                } else { // use hash shuffle for partitioned table
+                    List<Integer> partitionColumnIDs = table.getPartitionColumnIDs().stream()
+                            .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
+                    HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
+                            HashDistributionDesc.SourceType.SHUFFLE_AGG);
+                    return new PhysicalPropertySet(DistributionProperty
+                            .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
+                }
+            }
+            return new PhysicalPropertySet();
+        }
+
         if (!(targetTable instanceof OlapTable)) {
             return new PhysicalPropertySet();
         }
