@@ -24,6 +24,7 @@ import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IndexDef;
+import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
@@ -31,6 +32,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
@@ -43,6 +45,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
@@ -60,6 +63,7 @@ import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropRollupClause;
+import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
@@ -74,6 +78,7 @@ import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.TableRenameClause;
 
+import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -102,8 +107,17 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
     public Void visitCreateIndexClause(CreateIndexClause clause, ConnectContext context) {
         IndexDef indexDef = clause.getIndexDef();
         indexDef.analyze();
-        clause.setIndex(new Index(indexDef.getIndexName(), indexDef.getColumns(),
-                indexDef.getIndexType(), indexDef.getComment()));
+        Index index;
+        // Only assign meaningful indexId for OlapTable
+        if (table.isOlapTableOrMaterializedView()) {
+            long indexId = IndexType.isCompatibleIndex(indexDef.getIndexType()) ? ((OlapTable) table).incAndGetMaxIndexId() : -1;
+            index = new Index(indexId, indexDef.getIndexName(), indexDef.getColumns(),
+                    indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
+        } else {
+            index = new Index(indexDef.getIndexName(), indexDef.getColumns(),
+                    indexDef.getIndexType(), indexDef.getComment(), indexDef.getProperties());
+        }
+        clause.setIndex(index);
         return null;
     }
 
@@ -125,6 +139,10 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         Map<String, String> properties = clause.getProperties();
         if (properties.isEmpty()) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Properties is not set");
+        }
+
+        if (table.isExternalTableWithFileSystem()) {
+            return null;
         }
 
         if (properties.size() != 1
@@ -201,11 +219,11 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             try {
                 int val = Integer.parseInt(valStr);
                 if (val < 0) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Property " 
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Property "
                             + PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC + " must not be less than 0");
                 }
             } catch (NumberFormatException e) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Property " 
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Property "
                         + PropertyAnalyzer.PROPERTIES_PRIMARY_INDEX_CACHE_EXPIRE_SEC + " must be integer: " + valStr);
             }
             clause.setNeedTableStable(false);
@@ -274,6 +292,14 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 || properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
             clause.setNeedTableStable(false);
             clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+            try {
+                TimeUtils.parseHumanReadablePeriodOrDuration(
+                        properties.get(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION));
+            } catch (DateTimeParseException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
+            }
+            clause.setNeedTableStable(false);
         } else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }
@@ -316,6 +342,10 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize table in colocate group is not supported");
         }
 
+        if (olapTable.isCloudNativeTableOrMaterializedView()) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Optimize table in cloud native is not supported");
+        }
+
         List<Integer> sortKeyIdxes = Lists.newArrayList();
         List<ColumnDef> columnDefs = olapTable.getColumns().stream().map(Column::toColumnDef).collect(Collectors.toList());
         if (clause.getSortKeys() != null) {
@@ -324,7 +354,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             for (String column : clause.getSortKeys()) {
                 int idx = columnNames.indexOf(column);
                 if (idx == -1) {
-                    throw new SemanticException("Invalid column '%s' not exists in all columns. '%s', '%s'", column);
+                    throw new SemanticException("Unknown column '%s' does not exist", column);
                 }
                 sortKeyIdxes.add(idx);
             }
@@ -344,10 +374,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         KeysType originalKeysType = olapTable.getKeysType();
         KeysDesc keysDesc = clause.getKeysDesc();
         if (keysDesc != null) {
-            if (keysDesc.getKeysType() != KeysType.PRIMARY_KEYS || originalKeysType != KeysType.UNIQUE_KEYS) {
-                throw new SemanticException("not support optimize %s to %s keys type",
-                        originalKeysType.toSql(), keysDesc.getKeysType().toSql());
-            }
+            throw new SemanticException("not support change keys type when optimize table");
         }
         KeysType targetKeysType = keysDesc == null ? originalKeysType : keysDesc.getKeysType();
 
@@ -361,6 +388,11 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             }
             distributionDesc.analyze(columnSet);
             clause.setDistributionDesc(distributionDesc);
+
+            if (distributionDesc.getType() != olapTable.getDefaultDistributionInfo().getType()
+                    && clause.getPartitionNames() != null) {
+                throw new SemanticException("not support change distribution type when specify partitions");
+            }
         }
 
         // analyze partitions
@@ -377,6 +409,19 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 throw new SemanticException("partition names is empty");
             }
 
+            if (distributionDesc instanceof HashDistributionDesc
+                    && olapTable.getDefaultDistributionInfo() instanceof HashDistributionInfo) {
+                HashDistributionDesc hashDistributionDesc = (HashDistributionDesc) distributionDesc;
+                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) olapTable.getDefaultDistributionInfo();
+                Set<String> orginalPartitionColumn = hashDistributionInfo.getDistributionColumns()
+                        .stream().map(Column::getName).collect(Collectors.toSet());
+                Set<String> newPartitionColumn = hashDistributionDesc.getDistributionColumnNames()
+                        .stream().collect(Collectors.toSet());
+                if (!orginalPartitionColumn.equals(newPartitionColumn)) {
+                    throw new SemanticException("not support change distribution column when specify partitions");
+                }
+            }
+
             List<Long> partitionIds = Lists.newArrayList();
             for (String partitionName : partitionNameList) {
                 Partition partition = olapTable.getPartition(partitionName);
@@ -385,6 +430,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 }
                 partitionIds.add(partition.getId());
             }
+            clause.setSourcePartitionIds(partitionIds);
         } else {
             clause.setSourcePartitionIds(olapTable.getPartitions().stream().map(Partition::getId).collect(Collectors.toList()));
         }
@@ -451,10 +497,12 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 for (SlotRef slot : slots) {
                     Column refColumn = table.getColumn(slot.getColumnName());
                     if (refColumn.isGeneratedColumn()) {
-                        throw new SemanticException("Expression can not refers to other generated columns");
+                        throw new SemanticException("Expression can not refers to other generated columns: " +
+                                refColumn.getName());
                     }
                     if (refColumn.isAutoIncrement()) {
-                        throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
+                        throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns: " +
+                                refColumn.getName());
                     }
                 }
             }
@@ -486,12 +534,6 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 colPos.analyze();
             } catch (AnalysisException e) {
                 throw new SemanticException(PARSER_ERROR_MSG.invalidColumnPos(e.getMessage()), colPos.getPos());
-            }
-        }
-        if (colPos != null && table instanceof OlapTable && colPos.getLastCol() != null) {
-            Column afterColumn = table.getColumn(colPos.getLastCol());
-            if (afterColumn.isGeneratedColumn()) {
-                throw new SemanticException("Can not add column after Generated Column");
             }
         }
 
@@ -694,10 +736,12 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
                 for (SlotRef slot : slots) {
                     Column refColumn = table.getColumn(slot.getColumnName());
                     if (refColumn.isGeneratedColumn()) {
-                        throw new SemanticException("Expression can not refers to other generated columns");
+                        throw new SemanticException("Expression can not refers to other generated columns: " +
+                                refColumn.getName());
                     }
                     if (refColumn.isAutoIncrement()) {
-                        throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns");
+                        throw new SemanticException("Expression can not refers to AUTO_INCREMENT columns: " +
+                                refColumn.getName());
                     }
                 }
             }

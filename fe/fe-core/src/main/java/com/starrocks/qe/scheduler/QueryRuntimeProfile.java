@@ -21,6 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
+import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
@@ -34,7 +35,6 @@ import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.LoadEtlTask;
-import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TSinkCommitInfo;
 import com.starrocks.thrift.TTabletCommitInfo;
@@ -50,13 +50,25 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 public class QueryRuntimeProfile {
     private static final Logger LOG = LogManager.getLogger(QueryRuntimeProfile.class);
+
+    /**
+     * Set the queue size to a large value. The decision to execute the profile process task asynchronously
+     * occurs when a listener is added to {@link QueryRuntimeProfile#profileDoneSignal}. The function
+     * {@link QueryRuntimeProfile#addListener} will then determine if the size of the queued task exceeds
+     * {@link Config#profile_process_blocking_queue_size}.
+     */
+    private static final ThreadPoolExecutor EXECUTOR =
+            ThreadPoolManager.newDaemonFixedThreadPool(Config.profile_process_threads_num,
+                    Integer.MAX_VALUE, "profile-worker", false);
 
     /**
      * The value is meaningless, and it is just used as a value placeholder of {@link MarkedCountDownLatch}.
@@ -75,7 +87,7 @@ public class QueryRuntimeProfile {
      */
     private boolean profileAlreadyReported = false;
 
-    private final RuntimeProfile queryProfile;
+    private RuntimeProfile queryProfile;
     private final List<RuntimeProfile> fragmentProfiles;
 
     /**
@@ -159,7 +171,7 @@ public class QueryRuntimeProfile {
         return profileAlreadyReported;
     }
 
-    public void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier) {
+    public synchronized void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier) {
         this.topProfileSupplier = topProfileSupplier;
     }
 
@@ -205,6 +217,17 @@ public class QueryRuntimeProfile {
         return profileDoneSignal.getCount() == 0;
     }
 
+    public boolean addListener(Consumer<Boolean> task) {
+        if (EXECUTOR.getQueue().size() > Config.profile_process_blocking_queue_size) {
+            return false;
+        }
+        // We need to make sure this submission won't be rejected by set the queue size to Integer.MAX_VALUE
+        profileDoneSignal.addListener(() -> EXECUTOR.submit(() -> {
+            task.accept(true);
+        }));
+        return true;
+    }
+
     public boolean waitForProfileFinished(long timeout, TimeUnit unit) {
         boolean res = false;
         try {
@@ -242,19 +265,29 @@ public class QueryRuntimeProfile {
         // current batch, the previous reported state will be synchronized to the profile manager.
         long now = System.currentTimeMillis();
         long lastTime = lastRuntimeProfileUpdateTime.get();
-        if (topProfileSupplier != null && execPlan != null && connectContext != null &&
-                connectContext.getSessionVariable().isEnableProfile() &&
+        Supplier<RuntimeProfile> topProfileSupplier = this.topProfileSupplier;
+        ExecPlan plan = execPlan;
+        if (topProfileSupplier != null && plan != null && connectContext != null &&
+                connectContext.isProfileEnabled() &&
                 // If it's the last done report, avoiding duplicate trigger
                 (!execState.isFinished() || profileDoneSignal.getLeftMarks().size() > 1) &&
                 // Interval * 0.95 * 1000 to allow a certain range of deviation
                 now - lastTime > (connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 950L) &&
                 lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
             RuntimeProfile profile = topProfileSupplier.get();
-            ExecPlan plan = execPlan;
-            profile.addChild(buildMergedQueryProfile());
-            ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
-            ProfileManager.getInstance().pushProfile(profilingPlan, profile);
+            profile.addChild(buildQueryProfile(connectContext.needMergeProfile()));
+            ProfilingExecPlan profilingPlan = plan.getProfilingPlan();
+            saveRunningProfile(profilingPlan, profile);
         }
+    }
+
+    public synchronized void saveRunningProfile(ProfilingExecPlan profilingPlan, RuntimeProfile profile) {
+        // topProfileSupplier may be null when the query is finished.
+        // And here to make sure that runtime profile won't overwrite the final profile
+        if (topProfileSupplier == null) {
+            return;
+        }
+        ProfileManager.getInstance().pushProfile(profilingPlan, profile);
     }
 
     public void finalizeProfile() {
@@ -288,20 +321,8 @@ public class QueryRuntimeProfile {
         }
     }
 
-    public RuntimeProfile buildMergedQueryProfile() {
-        SessionVariable sessionVariable = connectContext.getSessionVariable();
-
-        if (!sessionVariable.isEnableProfile()) {
-            return queryProfile;
-        }
-
-        if (!jobSpec.isEnablePipeline()) {
-            return queryProfile;
-        }
-
-        int profileLevel = sessionVariable.getPipelineProfileLevel();
-        if (profileLevel >= TPipelineProfileLevel.DETAIL.getValue()) {
-            // We don't guarantee the detail level profile can work well with visualization feature.
+    public RuntimeProfile buildQueryProfile(boolean needMerge) {
+        if (!needMerge || !jobSpec.isEnablePipeline()) {
             return queryProfile;
         }
 

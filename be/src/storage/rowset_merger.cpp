@@ -433,6 +433,8 @@ private:
             Schema schema = tablet_schema->sort_key_idxes().empty()
                                     ? ChunkHelper::convert_schema(tablet_schema, column_groups[0])
                                     : ChunkHelper::get_sort_key_schema(tablet_schema);
+            // NOTE: although we switch to horizontal merge, the writer used is still VerticalRowsetWriter
+            // so it's important to make sure VerticalRowsetWriter can function properly when used in horizontal way
             RETURN_IF_ERROR(_do_merge_horizontally(tablet, tablet_schema, version, schema, rowsets, writer, cfg,
                                                    total_input_size, total_rows, total_chunk, stats, mask_buffer.get(),
                                                    &rowsets_mask_buffer));
@@ -540,7 +542,7 @@ Status compaction_merge_rowsets(Tablet& tablet, int64_t version, const vector<Ro
                                 RowsetWriter* writer, const MergeConfig& cfg,
                                 const starrocks::TabletSchemaCSPtr& cur_tablet_schema) {
     auto final_tablet_schema = cur_tablet_schema == nullptr ? tablet.tablet_schema() : cur_tablet_schema;
-    Schema schema = [&final_tablet_schema, &tablet]() {
+    Schema schema = [&final_tablet_schema]() {
         if (final_tablet_schema->sort_key_idxes().empty()) {
             return ChunkHelper::get_sort_key_schema_by_primary_key(final_tablet_schema);
         } else {

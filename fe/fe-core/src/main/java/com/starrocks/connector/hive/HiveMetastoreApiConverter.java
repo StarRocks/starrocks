@@ -56,6 +56,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -65,6 +66,10 @@ import java.util.stream.Collectors;
 
 import static com.google.common.base.Strings.emptyToNull;
 import static com.google.common.collect.ImmutableList.toImmutableList;
+import static com.starrocks.catalog.HiveTable.HIVE_TABLE_COLUMN_NAMES;
+import static com.starrocks.catalog.HiveTable.HIVE_TABLE_COLUMN_TYPES;
+import static com.starrocks.catalog.HiveTable.HIVE_TABLE_INPUT_FORMAT;
+import static com.starrocks.catalog.HiveTable.HIVE_TABLE_SERDE_LIB;
 import static com.starrocks.catalog.HudiTable.HUDI_BASE_PATH;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_COLUMN_NAMES;
 import static com.starrocks.catalog.HudiTable.HUDI_TABLE_COLUMN_TYPES;
@@ -139,9 +144,14 @@ public class HiveMetastoreApiConverter {
                         .collect(Collectors.toList()))
                 .setFullSchema(toFullSchemasForHiveTable(table))
                 .setTableLocation(toTableLocation(table.getSd(), table.getParameters()))
-                .setProperties(table.getParameters())
-                .setStorageFormat(HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name()))
-                .setCreateTime(table.getCreateTime());
+                .setProperties(toHiveProperties(table,
+                        HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name())))
+                .setSerdeProperties(toSerDeProperties(table))
+                .setStorageFormat(
+                        HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name()))
+                .setCreateTime(table.getCreateTime())
+                .setHiveTableType(HiveTable.HiveTableType.fromString(table.getTableType()));
+
         return tableBuilder.build();
     }
 
@@ -229,14 +239,16 @@ public class HiveMetastoreApiConverter {
                     TrinoViewDefinition.class);
             hiveViewText = trinoViewDefinition.getOriginalSql();
             hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
-                    table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition), hiveViewText);
+                    table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition), hiveViewText,
+                    HiveView.Type.Trino);
         } else {
             hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
-                    table.getTableName(), toFullSchemasForHiveTable(table), table.getViewExpandedText());
+                    table.getTableName(), toFullSchemasForHiveTable(table), table.getViewExpandedText(),
+                    HiveView.Type.Hive);
         }
 
         try {
-            hiveView.getQueryStatementWithSRParser();
+            hiveView.getQueryStatement();
         } catch (StarRocksPlannerException e) {
             throw new StarRocksConnectorException("failed to parse hive view text", e);
         }
@@ -314,18 +326,68 @@ public class HiveMetastoreApiConverter {
         return result;
     }
 
+    public static Map<String, String> toHiveProperties(Table metastoreTable, HiveStorageFormat storageFormat) {
+        Map<String, String> hiveProperties = Maps.newHashMap();
+
+        String serdeLib = storageFormat.getSerde();
+        if (!Strings.isNullOrEmpty(serdeLib)) {
+            // metaStore has more accurate information about serde
+            if (metastoreTable.getSd() != null && metastoreTable.getSd().getSerdeInfo() != null &&
+                    metastoreTable.getSd().getSerdeInfo().getSerializationLib() != null) {
+                serdeLib = metastoreTable.getSd().getSerdeInfo().getSerializationLib();
+            }
+            hiveProperties.put(HIVE_TABLE_SERDE_LIB, serdeLib);
+        }
+
+        String inputFormat = storageFormat.getInputFormat();
+        if (!Strings.isNullOrEmpty(inputFormat)) {
+            hiveProperties.put(HIVE_TABLE_INPUT_FORMAT, inputFormat);
+        }
+
+        String dataColumnNames = metastoreTable.getSd().getCols().stream()
+                .map(FieldSchema::getName).collect(Collectors.joining(","));
+
+        if (!Strings.isNullOrEmpty(dataColumnNames)) {
+            hiveProperties.put(HIVE_TABLE_COLUMN_NAMES, dataColumnNames);
+        }
+
+        String dataColumnTypes = metastoreTable.getSd().getCols().stream()
+                .map(FieldSchema::getType).collect(Collectors.joining("#"));
+
+        if (!Strings.isNullOrEmpty(dataColumnTypes)) {
+            hiveProperties.put(HIVE_TABLE_COLUMN_TYPES, dataColumnTypes);
+        }
+
+        if (metastoreTable.getParameters() != null) {
+            hiveProperties.putAll(metastoreTable.getParameters());
+        }
+
+        return hiveProperties;
+    }
+
+    public static Map<String, String> toSerDeProperties(Table table) {
+        Map<String, String> serdeProperties = new HashMap<>();
+        if (table.getSd() != null && table.getSd().getSerdeInfo() != null &&
+                table.getSd().getSerdeInfo().getParameters() != null) {
+            serdeProperties = table.getSd().getSerdeInfo().getParameters();
+        }
+        return serdeProperties;
+    }
+
     public static List<Column> toFullSchemasForHiveTable(Table table) {
         List<FieldSchema> fieldSchemas = getAllFieldSchemas(table);
         List<Column> fullSchema = Lists.newArrayList();
         for (FieldSchema fieldSchema : fieldSchemas) {
             Type type;
+            String comment = "";
             try {
+                comment = fieldSchema.getComment();
                 type = ColumnTypeConverter.fromHiveType(fieldSchema.getType());
             } catch (InternalError | Exception e) {
                 LOG.error("Failed to convert hive type {} on {}", fieldSchema.getType(), table.getTableName(), e);
                 type = Type.UNKNOWN_TYPE;
             }
-            Column column = new Column(fieldSchema.getName(), type, true);
+            Column column = new Column(fieldSchema.getName(), type, true, comment);
             fullSchema.add(column);
         }
         return fullSchema;
@@ -457,6 +519,11 @@ public class HiveMetastoreApiConverter {
     }
 
     public static TextFileFormatDesc toTextFileFormatDesc(Map<String, String> serdeParams) {
+        final String DEFAULT_FIELD_DELIM = "\001";
+        final String DEFAULT_COLLECTION_DELIM = "\002";
+        final String DEFAULT_MAPKEY_DELIM = "\003";
+        final String DEFAULT_LINE_DELIM = "\n";
+
         // Get properties 'field.delim', 'line.delim', 'collection.delim' and 'mapkey.delim' from StorageDescriptor
         // Detail refer to:
         // https://github.com/apache/hive/blob/90428cc5f594bd0abb457e4e5c391007b2ad1cb8/serde/src/gen/thrift/gen-javabean/org/apache/hadoop/hive/serde/serdeConstants.java#L34-L40
@@ -520,7 +587,8 @@ public class HiveMetastoreApiConverter {
         return hiveColumnStatistics;
     }
 
-    public static Map<String, String> updateStatisticsParameters(Map<String, String> parameters, HiveCommonStats statistics) {
+    public static Map<String, String> updateStatisticsParameters(Map<String, String> parameters,
+                                                                 HiveCommonStats statistics) {
         ImmutableMap.Builder<String, String> result = ImmutableMap.builder();
 
         parameters.forEach((key, value) -> {
@@ -535,7 +603,6 @@ public class HiveMetastoreApiConverter {
         if (!parameters.containsKey("STATS_GENERATED_VIA_STATS_TASK")) {
             result.put("STATS_GENERATED_VIA_STATS_TASK", "workaround for potential lack of HIVE-12730");
         }
-
 
         return result.buildOrThrow();
     }

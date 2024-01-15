@@ -101,6 +101,8 @@ public abstract class DataSink {
             return true;
         } else if (table instanceof TableFunctionTable) {
             return true;
+        } else if (table.isBlackHoleTable()) {
+            return true;
         }
 
         return false;

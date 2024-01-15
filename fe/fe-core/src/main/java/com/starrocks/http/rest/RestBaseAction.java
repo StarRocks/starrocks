@@ -69,7 +69,6 @@ public class RestBaseAction extends BaseAction {
 
     @Override
     public void handleRequest(BaseRequest request) {
-        LOG.info("receive http request. url={}", request.getRequest().uri());
         BaseResponse response = new BaseResponse();
         try {
             execute(request, response);

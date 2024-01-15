@@ -44,6 +44,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlColType;
 import com.starrocks.proto.PScalarType;
 import com.starrocks.proto.PTypeDesc;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariableConstants;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.thrift.TColumnType;
 import com.starrocks.thrift.TPrimitiveType;
@@ -120,7 +122,7 @@ public abstract class Type implements Cloneable {
             ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 0);
 
     public static final ScalarType VARCHAR = ScalarType.createVarcharType(-1);
-    public static final ScalarType STRING = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+    public static final ScalarType STRING = ScalarType.createVarcharType(ScalarType.OLAP_MAX_VARCHAR_LENGTH);
     public static final ScalarType DEFAULT_STRING = ScalarType.createDefaultString();
     public static final ScalarType HLL = ScalarType.createHllType();
     public static final ScalarType CHAR = ScalarType.createCharType(-1);
@@ -1497,7 +1499,27 @@ public abstract class Type implements Cloneable {
         }
     }
 
-    public static Type getCmpType(Type t1, Type t2) {
+    public static Type getCmpType(Type t1, Type t2, boolean isBetween) {
+        // if predicate is 'IN' and one type is string ,another type is not float
+        // we choose string or decimal as cmpType according to session variable cboEqBaseType
+        if (!isBetween &&
+                (t1.isStringType() && t2.isExactNumericType() || t1.isExactNumericType() && t2.isStringType())) {
+            Type baseType = Type.STRING;
+            if (ConnectContext.get() != null && SessionVariableConstants.DECIMAL.equalsIgnoreCase(ConnectContext.get()
+                    .getSessionVariable().getCboEqBaseType())) {
+                baseType = Type.DEFAULT_DECIMAL128;
+                if (t1.isDecimalOfAnyVersion() || t2.isDecimalOfAnyVersion()) {
+                    baseType = t1.isDecimalOfAnyVersion() ? t1 : t2;
+                }
+            }
+
+            if (ConnectContext.get() != null && SessionVariableConstants.DOUBLE.equalsIgnoreCase(ConnectContext.get()
+                    .getSessionVariable().getCboEqBaseType())) {
+                baseType = Type.DOUBLE;
+            }
+
+            return baseType;
+        }
         if (t1.getPrimitiveType() == PrimitiveType.NULL_TYPE) {
             return t2;
         }
@@ -1509,7 +1531,8 @@ public abstract class Type implements Cloneable {
             return getAssignmentCompatibleType(t1, t2, false);
         }
 
-        if (t1.getPrimitiveType() != PrimitiveType.INVALID_TYPE && t1.getPrimitiveType().equals(t2.getPrimitiveType())) {
+        if (t1.getPrimitiveType() != PrimitiveType.INVALID_TYPE &&
+                t1.getPrimitiveType().equals(t2.getPrimitiveType())) {
             return t1;
         }
 
@@ -1775,5 +1798,15 @@ public abstract class Type implements Cloneable {
 
     public String canonicalName() {
         return toString();
+    }
+
+    // This is used for information_schema.COLUMNS DATA_TYPE
+    public String toMysqlDataTypeString() {
+        return "unknown";
+    }
+
+    // This is used for information_schema.COLUMNS COLUMN_TYPE
+    public String toMysqlColumnTypeString() {
+        return "unknown";
     }
 }

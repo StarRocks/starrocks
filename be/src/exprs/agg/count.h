@@ -290,6 +290,7 @@ public:
             // Has no null value
             // We don't actually update in removable cumulative way, since the ordinary way is effecient enough
             this->data(state).count = frame_size;
+            this->data(state).is_frame_init = true;
         }
     }
 

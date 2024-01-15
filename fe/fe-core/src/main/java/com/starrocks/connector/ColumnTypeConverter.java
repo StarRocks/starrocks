@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
@@ -51,6 +50,7 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
+import org.apache.paimon.types.VarBinaryType;
 import org.apache.paimon.types.VarCharType;
 
 import java.util.ArrayList;
@@ -62,7 +62,6 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import static com.starrocks.catalog.ScalarType.MAX_VARCHAR_LENGTH;
 import static com.starrocks.catalog.Type.BIGINT;
 import static com.starrocks.catalog.Type.BOOLEAN;
 import static com.starrocks.catalog.Type.DATE;
@@ -136,7 +135,7 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATE;
                 break;
             case "STRING":
-                return ScalarType.createDefaultExternalTableString();
+                return ScalarType.createDefaultCatalogString();
             case "VARCHAR":
                 return ScalarType.createVarcharType(getVarcharLength(hiveType));
             case "CHAR":
@@ -217,14 +216,10 @@ public class ColumnTypeConverter {
             throw new StarRocksConnectorException("Unsupported Hive type: %s. Supported CHAR types: CHAR(<=%d).",
                     type, HiveChar.MAX_CHAR_LENGTH);
         } else if (type.isVarchar()) {
-            if (type.getColumnSize() == -1 || type.getColumnSize() == MAX_VARCHAR_LENGTH) {
+            if (type.getColumnSize() == -1 || type.getColumnSize() > HiveVarchar.MAX_VARCHAR_LENGTH) {
                 return stringTypeInfo;
             }
-            if (type.getColumnSize() <= HiveVarchar.MAX_VARCHAR_LENGTH) {
-                return getVarcharTypeInfo(type.getColumnSize());
-            }
-            throw new StarRocksConnectorException("Unsupported Hive type: %s. Supported VARCHAR types: VARCHAR(<=%d).",
-                    type, HiveVarchar.MAX_VARCHAR_LENGTH);
+            return getVarcharTypeInfo(type.getColumnSize());
         } else if (type.isArrayType()) {
             TypeInfo itemType = toTypeInfo(((ArrayType) type).getItemType());
             return getListTypeInfo(itemType);
@@ -285,7 +280,7 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DOUBLE;
                 break;
             case STRING:
-                return ScalarType.createDefaultExternalTableString();
+                return ScalarType.createDefaultCatalogString();
             case ARRAY:
                 Type type = new ArrayType(fromHudiType(avroSchema.getElementType()));
                 if (type.isArrayType()) {
@@ -333,7 +328,7 @@ public class ColumnTypeConverter {
 
                 if (!isConvertedFailed) {
                     // Hudi map's key must be string
-                    return new MapType(ScalarType.createDefaultExternalTableString(), valueType);
+                    return new MapType(ScalarType.createDefaultCatalogString(), valueType);
                 }
                 break;
             case UNION:
@@ -468,7 +463,7 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATETIME;
                 break;
             case STRING:
-                return ScalarType.createDefaultExternalTableString();
+                return ScalarType.createDefaultCatalogString();
             case DECIMAL:
                 int precision = ((io.delta.standalone.types.DecimalType) dataType).getPrecision();
                 int scale = ((io.delta.standalone.types.DecimalType) dataType).getScale();
@@ -503,12 +498,16 @@ public class ColumnTypeConverter {
             return ScalarType.createType(PrimitiveType.VARBINARY);
         }
 
+        public Type visit(VarBinaryType varBinaryType) {
+            return ScalarType.createType(PrimitiveType.VARBINARY);
+        }
+
         public Type visit(CharType charType) {
             return ScalarType.createCharType(charType.getLength());
         }
 
         public Type visit(VarCharType varCharType) {
-            return ScalarType.createDefaultExternalTableString();
+            return ScalarType.createDefaultCatalogString();
         }
 
         public Type visit(BooleanType booleanType) {
@@ -607,7 +606,7 @@ public class ColumnTypeConverter {
                 break;
             case STRING:
             case UUID:
-                return ScalarType.createDefaultExternalTableString();
+                return ScalarType.createDefaultCatalogString();
             case DECIMAL:
                 int precision = ((Types.DecimalType) icebergType).precision();
                 int scale = ((Types.DecimalType) icebergType).scale();
@@ -642,6 +641,7 @@ public class ColumnTypeConverter {
             case BINARY:
                 return Type.VARBINARY;
             case TIME:
+                return Type.TIME;
             case FIXED:
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;

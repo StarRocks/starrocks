@@ -119,7 +119,8 @@ public class OlapTableFactory implements AbstractTableFactory {
                     partitionNameToId.put(desc.getPartitionName(), partitionId);
                 }
 
-                DynamicPartitionUtil.checkIfAutomaticPartitionAllowed(stmt.getProperties());
+                DynamicPartitionUtil.checkIfExpressionPartitionAllowed(stmt.getProperties(),
+                        expressionPartitionDesc.getExpr());
 
             } else {
                 throw new DdlException("Currently only support range or list partition with engine type olap");
@@ -186,7 +187,7 @@ public class OlapTableFactory implements AbstractTableFactory {
         long tableId = GlobalStateMgr.getCurrentState().getNextId();
         OlapTable table;
         // only OlapTable support light schema change so far
-        Boolean useLightSchemaChange = true;
+        Boolean useFastSchemaEvolution = true;
         if (stmt.isExternal()) {
             table = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
@@ -195,7 +196,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                             ((ExternalOlapTable) table).getSourceTablePort())) {
                 throw new DdlException("can not create OLAP external table of self cluster");
             }
-            useLightSchemaChange = false;
+            useFastSchemaEvolution = false;
         } else if (stmt.isOlapEngine()) {
             RunMode runMode = RunMode.getCurrentRunMode();
             String volume = "";
@@ -214,7 +215,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
                 String storageVolumeId = svm.getStorageVolumeIdOfTable(tableId);
                 metastore.setLakeStorageInfo(table, storageVolumeId, properties);
-                useLightSchemaChange = false;
+                useFastSchemaEvolution = false;
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
             }
@@ -231,14 +232,14 @@ public class OlapTableFactory implements AbstractTableFactory {
 
             // get use light schema change
             try {
-                useLightSchemaChange &= PropertyAnalyzer.analyzeUseLightSchemaChange(properties);
+                useFastSchemaEvolution &= PropertyAnalyzer.analyzeUseFastSchemaEvolution(properties);
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
             // only support olap table use light schema change optimization
-            table.setUseLightSchemaChange(useLightSchemaChange);
+            table.setUseFastSchemaEvolution(useFastSchemaEvolution);
             List<Integer> sortKeyUniqueIds = new ArrayList<>();
-            if (useLightSchemaChange) {
+            if (useFastSchemaEvolution) {
                 for (Column column : baseSchema) {
                     column.setUniqueId(table.incAndGetMaxColUniqueId());
                     LOG.debug("table: {}, newColumn: {}, uniqueId: {}", table.getName(), column.getName(),
@@ -355,7 +356,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             try {
                 long bucketSize = PropertyAnalyzer.analyzeLongProp(properties,
                         PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, Config.default_automatic_bucket_size);
-                if (bucketSize > 0) {
+                if (bucketSize >= 0) {
                     table.setAutomaticBucketSize(bucketSize);
                 } else {
                     throw new DdlException("Illegal bucket size: " + bucketSize);

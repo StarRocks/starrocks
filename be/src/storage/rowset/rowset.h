@@ -237,6 +237,8 @@ public:
     bool has_data_files() const { return num_segments() > 0 || num_delete_files() > 0 || num_update_files() > 0; }
     KeysType keys_type() const { return _keys_type; }
 
+    const TabletSchemaCSPtr tablet_schema() { return rowset_meta()->tablet_schema(); }
+
     // remove all files in this rowset
     // TODO should we rename the method to remove_files() to be more specific?
     Status remove();
@@ -302,8 +304,6 @@ public:
     void set_is_compacting(bool flag) { is_compacting.store(flag); }
 
     bool get_is_compacting() { return is_compacting.load(); }
-
-    DeletePredicatePB* mutable_delete_predicate() { return _rowset_meta->mutable_delete_predicate(); }
 
     static bool comparator(const RowsetSharedPtr& left, const RowsetSharedPtr& right) {
         return left->end_version() < right->end_version();

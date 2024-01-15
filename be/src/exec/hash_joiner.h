@@ -18,12 +18,10 @@
 #include <utility>
 
 #include "column/chunk.h"
-#include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exec/exec_node.h"
 #include "exec/hash_join_components.h"
-#include "exec/hash_join_node.h"
 #include "exec/join_hash_map.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/runtime_filter_types.h"
@@ -73,8 +71,9 @@ struct HashJoinerParam {
                     const RowDescriptor& build_row_descriptor, const RowDescriptor& probe_row_descriptor,
                     const RowDescriptor& row_descriptor, TPlanNodeType::type build_node_type,
                     TPlanNodeType::type probe_node_type, bool build_conjunct_ctxs_is_empty,
-                    std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters, std::set<SlotId> output_slots,
-                    const TJoinDistributionMode::type distribution_mode)
+                    std::list<RuntimeFilterBuildDescriptor*> build_runtime_filters, std::set<SlotId> build_output_slots,
+                    std::set<SlotId> probe_output_slots, const TJoinDistributionMode::type distribution_mode,
+                    bool mor_reader_mode)
             : _pool(pool),
               _hash_join_node(hash_join_node),
               _node_id(node_id),
@@ -91,8 +90,10 @@ struct HashJoinerParam {
               _probe_node_type(probe_node_type),
               _build_conjunct_ctxs_is_empty(build_conjunct_ctxs_is_empty),
               _build_runtime_filters(std::move(build_runtime_filters)),
-              _output_slots(std::move(output_slots)),
-              _distribution_mode(distribution_mode) {}
+              _build_output_slots(std::move(build_output_slots)),
+              _probe_output_slots(std::move(probe_output_slots)),
+              _distribution_mode(distribution_mode),
+              _mor_reader_mode(mor_reader_mode) {}
 
     HashJoinerParam(HashJoinerParam&&) = default;
     HashJoinerParam(HashJoinerParam&) = default;
@@ -114,9 +115,11 @@ struct HashJoinerParam {
     TPlanNodeType::type _probe_node_type;
     bool _build_conjunct_ctxs_is_empty;
     std::list<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
-    std::set<SlotId> _output_slots;
+    std::set<SlotId> _build_output_slots;
+    std::set<SlotId> _probe_output_slots;
 
     const TJoinDistributionMode::type _distribution_mode;
+    const bool _mor_reader_mode;
 };
 
 inline bool could_short_circuit(TJoinOp::type join_type) {
@@ -140,7 +143,6 @@ inline bool is_spillable(TJoinOp::type join_type) {
 struct HashJoinProbeMetrics {
     RuntimeProfile::Counter* search_ht_timer = nullptr;
     RuntimeProfile::Counter* output_probe_column_timer = nullptr;
-    RuntimeProfile::Counter* output_tuple_column_timer = nullptr;
     RuntimeProfile::Counter* probe_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* other_join_conjunct_evaluate_timer = nullptr;
     RuntimeProfile::Counter* where_conjunct_evaluate_timer = nullptr;
@@ -200,7 +202,7 @@ public:
 
     void enter_eos_phase() { _phase = HashJoinPhase::EOS; }
     // build phase
-    [[nodiscard]] Status append_chunk_to_ht(RuntimeState* state, const ChunkPtr& chunk);
+    [[nodiscard]] Status append_chunk_to_ht(const ChunkPtr& chunk);
 
     [[nodiscard]] Status append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk);
 
@@ -410,7 +412,8 @@ private:
     const TPlanNodeType::type _build_node_type;
     const TPlanNodeType::type _probe_node_type;
     const bool _build_conjunct_ctxs_is_empty;
-    const std::set<SlotId>& _output_slots;
+    const std::set<SlotId>& _build_output_slots;
+    const std::set<SlotId>& _probe_output_slots;
 
     pipeline::RuntimeInFilters _runtime_in_filters;
     pipeline::RuntimeBloomFilters _build_runtime_filters;
@@ -449,6 +452,7 @@ private:
     HashJoinBuildMetrics* _build_metrics;
     HashJoinProbeMetrics* _probe_metrics;
     size_t _hash_table_build_rows{};
+    bool _mor_reader_mode = false;
 };
 
 } // namespace starrocks

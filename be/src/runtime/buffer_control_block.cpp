@@ -45,7 +45,7 @@
 namespace starrocks {
 
 void GetResultBatchCtx::on_failure(const Status& status) {
-    DCHECK(!status.ok()) << "status is ok, errmsg=" << status.get_error_msg();
+    DCHECK(!status.ok()) << "status is ok, errmsg=" << status.message();
     status.to_protobuf(result->mutable_status());
     done->Run();
     delete this;
@@ -73,7 +73,7 @@ void GetResultBatchCtx::on_data(TFetchDataResult* t_result, int64_t packet_seq, 
         result->set_packet_seq(packet_seq);
         result->set_eos(eos);
     } else {
-        LOG(WARNING) << "TFetchDataResult serialize failed, errmsg=" << st.get_error_msg();
+        LOG(WARNING) << "TFetchDataResult serialize failed, errmsg=" << st.message();
     }
     st.to_protobuf(result->mutable_status());
     done->Run();
@@ -292,6 +292,9 @@ void BufferControlBlock::get_batch(GetResultBatchCtx* ctx) {
 
 Status BufferControlBlock::close(Status exec_status) {
     std::unique_lock<std::mutex> l(_lock);
+    if (_is_close) {
+        return Status::OK();
+    }
     _is_close = true;
     _status = std::move(exec_status);
     // notify blocked get thread
@@ -311,7 +314,7 @@ Status BufferControlBlock::close(Status exec_status) {
     return Status::OK();
 }
 
-Status BufferControlBlock::cancel() {
+void BufferControlBlock::cancel() {
     std::unique_lock<std::mutex> l(_lock);
     _is_cancelled = true;
     _data_removal.notify_all();
@@ -320,7 +323,6 @@ Status BufferControlBlock::cancel() {
         ctx->on_failure(Status::Cancelled("Cancelled BufferControlBlock::cancel"));
     }
     _waiting_rpc.clear();
-    return Status::OK();
 }
 
 } // namespace starrocks

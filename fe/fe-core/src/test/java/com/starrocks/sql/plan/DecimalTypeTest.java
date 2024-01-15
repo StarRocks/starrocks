@@ -78,7 +78,7 @@ public class DecimalTypeTest extends PlanTestBase {
                 "THEN CAST(151971657 AS DECIMAL32 ) " +
                 " WHEN false THEN CASE WHEN NULL THEN 0.03 ELSE 0.02 END ELSE 0.04 END) AND (0.04) ) IS NULL)";
         String explain = getFragmentPlan(sql);
-        String snippet = "5:OlapScanNode\n" +
+        String snippet = "2:OlapScanNode\n" +
                 "     TABLE: tab1\n" +
                 "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join\n" +
                 "     partitions=0/1\n" +
@@ -266,5 +266,13 @@ public class DecimalTypeTest extends PlanTestBase {
         sql = "select cast(cast('12.56' as decimalv2(9,1)) as varchar);";
         plan = getFragmentPlan(sql);
         assertContains(plan, "'12.56'");
+    }
+
+    @Test
+    public void testDateToDecimal() throws Exception {
+        String sql = "select '1969-12-10 23:46:53' > c_0_0 from tab0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 16> : CAST(1: c_0_0 AS VARCHAR) < '1969-12-10 23:46:53'");
     }
 }

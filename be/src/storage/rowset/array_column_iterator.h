@@ -50,6 +50,27 @@ public:
 
     [[nodiscard]] Status fetch_values_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
 
+    // for support array<string>
+    bool all_page_dict_encoded() const override;
+
+    [[nodiscard]] Status fetch_all_dict_words(std::vector<Slice>* words) const override;
+
+    [[nodiscard]] Status next_dict_codes(size_t* n, Column* dst) override;
+
+    [[nodiscard]] Status next_dict_codes(const SparseRange<>& range, Column* dst) override;
+
+    [[nodiscard]] Status fetch_dict_codes_by_rowid(const rowid_t* rowids, size_t size, Column* values) override;
+
+    [[nodiscard]] Status decode_dict_codes(const int32_t* codes, size_t size, Column* words) override;
+
+    int dict_size() override { return _element_iterator->dict_size(); }
+
+private:
+    [[nodiscard]] Status next_batch_null_offsets(size_t* n, UInt32Column* offsets, UInt8Column* nulls,
+                                                 size_t* element_rows);
+    [[nodiscard]] Status next_batch_null_offsets(const SparseRange<>& range, UInt32Column* offsets, UInt8Column* nulls,
+                                                 SparseRange<>* element_range, size_t* element_rows);
+
 private:
     ColumnReader* _reader;
 
@@ -59,6 +80,7 @@ private:
     const ColumnAccessPath* _path;
 
     bool _access_values = true;
+    bool _is_string_element = false;
 };
 
 } // namespace starrocks

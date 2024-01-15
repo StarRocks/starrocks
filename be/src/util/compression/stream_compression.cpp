@@ -475,6 +475,10 @@ Status SnappyStreamCompression::decompress(uint8_t* input, size_t input_len, siz
             input_len -= 4;
             *input_bytes_read += 4;
         }
+        if (ctx->block_length == 0) {
+            *stream_end = true;
+            return st;
+        }
 
         // see if a compressed unit is ready.
         if (input_len < 4) return st;

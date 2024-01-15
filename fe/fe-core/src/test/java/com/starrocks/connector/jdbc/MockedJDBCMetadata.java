@@ -39,11 +39,19 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public static final String MOCKED_PARTITIONED_TABLE_NAME1 = "tbl1";
     public static final String MOCKED_PARTITIONED_TABLE_NAME2 = "tbl2";
     public static final String MOCKED_PARTITIONED_TABLE_NAME3 = "tbl3";
+    public static final String MOCKED_PARTITIONED_TABLE_NAME5 = "tbl5";
+
+    // string partition table
+    public static final String MOCKED_STRING_PARTITIONED_TABLE_NAME1 = "part_tbl1";
+    public static final String MOCKED_STRING_PARTITIONED_TABLE_NAME2 = "part_tbl2";
+    public static final String MOCKED_STRING_PARTITIONED_TABLE_NAME3 = "part_tbl3";
     private Map<String, String> properties;
     private Map<String, JDBCTable> tables = new HashMap<>();
 
-    private List<String> partitionNames = Arrays.asList("20230801", "20230802", "20230803");
-    private List<PartitionInfo> partitions = Arrays.asList(new Partition("d", 1690819200L),
+    private List<String> partitionNames = Arrays.asList("20230801", "20230802", "20230803", "MAXVALUE");
+    private List<PartitionInfo> partitions = Arrays.asList(
+            new Partition("d", 1690819200L),
+            new Partition("d", 1690819200L),
             new Partition("d", 1690819200L),
             new Partition("d", 1690819200L));
 
@@ -63,7 +71,6 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         try {
             if (tables.get(tblName) == null) {
                 if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME0)) {
-
                     tables.put(tblName, new JDBCTable(100000, MOCKED_PARTITIONED_TABLE_NAME0, getSchema(tblName),
                             getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
                 } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME1)) {
@@ -73,7 +80,13 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
                     tables.put(tblName, new JDBCTable(100002, MOCKED_PARTITIONED_TABLE_NAME2, getSchema(tblName),
                             getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
                 } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
-                    tables.put(tblName, new JDBCTable(100002, MOCKED_PARTITIONED_TABLE_NAME3, getSchema(tblName),
+                    tables.put(tblName, new JDBCTable(100003, MOCKED_PARTITIONED_TABLE_NAME3, getSchema(tblName),
+                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
+                } else if (tblName.equals(MOCKED_PARTITIONED_TABLE_NAME5)) {
+                    tables.put(tblName, new JDBCTable(100005, MOCKED_PARTITIONED_TABLE_NAME5, getSchema(tblName),
+                            getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
+                } else {
+                    tables.put(tblName, new JDBCTable(tblName.hashCode(), tblName, getSchema(tblName),
                             getPartitionColumns(tblName), MOCKED_PARTITIONED_DB_NAME, MOCKED_JDBC_CATALOG_NAME, properties));
                 }
             }
@@ -99,7 +112,6 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
                 return Arrays.asList(new Column("a", Type.VARCHAR), new Column("b", Type.VARCHAR),
                         new Column("c", Type.INT), new Column("d", Type.VARCHAR));
             }
-
         } finally {
             readUnlock();
         }
@@ -146,9 +158,10 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         readLock();
         try {
             if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME2)) {
-                return Arrays.asList("1234567", "1234568", "1234569");
-            } else if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME3)) {
-                return Arrays.asList("20230801", "20230802");
+                return Arrays.asList("1234567", "1234568", "1234569", "1234570");
+            } else if (tableName.equals(MOCKED_PARTITIONED_TABLE_NAME3)
+                    || tableName.equals(MOCKED_PARTITIONED_TABLE_NAME5)) {
+                return Arrays.asList("20230801", "20230802", "20230803", "20230804");
             } else {
                 return partitionNames;
             }
@@ -161,7 +174,10 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public List<String> listTableNames(String dbName) {
         readLock();
         try {
-            return Arrays.asList(MOCKED_PARTITIONED_TABLE_NAME0, MOCKED_PARTITIONED_TABLE_NAME1, MOCKED_PARTITIONED_TABLE_NAME2);
+            return Arrays.asList(MOCKED_PARTITIONED_TABLE_NAME0, MOCKED_PARTITIONED_TABLE_NAME1,
+                    MOCKED_PARTITIONED_TABLE_NAME2, MOCKED_PARTITIONED_TABLE_NAME3,
+                    MOCKED_STRING_PARTITIONED_TABLE_NAME1, MOCKED_STRING_PARTITIONED_TABLE_NAME2,
+                    MOCKED_STRING_PARTITIONED_TABLE_NAME3);
         } finally {
             readUnlock();
         }
@@ -190,8 +206,9 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public void initPartitions() {
         readLock();
         try {
-            partitionNames = Arrays.asList("20230801", "20230802", "20230803");
+            partitionNames = Arrays.asList("20230801", "20230802", "20230803", "MAXVALUE");
             partitions = Arrays.asList(new Partition("d", 1690819200L),
+                    new Partition("d", 1690819200L),
                     new Partition("d", 1690819200L),
                     new Partition("d", 1690819200L));
         } finally {
@@ -202,8 +219,9 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
     public void addPartitions() {
         readLock();
         try {
-            partitionNames = Arrays.asList("20230802", "20230803", "20230804", "20230805");
+            partitionNames = Arrays.asList("20230802", "20230803", "20230804", "20230805", "MAXVALUE");
             partitions = Arrays.asList(new Partition("d", 1690819200L),
+                    new Partition("d", 1690819200L),
                     new Partition("d", 1690819200L),
                     new Partition("d", 1690819200L),
                     new Partition("d", 1690819200L));
@@ -216,6 +234,7 @@ public class MockedJDBCMetadata implements ConnectorMetadata {
         readLock();
         try {
             partitions = Arrays.asList(new Partition("d", 1690819300L),
+                    new Partition("d", 1690819300L),
                     new Partition("d", 1690819300L),
                     new Partition("d", 1690819300L));
         } finally {

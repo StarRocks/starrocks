@@ -25,8 +25,10 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
@@ -39,8 +41,10 @@ import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.planner.BlackHoleTableSink;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.HiveTableSink;
 import com.starrocks.planner.IcebergTableSink;
@@ -49,6 +53,8 @@ import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.TableFunctionTableSink;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
@@ -71,9 +77,9 @@ import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
-import com.starrocks.sql.optimizer.base.OrderSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.base.RoundRobinDistributionSpec;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -160,19 +166,25 @@ public class InsertPlanner {
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
+        SessionVariable currentVariable = session.getSessionVariable();
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(targetTable);
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
+        boolean previousMVRewrite = currentVariable.isEnableMaterializedViewRewrite();
+        boolean enableMVRewrite = currentVariable.isEnableMaterializedViewRewriteForInsert() &&
+                currentVariable.isEnableMaterializedViewRewrite();
         try (Timer ignore = Tracers.watchScope("InsertPlanner")) {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(false);
             }
             // Non-query must use the strategy assign scan ranges per driver sequence, which local shuffle agg cannot use.
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
+            session.getSessionVariable().setEnableMaterializedViewRewrite(enableMVRewrite);
 
             Optimizer optimizer = new Optimizer();
-            PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
+            PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns,
+                    session.getSessionVariable());
 
             LOG.debug("property {}", requiredPropertySet);
             OptExpression optimizedPlan;
@@ -261,17 +273,34 @@ public class InsertPlanner {
                 if (olapTable.getAutomaticBucketSize() > 0) {
                     ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());
                 }
+
+                // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
+                session.getSessionVariable().setPreferComputeNode(false);
+                session.getSessionVariable().setUseComputeNodes(0);
+                OlapTableSink olapTableSink = (OlapTableSink) dataSink;
+                TableName catalogDbTable = insertStmt.getTableName();
+                Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogDbTable.getCatalog(),
+                        catalogDbTable.getDb());
+                try {
+                    olapTableSink.init(session.getExecutionId(), insertStmt.getTxnId(), db.getId(),
+                            ConnectContext.get().getSessionVariable().getQueryTimeoutS());
+                    olapTableSink.complete();
+                } catch (UserException e) {
+                    throw new SemanticException(e.getMessage());
+                }
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) targetTable);
             } else if (targetTable instanceof IcebergTable) {
                 descriptorTable.addReferencedTable(targetTable);
                 dataSink = new IcebergTableSink((IcebergTable) targetTable, tupleDesc,
-                        isKeyPartitionStaticInsert(insertStmt, queryRelation));
+                        isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
             } else if (targetTable instanceof HiveTable) {
                 dataSink = new HiveTableSink((HiveTable) targetTable, tupleDesc,
                         isKeyPartitionStaticInsert(insertStmt, queryRelation), session.getSessionVariable());
             } else if (targetTable instanceof TableFunctionTable) {
                 dataSink = new TableFunctionTableSink((TableFunctionTable) targetTable);
+            } else if (targetTable.isBlackHoleTable()) {
+                dataSink = new BlackHoleTableSink();
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
@@ -316,6 +345,7 @@ public class InsertPlanner {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(true);
             }
+            session.getSessionVariable().setEnableMaterializedViewRewrite(previousMVRewrite);
         }
     }
 
@@ -627,10 +657,12 @@ public class InsertPlanner {
      * so that the same key will be sent to the same fragment instance
      */
     private PhysicalPropertySet createPhysicalPropertySet(InsertStmt insertStmt,
-                                                          List<ColumnRefOperator> outputColumns) {
+                                                          List<ColumnRefOperator> outputColumns,
+                                                          SessionVariable session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
         if ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())) {
-            DistributionProperty distributionProperty = new DistributionProperty(new GatherDistributionSpec());
+            DistributionProperty distributionProperty = DistributionProperty
+                    .createProperty(new GatherDistributionSpec());
             return new PhysicalPropertySet(distributionProperty);
         }
 
@@ -653,15 +685,36 @@ public class InsertPlanner {
                     Ordering ordering = new Ordering(columnRef, isAsc, isNullFirst);
                     orderings.add(ordering);
                 }
-                SortProperty sortProperty = new SortProperty(new OrderSpec(orderings));
+                SortProperty sortProperty = SortProperty.createProperty(orderings);
                 return new PhysicalPropertySet(sortProperty);
             }
         }
 
 
-        if (targetTable instanceof TableFunctionTable && ((TableFunctionTable) targetTable).isWriteSingleFile()) {
-            DistributionProperty distributionProperty = new DistributionProperty(new GatherDistributionSpec());
-            return new PhysicalPropertySet(distributionProperty);
+        if (targetTable instanceof TableFunctionTable) {
+            TableFunctionTable table = (TableFunctionTable) targetTable;
+            if (table.isWriteSingleFile()) {
+                return new PhysicalPropertySet(DistributionProperty
+                        .createProperty(new GatherDistributionSpec()));
+            }
+
+            if (session.isEnableConnectorSinkGlobalShuffle()) {
+                // use random shuffle for unpartitioned table
+                if (table.getPartitionColumnNames().isEmpty()) {
+                    return new PhysicalPropertySet(DistributionProperty
+                            .createProperty(new RoundRobinDistributionSpec()));
+                } else { // use hash shuffle for partitioned table
+                    List<Integer> partitionColumnIDs = table.getPartitionColumnIDs().stream()
+                            .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
+                    HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
+                            HashDistributionDesc.SourceType.SHUFFLE_AGG);
+                    return new PhysicalPropertySet(DistributionProperty
+                            .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
+                }
+            }
+
+            // no global shuffle
+            return PhysicalPropertySet.EMPTY;
         }
 
 
@@ -699,7 +752,7 @@ public class InsertPlanner {
         HashDistributionDesc desc =
                 new HashDistributionDesc(keyColumnIds, HashDistributionDesc.SourceType.SHUFFLE_AGG);
         DistributionSpec spec = DistributionSpec.createHashDistributionSpec(desc);
-        DistributionProperty property = new DistributionProperty(spec);
+        DistributionProperty property = DistributionProperty.createProperty(spec);
 
         if (Config.eliminate_shuffle_load_by_replicated_storage) {
             forceReplicatedStorage = true;

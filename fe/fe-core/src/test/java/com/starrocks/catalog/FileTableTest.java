@@ -14,14 +14,17 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.hive.RemoteFileInputFormat;
 import com.starrocks.connector.hive.TextFileFormatDesc;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.common.EngineType;
+import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -54,8 +57,9 @@ public class FileTableTest {
     public void testCreateExternalTable() throws Exception {
         String hdfsPath = "hdfs://127.0.0.1:10000/hive/";
 
-        String createTableSql = "create external table if not exists db.file_tbl (col1 int, col2 int) engine=file properties " +
-                "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"orc\")";
+        String createTableSql =
+                "create external table if not exists db.file_tbl (col1 int, col2 int) engine=file properties " +
+                        "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"orc\")";
         CreateTableStmt
                 createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
         com.starrocks.catalog.Table table = createTable(createTableStmt);
@@ -72,7 +76,8 @@ public class FileTableTest {
                 "engine=file properties " +
                 "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"parquet\")";
         CreateTableStmt
-                createTableStmt2 = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql2, connectContext);
+                createTableStmt2 =
+                (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql2, connectContext);
         com.starrocks.catalog.Table table2 = createTable(createTableStmt2);
 
         Assert.assertTrue(table2 instanceof FileTable);
@@ -85,7 +90,8 @@ public class FileTableTest {
                 "engine=file properties " +
                 "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\")";
         CreateTableStmt
-                createTableStmt3 = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql3, connectContext);
+                createTableStmt3 =
+                (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql3, connectContext);
         Assert.assertThrows(DdlException.class,
                 () -> createTable(createTableStmt3));
 
@@ -93,7 +99,8 @@ public class FileTableTest {
                 "engine=file properties " +
                 "(\"format\"=\"parquet\")";
         CreateTableStmt
-                createTableStmt4 = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql4, connectContext);
+                createTableStmt4 =
+                (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql4, connectContext);
         Assert.assertThrows(DdlException.class,
                 () -> createTable(createTableStmt4));
 
@@ -101,7 +108,8 @@ public class FileTableTest {
                 "engine=file properties " +
                 "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"haha\")";
         CreateTableStmt
-                createTableStmt5 = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql5, connectContext);
+                createTableStmt5 =
+                (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql5, connectContext);
         Assert.assertThrows(DdlException.class,
                 () -> createTable(createTableStmt5));
     }
@@ -116,7 +124,8 @@ public class FileTableTest {
                             "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"text\", \"csv_separator\"=\",\", " +
                             "\"row_delimiter\"=\"xx\", \"collection_delimiter\"=\"yy\", \"map_delimiter\"=\"zz\")";
             CreateTableStmt
-                    createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
+                    createTableStmt =
+                    (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
             com.starrocks.catalog.Table table = createTable(createTableStmt);
 
             Assert.assertTrue(table instanceof FileTable);
@@ -165,5 +174,26 @@ public class FileTableTest {
         Assert.assertEquals(desc.getLineDelim(), "YYY");
         Assert.assertEquals(desc.getCollectionDelim(), "ZZZ");
         Assert.assertEquals(desc.getMapkeyDelim(), "MMM");
+    }
+
+    @Test
+    public void testCreateTextExternalTableFormat() throws Exception {
+        String createTableSql =
+                "create external table if not exists db.file_tbl (col1 int, col2 int, col3 string) engine=file properties " +
+                        "(\"path\"=\"hdfs://127.0.0.1:10000/hive/\", \"format\"=\"avro\")";
+        CreateTableStmt
+                createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createTableSql, connectContext);
+        com.starrocks.catalog.Table table = createTable(createTableStmt);
+
+        Assert.assertTrue(table instanceof FileTable);
+        FileTable fileTable = (FileTable) table;
+        List<DescriptorTable.ReferencedPartitionInfo> partitions = new ArrayList<>();
+        TTableDescriptor tTableDescriptor = fileTable.toThrift(partitions);
+
+        Assert.assertEquals(tTableDescriptor.getFileTable().getInput_format(),
+                HiveStorageFormat.get("avro").getInputFormat());
+        Assert.assertEquals(tTableDescriptor.getFileTable().getSerde_lib(), HiveStorageFormat.get("avro").getSerde());
+        Assert.assertEquals(tTableDescriptor.getFileTable().getHive_column_names(), "col1,col2,col3");
+        Assert.assertEquals(tTableDescriptor.getFileTable().getHive_column_types(), "int#int#string");
     }
 }

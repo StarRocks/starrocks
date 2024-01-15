@@ -235,6 +235,21 @@ size_t ColumnHelper::last_nonnull(const Column* col, size_t start, size_t end) {
     return end;
 }
 
+int64_t ColumnHelper::find_first_not_equal(Column* column, int64_t target, int64_t start, int64_t end) {
+    while (start + 1 < end) {
+        int64_t mid = start + (end - start) / 2;
+        if (column->compare_at(target, mid, *column, 1) == 0) {
+            start = mid;
+        } else {
+            end = mid;
+        }
+    }
+    if (column->compare_at(target, end - 1, *column, 1) == 0) {
+        return end;
+    }
+    return end - 1;
+}
+
 // expression trees' return column should align return type when some return columns maybe diff from the required
 // return type, as well the null flag. e.g., concat_ws returns col from create_const_null_column(), it's type is
 // Nullable(int8), but required return type is nullable(string), so col need align return type to nullable(string).

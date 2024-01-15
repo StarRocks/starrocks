@@ -19,6 +19,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
@@ -65,8 +66,9 @@ public class ReplayFromDumpTestBase {
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
-        FeConstants.showLocalShuffleColumnsInExplain = false;
+        FeConstants.showScanNodeLocalShuffleColumnsInExplain = false;
         FeConstants.enablePruneEmptyOutputScan = false;
+        FeConstants.showJoinLocalShuffleInExplain = false;
 
         new MockUp<EditLog>() {
             @Mock
@@ -77,15 +79,17 @@ public class ReplayFromDumpTestBase {
     }
 
     @Before
-    public void before() {
+    public void before() throws Exception {
         BackendCoreStat.reset();
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(connectContext.getQueryId()));
     }
 
     @AfterClass
     public static void afterClass() throws Exception {
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(true);
-        FeConstants.showLocalShuffleColumnsInExplain = true;
+        FeConstants.showScanNodeLocalShuffleColumnsInExplain = true;
     }
 
     public String getModelContent(String filename, String model) {
@@ -117,7 +121,7 @@ public class ReplayFromDumpTestBase {
         return modelContentBuilder.toString();
     }
 
-    public QueryDumpInfo getDumpInfoFromJson(String dumpInfoString) {
+    public static QueryDumpInfo getDumpInfoFromJson(String dumpInfoString) {
         return GsonUtils.GSON.fromJson(dumpInfoString, QueryDumpInfo.class);
     }
 
@@ -139,7 +143,7 @@ public class ReplayFromDumpTestBase {
         Assert.assertEquals(originCostPlan, replayCostPlan);
     }
 
-    protected String getDumpInfoFromFile(String fileName) throws Exception {
+    protected static String getDumpInfoFromFile(String fileName) throws Exception {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/" + fileName + ".json");
         StringBuilder sb = new StringBuilder();

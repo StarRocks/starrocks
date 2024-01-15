@@ -75,12 +75,15 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select slice(array[1,2,3,4], 2, 2)";
         assertPlanContains(sql, "array_slice([1,2,3,4], 2, 2)");
+
+        sql = "select contains_sequence(array[1,2,3], array[1,2])";
+        assertPlanContains(sql, "array_contains_seq([1,2,3], [1,2])");
     }
 
     @Test
     public void testArrayFnWithLambdaExpr() throws Exception {
         String sql = "select filter(array[], x -> true);";
-        assertPlanContains(sql, "array_filter([], array_map(<slot 2> -> TRUE, []))");
+        assertPlanContains(sql, "array_filter(CAST([] AS ARRAY<BOOLEAN>), array_map(<slot 2> -> TRUE, []))");
 
         sql = "select filter(array[5, -6, NULL, 7], x -> x > 0);";
         assertPlanContains(sql, " array_filter([5,-6,NULL,7], array_map(<slot 2> -> <slot 2> > 0, [5,-6,NULL,7]))");
@@ -243,6 +246,30 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select length('aaa');";
         assertPlanContains(sql, "char_length('aaa')");
+
+        sql = "SELECT str_to_map('a:1|b:2|c:3', '|', ':');";
+        assertPlanContains(sql, "str_to_map(split('a:1|b:2|c:3', '|'), ':')");
+
+        sql = "SELECT str_to_map('a');";
+        assertPlanContains(sql, "str_to_map(split('a', ','), ':')");
+
+        sql = "SELECT str_to_map('a:1|b:2|c:3', '|');";
+        assertPlanContains(sql, "str_to_map(split('a:1|b:2|c:3', '|'), ':')");
+
+        sql = "SELECT str_to_map('a:1,b:2,c:null');";
+        assertPlanContains(sql, "str_to_map(split('a:1,b:2,c:null', ','), ':')");
+
+        sql = "SELECT replace('hello-world', '-');";
+        assertPlanContains(sql, "replace('hello-world', '-', '')");
+
+        sql = "SELECT replace('hello-world', '-', '$');";
+        assertPlanContains(sql, "replace('hello-world', '-', '$')");
+    }
+
+    @Test
+    public void testURLFnTransform() throws Exception {
+        String sql = "select url_extract_path('https://www.starrocks.io/showcase?query=1')";
+        assertPlanContains(sql, "parse_url('https://www.starrocks.io/showcase?query=1', 'PATH')");
     }
 
     @Test
@@ -254,10 +281,10 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "parse_json('{\"a\": {\"b\": 1}}')");
 
         sql = "select json_extract(json_parse('{\"a\": {\"b\": 1}}'), '$.a.b')";
-        assertPlanContains(sql, "json_query(parse_json('{\"a\": {\"b\": 1}}'), '$.a.b')");
+        assertPlanContains(sql, "get_json_string(parse_json('{\"a\": {\"b\": 1}}'), '$.a.b')");
 
         sql = "select json_extract(JSON '{\"a\": {\"b\": 1}}', '$.a.b');";
-        assertPlanContains(sql, "json_query(CAST('{\"a\": {\"b\": 1}}' AS JSON), '$.a.b')");
+        assertPlanContains(sql, "get_json_string('{\"a\": {\"b\": 1}}', '$.a.b')");
 
         sql = "select json_format(JSON '[1, 2, 3]')";
         assertPlanContains(sql, "'[1, 2, 3]'");
@@ -354,4 +381,30 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         assertPlanContains(sql, "<slot 12> : CURRENT_ROLE()");
     }
 
+    @Test
+    public void testIsNullFunction() throws Exception {
+        String sql = "select isnull(1)";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnull('aaa')";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnull(null)";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnull(1, 2)";
+        analyzeFail(sql, "isnull function must have 1 argument");
+
+        sql = "select isnotnull(1)";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnotnull('aaa')";
+        assertPlanContains(sql, "<slot 2> : TRUE");
+
+        sql = "select isnotnull(null)";
+        assertPlanContains(sql, "<slot 2> : FALSE");
+
+        sql = "select isnotnull(1, 2)";
+        analyzeFail(sql, "isnotnull function must have 1 argument");
+    }
 }

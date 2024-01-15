@@ -76,6 +76,7 @@ public class Trino2SRFunctionCallTransformer {
         registerStringFunctionTransformer();
         registerRegexpFunctionTransformer();
         registerJsonFunctionTransformer();
+        registerURLFunctionTransformer();
         registerBitwiseFunctionTransformer();
         registerUnicodeFunctionTransformer();
         registerMapFunctionTransformer();
@@ -132,6 +133,9 @@ public class Trino2SRFunctionCallTransformer {
                 ImmutableList.of(Expr.class, Expr.class, Expr.class));
         // filter(array, lambda) -> array_filter(array, lambda)
         registerFunctionTransformer("filter", 2, "array_filter",
+                ImmutableList.of(Expr.class, Expr.class));
+        // contains_sequence -> array_contains_seq
+        registerFunctionTransformer("contains_sequence", 2, "array_contains_seq",
                 ImmutableList.of(Expr.class, Expr.class));
     }
 
@@ -194,16 +198,40 @@ public class Trino2SRFunctionCallTransformer {
 
         // length -> char_length
         registerFunctionTransformer("length", 1, "char_length", ImmutableList.of(Expr.class));
+
+        // str_to_map(str, del1, del2) -> str_to_map(split(str, del1), del2)
+        registerFunctionTransformer("str_to_map", 3, new FunctionCallExpr("str_to_map",
+                ImmutableList.of(new FunctionCallExpr("split", ImmutableList.of(
+                        new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class)
+                )), new PlaceholderExpr(3, Expr.class))));
+
+        // str_to_map(str) -> str_to_map(split(str, del1), del2)
+        registerFunctionTransformer("str_to_map", 2, new FunctionCallExpr("str_to_map",
+                ImmutableList.of(new FunctionCallExpr("split", ImmutableList.of(
+                        new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class)
+                )), new StringLiteral(":"))));
+
+        // str_to_map(str) -> str_to_map(split(str, del1), del2)
+        registerFunctionTransformer("str_to_map", 1, new FunctionCallExpr("str_to_map",
+                ImmutableList.of(new FunctionCallExpr("split", ImmutableList.of(
+                        new PlaceholderExpr(1, Expr.class), new StringLiteral(","))), new StringLiteral(":"))));
+
+        // replace(string, search) -> replace(string, search, '')
+        registerFunctionTransformer("replace", 2, new FunctionCallExpr("replace",
+                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class),
+                        new StringLiteral(""))));
     }
 
     private static void registerRegexpFunctionTransformer() {
         // regexp_like -> regexp
         registerFunctionTransformer("regexp_like", 2, "regexp",
                 ImmutableList.of(Expr.class, Expr.class));
+    }
 
-        // regexp_extract(string, pattern) -> regexp_extract(str, pattern, 0)
-        registerFunctionTransformer("regexp_extract", 2, new FunctionCallExpr("regexp_extract",
-                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new PlaceholderExpr(2, Expr.class), new IntLiteral(0L))));
+    private static void registerURLFunctionTransformer() {
+        // url_extract_path('https://www.starrocks.io/showcase') -> parse_url('https://www.starrocks.io/showcase', 'PATH')
+        registerFunctionTransformer("url_extract_path", 1, new FunctionCallExpr("parse_url",
+                ImmutableList.of(new PlaceholderExpr(1, Expr.class), new StringLiteral("PATH"))));
     }
 
     private static void registerJsonFunctionTransformer() {
@@ -215,8 +243,8 @@ public class Trino2SRFunctionCallTransformer {
         registerFunctionTransformer("json_parse", 1, "parse_json",
                 ImmutableList.of(Expr.class));
 
-        // json_extract -> json_query
-        registerFunctionTransformer("json_extract", 2, "json_query",
+        // json_extract -> get_json_string
+        registerFunctionTransformer("json_extract", 2, "get_json_string",
                 ImmutableList.of(Expr.class, Expr.class));
 
         // json_size -> json_length

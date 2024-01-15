@@ -20,6 +20,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "exprs/agg/count.h"
 #include "exprs/agg/window.h"
@@ -35,6 +36,17 @@
 #include "util/defer_op.h"
 #include "util/runtime_profile.h"
 
+// This macro is used to perform common pre-processing for each ProcessByPartitionIfNecessaryFunc
+// 1. When set_finishing(), the has_output() may be false, so add the check here.
+// 2. Reset state for the first partition. This cannot be invoded when there's no data.
+#define PRE_PROCESSING()                                    \
+    if (!_has_output()) {                                   \
+        return Status::OK();                                \
+    }                                                       \
+    if (_get_global_position(_current_row_position) == 0) { \
+        _reset_window_state();                              \
+    }
+
 namespace starrocks {
 Status window_init_jvm_context(int64_t fid, const std::string& url, const std::string& checksum,
                                const std::string& symbol, FunctionContext* context);
@@ -49,26 +61,38 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
         _buffered_tuple_id = tnode.analytic_node.buffered_tuple_id;
     }
 
+    if (!config::pipeline_analytic_enable_streaming_process) {
+        _need_partition_materializing = true;
+    }
+
     TAnalyticWindow window = tnode.analytic_node.window;
     if (!tnode.analytic_node.__isset.window) {
+        _need_partition_materializing = true;
     } else if (tnode.analytic_node.window.type == TAnalyticWindowType::RANGE) {
         // RANGE windows must have UNBOUNDED PRECEDING
         // RANGE window end bound must be CURRENT ROW or UNBOUNDED FOLLOWING
-    } else {
-        if (window.__isset.window_start) {
-            TAnalyticWindowBoundary b = window.window_start;
-            if (b.__isset.rows_offset_value) {
-                _rows_start_offset = b.rows_offset_value;
-                if (b.type == TAnalyticWindowBoundaryType::PRECEDING) {
-                    _rows_start_offset *= -1;
-                }
-            } else {
-                DCHECK_EQ(b.type, TAnalyticWindowBoundaryType::CURRENT_ROW);
-                _rows_start_offset = 0;
-            }
+        if (!window.__isset.window_start && !window.__isset.window_end) {
+            _need_partition_materializing = true;
         }
+        _is_unbounded_preceding = !window.__isset.window_start;
+    } else {
+        if (!window.__isset.window_start && !window.__isset.window_end) {
+            _need_partition_materializing = true;
+        } else {
+            if (window.__isset.window_start) {
+                TAnalyticWindowBoundary b = window.window_start;
+                if (b.__isset.rows_offset_value) {
+                    _rows_start_offset = b.rows_offset_value;
+                    if (b.type == TAnalyticWindowBoundaryType::PRECEDING) {
+                        _rows_start_offset *= -1;
+                    }
+                } else {
+                    DCHECK_EQ(b.type, TAnalyticWindowBoundaryType::CURRENT_ROW);
+                    _rows_start_offset = 0;
+                }
+            }
 
-        if (window.__isset.window_end) {
+            DCHECK(window.__isset.window_end);
             TAnalyticWindowBoundary b = window.window_end;
             if (b.__isset.rows_offset_value) {
                 _rows_end_offset = b.rows_offset_value;
@@ -80,8 +104,10 @@ Analytor::Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc,
                 _rows_end_offset = 0;
             }
         }
+        if (config::pipeline_analytic_enable_removable_cumulative_process) {
+            _use_removable_cumulative_process = (window.__isset.window_start && window.__isset.window_end);
+        }
         _is_unbounded_preceding = !window.__isset.window_start;
-        _is_unbounded_following = !window.__isset.window_end;
     }
 }
 
@@ -91,19 +117,18 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
     _pool = pool;
     _runtime_profile = runtime_profile;
     _limit = _tnode.limit;
-    // add profile attributes
     if (_tnode.analytic_node.__isset.sql_partition_keys) {
         _runtime_profile->add_info_string("PartitionKeys", _tnode.analytic_node.sql_partition_keys);
     }
     if (_tnode.analytic_node.__isset.sql_aggregate_functions) {
         _runtime_profile->add_info_string("AggregateFunctions", _tnode.analytic_node.sql_aggregate_functions);
     }
-    _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
     _mem_pool = std::make_unique<MemPool>();
 
     const TAnalyticNode& analytic_node = _tnode.analytic_node;
 
     size_t agg_size = analytic_node.analytic_functions.size();
+    _is_lead_lag_functions.resize(agg_size);
     _agg_fn_ctxs.resize(agg_size);
     _agg_functions.resize(agg_size);
     _agg_expr_ctxs.resize(agg_size);
@@ -114,13 +139,10 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 
     bool has_outer_join_child = analytic_node.__isset.has_outer_join_child && analytic_node.has_outer_join_child;
 
-    _has_lead_lag_function = false;
     _should_set_partition_size = false;
     for (int i = 0; i < agg_size; ++i) {
         const TExpr& desc = analytic_node.analytic_functions[i];
         const TFunction& fn = desc.nodes[0].fn;
-        VLOG_ROW << fn.name.function_name << " is arg nullable " << desc.nodes[0].has_nullable_child;
-        VLOG_ROW << fn.name.function_name << " is result nullable " << desc.nodes[0].is_nullable;
 
         _agg_intput_columns[i].resize(desc.nodes[0].num_children);
 
@@ -134,26 +156,17 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
 
         if (fn.name.function_name == "ntile") {
-            if (!state->enable_pipeline_engine()) {
-                return Status::NotSupported("The NTILE window function is only supported by the pipeline engine.");
-            }
             _need_partition_materializing = true;
         }
 
-        if (require_partition_size(fn.name.function_name)) {
-            if (!state->enable_pipeline_engine()) {
-                return Status::NotSupported(strings::Substitute(
-                        "The $0 window function is only supported by the pipeline engine.", fn.name.function_name));
-            }
+        if (_require_partition_size(fn.name.function_name)) {
             _should_set_partition_size = true;
             _partition_size_required_function_index.emplace_back(i);
             _need_partition_materializing = true;
         }
 
-        if (fn.name.function_name == "sum" || fn.name.function_name == "avg" || fn.name.function_name == "count") {
-            if (state->enable_pipeline_engine()) {
-                _support_cumulative_algo = true;
-            }
+        if (!(fn.name.function_name == "sum" || fn.name.function_name == "avg" || fn.name.function_name == "count")) {
+            _use_removable_cumulative_process = false;
         }
 
         bool is_input_nullable = false;
@@ -178,7 +191,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             const TypeDescriptor arg_type = TypeDescriptor::from_thrift(fn.arg_types[0]);
 
             auto return_typedesc = AnyValUtil::column_type_to_type_desc(return_type);
-            // collect arg_typedescs for aggregate function.
+            // Collect arg_typedescs for aggregate function.
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
             for (auto& type : fn.arg_types) {
                 arg_typedescs.push_back(AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_thrift(type)));
@@ -198,6 +211,7 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
                 // "in" means "ignore nulls", we use first_value_in/last_value_in instead of first_value/last_value
                 // to find right AggregateFunction to support ignore nulls.
                 real_fn_name += "_in";
+                _need_partition_materializing = true;
             }
             func = get_window_function(real_fn_name, arg_type.type, return_type.type, is_input_nullable, fn.binary_type,
                                        state->func_version());
@@ -211,8 +225,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
 
         for (size_t j = 0; j < _agg_expr_ctxs[i].size(); ++j) {
-            // we always treat first argument as non const, because most window function has only one args
-            // and cant't handler const column within the function
+            // We always treat first argument as non const, because most window function has only one args
+            // and cant't handler const column within the function.
             if (j == 0) {
                 _agg_intput_columns[i][j] =
                         ColumnHelper::create_column(_agg_expr_ctxs[i][j]->root()->type(), is_input_nullable);
@@ -224,13 +238,10 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
 
         DCHECK(_agg_functions[i] != nullptr);
-        VLOG_ROW << "get agg function " << _agg_functions[i]->get_name();
-        if (_agg_functions[i]->get_name() == "lead-lag") {
-            _has_lead_lag_function = true;
-        }
+        _is_lead_lag_functions[i] = (_agg_functions[i]->get_name() == "lead-lag");
     }
 
-    // compute agg state total size and offsets
+    // Compute agg state total size and offsets.
     for (int i = 0; i < agg_size; ++i) {
         _agg_states_offsets[i] = _agg_states_total_size;
         _agg_states_total_size += _agg_functions[i]->size();
@@ -264,6 +275,9 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
+    _peak_buffered_rows = ADD_PEAK_COUNTER(_runtime_profile, "PeakBufferedRows", TUnit::UNIT);
+    _remove_unused_rows_cnt = ADD_COUNTER(_runtime_profile, "RemoveUnusedRowsCount", TUnit::UNIT);
+    _remove_unused_total_rows = ADD_COUNTER(_runtime_profile, "RemoveUnusedTotalRows", TUnit::UNIT);
     _column_resize_timer = ADD_TIMER(_runtime_profile, "ColumnResizeTime");
     _partition_search_timer = ADD_TIMER(_runtime_profile, "PartitionSearchTime");
     _peer_group_search_timer = ADD_TIMER(_runtime_profile, "PeerGroupSearchTime");
@@ -287,13 +301,12 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
         }
     }
 
-    // save TFunction object
     _fns.reserve(_agg_fn_ctxs.size());
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         _fns.emplace_back(_tnode.analytic_node.analytic_functions[i].nodes[0].fn);
     }
 
-    return Status::OK();
+    return _prepare_processing_mode(state, runtime_profile);
 }
 
 Status Analytor::open(RuntimeState* state) {
@@ -363,126 +376,205 @@ void Analytor::close(RuntimeState* state) {
 
     if (_has_udaf) {
         auto promise_st = call_function_in_pthread(state, agg_close);
-        promise_st->get_future().get();
+        (void)promise_st->get_future().get();
     } else {
-        agg_close();
+        (void)agg_close();
     }
 }
 
-size_t Analytor::current_chunk_size() const {
-    return _input_chunks[_output_chunk_index]->num_rows();
+Status Analytor::process(RuntimeState* state, const ChunkPtr& chunk) {
+    _remove_unused_rows(state);
+
+    RETURN_IF_ERROR(_add_chunk(chunk));
+    RETURN_IF_ERROR((this->*_process_impl)(state));
+
+    return _check_has_error();
 }
 
-bool Analytor::is_chunk_buffer_empty() {
-    std::lock_guard<std::mutex> l(_buffer_mutex);
-    return _buffer.empty();
-}
-
-bool Analytor::is_chunk_buffer_full() {
-    return _buffer.size() >= config::pipeline_analytic_max_buffer_size;
-}
-
-ChunkPtr Analytor::poll_chunk_buffer() {
-    std::lock_guard<std::mutex> l(_buffer_mutex);
-    if (_buffer.empty()) {
-        return nullptr;
-    }
-    ChunkPtr chunk = _buffer.front();
-    _buffer.pop();
-    return chunk;
-}
-
-void Analytor::offer_chunk_to_buffer(const ChunkPtr& chunk) {
-    std::lock_guard<std::mutex> l(_buffer_mutex);
-    _buffer.push(chunk);
-}
-
-FrameRange Analytor::get_sliding_frame_range() {
-    if (!_is_unbounded_preceding) {
-        return {_current_row_position + _rows_start_offset, _current_row_position + _rows_end_offset + 1};
-    } else {
-        return {_partition_start, _current_row_position + _rows_end_offset + 1};
-    }
-}
-
-void Analytor::update_window_batch(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                   int64_t frame_end) {
-    // DO NOT put timer here because this function will be used frequently,
-    // timer will cause a sharp drop in performance
-    if (_has_lead_lag_function) {
-        _update_window_batch_lead_lag(peer_group_start, peer_group_end, frame_start, frame_end);
-    } else {
-        _update_window_batch_normal(peer_group_start, peer_group_end, frame_start, frame_end);
-    }
-}
-
-void Analytor::reset_window_state() {
-    // DO NOT put timer here because this function will be used frequently,
-    // timer will cause a sharp drop in performance
-    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        _agg_functions[i]->reset(_agg_fn_ctxs[i], _agg_intput_columns[i],
-                                 _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i]);
-    }
-}
-
-void Analytor::get_window_function_result(size_t frame_start, size_t frame_end) {
-    // DO NOT put timer here because this function will be used frequently,
-    // timer will cause a sharp drop in performance
-    DCHECK_GT(frame_end, frame_start);
-    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        Column* agg_column = _result_window_columns[i].get();
-        _agg_functions[i]->get_values(_agg_fn_ctxs[i], _managed_fn_states[0]->data() + _agg_states_offsets[i],
-                                      agg_column, frame_start, frame_end);
-    }
-}
-
-Status Analytor::output_result_chunk(ChunkPtr* chunk) {
-    ChunkPtr output_chunk = std::move(_input_chunks[_output_chunk_index]);
-    for (size_t i = 0; i < _result_window_columns.size(); i++) {
-        output_chunk->append_column(_result_window_columns[i], _result_tuple_desc->slots()[i]->id());
-    }
-
-    _num_rows_returned += output_chunk->num_rows();
-
-    if (reached_limit()) {
-        int64_t num_rows_over = _num_rows_returned - _limit;
-        output_chunk->set_num_rows(output_chunk->num_rows() - num_rows_over);
-        COUNTER_SET(_rows_returned_counter, _limit);
-        *chunk = output_chunk;
-        _output_chunk_index++;
-        return Status::OK();
-    }
-
-    COUNTER_SET(_rows_returned_counter, _num_rows_returned);
-    *chunk = output_chunk;
-    _output_chunk_index++;
-    _window_result_position = 0;
+Status Analytor::finish_process(RuntimeState* state) {
+    _input_eos = true;
+    RETURN_IF_ERROR((this->*_process_impl)(state));
+    _is_sink_complete.store(true, std::memory_order_release);
     return Status::OK();
 }
 
-void Analytor::create_agg_result_columns(int64_t chunk_size) {
-    if (_window_result_position == 0) {
-        _result_window_columns.resize(_agg_fn_types.size());
-        for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
-            _result_window_columns[i] =
-                    ColumnHelper::create_column(_agg_fn_types[i].result_type, _agg_fn_types[i].has_nullable_child);
-            // binary column cound't call resize method like Numeric Column,
-            // so we only reserve it.
-            if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
-                _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR ||
-                _agg_fn_types[i].result_type.type == LogicalType::TYPE_JSON ||
-                _agg_fn_types[i].result_type.type == LogicalType::TYPE_ARRAY ||
-                _agg_fn_types[i].result_type.type == LogicalType::TYPE_MAP ||
-                _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT) {
-                _result_window_columns[i]->reserve(chunk_size);
+std::string Analytor::debug_string() const {
+    std::stringstream ss;
+    ss << std::boolalpha;
+
+    FrameRange frame = _get_frame_range();
+    ss << "current_row_position=" << _get_global_position(_current_row_position) << ", partition=("
+       << _get_global_position(_partition.start) << ", " << _get_global_position(_partition.end) << "/"
+       << _partition.is_real << "), peer_group=(" << _get_global_position(_peer_group.start) << ", "
+       << _get_global_position(_peer_group.end) << "/" << _peer_group.is_real << ")"
+       << ", frame=[" << frame.start << ", " << frame.end << ")"
+       << ", input_chunks_size=" << _input_chunks.size() << ", output_chunk_index=" << _output_chunk_index
+       << ", removed_from_buffer_rows=" << _removed_from_buffer_rows
+       << ", removed_chunk_index=" << _removed_chunk_index;
+
+    return ss.str();
+}
+
+Status Analytor::_prepare_processing_mode(RuntimeState* state, RuntimeProfile* runtime_profile) {
+    TAnalyticWindow window = _tnode.analytic_node.window;
+    _process_impl = &Analytor::_materializing_process;
+    std::stringstream process_mode;
+    process_mode << (_need_partition_materializing ? "Materializing/" : "Streaming/");
+    process_mode << (_use_removable_cumulative_process ? "RemovableCumulative"
+                                                       : (_is_unbounded_preceding ? "Cumulative" : "ByDefinition"));
+    runtime_profile->add_info_string("ProcessMode", process_mode.str());
+    if (!_tnode.analytic_node.__isset.window) {
+        _materializing_process_impl = &Analytor::_materializing_process_for_unbounded_frame;
+    } else if (window.type == TAnalyticWindowType::RANGE) {
+        // RANGE windows must have UNBOUNDED PRECEDING
+        // RANGE window end bound must be CURRENT ROW or UNBOUNDED FOLLOWING
+        DCHECK(!window.__isset.window_start);
+        DCHECK(!window.__isset.window_end || window.window_end.type == TAnalyticWindowBoundaryType::CURRENT_ROW);
+        if (!window.__isset.window_end) {
+            // RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+            _materializing_process_impl = &Analytor::_materializing_process_for_unbounded_frame;
+        } else {
+            // RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+            DCHECK_EQ(window.window_end.type, TAnalyticWindowBoundaryType::CURRENT_ROW);
+            if (_need_partition_materializing) {
+                _materializing_process_impl = &Analytor::_materializing_process_for_half_unbounded_range_frame;
             } else {
-                _result_window_columns[i]->resize(chunk_size);
+                _process_impl = &Analytor::_streaming_process_for_half_bounded_range_frame;
+                _materializing_process_impl = nullptr;
+            }
+        }
+    } else {
+        if (!window.__isset.window_start && !window.__isset.window_end) {
+            // ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+            _materializing_process_impl = &Analytor::_materializing_process_for_unbounded_frame;
+        } else if (!window.__isset.window_start) {
+            // ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW or
+            // ROWS BETWEEN UNBOUNDED PRECEDING AND N PRECEDING or
+            // ROWS BETWEEN UNBOUNDED PRECEDING AND M FOLLOWING
+            if (_need_partition_materializing) {
+                _materializing_process_impl = &Analytor::_materializing_process_for_half_unbounded_rows_frame;
+            } else {
+                _process_impl = &Analytor::_streaming_process_for_half_unbounded_rows_frame;
+                _materializing_process_impl = nullptr;
+            }
+        } else {
+            // ROWS BETWEEN N PRECEDING AND M PRECEDING or
+            // ROWS BETWEEN N FOLLOWING AND M FOLLOWING or
+            // ROWS BETWEEN N PRECEDING AND M FOLLOWING or
+            // ROWS BETWEEN N PRECEDING AND CURRENT ROW or
+            // ROWS BETWEEN CURRENT ROW AND M FOLLOWING
+            if (_need_partition_materializing) {
+                _materializing_process_impl = &Analytor::_materializing_process_for_sliding_frame;
+            } else {
+                _process_impl = &Analytor::_streaming_process_for_sliding_frame;
+                _materializing_process_impl = nullptr;
             }
         }
     }
+
+    return Status::OK();
 }
 
-Status Analytor::add_chunk(const ChunkPtr& chunk) {
+Status Analytor::_evaluate_const_columns(int i) {
+    if (i >= _agg_fn_ctxs.size() || _agg_fn_ctxs[i] == nullptr) {
+        // Only agg fn has this context.
+        return Status::OK();
+    }
+    std::vector<ColumnPtr> const_columns;
+    const_columns.reserve(_agg_expr_ctxs[i].size());
+    for (auto& j : _agg_expr_ctxs[i]) {
+        ASSIGN_OR_RETURN(auto col, j->root()->evaluate_const(j));
+        const_columns.emplace_back(std::move(col));
+    }
+    _agg_fn_ctxs[i]->set_constant_columns(const_columns);
+    return Status::OK();
+}
+
+Status Analytor::_check_has_error() {
+    for (const auto* ctx : _agg_fn_ctxs) {
+        if (ctx != nullptr) {
+            if (ctx->has_error()) {
+                return Status::RuntimeError(ctx->error_msg());
+            }
+        }
+    }
+    return Status::OK();
+}
+
+void Analytor::_remove_unused_rows(RuntimeState* state) {
+    const size_t chunk_num = config::pipeline_analytic_removable_chunk_num;
+    // Keep at least one chunk, because the process of _find_partition_end() may access the end position of
+    // the last chunk.
+    if (_removed_chunk_index + chunk_num + 1 >= _input_chunk_first_row_positions.size()) {
+        return;
+    }
+
+    const int64_t remove_end_position = _input_chunk_first_row_positions[_removed_chunk_index + chunk_num];
+    if (_need_partition_materializing) {
+        if (_get_global_position(_partition.start) <= remove_end_position) {
+            return;
+        }
+    } else if (_use_removable_cumulative_process || !_is_unbounded_preceding) {
+        // Both cumulative process or sliding process need to access position around range.start
+        const auto frame = _get_frame_range();
+        if (_get_global_position(frame.start - 1) <= remove_end_position) {
+            return;
+        }
+    } else {
+        // Cumulative process only access the position around the frame.end
+        const auto frame = _get_frame_range();
+        if (_get_global_position(std::min(_current_row_position, frame.end)) <= remove_end_position) {
+            return;
+        }
+    }
+
+    const int64_t remove_rows = remove_end_position - _removed_from_buffer_rows;
+    COUNTER_ADD(_peak_buffered_rows, -remove_rows);
+    COUNTER_UPDATE(_remove_unused_rows_cnt, 1);
+    COUNTER_UPDATE(_remove_unused_total_rows, remove_rows);
+
+    {
+        SCOPED_TIMER(_column_resize_timer);
+        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+            for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
+                _agg_intput_columns[i][j]->remove_first_n_values(remove_rows);
+            }
+        }
+        for (size_t i = 0; i < _partition_ctxs.size(); i++) {
+            _partition_columns[i]->remove_first_n_values(remove_rows);
+        }
+        for (size_t i = 0; i < _order_ctxs.size(); i++) {
+            _order_columns[i]->remove_first_n_values(remove_rows);
+        }
+        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+            _agg_functions[i]->reset_state_for_contraction(
+                    _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], remove_rows);
+        }
+    }
+
+    _current_row_position -= remove_rows;
+    _partition.remove_first_n(remove_rows);
+    _peer_group.remove_first_n(remove_rows);
+    int32_t candidate_partition_end_size = _candidate_partition_ends.size();
+    while (--candidate_partition_end_size >= 0) {
+        auto peek = _candidate_partition_ends.front();
+        _candidate_partition_ends.pop();
+        _candidate_partition_ends.push(peek - remove_rows);
+    }
+    int32_t candidate_peer_group_end_size = _candidate_peer_group_ends.size();
+    while (--candidate_peer_group_end_size >= 0) {
+        auto peek = _candidate_peer_group_ends.front();
+        _candidate_peer_group_ends.pop();
+        _candidate_peer_group_ends.push(peek - remove_rows);
+    }
+    _removed_chunk_index += chunk_num;
+    _removed_from_buffer_rows += remove_rows;
+
+    DCHECK_GE(_current_row_position, 0);
+    DCHECK_GE(_partition.end, 0);
+}
+
+Status Analytor::_add_chunk(const ChunkPtr& chunk) {
     DCHECK(chunk != nullptr && !chunk->is_empty());
     const size_t chunk_size = chunk->num_rows();
 
@@ -499,7 +591,7 @@ Status Analytor::add_chunk(const ChunkPtr& chunk) {
             for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
                 ASSIGN_OR_RETURN(ColumnPtr column, _agg_expr_ctxs[i][j]->evaluate(chunk.get()));
 
-                // when chunk's column is const, maybe need to unpack it
+                // When chunk's column is const, maybe need to unpack it.
                 TRY_CATCH_BAD_ALLOC(_append_column(chunk_size, _agg_intput_columns[i][j].get(), column));
 
                 RETURN_IF_ERROR(check_if_overflow(_agg_intput_columns[i][j].get()));
@@ -520,24 +612,10 @@ Status Analytor::add_chunk(const ChunkPtr& chunk) {
     }
 
     _input_chunk_first_row_positions.emplace_back(_input_rows);
-    update_input_rows(chunk_size);
+    _input_rows += chunk_size;
     _input_chunks.emplace_back(chunk);
+    COUNTER_ADD(_peak_buffered_rows, chunk_size);
 
-    return Status::OK();
-}
-
-Status Analytor::_evaluate_const_columns(int i) {
-    if (i >= _agg_fn_ctxs.size() || _agg_fn_ctxs[i] == nullptr) {
-        // Only agg fn has this context
-        return Status::OK();
-    }
-    std::vector<ColumnPtr> const_columns;
-    const_columns.reserve(_agg_expr_ctxs[i].size());
-    for (auto& j : _agg_expr_ctxs[i]) {
-        ASSIGN_OR_RETURN(auto col, j->root()->evaluate_const(j));
-        const_columns.emplace_back(std::move(col));
-    }
-    _agg_fn_ctxs[i]->set_constant_columns(const_columns);
     return Status::OK();
 }
 
@@ -547,256 +625,309 @@ void Analytor::_append_column(size_t chunk_size, Column* dst_column, ColumnPtr& 
     if (src_column->only_null()) {
         static_cast<void>(dst_column->append_nulls(chunk_size));
     } else if (src_column->is_constant() && !dst_column->is_constant()) {
-        // unpack const column, then append it to dst
+        // Unpack const column, then append it to dst.
         auto* const_column = down_cast<ConstColumn*>(src_column.get());
         const_column->data_column()->assign(chunk_size, 0);
         dst_column->append(*const_column->data_column(), 0, chunk_size);
     } else {
-        // most of case
+        // Most cases.
         dst_column->append(*src_column, 0, chunk_size);
     }
 }
 
-bool Analytor::is_new_partition() {
-    // _current_row_position >= _partition_end : current partition data has been processed
-    // _partition_end == 0 : the first partition
-    return ((_current_row_position >= _partition_end) &
-            ((_partition_end == 0) | (_partition_end != _found_partition_end.second)));
-}
+Status Analytor::_materializing_process(RuntimeState* state) {
+    PRE_PROCESSING();
 
-int64_t Analytor::get_total_position(int64_t local_position) const {
-    return _removed_from_buffer_rows + local_position;
-}
-
-void Analytor::find_partition_end() {
-    // current partition data don't consume finished
-    if (_current_row_position < _partition_end) {
-        DCHECK_EQ(_found_partition_end.second, _partition_end);
-        return;
-    }
-
-    if (_partition_columns.empty() || _input_rows == 0) {
-        _found_partition_end.second = _input_rows;
-        _found_partition_end.first = _input_eos;
-        return;
-    }
-
-    while (!_candidate_partition_ends.empty()) {
-        int64_t peek = _candidate_partition_ends.front();
-        _candidate_partition_ends.pop();
-        if (peek > _found_partition_end.second) {
-            _found_partition_end.second = peek;
-            _found_partition_end.first = true;
-            return;
+    while (_has_output()) {
+        if (reached_limit() || state->is_cancelled()) {
+            return Status::OK();
         }
-    }
 
-    int64_t start = _found_partition_end.second;
-    _found_partition_end.second = static_cast<int64_t>(_partition_columns[0]->size());
-    {
-        SCOPED_TIMER(_partition_search_timer);
-        if (_use_hash_based_partition) {
-            _found_partition_end.second =
-                    _find_first_not_equal_for_hash_based_partition(_partition_end, start, _found_partition_end.second);
-        } else {
-            for (auto& column : _partition_columns) {
-                _found_partition_end.second =
-                        _find_first_not_equal(column.get(), _partition_end, start, _found_partition_end.second);
-            }
+        _find_partition_end();
+        // Only process after all the data in a partition is reached.
+        if (!_partition.is_real) {
+            return Status::OK();
         }
-    }
 
-    if (_found_partition_end.second < static_cast<int64_t>(_partition_columns[0]->size())) {
-        _found_partition_end.first = true;
-        _find_candidate_partition_ends();
-        return;
-    }
+        _init_window_result_columns();
 
-    // genuine partition end may be existed in the incoming chunks if _input_eos = false
-    DCHECK_EQ(_found_partition_end.second, _partition_columns[0]->size());
-    _found_partition_end.first = _input_eos;
-}
+        // Process at most one chunk
+        (this->*_materializing_process_impl)(state);
 
-void Analytor::find_peer_group_end() {
-    // current peer group data don't output finished
-    if (_current_row_position < _peer_group_end) {
-        return;
-    }
-
-    while (!_candidate_peer_group_ends.empty()) {
-        int64_t peek = _candidate_peer_group_ends.front();
-        _candidate_peer_group_ends.pop();
-        if (peek > _found_peer_group_end.second) {
-            _peer_group_start = _peer_group_end;
-            _found_peer_group_end.second = peek;
-            _found_peer_group_end.first = true;
-
-            _peer_group_statistics.update(_found_peer_group_end.second - _peer_group_end);
-
-            _peer_group_end = _found_peer_group_end.second;
-            return;
+        // Chunk may contains multiply partitions, so the chunk need to be reprocessed.
+        if (_is_current_chunk_finished_eval()) {
+            ChunkPtr chunk;
+            RETURN_IF_ERROR(_output_result_chunk(&chunk));
+            offer_chunk_to_buffer(chunk);
         }
-    }
 
-    _peer_group_start = _peer_group_end;
-    _found_peer_group_end.second = _found_partition_end.second;
-    DCHECK(!_order_columns.empty());
-
-    {
-        SCOPED_TIMER(_peer_group_search_timer);
-        for (auto& column : _order_columns) {
-            _found_peer_group_end.second = _find_first_not_equal(column.get(), _peer_group_start, _peer_group_start,
-                                                                 _found_peer_group_end.second);
-        }
-    }
-
-    if (_found_peer_group_end.second < _found_partition_end.second) {
-        _peer_group_statistics.update(_found_peer_group_end.second - _peer_group_end);
-        _peer_group_end = _found_peer_group_end.second;
-        _found_peer_group_end.first = true;
-        _find_candidate_peer_group_ends();
-        return;
-    }
-
-    DCHECK_EQ(_found_peer_group_end.second, _found_partition_end.second);
-    if (_found_partition_end.first) {
-        // _found_peer_group_end is the genuine partition boundary
-        _peer_group_end = _found_peer_group_end.second;
-        _found_peer_group_end.first = true;
-        return;
-    }
-
-    _found_peer_group_end.first = false;
-}
-
-void Analytor::reset_state_for_cur_partition() {
-    _partition_statistics.update(_found_partition_end.second - _partition_end);
-    _peer_group_statistics.reset();
-
-    _partition_start = _partition_end;
-    _partition_end = _found_partition_end.second;
-    _current_row_position = _partition_start;
-    reset_window_state();
-    DCHECK_GE(_current_row_position, 0);
-}
-
-void Analytor::reset_state_for_next_partition() {
-    _partition_statistics.update(_found_partition_end.second - _partition_end);
-    _peer_group_statistics.reset();
-
-    _partition_end = _found_partition_end.second;
-    _partition_start = _partition_end;
-    _current_row_position = _partition_start;
-    reset_window_state();
-    DCHECK_GE(_current_row_position, 0);
-}
-
-void Analytor::set_partition_size_for_function() {
-    for (auto i : _partition_size_required_function_index) {
-        auto& state = *reinterpret_cast<CumeDistState*>(_managed_fn_states[0]->mutable_data() + _agg_states_offsets[i]);
-        state.count = _partition_end - _partition_start;
-    }
-}
-
-void Analytor::remove_unused_buffer_values(RuntimeState* state) {
-    if (_input_chunks.size() <= _output_chunk_index ||
-        _input_chunk_first_row_positions[_output_chunk_index] - _removed_from_buffer_rows <
-                state->chunk_size() * BUFFER_CHUNK_NUMBER) {
-        return;
-    }
-
-    int64_t remove_end_position = _input_chunk_first_row_positions[_removed_chunk_index + BUFFER_CHUNK_NUMBER];
-    if (_partition_start <= remove_end_position) {
-        return;
-    }
-
-    int64_t remove_count = remove_end_position - _removed_from_buffer_rows;
-
-    {
-        SCOPED_TIMER(_column_resize_timer);
-        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-            for (size_t j = 0; j < _agg_expr_ctxs[i].size(); j++) {
-                _agg_intput_columns[i][j]->remove_first_n_values(remove_count);
-            }
-        }
-        for (size_t i = 0; i < _partition_ctxs.size(); i++) {
-            _partition_columns[i]->remove_first_n_values(remove_count);
-        }
-        for (size_t i = 0; i < _order_ctxs.size(); i++) {
-            _order_columns[i]->remove_first_n_values(remove_count);
-        }
-        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-            _agg_functions[i]->reset_state_for_contraction(
-                    _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], remove_count);
-        }
-    }
-
-    _removed_from_buffer_rows += remove_count;
-    _partition_start -= remove_count;
-    _partition_end -= remove_count;
-    _found_partition_end.second -= remove_count;
-    _current_row_position -= remove_count;
-    _peer_group_start -= remove_count;
-    _peer_group_end -= remove_count;
-    _found_peer_group_end.second -= remove_count;
-    int32_t candidate_partition_end_size = _candidate_partition_ends.size();
-    while (--candidate_partition_end_size >= 0) {
-        auto peek = _candidate_partition_ends.front();
-        _candidate_partition_ends.pop();
-        _candidate_partition_ends.push(peek - remove_count);
-    }
-    int32_t candidate_peer_group_end_size = _candidate_peer_group_ends.size();
-    while (--candidate_peer_group_end_size >= 0) {
-        auto peek = _candidate_peer_group_ends.front();
-        _candidate_peer_group_ends.pop();
-        _candidate_peer_group_ends.push(peek - remove_count);
-    }
-
-    _removed_chunk_index += BUFFER_CHUNK_NUMBER;
-
-    DCHECK_GE(_current_row_position, 0);
-}
-
-std::string Analytor::debug_string() const {
-    std::stringstream ss;
-    ss << std::boolalpha;
-
-    ss << "current_row_position=" << get_total_position(_current_row_position) << ", partition=("
-       << get_total_position(_partition_start) << ", " << get_total_position(_partition_end) << ", "
-       << get_total_position(_found_partition_end.second) << "/" << _found_partition_end.first << "), peer_group=("
-       << get_total_position(_peer_group_start) << ", " << get_total_position(_peer_group_end) << ", "
-       << get_total_position(_found_peer_group_end.second) << "/" << _found_peer_group_end.first << ")"
-       << ", frame=(" << _rows_start_offset << ", " << _rows_end_offset << ")"
-       << ", input_chunks_size=" << _input_chunks.size() << ", output_chunk_index=" << _output_chunk_index
-       << ", removed_from_buffer_rows=" << _removed_from_buffer_rows
-       << ", removed_chunk_index=" << _removed_chunk_index;
-
-    return ss.str();
-}
-
-Status Analytor::check_has_error() {
-    for (const auto* ctx : _agg_fn_ctxs) {
-        if (ctx != nullptr) {
-            if (ctx->has_error()) {
-                return Status::RuntimeError(ctx->error_msg());
-            }
+        if (_current_row_position == _partition.end) {
+            _reset_state_for_next_partition();
         }
     }
     return Status::OK();
 }
 
-void Analytor::_update_window_batch_lead_lag(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                             int64_t frame_end) {
-    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-        const Column* agg_column = _agg_intput_columns[i][0].get();
-        _agg_functions[i]->update_batch_single_state_with_frame(
-                _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], &agg_column,
-                peer_group_start, peer_group_end, frame_start, frame_end);
+Status Analytor::_streaming_process_for_half_unbounded_rows_frame(RuntimeState* state) {
+    PRE_PROCESSING();
+
+    do {
+        if (reached_limit() || state->is_cancelled()) {
+            return Status::OK();
+        }
+
+        // One iteration process one chunk, and a chunk may be processed more than once for window clause like
+        // `ROWS BETWEEN UNBOUNDED PRECEDING AND M FOLLOWING`.
+        auto remain_size = _current_chunk_size() - _window_result_position();
+        _init_window_result_columns();
+        _find_partition_end();
+
+        while (_current_row_position < _partition.end && remain_size > 0) {
+            const FrameRange frame = _get_frame_range();
+            const bool is_n_following_frame = _rows_end_offset > 0;
+
+            // For window clause like `ROWS BETWEEN UNBOUNDED PRECEDING AND M FOLLOWING`,
+            // if the current chunk has not reach the partition boundary, it may need more data.
+            if (is_n_following_frame && !_partition.is_real && frame.end > _partition.end) {
+                return Status::OK();
+            }
+
+            // For window clause like `ROWS BETWEEN UNBOUNDED PRECEDING AND M FOLLOWING`,
+            // extra update is needed for the first row.
+            if (is_n_following_frame && _current_row_position == _partition.start) {
+                _update_window_batch(_partition.start, _partition.end, _partition.start, frame.end - 1);
+            }
+
+            // The real frame is [frame.start, frame.end), but in streaming mode, which means the agg state will be
+            // updated in acumulative manner, so the frame for current evaluation is [frame.end-1, frame.end).
+            _update_window_batch(_partition.start, _partition.end, frame.end - 1, frame.end);
+
+            _get_window_function_result(_window_result_position(), _window_result_position() + 1);
+            _update_current_row_position(1);
+            remain_size--;
+        }
+
+        if (_partition.is_real && _current_row_position == _partition.end) {
+            _reset_state_for_next_partition();
+        }
+
+        if (_is_current_chunk_finished_eval()) {
+            ChunkPtr chunk;
+            RETURN_IF_ERROR(_output_result_chunk(&chunk));
+            offer_chunk_to_buffer(chunk);
+        }
+    } while (_has_output());
+
+    return Status::OK();
+}
+
+Status Analytor::_streaming_process_for_half_bounded_range_frame(RuntimeState* state) {
+    PRE_PROCESSING();
+
+    bool has_finish_current_partition = true;
+    while (_has_output()) {
+        if (reached_limit() || state->is_cancelled()) {
+            return Status::OK();
+        }
+        if (has_finish_current_partition) {
+            _find_partition_end();
+        }
+        _find_peer_group_end();
+
+        // We cannot evaluate if peer group end is not reached.
+        if (!_peer_group.is_real) {
+            DCHECK(!_partition.is_real);
+            break;
+        }
+
+        if (_current_row_position < _peer_group.end) {
+            // The real frame is [_partition_start, _peer_group_end), but in streaming mode, which means the agg state will be
+            // updated in acumulative manner, so the frame for current evaluation is [_peer_group_start, _peer_group_end).
+            _update_window_batch(_peer_group.start, _peer_group.end, _peer_group.start, _peer_group.end);
+        }
+        while (_current_row_position < _peer_group.end) {
+            const auto chunk_size = static_cast<int64_t>(_current_chunk_size());
+
+            _init_window_result_columns();
+
+            int64_t base = _first_global_position_of_current_chunk();
+            // Why use current_row_position to evaluate start here?
+            // Because the peer group may cross multiply chunks, we only need to update from the start of remaining part.
+            int64_t start = _get_global_position(_current_row_position) - base;
+            int64_t end = _get_global_position(_peer_group.end) - base;
+            if (end > chunk_size) {
+                end = chunk_size;
+            }
+            DCHECK_GE(start, 0);
+            DCHECK_GT(end, start);
+
+            _get_window_function_result(start, end);
+            _update_current_row_position(end - start);
+
+            if (_is_current_chunk_finished_eval()) {
+                ChunkPtr chunk;
+                RETURN_IF_ERROR(_output_result_chunk(&chunk));
+                offer_chunk_to_buffer(chunk);
+            }
+            if (reached_limit() || state->is_cancelled()) {
+                return Status::OK();
+            }
+        }
+
+        if (_partition.is_real && _current_row_position == _partition.end) {
+            has_finish_current_partition = true;
+            _reset_state_for_next_partition();
+        } else {
+            has_finish_current_partition = false;
+        }
+    }
+
+    return Status::OK();
+}
+
+Status Analytor::_streaming_process_for_sliding_frame(RuntimeState* state) {
+    PRE_PROCESSING();
+
+    do {
+        if (reached_limit() || state->is_cancelled()) {
+            return Status::OK();
+        }
+
+        // One iteration process one chunk, and a chunk may be processed more than once for window clause like
+        // `ROWS BETWEEN N PRECEDING AND M FOLLOWING`.
+        auto remain_size = _current_chunk_size() - _window_result_position();
+        _init_window_result_columns();
+        _find_partition_end();
+
+        while (_current_row_position < _partition.end && remain_size > 0) {
+            const FrameRange frame = _get_frame_range();
+            const bool is_n_following_frame = _rows_end_offset > 0;
+
+            // For window clause like `ROWS BETWEEN N PRECEDING AND M FOLLOWING`,
+            // if the current chunk has not reach the partition boundary, it may need more data.
+            if (is_n_following_frame && !_partition.is_real && frame.end > _partition.end) {
+                return Status::OK();
+            }
+
+            if (_use_removable_cumulative_process) {
+                _update_window_batch_removable_cumulatively();
+            } else {
+                // Update agg state in batch manner for each row.
+                _reset_window_state();
+                const FrameRange range = _get_frame_range();
+                _update_window_batch(_partition.start, _partition.end, range.start, range.end);
+            }
+
+            _get_window_function_result(_window_result_position(), _window_result_position() + 1);
+            _update_current_row_position(1);
+            remain_size--;
+        }
+
+        if (_partition.is_real && _current_row_position == _partition.end) {
+            _reset_state_for_next_partition();
+        }
+
+        if (_is_current_chunk_finished_eval()) {
+            ChunkPtr chunk;
+            RETURN_IF_ERROR(_output_result_chunk(&chunk));
+            offer_chunk_to_buffer(chunk);
+        }
+    } while (_has_output());
+
+    return Status::OK();
+}
+
+void Analytor::_materializing_process_for_unbounded_frame(RuntimeState* state) {
+    if (_current_row_position == _partition.start) {
+        // Update agg state in batch manner.
+        _update_window_batch(_partition.start, _partition.end, _partition.start, _partition.end);
+    }
+    const auto chunk_size = _current_chunk_size();
+    int64_t base = _first_global_position_of_current_chunk();
+    int64_t start = _get_global_position(_current_row_position) - base;
+    int64_t end = std::min<int64_t>(_current_row_position + chunk_size, _partition.end);
+    end = std::min<int64_t>((_get_global_position(end) - base), chunk_size);
+
+    _get_window_function_result(start, end);
+    _update_current_row_position(end - start);
+}
+
+void Analytor::_materializing_process_for_half_unbounded_rows_frame(RuntimeState* state) {
+    while (_current_row_position < _partition.end && !_is_current_chunk_finished_eval()) {
+        const FrameRange frame = _get_frame_range();
+        const bool is_n_following_frame = _rows_end_offset > 0;
+
+        // For window clause like `ROWS BETWEEN UNBOUNDED PRECEDING AND M FOLLOWING`,
+        // extra update is needed for the first row.
+        if (is_n_following_frame && _current_row_position == _partition.start) {
+            _update_window_batch(_partition.start, _partition.end, _partition.start, frame.end - 1);
+        }
+
+        // The real frame is [frame.start, frame.end), but in streaming mode, which means the agg state will be
+        // updated in acumulative manner, so the frame for current evaluation is [frame.end-1, frame.end).
+        _update_window_batch(_partition.start, _partition.end, frame.end - 1, frame.end);
+
+        _get_window_function_result(_window_result_position(), _window_result_position() + 1);
+        _update_current_row_position(1);
     }
 }
 
-void Analytor::_update_window_batch_normal(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,
-                                           int64_t frame_end) {
+void Analytor::_materializing_process_for_half_unbounded_range_frame(RuntimeState* state) {
+    if (_should_set_partition_size) {
+        _set_partition_size_for_function();
+    }
+    const auto chunk_size = _current_chunk_size();
+    while (_current_row_position < _partition.end && !_is_current_chunk_finished_eval()) {
+        _find_peer_group_end();
+        DCHECK(_peer_group.is_real);
+        // One peer group may across multiply chunks, so we need to avoid duplicate update.
+        if (_current_row_position == _peer_group.start) {
+            // The real frame is [_partition_start, _peer_group_end), but the agg state will be updated in
+            // acumulative manner, so the frame for current evaluation is [_peer_group_start, _peer_group_end).
+            _update_window_batch(_peer_group.start, _peer_group.end, _peer_group.start, _peer_group.end);
+        }
+
+        int64_t base = _first_global_position_of_current_chunk();
+        // Why use current_row_position to evaluate start here?
+        // Because the peer group may cross multiply chunks, we only need to update from the start of remaining part.
+        int64_t start = _get_global_position(_current_row_position) - base;
+        int64_t end = _get_global_position(_peer_group.end) - base;
+        if (end > chunk_size) {
+            end = chunk_size;
+        }
+        DCHECK_GE(start, 0);
+        DCHECK_GT(end, start);
+
+        _get_window_function_result(start, end);
+        _update_current_row_position(end - start);
+    }
+}
+
+void Analytor::_materializing_process_for_sliding_frame(RuntimeState* state) {
+    if (_use_removable_cumulative_process) {
+        while (_current_row_position < _partition.end && !_is_current_chunk_finished_eval()) {
+            _update_window_batch_removable_cumulatively();
+
+            _get_window_function_result(_window_result_position(), _window_result_position() + 1);
+            _update_current_row_position(1);
+        }
+    } else {
+        while (_current_row_position < _partition.end && !_is_current_chunk_finished_eval()) {
+            // Update agg state in batch manner for each row.
+            _reset_window_state();
+            const FrameRange range = _get_frame_range();
+            _update_window_batch(_partition.start, _partition.end, range.start, range.end);
+
+            _get_window_function_result(_window_result_position(), _window_result_position() + 1);
+            _update_current_row_position(1);
+        }
+    }
+}
+
+void Analytor::_update_window_batch(int64_t partition_start, int64_t partition_end, int64_t frame_start,
+                                    int64_t frame_end) {
+    // DO NOT put timer here because this function will be used frequently,
+    // timer will cause a sharp drop in performance.
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         size_t column_size = _agg_intput_columns[i].size();
         const Column* data_columns[column_size];
@@ -804,46 +935,199 @@ void Analytor::_update_window_batch_normal(int64_t peer_group_start, int64_t pee
             data_columns[j] = _agg_intput_columns[i][j].get();
         }
 
-        frame_start = std::max<int64_t>(frame_start, _partition_start);
-        // for rows betweend unbounded preceding and current row, we have not found the partition end, for others,
-        // _found_partition_end = _partition_end, so we use _found_partition_end instead of _partition_end
-        frame_end = std::min<int64_t>(frame_end, _found_partition_end.second);
+        // For lead/lag function, it uses the relationship between the frame_start and frame_end to determine
+        // whether NULL value should be generated, so the frame should not be normalized.
+        if (!_is_lead_lag_functions[i]) {
+            frame_start = std::max<int64_t>(frame_start, _partition.start);
+            // For half unounded window, we have not found the partition end, _found_partition_end.second refers to the next position.
+            // And for others, _found_partition_end.second is identical to _partition.end, so we can always use _found_partition_end
+            // instead of _partition.end to refer to the current right boundary.
+            frame_end = std::min<int64_t>(frame_end, _partition.end);
+        }
         _agg_functions[i]->update_batch_single_state_with_frame(
                 _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], data_columns,
-                peer_group_start, peer_group_end, frame_start, frame_end);
+                partition_start, partition_end, frame_start, frame_end);
     }
 }
 
-void Analytor::update_window_batch_removable_cumulatively() {
+void Analytor::_update_window_batch_removable_cumulatively() {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         const Column* agg_column = _agg_intput_columns[i][0].get();
         _agg_functions[i]->update_state_removable_cumulatively(
                 _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], &agg_column,
-                _current_row_position, _partition_start, _partition_end,
-                _is_unbounded_preceding ? (_partition_start - _current_row_position) : _rows_start_offset,
-                _is_unbounded_following ? (_partition_end - 1 - _current_row_position) : _rows_end_offset, false,
+                _current_row_position, _partition.start, _partition.end, _rows_start_offset, _rows_end_offset, false,
                 false);
     }
 }
 
-int64_t Analytor::_find_first_not_equal(Column* column, int64_t target, int64_t start, int64_t end) {
-    while (start + 1 < end) {
-        int64_t mid = start + (end - start) / 2;
-        if (column->compare_at(target, mid, *column, 1) == 0) {
-            start = mid;
+Status Analytor::_output_result_chunk(ChunkPtr* chunk) {
+    ChunkPtr output_chunk = std::move(_input_chunks[_output_chunk_index]);
+    for (size_t i = 0; i < _result_window_columns.size(); i++) {
+        output_chunk->append_column(_result_window_columns[i], _result_tuple_desc->slots()[i]->id());
+    }
+
+    _num_rows_returned += output_chunk->num_rows();
+
+    if (reached_limit()) {
+        int64_t num_rows_over = _num_rows_returned - _limit;
+        output_chunk->set_num_rows(output_chunk->num_rows() - num_rows_over);
+        *chunk = output_chunk;
+        _output_chunk_index++;
+        return Status::OK();
+    }
+
+    *chunk = output_chunk;
+    _output_chunk_index++;
+    return Status::OK();
+}
+
+void Analytor::_reset_state_for_next_partition() {
+    _partition_statistics.update(_partition.end - _partition.start);
+    _peer_group_statistics.reset();
+
+    _partition.start = _partition.end;
+    _current_row_position = _partition.start;
+    _reset_window_state();
+    DCHECK_GE(_current_row_position, 0);
+}
+
+void Analytor::_reset_window_state() {
+    // DO NOT put timer here because this function will be used frequently,
+    // timer will cause a sharp drop in performance.
+    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+        _agg_functions[i]->reset(_agg_fn_ctxs[i], _agg_intput_columns[i],
+                                 _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i]);
+    }
+}
+
+void Analytor::_init_window_result_columns() {
+    if (_window_result_position() != 0) {
+        return;
+    }
+    const auto chunk_size = _current_chunk_size();
+    _result_window_columns.resize(_agg_fn_types.size());
+    for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
+        _result_window_columns[i] =
+                ColumnHelper::create_column(_agg_fn_types[i].result_type, _agg_fn_types[i].has_nullable_child);
+        // Binary column cound't call resize method like Numeric Column,
+        // so we only reserve it.
+        if (_agg_fn_types[i].result_type.type == LogicalType::TYPE_CHAR ||
+            _agg_fn_types[i].result_type.type == LogicalType::TYPE_VARCHAR ||
+            _agg_fn_types[i].result_type.type == LogicalType::TYPE_JSON ||
+            _agg_fn_types[i].result_type.type == LogicalType::TYPE_ARRAY ||
+            _agg_fn_types[i].result_type.type == LogicalType::TYPE_MAP ||
+            _agg_fn_types[i].result_type.type == LogicalType::TYPE_STRUCT) {
+            _result_window_columns[i]->reserve(chunk_size);
         } else {
-            end = mid;
+            _result_window_columns[i]->resize(chunk_size);
         }
     }
-    if (column->compare_at(target, end - 1, *column, 1) == 0) {
-        return end;
+}
+
+void Analytor::_find_partition_end() {
+    // Current partition data don't consume finished.
+    if (_partition.is_real && _current_row_position < _partition.end) {
+        return;
     }
-    return end - 1;
+
+    if (_partition_columns.empty() || _input_rows == 0) {
+        _partition.end = (_input_rows - _removed_from_buffer_rows);
+        _partition.is_real = _input_eos;
+        return;
+    }
+
+    while (!_candidate_partition_ends.empty()) {
+        int64_t peek = _candidate_partition_ends.front();
+        _candidate_partition_ends.pop();
+        if (peek > _partition.end) {
+            _partition.end = peek;
+            _partition.is_real = true;
+            return;
+        }
+    }
+
+    const int64_t start = _partition.end;
+    const int64_t target = (_partition.is_real || _partition.end == 0) ? _partition.end : _partition.end - 1;
+    _partition.end = static_cast<int64_t>(_partition_columns[0]->size());
+    {
+        SCOPED_TIMER(_partition_search_timer);
+        if (start < _partition.end) {
+            if (_use_hash_based_partition) {
+                _partition.end = _find_first_not_equal_for_hash_based_partition(target, start, _partition.end);
+            } else {
+                for (auto& column : _partition_columns) {
+                    _partition.end = ColumnHelper::find_first_not_equal(column.get(), target, start, _partition.end);
+                }
+            }
+        }
+    }
+
+    if (_partition.end < static_cast<int64_t>(_partition_columns[0]->size())) {
+        _partition.is_real = true;
+        _find_candidate_partition_ends();
+        return;
+    }
+
+    // Genuine partition end may be existed in the incoming chunks if _input_eos = false.
+    DCHECK_EQ(_partition.end, _partition_columns[0]->size());
+    _partition.is_real = _input_eos;
+}
+
+void Analytor::_find_peer_group_end() {
+    // Current peer group data don't output finished.
+    if (_peer_group.is_real && _current_row_position < _peer_group.end) {
+        return;
+    }
+
+    while (!_candidate_peer_group_ends.empty()) {
+        int64_t peek = _candidate_peer_group_ends.front();
+        _candidate_peer_group_ends.pop();
+        if (peek > _peer_group.end) {
+            _peer_group.start = _peer_group.end;
+            _peer_group.end = peek;
+            _peer_group.is_real = true;
+
+            _peer_group_statistics.update(_peer_group.end - _peer_group.start);
+            return;
+        }
+    }
+
+    if (_peer_group.is_real) {
+        _peer_group.start = _peer_group.end;
+    }
+    _peer_group.end = _partition.end;
+    DCHECK(!_order_columns.empty());
+
+    {
+        SCOPED_TIMER(_peer_group_search_timer);
+        if (_peer_group.start < _peer_group.end) {
+            for (auto& column : _order_columns) {
+                _peer_group.end = ColumnHelper::find_first_not_equal(column.get(), _peer_group.start, _peer_group.start,
+                                                                     _peer_group.end);
+            }
+        }
+    }
+
+    if (_peer_group.end < _partition.end) {
+        _peer_group_statistics.update(_peer_group.end - _peer_group.start);
+        _peer_group.is_real = true;
+        _find_candidate_peer_group_ends();
+        return;
+    }
+
+    DCHECK_EQ(_peer_group.end, _partition.end);
+    if (_partition.is_real) {
+        // _found_peer_group_end is the genuine partition boundary.
+        _peer_group.is_real = true;
+        return;
+    }
+
+    _peer_group.is_real = false;
 }
 
 int64_t Analytor::_find_first_not_equal_for_hash_based_partition(int64_t target, int64_t start, int64_t end) {
     // In this case, we cannot compare each column one by one like Analytor::_find_first_not_equal does,
-    // and we must compare all the partition columns for one comparation
+    // and we must compare all the partition columns for one comparation.
     auto compare = [this](size_t left, size_t right) {
         for (auto& column : _partition_columns) {
             auto res = column->compare_at(left, right, *column, 1);
@@ -873,7 +1157,7 @@ void Analytor::_find_candidate_partition_ends() {
     }
 
     SCOPED_TIMER(_partition_search_timer);
-    for (size_t i = _found_partition_end.second + 1; i < _partition_columns[0]->size(); ++i) {
+    for (size_t i = _partition.end + 1; i < _partition_columns[0]->size(); ++i) {
         for (auto& column : _partition_columns) {
             auto cmp = column->compare_at(i - 1, i, *column, 1);
             if (cmp != 0) {
@@ -890,7 +1174,7 @@ void Analytor::_find_candidate_peer_group_ends() {
     }
 
     SCOPED_TIMER(_peer_group_search_timer);
-    for (size_t i = _found_peer_group_end.second + 1; i < _found_partition_end.second; ++i) {
+    for (size_t i = _peer_group.end + 1; i < _partition.end; ++i) {
         for (auto& column : _order_columns) {
             auto cmp = column->compare_at(i - 1, i, *column, 1);
             if (cmp != 0) {
@@ -898,6 +1182,24 @@ void Analytor::_find_candidate_peer_group_ends() {
                 break;
             }
         }
+    }
+}
+
+void Analytor::_get_window_function_result(size_t frame_start, size_t frame_end) {
+    // DO NOT put timer here because this function will be used frequently,
+    // timer will cause a sharp drop in performance.
+    DCHECK_GT(frame_end, frame_start);
+    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+        Column* agg_column = _result_window_columns[i].get();
+        _agg_functions[i]->get_values(_agg_fn_ctxs[i], _managed_fn_states[0]->data() + _agg_states_offsets[i],
+                                      agg_column, frame_start, frame_end);
+    }
+}
+
+void Analytor::_set_partition_size_for_function() {
+    for (auto i : _partition_size_required_function_index) {
+        auto& state = *reinterpret_cast<CumeDistState*>(_managed_fn_states[0]->mutable_data() + _agg_states_offsets[i]);
+        state.count = _partition.end - _partition.start;
     }
 }
 

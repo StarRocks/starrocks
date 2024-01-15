@@ -27,6 +27,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/update_manager.h"
+#include "storage/lake/versioned_tablet.h"
 #include "storage/options.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
@@ -61,8 +62,7 @@ public:
     void TearDown() override {
         delete _tablet_manager;
         delete _location_provider;
-        auto st = FileSystem::Default()->delete_dir_recursive(_test_dir);
-        st.permit_unchecked_error();
+        (void)FileSystem::Default()->delete_dir_recursive(_test_dir);
     }
 
     starrocks::lake::TabletManager* _tablet_manager{nullptr};
@@ -361,8 +361,8 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         c2.is_allow_null = false;
         EXPECT_OK(_tablet_manager->create_tablet(req));
 
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(65535));
-        ASSIGN_OR_ABORT(auto schema, tablet.get_schema());
+        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(65535, 1));
+        auto schema = tablet.get_schema();
         ASSERT_EQ(0, schema->column(0).unique_id());
         ASSERT_EQ(1, schema->column(1).unique_id());
         ASSERT_EQ(2, schema->column(2).unique_id());
@@ -405,8 +405,8 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         c2.is_allow_null = false;
         EXPECT_OK(_tablet_manager->create_tablet(req));
 
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(65536));
-        ASSIGN_OR_ABORT(auto schema, tablet.get_schema());
+        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(65536, 1));
+        auto schema = tablet.get_schema();
         ASSERT_EQ(0, schema->column(0).unique_id());
         ASSERT_EQ(1, schema->column(1).unique_id());
         ASSERT_EQ(2, schema->column(2).unique_id());
@@ -448,8 +448,8 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         c2.is_allow_null = false;
         EXPECT_OK(_tablet_manager->create_tablet(req));
 
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(65537));
-        ASSIGN_OR_ABORT(auto schema, tablet.get_schema());
+        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(65537, 1));
+        auto schema = tablet.get_schema();
         ASSERT_EQ(0, schema->column(0).unique_id());
         ASSERT_EQ(1, schema->column(1).unique_id());
         ASSERT_EQ(2, schema->column(2).unique_id());
@@ -459,6 +459,38 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         ASSERT_EQ("c3", schema->column(1).name());
         ASSERT_EQ("c2", schema->column(2).name());
     }
+}
+
+// NOLINTNEXTLINE
+TEST_F(LakeTabletManagerTest, create_tablet_with_cloud_native_persistent_index) {
+    auto fs = FileSystem::Default();
+    auto tablet_id = next_id();
+    auto schema_id = next_id();
+
+    TCreateTabletReq req;
+    req.tablet_id = tablet_id;
+    req.__set_version(1);
+    req.__set_version_hash(0);
+    req.__set_enable_persistent_index(true);
+    req.__set_persistent_index_type(TPersistentIndexType::CLOUD_NATIVE);
+    req.tablet_schema.__set_id(schema_id);
+    req.tablet_schema.__set_schema_hash(270068375);
+    req.tablet_schema.__set_short_key_column_count(2);
+    req.tablet_schema.__set_keys_type(TKeysType::PRIMARY_KEYS);
+    EXPECT_OK(_tablet_manager->create_tablet(req));
+    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(tablet_id));
+    EXPECT_TRUE(fs->path_exists(_location_provider->tablet_metadata_location(tablet_id, 1)).ok());
+    EXPECT_TRUE(fs->path_exists(_location_provider->schema_file_location(tablet_id, schema_id)).ok());
+    ASSIGN_OR_ABORT(auto metadata, tablet.get_metadata(1));
+    EXPECT_EQ(tablet_id, metadata->id());
+    EXPECT_EQ(1, metadata->version());
+    EXPECT_EQ(1, metadata->next_rowset_id());
+    EXPECT_FALSE(metadata->has_commit_time());
+    EXPECT_EQ(0, metadata->rowsets_size());
+    EXPECT_EQ(0, metadata->cumulative_point());
+    EXPECT_FALSE(metadata->has_delvec_meta());
+    EXPECT_TRUE(metadata->enable_persistent_index());
+    EXPECT_EQ(TPersistentIndexType::CLOUD_NATIVE, metadata->persistent_index_type());
 }
 
 namespace {

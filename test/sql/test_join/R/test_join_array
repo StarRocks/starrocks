@@ -1104,7 +1104,7 @@ None	[1,2,3,4,10]
 -- !result
 select s.s_1, t.i_1 from array_test s full join array_test t on s.s_1 => t.i_1 order by 1, 2;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 70. Detail message: Unexpected input '=', the most similar input is {<EOF>, ';'}.")
+E: (1064, "Getting syntax error at line 1, column 70. Detail message: Unexpected input '=>', the most similar input is {<EOF>, ';'}.")
 -- !result
 select s.aas_1, t.aas_1 from array_test s full join array_test t on s.aas_1 <= t.aas_1 order by 1, 2;
 -- result:
@@ -1198,4 +1198,10 @@ None	None
 [[["10"],["20"],["30"]],[["60"],["5"],["4"]],[["-100","-2"],["-20","10"],["100","23"]]]	[[["1"],["2"],["3"]],[["6"],["5"],["4"]],[["-1","-2"],["-2","10"],["100","23"]]]
 [[["10"],["20"],["30"]],[["60"],["5"],["4"]],[["-100","-2"],["-20","10"],["100","23"]]]	[[["1",null],["3"],null],[["50","2","6","4"]]]
 [[["10"],["20"],["30"]],[["60"],["5"],["4"]],[["-100","-2"],["-20","10"],["100","23"]]]	[[["1","2"],["3"]],[["50","2","6","4"]]]
+-- !result
+select s.i_1, t.d_1 from array_test s join array_test t on array_map(x -> x*3, s.i_1) = array_map(x-> x*3 + 1, t.d_1) order by 1, 2;
+-- result:
+-- !result
+select s.i_1, t.d_1 from array_test s join array_test t on array_map(x -> x*3, s.i_1)[0] = array_map(x-> x*3 + 1, t.d_1)[0] order by 1, 2;
+-- result:
 -- !result

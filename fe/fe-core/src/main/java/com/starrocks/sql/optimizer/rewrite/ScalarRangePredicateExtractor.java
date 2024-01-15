@@ -59,7 +59,7 @@ public class ScalarRangePredicateExtractor {
     }
 
     private ScalarOperator rewrite(ScalarOperator predicate, boolean onlyExtractColumnRef) {
-        if (predicate.getOpType() != OperatorType.COMPOUND) {
+        if (predicate == null || predicate.getOpType() != OperatorType.COMPOUND) {
             return predicate;
         }
 
@@ -105,11 +105,19 @@ public class ScalarRangePredicateExtractor {
 
             if (extractMap.values().stream().allMatch(valueDescriptor -> valueDescriptor.sourceCount == cs.size())
                     && extractMap.size() == cf.size()) {
-                return extractExpr;
+                if (result.size() == conjuncts.size()) {
+                    // to keep the isPushdown/isRedundant of predicate
+                    return predicate;
+                } else {
+                    return extractExpr;
+                }
             }
         }
 
-        if (!conjuncts.contains(extractExpr)) {
+        if (!conjuncts.containsAll(result)) {
+            // remove duplicates
+            result.removeAll(conjuncts);
+            extractExpr = Utils.compoundAnd(Lists.newArrayList(result));
             result.forEach(f -> f.setFromPredicateRangeDerive(true));
             result.stream().filter(predicateOperator -> !checkStatisticsEstimateValid(predicateOperator))
                     .forEach(f -> f.setNotEvalEstimate(true));

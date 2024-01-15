@@ -225,7 +225,7 @@ void TableFunctionNode::close(RuntimeState* state) {
         return;
     }
     if (_table_function != nullptr && _table_function_state != nullptr) {
-        _table_function->close(state, _table_function_state);
+        (void)_table_function->close(state, _table_function_state);
     }
     ExecNode::close(state);
 }
@@ -257,7 +257,7 @@ Status TableFunctionNode::build_chunk(ChunkPtr* chunk, const std::vector<ColumnP
 Status TableFunctionNode::get_next_input_chunk(RuntimeState* state, bool* eos) {
     if (_input_chunk_ptr != nullptr) {
         SCOPED_TIMER(_table_function_exec_timer);
-        _table_function_result = _table_function->process(_table_function_state);
+        _table_function_result = _table_function->process(state, _table_function_state);
         if (_table_function_state->processed_rows() < _input_chunk_ptr->num_rows()) {
             const TFunction& table_fn = _tnode.table_function_node.table_function.nodes[0].fn;
             const std::string& fn_name = table_fn.name.function_name;
@@ -283,7 +283,7 @@ Status TableFunctionNode::get_next_input_chunk(RuntimeState* state, bool* eos) {
     _table_function_state->set_params(table_function_params);
     {
         SCOPED_TIMER(_table_function_exec_timer);
-        _table_function_result = _table_function->process(_table_function_state);
+        _table_function_result = _table_function->process(state, _table_function_state);
         if (_table_function_state->processed_rows() < _input_chunk_ptr->num_rows()) {
             const TFunction& table_fn = _tnode.table_function_node.table_function.nodes[0].fn;
             const std::string& fn_name = table_fn.name.function_name;

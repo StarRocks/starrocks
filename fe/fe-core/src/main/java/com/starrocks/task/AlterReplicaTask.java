@@ -37,6 +37,7 @@ package com.starrocks.task;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
@@ -44,13 +45,16 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TAlterJobType;
 import com.starrocks.thrift.TAlterMaterializedViewParam;
 import com.starrocks.thrift.TAlterTabletMaterializedColumnReq;
 import com.starrocks.thrift.TAlterTabletReqV2;
@@ -88,9 +92,41 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     private final AlterJobV2.JobType jobType;
     private final TTabletType tabletType;
     private final long txnId;
-    private final Map<String, Expr> defineExprs;
     private final TAlterTabletMaterializedColumnReq generatedColumnReq;
     private List<Column> baseSchemaColumns;
+    private RollupJobV2Params rollupJobV2Params;
+
+    public static class RollupJobV2Params {
+        private final Map<String, Expr> defineExprs;
+        private final Expr whereExpr;
+        private final DescriptorTable descTabl;
+        private final List<String> baseTableColNames;
+        public RollupJobV2Params(Map<String, Expr> defineExprs,
+                                 Expr whereExpr,
+                                 DescriptorTable descTabl,
+                                 List<String> baseTableColNames) {
+            this.defineExprs = defineExprs;
+            this.whereExpr = whereExpr;
+            this.descTabl = descTabl;
+            this.baseTableColNames = baseTableColNames;
+        }
+
+        public Map<String, Expr> getDefineExprs() {
+            return defineExprs;
+        }
+
+        public Expr getWhereExpr() {
+            return whereExpr;
+        }
+
+        public DescriptorTable getDescTabl() {
+            return descTabl;
+        }
+
+        public List<String> getBaseTableColNames() {
+            return baseTableColNames;
+        }
+    }
 
     public static AlterReplicaTask alterLocalTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
                                                     long rollupTabletId, long baseTabletId, long newReplicaId, int newSchemaHash,
@@ -99,29 +135,31 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                                                     List<Column> baseSchemaColumns) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
-                null, TTabletType.TABLET_TYPE_DISK, 0, generatedColumnReq, baseSchemaColumns);
+                TTabletType.TABLET_TYPE_DISK, 0, generatedColumnReq, baseSchemaColumns, null);
     }
 
     public static AlterReplicaTask alterLakeTablet(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId,
             long rollupTabletId, long baseTabletId, long version, long jobId, long txnId) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, -1, -1, -1, version, jobId, AlterJobV2.JobType.SCHEMA_CHANGE,
-                null, TTabletType.TABLET_TYPE_LAKE, txnId, null, Collections.emptyList());
+                TTabletType.TABLET_TYPE_LAKE, txnId, null, Collections.emptyList(), null);
     }
 
     public static AlterReplicaTask rollupLocalTablet(long backendId, long dbId, long tableId, long partitionId,
             long rollupIndexId, long rollupTabletId, long baseTabletId,
             long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
-            long jobId, Map<String, Expr> defineExprs) {
+            long jobId, RollupJobV2Params rollupJobV2Params, List<Column> baseSchemaColumns) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.ROLLUP,
-                defineExprs, TTabletType.TABLET_TYPE_DISK, 0, null, Collections.emptyList());
+                TTabletType.TABLET_TYPE_DISK, 0, null,
+                baseSchemaColumns, rollupJobV2Params);
     }
 
     private AlterReplicaTask(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId, long rollupTabletId,
                              long baseTabletId, long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
-                             long jobId, AlterJobV2.JobType jobType, Map<String, Expr> defineExprs, TTabletType tabletType,
-                             long txnId, TAlterTabletMaterializedColumnReq generatedColumnReq, List<Column> baseSchemaColumns) {
+                             long jobId, AlterJobV2.JobType jobType,
+                             TTabletType tabletType, long txnId, TAlterTabletMaterializedColumnReq generatedColumnReq, 
+                             List<Column> baseSchemaColumns, RollupJobV2Params rollupJobV2Params) {
         super(null, backendId, TTaskType.ALTER, dbId, tableId, partitionId, rollupIndexId, rollupTabletId);
 
         this.baseTabletId = baseTabletId;
@@ -134,13 +172,13 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         this.jobId = jobId;
 
         this.jobType = jobType;
-        this.defineExprs = defineExprs;
-
         this.tabletType = tabletType;
         this.txnId = txnId;
 
         this.generatedColumnReq = generatedColumnReq;
         this.baseSchemaColumns = baseSchemaColumns;
+
+        this.rollupJobV2Params = rollupJobV2Params;
     }
 
     public long getBaseTabletId() {
@@ -174,30 +212,53 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     public TAlterTabletReqV2 toThrift() {
         TAlterTabletReqV2 req = new TAlterTabletReqV2(baseTabletId, signature, baseSchemaHash, newSchemaHash);
         req.setAlter_version(version);
-        if (defineExprs != null) {
-            for (Map.Entry<String, Expr> entry : defineExprs.entrySet()) {
-                List<SlotRef> slots = Lists.newArrayList();
-                entry.getValue().collect(SlotRef.class, slots);
-                TAlterMaterializedViewParam mvParam = new TAlterMaterializedViewParam(entry.getKey());
-                mvParam.setOrigin_column_name(slots.get(0).getColumnName());
-                mvParam.setMv_expr(entry.getValue().treeToThrift());
-                req.addToMaterialized_view_params(mvParam);
+        switch (jobType) {
+            case ROLLUP:
+                req.setAlter_job_type(TAlterJobType.ROLLUP);
+                break;
+            case SCHEMA_CHANGE:
+                req.setAlter_job_type(TAlterJobType.SCHEMA_CHANGE);
+                break;
+            case DECOMMISSION_BACKEND:
+                req.setAlter_job_type(TAlterJobType.DECOMMISSION_BACKEND);
+                break;
+            default:
+                break;
+        }
+        if (rollupJobV2Params != null) {
+            Map<String, Expr> defineExprs = rollupJobV2Params.getDefineExprs();
+            Expr whereExpr = rollupJobV2Params.getWhereExpr();
+            DescriptorTable descTable = rollupJobV2Params.getDescTabl();
+            List<String> baseTableColNames = rollupJobV2Params.getBaseTableColNames();
+            if (defineExprs != null) {
+                for (Map.Entry<String, Expr> entry : defineExprs.entrySet()) {
+                    List<SlotRef> slots = Lists.newArrayList();
+                    entry.getValue().collect(SlotRef.class, slots);
+                    TAlterMaterializedViewParam mvParam = new TAlterMaterializedViewParam(entry.getKey());
+                    mvParam.setOrigin_column_name(slots.get(0).getColumnName());
+                    mvParam.setMv_expr(entry.getValue().treeToThrift());
+                    req.addToMaterialized_view_params(mvParam);
+                }
+
+                // we need this thing, otherwise some expr evalution will fail in BE
+                TQueryGlobals queryGlobals = new TQueryGlobals();
+                SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+                queryGlobals.setNow_string(dateFormat.format(new Date()));
+                queryGlobals.setTimestamp_ms(System.currentTimeMillis());
+                queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
+                TQueryOptions queryOptions = new TQueryOptions();
+                req.setQuery_globals(queryGlobals);
+                req.setQuery_options(queryOptions);
             }
+            if (whereExpr != null) {
+                req.setWhere_expr(whereExpr.treeToThrift());
+            }
+            if (descTable != null) {
+                req.setDesc_tbl(descTable.toThrift());
+            }
+            req.setBase_table_column_names(baseTableColNames);
         }
         req.setMaterialized_column_req(generatedColumnReq);
-
-        // TODO: merge `generatedColumnReq`'s query options into this later.
-        if (defineExprs != null && defineExprs.size() > 0) {
-            // we need this thing, otherwise some expr evalution will fail in BE
-            TQueryGlobals queryGlobals = new TQueryGlobals();
-            SimpleDateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
-            queryGlobals.setNow_string(dateFormat.format(new Date()));
-            queryGlobals.setTimestamp_ms(System.currentTimeMillis());
-            queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
-            TQueryOptions queryOptions = new TQueryOptions();
-            req.setQuery_globals(queryGlobals);
-            req.setQuery_options(queryOptions);
-        }
 
         req.setTablet_type(tabletType);
         req.setTxn_id(txnId);
@@ -239,14 +300,14 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         if (db == null) {
             throw new MetaNotFoundException("database " + getDbId() + " does not exist");
         }
-
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable tbl = (OlapTable) db.getTable(getTableId());
             if (tbl == null) {
                 throw new MetaNotFoundException("tbl " + getTableId() + " does not exist");
             }
-            Partition partition = tbl.getPartition(getPartitionId());
+            PhysicalPartition partition = tbl.getPhysicalPartition(getPartitionId());
             if (partition == null) {
                 throw new MetaNotFoundException("partition " + getPartitionId() + " does not exist");
             }
@@ -285,7 +346,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 LOG.info("after handle alter task tablet: {}, replica: {}", getSignature(), replica);
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
         setFinished(true);
     }

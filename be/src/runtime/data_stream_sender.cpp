@@ -179,7 +179,7 @@ private:
 
     size_t _current_request_bytes = 0;
 
-    doris::PBackendService_Stub* _brpc_stub = nullptr;
+    PInternalService_Stub* _brpc_stub = nullptr;
 
     int32_t _brpc_timeout_ms = 500;
     // whether the dest can be treated as query statistics transfer chain.
@@ -298,7 +298,7 @@ Status DataStreamSender::Channel::add_rows_selective(RuntimeState* state, Chunk*
                                                      uint32_t from, uint32_t size) {
     // TODO(kks): find a way to remove this if condition
     if (UNLIKELY(_chunk == nullptr)) {
-        _chunk = chunk->clone_empty_with_tuple();
+        _chunk = chunk->clone_empty();
     }
 
     if (_chunk->num_rows() + size > state->chunk_size()) {
@@ -342,7 +342,7 @@ Status DataStreamSender::Channel::close_internal() {
 }
 
 void DataStreamSender::Channel::close(RuntimeState* state) {
-    state->log_error(close_internal().get_error_msg());
+    state->log_error(close_internal().message());
 }
 
 void DataStreamSender::Channel::close_wait(RuntimeState* state) {
@@ -621,7 +621,7 @@ Status DataStreamSender::close(RuntimeState* state, Status exec_status) {
         butil::IOBuf attachment;
         construct_brpc_attachment(&_chunk_request, &attachment);
         for (auto& _channel : _channels) {
-            _channel->send_chunk_request(&_chunk_request, attachment);
+            (void)_channel->send_chunk_request(&_chunk_request, attachment);
         }
     } else {
         for (auto& _channel : _channels) {

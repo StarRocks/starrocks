@@ -18,23 +18,34 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
+import com.starrocks.planner.TpchSQL;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.utframe.StarRocksAssert;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
 import java.util.List;
 
 public class PlanTestBase extends PlanTestNoneDBBase {
+
+    private static final Logger LOG = LogManager.getLogger(PlanTestBase.class);
+
     // use a unique dir so that it won't be conflict with other unit test which
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -280,147 +291,14 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
-        starRocksAssert.withTable("CREATE TABLE region ( R_REGIONKEY  INTEGER NOT NULL,\n" +
-                "                            R_NAME       CHAR(25) NOT NULL,\n" +
-                "                            R_COMMENT    VARCHAR(152),\n" +
-                "                            PAD char(1) NOT NULL)\n" +
-                "ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`r_regionkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`r_regionkey`) BUCKETS 1\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-
-        starRocksAssert.withTable("CREATE TABLE supplier ( S_SUPPKEY     INTEGER NOT NULL,\n" +
-                "                             S_NAME        CHAR(25) NOT NULL,\n" +
-                "                             S_ADDRESS     VARCHAR(40) NOT NULL, \n" +
-                "                             S_NATIONKEY   INTEGER NOT NULL,\n" +
-                "                             S_PHONE       CHAR(15) NOT NULL,\n" +
-                "                             S_ACCTBAL     double NOT NULL,\n" +
-                "                             S_COMMENT     VARCHAR(101) NOT NULL,\n" +
-                "                             PAD char(1) NOT NULL)\n" +
-                "ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`s_suppkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 1\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-
-        starRocksAssert.withTable("CREATE TABLE partsupp ( PS_PARTKEY     INTEGER NOT NULL,\n" +
-                "                             PS_SUPPKEY     INTEGER NOT NULL,\n" +
-                "                             PS_AVAILQTY    INTEGER NOT NULL,\n" +
-                "                             PS_SUPPLYCOST  double  NOT NULL,\n" +
-                "                             PS_COMMENT     VARCHAR(199) NOT NULL,\n" +
-                "                             PAD char(1) NOT NULL)\n" +
-                "ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`ps_partkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`ps_partkey`) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-
-        starRocksAssert.withTable("CREATE TABLE orders  ( O_ORDERKEY       INTEGER NOT NULL,\n" +
-                "                           O_CUSTKEY        INTEGER NOT NULL,\n" +
-                "                           O_ORDERSTATUS    CHAR(1) NOT NULL,\n" +
-                "                           O_TOTALPRICE     double NOT NULL,\n" +
-                "                           O_ORDERDATE      DATE NOT NULL,\n" +
-                "                           O_ORDERPRIORITY  CHAR(15) NOT NULL,  \n" +
-                "                           O_CLERK          CHAR(15) NOT NULL, \n" +
-                "                           O_SHIPPRIORITY   INTEGER NOT NULL,\n" +
-                "                           O_COMMENT        VARCHAR(79) NOT NULL,\n" +
-                "                           PAD char(1) NOT NULL)\n" +
-                "ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`o_orderkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`o_orderkey`) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-
-        starRocksAssert.withTable("CREATE TABLE customer ( C_CUSTKEY     INTEGER NOT NULL,\n" +
-                "                             C_NAME        VARCHAR(25) NOT NULL,\n" +
-                "                             C_ADDRESS     VARCHAR(40) NOT NULL,\n" +
-                "                             C_NATIONKEY   INTEGER NOT NULL,\n" +
-                "                             C_PHONE       CHAR(15) NOT NULL,\n" +
-                "                             C_ACCTBAL     double   NOT NULL,\n" +
-                "                             C_MKTSEGMENT  CHAR(10) NOT NULL,\n" +
-                "                             C_COMMENT     VARCHAR(117) NOT NULL,\n" +
-                "                             PAD char(1) NOT NULL)\n" +
-                "ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`c_custkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-
-        starRocksAssert.withTable("CREATE TABLE `nation` (\n" +
-                "  `N_NATIONKEY` int(11) NOT NULL COMMENT \"\",\n" +
-                "  `N_NAME` char(25) NOT NULL COMMENT \"\",\n" +
-                "  `N_REGIONKEY` int(11) NOT NULL COMMENT \"\",\n" +
-                "  `N_COMMENT` varchar(152) NULL COMMENT \"\",\n" +
-                "  `PAD` char(1) NOT NULL COMMENT \"\"\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`N_NATIONKEY`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`N_NATIONKEY`) BUCKETS 1\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-
-        starRocksAssert.withTable("CREATE TABLE part  ( P_PARTKEY     INTEGER NOT NULL,\n" +
-                "                          P_NAME        VARCHAR(55) NOT NULL,\n" +
-                "                          P_MFGR        CHAR(25) NOT NULL,\n" +
-                "                          P_BRAND       CHAR(10) NOT NULL,\n" +
-                "                          P_TYPE        VARCHAR(25) NOT NULL,\n" +
-                "                          P_SIZE        INTEGER NOT NULL,\n" +
-                "                          P_CONTAINER   CHAR(10) NOT NULL,\n" +
-                "                          P_RETAILPRICE double NOT NULL,\n" +
-                "                          P_COMMENT     VARCHAR(23) NOT NULL,\n" +
-                "                          PAD char(1) NOT NULL)\n" +
-                "ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`p_partkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`p_partkey`) BUCKETS 10\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-
-        starRocksAssert.withTable("CREATE TABLE lineitem ( L_ORDERKEY    INTEGER NOT NULL,\n" +
-                "                             L_PARTKEY     INTEGER NOT NULL,\n" +
-                "                             L_SUPPKEY     INTEGER NOT NULL,\n" +
-                "                             L_LINENUMBER  INTEGER NOT NULL,\n" +
-                "                             L_QUANTITY    double NOT NULL,\n" +
-                "                             L_EXTENDEDPRICE  double NOT NULL,\n" +
-                "                             L_DISCOUNT    double NOT NULL,\n" +
-                "                             L_TAX         double NOT NULL,\n" +
-                "                             L_RETURNFLAG  CHAR(1) NOT NULL,\n" +
-                "                             L_LINESTATUS  CHAR(1) NOT NULL,\n" +
-                "                             L_SHIPDATE    DATE NOT NULL,\n" +
-                "                             L_COMMITDATE  DATE NOT NULL,\n" +
-                "                             L_RECEIPTDATE DATE NOT NULL,\n" +
-                "                             L_SHIPINSTRUCT CHAR(25) NOT NULL,\n" +
-                "                             L_SHIPMODE     CHAR(10) NOT NULL,\n" +
-                "                             L_COMMENT      VARCHAR(44) NOT NULL,\n" +
-                "                             PAD char(1) NOT NULL)\n" +
-                "ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`l_orderkey`)\n" +
-                "COMMENT \"OLAP\"\n" +
-                "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 20\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
+        starRocksAssert.withTable(TpchSQL.REGION);
+        starRocksAssert.withTable(TpchSQL.SUPPLIER);
+        starRocksAssert.withTable(TpchSQL.PARTSUPP);
+        starRocksAssert.withTable(TpchSQL.ORDERS);
+        starRocksAssert.withTable(TpchSQL.CUSTOMER);
+        starRocksAssert.withTable(TpchSQL.NATION);
+        starRocksAssert.withTable(TpchSQL.PART);
+        starRocksAssert.withTable(TpchSQL.LINEITEM);
 
         starRocksAssert.withTable("CREATE TABLE `lineorder_flat_for_mv` (\n" +
                 "  `LO_ORDERDATE` date NOT NULL COMMENT \"\",\n" +
@@ -489,7 +367,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "  `L_TAX` double NOT NULL COMMENT \"\",\n" +
                 "  `L_RETURNFLAG` char(1) NOT NULL COMMENT \"\",\n" +
                 "  `L_LINESTATUS` char(1) NOT NULL COMMENT \"\",\n" +
-                "  `L_SHIPDATE` date NOT NULL COMMENT \"\",\n" +
+                "  `L_SHIPDATE` date NULL COMMENT \"\",\n" +
                 "  `L_COMMITDATE` date NOT NULL COMMENT \"\",\n" +
                 "  `L_RECEIPTDATE` date NOT NULL COMMENT \"\",\n" +
                 "  `L_SHIPINSTRUCT` char(25) NOT NULL COMMENT \"\",\n" +
@@ -818,7 +696,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                         "\"password\"=\"test_passwd\",\n" +
                         "\"driver_url\"=\"test_driver_url\",\n" +
                         "\"driver_class\"=\"test.driver.class\",\n" +
-                        "\"jdbc_uri\"=\"test_uri\"\n" +
+                        "\"jdbc_uri\"=\"jdbc:mysql://127.0.0.1:3306\"\n" +
                         ");")
                 .withTable("create external table test.jdbc_test\n" +
                         "(a int, b varchar(20), c float)\n" +
@@ -1019,6 +897,19 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `tprimary_bool` (\n" +
+                "  `pk1` bigint NOT NULL COMMENT \"\",\n" +
+                "  `pk2` BOOLEAN NOT NULL COMMENT \"\",\n" +
+                "  `v3` string NOT NULL COMMENT \"\",\n" +
+                "  `v4` int NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(pk1, pk2)\n" +
+                "DISTRIBUTED BY HASH(pk1, pk2) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
         starRocksAssert.withTable("CREATE TABLE `tjson` (\n" +
                 "  `v_int`  bigint NULL COMMENT \"\",\n" +
                 "  `v_json` json NULL COMMENT \"\" \n" +
@@ -1038,6 +929,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
         connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+        connectContext.getSessionVariable().setEnableShortCircuit(true);
     }
 
     @AfterClass
@@ -1074,8 +966,27 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                             }
                         }
                     }
+                } else {
+                    return;
                 }
             }
         };
+    }
+
+    public static void cleanupEphemeralMVs(StarRocksAssert starRocksAssert, long startTime) throws Exception {
+        String currentDb = starRocksAssert.getCtx().getDatabase();
+        if (StringUtils.isNotEmpty(currentDb)) {
+            Database testDb = GlobalStateMgr.getCurrentState().getDb(currentDb);
+            for (MaterializedView mv : ListUtils.emptyIfNull(testDb.getMaterializedViews())) {
+                if (startTime > 0 && mv.getCreateTime() > startTime) {
+                    starRocksAssert.dropMaterializedView(mv.getName());
+                    LOG.warn("cleanup mv after test case: {}", mv.getName());
+                }
+            }
+            if (CollectionUtils.isNotEmpty(testDb.getMaterializedViews())) {
+                LOG.warn("database [{}] still contains {} materialized views",
+                        testDb.getFullName(), testDb.getMaterializedViews().size());
+            }
+        }
     }
 }

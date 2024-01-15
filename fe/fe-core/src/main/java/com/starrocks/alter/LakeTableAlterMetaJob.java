@@ -38,6 +38,8 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
@@ -74,12 +76,12 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
     @SerializedName(value = "watershedTxnId")
     private long watershedTxnId = -1;
 
-    // PartitionId -> indexId -> MaterializedIndex
+    // PhysicalPartitionId -> indexId -> MaterializedIndex
     @SerializedName(value = "partitionIndexMap")
-    private Table<Long, Long, MaterializedIndex> partitionIndexMap = HashBasedTable.create();
+    private Table<Long, Long, MaterializedIndex> physicalPartitionIndexMap = HashBasedTable.create();
 
     @SerializedName(value = "commitVersionMap")
-    // Mapping from partition id to commit version
+    // Mapping from physical partition id to commit version
     private Map<Long, Long> commitVersionMap = new HashMap<>();
 
     public LakeTableAlterMetaJob(long jobId, long dbId, long tableId, String tableName,
@@ -99,7 +101,9 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
         if (db == null) {
             throw new AlterCancelException("database does not exist, dbId:" + dbId);
         }
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
+        
         try {
             olapTable = (OlapTable) db.getTable(tableName);
             if (olapTable == null) {
@@ -107,7 +111,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             }
             partitions.addAll(olapTable.getPartitions());
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         if (this.watershedTxnId == -1) {
@@ -139,7 +143,8 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             // database has been dropped
             throw new AlterCancelException("database does not exist, dbId:" + dbId);
         }
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
 
         LakeTable table = (LakeTable) db.getTable(tableId);
         if (table == null) {
@@ -148,8 +153,8 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
         }
         try {
             commitVersionMap.clear();
-            for (long partitionId : partitionIndexMap.rowKeySet()) {
-                Partition partition = table.getPartition(partitionId);
+            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkNotNull(partition, partitionId);
                 long commitVersion = partition.getNextVersion();
                 commitVersionMap.put(partitionId, commitVersion);
@@ -164,7 +169,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             // NOTE: !!! below this point, this update meta job must success unless the database or table been dropped. !!!
             updateNextVersion(table);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
     }
@@ -190,7 +195,8 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             LOG.warn("database does not exist, dbId:" + dbId);
             throw new AlterCancelException("database does not exist, dbId:" + dbId);
         }
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
 
         try {
             LakeTable table = (LakeTable) db.getTable(tableId);
@@ -217,7 +223,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             table.setState(OlapTable.OlapTableState.NORMAL);
 
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         LOG.info("update meta job finished: {}", jobId);
@@ -229,7 +235,8 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             // database has been dropped
             throw new AlterCancelException("database does not exist, dbId:" + dbId);
         }
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
 
         LakeTable table = (LakeTable) db.getTable(tableId);
         if (table == null) {
@@ -237,8 +244,8 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             throw new AlterCancelException("table does not exist, tableId:" + tableId);
         }
         try {
-            for (long partitionId : partitionIndexMap.rowKeySet()) {
-                Partition partition = table.getPartition(partitionId);
+            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
                 Preconditions.checkState(partition != null, partitionId);
                 long commitVersion = commitVersionMap.get(partitionId);
                 if (commitVersion != partition.getVisibleVersion() + 1) {
@@ -249,16 +256,16 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         return true;
     }
 
     boolean publishVersion() {
         try {
-            for (long partitionId : partitionIndexMap.rowKeySet()) {
+            for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
-                Map<Long, MaterializedIndex> dirtyIndexMap = partitionIndexMap.row(partitionId);
+                Map<Long, MaterializedIndex> dirtyIndexMap = physicalPartitionIndexMap.row(partitionId);
                 for (MaterializedIndex index : dirtyIndexMap.values()) {
                     Utils.publishVersion(index.getTablets(), watershedTxnId, commitVersion - 1, commitVersion,
                             finishedTimeMs / 1000);
@@ -272,7 +279,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
     }
 
     public void addDirtyPartitionIndex(long partitionId, long indexId, MaterializedIndex index) {
-        partitionIndexMap.put(partitionId, indexId, index);
+        physicalPartitionIndexMap.put(partitionId, indexId, index);
     }
 
     public void updatePartitionTabletMeta(Database db,
@@ -282,7 +289,8 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
                                           TTabletMetaType metaType) throws DdlException {
         // be id -> <tablet id,schemaHash>
         Map<Long, Set<Pair<Long, Integer>>> beIdToTabletIdWithHash = Maps.newHashMap();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableName);
             Partition partition = olapTable.getPartition(partitionName);
@@ -294,7 +302,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 for (MaterializedIndex index : physicalPartition.getMaterializedIndices(
                         MaterializedIndex.IndexExtState.VISIBLE)) {
-                    addDirtyPartitionIndex(partition.getId(), index.getId(), index);
+                    addDirtyPartitionIndex(physicalPartition.getId(), index.getId(), index);
                     int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
                     for (Tablet tablet : index.getTablets()) {
                         Long backendId = Utils.chooseBackend((LakeTablet) tablet);
@@ -305,7 +313,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         int totalTaskNum = beIdToTabletIdWithHash.keySet().size();
@@ -358,27 +366,27 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
     }
 
     void updateNextVersion(@NotNull LakeTable table) {
-        for (long partitionId : partitionIndexMap.rowKeySet()) {
-            Partition partition = table.getPartition(partitionId);
+        for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
             Preconditions.checkState(partition.getNextVersion() == commitVersion,
                     "partitionNextVersion=" + partition.getNextVersion() + " commitVersion=" + commitVersion);
             partition.setNextVersion(commitVersion + 1);
             LOG.info("LakeTableAlterMetaJob id: {} update next version of partition: {}, commitVersion: {}",
-                    jobId, partition.getName(), commitVersion);
+                    jobId, partition.getId(), commitVersion);
         }
     }
 
     void updateVisibleVersion(@NotNull LakeTable table) {
-        for (long partitionId : partitionIndexMap.rowKeySet()) {
-            Partition partition = table.getPartition(partitionId);
+        for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             long commitVersion = commitVersionMap.get(partitionId);
             Preconditions.checkState(partition.getVisibleVersion() == commitVersion - 1,
                     "partitionVisitionVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             partition.updateVisibleVersion(commitVersion);
             LOG.info("partitionVisibleVersion=" + partition.getVisibleVersion() + " commitVersion=" + commitVersion);
             LOG.info("LakeTableAlterMetaJob id: {} update visible version of partition: {}, visible Version: {}",
-                    jobId, partition.getName(), commitVersion);
+                    jobId, partition.getId(), commitVersion);
         }
     }
 
@@ -393,7 +401,8 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             // database has been dropped
             return false;
         }
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         LakeTable table;
         try {
             table = (LakeTable) db.getTable(tableId);
@@ -416,7 +425,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
                 span.end();
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
 
         GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
@@ -446,7 +455,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             this.errMsg = other.errMsg;
             this.timeoutMs = other.timeoutMs;
 
-            this.partitionIndexMap = other.partitionIndexMap;
+            this.physicalPartitionIndexMap = other.physicalPartitionIndexMap;
             this.watershedTxnId = other.watershedTxnId;
             this.commitVersionMap = other.commitVersionMap;
         }
@@ -457,7 +466,8 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
             LOG.warn("database does not exist, dbId:" + dbId);
             return;
         }
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         LakeTable table = (LakeTable) db.getTable(tableId);
         if (table == null) {
             return;
@@ -477,13 +487,13 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
                 throw new RuntimeException("unknown job state '{}'" + jobState.name());
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
     // for test
     public Table<Long, Long, MaterializedIndex> getPartitionIndexMap() {
-        return partitionIndexMap;
+        return physicalPartitionIndexMap;
     }
 
     // for test

@@ -40,9 +40,11 @@
 #include <vector>
 
 #include "column/chunk.h"
+#include "gen_cpp/Descriptors_types.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "storage/aggregate_type.h"
 #include "storage/olap_define.h"
+#include "storage/tablet_index.h"
 #include "storage/type_utils.h"
 #include "storage/types.h"
 #include "util/c_string.h"
@@ -229,6 +231,8 @@ private:
 bool operator==(const TabletColumn& a, const TabletColumn& b);
 bool operator!=(const TabletColumn& a, const TabletColumn& b);
 
+class TabletIndex;
+
 class TabletSchema {
 public:
     using SchemaId = int64_t;
@@ -257,11 +261,13 @@ public:
 
     // Caller should always check the returned value with `invalid_id()`.
     SchemaId id() const { return _id; }
+    void set_id(SchemaId id) { _id = id; }
     size_t estimate_row_size(size_t variable_len) const;
     int32_t field_index(int32_t col_unique_id) const;
     size_t field_index(std::string_view field_name) const;
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
+    void generate_sort_key_idxes();
     const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
 
     size_t num_columns() const { return _cols.size(); }
@@ -277,6 +283,7 @@ public:
     void append_column(TabletColumn column);
 
     int32_t schema_version() const { return _schema_version; }
+    void set_schema_version(int32_t version) { _schema_version = version; }
     void clear_columns();
     void copy_from(const std::shared_ptr<const TabletSchema>& tablet_schema);
 
@@ -304,13 +311,7 @@ public:
 
     std::string debug_string() const;
 
-    size_t mem_usage() const {
-        size_t mem_usage = sizeof(TabletSchema);
-        for (const auto& col : _cols) {
-            mem_usage += col.mem_usage();
-        }
-        return mem_usage;
-    }
+    int64_t mem_usage() const;
 
     bool shared() const { return _schema_map != nullptr; }
 
@@ -318,6 +319,11 @@ public:
 
     Status build_current_tablet_schema(int64_t index_id, int32_t version, const POlapTableIndexSchema& index,
                                        const std::shared_ptr<const TabletSchema>& ori_tablet_schema);
+
+    const std::vector<TabletIndex>* indexes() const { return &_indexes; }
+    Status get_indexes_for_column(int32_t col_unique_id, std::unordered_map<IndexType, TabletIndex>* res) const;
+    Status get_indexes_for_column(int32_t col_unique_id, IndexType index_type, std::shared_ptr<TabletIndex>& res) const;
+    bool has_index(int32_t col_unique_id, IndexType index_type) const;
 
 private:
     friend class SegmentReaderWriterTest;
@@ -330,11 +336,15 @@ private:
     void _init_from_pb(const TabletSchemaPB& schema);
 
     void _init_schema() const;
+    void _fill_index_map(const TabletIndex& index);
 
     SchemaId _id = invalid_id();
     TabletSchemaMap* _schema_map = nullptr;
 
     double _bf_fpp = 0;
+
+    std::vector<TabletIndex> _indexes;
+    std::unordered_map<IndexType, std::shared_ptr<std::unordered_set<int32_t>>> _index_map_col_unique_id;
 
     std::vector<TabletColumn> _cols;
     size_t _num_rows_per_row_block = 0;
@@ -344,8 +354,8 @@ private:
     mutable uint16_t _num_key_columns = 0;
     uint16_t _num_short_key_columns = 0;
     std::vector<ColumnId> _sort_key_idxes;
-    std::unordered_set<ColumnId> _sort_key_idxes_set;
     std::vector<ColumnUID> _sort_key_uids;
+    std::unordered_set<ColumnUID> _sort_key_uids_set;
 
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
     CompressionTypePB _compression_type = CompressionTypePB::LZ4_FRAME;

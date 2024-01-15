@@ -246,6 +246,7 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
     ASSERT_TRUE(query_ctx_mgr->init().ok());
 
     workgroup::WorkGroupPtr wg = std::make_shared<workgroup::WorkGroup>("wg1", 1, 1, 1, 1, 1 /* concurrency_limit */,
+                                                                        1.0 /* spill_mem_limit_threshold */,
                                                                         workgroup::WorkGroupType::WG_NORMAL);
 
     auto* query_ctx1 = gen_query_ctx(parent_mem_tracker.get(), query_ctx_mgr.get(), 0, 1, 3, 60, 300);
@@ -253,9 +254,9 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
     const auto query_id1 = query_ctx1->query_id();
 
     /// Case 1: When all the fragments have come and finished, wg.num_running_queries should become to zero.
-    ASSERT_OK(query_ctx1->init_query_once(wg.get()));
-    ASSERT_OK(query_ctx1->init_query_once(wg.get()));              // None-first invocations have no side-effects.
-    ASSERT_ERROR(query_ctx_overloaded->init_query_once(wg.get())); // Exceed concurrency_limit.
+    ASSERT_OK(query_ctx1->init_query_once(wg.get(), false));
+    ASSERT_OK(query_ctx1->init_query_once(wg.get(), false)); // None-first invocations have no side-effects.
+    ASSERT_ERROR(query_ctx_overloaded->init_query_once(wg.get(), false)); // Exceed concurrency_limit.
     ASSERT_EQ(1, wg->num_running_queries());
     ASSERT_EQ(1, wg->concurrency_overflow_count());
     // All the fragments comes.
@@ -276,8 +277,8 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
     auto* query_ctx2 =
             gen_query_ctx(parent_mem_tracker.get(), query_ctx_mgr.get(), 3, 4, 3, 0 /* delivery_timeout */, 300);
     const auto query_id2 = query_ctx2->query_id();
-    ASSERT_OK(query_ctx2->init_query_once(wg.get()));
-    ASSERT_OK(query_ctx2->init_query_once(wg.get())); // None-first invocations have no side-effects.
+    ASSERT_OK(query_ctx2->init_query_once(wg.get(), false));
+    ASSERT_OK(query_ctx2->init_query_once(wg.get(), false)); // None-first invocations have no side-effects.
     ASSERT_EQ(1, wg->num_running_queries());
     for (int i = 2; i < query_ctx2->total_fragments(); ++i) {
         auto* cur_query_ctx = query_ctx_mgr->get_or_register(query_id2);

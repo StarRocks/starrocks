@@ -60,7 +60,7 @@ public:
     Status init(RuntimeState* runtime_state, const TabletScannerParams& params);
     Status open([[maybe_unused]] RuntimeState* runtime_state);
     Status get_chunk([[maybe_unused]] RuntimeState* state, Chunk* chunk);
-    Status close(RuntimeState* state);
+    void close(RuntimeState* state);
 
     RuntimeState* runtime_state() { return _runtime_state; }
     int64_t raw_rows_read() const { return _raw_rows_read; }

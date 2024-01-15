@@ -37,7 +37,10 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.BackendLoadStatistic.Classification;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
@@ -78,6 +81,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     @Override
     protected List<TabletSchedCtx> selectAlternativeTabletsForCluster(
             ClusterLoadStatistic clusterStat, TStorageMedium medium) {
+        if (RunMode.getCurrentRunMode().isSharedDataMode()) {
+            return Collections.emptyList();
+        }
         List<TabletSchedCtx> alternativeTablets;
         String balanceType = "";
         do {
@@ -199,6 +205,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
                 List<RootPathLoadStatistic> pathStats = beStat.getPathStatistics(medium);
                 for (RootPathLoadStatistic pathStat : pathStats) {
+                    if (pathStat.getDiskState() != DiskInfo.DiskState.ONLINE) {
+                        continue;
+                    }
                     if (pathStat.getCapacityB() <= 0) {
                         continue;
                     }
@@ -560,7 +569,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
                         TabletSchedCtx schedCtx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE,
                                 tabletMeta.getDbId(), tabletMeta.getTableId(), tabletMeta.getPartitionId(),
-                                tabletMeta.getIndexId(), tabletId, System.currentTimeMillis());
+                                tabletMeta.getPhysicalPartitionId(), tabletMeta.getIndexId(),
+                                tabletId, System.currentTimeMillis());
                         schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
                         schedCtx.setSrc(replica);
                         schedCtx.setDest(lBackend.getId(), destPathHash);
@@ -778,6 +788,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 TabletSchedCtx schedCtx =
                         new TabletSchedCtx(TabletSchedCtx.Type.BALANCE, tabletMeta.getDbId(),
                                 tabletMeta.getTableId(), tabletMeta.getPartitionId(),
+                                tabletMeta.getPhysicalPartitionId(),
                                 tabletMeta.getIndexId(), tabletId, System.currentTimeMillis());
                 schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
                 schedCtx.setSrc(replica);
@@ -963,7 +974,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             return 0;
         }
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             OlapTable table = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
             if (table == null) {
@@ -999,7 +1011,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             }
             return cnt;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -1025,6 +1037,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             List<Long> pathHashList = Lists.newArrayList();
             for (RootPathLoadStatistic pathStat : beStat.getPathStatistics()) {
                 if (pathStat.getStorageMedium() == medium
+                        && pathStat.getDiskState() == DiskInfo.DiskState.ONLINE
                         && (pathStat.getClazz() == Classification.LOW || pathStat.getClazz() == Classification.MID)) {
                     pathHashList.add(pathStat.getPathHash());
                 }
@@ -1101,8 +1114,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             partitionStats = getPartitionStats(medium, false, beIds, null);
         } else {
             for (RootPathLoadStatistic pathStat : pathStats) {
-                diskCapMap
-                        .put(pathStat.getPathHash(), Pair.create(pathStat.getCapacityB(), pathStat.getUsedCapacityB()));
+                if (pathStat.getDiskState() == DiskInfo.DiskState.ONLINE) {
+                    diskCapMap.put(pathStat.getPathHash(),
+                            Pair.create(pathStat.getCapacityB(), pathStat.getUsedCapacityB()));
+                }
             }
             paths = Lists.newArrayList(diskCapMap.keySet());
             partitionStats = getPartitionStats(medium, true, null, Pair.create(beId, paths));
@@ -1270,6 +1285,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             TabletSchedCtx schedCtx = new TabletSchedCtx(TabletSchedCtx.Type.BALANCE,
                     tabletMeta.getDbId(), tabletMeta.getTableId(), tabletMeta.getPartitionId(),
+                    tabletMeta.getPhysicalPartitionId(),
                     tabletMeta.getIndexId(), tabletId, System.currentTimeMillis());
             schedCtx.setOrigPriority(TabletSchedCtx.Priority.LOW);
             schedCtx.setBalanceType(BalanceType.TABLET);
@@ -1302,9 +1318,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         if (db == null) {
             return result;
         }
-
+        Locker locker = new Locker();
         try {
-            db.readLock();
+            locker.lockDatabase(db, LockType.READ);
             OlapTable table = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
             if (table == null) {
                 return result;
@@ -1347,6 +1363,12 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                             continue;
                         }
 
+                        RootPathLoadStatistic pathLoadStatistic = loadStatistic
+                                .getRootPathLoadStatistic(replica.getBackendId(), replica.getPathHash());
+                        if (pathLoadStatistic == null || pathLoadStatistic.getDiskState() != DiskInfo.DiskState.ONLINE) {
+                            continue;
+                        }
+
                         if (beIds != null) {
                             tablets.computeIfPresent(replica.getBackendId(), (k, v) -> {
                                 v.add(tablet.getId());
@@ -1370,7 +1392,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         return result;
@@ -1383,9 +1405,9 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         if (db == null) {
             return false;
         }
-
+        Locker locker = new Locker();
         try {
-            db.readLock();
+            locker.lockDatabase(db, LockType.READ);
             OlapTable table = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tabletMeta.getTableId());
             if (table == null) {
                 return false;
@@ -1420,7 +1442,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
             return statusPair.first == LocalTablet.TabletStatus.HEALTHY;
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 
@@ -1462,7 +1484,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             // set the config to a local variable to avoid config params changed.
             int partitionBatchNum = Config.tablet_checker_partition_batch_num;
             int partitionChecked = 0;
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             lockStart = System.nanoTime();
             try {
                 TABLE:
@@ -1489,8 +1512,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                             lockTotalTime += System.nanoTime() - lockStart;
                             // release lock, so that lock can be acquired by other threads.
                             LOG.debug("partition checked reached batch value, release lock");
-                            db.readUnlock();
-                            db.readLock();
+                            locker.unLockDatabase(db, LockType.READ);
+                            locker.lockDatabase(db, LockType.READ);
                             LOG.debug("balancer get lock again");
                             lockStart = System.nanoTime();
                             if (globalStateMgr.getDbIncludeRecycleBin(dbId) == null) {
@@ -1588,7 +1611,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 }
             } finally {
                 lockTotalTime += System.nanoTime() - lockStart;
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
 
@@ -1616,7 +1639,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 continue;
             }
 
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 for (Table table : globalStateMgr.getTablesIncludeRecycleBin(db)) {
                     // check table is olap table or colocate table
@@ -1637,7 +1661,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     }
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
 
@@ -1850,7 +1874,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             this.pathSortIndex = new HashMap<>();
             for (RootPathLoadStatistic pathStatistic : statistic.getPathStatistics()) {
                 if (pathStatistic.getStorageMedium() != this.medium
-                        || pathStatistic.getDiskState() == DiskInfo.DiskState.OFFLINE
+                        || pathStatistic.getDiskState() != DiskInfo.DiskState.ONLINE
                         || pathStatistic.getCapacityB() <= 0) {
                     continue;
                 }

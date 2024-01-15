@@ -59,11 +59,12 @@
 namespace starrocks {
 
 LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr, const UniqueId& load_id,
-                         const std::string& txn_trace_parent, int64_t timeout_s,
+                         int64_t txn_id, const std::string& txn_trace_parent, int64_t timeout_s,
                          std::unique_ptr<MemTracker> mem_tracker)
         : _load_mgr(mgr),
           _lake_tablet_mgr(lake_tablet_mgr),
           _load_id(load_id),
+          _txn_id(txn_id),
           _timeout_s(timeout_s),
           _has_chunk_meta(false),
           _mem_tracker(std::move(mem_tracker)),
@@ -117,7 +118,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     }
     LOG_IF(WARNING, !st.ok()) << "Fail to open index " << index_id << " of load " << _load_id << ": " << st.to_string();
     response->mutable_status()->set_status_code(st.code());
-    response->mutable_status()->add_error_msgs(st.get_error_msg());
+    response->mutable_status()->add_error_msgs(std::string(st.message()));
 
     if (config::enable_load_colocate_mv) {
         response->set_is_repeated_chunk(true);

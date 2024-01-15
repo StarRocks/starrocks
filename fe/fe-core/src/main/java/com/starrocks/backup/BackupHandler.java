@@ -43,8 +43,10 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.AbstractJob.JobType;
 import com.starrocks.backup.BackupJob.BackupJobState;
 import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
+import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -55,6 +57,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -112,6 +116,8 @@ public class BackupHandler extends FrontendDaemon implements Writable {
     // user can get the error message before submitting the next one.
     // Use ConcurrentMap to get rid of locks.
     protected Map<Long, AbstractJob> dbIdToBackupOrRestoreJob = Maps.newConcurrentMap();
+
+    protected MvRestoreContext mvRestoreContext = new MvRestoreContext();
 
     // this lock is used for handling one backup or restore request at a time.
     private ReentrantLock seqlock = new ReentrantLock();
@@ -303,7 +309,8 @@ public class BackupHandler extends FrontendDaemon implements Writable {
         // Also calculate the signature for incremental backup check.
         List<TableRef> tblRefs = stmt.getTableRefs();
         BackupMeta curBackupMeta = null;
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             List<Table> backupTbls = Lists.newArrayList();
             for (TableRef tblRef : tblRefs) {
@@ -346,11 +353,16 @@ public class BackupHandler extends FrontendDaemon implements Writable {
                     ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                             "Failed to copy table " + tblName + " with selected partitions");
                 }
+                if (copiedTbl.isMaterializedView()) {
+                    MaterializedView copiedMv = (MaterializedView) copiedTbl;
+                    copiedMv.setInactiveAndReason(String.format("Set the materialized view %s inactive in backup and " +
+                            "active it in restore if possible", copiedMv.getName()));
+                }
                 backupTbls.add(copiedTbl);
             }
             curBackupMeta = new BackupMeta(backupTbls);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         // Check if label already be used
@@ -429,11 +441,12 @@ public class BackupHandler extends FrontendDaemon implements Writable {
                 if (remoteTbl.isCloudNativeTable()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, remoteTbl.getName());
                 }
+                mvRestoreContext.addIntoMvBaseTableBackupInfoIfNeeded(remoteTbl, jobInfo, tblInfo);
             }
         }
         restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
                 db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
-                stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta);
+                stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta, mvRestoreContext);
         globalStateMgr.getEditLog().logRestoreJob(restoreJob);
 
         // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
@@ -615,6 +628,7 @@ public class BackupHandler extends FrontendDaemon implements Writable {
             return;
         }
         dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
+        mvRestoreContext.addIntoMvBaseTableBackupInfo(job);
     }
 
     public boolean report(TTaskType type, long jobId, long taskId, int finishedNum, int totalNum) {
@@ -662,6 +676,7 @@ public class BackupHandler extends FrontendDaemon implements Writable {
                 continue;
             }
             dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
+            mvRestoreContext.addIntoMvBaseTableBackupInfo(job);
         }
         LOG.info("finished replay {} backup/store jobs from image", dbIdToBackupOrRestoreJob.size());
     }
@@ -701,6 +716,7 @@ public class BackupHandler extends FrontendDaemon implements Writable {
                 continue;
             }
             dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
+            mvRestoreContext.addIntoMvBaseTableBackupInfo(job);
         }
     }
 
@@ -720,6 +736,9 @@ public class BackupHandler extends FrontendDaemon implements Writable {
             while (iterator.hasNext()) {
                 AbstractJob job = iterator.next().getValue();
                 if (isJobExpired(job, currentTimeMs)) {
+                    // discard mv backup table info if needed.
+                    mvRestoreContext.discardExpiredBackupTableInfo(job);
+
                     LOG.warn("discard expired job {}", job);
                     iterator.remove();
                 }

@@ -1,0 +1,44 @@
+-- name: testIcebergHadoopCatalog
+shell: ossutil64 mkdir oss://${oss_bucket}/test_catalog/test_iceberg_hadoop_catalog/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result
+create external catalog `ice_hadoop${uuid0}`
+properties (
+"type"  =  "iceberg",
+"iceberg.catalog.type"  =  "hadoop",
+"iceberg.catalog.warehouse"="oss://${oss_bucket}/test_catalog/test_iceberg_hadoop_catalog/${uuid0}"
+);
+-- result:
+-- !result
+create database ice_hadoop${uuid0}.ice_hadoop_db${uuid0};
+-- result:
+-- !result
+create table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test (
+    c0 int, 
+    c1 string
+);
+-- result:
+-- !result
+insert into ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test values (1, "A");
+-- result:
+-- !result
+select * from ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test;
+-- result:
+1	A
+-- !result
+drop table ice_hadoop${uuid0}.ice_hadoop_db${uuid0}.test;
+-- result:
+-- !result
+drop database ice_hadoop${uuid0}.ice_hadoop_db${uuid0};
+-- result:
+-- !result
+drop catalog ice_hadoop${uuid0};
+-- result:
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_catalog/test_iceberg_hadoop_catalog/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

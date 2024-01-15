@@ -77,11 +77,9 @@ protected:
     void SetUp() override {
         _fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(_fs->create_dir(kSegmentDir).ok());
-        _page_cache_mem_tracker = std::make_unique<MemTracker>();
-        StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), 1000000000);
     }
 
-    void TearDown() override { StoragePageCache::release_global_cache(); }
+    void TearDown() override { StoragePageCache::instance()->prune(); }
 
     void build_segment(const SegmentWriterOptions& opts, const TabletSchemaCSPtr& build_schema,
                        const TabletSchemaCSPtr& query_schema, size_t nrows, const ValueGenerator& generator,
@@ -108,7 +106,7 @@ protected:
         uint64_t file_size, index_size, footer_position;
         ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
-        *res = *Segment::open(_fs, filename, 0, query_schema);
+        *res = *Segment::open(_fs, FileInfo{filename}, 0, query_schema);
         ASSERT_EQ(nrows, (*res)->num_rows());
     }
 
@@ -217,7 +215,7 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
     uint64_t footer_position;
     ASSERT_OK(writer.finalize(&file_size, &index_size, &footer_position));
 
-    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema);
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;
@@ -245,6 +243,32 @@ TEST_F(SegmentReaderWriterTest, TestHorizontalWrite) {
         }
     }
     EXPECT_EQ(count, num_rows);
+
+    // Test new_column_iterator
+    {
+        auto r = segment->new_column_iterator(5 /* nonexist column id*/, nullptr);
+        ASSERT_FALSE(r.ok());
+        ASSERT_TRUE(r.status().is_not_found()) << r.status();
+    }
+    // Test new_column_iterator_or_default
+    {
+        TabletColumn column;
+        column.set_unique_id(5);
+        column.set_type(LogicalType::TYPE_BIGINT);
+        column.set_is_nullable(false);
+
+        auto r = segment->new_column_iterator_or_default(column, nullptr);
+        ASSERT_FALSE(r.ok());
+
+        column.set_is_nullable(true);
+        r = segment->new_column_iterator_or_default(column, nullptr);
+        ASSERT_TRUE(r.ok()) << r.status();
+
+        column.set_is_nullable(false);
+        column.set_default_value("10");
+        r = segment->new_column_iterator_or_default(column, nullptr);
+        ASSERT_TRUE(r.ok()) << r.status();
+    }
 }
 
 // NOLINTNEXTLINE
@@ -319,7 +343,7 @@ TEST_F(SegmentReaderWriterTest, TestVerticalWrite) {
 
     ASSERT_OK(writer.finalize_footer(&file_size));
 
-    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema);
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;
@@ -418,7 +442,7 @@ TEST_F(SegmentReaderWriterTest, TestReadMultipleTypesColumn) {
     }
 
     ASSERT_OK(writer.finalize_footer(&file_size));
-    auto segment = *Segment::open(_fs, file_name, 0, tablet_schema);
+    auto segment = *Segment::open(_fs, FileInfo{file_name}, 0, tablet_schema);
     ASSERT_EQ(segment->num_rows(), num_rows);
 
     SegmentReadOptions seg_options;

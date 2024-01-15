@@ -73,3 +73,87 @@ select c2["key1"] from map_top_n;
 12
 7
 -- !result
+select map{1: "a", 2: "b"}[c1] from map_top_n;
+-- result:
+a
+b
+None
+None
+None
+-- !result
+select map{null: "a", 2: "b"}[null];
+-- result:
+a
+-- !result
+-- name: testEmptyMap
+with t0 as (
+    select c1 from (values(map())) as t(c1)
+)
+select map_concat(map('a',1, 'b',2), c1)
+from t0;
+-- result:
+{"a":1,"b":2}
+-- !result
+with t0 as (
+    select c1 from (values(map())) as t(c1)
+)
+select map_concat(c1, map('a',1, 'b',2))
+from t0;
+-- result:
+{"a":1,"b":2}
+-- !result
+select map_concat(c1, map())
+from (select c1 from (values(map())) as t(c1)) t;
+-- result:
+{}
+-- !result
+select map_concat(c1, map(1,2))
+from (select c1 from (values(map())) as t(c1)) t;
+-- result:
+{1:2}
+-- !result
+select map_concat(c1, map(map(),map()))
+from (select c1 from (values(map())) as t(c1)) t;
+-- result:
+{{}:{}}
+-- !result
+select map_concat(c1, map(map(),[]))
+from (select c1 from (values(map())) as t(c1)) t;
+-- result:
+{{}:[]}
+-- !result
+select map_concat(c1, map([],map()))
+from (select c1 from (values(map())) as t(c1)) t;
+-- result:
+{[]:{}}
+-- !result
+select map_concat(c1, map())
+from (select c1 from (values(map([], []))) as t(c1)) t;
+-- result:
+{[]:[]}
+-- !result
+select map_concat(c1, map())
+from (select c1 from (values(map([], [[]]))) as t(c1)) t;
+-- result:
+{[]:[[]]}
+-- !result
+select map_concat(c1, map([1], [2]))
+from (select c1 from (values(map([], []))) as t(c1)) t;
+-- result:
+{[1]:[2],[]:[]}
+-- !result
+select map_concat(c1, map([1], [[2]]))
+from (select c1 from (values(map([], [[]]))) as t(c1)) t;
+-- result:
+{[1]:[[2]],[]:[[]]}
+-- !result
+select map_concat(c1, map(named_struct('1',2), named_struct('A', [map()])))
+from (select c1 from (values(map())) as t(c1)) t;
+-- result:
+{{"1":2}:{"A":[{}]}}
+-- !result
+select map_concat(c1, map(named_struct('1',2), named_struct('A', [map([],[[named_struct('C', [[map()]])]])])))
+from (select c1 from (values(map())) as t(c1)) t;
+-- result:
+{{"1":2}:{"A":[{[]:[[{"C":[[{}]]}]]}]}}
+-- !result

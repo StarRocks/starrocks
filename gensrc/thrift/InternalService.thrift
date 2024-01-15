@@ -102,7 +102,8 @@ enum TPipelineProfileLevel {
 enum TSpillMode {
   AUTO,
   FORCE,
-  NONE
+  NONE,
+  RANDOM,
 }
 
 enum TSpillableOperatorType {
@@ -121,6 +122,11 @@ enum TTabletInternalParallelMode {
 enum TOverflowMode {
   OUTPUT_NULL = 0;
   REPORT_ERROR = 1;
+}
+
+struct TQueryQueueOptions {
+  1: optional bool enable_global_query_queue;
+  2: optional bool enable_group_level_query_queue;
 }
 
 // Query options with their respective defaults
@@ -198,13 +204,18 @@ struct TQueryOptions {
   77: optional i64 spill_operator_max_bytes;
   78: optional i32 spill_encode_level;
   79: optional i64 spill_revocable_max_bytes;
+  80: optional bool spill_enable_direct_io;
+  // only used in spill_mode="random"
+  // probability of triggering operator spill
+  // (0.0,1.0)
+  81: optional double spill_rand_ratio;
 
   85: optional TSpillMode spill_mode;
   
   86: optional i32 io_tasks_per_scan_operator = 4;
   87: optional i32 connector_io_tasks_per_scan_operator = 16;
   88: optional double runtime_filter_early_return_selectivity = 0.05;
-
+  89: optional bool enable_dynamic_prune_scan_range = true;
 
   90: optional i64 log_rejected_record_num = 0;
 
@@ -230,6 +241,19 @@ struct TQueryOptions {
   105: optional bool use_column_pool = true;
 
   106: optional bool enable_agg_spill_preaggregation;
+  107: optional i64 global_runtime_filter_build_max_size;
+  108: optional i64 runtime_filter_rpc_http_min_size;
+
+  109: optional i64 big_query_profile_second_threshold;
+
+  110: optional TQueryQueueOptions query_queue_options;
+
+  111: optional bool enable_file_metacache;
+
+  112: optional bool enable_pipeline_level_shuffle;
+  113: optional bool enable_hyperscan_vec;
+
+  114: optional bool enable_jit = false;
 }
 
 
@@ -303,6 +327,8 @@ struct TQueryGlobals {
   // Added by StarRocks
   // Required by function 'last_query_id'.
   30: optional string last_query_id
+
+  31: optional i64 timestamp_us
 }
 
 

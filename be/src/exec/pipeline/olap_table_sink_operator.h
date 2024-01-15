@@ -60,11 +60,6 @@ public:
 
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
-    bool is_epoch_finished() const override { return _is_epoch_finished; }
-    bool is_epoch_finishing() const override;
-    Status set_epoch_finishing(RuntimeState* state) override;
-    Status reset_epoch(RuntimeState* state) override;
-
 private:
     starrocks::stream_load::OlapTableSink* _sink;
     FragmentContext* const _fragment_ctx;
@@ -74,9 +69,7 @@ private:
     mutable bool _is_open_done = false;
     int32_t _sender_id;
     bool _is_cancelled = false;
-
-    // STREAM MV
-    bool _is_epoch_finished = false;
+    bool _is_audit_report_done = true;
 
     // temporarily save chunk during automatic partition creation
     mutable ChunkPtr _automatic_partition_chunk;

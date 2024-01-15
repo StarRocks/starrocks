@@ -17,14 +17,18 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TableName;
-import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CompactionClause;
 import com.starrocks.sql.ast.TableRenameClause;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -69,6 +73,22 @@ public class AnalyzeAlterTableStatementTest {
         AlterTableStatementAnalyzer.analyze(alterTableStmt, AnalyzeTestUtil.getConnectContext());
     }
 
+    @Test(expected = SemanticException.class)
+    public void testCompactionClause()  {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        List<AlterClause> ops = Lists.newArrayList();
+        NodePosition pos = new NodePosition(1, 23, 1, 48);
+        ops.add(new CompactionClause(true, pos));
+        AlterTableStmt alterTableStmt = new AlterTableStmt(new TableName("testDb", "testTbl"), ops);
+        AlterTableStatementAnalyzer.analyze(alterTableStmt, AnalyzeTestUtil.getConnectContext());
+    }
+
     @Test
     public void testCreateIndex() {
         String sql = "CREATE INDEX index1 ON `test`.`t0` (`col1`) USING BITMAP COMMENT 'balabala'";
@@ -90,6 +110,8 @@ public class AnalyzeAlterTableStatementTest {
     @Test
     public void testModifyTableProperties() {
         analyzeSuccess("ALTER TABLE test.t0 SET (\"default.replication_num\" = \"2\");");
+        analyzeSuccess("ALTER TABLE test.t0 SET (\"datacache.partition_duration\" = \"10 days\");");
+        analyzeFail("ALTER TABLE test.t0 SET (\"datacache.partition_duration\" = \"abcd\");", "Cannot parse text to Duration");
         analyzeFail("ALTER TABLE test.t0 SET (\"default.replication_num\" = \"2\", \"dynamic_partition.enable\" = \"true\");",
                 "Can only set one table property at a time");
         analyzeFail("ALTER TABLE test.t0 SET (\"abc\" = \"2\");",
@@ -115,7 +137,6 @@ public class AnalyzeAlterTableStatementTest {
                 ")\n" +
                 "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                 "PROPERTIES('replication_num' = '1');");
-        Config.enable_experimental_mv = true;
         AnalyzeTestUtil.getStarRocksAssert().withMaterializedView("CREATE MATERIALIZED VIEW mv1_partition_by_column \n" +
                 "PARTITION BY k1 \n" +
                 "distributed by hash(k2) \n" +
@@ -147,4 +168,15 @@ public class AnalyzeAlterTableStatementTest {
         analyzeFail("alter table t0 add column testcol TIME");
         analyzeFail("alter table t0 modify column v0 TIME");
     }
+
+    @Test
+    public void testColumnWithRowUpdate() {
+        String sql = "alter table tmcwr add column testcol TIME";
+        analyzeFail(sql, "row store table tmcwr can't do schema change");
+        sql = "alter table tmcwr drop column name";
+        analyzeFail(sql, "row store table tmcwr can't do schema change");
+        sql = "alter table tmcwr modify column name TIME";
+        analyzeFail(sql, "row store table tmcwr can't do schema change");
+    }
+
 }

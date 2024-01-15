@@ -25,7 +25,6 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.NotImplementedException;
@@ -38,7 +37,6 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -358,7 +356,6 @@ public class MaterializedViewTest {
     @Test
     public void testRangePartitionSerialization() throws Exception {
         FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -426,7 +423,6 @@ public class MaterializedViewTest {
     @Test
     public void testRenameMaterializedView() throws Exception {
         FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -487,7 +483,6 @@ public class MaterializedViewTest {
     @Test
     public void testMvAfterDropBaseTable() throws Exception {
         FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -521,7 +516,6 @@ public class MaterializedViewTest {
     @Test
     public void testMvAfterBaseTableRename() throws Exception {
         FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -555,7 +549,6 @@ public class MaterializedViewTest {
     @Test
     public void testMaterializedViewWithHint() throws Exception {
         FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -587,6 +580,7 @@ public class MaterializedViewTest {
         Assert.assertTrue(taskProperties.containsKey("query_timeout"));
         Assert.assertEquals("500", taskProperties.get("query_timeout"));
         Assert.assertEquals(Constants.TaskType.EVENT_TRIGGERED, task.getType());
+        Assert.assertTrue(task.getDefinition(), task.getDefinition().contains("query_timeout='500'"));
     }
 
     @Test
@@ -648,7 +642,6 @@ public class MaterializedViewTest {
     @Test
     public void testCreateMaterializedViewWithInactiveMaterializedView() throws Exception {
         FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
         StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
@@ -687,53 +680,6 @@ public class MaterializedViewTest {
         mv.onReload();
 
         Assert.assertFalse(mv.isActive());
-    }
-
-    @Test
-    public void testAlterAsyncMaterializedViewWithInterval() throws Exception {
-        FeConstants.runningUnitTest = true;
-        Config.enable_experimental_mv = true;
-        UtFrameUtils.createMinStarRocksCluster();
-        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
-        starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable("CREATE TABLE base_table\n" +
-                        "(\n" +
-                        "    k1 date,\n" +
-                        "    k2 int,\n" +
-                        "    v1 int sum\n" +
-                        ")\n" +
-                        "PARTITION BY RANGE(k1)\n" +
-                        "(\n" +
-                        "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
-                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
-                        ")\n" +
-                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                        "PROPERTIES('replication_num' = '1');")
-                .withMaterializedView("CREATE MATERIALIZED VIEW base_mv\n" +
-                        "PARTITION BY k1\n" +
-                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                        "REFRESH async START('2122-12-31 20:45:11') EVERY(INTERVAL 1 DAY)\n" +
-                        "as select k1,k2,v1 from base_table;");
-        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-        MaterializedView baseMv = ((MaterializedView) testDb.getTable("base_mv"));
-
-        String alterMvSql = "ALTER MATERIALIZED VIEW base_mv REFRESH ASYNC EVERY(INTERVAL 2 DAY);";
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, alterMvSql);
-        stmtExecutor.execute();
-
-        // assert context
-        MaterializedView.AsyncRefreshContext asyncRefreshContext = baseMv.getRefreshScheme().getAsyncRefreshContext();
-        // start time must equal 2022-12-31
-        Assert.assertEquals(4828164311L, asyncRefreshContext.getStartTime());
-        Assert.assertEquals(2, asyncRefreshContext.getStep());
-        Assert.assertEquals("DAY", asyncRefreshContext.getTimeUnit());
-
-        // assert task schedule
-        String mvTaskName = "mv-" + baseMv.getId();
-        TaskSchedule schedule = connectContext.getGlobalStateMgr().getTaskManager().getTask(mvTaskName).getSchedule();
-        // start time must equal 2022-12-31
-        Assert.assertEquals(4828164311L, asyncRefreshContext.getStartTime());
     }
 
     @Test

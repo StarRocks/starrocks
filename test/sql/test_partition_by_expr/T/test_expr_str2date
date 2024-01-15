@@ -1,0 +1,73 @@
+-- name: test_expr_str2date
+CREATE TABLE partition_str2date (
+        create_time varchar(100),
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(str2date(create_time, '%Y-%m-%d %H:%i:%s'))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+insert into partition_str2date values('2021-01-04 23:59:59', '1', 1, 1);
+select * from partition_str2date;
+select * from partition_str2date where create_time = '2021-01-04 23:59:59';
+drop table partition_str2date;
+CREATE TABLE partition_str2date (
+        create_time varchar(100),
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(str2date(create_time, '%Y-%m-%d'))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+insert into partition_str2date values('2021-01-04', '1', 1, 1);
+select * from partition_str2date;
+select * from partition_str2date where create_time = '2021-01-04';
+drop table partition_str2date;
+CREATE TABLE partition_str2date (
+        create_time varchar(100),
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(str2date(create_time, '%Y%m%d%H'))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+insert into partition_str2date values('2021010423', '1', 1, 1);
+select * from partition_str2date;
+select * from partition_str2date where create_time = '2021010423';
+drop table partition_str2date;
+-- name: test_expr_str2date_add_partition
+CREATE TABLE partition_str2date (
+        create_time varchar(100),
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(str2date(create_time, '%Y-%m-%d'))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+)
+PROPERTIES (
+"replication_num" = "1"
+);
+alter table partition_str2date add partition p20231226 VALUES [("2023-12-26"), ("2023-12-27"));
+show create table partition_str2date;
+-- name: test_expr_str2date_partition_prune
+CREATE TABLE partition_str2date (
+        create_time varchar(100),
+        sku_id varchar(100),
+        total_amount decimal,
+        id int
+)
+PARTITION BY RANGE(str2date(create_time, '%Y-%m-%d'))(
+START ("2021-01-01") END ("2021-01-10") EVERY (INTERVAL 1 DAY)
+);
+insert into partition_str2date values('2021-01-04','1',1.1,1);
+insert into partition_str2date values('2021-01-05','1',1.1,1);
+insert into partition_str2date values('2021-01-06','1',1.1,1);
+select * from partition_str2date;
+select * from partition_str2date where create_time='2021-01-05';
+explain select * from partition_str2date where create_time='2021-01-05';
+select * from partition_str2date where '2021-01-05'=create_time;
+select * from partition_str2date where create_time>='2021-01-05';

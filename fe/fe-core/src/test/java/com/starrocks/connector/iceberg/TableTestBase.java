@@ -48,6 +48,18 @@ public class TableTestBase {
 
     public static final Schema SCHEMA_B =
             new Schema(required(1, "k1", Types.IntegerType.get()), required(2, "k2", Types.IntegerType.get()));
+
+    public static final Schema SCHEMA_D =
+            new Schema(required(1, "k1", Types.IntegerType.get()), required(2, "ts",
+                    Types.TimestampType.withZone()));
+
+    public static final Schema SCHEMA_E =
+            new Schema(required(1, "k1", Types.IntegerType.get()), required(2, "ts",
+                    Types.TimestampType.withoutZone()));
+
+    public static final Schema SCHEMA_F =
+            new Schema(required(1, "k1", Types.IntegerType.get()), required(2, "dt", Types.DateType.get()));
+
     protected static final int BUCKETS_NUMBER = 16;
 
     // Partition spec used to create tables
@@ -55,6 +67,32 @@ public class TableTestBase {
             PartitionSpec.builderFor(SCHEMA_A).bucket("data", BUCKETS_NUMBER).build();
     protected static final PartitionSpec SPEC_B =
             PartitionSpec.builderFor(SCHEMA_B).identity("k2").build();
+    protected static final PartitionSpec SPEC_B_1 = PartitionSpec.builderFor(SCHEMA_B).build();
+
+    protected static final PartitionSpec SPEC_D_1 =
+            PartitionSpec.builderFor(SCHEMA_D).identity("ts").build();
+    protected static final PartitionSpec SPEC_D_2 =
+            PartitionSpec.builderFor(SCHEMA_D).year("ts").build();
+    protected static final PartitionSpec SPEC_D_3 =
+            PartitionSpec.builderFor(SCHEMA_D).month("ts").build();
+    protected static final PartitionSpec SPEC_D_4 =
+            PartitionSpec.builderFor(SCHEMA_D).day("ts").build();
+    protected static final PartitionSpec SPEC_D_5 =
+            PartitionSpec.builderFor(SCHEMA_D).hour("ts").build();
+
+    protected static final PartitionSpec SPEC_E_1 =
+            PartitionSpec.builderFor(SCHEMA_E).identity("ts").build();
+    protected static final PartitionSpec SPEC_E_2 =
+            PartitionSpec.builderFor(SCHEMA_E).year("ts").build();
+    protected static final PartitionSpec SPEC_E_3 =
+            PartitionSpec.builderFor(SCHEMA_E).month("ts").build();
+    protected static final PartitionSpec SPEC_E_4 =
+            PartitionSpec.builderFor(SCHEMA_E).day("ts").build();
+    protected static final PartitionSpec SPEC_E_5 =
+            PartitionSpec.builderFor(SCHEMA_E).hour("ts").build();
+
+    protected static final PartitionSpec SPEC_F =
+            PartitionSpec.builderFor(SCHEMA_F).day("dt").build();
 
     public static final DataFile FILE_A =
             DataFiles.builder(SPEC_A)
@@ -62,6 +100,24 @@ public class TableTestBase {
                     .withFileSizeInBytes(10)
                     .withPartitionPath("data_bucket=0") // easy way to set partition data for now
                     .withRecordCount(2)
+                    .build();
+
+    public static DeleteFile FILE_A_DELETES =
+            FileMetadata.deleteFileBuilder(SPEC_A)
+                    .ofPositionDeletes()
+                    .withPath("/path/to/data-a-deletes.parquet")
+                    .withFileSizeInBytes(10)
+                    .withPartitionPath("data_bucket=0") // easy way to set partition data for now
+                    .withRecordCount(1)
+                    .build();
+    // Equality delete files.
+    public static DeleteFile FILE_A2_DELETES =
+            FileMetadata.deleteFileBuilder(SPEC_A)
+                    .ofEqualityDeletes(1)
+                    .withPath("/path/to/data-a2-deletes.parquet")
+                    .withFileSizeInBytes(10)
+                    .withPartitionPath("data_bucket=0")
+                    .withRecordCount(1)
                     .build();
 
     public static final DataFile FILE_A_1 =
@@ -126,6 +182,12 @@ public class TableTestBase {
                     .withMetrics(TABLE_B_METRICS)
                     .build();
 
+    public static final DataFile FILE_B_5 = DataFiles.builder(SPEC_B)
+            .withPath("/path/to/data-b5.parquet")
+            .withFileSizeInBytes(20)
+            .withRecordCount(4)
+            .build();
+
     public static final DeleteFile FILE_C_1 = FileMetadata.deleteFileBuilder(SPEC_B).ofPositionDeletes()
             .withPath("delete.orc")
             .withFileSizeInBytes(1024)
@@ -144,6 +206,11 @@ public class TableTestBase {
     public TestTables.TestTable mockedNativeTableA = null;
     public TestTables.TestTable mockedNativeTableB = null;
     public TestTables.TestTable mockedNativeTableC = null;
+    public TestTables.TestTable mockedNativeTableD = null;
+    public TestTables.TestTable mockedNativeTableE = null;
+    public TestTables.TestTable mockedNativeTableF = null;
+    public TestTables.TestTable mockedNativeTableG = null;
+
     protected final int formatVersion = 1;
 
     @Before
@@ -152,9 +219,13 @@ public class TableTestBase {
         tableDir.delete(); // created by table create
 
         this.metadataDir = new File(tableDir, "metadata");
-        this.mockedNativeTableA = create(SCHEMA_A, SPEC_A, "ta", 1);
+        this.mockedNativeTableA = create(SCHEMA_A, SPEC_A, "ta", 2);
         this.mockedNativeTableB = create(SCHEMA_B, SPEC_B, "tb", 1);
         this.mockedNativeTableC = create(SCHEMA_B, SPEC_B, "tc", 2);
+        this.mockedNativeTableD = create(SCHEMA_D, SPEC_D_5, "td", 1);
+        this.mockedNativeTableE = create(SCHEMA_D, SPEC_D_1, "te", 1);
+        this.mockedNativeTableF = create(SCHEMA_F, SPEC_F, "tf", 1);
+        this.mockedNativeTableG = create(SCHEMA_B, SPEC_B_1, "tg", 1);
     }
 
     @After

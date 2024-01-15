@@ -23,7 +23,6 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.jmockit.Deencapsulation;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -32,6 +31,7 @@ import org.junit.Test;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
@@ -49,13 +49,14 @@ public class JDBCMetadataTest {
     @Mocked
     Connection connection;
 
-    @Mocked
-    JDBCTableIdCache jdbcTableIdCache;
-
     private Map<String, String> properties;
     private MockResultSet dbResult;
     private MockResultSet tableResult;
     private MockResultSet columnResult;
+    @Mocked
+    PreparedStatement preparedStatement;
+    private MockResultSet partitionsResult;
+    MockResultSet partitionsInfoTablesResult;
 
     @Before
     public void setUp() throws SQLException {
@@ -67,17 +68,17 @@ public class JDBCMetadataTest {
         columnResult.addColumn("DATA_TYPE",
                 Arrays.asList(Types.INTEGER, Types.DECIMAL, Types.CHAR, Types.VARCHAR, Types.TINYINT, Types.SMALLINT,
                         Types.INTEGER, Types.BIGINT, Types.TINYINT, Types.SMALLINT,
-                        Types.INTEGER, Types.BIGINT));
+                        Types.INTEGER, Types.BIGINT, Types.DATE, Types.TIME, Types.TIMESTAMP));
         columnResult.addColumn("TYPE_NAME",
                 Arrays.asList("INTEGER", "DECIMAL", "CHAR", "VARCHAR", "TINYINT UNSIGNED", "SMALLINT UNSIGNED",
                         "INTEGER UNSIGNED", "BIGINT UNSIGNED", "TINYINT", "SMALLINT",
-                        "INTEGER", "BIGINT"));
-        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(4, 10, 10, 10, 1, 2, 4, 8, 1, 2, 4, 8));
-        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
+                        "INTEGER", "BIGINT", "DATE", "TIME", "TIMESTAMP"));
+        columnResult.addColumn("COLUMN_SIZE", Arrays.asList(4, 10, 10, 10, 1, 2, 4, 8, 1, 2, 4, 8, 8, 8, 8));
+        columnResult.addColumn("DECIMAL_DIGITS", Arrays.asList(0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0));
         columnResult.addColumn("COLUMN_NAME",
-                Arrays.asList("a", "b", "c", "d", "e1", "e2", "e4", "e8", "f1", "f2", "f3", "f4"));
+                Arrays.asList("a", "b", "c", "d", "e1", "e2", "e4", "e8", "f1", "f2", "f3", "f4", "g1", "g2", "g3"));
         columnResult.addColumn("IS_NULLABLE",
-                Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO"));
+                Arrays.asList("YES", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO", "NO"));
         properties = new HashMap<>();
         properties.put(DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
         properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
@@ -85,6 +86,11 @@ public class JDBCMetadataTest {
         properties.put(JDBCResource.PASSWORD, "123456");
         properties.put(JDBCResource.CHECK_SUM, "xxxx");
         properties.put(JDBCResource.DRIVER_URL, "xxxx");
+
+        partitionsResult = new MockResultSet("partitions");
+        partitionsResult.addColumn("NAME", Arrays.asList("'20230810'"));
+        partitionsResult.addColumn("PARTITION_EXPRESSION", Arrays.asList("`d`"));
+        partitionsResult.addColumn("MODIFIED_TIME", Arrays.asList("2023-08-01"));
 
 
         new Expectations() {
@@ -106,16 +112,6 @@ public class JDBCMetadataTest {
                 result = columnResult;
                 minTimes = 0;
 
-                JDBCTableName jdbcTablekey = JDBCTableName.of("catalog", "test", "tbl1");
-
-                Deencapsulation.invoke(jdbcTableIdCache, "containsTableId", jdbcTablekey);
-                result = true;
-                minTimes = 0;
-
-                Deencapsulation.invoke(jdbcTableIdCache, "getTableId", jdbcTablekey);
-                result = 100000;
-                minTimes = 0;
-
             }
         };
     }
@@ -124,6 +120,7 @@ public class JDBCMetadataTest {
     public void testListDatabaseNames() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            dbResult.beforeFirst();
             List<String> result = jdbcMetadata.listDbNames();
             List<String> expectResult = Lists.newArrayList("test");
             Assert.assertEquals(expectResult, result);
@@ -136,6 +133,7 @@ public class JDBCMetadataTest {
     public void testGetDb() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            dbResult.beforeFirst();
             Database db = jdbcMetadata.getDb("test");
             Assert.assertEquals("test", db.getOriginName());
         } catch (Exception e) {
@@ -156,11 +154,45 @@ public class JDBCMetadataTest {
     }
 
     @Test
-    public void testGetTable() {
+    public void testGetTableWithoutPartition() throws SQLException {
+        new Expectations() {
+            {
+                preparedStatement.executeQuery();
+                result = null;
+                minTimes = 0;
+            }
+        };
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
             Table table = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
+            Assert.assertTrue(table.getPartitionColumns().isEmpty());
+        } catch (Exception e) {
+            System.out.println(e.getMessage());
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testGetTableWithPartition() throws SQLException {
+        new Expectations() {
+            {
+                preparedStatement.executeQuery();
+                result = partitionsResult;
+                minTimes = 0;
+
+                partitionsInfoTablesResult = new MockResultSet("partitions");
+                partitionsInfoTablesResult.addColumn("TABLE_NAME", Arrays.asList("partitions"));
+                connection.getMetaData().getTables(anyString, null, null, null);
+                result = partitionsInfoTablesResult;
+                minTimes = 0;
+            }
+        };
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            Table table = jdbcMetadata.getTable("test", "tbl1");
+            Assert.assertTrue(table instanceof JDBCTable);
+            Assert.assertFalse(table.getPartitionColumns().isEmpty());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
@@ -185,6 +217,9 @@ public class JDBCMetadataTest {
         Assert.assertTrue(columns.get(9).getType().equals(ScalarType.createType(PrimitiveType.SMALLINT)));
         Assert.assertTrue(columns.get(10).getType().equals(ScalarType.createType(PrimitiveType.INT)));
         Assert.assertTrue(columns.get(11).getType().equals(ScalarType.createType(PrimitiveType.BIGINT)));
+        Assert.assertTrue(columns.get(12).getType().equals(ScalarType.createType(PrimitiveType.DATE)));
+        Assert.assertTrue(columns.get(13).getType().equals(ScalarType.createType(PrimitiveType.TIME)));
+        Assert.assertTrue(columns.get(14).getType().equals(ScalarType.createType(PrimitiveType.DATETIME)));
     }
 
     @Test
@@ -202,7 +237,9 @@ public class JDBCMetadataTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
             Table table1 = jdbcMetadata.getTable("test", "tbl1");
-            Assert.assertTrue(table1.getId() == 100000);
+            columnResult.beforeFirst();
+            Table table2 = jdbcMetadata.getTable("test", "tbl1");
+            Assert.assertTrue(table1.getId() == table2.getId());
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();

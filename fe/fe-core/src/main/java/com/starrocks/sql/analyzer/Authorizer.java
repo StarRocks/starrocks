@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
@@ -24,6 +25,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.privilege.AccessControlProvider;
+import com.starrocks.privilege.AccessController;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.NativeAccessController;
 import com.starrocks.privilege.ObjectType;
@@ -35,6 +37,8 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.pipe.PipeName;
+import org.apache.commons.collections4.ListUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -192,9 +196,10 @@ public class Authorizer {
             case FILE:
             case SCHEMA:
             case PAIMON:
+            case ODPS:
                 // `privilegeType == null` meaning we don't check specified action, just any action
                 if (privilegeType == null) {
-                    checkAnyActionOnTable(currentUser, roleIds, new TableName(dbName, tbl.getName()));
+                    checkAnyActionOnTable(currentUser, roleIds, new TableName(tbl.getCatalogName(), dbName, tbl.getName()));
                 } else {
                     checkTableAction(currentUser, roleIds, dbName, tbl.getName(), privilegeType);
                 }
@@ -278,37 +283,46 @@ public class Authorizer {
     }
 
     /**
+     * A lambda function that throws AccessDeniedException
+     */
+    @FunctionalInterface
+    public interface AccessControlChecker {
+        void check() throws AccessDeniedException;
+    }
+
+    /**
      * Check whether current user has any privilege action on the db or objects(table/view/mv) in the db.
      * Currently, it's used by `show databases` or `use database`.
      */
     public static void checkAnyActionOnOrInDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db)
             throws AccessDeniedException {
         Preconditions.checkNotNull(db, "db should not null");
+        AccessController controller = getInstance().getAccessControlOrDefault(catalogName);
 
-        try {
-            getInstance().getAccessControlOrDefault(catalogName).checkAnyActionOnDb(currentUser, roleIds, catalogName, db);
-        } catch (AccessDeniedException e1) {
+        List<AccessControlChecker> basicCheckers = ImmutableList.of(
+                () -> controller.checkAnyActionOnDb(currentUser, roleIds, catalogName, db),
+                () -> controller.checkAnyActionOnAnyTable(currentUser, roleIds, catalogName, db)
+        );
+        List<AccessControlChecker> extraCheckers = ImmutableList.of(
+                () -> controller.checkAnyActionOnAnyView(currentUser, roleIds, db),
+                () -> controller.checkAnyActionOnAnyMaterializedView(currentUser, roleIds, db),
+                () -> controller.checkAnyActionOnAnyFunction(currentUser, roleIds, db),
+                () -> controller.checkAnyActionOnPipe(currentUser, roleIds, new PipeName("*", "*"))
+        );
+        List<AccessControlChecker> appliedCheckers = CatalogMgr.isInternalCatalog(catalogName) ?
+                ListUtils.union(basicCheckers, extraCheckers) : basicCheckers;
+
+        AccessDeniedException lastExcepton = null;
+        for (AccessControlChecker checker : appliedCheckers) {
             try {
-                getInstance().getAccessControlOrDefault(catalogName)
-                        .checkAnyActionOnAnyTable(currentUser, roleIds, catalogName, db);
-            } catch (AccessDeniedException e2) {
-                if (CatalogMgr.isInternalCatalog(catalogName)) {
-                    try {
-                        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                                .checkAnyActionOnAnyView(currentUser, roleIds, db);
-                    } catch (AccessDeniedException e3) {
-                        try {
-                            getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                                    .checkAnyActionOnAnyMaterializedView(currentUser, roleIds, db);
-                        } catch (AccessDeniedException e4) {
-                            getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
-                                    .checkAnyActionOnAnyFunction(currentUser, roleIds, db);
-                        }
-                    }
-                } else {
-                    throw new AccessDeniedException();
-                }
+                checker.check();
+                return;
+            } catch (AccessDeniedException e) {
+                lastExcepton = e;
             }
+        }
+        if (lastExcepton != null) {
+            throw lastExcepton;
         }
     }
 
@@ -328,6 +342,18 @@ public class Authorizer {
                                                 PrivilegeType privilegeType) throws AccessDeniedException {
         getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
                 .checkResourceGroupAction(currentUser, roleIds, name, privilegeType);
+    }
+
+    public static void checkPipeAction(UserIdentity currentUser, Set<Long> roleIds, PipeName name,
+                                       PrivilegeType privilegeType) throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkPipeAction(currentUser, roleIds, name, privilegeType);
+    }
+
+    public static void checkAnyActionOnPipe(UserIdentity currentUser, Set<Long> roleIds, PipeName name)
+            throws AccessDeniedException {
+        getInstance().getAccessControlOrDefault(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)
+                .checkAnyActionOnPipe(currentUser, roleIds, name);
     }
 
     public static void checkStorageVolumeAction(UserIdentity currentUser, Set<Long> roleIds, String storageVolume,

@@ -146,7 +146,7 @@ public class LakeTableSchemaChangeJobTest {
         table.setIndexMeta(index.getId(), "t0", Collections.singletonList(c0), 0, 0, (short) 1, TStorageType.COLUMN,
                 keysType);
         table.setBaseIndexId(index.getId());
-        table.setUseLightSchemaChange(false);
+        table.setUseFastSchemaEvolution(false);
 
         FilePathInfo.Builder builder = FilePathInfo.newBuilder();
         FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
@@ -346,6 +346,11 @@ public class LakeTableSchemaChangeJobTest {
             public long getNextTransactionId() {
                 return 10101L;
             }
+
+            @Mock
+            public long peekNextTransactionId() {
+                return 10102L;
+            }
         };
 
         schemaChangeJob.runPendingJob();
@@ -385,6 +390,11 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public long getNextTransactionId() {
                 return 10101L;
+            }
+
+            @Mock
+            public long peekNextTransactionId() {
+                return 10102L;
             }
 
             @Mock
@@ -436,6 +446,11 @@ public class LakeTableSchemaChangeJobTest {
             }
 
             @Mock
+            public long peekNextTransactionId() {
+                return 10102L;
+            }
+
+            @Mock
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
                 throw new AnalysisException("isPreviousLoadFinished exception");
             }
@@ -484,6 +499,11 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public long getNextTransactionId() {
                 return 10101L;
+            }
+
+            @Mock
+            public long peekNextTransactionId() {
+                return 10102L;
             }
 
             @Mock
@@ -551,6 +571,11 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public long getNextTransactionId() {
                 return 10101L;
+            }
+
+            @Mock
+            public long peekNextTransactionId() {
+                return 10102L;
             }
 
             @Mock
@@ -625,6 +650,11 @@ public class LakeTableSchemaChangeJobTest {
             }
 
             @Mock
+            public long peekNextTransactionId() {
+                return 10102L;
+            }
+
+            @Mock
             public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
                 return true;
             }
@@ -680,6 +710,11 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public long getNextTransactionId() {
                 return 10101L;
+            }
+
+            @Mock
+            public long peekNextTransactionId() {
+                return 10102L;
             }
 
             @Mock
@@ -765,6 +800,11 @@ public class LakeTableSchemaChangeJobTest {
             @Mock
             public long getNextTransactionId() {
                 return 10101L;
+            }
+
+            @Mock
+            public long peekNextTransactionId() {
+                return 10102L;
             }
 
             @Mock
@@ -880,5 +920,64 @@ public class LakeTableSchemaChangeJobTest {
         // Does not support cancel job in FINISHED state.
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, schemaChangeJob.getJobState());
+    }
+
+    @Test
+    public void testTransactionRaceCondition() throws AlterCancelException {
+        new MockUp<Utils>() {
+            @Mock
+            public Long chooseBackend(LakeTablet tablet) {
+                return 1L;
+            }
+        };
+
+        new MockUp<LakeTableSchemaChangeJob>() {
+            @Mock
+            public void sendAgentTaskAndWait(AgentBatchTask batchTask, MarkedCountDownLatch<Long, Long> countDownLatch,
+                                             long timeoutSeconds) throws AlterCancelException {
+                // nothing to do.
+            }
+
+            @Mock
+            public void sendAgentTask(AgentBatchTask batchTask) {
+                batchTask.getAllTasks().forEach(t -> t.setFinished(true));
+            }
+
+            @Mock
+            public void writeEditLog(LakeTableSchemaChangeJob job) {
+                // nothing to do.
+            }
+
+            @Mock
+            public Future<Boolean> writeEditLogAsync(LakeTableSchemaChangeJob job) {
+                return ConcurrentUtils.constantFuture(true);
+            }
+
+            @Mock
+            public long getNextTransactionId() {
+                return 10101L;
+            }
+
+            @Mock
+            public long peekNextTransactionId() {
+                return 10103L; // !!!! <-------- 10103 != 10101 + 1
+            }
+
+            @Mock
+            public boolean isPreviousLoadFinished(long dbId, long tableId, long txnId) throws AnalysisException {
+                return true;
+            }
+        };
+
+        Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
+            schemaChangeJob.runPendingJob();
+        });
+        Assert.assertTrue(exception.getMessage().contains(
+                "concurrent transaction detected while adding shadow index, please re-run the alter table command"));
+        Assert.assertEquals(AlterJobV2.JobState.PENDING, schemaChangeJob.getJobState());
+        Assert.assertEquals(10101L, schemaChangeJob.getWatershedTxnId());
+
+        schemaChangeJob.cancel("test");
+        Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
 }

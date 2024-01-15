@@ -34,6 +34,7 @@ import com.starrocks.planner.FileTableScanNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.NonRecoverableException;
@@ -53,7 +54,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import java.util.Set;
 
 /**
@@ -86,7 +86,7 @@ public class HDFSBackendSelector implements BackendSelector {
     // After testing, this value can ensure that the scan range size assigned to each BE is as uniform as possible,
     // and the largest scan data is not more than 1.1 times of the average value
     private final double kMaxImbalanceRatio = 1.1;
-    public static final int CONSISTENT_HASH_RING_VIRTUAL_NUMBER = 32;
+    public static final int CONSISTENT_HASH_RING_VIRTUAL_NUMBER = 256;
 
     class HdfsScanRangeHasher {
         String basePath;
@@ -116,6 +116,9 @@ public class HDFSBackendSelector implements BackendSelector {
                 PaimonScanNode node = (PaimonScanNode) scanNode;
                 predicates = node.getScanNodePredicates();
                 basePath = node.getPaimonTable().getTableLocation();
+            } else if (scanNode instanceof OdpsScanNode) {
+                OdpsScanNode node = (OdpsScanNode) scanNode;
+                predicates = node.getScanNodePredicates();
             } else {
                 Preconditions.checkState(false);
             }
@@ -173,9 +176,7 @@ public class HDFSBackendSelector implements BackendSelector {
             }
         }
         if (node == null) {
-            Random rand = new Random(System.currentTimeMillis());
-            int i = rand.nextInt(backends.size());
-            node = backends.get(i);
+            node = backends.get(0);
         }
         return node;
     }
@@ -251,7 +252,8 @@ public class HDFSBackendSelector implements BackendSelector {
                     }
                     backends.addAll(servers);
                 }
-                ComputeNode node = reBalanceScanRangeForComputeNode(backends, avgNodeScanRangeBytes, scanRangeLocations);
+                ComputeNode node =
+                        reBalanceScanRangeForComputeNode(backends, avgNodeScanRangeBytes, scanRangeLocations);
                 if (node == null) {
                     remoteScanRangeLocations.add(scanRangeLocations);
                 } else {

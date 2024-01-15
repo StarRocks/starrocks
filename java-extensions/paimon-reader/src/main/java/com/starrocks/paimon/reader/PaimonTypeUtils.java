@@ -31,14 +31,13 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
+import org.apache.paimon.types.VarBinaryType;
 import org.apache.paimon.types.VarCharType;
 
 import java.util.stream.Collectors;
 
 /** Convert paimon type to hive string representation. */
 public class PaimonTypeUtils {
-    public static final int MAX_DECIMAL32_PRECISION = 9;
-    public static final int MAX_DECIMAL64_PRECISION = 18;
     private PaimonTypeUtils() {}
 
     public static String fromPaimonType(DataType type) {
@@ -65,16 +64,12 @@ public class PaimonTypeUtils {
             return "binary";
         }
 
+        public String visit(VarBinaryType varBinaryType) {
+            return "binary";
+        }
+
         public String visit(DecimalType decimalType) {
-            // convert decimal(x,y) to decimal
-            int precision = decimalType.getPrecision();
-            if (precision <= MAX_DECIMAL32_PRECISION) {
-                return "decimal32";
-            } else if (precision <= MAX_DECIMAL64_PRECISION) {
-                return "decimal64";
-            } else {
-                return "decimal128";
-            }
+            return String.format("decimal(%d,%d)", decimalType.getPrecision(), decimalType.getScale());
         }
 
         public String visit(TinyIntType tinyIntType) {

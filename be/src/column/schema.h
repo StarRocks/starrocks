@@ -31,6 +31,8 @@ public:
     Schema(Schema&&) = default;
     Schema& operator=(Schema&&) = default;
 
+    inline static const std::string FULL_ROW_COLUMN = "__row";
+
 #ifdef BE_TEST
     explicit Schema(Fields fields);
 #endif
@@ -79,10 +81,16 @@ public:
 
     std::vector<std::string> field_names() const;
 
+    std::vector<std::string> value_field_names() const;
+
+    std::vector<ColumnId> value_field_column_ids() const;
+
     // return null if name not found
     FieldPtr get_field_by_name(const std::string& name) const;
 
     size_t get_field_index_by_name(const std::string& name) const;
+
+    std::vector<ColumnId> field_column_ids(bool use_rowstore = false) const;
 
     void convert_to(Schema* new_schema, const std::vector<LogicalType>& new_types) const;
 

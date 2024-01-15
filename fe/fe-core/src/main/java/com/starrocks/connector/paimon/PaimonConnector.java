@@ -23,6 +23,8 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.credential.CloudType;
+import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
+import com.starrocks.credential.aliyun.AliyunCloudCredential;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudCredential;
 import org.apache.paimon.catalog.Catalog;
@@ -31,6 +33,8 @@ import org.apache.paimon.catalog.CatalogFactory;
 import org.apache.paimon.options.Options;
 
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static org.apache.paimon.options.CatalogOptions.METASTORE;
 import static org.apache.paimon.options.CatalogOptions.URI;
@@ -42,9 +46,6 @@ public class PaimonConnector implements Connector {
     private static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private final HdfsEnvironment hdfsEnvironment;
     private Catalog paimonNativeCatalog;
-    private final String catalogType;
-    private final String metastoreUris;
-    private final String warehousePath;
     private final String catalogName;
     private final Options paimonOptions;
 
@@ -53,9 +54,9 @@ public class PaimonConnector implements Connector {
         this.catalogName = context.getCatalogName();
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForStorage(properties);
         this.hdfsEnvironment = new HdfsEnvironment(cloudConfiguration);
-        this.catalogType = properties.get(PAIMON_CATALOG_TYPE);
-        this.metastoreUris = properties.get(HIVE_METASTORE_URIS);
-        this.warehousePath = properties.get(PAIMON_CATALOG_WAREHOUSE);
+        String catalogType = properties.get(PAIMON_CATALOG_TYPE);
+        String metastoreUris = properties.get(HIVE_METASTORE_URIS);
+        String warehousePath = properties.get(PAIMON_CATALOG_WAREHOUSE);
 
         this.paimonOptions = new Options();
         if (Strings.isNullOrEmpty(catalogType)) {
@@ -74,7 +75,16 @@ public class PaimonConnector implements Connector {
             throw new StarRocksConnectorException("The property %s must be set.", PAIMON_CATALOG_WAREHOUSE);
         }
         paimonOptions.setString(WAREHOUSE.key(), warehousePath);
+        initFsOption(cloudConfiguration);
+        String keyPrefix = "paimon.option.";
+        Set<String> optionKeys = properties.keySet().stream().filter(k -> k.startsWith(keyPrefix)).collect(Collectors.toSet());
+        for (String k : optionKeys) {
+            String key = k.substring(keyPrefix.length());
+            paimonOptions.setString(key, properties.get(k));
+        }
+    }
 
+    public void initFsOption(CloudConfiguration cloudConfiguration) {
         if (cloudConfiguration.getCloudType() == CloudType.AWS) {
             AWSCloudConfiguration awsCloudConfiguration = (AWSCloudConfiguration) cloudConfiguration;
             paimonOptions.set("s3.connection.ssl.enabled", String.valueOf(awsCloudConfiguration.getEnableSSL()));
@@ -88,6 +98,19 @@ public class PaimonConnector implements Connector {
             }
             if (!awsCloudCredential.getSecretKey().isEmpty()) {
                 paimonOptions.set("s3.secret-key", awsCloudCredential.getSecretKey());
+            }
+        }
+        if (cloudConfiguration.getCloudType() == CloudType.ALIYUN) {
+            AliyunCloudConfiguration aliyunCloudConfiguration = (AliyunCloudConfiguration) cloudConfiguration;
+            AliyunCloudCredential aliyunCloudCredential = aliyunCloudConfiguration.getAliyunCloudCredential();
+            if (!aliyunCloudCredential.getEndpoint().isEmpty()) {
+                paimonOptions.set("fs.oss.endpoint", aliyunCloudCredential.getEndpoint());
+            }
+            if (!aliyunCloudCredential.getAccessKey().isEmpty()) {
+                paimonOptions.set("fs.oss.accessKeyId", aliyunCloudCredential.getAccessKey());
+            }
+            if (!aliyunCloudCredential.getSecretKey().isEmpty()) {
+                paimonOptions.set("fs.oss.accessKeySecret", aliyunCloudCredential.getSecretKey());
             }
         }
     }
@@ -105,7 +128,6 @@ public class PaimonConnector implements Connector {
 
     @Override
     public ConnectorMetadata getMetadata() {
-        return new PaimonMetadata(catalogName, hdfsEnvironment, getPaimonNativeCatalog(), catalogType, metastoreUris,
-                warehousePath);
+        return new PaimonMetadata(catalogName, hdfsEnvironment, getPaimonNativeCatalog());
     }
 }

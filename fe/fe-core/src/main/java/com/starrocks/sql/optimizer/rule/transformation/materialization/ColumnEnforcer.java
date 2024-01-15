@@ -31,7 +31,7 @@ import java.util.List;
 import java.util.Map;
 
 // Add columnsToEnforce into LogicalScanOperator's colRefToColumnMetaMap.
-// enforce() will return a new OptExpression based on old OptExpression insteading of
+// enforce() will return a new OptExpression based on old OptExpression instead of
 // modifying it locally.
 public class ColumnEnforcer {
     private OptExpression optExpression;
@@ -55,11 +55,18 @@ public class ColumnEnforcer {
         return enforceContext.enforcedColumns;
     }
 
+    public List<ColumnRefOperator> getEnforcedNonExistedColumns() {
+        return enforceContext.enforcedNonExistedColumns;
+    }
+
     private class EnforceContext {
-        public List<ColumnRefOperator> enforcedColumns;
+        // Columns which are enforced no matter it is existed in operator's output columns.
+        private final List<ColumnRefOperator> enforcedColumns = Lists.newArrayList();
+        // Columns which are enforced and are not existed before in operator's output columns which should be
+        // removed after rewrite.
+        private final List<ColumnRefOperator> enforcedNonExistedColumns = Lists.newArrayList();
 
         public EnforceContext() {
-            this.enforcedColumns = Lists.newArrayList();
         }
     }
 
@@ -72,8 +79,13 @@ public class ColumnEnforcer {
             Map<ColumnRefOperator, Column> columnRefOperatorColumnMap = Maps.newHashMap(scanOperator.getColRefToColumnMetaMap());
             for (ColumnRefOperator columnRef : columnsToEnforce) {
                 for (Map.Entry<Column, ColumnRefOperator> entry : scanOperator.getColumnMetaToColRefMap().entrySet()) {
-                    if (entry.getValue().equals(columnRef)) {
-                        columnRefOperatorColumnMap.put(columnRef, entry.getKey());
+                    ColumnRefOperator toEnforceColumnRefOp = entry.getValue();
+                    // Only add to-enforce column ref operator into enforce columns when it's not in the output columns.
+                    if (toEnforceColumnRefOp.equals(columnRef)) {
+                        if (!columnRefOperatorColumnMap.containsKey(toEnforceColumnRefOp)) {
+                            columnRefOperatorColumnMap.put(columnRef, entry.getKey());
+                            context.enforcedNonExistedColumns.add(columnRef);
+                        }
                         context.enforcedColumns.add(columnRef);
                     }
                 }
@@ -99,12 +111,15 @@ public class ColumnEnforcer {
                 Map<ColumnRefOperator, ScalarOperator> columnRefMap =
                         Maps.newHashMap(optExpression.getOp().getProjection().getColumnRefMap());
                 for (ColumnRefOperator columnRef : localContext.enforcedColumns) {
-                    columnRefMap.put(columnRef, columnRef);
+                    if (!columnRefMap.containsKey(columnRef)) {
+                        columnRefMap.put(columnRef, columnRef);
+                        context.enforcedNonExistedColumns.add(columnRef);
+                    }
+                    context.enforcedColumns.add(columnRef);
                 }
                 builder.setProjection(new Projection(columnRefMap));
             }
             OptExpression newOptExpression = OptExpression.create(builder.build(), inputs);
-            context.enforcedColumns.addAll(localContext.enforcedColumns);
             newOptExpression.deriveLogicalPropertyItself();
             return newOptExpression;
         }

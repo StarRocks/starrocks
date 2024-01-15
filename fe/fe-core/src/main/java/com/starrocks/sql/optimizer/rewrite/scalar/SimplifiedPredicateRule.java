@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.EliminateNegationsRewriter;
@@ -328,34 +329,31 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate,
                                                ScalarOperatorRewriteContext context) {
-        if (predicate.getChild(0).isVariable() && predicate.getChild(0).equals(predicate.getChild(1))) {
+        ScalarOperator left = predicate.getChild(0);
+        ScalarOperator right = predicate.getChild(1);
+        if (left.isVariable() && left.equals(right)) {
             if (predicate.getBinaryType().equals(BinaryType.EQ_FOR_NULL)) {
                 return ConstantOperator.createBoolean(true);
             }
         }
+
+        if (predicate.getBinaryType().isEqual() && left.isConstantRef() && right.getType().isBoolean()) {
+            ConstantOperator constantOperator = (ConstantOperator) left;
+            if (constantOperator.isTrue()) {
+                return right;
+            }
+        } else if (predicate.getBinaryType().isEqual() && left.getType().isBoolean() && right.isConstantRef()) {
+            ConstantOperator constantOperator = (ConstantOperator) right;
+            if (constantOperator.isTrue()) {
+                return left;
+            }
+        }
+
         return predicate;
     }
 
     @Override
     public ScalarOperator visitCall(CallOperator call, ScalarOperatorRewriteContext context) {
-        if (call.getFunction() == null) {
-            return call;
-        }
-        // return Null directly iff:
-        // 1. Not UDF
-        // 2. Not in isNotAlwaysNullResultWithNullParamFunctions
-        // 3. Has null parameter
-        // 4. Not assert_true
-        Function fn = call.getFunction();
-        if (!FunctionSet.isNotAlwaysNullResultWithNullParamFunctions(call.getFnName())
-                && !fn.isUdf() && fn instanceof ScalarFunction) {
-            for (ScalarOperator op : call.getChildren()) {
-                if (op.isConstantNull()) {
-                    return ConstantOperator.createNull(call.getType());
-                }
-            }
-        }
-
         if (FunctionSet.IF.equalsIgnoreCase(call.getFnName())) {
             return ifCall(call);
         } else if (FunctionSet.IFNULL.equalsIgnoreCase(call.getFnName())) {
@@ -368,6 +366,35 @@ public class SimplifiedPredicateRule extends BottomUpScalarOperatorRewriteRule {
             return simplifiedDateTrunc(call);
         }
         return call;
+    }
+
+    @Override
+    public ScalarOperator visitLikePredicateOperator(LikePredicateOperator predicate,
+                                                     ScalarOperatorRewriteContext context) {
+        // make sure is like, not regexp
+        if (predicate.getLikeType() != LikePredicateOperator.LikeType.LIKE) {
+            return predicate;
+        }
+
+        ScalarOperator rightOp = predicate.getChild(1);
+
+        // make sure is constant column ref
+        if (!rightOp.isConstantRef()) {
+            return predicate;
+        }
+
+        // make sure is string literal
+        if (rightOp.getType() != Type.VARCHAR && rightOp.getType() != Type.CHAR) {
+            return predicate;
+        }
+
+        // make sure it didn't contain '%' and '_' both
+        String likeString =  ((ConstantOperator) predicate.getChild(1)).getVarchar();
+        if (likeString.contains("%") || likeString.contains("_")) {
+            return predicate;
+        }
+
+        return new BinaryPredicateOperator(BinaryType.EQ, predicate.getChild(0), rightOp);
     }
 
     // reduce `date_sub(date_add(x, 1), 2)` -> `date_sub(x, 1)`

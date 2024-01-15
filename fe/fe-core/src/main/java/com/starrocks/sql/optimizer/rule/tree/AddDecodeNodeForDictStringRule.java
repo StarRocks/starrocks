@@ -883,7 +883,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
-        if (!ConnectContext.get().getSessionVariable().isEnableLowCardinalityOptimize()) {
+        if (!ConnectContext.get().getSessionVariable().isEnableLowCardinalityOptimize()
+                || taskContext.getOptimizerContext().getSessionVariable().isUseLowCardinalityOptimizeV2()) {
             return root;
         }
 
@@ -971,7 +972,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
         LogicalProperty decodeProperty = new LogicalProperty(childExpr.get(0).getLogicalProperty());
         result.setLogicalProperty(
-                DecodeVisitor.rewriteLogicProperty(decodeProperty, decodeOperator.getDictToStrings()));
+                DecodeVisitor.rewriteLogicProperty(decodeProperty, decodeOperator.getDictIdToStringsId()));
         context.clear();
         return result;
     }

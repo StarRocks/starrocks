@@ -70,6 +70,7 @@ size_t ArrayColumn::byte_size(size_t idx) const {
 }
 
 void ArrayColumn::reserve(size_t n) {
+    _elements->reserve(n);
     _offsets->reserve(n + 1);
 }
 
@@ -125,7 +126,7 @@ void ArrayColumn::append_selective(const Column& src, const uint32_t* indexes, u
 }
 
 // TODO(fzh): directly copy elements for un-nested arrays
-void ArrayColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) {
+void ArrayColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     for (uint32_t i = 0; i < size; i++) {
         append(src, index, 1);
     }

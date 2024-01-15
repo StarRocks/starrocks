@@ -14,7 +14,6 @@
 
 package com.starrocks.paimon.reader;
 
-import com.google.common.base.Strings;
 import com.starrocks.jni.connector.ColumnType;
 import com.starrocks.jni.connector.ColumnValue;
 import com.starrocks.jni.connector.ConnectorScanner;
@@ -22,12 +21,7 @@ import com.starrocks.jni.connector.SelectedFields;
 import com.starrocks.utils.loader.ThreadContextClassLoader;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.paimon.catalog.Catalog;
-import org.apache.paimon.catalog.CatalogContext;
-import org.apache.paimon.catalog.CatalogFactory;
-import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.InternalRow;
-import org.apache.paimon.options.Options;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
@@ -35,33 +29,21 @@ import org.apache.paimon.table.Table;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.types.DataType;
-import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.InternalRowUtils;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.apache.paimon.options.CatalogOptions.METASTORE;
-import static org.apache.paimon.options.CatalogOptions.URI;
-import static org.apache.paimon.options.CatalogOptions.WAREHOUSE;
 
 public class PaimonSplitScanner extends ConnectorScanner {
 
     private static final Logger LOG = LogManager.getLogger(PaimonSplitScanner.class);
-
-    private final String catalogType;
-    private final String metastoreUri;
-    private final String warehousePath;
-    private final String databaseName;
-    private final String tableName;
     private final String splitInfo;
     private final String predicateInfo;
-    private final Map<String, String> optionInfo = new HashMap<>();
     private final String[] requiredFields;
+    private final String encodedTable;
     private ColumnType[] requiredTypes;
     private DataType[] logicalTypes;
     private Table table;
@@ -70,50 +52,17 @@ public class PaimonSplitScanner extends ConnectorScanner {
     private final ClassLoader classLoader;
     private final String[] nestedFields;
 
+    private String timeZone;
+
     public PaimonSplitScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
-        this.catalogType = params.get("catalog_type");
-        this.metastoreUri = params.get("metastore_uri");
-        this.warehousePath = params.get("warehouse_path");
-        this.databaseName = params.get("database_name");
-        this.tableName = params.get("table_name");
         this.requiredFields = params.get("required_fields").split(",");
         this.nestedFields = params.getOrDefault("nested_fields", "").split(",");
         this.splitInfo = params.get("split_info");
         this.predicateInfo = params.get("predicate_info");
-
-        String[] optionList = params.get("option_info").split(",");
-        for (String option : optionList) {
-            String[] kv = option.split("=");
-            if (kv.length == 2) {
-                optionInfo.put(kv[0], kv[1]);
-            } else {
-                LOG.warn("Invalid paimon option argument: " + option);
-            }
-        }
-
+        this.encodedTable = params.get("native_table");
         this.classLoader = this.getClass().getClassLoader();
-    }
-
-    private void initTable() throws IOException {
-        Options options = new Options();
-        options.setString(METASTORE.key(), catalogType);
-        options.setString(WAREHOUSE.key(), warehousePath);
-        if (!Strings.isNullOrEmpty(metastoreUri)) {
-            options.setString(URI.key(), metastoreUri);
-        }
-        for (Map.Entry<String, String> entry : this.optionInfo.entrySet()) {
-            options.set(entry.getKey(), entry.getValue());
-        }
-        Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(options));
-        Identifier identifier = new Identifier(databaseName, tableName);
-        try {
-            this.table = catalog.getTable(identifier);
-        } catch (Catalog.TableNotExistException e) {
-            String msg = "Failed to init the paimon table.";
-            LOG.error(msg, e);
-            throw new IOException(msg, e);
-        }
+        this.timeZone = params.get("time_zone");
     }
 
     private void parseRequiredTypes() {
@@ -129,9 +78,6 @@ public class PaimonSplitScanner extends ConnectorScanner {
             DataType dataType = table.rowType().getTypeAt(index);
             String type = PaimonTypeUtils.fromPaimonType(dataType);
             requiredTypes[i] = new ColumnType(type);
-            if (dataType instanceof DecimalType) {
-                requiredTypes[i].setScale(((DecimalType) dataType).getScale());
-            }
             logicalTypes[i] = dataType;
         }
 
@@ -148,25 +94,22 @@ public class PaimonSplitScanner extends ConnectorScanner {
     }
 
     private void initReader() throws IOException {
-
         ReadBuilder readBuilder = table.newReadBuilder();
         RowType rowType = table.rowType();
         List<String> fieldNames = PaimonScannerUtils.fieldNames(rowType);
-        if (requiredFields.length < fieldNames.size()) {
-            int[] projected = Arrays.stream(requiredFields).mapToInt(fieldNames::indexOf).toArray();
-            readBuilder.withProjection(projected);
-        }
+        int[] projected = Arrays.stream(requiredFields).mapToInt(fieldNames::indexOf).toArray();
+        readBuilder.withProjection(projected);
         List<Predicate> predicates = PaimonScannerUtils.decodeStringToObject(predicateInfo);
         readBuilder.withFilter(predicates);
         Split split = PaimonScannerUtils.decodeStringToObject(splitInfo);
-        RecordReader<InternalRow> reader = readBuilder.newRead().createReader(split);
+        RecordReader<InternalRow> reader = readBuilder.newRead().executeFilter().createReader(split);
         iterator = new RecordReaderIterator<>(reader);
     }
 
     @Override
     public void open() throws IOException {
         try (ThreadContextClassLoader ignored = new ThreadContextClassLoader(classLoader)) {
-            initTable();
+            table = PaimonScannerUtils.decodeStringToObject(encodedTable);
             parseRequiredTypes();
             initOffHeapTableWriter(requiredTypes, requiredFields, fetchSize);
             initReader();
@@ -205,7 +148,7 @@ public class PaimonSplitScanner extends ConnectorScanner {
                     if (fieldData == null) {
                         appendData(i, null);
                     } else {
-                        ColumnValue fieldValue = new PaimonColumnValue(fieldData, logicalTypes[i]);
+                        ColumnValue fieldValue = new PaimonColumnValue(fieldData, logicalTypes[i], timeZone);
                         appendData(i, fieldValue);
                     }
                 }
@@ -223,21 +166,6 @@ public class PaimonSplitScanner extends ConnectorScanner {
 
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("catalogType: ");
-        sb.append(catalogType);
-        sb.append("\n");
-        sb.append("metastoreUri: ");
-        sb.append(metastoreUri);
-        sb.append("\n");
-        sb.append("warehousePath: ");
-        sb.append(warehousePath);
-        sb.append("\n");
-        sb.append("databaseName: ");
-        sb.append(databaseName);
-        sb.append("\n");
-        sb.append("tableName: ");
-        sb.append(tableName);
-        sb.append("\n");
         sb.append("splitInfo: ");
         sb.append(splitInfo);
         sb.append("\n");

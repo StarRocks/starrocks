@@ -42,9 +42,16 @@ public:
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
+    void peek_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
+    void default_data_source_mem_bytes(int64_t* min_value, int64_t* max_value) override;
+
+    friend class HiveDataSource;
+
 protected:
     ConnectorScanNode* _scan_node;
     const THdfsScanNode _hdfs_scan_node;
+    int64_t _max_file_length = 0;
+    std::atomic<int32_t> _lazy_column_coalesce_counter = 0;
 };
 
 class HiveDataSource final : public DataSource {
@@ -58,7 +65,7 @@ public:
     Status get_next(RuntimeState* state, ChunkPtr* chunk) override;
     const std::string get_custom_coredump_msg() const override;
     std::atomic<int32_t>* get_lazy_column_coalesce_counter() {
-        return _provider->_scan_node->get_lazy_column_coalesce_counter();
+        return &(const_cast<HiveDataSourceProvider*>(_provider)->_lazy_column_coalesce_counter);
     }
     int32_t scan_range_indicate_const_column_index(SlotId id) const;
 
@@ -68,6 +75,7 @@ public:
     int64_t cpu_time_spent() const override;
     int64_t io_time_spent() const override;
     int64_t estimated_mem_usage() const override;
+    bool can_estimate_mem_usage() const override { return true; }
 
 private:
     const HiveDataSourceProvider* _provider;
@@ -79,11 +87,15 @@ private:
     Status _decompose_conjunct_ctxs(RuntimeState* state);
     void _init_tuples_and_slots(RuntimeState* state);
     void _init_counter(RuntimeState* state);
+    void _init_rf_counters();
 
     Status _init_partition_values();
     Status _init_scanner(RuntimeState* state);
-    HdfsScanner* _create_hudi_jni_scanner();
-    HdfsScanner* _create_paimon_jni_scanner(FSOptions& options);
+    HdfsScanner* _create_hudi_jni_scanner(const FSOptions& options);
+    HdfsScanner* _create_paimon_jni_scanner(const FSOptions& options);
+    // for hiveTable/fileTable with avro/rcfile/sequence format
+    HdfsScanner* _create_hive_jni_scanner(const FSOptions& options);
+    HdfsScanner* _create_odps_jni_scanner(const FSOptions& options);
     Status _check_all_slots_nullable();
 
     // =====================================
@@ -92,6 +104,8 @@ private:
     HdfsScanner* _scanner = nullptr;
     bool _use_datacache = false;
     bool _enable_populate_datacache = false;
+    bool _enable_dynamic_prune_scan_range = true;
+    bool _use_file_metacache = false;
 
     // ============ conjuncts =================
     std::vector<ExprContext*> _min_max_conjunct_ctxs;
@@ -125,6 +139,9 @@ private:
 
     // partition columns.
     std::vector<SlotDescriptor*> _partition_slots;
+
+    // iceberg equality delete column slots.
+    std::vector<SlotDescriptor*> _equality_delete_slots;
 
     // partition column index in `tuple_desc`
     std::vector<int> _partition_index_in_chunk;

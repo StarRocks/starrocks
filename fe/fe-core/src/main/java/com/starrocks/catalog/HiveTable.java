@@ -54,9 +54,12 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveStorageFormat;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -84,6 +87,23 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResource
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 public class HiveTable extends Table implements HiveMetaStoreTable {
+    public enum HiveTableType {
+        VIRTUAL_VIEW,
+        EXTERNAL_TABLE,
+        MANAGED_TABLE,
+        MATERIALIZED_VIEW,
+        UNKNOWN;
+
+        public static HiveTableType fromString(String hiveTableType) {
+            for (HiveTableType type : HiveTableType.values()) {
+                if (type.name().equalsIgnoreCase(hiveTableType)) {
+                    return type;
+                }
+            }
+            return UNKNOWN;
+        }
+    }
+
     private static final Logger LOG = LogManager.getLogger(HiveTable.class);
 
     private static final String JSON_KEY_HIVE_DB = "hiveDb";
@@ -93,7 +113,16 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     private static final String JSON_KEY_PART_COLUMN_NAMES = "partColumnNames";
     private static final String JSON_KEY_DATA_COLUMN_NAMES = "dataColumnNames";
     private static final String JSON_KEY_HIVE_PROPERTIES = "hiveProperties";
+
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
+
+    public static final String HIVE_TABLE_SERDE_LIB = "hive.table.serde.lib";
+
+    public static final String HIVE_TABLE_INPUT_FORMAT = "hive.table.input.format";
+
+    public static final String HIVE_TABLE_COLUMN_NAMES = "hive.table.column.names";
+
+    public static final String HIVE_TABLE_COLUMN_TYPES = "hive.table.column.types";
 
     private String catalogName;
     @SerializedName(value = "dn")
@@ -112,6 +141,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     private List<String> dataColumnNames = Lists.newArrayList();
     @SerializedName(value = "prop")
     private Map<String, String> hiveProperties = Maps.newHashMap();
+    @SerializedName(value = "sp")
+    private Map<String, String> serdeProperties = Maps.newHashMap();
 
     // For `insert into target_table select from hive_table, we set it to false when executing this kind of insert query.
     // 1. `useMetadataCache` is false means that this query need to list all selected partitions files from hdfs/s3.
@@ -119,6 +150,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     // 3. The most import point is that query result may be wrong with cached and expired partition files, causing insert data is wrong.
     // This error will happen when appending files to an existed partition on user side.
     private boolean useMetadataCache = true;
+
+    private HiveTableType hiveTableType = HiveTableType.MANAGED_TABLE;
 
     private HiveStorageFormat storageFormat;
 
@@ -129,7 +162,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public HiveTable(long id, String name, List<Column> fullSchema, String resourceName, String catalog,
                      String hiveDbName, String hiveTableName, String tableLocation, long createTime,
                      List<String> partColumnNames, List<String> dataColumnNames, Map<String, String> properties,
-                     HiveStorageFormat storageFormat) {
+                     Map<String, String> serdeProperties, HiveStorageFormat storageFormat, HiveTableType hiveTableType) {
         super(id, name, TableType.HIVE, fullSchema);
         this.resourceName = resourceName;
         this.catalogName = catalog;
@@ -140,7 +173,9 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         this.partColumnNames = partColumnNames;
         this.dataColumnNames = dataColumnNames;
         this.hiveProperties = properties;
+        this.serdeProperties = serdeProperties;
         this.storageFormat = storageFormat;
+        this.hiveTableType = hiveTableType;
     }
 
     public String getHiveDbTable() {
@@ -171,7 +206,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     public boolean isUseMetadataCache() {
-        if (ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableHiveMetadataCacheWithInsert()) {
+        if (ConnectContext.get() != null &&
+                ConnectContext.get().getSessionVariable().isEnableHiveMetadataCacheWithInsert()) {
             return true;
         } else {
             return useMetadataCache;
@@ -223,6 +259,10 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return Joiner.on(":").join(name, createTime);
     }
 
+    public HiveTableType getHiveTableType() {
+        return hiveTableType;
+    }
+
     @Override
     public Map<String, String> getProperties() {
         // The user may alter the resource properties
@@ -244,7 +284,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         ImmutableMap.Builder<String, Column> nameToColumnTemp = ImmutableMap.builder();
         ImmutableList.Builder<String> dataColumnNamesTemp = ImmutableList.builder();
 
-
         updatedTable.nameToColumn.forEach((colName, column) -> {
             Column baseColumn = nameToColumn.get(colName);
             if (baseColumn != null) {
@@ -260,8 +299,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         if (db == null) {
             throw new StarRocksConnectorException("Not found database " + dbName);
         }
-
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             this.fullSchema.clear();
             this.nameToColumn.clear();
@@ -276,7 +315,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                 GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColumn(log);
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -339,6 +378,13 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             tPartition.setLocation(tPartitionLocation);
             tHdfsTable.putToPartitions(partitionId, tPartition);
         }
+
+        tHdfsTable.setSerde_lib(hiveProperties.get(HIVE_TABLE_SERDE_LIB));
+        tHdfsTable.setInput_format(hiveProperties.get(HIVE_TABLE_INPUT_FORMAT));
+        tHdfsTable.setHive_column_names(hiveProperties.get(HIVE_TABLE_COLUMN_NAMES));
+        tHdfsTable.setHive_column_types(hiveProperties.get(HIVE_TABLE_COLUMN_TYPES));
+        tHdfsTable.setSerde_properties(serdeProperties);
+        tHdfsTable.setTime_zone(TimeUtils.getSessionTimeZone());
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.HDFS_TABLE, fullSchema.size(),
                 0, hiveTableName, hiveDbName);
@@ -514,7 +560,6 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                 Objects.equal(tableIdentifier, otherTable.getTableIdentifier());
     }
 
-
     public static Builder builder() {
         return new Builder();
     }
@@ -532,7 +577,9 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         private List<String> partitionColNames = Lists.newArrayList();
         private List<String> dataColNames = Lists.newArrayList();
         private Map<String, String> properties = Maps.newHashMap();
+        private Map<String, String> serdeProperties = Maps.newHashMap();
         private HiveStorageFormat storageFormat;
+        private HiveTableType hiveTableType = HiveTableType.MANAGED_TABLE;
 
         public Builder() {
         }
@@ -597,14 +644,25 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             return this;
         }
 
+        public Builder setSerdeProperties(Map<String, String> serdeProperties) {
+            this.serdeProperties = serdeProperties;
+            return this;
+        }
+
         public Builder setStorageFormat(HiveStorageFormat storageFormat) {
             this.storageFormat = storageFormat;
             return this;
         }
 
+        public Builder setHiveTableType(HiveTableType hiveTableType) {
+            this.hiveTableType = hiveTableType;
+            return this;
+        }
+
         public HiveTable build() {
             return new HiveTable(id, tableName, fullSchema, resourceName, catalogName, hiveDbName, hiveTableName,
-                    tableLocation, createTime, partitionColNames, dataColNames, properties, storageFormat);
+                    tableLocation, createTime, partitionColNames, dataColNames, properties, serdeProperties,
+                    storageFormat, hiveTableType);
         }
     }
 }

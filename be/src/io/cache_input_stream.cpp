@@ -37,12 +37,11 @@ CacheInputStream::CacheInputStream(const std::shared_ptr<SharedBufferedInputStre
           _sb_stream(stream),
           _offset(0),
           _size(size) {
-    // _cache_key = _filename;
-    // use hash(filename) as cache key.
     _cache = BlockCache::instance();
     _block_size = _cache->block_size();
 
     _cache_key.resize(12);
+
     char* data = _cache_key.data();
     uint64_t hash_value = HashUtil::hash64(filename.data(), filename.size(), 0);
     memcpy(data, &hash_value, sizeof(hash_value));
@@ -70,6 +69,9 @@ CacheInputStream::~CacheInputStream() {
 }
 
 Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bool can_zero_copy) {
+    if (UNLIKELY(size == 0)) {
+        return Status::OK();
+    }
     DCHECK(size <= _block_size);
     int64_t block_id = offset / _block_size;
 
@@ -89,14 +91,18 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
     int64_t shift = offset - block_offset;
 
     SharedBufferedInputStream::SharedBuffer* sb = nullptr;
-    auto ret = _sb_stream->find_shared_buffer(offset, size);
-    if (ret.ok()) {
-        sb = ret.value();
-        if (sb->buffer.capacity() > 0) {
-            strings::memcpy_inlined(out, sb->buffer.data() + offset - sb->offset, size);
-            _populate_cache_from_zero_copy_buffer((const char*)sb->buffer.data() + block_offset - sb->offset,
-                                                  block_offset, load_size);
-            return Status::OK();
+    if (_enable_block_buffer) {
+        auto ret = _sb_stream->find_shared_buffer(offset, size);
+        if (ret.ok()) {
+            sb = ret.value();
+            if (sb->buffer.capacity() > 0) {
+                strings::memcpy_inlined(out, sb->buffer.data() + offset - sb->offset, size);
+                if (_enable_populate_cache) {
+                    _populate_cache_from_zero_copy_buffer((const char*)sb->buffer.data() + block_offset - sb->offset,
+                                                          block_offset, load_size);
+                }
+                return Status::OK();
+            }
         }
     }
 
@@ -105,24 +111,34 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
     int64_t read_cache_ns = 0;
     BlockBuffer block;
     ReadCacheOptions options;
+    size_t read_size = 0;
     {
         SCOPED_RAW_TIMER(&read_cache_ns);
-        res = _cache->read_cache(_cache_key, block_offset, load_size, &block.buffer, &options);
+        if (_enable_block_buffer) {
+            res = _cache->read_buffer(_cache_key, block_offset, load_size, &block.buffer, &options);
+            read_size = load_size;
+        } else {
+            StatusOr<size_t> r = _cache->read_buffer(_cache_key, offset, size, out, &options);
+            res = r.status();
+            read_size = size;
+        }
     }
     if (res.ok()) {
-        block.buffer.copy_to(out, size, shift);
-        block.offset = block_offset;
-        _block_map[block_id] = block;
+        if (_enable_block_buffer) {
+            block.buffer.copy_to(out, size, shift);
+            block.offset = block_offset;
+            _block_map[block_id] = block;
+        }
+        _stats.read_cache_bytes += read_size;
         _stats.read_cache_count += 1;
-        _stats.read_cache_bytes += load_size;
         _stats.read_mem_cache_bytes += options.stats.read_mem_bytes;
         _stats.read_disk_cache_bytes += options.stats.read_disk_bytes;
         _stats.read_cache_ns += read_cache_ns;
-        _cache->record_read_cache(load_size, read_cache_ns / 1000);
+        _cache->record_read_cache(read_size, read_cache_ns / 1000);
         return Status::OK();
     } else if (res.is_resource_busy()) {
         _stats.skip_read_cache_count += 1;
-        _stats.skip_read_cache_bytes += load_size;
+        _stats.skip_read_cache_bytes += read_size;
     }
     if (!res.is_not_found() && !res.is_resource_busy()) return res;
 
@@ -153,7 +169,7 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
     if (_enable_populate_cache && res.is_not_found()) {
         SCOPED_RAW_TIMER(&_stats.write_cache_ns);
         WriteCacheOptions options;
-        Status r = _cache->write_cache(_cache_key, block_offset, load_size, src, &options);
+        Status r = _cache->write_buffer(_cache_key, block_offset, load_size, src, &options);
         if (r.ok()) {
             _stats.write_cache_count += 1;
             _stats.write_cache_bytes += load_size;
@@ -162,7 +178,7 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
         } else if (!r.is_already_exist()) {
             _stats.write_cache_fail_count += 1;
             _stats.write_cache_fail_bytes += load_size;
-            LOG(WARNING) << "write block cache failed, errmsg: " << r.get_error_msg();
+            LOG(WARNING) << "write block cache failed, errmsg: " << r.message();
             // Failed to write cache, but we can keep processing query.
         }
     }
@@ -170,7 +186,7 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
 }
 
 void CacheInputStream::_deduplicate_shared_buffer(SharedBufferedInputStream::SharedBuffer* sb) {
-    if (sb->size == 0) {
+    if (sb->size == 0 || _block_map.empty()) {
         return;
     }
     int64_t end_offset = sb->offset + sb->size;
@@ -212,11 +228,11 @@ Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count)
     int64_t end_offset = offset + count;
     int64_t start_block_id = offset / _block_size;
     int64_t end_block_id = (end_offset - 1) / _block_size;
-    bool can_zero_copy = p + _block_size < pe;
     for (int64_t i = start_block_id; i <= end_block_id; i++) {
         size_t off = std::max(offset, i * _block_size);
         size_t end = std::min((i + 1) * _block_size, end_offset);
         size_t size = end - off;
+        bool can_zero_copy = p + _block_size < pe;
         Status st = _read_block(off, size, p, can_zero_copy);
         if (!st.ok()) return st;
         offset += size;
@@ -236,8 +252,7 @@ StatusOr<int64_t> CacheInputStream::read(void* data, int64_t count) {
 Status CacheInputStream::seek(int64_t offset) {
     if (offset < 0 || offset >= _size) return Status::InvalidArgument(fmt::format("Invalid offset {}", offset));
     _offset = offset;
-    _sb_stream->seek(offset);
-    return Status::OK();
+    return _sb_stream->seek(offset);
 }
 
 StatusOr<int64_t> CacheInputStream::position() {
@@ -271,7 +286,7 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
         SCOPED_RAW_TIMER(&_stats.write_cache_ns);
         WriteCacheOptions options;
         options.overwrite = false;
-        Status r = cache->write_cache(_cache_key, offset, size, buf, &options);
+        Status r = cache->write_buffer(_cache_key, offset, size, buf, &options);
         if (r.ok()) {
             _stats.write_cache_count += 1;
             _stats.write_cache_bytes += size;
@@ -283,7 +298,7 @@ void CacheInputStream::_populate_cache_from_zero_copy_buffer(const char* p, int6
         } else if (!r.is_already_exist()) {
             _stats.write_cache_fail_count += 1;
             _stats.write_cache_fail_bytes += size;
-            LOG(WARNING) << "write block cache failed, errmsg: " << r.get_error_msg();
+            LOG(WARNING) << "write block cache failed, errmsg: " << r.message();
         }
     };
 

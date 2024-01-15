@@ -147,10 +147,10 @@ public class SelectStmtTest {
                 "[TPlanNode(node_id:0, node_type:OLAP_SCAN_NODE, num_children:0, limit:-1, row_tuples:[0], " +
                         "nullable_tuples:[false], conjuncts:[TExpr(nodes:[TExprNode(node_type:BINARY_PRED, " +
                         "type:TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:BOOLEAN))]), " +
-                        "opcode:EQ, num_children:2, output_scale:-1, vector_opcode:INVALID_OPCODE, child_type:BOOLEAN, " +
+                        "opcode:EQ, num_children:2, output_scale:-1, vector_opcode:INVALID_OPCODE, child_type:INT, " +
                         "has_nullable_child:true, is_nullable:true, is_monotonic:false)";
         String thrift = UtFrameUtils.getPlanThriftString(ctx, sql);
-        Assert.assertTrue(thrift.contains(expectString));
+        Assert.assertTrue(thrift, thrift.contains(expectString));
     }
 
     @Test
@@ -474,16 +474,16 @@ public class SelectStmtTest {
                 {"with t1 as (select count(distinct k1, k2) as a, count(distinct k3) as b from db1.tbl1 " +
                         "group by k2, k3, k4) select * from t1 limit 1",
                         "14:Project\n" +
-                                "  |  <slot 11> : 11: count\n" +
-                                "  |  <slot 12> : 12: count\n" +
+                                "  |  <slot 5> : 5: count\n" +
+                                "  |  <slot 6> : 6: count\n" +
                                 "  |  limit: 1\n" +
                                 "  |  \n" +
                                 "  13:HASH JOIN\n" +
                                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                                 "  |  colocate: false, reason: \n" +
-                                "  |  equal join conjunct: 14: k2 <=> 17: k2\n" +
-                                "  |  equal join conjunct: 15: k3 <=> 18: k3\n" +
-                                "  |  equal join conjunct: 16: k4 <=> 19: k4\n" +
+                                "  |  equal join conjunct: 8: k2 <=> 11: k2\n" +
+                                "  |  equal join conjunct: 9: k3 <=> 12: k3\n" +
+                                "  |  equal join conjunct: 10: k4 <=> 13: k4\n" +
                                 "  |  limit: 1"
                 }
         };

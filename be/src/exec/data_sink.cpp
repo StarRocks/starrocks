@@ -44,7 +44,9 @@
 #include "exec/tablet_sink.h"
 #include "exprs/expr.h"
 #include "gen_cpp/InternalService_types.h"
+#include "runtime/blackhole_table_sink.h"
 #include "runtime/data_stream_sender.h"
+#include "runtime/dictionary_cache_sink.h"
 #include "runtime/export_sink.h"
 #include "runtime/hive_table_sink.h"
 #include "runtime/iceberg_table_sink.h"
@@ -166,6 +168,20 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
             return Status::InternalError("Missing table function table sink");
         }
         *sink = std::make_unique<TableFunctionTableSink>(state->obj_pool(), output_exprs);
+        break;
+    }
+    case TDataSinkType::BLACKHOLE_TABLE_SINK: {
+        *sink = std::make_unique<BlackHoleTableSink>(state->obj_pool());
+        break;
+    }
+    case TDataSinkType::DICTIONARY_CACHE_SINK: {
+        if (!thrift_sink.__isset.dictionary_cache_sink) {
+            return Status::InternalError("Missing dictionary cache sink");
+        }
+        if (!state->enable_pipeline_engine()) {
+            return Status::InternalError("dictionary cache only support pipeline engine");
+        }
+        *sink = std::make_unique<DictionaryCacheSink>();
         break;
     }
 

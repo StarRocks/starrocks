@@ -67,6 +67,9 @@ public class ScalarFunction extends Function {
     private String prepareFnSymbol;
     @SerializedName(value = "closeFnSymbol")
     private String closeFnSymbol;
+    // isolated/shared
+    @SerializedName(value = "isolated")
+    private boolean isolationType = true;
 
     // Only used for serialization
     protected ScalarFunction() {
@@ -101,6 +104,7 @@ public class ScalarFunction extends Function {
         symbolName = other.symbolName;
         prepareFnSymbol = other.prepareFnSymbol;
         closeFnSymbol = other.closeFnSymbol;
+        isolationType = other.isolationType;
     }
 
     public static ScalarFunction createVectorizedBuiltin(long fid,
@@ -143,15 +147,25 @@ public class ScalarFunction extends Function {
             FunctionName name, Type[] args,
             Type returnType, boolean isVariadic,
             TFunctionBinaryType binaryType,
-            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol) {
+            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol, boolean isolationType) {
         ScalarFunction fn = new ScalarFunction(name, args, returnType, isVariadic);
         fn.setBinaryType(binaryType);
         fn.setUserVisible(true);
         fn.symbolName = symbol;
         fn.prepareFnSymbol = prepareFnSymbol;
         fn.closeFnSymbol = closeFnSymbol;
+        fn.setIsolationType(isolationType);
         fn.setLocation(new HdfsURI(objectFile));
         return fn;
+    }
+
+    public static ScalarFunction createUdf(
+            FunctionName name, Type[] args,
+            Type returnType, boolean isVariadic,
+            TFunctionBinaryType binaryType,
+            String objectFile, String symbol, String prepareFnSymbol, String closeFnSymbol) {
+        return createUdf(name, args, returnType, isVariadic, binaryType, objectFile,
+                symbol, prepareFnSymbol, closeFnSymbol, true);
     }
 
     public void setSymbolName(String s) {
@@ -176,6 +190,14 @@ public class ScalarFunction extends Function {
 
     public String getCloseFnSymbol() {
         return closeFnSymbol;
+    }
+
+    public boolean getIsolationType() {
+        return isolationType;
+    }
+
+    public void setIsolationType(boolean isolationType) {
+        this.isolationType = isolationType;
     }
 
     @Override
@@ -203,6 +225,7 @@ public class ScalarFunction extends Function {
             scalarFunction.setClose_fn_symbol(closeFnSymbol);
         }
         fn.setScalar_fn(scalarFunction);
+        fn.setIsolated(isolationType);
         return fn;
     }
 

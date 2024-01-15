@@ -42,6 +42,7 @@ public class WindowImplementationRule extends ImplementationRule {
                 logical.getAnalyticWindow(),
                 logical.getEnforceSortColumns(),
                 logical.isUseHashBasedPartition(),
+                logical.isSkewed(),
                 logical.getLimit(),
                 logical.getPredicate(),
                 logical.getProjection());

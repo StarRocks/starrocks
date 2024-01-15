@@ -100,9 +100,9 @@ public class ScanTest extends PlanTestBase {
 
         sql = "select 0 from baseall inner join t0 on v1 = k1 group by (v2 + k2),k1";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "0:OlapScanNode\n" +
+        assertContains(plan, "OlapScanNode\n" +
                 "     TABLE: baseall\n" +
-                "     PREAGGREGATION: OFF. Reason: Group columns isn't bound table baseall");
+                "     PREAGGREGATION: OFF. Reason: Has can not pre-aggregation Join");
     }
 
     @Test
@@ -335,13 +335,13 @@ public class ScanTest extends PlanTestBase {
 
     @Test
     public void testScalarReuseIsNull() throws Exception {
-        String sql =
+        String plan =
                 getFragmentPlan("SELECT (abs(1) IS NULL) = true AND ((abs(1) IS NULL) IS NOT NULL) as count FROM t1;");
-        Assert.assertTrue(sql.contains("1:Project\n"
-                + "  |  <slot 4> : (6: expr = TRUE) AND (6: expr IS NOT NULL)\n"
-                + "  |  common expressions:\n"
-                + "  |  <slot 5> : abs(1)\n"
-                + "  |  <slot 6> : 5: abs IS NULL"));
+        Assert.assertTrue(plan, plan.contains("1:Project\n" +
+                "  |  <slot 4> : (6: expr) AND (6: expr IS NOT NULL)\n" +
+                "  |  common expressions:\n" +
+                "  |  <slot 5> : abs(1)\n" +
+                "  |  <slot 6> : 5: abs IS NULL"));
     }
 
     @Test

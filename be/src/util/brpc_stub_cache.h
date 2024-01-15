@@ -38,6 +38,7 @@
 #include <mutex>
 #include <vector>
 
+#include "common/config.h"
 #include "common/statusor.h"
 #include "gen_cpp/Types_types.h" // TNetworkAddress
 #include "gen_cpp/doris_internal_service.pb.h"
@@ -65,7 +66,7 @@ public:
         }
     }
 
-    doris::PBackendService_Stub* get_stub(const butil::EndPoint& endpoint) {
+    PInternalService_Stub* get_stub(const butil::EndPoint& endpoint) {
         std::lock_guard<SpinLock> l(_lock);
         auto stub_pool = _stub_map.seek(endpoint);
         if (stub_pool == nullptr) {
@@ -76,39 +77,9 @@ public:
         return (*stub_pool)->get_or_create(endpoint);
     }
 
-    // rarely used, so create as needed
-    static StatusOr<std::unique_ptr<doris::PBackendService_Stub>> create_http_stub(const TNetworkAddress& taddr) {
-        butil::EndPoint endpoint;
-        std::string realhost;
-        realhost = taddr.hostname;
-        if (!is_valid_ip(taddr.hostname)) {
-            realhost = hostname_to_ip(taddr.hostname);
-            if (realhost == "") {
-                return Status::RuntimeError("failed to get ip from host " + taddr.hostname);
-            }
-        }
-        if (str2endpoint(realhost.c_str(), taddr.port, &endpoint)) {
-            return Status::RuntimeError("unknown endpoint, host = " + taddr.hostname);
-        }
-        // create
-        brpc::ChannelOptions options;
-        options.connect_timeout_ms = 3000;
-        options.protocol = "http";
-        // Explicitly set the max_retry
-        // TODO(meegoo): The retry strategy can be customized in the future
-        options.max_retry = 3;
-        std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
-        if (channel->Init(endpoint, &options)) {
-            return Status::RuntimeError("init brpc http channel error on " + taddr.hostname + ":" +
-                                        std::to_string(taddr.port));
-        }
-        return std::make_unique<doris::PBackendService_Stub>(channel.release(),
-                                                             google::protobuf::Service::STUB_OWNS_CHANNEL);
-    }
+    PInternalService_Stub* get_stub(const TNetworkAddress& taddr) { return get_stub(taddr.hostname, taddr.port); }
 
-    doris::PBackendService_Stub* get_stub(const TNetworkAddress& taddr) { return get_stub(taddr.hostname, taddr.port); }
-
-    doris::PBackendService_Stub* get_stub(const std::string& host, int port) {
+    PInternalService_Stub* get_stub(const std::string& host, int port) {
         butil::EndPoint endpoint;
         std::string realhost;
         realhost = host;
@@ -139,10 +110,10 @@ private:
             }
         }
 
-        doris::PBackendService_Stub* get_or_create(const butil::EndPoint& endpoint) {
+        PInternalService_Stub* get_or_create(const butil::EndPoint& endpoint) {
             if (UNLIKELY(_stubs.size() < config::brpc_max_connections_per_server)) {
                 brpc::ChannelOptions options;
-                options.connect_timeout_ms = 3000;
+                options.connect_timeout_ms = config::rpc_connect_timeout_ms;
                 // Explicitly set the max_retry
                 // TODO(meegoo): The retry strategy can be customized in the future
                 options.max_retry = 3;
@@ -154,8 +125,7 @@ private:
                 if (channel->Init(endpoint, &options)) {
                     return nullptr;
                 }
-                auto stub = new doris::PBackendService_Stub(channel.release(),
-                                                            google::protobuf::Service::STUB_OWNS_CHANNEL);
+                auto stub = new PInternalService_Stub(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
                 _stubs.push_back(stub);
                 return stub;
             }
@@ -165,12 +135,69 @@ private:
             return _stubs[_idx];
         }
 
-        std::vector<doris::PBackendService_Stub*> _stubs;
+        std::vector<PInternalService_Stub*> _stubs;
         int64_t _idx = -1;
     };
 
     SpinLock _lock;
     butil::FlatMap<butil::EndPoint, StubPool*> _stub_map;
+};
+
+class HttpBrpcStubCache {
+public:
+    static HttpBrpcStubCache* getInstance() {
+        static HttpBrpcStubCache cache;
+        return &cache;
+    }
+
+    StatusOr<PInternalService_Stub*> get_http_stub(const TNetworkAddress& taddr) {
+        butil::EndPoint endpoint;
+        std::string realhost;
+        realhost = taddr.hostname;
+        if (!is_valid_ip(taddr.hostname)) {
+            realhost = hostname_to_ip(taddr.hostname);
+            if (realhost == "") {
+                return Status::RuntimeError("failed to get ip from host " + taddr.hostname);
+            }
+        }
+        if (str2endpoint(realhost.c_str(), taddr.port, &endpoint)) {
+            return Status::RuntimeError("unknown endpoint, host = " + taddr.hostname);
+        }
+        // get is exist
+        std::lock_guard<SpinLock> l(_lock);
+        auto stub_ptr = _stub_map.seek(endpoint);
+        if (stub_ptr != nullptr) {
+            return *stub_ptr;
+        }
+        // create
+        brpc::ChannelOptions options;
+        options.connect_timeout_ms = config::rpc_connect_timeout_ms;
+        options.protocol = "http";
+        // Explicitly set the max_retry
+        // TODO(meegoo): The retry strategy can be customized in the future
+        options.max_retry = 3;
+        std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
+        if (channel->Init(endpoint, &options)) {
+            return Status::RuntimeError("init brpc http channel error on " + taddr.hostname + ":" +
+                                        std::to_string(taddr.port));
+        }
+        auto stub = new PInternalService_Stub(channel.release(), google::protobuf::Service::STUB_OWNS_CHANNEL);
+        _stub_map.insert(endpoint, stub);
+        return stub;
+    }
+
+private:
+    HttpBrpcStubCache() { _stub_map.init(500); }
+    ~HttpBrpcStubCache() {
+        for (auto& stub : _stub_map) {
+            delete stub.second;
+        }
+    }
+    HttpBrpcStubCache(const HttpBrpcStubCache& cache) = delete;
+    HttpBrpcStubCache& operator=(const HttpBrpcStubCache& cache) = delete;
+
+    SpinLock _lock;
+    butil::FlatMap<butil::EndPoint, PInternalService_Stub*> _stub_map;
 };
 
 } // namespace starrocks

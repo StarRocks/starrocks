@@ -37,6 +37,18 @@ public class AliyunCloudCredential implements CloudCredential {
         this.endpoint = endpoint;
     }
 
+    public String getAccessKey() {
+        return accessKey;
+    }
+
+    public String getSecretKey() {
+        return secretKey;
+    }
+
+    public String getEndpoint() {
+        return endpoint;
+    }
+
     @Override
     public void applyToConfiguration(Configuration configuration) {
         configuration.set("fs.oss.impl", "com.aliyun.jindodata.oss.JindoOssFileSystem");
@@ -57,6 +69,9 @@ public class AliyunCloudCredential implements CloudCredential {
         properties.put(CloudConfigurationConstants.AWS_S3_ACCESS_KEY, accessKey);
         properties.put(CloudConfigurationConstants.AWS_S3_SECRET_KEY, secretKey);
         properties.put(CloudConfigurationConstants.AWS_S3_ENDPOINT, endpoint);
+        properties.put(CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY, accessKey);
+        properties.put(CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY, secretKey);
+        properties.put(CloudConfigurationConstants.ALIYUN_OSS_ENDPOINT, endpoint);
     }
 
     @Override

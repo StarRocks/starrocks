@@ -17,21 +17,22 @@
 #include <butil/time.h>
 #include <bvar/bvar.h>
 
+#include <set>
 #include <string_view>
 #include <unordered_map>
 
 #include "common/config.h"
 #include "common/status.h"
 #include "fs/fs.h"
-#include "gutil/stl_util.h"
+#include "gutil/strings/util.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/meta_file.h"
+#include "storage/lake/metacache.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/update_manager.h"
-#include "storage/olap_common.h"
 #include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/raw_container.h"
@@ -67,10 +68,43 @@ static bvar::PassiveStatus<int> g_active_delete_file_tasks("lake_vacuum_active_d
                                                            get_num_active_file_queued_tasks, nullptr);
 namespace {
 
+const char* const kDuplicateFilesError =
+        "Duplicate files were returned from the remote storage. The most likely cause is an S3 or HDFS API "
+        "compatibility issue with your remote storage implementation.";
+
 std::future<Status> completed_future(Status value) {
     std::promise<Status> p;
     p.set_value(std::move(value));
     return p.get_future();
+}
+
+bool should_retry(const Status& st, int64_t attempted_retries) {
+    if (attempted_retries >= config::lake_vacuum_retry_max_attempts) {
+        return false;
+    }
+    if (st.is_resource_busy()) {
+        return true;
+    }
+    auto message = st.message();
+    return MatchPattern(message, config::lake_vacuum_retry_pattern);
+}
+
+int64_t calculate_retry_delay(int64_t attempted_retries) {
+    int64_t min_delay = config::lake_vacuum_retry_min_delay_ms;
+    return min_delay * (1 << attempted_retries);
+}
+
+Status delete_files_with_retry(FileSystem* fs, const std::vector<std::string>& paths) {
+    for (int64_t attempted_retries = 0; /**/; attempted_retries++) {
+        auto st = fs->delete_files(paths);
+        if (!st.ok() && should_retry(st, attempted_retries)) {
+            int64_t delay = calculate_retry_delay(attempted_retries);
+            LOG(WARNING) << "Fail to delete: " << st << " will retry after " << delay << "ms";
+            std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+        } else {
+            return st;
+        }
+    }
 }
 
 // Batch delete files with specified FileSystem object |fs|
@@ -91,54 +125,49 @@ Status do_delete_files(FileSystem* fs, const std::vector<std::string>& paths) {
     }
 
     auto t0 = butil::gettimeofday_us();
-    auto st = fs->delete_files(paths);
-    TEST_SYNC_POINT_CALLBACK("vacuum.delete_files", &st);
+    auto st = delete_files_with_retry(fs, paths);
     if (st.ok()) {
         auto t1 = butil::gettimeofday_us();
         g_del_file_latency << (t1 - t0);
         g_deleted_files << paths.size();
         VLOG(5) << "Deleted " << paths.size() << " files cost " << (t1 - t0) << "us";
     } else {
+        g_del_fails << 1;
         LOG(WARNING) << "Fail to delete: " << st;
     }
     return st;
 }
 
-// Batch delete with short circuit: delete files in paths2 only after all files in paths1 have been deleted successfully.
-Status delete_files2(const std::vector<std::string>& paths1, const std::vector<std::string>& paths2) {
-    RETURN_IF_ERROR(delete_files(paths1));
-    RETURN_IF_ERROR(delete_files(paths2));
-    return Status::OK();
-}
-
-// A Callable wrapper for delete_files2 that returns a future to the operation so that it can be executed in parallel to other requests
-std::future<Status> delete_files2_callable(std::vector<std::string> files1, std::vector<std::string> files2) {
-    auto task = std::make_shared<std::packaged_task<Status()>>(
-            [files1 = std::move(files1), files2 = std::move(files2)]() { return delete_files2(files1, files2); });
-    auto packaged_func = [task]() { (*task)(); };
-    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
-    if (auto st = tp->submit_func(std::move(packaged_func)); !st.ok()) {
-        return completed_future(std::move(st));
-    }
-    return task->get_future();
-}
-
+// AsyncFileDeleter
+// A class for asynchronously deleting files in batches.
+//
+// The AsyncFileDeleter class provides a mechanism to delete files in batches in an asynchronous manner.
+// It allows specifying the batch size, which determines the number of files to be deleted in each batch.
 class AsyncFileDeleter {
 public:
-    Status delete_files(std::vector<std::string> files) {
-        RETURN_IF_ERROR(wait());
-        _prev_task_status = delete_files_callable(std::move(files));
-        DCHECK(_prev_task_status.valid());
-        return Status::OK();
+    using DeleteCallback = std::function<void(const std::vector<std::string>&)>;
+
+    explicit AsyncFileDeleter(int64_t batch_size) : _batch_size(batch_size) {}
+    explicit AsyncFileDeleter(int64_t batch_size, DeleteCallback cb) : _batch_size(batch_size), _cb(std::move(cb)) {}
+
+    Status delete_file(std::string path) {
+        _batch.emplace_back(std::move(path));
+        if (_batch.size() < _batch_size) {
+            return Status::OK();
+        }
+        return submit(&_batch);
     }
 
-    Status delete_files2(std::vector<std::string> files1, std::vector<std::string> files2) {
-        RETURN_IF_ERROR(wait());
-        _prev_task_status = delete_files2_callable(std::move(files1), std::move(files2));
-        DCHECK(_prev_task_status.valid());
-        return Status::OK();
+    Status finish() {
+        if (!_batch.empty()) {
+            RETURN_IF_ERROR(submit(&_batch));
+        }
+        return wait();
     }
 
+    int64_t delete_count() const { return _delete_count; }
+
+private:
     // Wait for all submitted deletion tasks to finish and return task execution results.
     Status wait() {
         if (_prev_task_status.valid()) {
@@ -148,8 +177,24 @@ public:
         }
     }
 
-private:
+    Status submit(std::vector<std::string>* files_to_delete) {
+        // Await previous task completion before submitting a new deletion.
+        RETURN_IF_ERROR(wait());
+        _delete_count += files_to_delete->size();
+        if (_cb) {
+            _cb(*files_to_delete);
+        }
+        _prev_task_status = delete_files_callable(std::move(*files_to_delete));
+        files_to_delete->clear();
+        DCHECK(_prev_task_status.valid());
+        return Status::OK();
+    }
+
+    int64_t _batch_size;
+    int64_t _delete_count = 0;
+    std::vector<std::string> _batch;
     std::future<Status> _prev_task_status;
+    DeleteCallback _cb;
 };
 
 } // namespace
@@ -188,24 +233,31 @@ std::future<Status> delete_files_callable(std::vector<std::string> files_to_dele
     return task->get_future();
 }
 
-static void collect_garbage_files(const TabletMetadataPB& metadata, const std::string& base_dir,
-                                  std::vector<std::string>* garbage_files, int64_t* garbage_data_size) {
+void run_clear_task_async(std::function<void()> task) {
+    auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
+    auto st = tp->submit_func(std::move(task));
+    LOG_IF(ERROR, !st.ok()) << st;
+}
+
+static Status collect_garbage_files(const TabletMetadataPB& metadata, const std::string& base_dir,
+                                    AsyncFileDeleter* deleter, int64_t* garbage_data_size) {
     for (const auto& rowset : metadata.compaction_inputs()) {
         for (const auto& segment : rowset.segments()) {
-            garbage_files->emplace_back(join_path(base_dir, segment));
+            RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, segment)));
         }
         *garbage_data_size += rowset.data_size();
     }
     for (const auto& file : metadata.orphan_files()) {
-        garbage_files->emplace_back(join_path(base_dir, file.name()));
+        RETURN_IF_ERROR(deleter->delete_file(join_path(base_dir, file.name())));
         *garbage_data_size += file.size();
     }
+    return Status::OK();
 }
 
 static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_view root_dir, int64_t tablet_id,
                                       int64_t grace_timestamp, int64_t min_retain_version,
-                                      std::vector<std::string>* datafiles_to_vacuum,
-                                      std::vector<std::string>* metafiles_to_vacuum, int64_t* total_datafile_size) {
+                                      AsyncFileDeleter* datafile_deleter, AsyncFileDeleter* metafile_deleter,
+                                      int64_t* total_datafile_size) {
     auto t0 = butil::gettimeofday_ms();
     auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
@@ -228,7 +280,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
             auto metadata = std::move(res).value();
             if (skip_check_grace_timestamp) {
                 DCHECK_LE(version, final_retain_version);
-                collect_garbage_files(*metadata, data_dir, datafiles_to_vacuum, total_datafile_size);
+                RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, datafile_deleter, total_datafile_size));
             } else {
                 int64_t compare_time = 0;
                 if (metadata->has_commit_time() && metadata->commit_time() > 0) {
@@ -255,7 +307,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
                     skip_check_grace_timestamp = true;
 
                     // The metadata will be retained, but garbage files recorded in it can be deleted.
-                    collect_garbage_files(*metadata, data_dir, datafiles_to_vacuum, total_datafile_size);
+                    RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, datafile_deleter, total_datafile_size));
                 } else {
                     DCHECK_LE(version, final_retain_version);
                     final_retain_version = version;
@@ -275,7 +327,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     }
     DCHECK_LE(version, final_retain_version);
     for (auto v = version + 1; v < final_retain_version; v++) {
-        metafiles_to_vacuum->emplace_back(join_path(meta_dir, tablet_metadata_filename(tablet_id, v)));
+        RETURN_IF_ERROR(metafile_deleter->delete_file(join_path(meta_dir, tablet_metadata_filename(tablet_id, v))));
     }
     return Status::OK();
 }
@@ -300,69 +352,55 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     DCHECK(vacuumed_files != nullptr);
     DCHECK(vacuumed_file_size != nullptr);
 
-    AsyncFileDeleter async_deleter;
-    int64_t min_batch_delete_size = config::lake_vacuum_min_batch_delete_size;
-    std::vector<std::string> datafiles_to_vacuum;
-    std::vector<std::string> metafiles_to_vacuum;
-    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_dir));
+    auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
+        erase_tablet_metadata_from_metacache(tablet_mgr, files);
+    };
+
     for (auto tablet_id : tablet_ids) {
+        AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
+        AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
         RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_id, grace_timestamp, min_retain_version,
-                                                &datafiles_to_vacuum, &metafiles_to_vacuum, vacuumed_file_size));
-        if (datafiles_to_vacuum.size() < min_batch_delete_size && metafiles_to_vacuum.size() < min_batch_delete_size) {
-            continue;
-        }
-        (*vacuumed_files) += (datafiles_to_vacuum.size() + metafiles_to_vacuum.size());
-        erase_tablet_metadata_from_metacache(tablet_mgr, metafiles_to_vacuum);
-        RETURN_IF_ERROR(async_deleter.delete_files2(std::move(datafiles_to_vacuum), std::move(metafiles_to_vacuum)));
-        datafiles_to_vacuum.clear();
-        metafiles_to_vacuum.clear();
+                                                &datafile_deleter, &metafile_deleter, vacuumed_file_size));
+        RETURN_IF_ERROR(datafile_deleter.finish());
+        RETURN_IF_ERROR(metafile_deleter.finish());
+        (*vacuumed_files) += datafile_deleter.delete_count();
+        (*vacuumed_files) += metafile_deleter.delete_count();
     }
-    if (!datafiles_to_vacuum.empty() || !metafiles_to_vacuum.empty()) {
-        (*vacuumed_files) += (datafiles_to_vacuum.size() + metafiles_to_vacuum.size());
-        erase_tablet_metadata_from_metacache(tablet_mgr, metafiles_to_vacuum);
-        RETURN_IF_ERROR(async_deleter.delete_files2(std::move(datafiles_to_vacuum), std::move(metafiles_to_vacuum)));
-    }
-    return async_deleter.wait();
+    return Status::OK();
 }
 
 static Status vacuum_txn_log(std::string_view root_location, int64_t min_active_txn_id, int64_t* vacuumed_files,
                              int64_t* vacuumed_file_size) {
-    auto t0 = butil::gettimeofday_s();
     DCHECK(vacuumed_files != nullptr);
     DCHECK(vacuumed_file_size != nullptr);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
-    std::vector<std::string> files_to_vacuum;
-    AsyncFileDeleter async_deleter;
+    auto t0 = butil::gettimeofday_s();
+    auto deleter = AsyncFileDeleter(config::lake_vacuum_min_batch_delete_size);
     auto ret = Status::OK();
-    auto batch_size = config::lake_vacuum_min_batch_delete_size;
     auto log_dir = join_path(root_location, kTxnLogDirectoryName);
     auto iter_st = ignore_not_found(fs->iterate_dir2(log_dir, [&](DirEntry entry) {
-        if (!is_txn_log(entry.name)) {
-            return true;
-        }
-        auto [tablet_id, txn_id] = parse_txn_log_filename(entry.name);
-        if (txn_id >= min_active_txn_id) {
+        if (is_txn_log(entry.name)) {
+            auto [tablet_id, txn_id] = parse_txn_log_filename(entry.name);
+            if (txn_id >= min_active_txn_id) {
+                return true;
+            }
+        } else if (is_txn_slog(entry.name)) {
+            auto [tablet_id, txn_id] = parse_txn_slog_filename(entry.name);
+            if (txn_id >= min_active_txn_id) {
+                return true;
+            }
+        } else {
             return true;
         }
 
-        files_to_vacuum.emplace_back(join_path(log_dir, entry.name));
         *vacuumed_files += 1;
         *vacuumed_file_size += entry.size.value_or(0);
 
-        if (files_to_vacuum.size() >= batch_size) {
-            auto st = async_deleter.delete_files(std::move(files_to_vacuum));
-            files_to_vacuum.clear();
-            ret.update(st);
-            return st.ok(); // Stop list if delete failed
-        }
-        return true;
+        ret.update(deleter.delete_file(join_path(log_dir, entry.name)));
+        return ret.ok(); // Stop list if delete failed
     }));
     ret.update(iter_st);
-
-    if (!files_to_vacuum.empty()) {
-        ret.update(async_deleter.delete_files(std::move(files_to_vacuum)));
-    }
-    ret.update(async_deleter.wait());
+    ret.update(deleter.finish());
 
     auto t1 = butil::gettimeofday_s();
     g_vacuum_txnlog_latency << (t1 - t0);
@@ -427,19 +465,23 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
 
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_dir));
 
-    std::unordered_map<int64_t, std::vector<int64_t>> tablet_versions;
+    std::unordered_map<int64_t, std::set<int64_t>> tablet_versions;
     //                 ^^^^^^^ tablet id
-    //                                     ^^^^^^^^^ version number
+    //                                  ^^^^^^^^^ version number
 
     auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
     auto log_dir = join_path(root_dir, kTxnLogDirectoryName);
 
-    AsyncFileDeleter async_deleter;
-    std::vector<std::string> txn_logs;
+    std::set<std::string> txn_logs;
     RETURN_IF_ERROR(ignore_not_found(fs->iterate_dir(log_dir, [&](std::string_view name) {
         if (is_txn_log(name)) {
             auto [tablet_id, txn_id] = parse_txn_log_filename(name);
+            if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
+                return true;
+            }
+        } else if (is_txn_slog(name)) {
+            auto [tablet_id, txn_id] = parse_txn_slog_filename(name);
             if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
                 return true;
             }
@@ -452,12 +494,13 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             return true;
         }
 
-        txn_logs.emplace_back(name);
+        auto [_, inserted] = txn_logs.emplace(name);
+        LOG_IF(FATAL, !inserted) << kDuplicateFilesError << " duplicate file:" << join_path(log_dir, name);
 
         return true;
     })));
 
-    std::vector<std::string> files_to_vacuum;
+    AsyncFileDeleter deleter(config::lake_vacuum_min_batch_delete_size);
     for (const auto& log_name : txn_logs) {
         auto res = tablet_mgr->get_txn_log(join_path(log_dir, log_name), false);
         if (res.status().is_not_found()) {
@@ -469,31 +512,29 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
             if (log->has_op_write()) {
                 const auto& op = log->op_write();
                 for (const auto& segment : op.rowset().segments()) {
-                    files_to_vacuum.emplace_back(join_path(data_dir, segment));
+                    RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment)));
                 }
                 for (const auto& f : op.dels()) {
-                    files_to_vacuum.emplace_back((join_path(data_dir, f)));
+                    RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f)));
                 }
             }
             if (log->has_op_compaction()) {
                 const auto& op = log->op_compaction();
                 for (const auto& segment : op.output_rowset().segments()) {
-                    files_to_vacuum.emplace_back((join_path(data_dir, segment)));
+                    RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment)));
                 }
             }
             if (log->has_op_schema_change()) {
                 const auto& op = log->op_schema_change();
                 for (const auto& rowset : op.rowsets()) {
                     for (const auto& segment : rowset.segments()) {
-                        files_to_vacuum.emplace_back((join_path(data_dir, segment)));
+                        RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment)));
                     }
                 }
             }
-            files_to_vacuum.emplace_back((join_path(log_dir, log_name)));
+            RETURN_IF_ERROR(deleter.delete_file(join_path(log_dir, log_name)));
         }
     }
-    RETURN_IF_ERROR(async_deleter.delete_files(std::move(files_to_vacuum)));
-    files_to_vacuum.clear();
 
     RETURN_IF_ERROR(ignore_not_found(fs->iterate_dir(meta_dir, [&](std::string_view name) {
         if (!is_tablet_metadata(name)) {
@@ -503,18 +544,18 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         if (!std::binary_search(tablet_ids.begin(), tablet_ids.end(), tablet_id)) {
             return true;
         }
-        tablet_versions[tablet_id].emplace_back(version);
+        auto [_, inserted] = tablet_versions[tablet_id].insert(version);
+        LOG_IF(FATAL, !inserted) << kDuplicateFilesError << " duplicate file: " << join_path(meta_dir, name);
         return true;
     })));
 
     for (auto& [tablet_id, versions] : tablet_versions) {
         DCHECK(!versions.empty());
-        std::sort(versions.begin(), versions.end());
 
         TabletMetadataPtr latest_metadata = nullptr;
 
         // Find metadata files that has garbage data files and delete all those files
-        for (int64_t garbage_version = versions.back(); garbage_version >= versions[0]; /**/) {
+        for (int64_t garbage_version = *versions.rbegin(), min_v = *versions.begin(); garbage_version >= min_v; /**/) {
             auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, garbage_version));
             auto res = tablet_mgr->get_tablet_metadata(path, false);
             if (res.status().is_not_found()) {
@@ -528,7 +569,7 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                     latest_metadata = metadata;
                 }
                 int64_t dummy_file_size = 0;
-                collect_garbage_files(*metadata, data_dir, &files_to_vacuum, &dummy_file_size);
+                RETURN_IF_ERROR(collect_garbage_files(*metadata, data_dir, &deleter, &dummy_file_size));
                 if (metadata->has_prev_garbage_version()) {
                     garbage_version = metadata->prev_garbage_version();
                 } else {
@@ -536,31 +577,27 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
                 }
             }
         }
-        RETURN_IF_ERROR(async_deleter.delete_files(std::move(files_to_vacuum)));
-        files_to_vacuum.clear();
 
         if (latest_metadata != nullptr) {
             for (const auto& rowset : latest_metadata->rowsets()) {
                 for (const auto& segment : rowset.segments()) {
-                    files_to_vacuum.emplace_back(join_path(data_dir, segment));
+                    RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, segment)));
                 }
             }
             if (latest_metadata->has_delvec_meta()) {
                 for (const auto& [v, f] : latest_metadata->delvec_meta().version_to_file()) {
-                    files_to_vacuum.emplace_back(join_path(data_dir, f.name()));
+                    RETURN_IF_ERROR(deleter.delete_file(join_path(data_dir, f.name())));
                 }
             }
         }
 
         for (auto version : versions) {
             auto path = join_path(meta_dir, tablet_metadata_filename(tablet_id, version));
-            files_to_vacuum.emplace_back(std::move(path));
+            RETURN_IF_ERROR(deleter.delete_file(std::move(path)));
         }
-        RETURN_IF_ERROR(async_deleter.delete_files(std::move(files_to_vacuum)));
-        files_to_vacuum.clear();
     }
 
-    return async_deleter.wait();
+    return deleter.finish();
 }
 
 void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& request, DeleteTabletResponse* response) {
@@ -572,6 +609,26 @@ void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& reques
     auto root_dir = tablet_mgr->tablet_root_location(tablet_ids[0]);
     auto st = delete_tablets_impl(tablet_mgr, root_dir, tablet_ids);
     st.to_protobuf(response->mutable_status());
+}
+
+void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& request, DeleteTxnLogResponse* response) {
+    DCHECK(tablet_mgr != nullptr);
+    DCHECK(request.tablet_ids_size() > 0);
+    DCHECK(response != nullptr);
+
+    std::vector<std::string> files_to_delete;
+    files_to_delete.reserve(request.tablet_ids_size() * request.txn_ids_size());
+
+    for (auto tablet_id : request.tablet_ids()) {
+        for (auto txn_id : request.txn_ids()) {
+            auto log_path = tablet_mgr->txn_log_location(tablet_id, txn_id);
+            files_to_delete.emplace_back(log_path);
+
+            tablet_mgr->metacache()->erase(log_path);
+        }
+    }
+
+    delete_files_async(files_to_delete);
 }
 
 } // namespace starrocks::lake

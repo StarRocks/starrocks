@@ -33,6 +33,31 @@ class Tablet;
 class Schema;
 class Column;
 
+class TabletLoader {
+public:
+    virtual ~TabletLoader() = default;
+    virtual starrocks::Schema generate_pkey_schema() = 0;
+    virtual DataDir* data_dir() = 0;
+    virtual TTabletId tablet_id() = 0;
+    // return latest applied (publish in cloud native) version
+    virtual StatusOr<EditVersion> applied_version() = 0;
+    // Do some special setting if need
+    virtual void setting() = 0;
+    // iterator all rowset and get their iterator and basic stat
+    virtual Status rowset_iterator(
+            const Schema& pkey_schema,
+            const std::function<Status(const std::vector<ChunkIteratorPtr>&, uint32_t)>& handler) = 0;
+
+    size_t total_data_size() const { return _total_data_size; }
+    size_t total_segments() const { return _total_segments; }
+    size_t rowset_num() const { return _rowset_num; };
+
+protected:
+    size_t _total_data_size = 0;
+    size_t _total_segments = 0;
+    size_t _rowset_num = 0;
+};
+
 namespace lake {
 class LakeLocalPersistentIndex;
 }
@@ -43,7 +68,8 @@ enum PersistentIndexFileVersion {
     PERSISTENT_INDEX_VERSION_UNKNOWN = 0,
     PERSISTENT_INDEX_VERSION_1,
     PERSISTENT_INDEX_VERSION_2,
-    PERSISTENT_INDEX_VERSION_3
+    PERSISTENT_INDEX_VERSION_3,
+    PERSISTENT_INDEX_VERSION_4
 };
 
 static constexpr uint64_t NullIndexValue = -1;
@@ -195,7 +221,7 @@ public:
     virtual Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) = 0;
 
     virtual Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes,
-                              std::unique_ptr<WritableFile>& index_file, uint64_t* page_size) = 0;
+                              std::unique_ptr<WritableFile>& index_file, uint64_t* page_size, uint32_t* checksum) = 0;
 
     // load wals
     // |n|: size of key/value array
@@ -360,6 +386,8 @@ public:
 
     void clear();
 
+    Status create_index_file(std::string& path);
+
     static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size, const std::string& path);
 
 private:
@@ -373,6 +401,7 @@ private:
     uint32_t _fixed_key_size = -1;
     uint64_t _offset = 0;
     uint64_t _page_size = 0;
+    uint32_t _checksum = 0;
     std::string _path;
     std::unique_ptr<WritableFile> _index_file;
     std::shared_ptr<FileSystem> _fs;
@@ -535,12 +564,14 @@ private:
         uint32_t value_size;
         uint32_t nbucket;
         uint64_t data_size;
+        uint64_t uncompressed_size;
     };
 
     std::vector<ShardInfo> _shards;
     std::map<size_t, std::pair<size_t, size_t>> _shard_info_by_length;
     mutable std::vector<std::unique_ptr<BloomFilter>> _bf_vec;
     std::vector<size_t> _bf_off;
+    CompressionTypePB _compression_type;
 };
 
 class ImmutableIndexWriter {
@@ -562,13 +593,10 @@ public:
     size_t file_size() { return _total_kv_bytes + _total_bf_bytes; }
 
     bool bf_flushed() { return _bf_flushed; }
-    /*
-    void swap_bf_vec(std::vector<std::unique_ptr<BloomFilter>>* bf_vec) {
-        if (!_bf_flushed) {
-            bf_vec->swap(_bf_vec);
-        }
-    }
-    */
+
+    size_t total_kv_num() { return _total; }
+
+    std::string index_file() { return _idx_file_path; }
 
 private:
     EditVersion _version;
@@ -666,7 +694,7 @@ public:
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array for return values
-    Status get(size_t n, const Slice* keys, IndexValue* values);
+    virtual Status get(size_t n, const Slice* keys, IndexValue* values);
 
     Status get_from_one_immutable_index(ImmutableIndex* immu_index, size_t n, const Slice* keys, IndexValue* values,
                                         std::map<size_t, KeysInfo>* keys_info_by_key_size, KeysInfo* found_keys_info);
@@ -677,21 +705,21 @@ public:
     // |values|: value array
     // |old_values|: return old values for updates, or set to NullValue for inserts
     // |stat|: used for collect statistic
-    Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
-                  IOStat* stat = nullptr);
+    virtual Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
+                          IOStat* stat = nullptr);
 
     // batch insert, return error if key already exists
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |values|: value array
     // |check_l1|: also check l1 for insertion consistency(key must not exist previously), may imply heavy IO costs
-    Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
+    virtual Status insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1);
 
     // batch erase
     // |n|: size of key/value array
     // |keys|: key array as raw buffer
     // |old_values|: return old values if key exist, or set to NullValue if not
-    Status erase(size_t n, const Slice* keys, IndexValue* old_values);
+    virtual Status erase(size_t n, const Slice* keys, IndexValue* old_values);
 
     // TODO(qzc): maybe unused, remove it or refactor it with the methods in use by template after a period of time
     // batch replace
@@ -709,8 +737,8 @@ public:
     // |values|: value array
     // |max_src_rssid|: maximum of rssid array
     // |failed|: return not match rowid
-    Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
-                       std::vector<uint32_t>* failed);
+    virtual Status try_replace(size_t n, const Slice* keys, const IndexValue* values, const uint32_t max_src_rssid,
+                               std::vector<uint32_t>* failed);
 
     Status flush_advance();
 
@@ -732,11 +760,32 @@ public:
 
     static double major_compaction_score(size_t l1_count, size_t l2_count);
 
+    // not thread safe, just for unit test
+    size_t kv_num_in_immutable_index() {
+        size_t res = 0;
+        for (int i = 0; i < _l1_vec.size(); i++) {
+            res += _l1_vec[i]->total_size();
+        }
+        for (int i = 0; i < _l2_vec.size(); i++) {
+            res += _l2_vec[i]->total_size();
+        }
+        return res;
+    }
+
+    Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
+
+    void reset_cancel_major_compaction();
+
+    static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
+                                   const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
+
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
                                       const EditVersionWithMerge& min_l2_version);
 
     uint64_t _l2_file_size() const;
+
+    Status _load_by_loader(TabletLoader* loader);
 
 private:
     size_t _dump_bound();
@@ -767,11 +816,10 @@ private:
     Status _reload(const PersistentIndexMetaPB& index_meta);
 
     // commit index meta
-    Status _build_commit(Tablet* tablet, PersistentIndexMetaPB& index_meta);
+    Status _build_commit(TabletLoader* loader, PersistentIndexMetaPB& index_meta);
 
     // insert rowset data into persistent index
-    Status _insert_rowsets(Tablet* tablet, std::vector<RowsetSharedPtr>& rowsets, const Schema& pkey_schema,
-                           int64_t apply_version, std::unique_ptr<Column> pk_column);
+    Status _insert_rowsets(TabletLoader* loader, const Schema& pkey_schema, std::unique_ptr<Column> pk_column);
 
     Status _get_from_immutable_index(size_t n, const Slice* keys, IndexValue* values,
                                      std::map<size_t, KeysInfo>& keys_info_by_key_size, IOStat* stat);
@@ -836,6 +884,8 @@ protected:
     std::vector<EditVersionWithMerge> _l2_versions;
     // all l2
     std::vector<std::unique_ptr<ImmutableIndex>> _l2_vec;
+
+    bool _cancel_major_compaction = false;
 
 private:
     bool _need_bloom_filter = false;

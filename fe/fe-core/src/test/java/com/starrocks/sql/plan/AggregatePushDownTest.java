@@ -77,10 +77,10 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "where month(order_date)=1\n" +
                 "order by region, order_date";
         String plan = UtFrameUtils.getVerboseFragmentPlan(connectContext, q1);
-        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+        Assert.assertTrue(plan, plan.contains("  1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: sum[([3: income, DECIMAL128(10,2), false]); args: DECIMAL128; " +
                 "result: DECIMAL128(38,2); args nullable: false; result nullable: true]\n" +
-                "  |  group by: [2: order_date, DATE, false], [1: region, VARCHAR, true]\n"));
+                "  |  group by: [1: region, VARCHAR, true], [2: order_date, DATE, false]\n"));
 
         Assert.assertTrue(plan.contains("  0:OlapScanNode\n" +
                 "     table: trans, rollup: trans\n" +
@@ -88,5 +88,134 @@ public class AggregatePushDownTest extends PlanTestBase {
                 "     Predicates: month[([2: order_date, DATE, false]); args: DATE; result: TINYINT; " +
                 "args nullable: false; result nullable: false] = 1\n" +
                 ""));
+    }
+
+    @Test
+    public void testPushDownDistinctAggBelowWindow_1() throws Exception {
+        // unsupported window func ref cols from partition by cols
+        String sql = "select distinct t1d from (select *, sum(t1e) over (partition by t1d) as cnt from test_all_type ) " +
+                "t where cnt > 1 limit 10;";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "5:SELECT\n" +
+                "  |  predicates: 11: sum(5: t1e) > 1.0\n" +
+                "  |  \n" +
+                "  4:ANALYTIC\n" +
+                "  |  functions: [, sum(12: sum), ]\n" +
+                "  |  partition by: 4: t1d\n" +
+                "  |  \n" +
+                "  3:SORT\n" +
+                "  |  order by: <slot 4> 4: t1d ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(5: t1e)\n" +
+                "  |  group by: 4: t1d\n" +
+                "  |  \n" +
+                "  1:EXCHANGE");
+    }
+
+    @Test
+    public void testPushDownDistinctAggBelowWindow_2() throws Exception {
+        // unsupported window func ref cols from partition by cols
+        String sql = "select distinct t1d from (select *, sum(t1d) over (partition by t1d, t1e) as cnt from " +
+                "test_all_type ) t where cnt > 1 limit 10;";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:ANALYTIC\n" +
+                "  |  functions: [, sum(12: sum), ]\n" +
+                "  |  partition by: 4: t1d, 5: t1e\n" +
+                "  |  \n" +
+                "  3:SORT\n" +
+                "  |  order by: <slot 4> 4: t1d ASC, <slot 5> 5: t1e ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(4: t1d)\n" +
+                "  |  group by: 4: t1d, 5: t1e\n" +
+                "  |  \n" +
+                "  1:EXCHANGE");
+    }
+
+    @Test
+    public void testPushDownDistinctAggBelowWindow_3() throws Exception {
+        // unsupported window func ref cols from partition by cols
+        String sql = "select distinct t1c from (select *, sum(t1d) over (partition by t1e order by t1d) as cnt from " +
+                "test_all_type ) t where cnt > 1 limit 10;";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(4: t1d)\n" +
+                "  |  group by: 3: t1c, 4: t1d, 5: t1e\n" +
+                "  |  \n" +
+                "  1:EXCHANGE");
+    }
+
+    @Test
+    public void testNotPushDownDistinctAggBelowWindow_1() throws Exception {
+        // unsupported count function
+        String sql = "select distinct t1d from (select *, count(1) over (partition by t1d) as cnt from test_all_type ) " +
+                "t where cnt > 1 limit 10;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "4:SELECT\n" +
+                "  |  predicates: 11: count(1) > 1\n" +
+                "  |  \n" +
+                "  3:ANALYTIC\n" +
+                "  |  functions: [, count(1), ]\n" +
+                "  |  partition by: 4: t1d\n" +
+                "  |  \n" +
+                "  2:SORT\n" +
+                "  |  order by: <slot 4> 4: t1d ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  1:EXCHANGE");
+    }
+
+    @Test
+    public void testPruneColsAfterPushdownAgg_1() throws Exception {
+        String sql = "select L_PARTKEY from lineitem_partition where L_SHIPDATE >= '1992-01-01' and L_SHIPDATE < '1993-01-01'";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 2> : 2: L_PARTKEY\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: lineitem_partition\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/7");
+    }
+
+    @Test
+    public void testPruneColsAfterPushdownAgg_2() throws Exception {
+        String sql = "select max(L_ORDERKEY), sum(2), L_PARTKEY from lineitem_partition " +
+                "join t0 on L_PARTKEY = v1 " +
+                "where L_SHIPDATE >= '1992-01-01' and L_SHIPDATE < '1993-01-01' group by L_PARTKEY";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "1:Project\n" +
+                "  |  <slot 1> : 1: L_ORDERKEY\n" +
+                "  |  <slot 2> : 2: L_PARTKEY\n" +
+                "  |  <slot 26> : 2\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: lineitem_partition\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/7",
+                "7:HASH JOIN\n" +
+                        "  |  join op: INNER JOIN (BROADCAST)\n" +
+                        "  |  colocate: false, reason: \n" +
+                        "  |  equal join conjunct: 23: cast = 18: v1\n" +
+                        "  |  \n" +
+                        "  |----6:EXCHANGE\n" +
+                        "  |    \n" +
+                        "  4:Project\n" +
+                        "  |  <slot 2> : 2: L_PARTKEY\n" +
+                        "  |  <slot 23> : CAST(2: L_PARTKEY AS BIGINT)\n" +
+                        "  |  <slot 24> : 24: max\n" +
+                        "  |  <slot 25> : 25: sum\n" +
+                        "  |  \n" +
+                        "  3:AGGREGATE (update finalize)\n" +
+                        "  |  output: sum(26: expr), max(1: L_ORDERKEY)\n" +
+                        "  |  group by: 2: L_PARTKEY\n" +
+                        "  |  \n" +
+                        "  2:EXCHANGE");
     }
 }

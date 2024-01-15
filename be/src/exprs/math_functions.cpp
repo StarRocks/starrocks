@@ -21,6 +21,7 @@
 #include <util/decimal_types.h>
 
 #include <cmath>
+#include <random>
 
 #include "column/array_column.h"
 #include "column/column_helper.h"
@@ -31,6 +32,9 @@
 namespace starrocks {
 
 static const double MAX_EXP_PARAMETER = std::log(std::numeric_limits<double>::max());
+
+static std::uniform_real_distribution<double> distribution(0.0, 1.0);
+static thread_local std::mt19937_64 generator{std::random_device{}()};
 
 // ==== basic check rules =========
 DEFINE_UNARY_FN_WITH_IMPL(NegativeCheck, value) {
@@ -687,18 +691,8 @@ StatusOr<ColumnPtr> MathFunctions::conv_string(FunctionContext* context, const C
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-static uint32_t generate_randoms(ColumnBuilder<TYPE_DOUBLE>* result, int32_t num_rows, uint32_t seed) {
-    for (int i = 0; i < num_rows; ++i) {
-        seed = ::rand_r(&seed);
-        // Normalize to [0,1].
-        result->append(static_cast<double>(seed) / RAND_MAX);
-    }
-    return seed;
-}
-
 Status MathFunctions::rand_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
-        int64_t seed = 0;
         if (context->get_num_args() == 1) {
             // This is a call to RandSeed, initialize the seed
             // TODO: should we support non-constant seed?
@@ -715,11 +709,8 @@ Status MathFunctions::rand_prepare(FunctionContext* context, FunctionContext::Fu
             }
 
             int64_t seed_value = ColumnHelper::get_const_value<TYPE_BIGINT>(seed_column);
-            seed = seed_value;
-        } else {
-            seed = GetCurrentTimeNanos();
+            generator.seed(seed_value);
         }
-        context->set_function_state(scope, reinterpret_cast<void*>(seed)); // NOLINT
     }
     return Status::OK();
 }
@@ -730,12 +721,10 @@ Status MathFunctions::rand_close(FunctionContext* context, FunctionContext::Func
 
 StatusOr<ColumnPtr> MathFunctions::rand(FunctionContext* context, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns[columns.size() - 1]);
-    void* state = context->get_function_state(FunctionContext::THREAD_LOCAL);
-
     ColumnBuilder<TYPE_DOUBLE> result(num_rows);
-    int64_t res = generate_randoms(&result, num_rows, reinterpret_cast<int64_t>(state));
-    state = reinterpret_cast<void*>(res); // NOLINT
-    context->set_function_state(FunctionContext::THREAD_LOCAL, state);
+    for (int i = 0; i < num_rows; ++i) {
+        result.append(distribution(generator));
+    }
 
     return result.build(false);
 }

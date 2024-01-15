@@ -120,7 +120,8 @@ public class ProfilingExecPlan {
         }
 
         public boolean isFinalSink() {
-            return !instanceOf(DataStreamSink.class) && !instanceOf(MultiCastDataSink.class);
+            return instanceOf(DataSink.class) &&
+                    !instanceOf(DataStreamSink.class) && !instanceOf(MultiCastDataSink.class);
         }
 
         public boolean hasChild(int i) {

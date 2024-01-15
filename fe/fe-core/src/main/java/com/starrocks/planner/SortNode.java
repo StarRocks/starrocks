@@ -76,12 +76,11 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     private TopNType topNType = TopNType.ROW_NUMBER;
 
     private long offset;
-    // if true, the output of this node feeds an AnalyticNode
-    private boolean isAnalyticSort;
     // if SortNode(TopNNode in BE) is followed by AnalyticNode with partition_exprs, this partition_exprs is
     // also added to TopNNode to hint that local shuffle operator is prepended to TopNNode in
     // order to eliminate merging operation in pipeline execution engine.
     private List<Expr> analyticPartitionExprs = Collections.emptyList();
+    private boolean analyticPartitionSkewed = false;
 
     // info_.sortTupleSlotExprs_ substituted with the outputSmap_ for materialized slots in init().
     public List<Expr> resolvedTupleExprs;
@@ -91,6 +90,10 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
 
     public void setAnalyticPartitionExprs(List<Expr> exprs) {
         this.analyticPartitionExprs = exprs;
+    }
+
+    public void setAnalyticPartitionSkewed(boolean isSkewed) {
+        analyticPartitionSkewed = isSkewed;
     }
 
     private DataPartition inputPartition;
@@ -145,7 +148,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
     public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator, DescriptorTable descTbl) {
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         // only support the runtime filter in TopN when limit > 0
-        if (limit < 0 || !sessionVariable.getEnableGlobalRuntimeFilter() ||
+        if (limit < 0 || !sessionVariable.getEnableTopNRuntimeFilter() ||
                 getSortInfo().getOrderingExprs().isEmpty()) {
             return;
         }
@@ -215,6 +218,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         msg.sort_node.setIs_asc_order(info.getIsAscOrder());
         msg.sort_node.setNulls_first(info.getNullsFirst());
         msg.sort_node.setAnalytic_partition_exprs(Expr.treesToThrift(analyticPartitionExprs));
+        msg.sort_node.setAnalytic_partition_skewed(analyticPartitionSkewed);
         if (info.getSortTupleSlotExprs() != null) {
             msg.sort_node.setSort_tuple_slot_exprs(Expr.treesToThrift(info.getSortTupleSlotExprs()));
         }

@@ -20,6 +20,8 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
@@ -28,16 +30,20 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
@@ -47,6 +53,7 @@ import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections.MapUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.roaringbitmap.RoaringBitmap;
@@ -72,6 +79,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
+import static com.starrocks.qe.SessionVariableConstants.AggregationStage.AUTO;
+import static com.starrocks.qe.SessionVariableConstants.AggregationStage.ONE_STAGE;
 import static java.util.function.Function.identity;
 
 public class Utils {
@@ -86,7 +95,16 @@ public class Utils {
         return list;
     }
 
-    private static void extractConjunctsImpl(ScalarOperator root, List<ScalarOperator> result) {
+    public static Set<ScalarOperator> extractConjunctSet(ScalarOperator root) {
+        Set<ScalarOperator> list = Sets.newHashSet();
+        if (null == root) {
+            return list;
+        }
+        extractConjunctsImpl(root, list);
+        return list;
+    }
+
+    private static void extractConjunctsImpl(ScalarOperator root, Collection<ScalarOperator> result) {
         if (!OperatorType.COMPOUND.equals(root.getOpType())) {
             result.add(root);
             return;
@@ -397,9 +415,7 @@ public class Utils {
                 }
                 return true;
             } else if (operator instanceof LogicalIcebergScanOperator) {
-                // TODO(stephen): support `analyze table` to collect iceberg table ndv
-                // iceberg metadata doesn't have ndv, we default to unknown for all iceberg table column statistics.
-                return true;
+                return ((LogicalIcebergScanOperator) operator).hasUnknownColumn();
             } else {
                 // For other scan operators, we do not know the column statistics.
                 return true;
@@ -480,21 +496,23 @@ public class Utils {
             return Optional.empty();
         }
 
-        try {
-            if (((ConstantOperator) op).isNull()) {
-                return Optional.of(ConstantOperator.createNull(descType));
-            }
+        if (((ConstantOperator) op).isNull()) {
+            return Optional.of(ConstantOperator.createNull(descType));
+        }
 
-            ConstantOperator result = ((ConstantOperator) op).castToStrictly(descType);
-            if (result.toString().equalsIgnoreCase(op.toString())) {
-                return Optional.of(result);
-            } else if (descType.isDate() && (op.getType().isIntegerType() || op.getType().isStringType())) {
-                if (op.toString().equalsIgnoreCase(result.toString().replaceAll("-", ""))) {
-                    return Optional.of(result);
-                }
+        Optional<ConstantOperator> result = ((ConstantOperator) op).castToStrictly(descType);
+        if (!result.isPresent()) {
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("invalid value: {} to type {}", op, descType);
             }
-        } catch (Exception ignored) {
-            LOG.debug("invalid value: {} to type {}", op, descType);
+            return Optional.empty();
+        }
+        if (result.get().toString().equalsIgnoreCase(op.toString())) {
+            return Optional.of(result.get());
+        } else if (descType.isDate() && (op.getType().isIntegerType() || op.getType().isStringType())) {
+            if (op.toString().equalsIgnoreCase(result.get().toString().replaceAll("-", ""))) {
+                return Optional.of(result.get());
+            }
         }
         return Optional.empty();
     }
@@ -527,12 +545,8 @@ public class Utils {
             return Optional.of(ConstantOperator.createNull(childType));
         }
 
-        try {
-            ConstantOperator result = rhs.castTo(childType);
-            return Optional.of(result);
-        } catch (Exception ignored) {
-        }
-        return Optional.empty();
+        Optional<ConstantOperator> result = rhs.castTo(childType);
+        return result.isPresent() ? Optional.of(result.get()) : Optional.empty();
     }
 
     public static ScalarOperator transTrue2Null(ScalarOperator predicates) {
@@ -601,6 +615,30 @@ public class Utils {
         return false;
     }
 
+    public static boolean isNotAlwaysNullResultWithNullScalarOperator(ScalarOperator scalarOperator) {
+        for (ScalarOperator child : scalarOperator.getChildren()) {
+            if (isNotAlwaysNullResultWithNullScalarOperator(child)) {
+                return true;
+            }
+        }
+
+        if (scalarOperator.isColumnRef() || scalarOperator.isConstantRef() || scalarOperator instanceof CastOperator) {
+            return false;
+        } else if (scalarOperator instanceof CallOperator) {
+            Function fn = ((CallOperator) scalarOperator).getFunction();
+            if (fn == null) {
+                return true;
+            }
+            if (!GlobalStateMgr.getCurrentState()
+                    .isNotAlwaysNullResultWithNullParamFunction(fn.getFunctionName().getFunction())
+                    && !fn.isUdf()
+                    && !FunctionSet.ASSERT_TRUE.equals(fn.getFunctionName().getFunction())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     // RoaringBitmap can be considered as a Set<Integer> contains only unsigned integers,
     // so getIntStream() resembles to Set<Integer>::stream()
     public static Stream<Integer> getIntStream(RoaringBitmap bitmap) {
@@ -639,5 +677,75 @@ public class Utils {
             eqColumnRefs.put(Objects.requireNonNull(lhsColRef), Objects.requireNonNull(rhsColRef));
         }
         return eqColumnRefs;
+    }
+
+    public static boolean couldGenerateMultiStageAggregate(LogicalProperty inputLogicalProperty,
+                                                           Operator inputOp, Operator childOp) {
+        // 1. Must do one stage aggregate If the child contains limit,
+        //    the aggregation must be a single node to ensure correctness.
+        //    eg. select count(*) from (select * table limit 2) t
+        if (childOp.hasLimit()) {
+            return false;
+        }
+
+        // 2. check if must generate multi stage aggregate.
+        if (mustGenerateMultiStageAggregate(inputOp, childOp)) {
+            return true;
+        }
+
+        // 3. Respect user hint
+        int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
+        if (aggStage == ONE_STAGE.ordinal() ||
+                (aggStage == AUTO.ordinal() && inputLogicalProperty.oneTabletProperty().supportOneTabletOpt)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    public static boolean mustGenerateMultiStageAggregate(Operator inputOp, Operator childOp) {
+        // Must do two stage aggregate if child operator is RepeatOperator
+        // If the repeat node is used as the input node of the Exchange node.
+        // Will cause the node to be unable to confirm whether it is const during serialization
+        // (BE does this for efficiency reasons).
+        // Therefore, it is forcibly ensured that no one-stage aggregation nodes are generated
+        // on top of the repeat node.
+        if (OperatorType.LOGICAL_REPEAT.equals(childOp.getOpType()) || OperatorType.PHYSICAL_REPEAT.equals(childOp.getOpType())) {
+            return true;
+        }
+
+        Map<ColumnRefOperator, CallOperator> aggs = Maps.newHashMap();
+        if (OperatorType.LOGICAL_AGGR.equals(inputOp.getOpType())) {
+            aggs = ((LogicalAggregationOperator) inputOp).getAggregations();
+        } else if (OperatorType.PHYSICAL_HASH_AGG.equals(inputOp.getOpType())) {
+            aggs = ((PhysicalHashAggregateOperator) inputOp).getAggregations();
+        }
+
+        if (MapUtils.isEmpty(aggs)) {
+            return false;
+        } else {
+            // Must do multiple stage aggregate when aggregate distinct function has array type
+            // Must generate three, four phase aggregate for distinct aggregate with multi columns
+            return aggs.values().stream().anyMatch(callOperator -> callOperator.isDistinct()
+                    && (callOperator.getChildren().size() > 1 ||
+                    callOperator.getChildren().stream().anyMatch(c -> c.getType().isComplexType())));
+        }
+    }
+
+    public static boolean hasNonDeterministicFunc(ScalarOperator operator) {
+        for (ScalarOperator child : operator.getChildren()) {
+            if (child instanceof CallOperator) {
+                CallOperator call = (CallOperator) child;
+                String fnName = call.getFnName();
+                if (FunctionSet.nonDeterministicFunctions.contains(fnName)) {
+                    return true;
+                }
+            }
+
+            if (hasNonDeterministicFunc(child)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

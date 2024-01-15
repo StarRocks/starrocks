@@ -102,6 +102,7 @@ public class LoadStmtTest {
         analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER (\"username\"=\"sr\") PROPERTIES (\"strict_mode\"=\"true\")");
         analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER (\"username\"=\"sr\")");
         analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0` FORMAT AS CSV (SKIP_HEADER = 2 TRIM_SPACE = TRUE ENCLOSE = \"'\" ESCAPE = \"|\")) WITH BROKER (\"username\"=\"sr\")");
+        analyzeSuccess("LOAD LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0` FORMAT AS CSV (SKIP_HEADER = 2 TRIM_SPACE = TRUE ENCLOSE = \"'\" ESCAPE = \"|\")) WITH BROKER PROPERTIES (\"merge_condition\"=\"sr\")");
     }
 
     @Test
@@ -118,5 +119,51 @@ public class LoadStmtTest {
                 "INTO TABLE t0 (`v1`, `v2`, `v3`)) WITH BROKER hdfs_broker " +
                 "(\"password\"  =  \"***\", \"username\"  =  \"sr\") PROPERTIES (\"strict_mode\" = \"true\")",
                 AstToStringBuilder.toString(stmt));
+
+        stmt = (LoadStmt) analyzeSuccess("LOAD  LABEL test.testLabel (DATA INFILE(\"wasbs://aa@bb.blob.core.windows.net/*\") INTO TABLE `t0`) WITH BROKER " +
+                "(\"gcp.gcs.service_account_email\" = \"someone@gmail.com\",\n" +
+                "\"gcp.gcs.service_account_private_key_id\" = \"some_private_key_id\",\n" +
+                "\"gcp.gcs.service_account_private_key\" = \"some_private_key\")");
+        Assert.assertEquals("LOAD LABEL `test`.`testLabel` (DATA INFILE ('wasbs://aa@bb.blob.core.windows.net/*') INTO TABLE t0) WITH BROKER  " +
+                "(\"gcp.gcs.service_account_email\"  =  \"someone@gmail.com\", \"gcp.gcs.service_account_private_key_id\"  =  \"***\", \"gcp.gcs.service_account_private_key\"  =  \"***\")", AstToStringBuilder.toString(stmt));
+
+        stmt = (LoadStmt) analyzeSuccess("LOAD  LABEL test.testLabel (DATA INFILE(\"s3a://us-west-benchmark-data/tpch_100g/parquet/part/000004_0\") INTO TABLE `t0`) WITH BROKER " +
+                "(\"aws.s3.use_instance_profile\" = \"false\",\"aws.s3.access_key\" = \"some_key\", \"aws.s3.secret_key\" = \"some_secret\", \"aws.s3.region\" = \"us-west-2\")" +
+                " PROPERTIES (\"strict_mode\"=\"true\")");
+        Assert.assertEquals("LOAD LABEL `test`.`testLabel` (DATA INFILE ('s3a://us-west-benchmark-data/tpch_100g/parquet/part/000004_0') INTO TABLE t0) WITH BROKER  " +
+                "(\"aws.s3.access_key\"  =  \"***\", \"aws.s3.secret_key\"  =  \"***\", \"aws.s3.use_instance_profile\"  =  \"false\", \"aws.s3.region\"  =  \"us-west-2\") PROPERTIES (\"strict_mode\" = \"true\")", AstToStringBuilder.toString(stmt));
+
+        stmt = (LoadStmt) analyzeSuccess("LOAD  LABEL test.testLabel (DATA INFILE(\"wasbs://aa@bb.blob.core.windows.net/*\") INTO TABLE `t0`) WITH BROKER " +
+                "(\"azure.blob.storage_account\" = \"some_account\",\n" +
+                "    \"azure.blob.shared_key\" = \"some_shared_key\")");
+        Assert.assertEquals("LOAD LABEL `test`.`testLabel` (DATA INFILE ('wasbs://aa@bb.blob.core.windows.net/*') INTO TABLE t0) WITH BROKER  " +
+                "(\"azure.blob.storage_account\"  =  \"some_account\", \"azure.blob.shared_key\"  =  \"***\")", AstToStringBuilder.toString(stmt));
+
+        stmt = (LoadStmt) analyzeSuccess("LOAD  LABEL test.testLabel (DATA INFILE(\"wasbs://aa@bb.blob.core.windows.net/*\") INTO TABLE `t0`) WITH BROKER " +
+                "(\"azure.blob.account_name\" = \"some_account\",\n" +
+                "\"azure.blob.container_name\" = \"some_container\",\n" +
+                "\"azure.blob.sas_token\" = \"some_token\")");
+        Assert.assertEquals("LOAD LABEL `test`.`testLabel` (DATA INFILE ('wasbs://aa@bb.blob.core.windows.net/*') INTO TABLE t0) WITH BROKER  " +
+                "(\"azure.blob.account_name\"  =  \"some_account\", \"azure.blob.container_name\"  =  \"some_container\", \"azure.blob.sas_token\"  =  \"***\")", AstToStringBuilder.toString(stmt));
+
+        stmt = (LoadStmt) analyzeSuccess("LOAD  LABEL test.testLabel (DATA INFILE(\"wasbs://aa@bb.blob.core.windows.net/*\") INTO TABLE `t0`) WITH BROKER " +
+                "(\"azure.adls1.oauth2_client_id\" = \"some_client_id\",\n" +
+                "\"azure.adls1.oauth2_credential\" = \"some_credential\",\n" +
+                "\"azure.adls1.oauth2_endpoint\" = \"some_endpoint\")");
+        Assert.assertEquals("LOAD LABEL `test`.`testLabel` (DATA INFILE ('wasbs://aa@bb.blob.core.windows.net/*') INTO TABLE t0) WITH BROKER  " +
+                "(\"azure.adls1.oauth2_credential\"  =  \"***\", \"azure.adls1.oauth2_endpoint\"  =  \"some_endpoint\", \"azure.adls1.oauth2_client_id\"  =  \"some_client_id\")", AstToStringBuilder.toString(stmt));
+
+        stmt = (LoadStmt) analyzeSuccess("LOAD  LABEL test.testLabel (DATA INFILE(\"wasbs://aa@bb.blob.core.windows.net/*\") INTO TABLE `t0`) WITH BROKER " +
+                "(\"azure.adls2.storage_account\" = \"some_account\",\n" +
+                "\"azure.adls2.shared_key\" = \"some_key\")");
+        Assert.assertEquals("LOAD LABEL `test`.`testLabel` (DATA INFILE ('wasbs://aa@bb.blob.core.windows.net/*') INTO TABLE t0) WITH BROKER  " +
+                "(\"azure.adls2.shared_key\"  =  \"***\", \"azure.adls2.storage_account\"  =  \"some_account\")", AstToStringBuilder.toString(stmt));
+
+        stmt = (LoadStmt) analyzeSuccess("LOAD  LABEL test.testLabel (DATA INFILE(\"wasbs://aa@bb.blob.core.windows.net/*\") INTO TABLE `t0`) WITH BROKER " +
+                "(\"azure.adls2.oauth2_client_id\" = \"some_client_id\",\n" +
+                "\"azure.adls2.oauth2_client_secret\" = \"some_secret\",\n" +
+                "\"azure.adls2.oauth2_client_endpoint\" = \"some_endpoint\")");
+        Assert.assertEquals("LOAD LABEL `test`.`testLabel` (DATA INFILE ('wasbs://aa@bb.blob.core.windows.net/*') INTO TABLE t0) WITH BROKER  " +
+                "(\"azure.adls2.oauth2_client_id\"  =  \"some_client_id\", \"azure.adls2.oauth2_client_endpoint\"  =  \"some_endpoint\", \"azure.adls2.oauth2_client_secret\"  =  \"***\")", AstToStringBuilder.toString(stmt));
     }
 }

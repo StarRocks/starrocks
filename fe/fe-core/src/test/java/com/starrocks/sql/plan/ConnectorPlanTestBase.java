@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
@@ -35,6 +36,8 @@ import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.DropCatalogStmt;
 import io.delta.standalone.DeltaLog;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.paimon.catalog.Catalog;
@@ -51,6 +54,7 @@ import org.apache.paimon.table.sink.BatchTableCommit;
 import org.apache.paimon.table.sink.BatchTableWrite;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataTypes;
+import org.elasticsearch.common.Strings;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.rules.TemporaryFolder;
@@ -62,6 +66,7 @@ import java.util.List;
 import java.util.Map;
 
 public class ConnectorPlanTestBase extends PlanTestBase {
+    public static final String MOCK_PAIMON_CATALOG_NAME = "paimon0";
 
     @ClassRule
     public static TemporaryFolder temp = new TemporaryFolder();
@@ -75,10 +80,10 @@ public class ConnectorPlanTestBase extends PlanTestBase {
     public static void doInit(String warehouse) throws Exception {
         PlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
-        mockCatalog(connectContext, warehouse);
+        mockAllCatalogs(connectContext, warehouse);
     }
 
-    public static void mockCatalog(ConnectContext ctx, String warehouse) throws Exception {
+    public static void mockAllCatalogs(ConnectContext ctx, String warehouse) throws Exception {
         GlobalStateMgr gsmMgr = ctx.getGlobalStateMgr();
         MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
         gsmMgr.setMetadataMgr(metadataMgr);
@@ -87,6 +92,53 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         mockPaimonCatalogImpl(metadataMgr, warehouse);
         mockIcebergCatalogImpl(metadataMgr);
         mockDeltaLakeCatalog(metadataMgr);
+    }
+
+    public static void mockCatalog(ConnectContext ctx, String catalogName) throws Exception {
+        mockCatalog(ctx, catalogName, "");
+    }
+
+    public static void mockCatalog(ConnectContext ctx, String catalogName, String warehouse) throws Exception {
+        GlobalStateMgr gsmMgr = ctx.getGlobalStateMgr();
+        MockedMetadataMgr metadataMgr = new MockedMetadataMgr(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
+        gsmMgr.setMetadataMgr(metadataMgr);
+        switch (catalogName) {
+            case MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME:
+                mockHiveCatalogImpl(metadataMgr);
+                break;
+            case MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME:
+                mockJDBCCatalogImpl(metadataMgr);
+                break;
+            case MOCK_PAIMON_CATALOG_NAME:
+                Preconditions.checkState(!Strings.isNullOrEmpty(warehouse));
+                mockPaimonCatalogImpl(metadataMgr, warehouse);
+                break;
+            case MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME:
+                mockIcebergCatalogImpl(metadataMgr);
+                break;
+            case MockedDeltaLakeMetadata.MOCKED_CATALOG_NAME:
+                mockDeltaLakeCatalog(metadataMgr);
+                break;
+            default:
+                throw new SemanticException("Unsupported catalog type:" + catalogName);
+        }
+    }
+
+    public static void dropAllCatalogs() {
+        try {
+            dropCatalog(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME);
+            dropCatalog(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
+            dropCatalog(MOCK_PAIMON_CATALOG_NAME);
+            dropCatalog(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
+            dropCatalog(MockedDeltaLakeMetadata.MOCKED_CATALOG_NAME);
+        } catch (Exception e) {
+            // ignore error
+            e.printStackTrace();
+        }
+    }
+
+    public static void dropCatalog(String catalog) {
+        GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(new DropCatalogStmt(catalog));
     }
 
     public static void mockHiveCatalog(ConnectContext ctx) throws DdlException {
@@ -101,7 +153,8 @@ public class ConnectorPlanTestBase extends PlanTestBase {
 
         properties.put("type", "hive");
         properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
-        GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog("hive", "hive0", "", properties);
+        GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog("hive",
+                MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME, "", properties);
 
         MockedHiveMetadata mockedHiveMetadata = new MockedHiveMetadata();
         metadataMgr.registerMockedMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME, mockedHiveMetadata);
@@ -191,13 +244,11 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         properties.put("type", "paimon");
         properties.put("paimon.catalog.type", "filesystem");
         properties.put("paimon.catalog.warehouse", warehouse);
-        GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog("paimon", "paimon0", "", properties);
-
+        GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog("paimon", MOCK_PAIMON_CATALOG_NAME, "", properties);
         //register paimon catalog
         PaimonMetadata paimonMetadata =
-                new PaimonMetadata("paimon0", new HdfsEnvironment(), paimonNativeCatalog,
-                        "filesystem", null, warehouse);
-        metadataMgr.registerMockedMetadata("paimon0", paimonMetadata);
+                new PaimonMetadata(MOCK_PAIMON_CATALOG_NAME, new HdfsEnvironment(), paimonNativeCatalog);
+        metadataMgr.registerMockedMetadata(MOCK_PAIMON_CATALOG_NAME, paimonMetadata);
     }
 
     public static class MockedDeltaLakeMetadata extends DeltaLakeMetadata {

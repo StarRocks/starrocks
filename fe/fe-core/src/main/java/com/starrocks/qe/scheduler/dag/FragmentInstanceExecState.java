@@ -173,7 +173,8 @@ public class FragmentInstanceExecState {
 
         TNetworkAddress brpcAddress = worker.getBrpcAddress();
         try {
-            if (serializedRequest.length != 0) {
+            // when `set enable_plan_serialize_concurrently = false` or encountered exception when serializing.
+            if (serializedRequest != null && serializedRequest.length != 0) {
                 deployFuture = BackendServiceClient.getInstance().execPlanFragmentAsync(brpcAddress, serializedRequest,
                         jobSpec.getPlanProtocol());
             } else {
@@ -364,7 +365,7 @@ public class FragmentInstanceExecState {
                     jobSpec.isEnablePipeline());
         } catch (RpcException e) {
             LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(), brpcAddress.getPort(), e);
-            SimpleScheduler.addToBlacklist(worker.getId());
+            SimpleScheduler.addToBlocklist(worker.getId());
             return false;
         }
 

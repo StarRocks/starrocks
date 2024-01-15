@@ -260,6 +260,7 @@ class FurtherPartitionPruneTest extends PlanTestBase {
 
     private static Stream<Arguments> onePartitionSqlList() {
         List<String> sqlList = Lists.newArrayList();
+        sqlList.add("select * from tbl_int where k1 = 1 = true");
         sqlList.add("select * from less_than_tbl where k1 is null");
         sqlList.add("select * from less_than_tbl where k1 is null or k1 <=> null");
         sqlList.add("select * from less_than_tbl where k1 = 1 and k1 is null");
@@ -430,7 +431,6 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add("select * from tbl_int where k1 in (1,100,200,300) or k1 > 300");
 
         sqlList.add("select * from two_key where k1 < 100 or k1 > 200");
-        sqlList.add("select * from tbl_int where k1 = 1 = true");
         sqlList.add("select * from tbl_int where b1 or (k1 < 100) or k1 > 200");
         sqlList.add("select * from tbl_int where b1");
         return sqlList.stream().map(e -> Arguments.of(e));
@@ -452,7 +452,10 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add("select * from ptest where date_trunc('year', d2) = '2020-01-01'");
         sqlList.add("select * from less_than_tbl where date_trunc('year', k1) < '2020-08-01'");
         sqlList.add("select * from less_than_tbl where datediff('2020-08-01', k1) = 1");
-
+        sqlList.add("select * from less_than_tbl where date_format(k1, '%m月%Y年') = '06月-2020年'");
+        sqlList.add("select * from less_than_tbl where date_format(k1, '%a-%Y') = 'Wed-2020'");
+        sqlList.add("select * from less_than_tbl where date_format(k1, '') is null");
+        sqlList.add("select * from less_than_tbl where date_format(k1, '%abcdDdehIjklMprTUvWXxy') = 'Wed-2020'");
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 
@@ -493,6 +496,9 @@ class FurtherPartitionPruneTest extends PlanTestBase {
         sqlList.add("select * from less_than_tbl where previous_day(k1, 'Monday') in ('2020-07-01', '2020-08-01', " +
                 "'2020-08-06') and k3 = 'a'");
         sqlList.add("select * from less_than_tbl where datediff('2020-08-01', k1) < 0");
+        sqlList.add("select * from less_than_tbl where date_format(k1, '%Y年%m月') = '2020年06月'");
+        sqlList.add("select * from less_than_tbl where date_format(k1, '%Y年%m月') < '2020年08月'");
+        sqlList.add("select * from less_than_tbl where date_format(k1, '%Y-%m-%d %H-%i-%S') < '2020-08-02 12:00:00'");
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 }

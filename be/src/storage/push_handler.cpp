@@ -109,6 +109,7 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
                 for (const auto& column_desc : request.columns_desc) {
                     tablet_schema->append_column(TabletColumn(column_desc));
                 }
+                tablet_schema->generate_sort_key_idxes();
             }
             res = del_cond_handler.generate_delete_predicate(*tablet_schema, request.delete_conditions, &del_pred);
             del_preds.push(del_pred);
@@ -127,6 +128,7 @@ Status PushHandler::_do_streaming_ingestion(TabletSharedPtr tablet, const TPushR
         for (const auto& column_desc : request.columns_desc) {
             tablet_schema->append_column(TabletColumn(column_desc));
         }
+        tablet_schema->generate_sort_key_idxes();
     }
 
     Status st = Status::OK();

@@ -14,8 +14,6 @@
 
 #pragma once
 
-#include <bthread/bthread.h>
-
 #include <cstdint>
 #include <string>
 
@@ -45,23 +43,6 @@
             RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit(err_msg));          \
         }                                                                                     \
     } while (0)
-
-// Multiple bthread may share a single pthread, and thereby share a single thread local variable(i.e. tls_thread_status).
-// Using bthread::Mutex will trigger bthread context switch, but still holding the same thread local variable, and
-// different brpc process may come from different instances of a same query or evern different queries. And holding
-// the MemTracker of another instance may lead to be crash because the MemTracker has been released.
-#define RETURN_NULL_IF_BTHREAD() \
-    do {                         \
-        if (bthread_self()) {    \
-            return nullptr;      \
-        }                        \
-    } while (false)
-#define RETURN_IF_BTHREAD()   \
-    do {                      \
-        if (bthread_self()) { \
-            return;           \
-        }                     \
-    } while (false)
 
 namespace starrocks {
 
@@ -114,13 +95,13 @@ private:
             return true;
         }
 
-        bool try_mem_consume_with_limited_tracker(int64_t size, MemTracker* tracker, int64_t limit) {
+        bool try_mem_consume_with_limited_tracker(int64_t size) {
             MemTracker* cur_tracker = _loader();
             _cache_size += size;
             _allocated_cache_size += size;
             _total_consumed_bytes += size;
             if (cur_tracker != nullptr && _cache_size >= BATCH_SIZE) {
-                MemTracker* limit_tracker = cur_tracker->try_consume_with_limited(_cache_size, tracker, limit);
+                MemTracker* limit_tracker = cur_tracker->try_consume_with_limited(_cache_size);
                 if (LIKELY(limit_tracker == nullptr)) {
                     _cache_size = 0;
                     return true;
@@ -135,10 +116,10 @@ private:
             return true;
         }
 
-        bool try_mem_reserve(int64_t reserve_bytes, MemTracker* tracker, int64_t limit) {
+        bool try_mem_reserve(int64_t reserve_bytes) {
             DCHECK(_reserved_bytes == 0);
             DCHECK(reserve_bytes >= 0);
-            if (try_mem_consume_with_limited_tracker(reserve_bytes, tracker, limit)) {
+            if (try_mem_consume_with_limited_tracker(reserve_bytes)) {
                 _reserved_bytes = reserve_bytes;
                 return true;
             }
@@ -238,7 +219,6 @@ public:
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_mem_tracker(starrocks::MemTracker* mem_tracker) {
-        RETURN_NULL_IF_BTHREAD();
         release_reserved();
         mem_tracker_ctx_shift();
         auto* prev = tls_mem_tracker;
@@ -248,7 +228,6 @@ public:
 
     // Return prev memory tracker.
     starrocks::MemTracker* set_operator_mem_tracker(starrocks::MemTracker* operator_mem_tracker) {
-        RETURN_NULL_IF_BTHREAD();
         operator_mem_tracker_ctx_shift();
         auto* prev = tls_operator_mem_tracker;
         tls_operator_mem_tracker = operator_mem_tracker;
@@ -268,10 +247,7 @@ public:
 
     static CurrentThread& current();
 
-    static void set_exceed_mem_tracker(starrocks::MemTracker* mem_tracker) {
-        RETURN_IF_BTHREAD();
-        tls_exceed_mem_tracker = mem_tracker;
-    }
+    static void set_exceed_mem_tracker(starrocks::MemTracker* mem_tracker) { tls_exceed_mem_tracker = mem_tracker; }
 
     bool set_is_catched(bool is_catched) {
         bool old = _is_catched;
@@ -294,8 +270,8 @@ public:
         return false;
     }
 
-    bool try_mem_reserve(int64_t size, MemTracker* tracker, int64_t limit) {
-        if (_mem_cache_manager.try_mem_reserve(size, tracker, limit)) {
+    bool try_mem_reserve(int64_t size) {
+        if (_mem_cache_manager.try_mem_reserve(size)) {
             return true;
         }
         return false;
