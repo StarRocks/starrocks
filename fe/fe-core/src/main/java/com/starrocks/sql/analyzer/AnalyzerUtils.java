@@ -80,33 +80,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.PartitionMeasure;
-import com.starrocks.sql.ast.AddPartitionClause;
-import com.starrocks.sql.ast.AstTraverser;
-import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.CTERelation;
-import com.starrocks.sql.ast.ColumnDef;
-import com.starrocks.sql.ast.DeleteStmt;
-import com.starrocks.sql.ast.DistributionDesc;
-import com.starrocks.sql.ast.FieldReference;
-import com.starrocks.sql.ast.FileTableFunctionRelation;
-import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.JoinRelation;
-import com.starrocks.sql.ast.ListPartitionDesc;
-import com.starrocks.sql.ast.MultiItemListPartitionDesc;
-import com.starrocks.sql.ast.PartitionDesc;
-import com.starrocks.sql.ast.PartitionKeyDesc;
-import com.starrocks.sql.ast.PartitionValue;
-import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.RangePartitionDesc;
-import com.starrocks.sql.ast.Relation;
-import com.starrocks.sql.ast.SelectRelation;
-import com.starrocks.sql.ast.SetOperationRelation;
-import com.starrocks.sql.ast.SingleRangePartitionDesc;
-import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.SubqueryRelation;
-import com.starrocks.sql.ast.TableRelation;
-import com.starrocks.sql.ast.UpdateStmt;
-import com.starrocks.sql.ast.ViewRelation;
+import com.starrocks.sql.ast.*;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -506,6 +480,18 @@ public class AnalyzerUtils {
             return super.visitSubquery(node, context);
         }
 
+        @Override
+        public Void visitTableFunction(TableFunctionRelation node, Void context) {
+            ctes.add(node.getAlias());
+            node.getChildExpressions().forEach(this::visit);
+            return super.visitTableFunction(node, context);
+        }
+
+        @Override
+        public Void visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void context) {
+            return super.visitJoin(node, context);
+        }
+
         private void visitTableAndView(TableName alias, TableName realName, boolean createByPolicyRewritten) {
             if (alias != null) {
                 aliasMap.put(alias.getTbl(), realName);
@@ -532,19 +518,15 @@ public class AnalyzerUtils {
         }
 
         // handle 'select * from a,b,c' situation
-        private boolean fillStarRelation(Relation relation, Set<TableName> starRelationNames) {
+        private void fillStarRelation(Relation relation, Set<TableName> starRelationNames) {
             if (relation instanceof TableRelation || relation instanceof ViewRelation) {
                 if (!(relation instanceof FileTableFunctionRelation)) {
                     starRelationNames.add(relation.getResolveTableName());
                 }
-                return true;
             } else if (relation instanceof JoinRelation) {
                 JoinRelation joinRelation = (JoinRelation) relation;
-                boolean leftResult = fillStarRelation(joinRelation.getLeft(), starRelationNames);
-                boolean rightResult = fillStarRelation(joinRelation.getRight(), starRelationNames);
-                return leftResult && rightResult;
-            } else {
-                return false;
+                fillStarRelation(joinRelation.getLeft(), starRelationNames);
+                fillStarRelation(joinRelation.getRight(), starRelationNames);
             }
         }
 
@@ -552,15 +534,12 @@ public class AnalyzerUtils {
         public Void visitSelect(SelectRelation node, Void context) {
             Relation relation = node.getRelation();
             if (node.getOutputExpression().stream().allMatch(expr -> expr instanceof FieldReference)) {
-                if ((relation instanceof TableRelation && !(relation instanceof FileTableFunctionRelation))
-                        || relation instanceof ViewRelation) {
-                    put(relation.getResolveTableName(), "*");
-                } else {
-                    Set<TableName> starRelationNames = Sets.newHashSet();
-                    if (fillStarRelation(relation, starRelationNames)) {
-                        starRelationNames.forEach(name -> put(name, "*"));
-                    }
-                }
+                Set<TableName> starRelationNames = Sets.newHashSet();
+                fillStarRelation(relation, starRelationNames);
+                starRelationNames.forEach(name -> put(name, "*"));
+            }
+            if (relation instanceof ValuesRelation) {
+                return null;
             }
             return super.visitSelect(node, context);
         }
@@ -582,7 +561,8 @@ public class AnalyzerUtils {
         public Void visitSlot(SlotRef slotRef, Void context) {
             // filter _LAMBDA_TABLE && alias SlotRef
             if (!slotRef.isFromLambda() && slotRef.getTblNameWithoutAnalyzed() != null) {
-                put(slotRef.getTblNameWithoutAnalyzed(), slotRef.getColumnName());
+                // when used columnName for Struct type, it would like c2.c2_sub1 instead of c2
+                put(slotRef.getTblNameWithoutAnalyzed(), slotRef.getLabel());
             }
             return null;
         }
