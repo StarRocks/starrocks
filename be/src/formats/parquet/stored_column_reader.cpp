@@ -50,6 +50,10 @@ public:
 
     Status load_specific_page(size_t cur_page_idx, uint64_t offset, uint64_t first_row) override;
 
+    void set_page_change_on_record_boundry() override {
+        _page_change_on_record_boundry = true;
+    }
+
 protected:
     bool page_selected(size_t num_values) override;
 
@@ -88,6 +92,10 @@ private:
 
     // Use uint16_t instead of uint8_t to make it auto simd by compiler.
     std::vector<uint16_t> _is_nulls;
+
+    // default is false, but if there is page index, it's true.
+    // so that we don't need check next page to know the last record in current page is finished.
+    bool _page_change_on_record_boundry = false;
 };
 
 class OptionalStoredColumnReader : public StoredColumnReaderImpl {
@@ -350,6 +358,7 @@ Status RepeatedStoredColumnReader::_decode_levels(size_t num_levels) {
                 fmt::format("def levels need to parsed: {}, def levels parsed: {}", levels_to_decode, res_def));
     }
     size_t res_rep = _reader->decode_rep_levels(levels_to_decode, &_rep_levels[_levels_decoded]);
+
     if (UNLIKELY(res_rep != levels_to_decode)) {
         return Status::InternalError(
                 fmt::format("rep levels need to parsed: {}, rep levels parsed: {}", levels_to_decode, res_rep));
@@ -805,7 +814,7 @@ StatusOr<size_t> RepeatedStoredColumnReader::_convert_row_to_value(size_t* row) 
         _delimit_rows(&row_to_parse, &level_parsed);
         _levels_parsed += level_parsed;
         num_parsed_levels += level_parsed;
-        if (num_parsed_levels == _num_values_left_in_cur_page && _reader->is_last_page()) {
+        if (num_parsed_levels == _num_values_left_in_cur_page && (_page_change_on_record_boundry || _reader->is_last_page())) {
             row_to_parse += 1;
             _meet_first_record = false;
         }
