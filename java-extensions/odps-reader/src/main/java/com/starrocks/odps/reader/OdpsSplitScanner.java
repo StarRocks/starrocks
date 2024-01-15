@@ -67,6 +67,8 @@ public class OdpsSplitScanner extends ConnectorScanner {
     private SplitReader<VectorSchemaRoot> reader;
     private Map<String, Integer> nameIndexMap;
 
+    private final String timezone;
+
     public OdpsSplitScanner(int fetchSize, Map<String, String> params) {
         this.fetchSize = fetchSize;
         this.projectName = params.get("project_name");
@@ -117,6 +119,7 @@ public class OdpsSplitScanner extends ConnectorScanner {
         }
         settings = builder.build();
         this.classLoader = this.getClass().getClassLoader();
+        this.timezone = params.get("time_zone");
     }
 
     @Override
@@ -178,7 +181,7 @@ public class OdpsSplitScanner extends ConnectorScanner {
                         if (data == null) {
                             appendData(fieldIndex, null);
                         } else {
-                            appendData(fieldIndex, new OdpsColumnValue(data, requireColumns[fieldIndex].getTypeInfo()));
+                            appendData(fieldIndex, new OdpsColumnValue(data, requireColumns[fieldIndex].getTypeInfo(), timezone));
                         }
                     }
                 }

@@ -236,9 +236,19 @@ Boolean value to control whether to enable materialized view Union query rewrite
 
 Boolean value to control whether to enable rule-based materialized view query rewrite. This variable is mainly used in single-table query rewrite. Default: `true`.
 
+### enable_short_circuit (3.2.3 and later)
+
+Whether to enable short circuiting for queries. Default: `false`. If it is set to true, when the table uses hybrid row-column storage and the query meets the criteria (to evaluate whether the query is a point query): the conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the short circuit to directly query the data stored in the row-by-row fashion.
+
 ### enable_spill (3.0 and later)
 
 Whether to enable intermediate result spilling. Default: `false`. If it is set to `true`, StarRocks spills the intermediate results to disk to reduce the memory usage when processing aggregate, sort, or join operators in queries.
+
+### enable_strict_order_by
+
+Used to check whether the column name referenced in ORDER BY is ambiguous. When this variable is set to the default value `TRUE`, an error is reported for such a query pattern: Duplicate alias is used in different expressions of the query and this alias is also a sorting field in ORDER BY, for example, `select distinct t1.* from tbl1 t1 order by t1.k1;`. The logic is the same as that in v2.3 and earlier. When this variable is set to `FALSE`, a loose deduplication mechanism is used, which processes such queries as valid SQL queries.
+
+This variable is supported from v2.5.18 and v3.1.7.
 
 ### enable_profile
 
@@ -598,7 +608,28 @@ The SQL dialect that is used. For example, you can run the `set sql_dialect = 't
 
 ### sql_mode
 
-Used to specify the SQL mode to accommodate certain SQL dialects.
+Used to specify the SQL mode to accommodate certain SQL dialects. Valid values include:
+
+* `PIPES_AS_CONCAT`: The pipe symbol `|` is used to concatenate strings, for example, `select 'hello ' || 'world'`.
+* `ONLY_FULL_GROUP_BY` (Default): The SELECT LIST can only contain GROUP BY columns or aggregate functions.
+* `ALLOW_THROW_EXCEPTION`: returns an error instead of NULL when type conversion fails.
+* `FORBID_INVALID_DATE`: prohibits invalid dates.
+* `MODE_DOUBLE_LITERAL`: interprets floating-point types as DOUBLE rather than DECIMAL.
+* `SORT_NULLS_LAST`: places NULL values at the end after sorting.
+* `ERROR_IF_OVERFLOW`: returns an error instead of NULL in the case of arithmetic overflow. Currently, only the DECIMAL data type supports this option.
+* `GROUP_CONCAT_LEGACY`: uses the `group_concat` syntax of v2.5 and earlier. This option is supported from v3.0.9 and v3.1.6.
+
+You can set only one SQL mode, for example:
+
+```SQL
+set sql_mode = 'PIPES_AS_CONCAT';
+```
+
+Or, you can set multiple modes at a time, for example:
+
+```SQL
+set sql_mode = 'PIPES_AS_CONCAT,ERROR_IF_OVERFLOW,GROUP_CONCAT_LEGACY';
+```
 
 ### sql_safe_updates
 

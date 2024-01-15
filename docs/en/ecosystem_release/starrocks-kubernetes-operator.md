@@ -2,7 +2,7 @@
 displayed_sidebar: "English"
 ---
 
-# starrocks-kubernetes-operator
+# Releases of Kubernetes Operator for StarRocks
 
 ## Notifications
 
@@ -30,18 +30,20 @@ The Operator provided by StarRocks is used to deploy StarRocks clusters in the K
   - Default configuration file for StarRocks Operator: `operator.yaml`
   - Helm Chart, including `kube-starrocks` Chart `kube-starrocks-${chart_version}.tgz`. The `kube-starrocks` Chart is divided into two subcharts: `starrocks` Chart `starrocks-${chart_version}.tgz` and `operator` Chart `operator-${chart_version}.tgz`.
 
-For example, the download URL for kube-starrocks chart v1.8.6 is: [kube-starrocks](https://github.com/StarRocks/starrocks-kubernetes-operator/releases/download/v1.8.6/kube-starrocks-1.8.6.tgz)
+For example, the download URL for kube-starrocks chart v1.8.6 is:
+
+`https://github.com/StarRocks/starrocks-kubernetes-operator/releases/download/v1.8.6/kube-starrocks-1.8.6.tgz`
 
 **Version requirements**
 
 - Kubernetes: 1.18 or later
 - Go: 1.19 or later
 
-## **Release notes**
+## Release notes
 
 ## 1.8
 
-**1.8.6**
+### 1.8.6
 
 **Bug Fixes**
 
@@ -54,7 +56,7 @@ Fixed the following issue:
 - [Load data from outside the Kubernetes network to StarRocks through FE proxy](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/load_data_using_stream_load_howto.md)
 - [Update the root user's password using Helm](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/change_root_password_howto.md)
 
-**1.8.5**
+### 1.8.5
 
 **Improvements**
 
@@ -69,7 +71,7 @@ Fixed the following issue:
 
 - **[Helm Chart]** When the value specified in `starrocks.starrocksCluster.name` is different from the value of `starrocks.nameOverride`, the old configmaps for FE, BE, and CN will be deleted. New configmaps with new names for the FE, BE, and CN will be created. **This may result in the restart of the FE, BE, and CN pods.**
 
-**1.8.4**
+### 1.8.4
 
 **Features**
 
@@ -90,7 +92,7 @@ Fixed the following issue:
 - Add more user guides on how to deploy a StarRocks cluster with different configurations. For example, how to [deploy a StarRocks cluster with all supported features](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/examples/starrocks/deploy_a_starrocks_cluster_with_all_features.yaml). For more user guides, see [docs](https://github.com/StarRocks/starrocks-kubernetes-operator/tree/main/examples/starrocks).
 - Add more user guides on how to manage the StarRocks cluster. For example, how to configure [logging and related fields](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/logging_and_related_configurations_howto.md) and [mount external configmaps or secrets](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/mount_external_configmaps_or_secrets_howto.md). For more user guides, see [docs](https://github.com/StarRocks/starrocks-kubernetes-operator/tree/main/doc).
 
-**1.8.3**
+### 1.8.3
 
 **Upgrade notes**
 
@@ -105,13 +107,13 @@ Fixed the following issue:
 
 - The value of the `proxy_read_timeout` parameter is changed in the **nginx.conf** file to 600s from 60s, in order to avoid timeout.
 
-**1.8.2**
+### 1.8.2
 
 **Improvements**
 
 - Increase the maximum memory usage allowed for the operator pods to avoid OOM. [#254](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/254)
 
-**1.8.1**
+### 1.8.1
 
 **Features**
 
@@ -122,7 +124,7 @@ Fixed the following issue:
 
 - Remove the related Kubernetes resources when the `BeSpec` or `CnSpec` of the StarRocks cluster is deleted, ensuring a clean and consistent state of the cluster. [#245](https://github.com/StarRocks/starrocks-kubernetes-operator/pull/245)
 
-**1.8.0**
+### 1.8.0
 
 **Upgrade notes and behavior changes**
 

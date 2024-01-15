@@ -149,8 +149,6 @@ public class MSchema {
             )
     ).withValues("('value1', 1, 2, 3, 4.0, 5.0, 6, '2022-11-11 10:00:01', '2022-11-11', 10.12)");
 
-
-
     public static final MTable TABLE_WITH_PARTITION = new MTable("table_with_partition", "t1a",
             List.of(
                     "  `t1a` varchar(20) NULL",
@@ -256,6 +254,14 @@ public class MSchema {
             " ,(2,1,1),(2,1,2),(2,1,3),(2,2,1),(2,2,2),(2,2,3),(2,3,1),(2,3,2),(2,3,3)" +
             " ,(3,1,1),(3,1,2),(3,1,3),(3,2,1),(3,2,2),(3,2,3),(3,3,1),(3,3,2),(3,3,3)");
 
+    public static final MTable T2 = new MTable("t2", "v1",
+            List.of(
+                    "  `v1` bigint NULL",
+                    "  `v2` bigint NULL",
+                    "  `v3` bigint NULL"
+            )
+    ).withValues("(1, 2, 3)");
+
     public static final MTable T_METRICS = new MTable("t_metrics", "c1",
             List.of(
                     " c1 int",
@@ -279,6 +285,34 @@ public class MSchema {
     public static final MTable TABLE_WITH_DAY_PARTITION1 = TABLE_WITH_DAY_PARTITION.copyWithName("table_with_day_partition1");
     public static final MTable TABLE_WITH_DAY_PARTITION2 = TABLE_WITH_DAY_PARTITION.copyWithName("table_with_day_partition2");
 
+    public static final MTable TEST10 = new MTable("test10", "event_id",
+            List.of(
+                    "  `event_id` int NULL",
+                    "  `event_type` varchar(65533) NULL ",
+                    "  `event_time` datetime NULL "
+            ),
+            "event_time",
+            List.of(
+                    "PARTITION p20230105 VALUES [(\"2023-01-05 00:00:00\"), (\"2023-01-06 00:00:00\"))",
+                    "PARTITION p20230106 VALUES [(\"2023-01-06 00:00:00\"), (\"2023-01-07 00:00:00\"))"
+            )
+    ).withValues("(1, 'a', '2023-01-05 10:20:22'),(2, 'b', '2023-01-05 10:20:22')," +
+            "(11, 'aa', '2023-01-06 10:20:22'),(22, 'bb', '2023-01-06 10:20:22')");
+
+    public static final MTable TEST11 = new MTable("test11", "event_id1",
+            List.of(
+                    "  `event_id1` int NULL",
+                    "  `event_type1` varchar(65533) NULL ",
+                    "  `event_time1` datetime NULL "
+            ),
+            "event_time1",
+            List.of(
+                    "PARTITION p20230105 VALUES [(\"2023-01-05 00:00:00\"), (\"2023-01-06 00:00:00\"))",
+                    "PARTITION p20230106 VALUES [(\"2023-01-06 00:00:00\"), (\"2023-01-07 00:00:00\"))"
+            )
+    ).withValues("(1, 'a', '2023-01-05 10:20:22'),(2, 'b', '2023-01-05 10:20:23')," +
+            "(11, 'aa', '2023-01-06 10:20:22'),(22, 'bbx', '2023-01-06 10:20:22')");
+
     public static final List<MTable>  TABLE_MARKETING = List.of(
             EMPS,
             EMPS_NULL,
@@ -299,7 +333,10 @@ public class MSchema {
             TEST_BASE_PART,
             T1,
             JSON_TBL,
-            T_METRICS
+            T_METRICS,
+            TEST10,
+            TEST11,
+            T2
     );
     public static final Map<String, MTable> TABLE_MAP = Maps.newHashMap();
 

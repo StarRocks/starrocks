@@ -72,11 +72,12 @@ private:
     void _assign_ordinals();
     template <typename T>
     void _assign_ordinals_tmpl();
-    ChunkPtr _late_materialize(const ChunkPtr& chunk);
     template <typename T>
     ChunkPtr _late_materialize_tmpl(const ChunkPtr& chunk);
 
 protected:
+    ChunkPtr _late_materialize(const ChunkPtr& chunk);
+
     size_t _total_rows = 0;        // Total rows of sorting data
     Permutation _sort_permutation; // Temp permutation for sorting
     size_t _staging_unsorted_rows = 0;

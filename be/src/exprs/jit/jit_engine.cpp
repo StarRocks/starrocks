@@ -93,8 +93,12 @@ StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* cont
 
     // TODO(Yueyang): optimize module name.
     auto expr_name = expr->debug_string();
+    JITScalarFunction compiled_function = nullptr;
+    compiled_function = (JITScalarFunction)instance->lookup_function_with_lock(expr_name);
 
-    // TODO(Yueyang): loopup in cache.
+    if (compiled_function != nullptr) {
+        return compiled_function;
+    }
 
     auto llvm_context = std::make_unique<llvm::LLVMContext>();
     auto module = std::make_unique<llvm::Module>(expr_name, *llvm_context);
@@ -112,7 +116,7 @@ StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* cont
     }
 
     // Compile module, return function pointer (maybe nullptr).
-    JITScalarFunction compiled_function = reinterpret_cast<JITScalarFunction>(
+    compiled_function = reinterpret_cast<JITScalarFunction>(
             instance->compile_module(std::move(module), std::move(llvm_context), expr_name));
 
     if (compiled_function == nullptr) {
@@ -165,7 +169,6 @@ void* JITEngine::compile_module(std::unique_ptr<llvm::Module> module, std::uniqu
     auto* func = lookup_function(expr_name);
     // The function has already been compiled.
     if (func != nullptr) {
-        ++_resource_ref_count_map[expr_name];
         return func;
     }
 
@@ -181,14 +184,17 @@ void* JITEngine::compile_module(std::unique_ptr<llvm::Module> module, std::uniqu
     }
 
     _resource_tracker_map[expr_name] = std::move(resource_tracker);
-    _resource_ref_count_map[expr_name] = 1;
+    _resource_ref_count_map[expr_name] = 0;
     // Lookup the function in the JIT engine, this will trigger the compilation.
     return lookup_function(expr_name);
 }
 
 Status JITEngine::remove_module(const std::string& expr_name) {
     std::lock_guard<std::mutex> lock(_mutex);
-    if (--_resource_ref_count_map[expr_name] > 0) {
+    if (!_resource_ref_count_map.contains(expr_name)) {
+        return Status::RuntimeError("Remove a non-existing jit module");
+    }
+    if (_resource_ref_count_map[expr_name].fetch_sub(1) > 1) {
         return Status::OK();
     }
     auto it = _resource_tracker_map.find(expr_name);
@@ -198,6 +204,7 @@ Status JITEngine::remove_module(const std::string& expr_name) {
 
     auto error = it->second->remove();
     _resource_tracker_map.erase(it);
+    _resource_ref_count_map.erase(expr_name);
     if (UNLIKELY(error)) {
         std::string error_message;
         llvm::handleAllErrors(std::move(error), [&](const llvm::ErrorInfoBase& EIB) { error_message = EIB.message(); });
@@ -226,7 +233,13 @@ void* JITEngine::lookup_function(const std::string& expr_name) {
         LOG(ERROR) << "Failed to find jit function: " << error_message;
         return nullptr;
     }
+    _resource_ref_count_map[expr_name].fetch_add(1);
     return reinterpret_cast<void*>(addr->toPtr<JITScalarFunction>());
+}
+
+void* JITEngine::lookup_function_with_lock(const std::string& expr_name) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    return lookup_function(expr_name);
 }
 
 } // namespace starrocks

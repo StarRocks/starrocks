@@ -103,6 +103,10 @@ public class PseudoCluster {
         }
     }
 
+    public void setServerPrepareStatement() {
+        dataSource.setConnectionProperties("useServerPrepStmts=true");
+    }
+
     public void setQueryTimeout(int timeout) {
         dataSource.setDefaultQueryTimeout(timeout);
     }

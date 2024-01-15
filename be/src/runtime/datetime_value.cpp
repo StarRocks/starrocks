@@ -1485,7 +1485,7 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
             to = append_with_prefix(buf, pos - buf, '0', 1, to);
             break;
         case 'f':
-            if (write_size + 2 >= buffer_size) return false;
+            if (write_size + 6 >= buffer_size) return false;
             // Microseconds (000000..999999)
             pos = int_to_str(_microsecond, buf);
             to = append_with_prefix(buf, pos - buf, '0', 6, to);

@@ -31,14 +31,17 @@ import org.apache.paimon.utils.InternalRowUtils;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 public class PaimonColumnValue implements ColumnValue {
     private final Object fieldData;
     private final DataType dataType;
-    public PaimonColumnValue(Object fieldData, DataType dataType) {
+    private final String timeZone;
+    public PaimonColumnValue(Object fieldData, DataType dataType, String timeZone) {
         this.fieldData = fieldData;
         this.dataType = dataType;
+        this.timeZone = timeZone;
     }
     @Override
     public boolean getBoolean() {
@@ -72,24 +75,7 @@ public class PaimonColumnValue implements ColumnValue {
 
     @Override
     public String getString(ColumnType.TypeValue type) {
-        if (type == ColumnType.TypeValue.DATE) {
-            int epoch = (int) fieldData;
-            LocalDate date = LocalDate.ofEpochDay(epoch);
-            return PaimonScannerUtils.formatDate(date);
-        } else {
-            return fieldData.toString();
-        }
-    }
-
-    @Override
-    public String getTimestamp(ColumnType.TypeValue type) {
-        if (type == ColumnType.TypeValue.DATETIME_MILLIS) {
-            Timestamp ts = (Timestamp) fieldData;
-            LocalDateTime dateTime = ts.toLocalDateTime();
-            return PaimonScannerUtils.formatDateTime(dateTime);
-        } else {
-            return fieldData.toString();
-        }
+        return fieldData.toString();
     }
 
     @Override
@@ -133,7 +119,7 @@ public class PaimonColumnValue implements ColumnValue {
                 DataField dataField = fields.get(idx);
                 Object o = InternalRowUtils.get(array, idx, dataField.type());
                 if (o != null) {
-                    cv = new PaimonColumnValue(o, dataField.type());
+                    cv = new PaimonColumnValue(o, dataField.type(), timeZone);
                 }
             }
             values.add(cv);
@@ -154,9 +140,19 @@ public class PaimonColumnValue implements ColumnValue {
             PaimonColumnValue cv = null;
             Object o = InternalRowUtils.get(array, i, dataType);
             if (o != null) {
-                cv = new PaimonColumnValue(o, dataType);
+                cv = new PaimonColumnValue(o, dataType, timeZone);
             }
             values.add(cv);
         }
+    }
+
+    @Override
+    public LocalDate getDate() {
+        return LocalDate.ofEpochDay((int) fieldData);
+    }
+
+    @Override
+    public LocalDateTime getDateTime(ColumnType.TypeValue type) {
+        return LocalDateTime.ofInstant(((Timestamp) fieldData).toInstant(), ZoneId.of(timeZone));
     }
 }

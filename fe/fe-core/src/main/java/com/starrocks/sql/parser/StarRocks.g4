@@ -485,11 +485,12 @@ createTemporaryTableStatement
 
 createTableAsSelectStatement
     : CREATE TABLE (IF NOT EXISTS)? qualifiedName
-        ('(' identifier (',' identifier)* ')')?
+        ('(' (identifier (',' identifier)*  (',' indexDesc)* | indexDesc (',' indexDesc)*) ')')?
         keyDesc?
         comment?
         partitionDesc?
         distributionDesc?
+        orderByDesc?
         properties?
         AS queryStatement
     ;

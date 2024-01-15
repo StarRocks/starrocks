@@ -12,7 +12,7 @@ However, when it comes to building complex and efficient reports using data from
 
 ## Overview
 
-StarRocks supports building asynchronous materialized views based on external catalogs such as Hive catalog, Iceberg catalog, Hudi catalog, and Paimon catalog. External catalog-based materialized views are particularly useful in the following scenarios:
+StarRocks supports building asynchronous materialized views based on external catalogs such as Hive catalog, Iceberg catalog, Hudi catalog, JDBC catalog, and Paimon catalog. External catalog-based materialized views are particularly useful in the following scenarios:
 
 - **Transparent Acceleration of data lake reports**
 
@@ -94,9 +94,9 @@ Creating a materialized view on tables in external catalogs is similar to creati
 
 ### Choose a suitable refresh strategy
 
-Currently, StarRocks cannot detect partition-level data changes in Hudi catalogs and JDBC catalogs. Therefore, a full-size refresh is performed once the task is triggered.
+Currently, StarRocks cannot detect partition-level data changes in Hudi catalogs. Therefore, a full-size refresh is performed once the task is triggered.
 
-For Hive Catalog, Iceberg Catalog (starting from v3.1.4), and Paimon Catalog (starting from v3.2.1), StarRocks supports detecting data changes at the partition level. As a result, StarRocks can:
+For Hive Catalog, Iceberg Catalog (starting from v3.1.4), JDBC catalog (starting from v3.1.4, only for MySQL range-partitioned tables), and Paimon Catalog (starting from v3.2.1), StarRocks supports detecting data changes at the partition level. As a result, StarRocks can:
 
 - Refresh only the partitions with data changes to avoid full-size refresh, reducing resource consumption caused by refresh.
 
@@ -122,7 +122,7 @@ From v3.1.4, StarRocks supports detecting data changes for Iceberg Catalog at th
 
 ### Enable query rewrite for external catalog-based materialized views
 
-By default, StarRocks does not support query rewrite for materialized views built on Hudi, Iceberg, and JDBC catalogs because query rewrite in this scenario cannot ensure a strong consistency of results. You can enable this feature by setting the property `force_external_table_query_rewrite` to `true` when creating the materialized view. For materialized views built on tables in Hive catalogs, the query rewrite is enabled by default.
+By default, StarRocks does not support query rewrite for materialized views built on Hudi and JDBC catalogs because query rewrite in this scenario cannot ensure a strong consistency of results. You can enable this feature by setting the property `force_external_table_query_rewrite` to `true` when creating the materialized view. For materialized views built on tables in Hive catalogs, the query rewrite is enabled by default.
 
 Example:
 
