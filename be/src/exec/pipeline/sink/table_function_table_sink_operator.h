@@ -96,6 +96,9 @@ private:
     const std::shared_ptr<::parquet::schema::GroupNode> _parquet_file_schema;
     std::unordered_map<std::string, std::unique_ptr<starrocks::RollingAsyncParquetWriter>> _partition_writers;
     std::atomic<bool> _is_finished = false;
+
+    std::unique_ptr<FileWriter> _file_writer;
+    mutable std::queue<std::future<Status>> _blocking_futures;
 };
 
 class TableFunctionTableSinkOperatorFactory final : public OperatorFactory {

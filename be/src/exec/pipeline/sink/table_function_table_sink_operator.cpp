@@ -89,7 +89,27 @@ void TableFunctionTableSinkOperator::close(RuntimeState* state) {
     Operator::close(state);
 }
 
+template<typename R>
+bool is_ready(std::future<R> const& f) {
+    return f.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+}
+
 bool TableFunctionTableSinkOperator::need_input() const {
+    while (!_blocking_futures.empty()) {
+        // return if any future is not ready, check in order of FIFO
+        if (!is_ready(_blocking_futures.front())) {
+            return false;
+        }
+        if (auto st = _blocking_futures.front().get(); !st.ok()) {
+            LOG(WARNING) << "cancel fragment: " << st;
+            _fragment_ctx->cancel(st);
+            return false;
+        }
+    }
+
+    return true;
+
+    /*
     for (const auto& writer : _partition_writers) {
         if (!writer.second->writable()) {
             return false;
@@ -97,6 +117,7 @@ bool TableFunctionTableSinkOperator::need_input() const {
     }
 
     return true;
+    */
 }
 
 bool TableFunctionTableSinkOperator::is_finished() const {
@@ -144,6 +165,26 @@ StatusOr<ChunkPtr> TableFunctionTableSinkOperator::pull_chunk(RuntimeState* stat
 }
 
 Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
+    auto future_handler = [&](auto&& future) {
+        if (is_ready(future)) {
+            RETURN_IF_ERROR(future.get());
+        } else {
+            _blocking_futures.push(std::move(future));
+        }
+        return Status::OK();
+    };
+
+    // poc: unpartitoned writer
+    if (_file_writer->getWrittenBytes() > 100) {
+        RETURN_IF_ERROR(future_handler(_file_writer->commit()));
+    }
+
+    _file_writer = std::make_unique<parquet::ParquetFileWriter>();
+    RETURN_IF_ERROR(future_handler(_file_writer->write(chunk)));
+
+    return Status::OK();
+
+    /*
     if (_partition_exprs.empty()) {
         if (_partition_writers.empty()) {
             auto writer = std::make_unique<RollingAsyncParquetWriter>(_make_table_info(_path), _output_exprs,
@@ -176,6 +217,7 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
     }
 
     return _partition_writers[partition_location]->append_chunk(chunk.get(), state);
+    */
 }
 
 TableInfo TableFunctionTableSinkOperator::_make_table_info(const string& partition_location) const {

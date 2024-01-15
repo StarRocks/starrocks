@@ -20,6 +20,7 @@
 #include <arrow/io/interfaces.h>
 #include <parquet/arrow/writer.h>
 #include <runtime/current_thread.h>
+#include <future>
 
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -459,7 +460,10 @@ Status AsyncFileWriter::_flush_row_group() {
         _rg_writer_closing = true;
     }
 
-    bool ok = _executor_pool->try_offer([&]() {
+    std::promise<int> promise;
+    std::future<int> future = promise.get_future();
+
+    bool ok = _executor_pool->try_offer([& , promise = std::move(promise)]{
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_state->instance_mem_tracker());
         SCOPED_TIMER(_io_timer);
         if (_chunk_writer != nullptr) {
@@ -476,6 +480,7 @@ Status AsyncFileWriter::_flush_row_group() {
             _rg_writer_closing = false;
         }
         _cv.notify_one();
+        promise.set_value(1);
     });
 
     if (!ok) {
@@ -530,6 +535,162 @@ Status AsyncFileWriter::close(RuntimeState* state,
     }
 
     return Status::OK();
+}
+
+std::future<Status> ParquetFileWriter::write(ChunkPtr chunk) {
+    auto status = _rowgroup_writer->write(chunk.get());
+    if (_rowgroup_writer->estimated_buffered_bytes() > 100) {
+        return _flush_row_group();
+    }
+    return std::move(NON_BLOCKED_OK);
+}
+
+void ParquetFileWriter::commitAsync(std::function<void(StatusOr<pipeline::FileMetrics>)> callback) {
+    if (bool ok = _executors->try_offer([&, writer = std::move(_writer), output_stream = std::move(_output_stream)]{
+        try {
+            writer->Close();
+            _set_metrics(writer->metadata().get());
+        } catch (const ::parquet::ParquetStatusException& e) {
+            auto exception = Status::IOError(fmt::format("{}: {}", "close writer error", e.what()));
+            LOG(WARNING) << exception;
+            callback(exception);
+            return;
+        }
+
+        if (auto st = output_stream->Close(); !st.ok()) {
+            auto exception = Status::IOError(fmt::format("{}: {}", "close output stream error", st.message()));
+            LOG(WARNING) << exception;
+            callback(exception);
+            return;
+        }
+
+        // io task succeed
+        callback(_metrics.value());
+    }); !ok) {
+        auto exception = Status::ResourceBusy("submit flush row group task fails");
+        LOG(WARNING) << exception;
+        callback(exception);
+    }
+}
+
+void ParquetFileWriter::rollback() {
+    // necessary?
+}
+
+void ParquetFileWriter::close() {
+    // necessary?
+}
+
+pipeline::FileMetrics ParquetFileWriter::metrics() {
+    DCHECK(_metrics.has_value()) << "shall be invoked after commit";
+    return _metrics.value();
+}
+
+std::future<Status> ParquetFileWriter::_flush_row_group() {
+    DCHECK(_rowgroup_writer != nullptr);
+    std::promise<Status> promise;
+    std::future<Status> future = promise.get_future();
+
+    if (bool ok = _executors->try_offer([& , rowgroup_writer = std::move(_rowgroup_writer), promise = std::move(promise)]{
+        try {
+            rowgroup_writer->close();
+        } catch (const ::parquet::ParquetStatusException& e) {
+            auto exception = Status::IOError(fmt::format("{}: {}", "flush rowgroup error", e.what()));
+            LOG(WARNING) << exception;
+            promise.set_value(exception);
+        }
+    }); !ok) {
+        auto exception = Status::ResourceBusy("submit flush row group task fails");
+        LOG(WARNING) << exception;
+        promise.set_value(exception);
+    }
+
+    return std::move(future);
+}
+
+#define MERGE_STATS_CASE(ParquetType)                                                                              \
+    case ParquetType: {                                                                                            \
+        auto typed_left_stat =                                                                                     \
+                std::static_pointer_cast<::parquet::TypedStatistics<::parquet::PhysicalType<ParquetType>>>(left);  \
+        auto typed_right_stat =                                                                                    \
+                std::static_pointer_cast<::parquet::TypedStatistics<::parquet::PhysicalType<ParquetType>>>(right); \
+        typed_left_stat->Merge(*typed_right_stat);                                                                 \
+        return;                                                                                                    \
+    }
+
+void merge_stats(const std::shared_ptr<::parquet::Statistics>& left,
+                 const std::shared_ptr<::parquet::Statistics>& right) {
+    DCHECK(left->physical_type() == right->physical_type());
+    switch (left->physical_type()) {
+        MERGE_STATS_CASE(::parquet::Type::BOOLEAN);
+        MERGE_STATS_CASE(::parquet::Type::INT32);
+        MERGE_STATS_CASE(::parquet::Type::INT64);
+        MERGE_STATS_CASE(::parquet::Type::INT96);
+        MERGE_STATS_CASE(::parquet::Type::FLOAT);
+        MERGE_STATS_CASE(::parquet::Type::DOUBLE);
+        MERGE_STATS_CASE(::parquet::Type::BYTE_ARRAY);
+        MERGE_STATS_CASE(::parquet::Type::FIXED_LEN_BYTE_ARRAY);
+    default: {
+    }
+    }
+}
+
+void ParquetFileWriter::_set_metrics(::parquet::FileMetaData* meta) {
+    DCHECK(meta != nullptr);
+    pipeline::FileMetrics file_metrics;
+    // field_id -> column_stat
+    std::map<int32_t, std::shared_ptr<::parquet::Statistics>> column_stats;
+    std::map<int32_t, int64_t> column_sizes;
+    std::map<int32_t, int64_t> value_counts;
+    std::map<int32_t, int64_t> null_value_counts;
+    std::map<int32_t, std::string> lower_bounds;
+    std::map<int32_t, std::string> upper_bounds;
+    bool has_null_count = false;
+    bool has_min_max = false;
+
+    // traverse stat of column chunk in each row group
+    for (int col_idx = 0; col_idx < meta->num_columns(); col_idx++) {
+        auto field_id = meta->schema()->Column(col_idx)->schema_node()->field_id();
+
+        for (int rg_idx = 0; rg_idx < meta->num_row_groups(); rg_idx++) {
+            auto column_chunk_meta = meta->RowGroup(rg_idx)->ColumnChunk(col_idx);
+            column_sizes[field_id] += column_chunk_meta->total_compressed_size();
+
+            if (column_chunk_meta->is_stats_set()) {
+                auto column_stat = column_chunk_meta->statistics();
+                if (!column_stats.count(field_id)) {
+                    column_stats[field_id] = column_stat;
+                } else {
+                    merge_stats(column_stats[field_id], column_stat);
+                }
+            }
+        }
+    }
+
+    for (auto& [field_id, column_stat] : column_stats) {
+        value_counts[field_id] = column_stat->num_values();
+        if (column_stat->HasNullCount()) {
+            has_null_count = true;
+            null_value_counts[field_id] = column_stat->null_count();
+        }
+        if (column_stat->HasMinMax()) {
+            has_min_max = true;
+            lower_bounds[field_id] = column_stat->EncodeMin();
+            upper_bounds[field_id] = column_stat->EncodeMax();
+        }
+    }
+
+    file_metrics.column_sizes = std::move(column_sizes);
+    file_metrics.value_counts = std::move(value_counts);
+    if (has_null_count) {
+        file_metrics.null_value_counts = std::move(null_value_counts);
+    }
+    if (has_min_max) {
+        file_metrics.lower_bounds = std::move(lower_bounds);
+        file_metrics.upper_bounds = std::move(upper_bounds);
+    }
+
+    _metrics = file_metrics;
 }
 
 } // namespace starrocks::parquet

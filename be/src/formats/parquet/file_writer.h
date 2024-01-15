@@ -31,6 +31,7 @@
 
 #include "column/chunk.h"
 #include "column/nullable_column.h"
+#include "exec/pipeline/sink/rolling_file_writer.h"
 #include "formats/parquet/chunk_writer.h"
 #include "fs/fs.h"
 #include "runtime/runtime_state.h"
@@ -232,5 +233,43 @@ private:
     bool _rg_writer_closing = false;
     std::mutex _m;
 };
+
+template <typename T>
+std::future<T> make_completed_future(T&& t) {
+    std::promise<T> p;
+    p.set_value(std::forward<T>(t));
+    return p.get_future();
+}
+
+class ParquetFileWriter final : public pipeline::FileWriter {
+public:
+    ParquetFileWriter();
+
+    ~ParquetFileWriter() override;
+
+    std::future<Status> write(ChunkPtr chunk) override;
+
+    void commitAsync(std::function<void(StatusOr<pipeline::FileMetrics>)> callback) override;
+
+    void rollback() override;
+
+    void close() override;
+
+    pipeline::FileMetrics metrics() override;
+
+private:
+    std::future<Status> _flush_row_group();
+
+    void _set_metrics(::parquet::FileMetaData* meta_data);
+
+    std::unique_ptr<::parquet::ParquetFileWriter> _writer;
+    std::unique_ptr<ChunkWriter> _rowgroup_writer;
+    std::unique_ptr<ParquetOutputStream> _output_stream;
+    std::optional<pipeline::FileMetrics> _metrics; // set metrics after commit
+    PriorityThreadPool* _executors;
+
+    inline static std::future<Status> NON_BLOCKED_OK = make_completed_future(Status::OK());
+};
+
 
 } // namespace starrocks::parquet
