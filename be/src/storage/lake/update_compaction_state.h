@@ -52,6 +52,7 @@ private:
     std::vector<ChunkIteratorPtr> _segment_iters;
     int64_t _tablet_id = 0;
     std::mutex _state_lock;
+    OlapReaderStatistics _stats;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const CompactionState& o) {
