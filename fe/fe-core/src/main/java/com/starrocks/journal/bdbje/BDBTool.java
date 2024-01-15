@@ -62,8 +62,8 @@ import java.util.Map;
 public class BDBTool {
     private static final Logger LOG = LogManager.getLogger(BDBTool.class);
 
-    private String metaPath;
-    private BDBToolOptions options;
+    private final String metaPath;
+    private final BDBToolOptions options;
 
     public BDBTool(String metaPath, BDBToolOptions options) {
         this.metaPath = metaPath;
@@ -76,7 +76,7 @@ public class BDBTool {
         envConfig.setReadOnly(true);
         envConfig.setCachePercent(20);
 
-        Environment env = null;
+        Environment env;
         try {
             env = new Environment(new File(metaPath), envConfig);
         } catch (DatabaseException e) {
@@ -91,7 +91,7 @@ public class BDBTool {
                 // list all databases
                 List<String> dbNames = env.getDatabaseNames();
                 JSONArray jsonArray = new JSONArray(dbNames);
-                System.out.println(jsonArray.toString());
+                System.out.println(jsonArray);
                 return true;
             } else {
                 // db operations
@@ -106,11 +106,11 @@ public class BDBTool {
                         Map<String, String> statMap = Maps.newHashMap();
                         statMap.put("count", String.valueOf(db.count()));
                         JSONObject jsonObject = new JSONObject(statMap);
-                        System.out.println(jsonObject.toString());
+                        System.out.println(jsonObject);
                         return true;
                     } else {
                         // set from key
-                        long fromKey = 0L;
+                        long fromKey;
                         String fromKeyStr = options.hasFromKey() ? options.getFromKey() : dbName;
                         try {
                             fromKey = Long.parseLong(fromKeyStr);
