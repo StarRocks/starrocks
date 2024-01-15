@@ -14,13 +14,7 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 #include "avro.h"
-#ifdef __cplusplus
-}
-#endif
 
 namespace starrocks {
 
