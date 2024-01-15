@@ -546,8 +546,15 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator((uint32_t)ucid, &dcg_filename, access_path));
     if (col_iter == nullptr) {
         // not found in delta column group, create normal column iterator
+<<<<<<< HEAD
         ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator(cid, access_path));
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_name()));
+=======
+        auto tablet_schema = _opts.tablet_schema ? _opts.tablet_schema : _segment->tablet_schema_share_ptr();
+        const auto& col = tablet_schema->column(cid);
+        ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, access_path));
+        ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_info()));
+>>>>>>> 7dbd6acae8 ([Enhancement]Pass FileInfo when call `newRandomAccessFile` when init  column_iterator (#38996))
         iter_opts.read_file = rfile.get();
         _column_files[cid] = std::move(rfile);
     } else {
