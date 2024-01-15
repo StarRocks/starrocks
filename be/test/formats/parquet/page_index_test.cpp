@@ -180,11 +180,15 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
     //     "c3": df.apply(lambda x: pd.NA if x["c0"] % 10 == 0 else [x["c0"] % 1000, pd.NA, x["c1"] % 1000], axis = 1)
     // })
     const std::string big_page_file = "./be/test/formats/parquet/test_data/page_index_big_page.parquet";
+    // same data with above but without dictionary
+    const std::string repeated_no_dict_file = "./be/test//formats/parquet/test_data/page_index_repeated_nodict.parquet";
+
+    std::vector<std::string> files = {small_page_file, big_page_file, repeated_no_dict_file};
 
     // for small page 1000 values / page
     // for big page 10000 values / page
-    for (size_t index = 0; index < 2; index++) {
-        const std::string& file_path = index == 0 ? small_page_file : big_page_file;
+    for (size_t index = 0; index < 3; index++) {
+        const std::string& file_path = files[index];
         std::cout << "file_path: " << file_path << std::endl;
 
         std::uniform_int_distribution<int> dist_small(1, 20000);
