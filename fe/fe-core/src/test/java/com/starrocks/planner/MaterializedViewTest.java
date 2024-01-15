@@ -5358,4 +5358,20 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 });
 
     }
+
+    @Test
+    public void testAggregateWithHave() {
+        String mv = "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno having sum(salary) > 1";
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno having sum(salary) > 1");
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno having sum(salary) > 10");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid having sum(salary) > 10");
+    }
 }

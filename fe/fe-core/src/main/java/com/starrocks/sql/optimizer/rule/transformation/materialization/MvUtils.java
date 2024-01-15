@@ -321,9 +321,11 @@ public class MvUtils {
         if (root == null) {
             return false;
         }
+        // 1. check whether is SPJ first
         if (isLogicalSPJ(root)) {
             return true;
         }
+        // 2. check whether it's SPJG then
         return isLogicalSPJG(root);
     }
 
