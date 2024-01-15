@@ -24,8 +24,8 @@ public class ShowBackendBlackListStmt extends ShowStmt {
             .addColumn(new Column("BackendId", ScalarType.createVarchar(20)))
             .addColumn(new Column("AddBlackListType", ScalarType.createVarchar(20)))
             .addColumn(new Column("LostConnectionTime", ScalarType.createVarchar(20)))
-            .addColumn(new Column("LostConnectionNumberInTerm", ScalarType.createVarchar(10)))
-            .addColumn(new Column("CheckTimeTerm", ScalarType.createVarchar(10)))
+            .addColumn(new Column("LostConnectionNumberInPeriod", ScalarType.createVarchar(10)))
+            .addColumn(new Column("CheckTimePeriod(s)", ScalarType.createVarchar(10)))
             .build();
 
     public ShowBackendBlackListStmt(NodePosition pos) {
