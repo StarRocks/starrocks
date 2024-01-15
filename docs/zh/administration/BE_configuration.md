@@ -535,6 +535,18 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：计算 tablet 的校验和 (checksum)。
 - 默认值：1
 
+#### object_storage_connect_timeout_ms
+
+- 含义：对象存储 Socket 连接的超时时间。
+- 默认值：`-1`，表示使用 SDK 中的默认时间。
+- 引入版本：3.0.9
+
+#### object_storage_request_timeout_ms
+
+- 含义：对象存储 HTTP 连接的超时时间。
+- 默认值：`-1`，表示使用 SDK 中的默认时间。
+- 引入版本：3.0.9
+
 #### sys_log_dir
 
 - 含义：存放日志的地方，包括 INFO，WARNING，ERROR，FATAL 等日志。
