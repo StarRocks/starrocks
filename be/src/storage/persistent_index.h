@@ -728,8 +728,8 @@ private:
     bool _can_dump_directly();
     bool _need_flush_advance();
     bool _need_merge_advance();
-    Status _flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values);
-
+    Status _flush_advance_or_append_wal(size_t n, const Slice* keys, const IndexValue* values,
+                                        std::vector<size_t>* replace_idxes);
     Status _delete_major_compaction_tmp_index_file();
     Status _delete_tmp_index_file();
 
