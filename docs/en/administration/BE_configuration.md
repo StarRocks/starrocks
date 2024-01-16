@@ -213,7 +213,7 @@ BE dynamic parameters are as follows.
 #### pindex_major_compaction_limit_per_disk
 
 - **Default:** 1
-- **Description:**  the maximum concurrency of compaction on a disk. This addresses the issue of uneven I/O across disks due to compaction. This issue can cause excessively high I/O for certain disks.
+- **Description:** The maximum concurrency of compaction on a disk. This addresses the issue of uneven I/O across disks due to compaction. This issue can cause excessively high I/O for certain disks.
 - **Introduced in:** 3.0.9
 
 #### load_error_log_reserve_hours
