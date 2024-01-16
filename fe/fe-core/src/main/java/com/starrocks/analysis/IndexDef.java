@@ -199,6 +199,8 @@ public class IndexDef implements ParseNode {
             }
         } else if (indexType == IndexType.GIN) {
             InvertedIndexUtil.checkInvertedIndexValid(column, properties, keysType);
+        } else if (indexType == IndexType.NGRAMBF) {
+
         } else {
             throw new SemanticException("Unsupported index type: " + indexType);
         }
@@ -206,7 +208,8 @@ public class IndexDef implements ParseNode {
 
     public enum IndexType {
         BITMAP,
-        GIN("GIN");
+        GIN("GIN"),
+        NGRAMBF("NGRAMBF");
 
         IndexType(String name) {
             this.displayName = name;
@@ -226,6 +229,8 @@ public class IndexDef implements ParseNode {
                 index = IndexDef.IndexType.BITMAP;
             } else if (indexTypeContext.GIN() != null) {
                 index = IndexDef.IndexType.GIN;
+            } else if (indexTypeContext.NGRAMBF() != null) {
+                index = IndexType.NGRAMBF;
             } else {
                 throw new ParsingException("Not specify index type");
             }

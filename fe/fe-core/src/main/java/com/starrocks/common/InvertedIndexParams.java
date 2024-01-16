@@ -126,4 +126,38 @@ public class InvertedIndexParams {
             return defaultValue;
         }
     }
+
+    public enum NgramBfIndexParamsKey implements ParamsKey {
+        /**
+         * Specific index parser
+         */
+        GRAM_NUM("2", true),
+
+        /**
+         * Whether to omit term frequency and term position when indexing
+         */
+        FPP("0.05");
+
+        private final String defaultValue;
+        private boolean needDefault = false;
+
+        NgramBfIndexParamsKey(String defaultValue, boolean needDefault) {
+            this.defaultValue = defaultValue;
+            this.needDefault = needDefault;
+        }
+
+        NgramBfIndexParamsKey(String defaultValue) {
+            this.defaultValue = defaultValue;
+        }
+
+        @Override
+        public String defaultValue() {
+            return defaultValue;
+        }
+
+        @Override
+        public boolean needDefault() {
+            return needDefault;
+        }
+    }
 }
