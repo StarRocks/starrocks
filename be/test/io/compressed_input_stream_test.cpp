@@ -88,13 +88,8 @@ protected:
         char* buf = vec_buf.data();
 
         for (;;) {
-<<<<<<< HEAD
-            auto st = compressed_input_stream->read(buf, buffer_size);
-            ASSERT_TRUE(st.ok()) << st.status().get_error_msg();
-=======
             auto st = compressed_input_stream->read(buf, ctx.read_buffer_size);
-            ASSERT_TRUE(st.ok()) << st.status().message();
->>>>>>> 31e77116ea ([Enhancement] save memmove in compressed input stream (#38691))
+            ASSERT_TRUE(st.ok()) << st.status().get_error_msg();
             uint64_t sz = st.value();
             if (sz == 0) break;
             buf[sz] = 0;
