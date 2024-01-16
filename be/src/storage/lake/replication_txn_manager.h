@@ -16,6 +16,7 @@
 
 #include "common/status.h"
 #include "gen_cpp/AgentService_types.h"
+#include "gutil/macros.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
 #include "storage/lake/types_fwd.h"

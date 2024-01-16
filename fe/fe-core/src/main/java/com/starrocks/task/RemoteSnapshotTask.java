@@ -42,7 +42,8 @@ public class RemoteSnapshotTask extends AgentTask {
             TTabletType tabletType, long transactionId, int schemaHash, long visibleVersion,
             String srcToken, long srcTabletId, TTabletType srcTabletType, int srcSchemaHash,
             long srcVisibleVersion, List<TBackend> srcBackends, int timeoutSec) {
-        super(null, backendId, TTaskType.REMOTE_SNAPSHOT, dbId, tableId, partitionId, indexId, tabletId, tabletId);
+        super(null, backendId, TTaskType.REMOTE_SNAPSHOT, dbId, tableId, partitionId, indexId, tabletId, tabletId,
+                System.currentTimeMillis());
         this.transactionId = transactionId;
         this.tabletType = tabletType;
         this.schemaHash = schemaHash;
@@ -85,7 +86,7 @@ public class RemoteSnapshotTask extends AgentTask {
         sb.append(", tablet id: ").append(tabletId).append(", tablet type: ").append(tabletType);
         sb.append(", schema hash: ").append(schemaHash);
         sb.append(", visible version: ").append(visibleVersion);
-        sb.append(", src token:").append(srcToken).append(", src tablet id:").append(srcTabletId);
+        sb.append(", src token: ").append(srcToken).append(", src tablet id: ").append(srcTabletId);
         sb.append(", src tablet type:").append(srcTabletType).append(", src schema hash: ").append(srcSchemaHash);
         sb.append(", src visible version: ").append(srcVisibleVersion);
         sb.append(", src backends: ").append(srcBackends);

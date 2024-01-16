@@ -97,6 +97,8 @@ message TabletMetadataPB {
     // The commit time on the FE for the transaction that created this tablet metadata.
     // Meansured as the number of seconds since the Epoch, 1970-01-01 00:00:00 +0000 (UTC).
     optional int64 commit_time = 13;
+    // If the tablet is replicated from another cluster, the source_schema saved the schema in the cluster
+    optional TabletSchemaPB source_schema = 14;
 }
 
 message MetadataUpdateInfoPB {
@@ -141,6 +143,7 @@ message TxnLogPB {
         optional ReplicationTxnMetaPB txn_meta = 1;
         repeated OpWrite op_writes = 2;
         map<uint32, DelvecDataPB> delvecs = 3;
+        optional TabletSchemaPB source_schema = 4;
     }
 
     optional int64 tablet_id = 1;

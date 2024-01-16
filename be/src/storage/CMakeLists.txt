@@ -49,6 +49,7 @@ add_library(Storage STATIC
     protobuf_file.cpp
     replication_txn_manager.cpp
     replication_utils.cpp
+    segment_stream_converter.cpp
     rowset_update_state.cpp
     rowset_column_update_state.cpp
     update_compaction_state.cpp

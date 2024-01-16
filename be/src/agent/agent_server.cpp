@@ -232,8 +232,9 @@ void AgentServer::Impl::init_or_die() {
                                                 MIN_CLONE_TASK_THREADS_IN_POOL),
                                        DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("replication", 0, config::replication_threads,
-                                       config::replication_thread_pool_queue_size, _thread_pool_replication);
+        BUILD_DYNAMIC_TASK_THREAD_POOL(
+                "replication", 0, config::replication_threads > 0 ? config::replication_threads : CpuInfo::num_cores(),
+                std::numeric_limits<int>::max(), _thread_pool_replication);
 
         // It is the same code to create workers of each type, so we use a macro
         // to make code to be more readable.
@@ -408,6 +409,9 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
                       << ", task_count_in_queue=" << register_pair.second;                                         \
             ret_st = pool->submit_func(                                                                            \
                     std::bind(do_func, std::make_shared<AGENT_REQ>(*task, task->request, time(nullptr)), env));    \
+            if (!ret_st.ok()) {                                                                                    \
+                LOG(WARNING) << "fail to submit task. reason: " << ret_st.message() << ", task: " << task;         \
+            }                                                                                                      \
         } else {                                                                                                   \
             LOG(INFO) << "Submit task failed, already exists type=" << t_task_type << ", signature=" << signature; \
         }                                                                                                          \
@@ -564,7 +568,7 @@ void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
         break;
     case TTaskType::REMOTE_SNAPSHOT:
     case TTaskType::REPLICATE_SNAPSHOT:
-        st = _thread_pool_replication->update_max_threads(new_val);
+        st = _thread_pool_replication->update_max_threads(new_val > 0 ? new_val : CpuInfo::num_cores());
         break;
     default:
         break;

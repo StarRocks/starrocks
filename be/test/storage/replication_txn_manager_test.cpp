@@ -56,11 +56,16 @@ public:
     }
 
     void TearDown() override {
-        (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet_id, kDeleteFiles);
-        (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_src_tablet_id, kDeleteFiles);
-        (void)StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_tablet_id);
-        (void)StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_src_tablet_id);
-        (void)fs::remove_all(config::storage_root_path);
+        auto status = StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet_id, kDeleteFiles);
+        EXPECT_TRUE(status.ok()) << status;
+        status = StorageEngine::instance()->tablet_manager()->drop_tablet(_src_tablet_id, kDeleteFiles);
+        EXPECT_TRUE(status.ok()) << status;
+        status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_tablet_id);
+        EXPECT_TRUE(status.ok()) << status;
+        status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_src_tablet_id);
+        EXPECT_TRUE(status.ok()) << status;
+        status = fs::remove_all(config::storage_root_path);
+        EXPECT_TRUE(status.ok()) << status;
     }
 
     TabletSharedPtr create_tablet(int64_t tablet_id, int64_t version, int32_t schema_hash,
@@ -69,7 +74,7 @@ public:
         request.tablet_id = tablet_id;
         request.__set_version(version);
         request.__set_version_hash(0);
-        request.tablet_schema.__set_id(1);
+        request.tablet_schema.__set_id(GetParam() + 1);
         request.tablet_schema.schema_hash = schema_hash;
         request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = GetParam();

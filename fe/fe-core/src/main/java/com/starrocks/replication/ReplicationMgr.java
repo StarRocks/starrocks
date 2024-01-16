@@ -52,7 +52,7 @@ public class ReplicationMgr extends FrontendDaemon {
     private final Map<Long, ReplicationJob> abortedJobs = Maps.newConcurrentMap(); // Aborted jobs, will retry later
 
     public ReplicationMgr() {
-        super("ReplicationMgr", 1000L);
+        super("ReplicationMgr", Config.replication_interval_ms);
     }
 
     @Override
@@ -83,18 +83,19 @@ public class ReplicationMgr extends FrontendDaemon {
 
     public void addReplicationJob(ReplicationJob job) throws AlreadyExistsException {
         // Limit replication job size
-        if (runningJobs.size() >= Config.replication_transaction_max_parallel_job_count) {
+        if (runningJobs.size() >= Config.replication_max_parallel_table_count) {
             throw new RuntimeException(
-                    "The replication jobs exceeds the replication_transaction_max_parallel_job_count: "
-                            + Config.replication_transaction_max_parallel_job_count);
+                    "The replication jobs exceeds the replication_max_parallel_table_count: "
+                            + Config.replication_max_parallel_table_count);
         }
 
         // Limit replication data size
-        long totalReplicationDataSize = getTotalReplicationDataSize();
-        if (totalReplicationDataSize >= Config.replication_transaction_max_parallel_replication_data_size_mb) {
-            throw new RuntimeException("The total replication data size in replication jobs exceeds "
-                    + "replication_transaction_max_parallel_replication_data_size_mb: "
-                    + Config.replication_transaction_max_parallel_replication_data_size_mb);
+        long replicatingDataSizeMB = getReplicatingDataSize() / 1048576;
+        if (replicatingDataSizeMB >= Config.replication_max_parallel_data_size_mb) {
+            throw new RuntimeException("The replicating data size in all running replication jobs "
+                    + replicatingDataSizeMB
+                    + "(MB) exceeds replication_max_parallel_data_size_mb: "
+                    + Config.replication_max_parallel_data_size_mb);
         }
 
         if (runningJobs.putIfAbsent(job.getTableId(), job) != null) {
@@ -103,6 +104,10 @@ public class ReplicationMgr extends FrontendDaemon {
 
         committedJobs.remove(job.getTableId()); // If the job is committed before, remove it from committed jobs
         abortedJobs.remove(job.getTableId()); // If the job is aborted before, remove it from aborted jobs
+
+        LOG.info("Added replication job, database id: {}, table id: {}, "
+                + "replication data size: {}, current replicating data size: {}(MB)",
+                job.getDatabaseId(), job.getTableId(), job.getReplicationDataSize(), replicatingDataSizeMB);
     }
 
     public boolean hasRunningJobs() {
@@ -173,12 +178,12 @@ public class ReplicationMgr extends FrontendDaemon {
         }
     }
 
-    private long getTotalReplicationDataSize() {
-        long totalReplicationDataSize = 0;
+    private long getReplicatingDataSize() {
+        long replicatingDataSize = 0;
         for (ReplicationJob job : runningJobs.values()) {
-            totalReplicationDataSize += job.getReplicationDataSize();
+            replicatingDataSize += job.getReplicationDataSize();
         }
-        return totalReplicationDataSize;
+        return replicatingDataSize;
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
