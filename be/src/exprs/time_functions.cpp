@@ -880,9 +880,14 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
     Slice format_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_format);
     auto period_unit = format_slice.to_string();
 
-    ColumnPtr column_time_base = context->get_constant_column(3);
-    Slice time_base_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_time_base);
-    auto time_base = time_base_slice.to_string();
+    std::string time_base;
+    if (UNLIKELY(context->get_num_constant_columns() == 3)) {
+        time_base = "floor";
+    } else {
+        ColumnPtr column_time_base = context->get_constant_column(3);
+        Slice time_base_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_time_base);
+        time_base = time_base_slice.to_string();
+    }
 
     ScalarFunction function;
     const FunctionContext::TypeDesc* boundary = context->get_arg_type(0);
