@@ -210,6 +210,12 @@ BE dynamic parameters are as follows.
 - **Default:** 500 ms
 - **Description:** The time interval at which to collect the Counter statistics.
 
+#### pindex_major_compaction_limit_per_disk
+
+- **Default:** 1
+- **Description:** The maximum concurrency of compaction on a disk. This addresses the issue of uneven I/O across disks due to compaction. This issue can cause excessively high I/O for certain disks.
+- **Introduced in:** 3.0.9
+
 #### load_error_log_reserve_hours
 
 - **Default:** 48 hours
@@ -485,6 +491,20 @@ BE static parameters are as follows.
 - **Default**: 1
 - **Unit**: N/A
 - **Description**: The number of threads used for checking the consistency of tablets.
+
+#### object_storage_connect_timeout_ms
+
+- **Default**: `-1`, which means to use the default timeout duration of the SDK configurations.
+- **Unit** ms
+- **Description**: Timeout duration to establish socket connections with object storage.
+- **Introduced in:** 3.0.9
+
+#### object_storage_request_timeout_ms
+
+- **Default**: `-1`, which means to use the default timeout duration of the SDK configurations.
+- **Unit** ms
+- **Description**: Timeout duration to establish HTTP connections with object storage.
+- **Introduced in:** 3.0.9
 
 #### sys_log_dir
 

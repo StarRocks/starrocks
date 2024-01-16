@@ -168,8 +168,8 @@ public class TaskBuilder {
         Task task = new Task(getMvTaskName(materializedView.getId()));
         task.setSource(Constants.TaskSource.MV);
         task.setDbName(dbName);
-        previousTaskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID,
-                String.valueOf(materializedView.getId()));
+        String mvId = String.valueOf(materializedView.getId());
+        previousTaskProperties.put(PartitionBasedMvRefreshProcessor.MV_ID, mvId);
         task.setProperties(previousTaskProperties);
         task.setDefinition(
                 "insert overwrite " + materializedView.getName() + " " + materializedView.getViewDefineSql());
@@ -245,7 +245,9 @@ public class TaskBuilder {
             TaskBuilder.updateTaskInfo(task, materializedView);
             taskManager.createTask(task, false);
         } else {
-            Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, currentTask.getProperties());
+            Map<String, String> previousTaskProperties = currentTask.getProperties() == null ?
+                     Maps.newHashMap() : Maps.newHashMap(currentTask.getProperties());
+            Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, previousTaskProperties);
             TaskBuilder.updateTaskInfo(changedTask, materializedView);
             taskManager.alterTask(currentTask, changedTask, false);
             task = currentTask;

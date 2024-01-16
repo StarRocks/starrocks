@@ -150,8 +150,7 @@ CONF_mInt32(compact_threads, "4");
 CONF_Int32(compact_thread_pool_queue_size, "100");
 
 // The count of thread to replication
-CONF_Int32(replication_threads, "64");
-CONF_Int32(replication_thread_pool_queue_size, "2048");
+CONF_Int32(replication_threads, "0");
 CONF_Int32(clear_expired_replcation_snapshots_interval_seconds, "3600");
 
 // The log dir.
@@ -938,6 +937,7 @@ CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
 CONF_mBool(enable_primary_key_recover, "false");
+CONF_mBool(lake_enable_compaction_async_write, "false");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 

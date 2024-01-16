@@ -238,6 +238,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：毫秒
 - 默认值：500
 
+#### pindex_major_compaction_limit_per_disk
+
+- 含义：每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题。
+- 默认值：1
+- 引入版本：3.0.9
+
 #### load_error_log_reserve_hours  
 
 - 含义：导入数据信息保留的时长。
@@ -534,6 +540,18 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：计算 tablet 的校验和 (checksum)。
 - 默认值：1
+
+#### object_storage_connect_timeout_ms
+
+- 含义：对象存储 Socket 连接的超时时间。
+- 默认值：`-1`，表示使用 SDK 中的默认时间。
+- 引入版本：3.0.9
+
+#### object_storage_request_timeout_ms
+
+- 含义：对象存储 HTTP 连接的超时时间。
+- 默认值：`-1`，表示使用 SDK 中的默认时间。
+- 引入版本：3.0.9
 
 #### sys_log_dir
 

@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # 使用 DataX 导入
 
-本文介绍如何利用 DataX 基于 StarRocks 开发的 StarRocks Writer 插件将 MySQL、Oracle 等数据库中的数据导入至 StarRocks。该插件将数据转化为 CSV 或 JSON 格式并将其通过 [Stream Load](./StreamLoad.md) 方式批量导入至 StarRocks。
+本文介绍如何利用 DataX 基于 StarRocks 开发的 StarRocks Writer 插件将 MySQL、Oracle 等数据库中的数据导入至 StarRocks。该插件将数据转化为 CSV 或 JSON 格式并将其通过 [Stream Load](../../loading/StreamLoad.md) 方式批量导入至 StarRocks。
 
 DataX 导入支持多种数据源，您可以参考 [DataX - Support Data Channels](https://github.com/alibaba/DataX#support-data-channels) 了解详情。
 
@@ -92,7 +92,7 @@ tar -xzvf starrockswriter.tar.gz
 
 | **参数**      | **说明**                                                     | **必选** | **默认值** |
 | ------------- | ------------------------------------------------------------ | -------- | ---------- |
-| username      | StarRocks 集群用户名。<br />导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。                                       | 是       | 无         |
+| username      | StarRocks 集群用户名。<br />导入操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。                                       | 是       | 无         |
 | password      | StarRocks 集群用户密码。                                     | 是       | 无         |
 | database      | StarRocks 目标数据库名称。                                   | 是       | 无         |
 | table         | StarRocks 目标表名称。                                       | 是       | 无         |
@@ -104,7 +104,7 @@ tar -xzvf starrockswriter.tar.gz
 | maxBatchRows  | 单次 Stream Load 导入的最大行数。导入大量数据时，StarRocks Writer 将根据 `maxBatchRows` 或 `maxBatchSize` 将数据分为多个 Stream Load 作业分批导入。 | 否       | 500000     |
 | maxBatchSize  | 单次 Stream Load 导入的最大字节数，单位为 Byte。导入大量数据时，StarRocks Writer 将根据 `maxBatchRows` 或 `maxBatchSize` 将数据分为多个 Stream Load 作业分批导入。 | 否       | 104857600  |
 | flushInterval | 上一次 Stream Load 结束至下一次开始的时间间隔，单位为 ms。   | 否       | 300000     |
-| loadProps     | Stream Load 的导入参数，详情参考 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。 | 否       | 无         |
+| loadProps     | Stream Load 的导入参数，详情参考 [STREAM LOAD](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。 | 否       | 无         |
 
 > 注意
 >
@@ -179,7 +179,7 @@ python datax/bin/datax.py --jvm="-Xms6G -Xmx6G" --loglevel=debug datax/job/job.j
 
 由于 DataX 导入是基于封装的 Stream Load 实现，您可以在 `datax/log/$date/` 目录下搜索对应的导入作业日志，日志文件名字中包含导入使用的 JSON 文件名和任务启动时间（小时、分钟、秒），例如：**t_datax_job_job_json-20_52_19.196.log**。
 
-- 如果日志中有 "http://fe_ip:fe_http_port/api/db_name/tbl_name/_stream_load" 记录生成，则表示 Stream Load 作业已成功触发。作业成功触发后，您可参考 [Stream Load 返回值](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#返回值) 查看任务情况。
+- 如果日志中有 "http://fe_ip:fe_http_port/api/db_name/tbl_name/_stream_load" 记录生成，则表示 Stream Load 作业已成功触发。作业成功触发后，您可参考 [Stream Load 返回值](../../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md#返回值) 查看任务情况。
 - 日志中如果没有上述信息，请根据报错信息排查问题，或者在 [DataX 社区问题](https://github.com/alibaba/DataX/issues)中寻找解决方案。
 
 > 注意

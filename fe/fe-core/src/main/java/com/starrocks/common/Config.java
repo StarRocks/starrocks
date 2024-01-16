@@ -367,6 +367,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int edit_log_roll_num = 50000;
 
+    @ConfField(mutable = true)
+    public static int edit_log_write_slow_log_threshold_ms = 2000;
+
     /**
      * whether ignore unknown log id
      * when fe rolls back to low version, there may be log id that low version fe can not recognise
@@ -2763,18 +2766,16 @@ public class Config extends ConfigBase {
     public static int refresh_dictionary_cache_thread_num = 2;
 
     /*
-     * replication transaction config
+     * Replication config
      */
+    @ConfField
+    public static int replication_interval_ms = 10;
     @ConfField(mutable = true)
-    public static int replication_transaction_max_parallel_job_count = 100; // 100
+    public static int replication_max_parallel_table_count = 100; // 100
     @ConfField(mutable = true)
-    public static int replication_transaction_max_parallel_replication_data_size_mb = 10240; // 10g
+    public static int replication_max_parallel_data_size_mb = 10240; // 10g
     @ConfField(mutable = true)
     public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
-    @ConfField(mutable = true)
-    public static int replication_transaction_remote_snapshot_timeout_sec = 30 * 60; // 30minute
-    @ConfField(mutable = true)
-    public static int replication_transaction_replicate_snapshot_timeout_sec = 30 * 60; // 30minute
 
     @ConfField(mutable = true)
     public static boolean jdbc_meta_default_cache_enable = false;
