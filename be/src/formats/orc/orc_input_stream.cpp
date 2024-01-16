@@ -14,15 +14,10 @@
 
 #include "formats/orc/orc_input_stream.h"
 
-#include <set>
-
-#include "cctz/civil_time.h"
 #include "exprs/cast_expr.h"
 #include "formats/orc/orc_mapping.h"
 #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
-#include "simd/simd.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -50,7 +45,7 @@ void ORCHdfsFileStream::prepareCache(PrepareCacheScope scope, uint64_t offset, u
     // We need to set io range manually, otherwise one io request will be split into multiple requests
     std::vector<IORange> io_ranges{};
     io_ranges.emplace_back(InputStream::IORange{.offset = offset, .size = length});
-    setIORanges(io_ranges);
+    setIORanges(io_ranges, false);
 
     doRead(_cache_buffer.data(), length, offset);
 
@@ -96,14 +91,29 @@ void ORCHdfsFileStream::clearIORanges() {
     _sb_stream->release();
 }
 
-void ORCHdfsFileStream::setIORanges(std::vector<IORange>& io_ranges) {
+void ORCHdfsFileStream::setIORanges(std::vector<IORange>& io_ranges, const bool is_from_stripe) {
     if (!_sb_stream) return;
+
     std::vector<io::SharedBufferedInputStream::IORange> bs_io_ranges;
     bs_io_ranges.reserve(io_ranges.size());
     for (const auto& r : io_ranges) {
-        bs_io_ranges.emplace_back(static_cast<int64_t>(r.offset), static_cast<int64_t>(r.size));
+        bs_io_ranges.emplace_back(static_cast<int64_t>(r.offset), static_cast<int64_t>(r.size), r.is_active);
     }
-    Status st = _sb_stream->set_io_ranges(bs_io_ranges);
+
+    // default we will coalesce active and lazy column into one io range
+    bool active_lazy_column_coalesce = true;
+    // We will only handle adaptive io coalesce from stripe, not from prepareCache()
+    if (is_from_stripe) {
+        if (isIOAdaptiveCoalesceEnabled() && _lazy_column_coalesce_counter->load(std::memory_order_relaxed) < 0) {
+            active_lazy_column_coalesce = false;
+            _app_stats->orc_stripe_active_lazy_coalesce_seperately++;
+        } else {
+            _app_stats->orc_stripe_active_lazy_coalesce_together++;
+        }
+    }
+
+    Status st = _sb_stream->set_io_ranges(bs_io_ranges, active_lazy_column_coalesce);
+
     if (!st.ok()) {
         auto msg = strings::Substitute("Failed to setIORanges $0: $1", _file->filename(), st.to_string());
         throw orc::ParseError(msg);

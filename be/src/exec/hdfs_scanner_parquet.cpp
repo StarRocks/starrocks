@@ -97,10 +97,10 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     group_dict_filter_timer = ADD_CHILD_TIMER(root, "GroupDictFilter", kParquetProfileSectionPrefix);
     group_dict_decode_timer = ADD_CHILD_TIMER(root, "GroupDictDecode", kParquetProfileSectionPrefix);
 
-    group_active_lazy_coalesce_together =
-            ADD_CHILD_COUNTER(root, "GroupActiveLazyCoalesceTogether", TUnit::UNIT, kParquetProfileSectionPrefix);
-    group_active_lazy_coalesce_seperately =
-            ADD_CHILD_COUNTER(root, "GroupActiveLazyCoalesceSeperately", TUnit::UNIT, kParquetProfileSectionPrefix);
+    group_active_lazy_coalesce_together = ADD_CHILD_COUNTER(root, "GroupActiveLazyColumnIOCoalesceTogether",
+                                                            TUnit::UNIT, kParquetProfileSectionPrefix);
+    group_active_lazy_coalesce_seperately = ADD_CHILD_COUNTER(root, "GroupActiveLazyColumnIOCoalesceSeperately",
+                                                              TUnit::UNIT, kParquetProfileSectionPrefix);
 
     has_page_statistics = ADD_CHILD_COUNTER(root, "HasPageStatistics", TUnit::UNIT, kParquetProfileSectionPrefix);
     page_skip = ADD_CHILD_COUNTER(root, "PageSkipCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
