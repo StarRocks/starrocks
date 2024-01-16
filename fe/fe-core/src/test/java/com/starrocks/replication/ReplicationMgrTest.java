@@ -99,7 +99,7 @@ public class ReplicationMgrTest {
         partition.updateVersionForRestore(10);
         srcPartition.updateVersionForRestore(partition.getCommittedVersion() + 100);
 
-        job = new ReplicationJob("test_token", db.getId(), table, srcTable, GlobalStateMgr.getCurrentSystemInfo());
+        job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable, GlobalStateMgr.getCurrentSystemInfo());
         replicationMgr = new ReplicationMgr();
         replicationMgr.addReplicationJob(job);
     }

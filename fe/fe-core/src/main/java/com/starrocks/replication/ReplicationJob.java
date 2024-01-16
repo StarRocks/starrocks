@@ -15,6 +15,7 @@
 package com.starrocks.replication;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
@@ -253,6 +254,9 @@ public class ReplicationJob implements GsonPostProcessable {
         }
     }
 
+    @SerializedName(value = "jobId")
+    private final String jobId;
+
     @SerializedName(value = "srcToken")
     private final String srcToken;
 
@@ -284,6 +288,10 @@ public class ReplicationJob implements GsonPostProcessable {
     private volatile int taskNum = 0;
     private Map<AgentTask, AgentTask> finishedTasks = Maps.newConcurrentMap();
 
+    public String getJobId() {
+        return jobId;
+    }
+
     public long getDatabaseId() {
         return databaseId;
     }
@@ -310,6 +318,11 @@ public class ReplicationJob implements GsonPostProcessable {
     public ReplicationJob(TTableReplicationRequest request) throws MetaNotFoundException {
         Preconditions.checkState(request.src_table_type == TTableType.OLAP_TABLE);
 
+        if (Strings.isNullOrEmpty(request.job_id)) {
+            this.jobId = UUIDUtil.genUUID().toString();
+        } else {
+            this.jobId = request.job_id;
+        }
         this.srcToken = request.src_token;
         this.databaseId = request.database_id;
         this.tableId = request.table_id;
@@ -326,8 +339,13 @@ public class ReplicationJob implements GsonPostProcessable {
         }
     }
 
-    public ReplicationJob(String srcToken, long databaseId, OlapTable table, OlapTable srcTable,
+    public ReplicationJob(String jobId, String srcToken, long databaseId, OlapTable table, OlapTable srcTable,
             SystemInfoService srcSystemInfoService) {
+        if (Strings.isNullOrEmpty(jobId)) {
+            this.jobId = UUIDUtil.genUUID().toString();
+        } else {
+            this.jobId = jobId;
+        }
         this.srcToken = srcToken;
         this.databaseId = databaseId;
         this.tableId = table.getId();
@@ -624,7 +642,7 @@ public class ReplicationJob implements GsonPostProcessable {
             throws LabelAlreadyUsedException, DuplicatedRequestException, AnalysisException, RunningTxnExceedException {
         TransactionState.LoadJobSourceType loadJobSourceType = TransactionState.LoadJobSourceType.REPLICATION;
         TransactionState.TxnCoordinator coordinator = TransactionState.TxnCoordinator.fromThisFE();
-        String label = String.format("REPLICATION_%d_%d_%s", databaseId, tableId, UUIDUtil.genUUID().toString());
+        String label = String.format("REPLICATION_%d_%d_%s", databaseId, tableId, jobId);
         transactionId = GlobalStateMgr.getServingState().getGlobalTransactionMgr().beginTransaction(databaseId,
                 Lists.newArrayList(tableId), label, coordinator, loadJobSourceType,
                 Config.replication_transaction_timeout_sec, WarehouseManager.DEFAULT_CLUSTER_ID);
