@@ -42,6 +42,7 @@ public class ShortCircuitTest extends PlanTestBase {
     public void testShortcircuit() throws Exception {
         connectContext.getSessionVariable().setEnableShortCircuit(true);
         connectContext.getSessionVariable().setPreferComputeNode(true);
+        connectContext.getSessionVariable().setCboUseDBLock(true);
         OLD_VALUE = FeConstants.runningUnitTest;
         FeConstants.runningUnitTest = true;
 
@@ -69,8 +70,9 @@ public class ShortCircuitTest extends PlanTestBase {
         planFragment = getFragmentPlan(sql);
         Assert.assertTrue(planFragment.contains("Short Circuit Scan: true"));
 
-        // not support short circuit
-        sql = "select * from tprimary1 ";
+        // complex convert for short circuit
+        sql = "select * from tprimary_bool where pk1 = 1 and pk2 = true " +
+                "and pk1 =(select pk1 from tprimary_bool where pk1 = 2 and pk2 = true) ";
         planFragment = getFragmentPlan(sql);
         Assert.assertFalse(planFragment.contains("Short Circuit Scan: true"));
     }
