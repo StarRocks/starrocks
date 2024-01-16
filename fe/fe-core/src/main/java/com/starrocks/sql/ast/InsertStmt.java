@@ -350,7 +350,7 @@ public class InsertStmt extends DmlStmt {
                     "Use \"format\" = \"parquet\" as only parquet format is supported now");
         }
 
-        if (!PARQUET_FORMAT.equals(format)) {
+        if (!PARQUET_FORMAT.equalsIgnoreCase(format)) {
             throw new SemanticException("use \"format\" = \"parquet\", as only parquet format is supported now");
         }
 
