@@ -918,13 +918,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return CollectionUtils.isNotEmpty(materializedView.getUpdatedPartitionNamesOfTable(table, false));
     }
 
-    /**
-     * @param table : Whether this table can be supported for incremental refresh by partition or not.
-     */
-    private boolean unSupportRefreshByPartition(Table table) {
-        return !table.isOlapTableOrMaterializedView() && !table.isHiveTable()
-                && !table.isJDBCTable() && !table.isIcebergTable() && !table.isCloudNativeTable()
-                && !table.isPaimonTable();
+    private static boolean supportPartitionRefresh(Table table) {
+        if (table.getType() == Table.TableType.VIEW) {
+            return false;
+        }
+        return ConnectorPartitionTraits.build(table).supportPartitionRefresh();
     }
 
     /**
@@ -935,7 +933,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private boolean isNonPartitionedMVNeedToRefresh() {
         for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             Table snapshotTable = tablePair.second;
-            if (unSupportRefreshByPartition(snapshotTable)) {
+            if (!supportPartitionRefresh(snapshotTable)) {
                 return true;
             }
             if (needToRefreshTable(snapshotTable)) {
@@ -955,7 +953,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (snapshotTable.getId() == partitionTable.getId()) {
                 continue;
             }
-            if (unSupportRefreshByPartition(snapshotTable)) {
+            if (!supportPartitionRefresh(snapshotTable)) {
                 continue;
             }
             if (needToRefreshTable(snapshotTable)) {
@@ -1093,7 +1091,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private Set<String> getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(Table refBaseTable,
                                                                                   Set<String> mvRangePartitionNames,
                                                                                   boolean force) {
-        if (force || unSupportRefreshByPartition(refBaseTable)) {
+        if (force || !supportPartitionRefresh(refBaseTable)) {
             return Sets.newHashSet(mvRangePartitionNames);
         }
 
