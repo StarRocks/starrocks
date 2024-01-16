@@ -591,7 +591,7 @@ public class AnalyzerUtils {
             // filter _LAMBDA_TABLE && alias SlotRef
             if (!slotRef.isFromLambda() && slotRef.getTblNameWithoutAnalyzed() != null) {
                 // when used columnName for Struct type, it would like c2.c2_sub1 instead of c2
-                put(slotRef.getTblNameWithoutAnalyzed(), slotRef.getLabel());
+                put(slotRef.getTblNameWithoutAnalyzed(), slotRef.getLabel().replace("`", ""));
             }
             return null;
         }
