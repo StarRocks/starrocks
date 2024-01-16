@@ -258,6 +258,11 @@ public class IcebergTable extends Table {
         return Joiner.on(":").join(name, ((BaseTable) getNativeTable()).operations().current().uuid());
     }
 
+    @Override
+    public Map<String, String> getProperties() {
+        return icebergProperties;
+    }
+
     public IcebergCatalogType getCatalogType() {
         return IcebergCatalogType.valueOf(icebergProperties.get(ICEBERG_CATALOG_TYPE));
     }
