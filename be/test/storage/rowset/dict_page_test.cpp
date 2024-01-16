@@ -32,16 +32,136 @@ namespace starrocks {
 
 class DictPageTest : public testing::Test {
 public:
+    //template <LogicalType Type>
+    //void test_encode_decode_page_template(typename TypeTraits<Type>::CppType* data, size_t size) {
+    //    using CppType = typename TypeTraits<Type>::CppType;
+    //    // encode
+    //    PageBuilderOptions options;
+    //    // 64K
+    //    options.data_page_size = 1024 * 1024;
+    //    options.dict_page_size = 1024 * 1024;
+    //    int data_num = size;
+    //    std::unique_ptr<uint8_t*[]> data_handler_ptr(new uint8_t*[data_num]);
+    //    uint8_t** data_handler = data_handler_ptr.get();
+    //    for (int i = 0; i < data_num; i++) {
+    //        data_handler[i] = (uint8*)&data[i];
+    //    }
+    //    DictPageBuilder<Type> page_builder(options);
+    //    Status status;
+    //    int added_count = page_builder.add(data_handler[0], data_num);
+    //    ASSERT_EQ(data_num, added_count);
+    //    auto s = page_builder.finish()->build();
+    //    ASSERT_EQ(data_num, page_builder.count());
+    //    ASSERT_FALSE(page_builder.is_page_full());
+    //
+    //    // check first value and last value
+    //    CppType first_value;
+    //    status = page_builder.get_first_value(&first_value);
+    //    ASSERT_TRUE(status.ok());
+    //    ASSERT_EQ(data[0], first_value);
+    //    CppType last_value;
+    //    status = page_builder.get_last_value(&last_value);
+    //    ASSERT_EQ(data[data_num - 1], last_value);
+    //
+    //    // construct dict page
+    //    OwnedSlice dict_slice = page_builder.get_dictionary_page()->build();
+    //    Slice encoded_dict = dict_slice.slice();
+    //    starrocks::PageFooterPB dict_footer;
+    //    dict_footer.set_type(starrocks::DATA_PAGE);
+    //    starrocks::DataPageFooterPB* dict_page_footer = dict_footer.mutable_data_page_footer();
+    //    dict_page_footer->set_nullmap_size(0);
+    //    std::unique_ptr<char[]> dict_page = nullptr;
+    //    Status st = StoragePageDecoder::decode_page(&dict_footer, 0, starrocks::BIT_SHUFFLE, &dict_page, &encoded_dict);
+    //    ASSERT_TRUE(st.ok());
+    //
+    //    auto dict_page_decoder = std::make_unique<BitShufflePageDecoder<Type>>(encoded_dict);
+    //    status = dict_page_decoder->init();
+    //    ASSERT_TRUE(status.ok());
+    //    // because every record is unique
+    //    ASSERT_EQ(data_num, dict_page_decoder->count());
+    //
+    //    // decode
+    //    Slice encoded_data = s.slice();
+    //    PageFooterPB footer_data;
+    //    footer_data.set_type(DATA_PAGE);
+    //    starrocks::DataPageFooterPB* data_page_footer = footer_data.mutable_data_page_footer();
+    //    data_page_footer->set_nullmap_size(0);
+    //    std::unique_ptr<char[]> data_page = nullptr;
+    //    st = StoragePageDecoder::decode_page(&footer_data, 0, starrocks::DICT_ENCODING, &data_page, &encoded_data);
+    //    ASSERT_TRUE(st.ok());
+    //
+    //    DictPageDecoder<Type> page_decoder(encoded_data);
+    //    page_decoder.set_dict_decoder(dict_page_decoder.get());
+    //
+    //    status = page_decoder.init();
+    //    ASSERT_TRUE(status.ok());
+    //    ASSERT_EQ(data_num, page_decoder.count());
+    //
+    //    // check values
+    //    auto column = ChunkHelper::column_from_field_type(Type, false);
+    //    size_t decode_size = data_num;
+    //    status = page_decoder.next_batch(&decode_size, column.get());
+    //    ASSERT_TRUE(status.ok());
+    //    ASSERT_EQ(data_num, decode_size);
+    //    auto* values = reinterpret_cast<const CppType*>(column->raw_data());
+    //    auto* decoded = (CppType*)values;
+    //    for (uint i = 0; i < decode_size; i++) {
+    //        if (data[i] != decoded[i]) {
+    //            if constexpr (std::is_same_v<int128_t, CppType>) {
+    //                FAIL() << "Fail at index " << i;
+    //            } else {
+    //                FAIL() << "Fail at index " << i << " inserted=" << data[i] << " got=" << decoded[i];
+    //            }
+    //        }
+    //    }
+    //
+    //    column->resize(0);
+    //    ASSERT_TRUE(size > 100);
+    //    status = page_decoder.seek_to_position_in_page(100);
+    //    ASSERT_TRUE(status.ok()) << status.to_string();
+    //    status = page_decoder.next_batch(&decode_size, column.get());
+    //    ASSERT_TRUE(status.ok()) << status.to_string();
+    //    // 2000 - 100
+    //    ASSERT_EQ(size - 100, decode_size);
+    //    values = reinterpret_cast<const CppType*>(column->raw_data());
+    //    decoded = (CppType*)values;
+    //    for (uint i = 0; i < decode_size; i++) {
+    //        if (data[i + 100] != decoded[i]) {
+    //            if constexpr (std::is_same_v<int128_t, CppType>) {
+    //                FAIL() << "Fail at index " << i;
+    //            } else {
+    //                FAIL() << "Fail at index " << i << " inserted=" << data[i + 100] << " got=" << decoded[i];
+    //            }
+    //        }
+    //    }
+    //
+    //    ASSERT_TRUE(page_decoder.seek_to_position_in_page(0).ok());
+    //    ASSERT_EQ(0, page_decoder.current_index());
+    //    column = ChunkHelper::column_from_field_type(Type, false);
+    //    SparseRange<> read_range;
+    //    read_range.add(Range<>(0, 2));
+    //    read_range.add(Range<>(4, 7));
+    //    status = page_decoder.next_batch(read_range, column.get());
+    //    ASSERT_TRUE(status.ok());
+    //    ASSERT_EQ(5, column->size());
+    //    ASSERT_EQ(data[0], column->get(0).get<CppType>());
+    //    ASSERT_EQ(data[1], column->get(1).get<CppType>());
+    //    ASSERT_EQ(data[4], column->get(2).get<CppType>());
+    //    ASSERT_EQ(data[5], column->get(3).get<CppType>());
+    //    ASSERT_EQ(data[6], column->get(4).get<CppType>());
+    //}
+
     template <LogicalType Type>
-    void test_encode_decode_page_template(typename TypeTraits<Type>::CppType* data, size_t size) {
+    void test_encode_decode_page_template(typename TypeTraits<Type>::CppType* data, size_t base_size, size_t all_size) {
         using CppType = typename TypeTraits<Type>::CppType;
         // encode
         PageBuilderOptions options;
         // 64K
         options.data_page_size = 1024 * 1024;
         options.dict_page_size = 1024 * 1024;
-        int data_num = size;
-        uint8_t** data_handler = new uint8_t*[data_num];
+        int data_num = all_size;
+        std::unique_ptr<uint8_t*[]> data_handler_ptr(new uint8_t*[data_num]);
+        uint8_t** data_handler = data_handler_ptr.get();
         for (int i = 0; i < data_num; i++) {
             data_handler[i] = (uint8*)&data[i];
         }
@@ -76,8 +196,7 @@ public:
         auto dict_page_decoder = std::make_unique<BitShufflePageDecoder<Type>>(encoded_dict);
         status = dict_page_decoder->init();
         ASSERT_TRUE(status.ok());
-        // because every record is unique
-        ASSERT_EQ(data_num, dict_page_decoder->count());
+        ASSERT_EQ(base_size, dict_page_decoder->count());
 
         // decode
         Slice encoded_data = s.slice();
@@ -115,13 +234,13 @@ public:
         }
 
         column->resize(0);
-        ASSERT_TRUE(size > 100);
+        ASSERT_TRUE(data_num > 100);
         status = page_decoder.seek_to_position_in_page(100);
         ASSERT_TRUE(status.ok()) << status.to_string();
         status = page_decoder.next_batch(&decode_size, column.get());
         ASSERT_TRUE(status.ok()) << status.to_string();
         // 2000 - 100
-        ASSERT_EQ(size - 100, decode_size);
+        ASSERT_EQ(data_num - 100, decode_size);
         values = reinterpret_cast<const CppType*>(column->raw_data());
         decoded = (CppType*)values;
         for (uint i = 0; i < decode_size; i++) {
@@ -157,7 +276,19 @@ TEST_F(DictPageTest, TestSmallDataSizeWithInt32) {
     for (int i = 0; i < 10000; i++) {
         ints.get()[i] = i;
     }
-    test_encode_decode_page_template<TYPE_INT>(ints.get(), size);
+    test_encode_decode_page_template<TYPE_INT>(ints.get(), size, size);
+}
+
+TEST_F(DictPageTest, TestSameValueWithInt32) {
+    const uint32_t size = 1000;
+    std::unique_ptr<int32_t[]> ints(new int32_t[size]);
+    for (int i = 0; i < size; i++) {
+        ints.get()[i] = i;
+    }
+    std::unique_ptr<int32_t[]> ints_expand(new int32_t[size * 2]);
+    std::memcpy(ints_expand.get(), ints.get(), size * sizeof(int32_t));
+    std::memcpy(ints_expand.get() + size, ints.get(), size * sizeof(int32_t));
+    test_encode_decode_page_template<TYPE_INT>(ints_expand.get(), size, size * 2);
 }
 
 TEST_F(DictPageTest, TestSmallDataSizeWithInt64_t) {
@@ -166,7 +297,19 @@ TEST_F(DictPageTest, TestSmallDataSizeWithInt64_t) {
     for (int i = 0; i < size; i++) {
         ints.get()[i] = i;
     }
-    test_encode_decode_page_template<TYPE_BIGINT>(ints.get(), size);
+    test_encode_decode_page_template<TYPE_BIGINT>(ints.get(), size, size);
+}
+
+TEST_F(DictPageTest, TestSameValueWithInt64_t) {
+    const uint32_t size = 1000;
+    std::unique_ptr<int64_t[]> ints(new int64_t[size]);
+    for (int i = 0; i < size; i++) {
+        ints.get()[i] = i;
+    }
+    std::unique_ptr<int64_t[]> ints_expand(new int64_t[size * 2]);
+    std::memcpy(ints_expand.get(), ints.get(), size * sizeof(int64_t));
+    std::memcpy(ints_expand.get() + size, ints.get(), size * sizeof(int64_t));
+    test_encode_decode_page_template<TYPE_BIGINT>(ints_expand.get(), size, size * 2);
 }
 
 TEST_F(DictPageTest, TestSmallDataSizeWithInt128_t) {
@@ -175,7 +318,19 @@ TEST_F(DictPageTest, TestSmallDataSizeWithInt128_t) {
     for (int i = 0; i < size; i++) {
         ints.get()[i] = i;
     }
-    test_encode_decode_page_template<TYPE_LARGEINT>(ints.get(), size);
+    test_encode_decode_page_template<TYPE_LARGEINT>(ints.get(), size, size);
+}
+
+TEST_F(DictPageTest, TestSameValueWithInt128_t) {
+    const uint32_t size = 1000;
+    std::unique_ptr<int128_t[]> ints(new int128_t[size]);
+    for (int i = 0; i < size; i++) {
+        ints.get()[i] = i;
+    }
+    std::unique_ptr<int128_t[]> ints_expand(new int128_t[size * 2]);
+    std::memcpy(ints_expand.get(), ints.get(), size * sizeof(int128_t));
+    std::memcpy(ints_expand.get() + size, ints.get(), size * sizeof(int128_t));
+    test_encode_decode_page_template<TYPE_LARGEINT>(ints_expand.get(), size, size * 2);
 }
 
 TEST_F(DictPageTest, TestSmallDataSizeWithFloat) {
@@ -186,7 +341,21 @@ TEST_F(DictPageTest, TestSmallDataSizeWithFloat) {
         float random_value = static_cast<float>(20000 + i) / (static_cast<float>(RAND_MAX / upper));
         floats.get()[i] = random_value;
     }
-    test_encode_decode_page_template<TYPE_FLOAT>(floats.get(), size);
+    test_encode_decode_page_template<TYPE_FLOAT>(floats.get(), size, size);
+}
+
+TEST_F(DictPageTest, TestSameValueWithFloat) {
+    const uint32_t size = 1000;
+    std::unique_ptr<float[]> floats(new float[size]);
+    int upper = 100000;
+    for (int i = 0; i < size; i++) {
+        float random_value = static_cast<float>(20000 + i) / (static_cast<float>(RAND_MAX / upper));
+        floats.get()[i] = random_value;
+    }
+    std::unique_ptr<float[]> floats_expand(new float [size * 2]);
+    std::memcpy(floats_expand.get(), floats.get(), size * sizeof(float));
+    std::memcpy(floats_expand.get() + size, floats.get(), size * sizeof(float));
+    test_encode_decode_page_template<TYPE_FLOAT>(floats_expand.get(), size, size * 2);
 }
 
 TEST_F(DictPageTest, TestSmallDataSizeWithDouble) {
@@ -197,7 +366,21 @@ TEST_F(DictPageTest, TestSmallDataSizeWithDouble) {
         double random_value = static_cast<double>(20000 + i) / (static_cast<double>(RAND_MAX / upper));
         floats.get()[i] = random_value;
     }
-    test_encode_decode_page_template<TYPE_DOUBLE>(floats.get(), size);
+    test_encode_decode_page_template<TYPE_DOUBLE>(floats.get(), size, size);
+}
+
+TEST_F(DictPageTest, TestSameValueWithDouble) {
+    const uint32_t size = 1000;
+    std::unique_ptr<double[]> doubles(new double[size]);
+    int upper = 100000;
+    for (int i = 0; i < size; i++) {
+        double random_value = static_cast<double>(20000 + i) / (static_cast<double>(RAND_MAX / upper));
+        doubles.get()[i] = random_value;
+    }
+    std::unique_ptr<double[]> doubles_expand(new double [size * 2]);
+    std::memcpy(doubles_expand.get(), doubles.get(), size * sizeof(double));
+    std::memcpy(doubles_expand.get() + size, doubles.get(), size * sizeof(double));
+    test_encode_decode_page_template<TYPE_DOUBLE>(doubles_expand.get(), size, size * 2);
 }
 
 TEST_F(DictPageTest, TestSmallDataSizeWithInt16_t) {
@@ -210,7 +393,7 @@ TEST_F(DictPageTest, TestSmallDataSizeWithInt16_t) {
     for (int i = lower; i <= upper; i++) {
         ints.get()[cur++] = i;
     }
-    test_encode_decode_page_template<TYPE_SMALLINT>(ints.get(), size);
+    test_encode_decode_page_template<TYPE_SMALLINT>(ints.get(), size, size);
 }
 
 TEST_F(DictPageTest, TestSmallDataSizeWithDecimal) {
@@ -221,7 +404,23 @@ TEST_F(DictPageTest, TestSmallDataSizeWithDecimal) {
             decimals.get()[i * 100 + j] = decimal12_t(i, j);
         }
     }
-    test_encode_decode_page_template<TYPE_DECIMAL>(decimals.get(), size);
+    test_encode_decode_page_template<TYPE_DECIMAL>(decimals.get(), size, size);
+}
+
+TEST_F(DictPageTest, TestSameValueWithDecimal) {
+    const int F = 10;
+    const int I = 100;
+    const uint32_t size = F * I;
+    std::unique_ptr<decimal12_t[]> decimals(new decimal12_t[size]);
+    for (int i = 0; i < F; i++) {
+        for (int j = 0; j < I; j++) {
+            decimals.get()[i * I + j] = decimal12_t(i, j);
+        }
+    }
+    std::unique_ptr<decimal12_t[]> decimals_expand(new decimal12_t[size * 2]);
+    std::memcpy(decimals_expand.get(), decimals.get(), size * sizeof(decimal12_t));
+    std::memcpy(decimals_expand.get() + size, decimals.get(), size * sizeof(decimal12_t));
+    test_encode_decode_page_template<TYPE_DECIMAL>(decimals_expand.get(), size, size * 2);
 }
 
 TEST_F(DictPageTest, TestSmallDataSizeWithDecimalV2) {
@@ -232,7 +431,23 @@ TEST_F(DictPageTest, TestSmallDataSizeWithDecimalV2) {
             decimals.get()[i * 100 + j] = DecimalV2Value(i, j);
         }
     }
-    test_encode_decode_page_template<TYPE_DECIMALV2>(decimals.get(), size);
+    test_encode_decode_page_template<TYPE_DECIMALV2>(decimals.get(), size, size);
+}
+
+TEST_F(DictPageTest, TestSameValueWithDecimalV2) {
+    const int F = 10;
+    const int I = 100;
+    const uint32_t size = F * I;
+    std::unique_ptr<DecimalV2Value[]> decimals(new DecimalV2Value[size]);
+    for (int i = 0; i < F; i++) {
+        for (int j = 0; j < I; j++) {
+            decimals.get()[i * I + j] = DecimalV2Value(i, j);
+        }
+    }
+    std::unique_ptr<DecimalV2Value[]> decimals_expand(new DecimalV2Value[size * 2]);
+    std::memcpy(decimals_expand.get(), decimals.get(), size * sizeof(DecimalV2Value));
+    std::memcpy(decimals_expand.get() + size, decimals.get(), size * sizeof(DecimalV2Value));
+    test_encode_decode_page_template<TYPE_DECIMALV2>(decimals.get(), size, size);
 }
 
 TEST_F(DictPageTest, TestLargeDataSize) {
@@ -248,7 +463,8 @@ TEST_F(DictPageTest, TestLargeDataSize) {
     options.data_page_size = 1024 * 1024;
     options.dict_page_size = 1024 * 1024;
     int data_num = size;
-    uint8_t** data_handler = new uint8_t*[data_num];
+    std::unique_ptr<uint8_t*[]> data_handler_ptr(new uint8_t*[data_num]);
+    uint8_t** data_handler = data_handler_ptr.get();
     for (int i = 0; i < data_num; i++) {
         data_handler[i] = (uint8*)&ints[i];
     }

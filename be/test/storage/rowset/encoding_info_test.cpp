@@ -104,11 +104,11 @@ TEST_F(EncodingInfoTest, get_default_encoding_number_types) {
         EXPECT_EQ(BIT_SHUFFLE, EncodingInfo::get_default_encoding(logicType, false));
         const EncodingInfo* encoding_info;
         auto status = EncodingInfo::get(logicType, DEFAULT_ENCODING, &encoding_info);
-        ASSERT_FALSE(status.ok());
+        ASSERT_TRUE(status.ok());
         EXPECT_EQ(BIT_SHUFFLE, encoding_info->encoding());
 
         status = EncodingInfo::get(logicType, DICT_ENCODING, &encoding_info);
-        ASSERT_FALSE(status.ok());
+        ASSERT_TRUE(status.ok());
         EXPECT_EQ(DICT_ENCODING, encoding_info->encoding());
     }
 
@@ -117,13 +117,14 @@ TEST_F(EncodingInfoTest, get_default_encoding_number_types) {
         EXPECT_EQ(DICT_ENCODING, EncodingInfo::get_default_encoding(logicType, false));
         const EncodingInfo* encoding_info;
         auto status = EncodingInfo::get(logicType, DEFAULT_ENCODING, &encoding_info);
-        ASSERT_FALSE(status.ok());
+        ASSERT_TRUE(status.ok());
         EXPECT_EQ(DICT_ENCODING, encoding_info->encoding());
 
         status = EncodingInfo::get(logicType, DICT_ENCODING, &encoding_info);
-        ASSERT_FALSE(status.ok());
+        ASSERT_TRUE(status.ok());
         EXPECT_EQ(DICT_ENCODING, encoding_info->encoding());
     }
+    config::dictionary_encoding_ratio_for_non_string_column = 0;
 }
 
 TEST_F(EncodingInfoTest, default_encoding) {
