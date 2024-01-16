@@ -18,6 +18,7 @@
 
 #include "exec/vectorized/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
+#include "gen_cpp/Types_types.h" // for TStorageMedium::type
 
 namespace starrocks {
 
@@ -38,6 +39,11 @@ struct TabletBasicInfo {
     std::string data_dir;
     int64_t shard_id{0};
     int64_t schema_hash{0};
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_be_tablets_scanner.h
+=======
+    int64_t index_disk_usage{0};
+    TStorageMedium::type medium_type;
+>>>>>>> cceb1943b0 ([Enhancement] Add medium type of data dir in be_tablets (#37070)):be/src/exec/schema_scanner/schema_be_tablets_scanner.h
 };
 
 namespace vectorized {
