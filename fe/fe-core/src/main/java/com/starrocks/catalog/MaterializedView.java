@@ -1869,7 +1869,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
             Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
-            expressionRangePartitionInfo.renameTableName(new TableName(db.getFullName(), this.name));
+            expressionRangePartitionInfo.renameTableName(db.getFullName(), this.name);
         }
 
         setActive();

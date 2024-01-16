@@ -53,7 +53,6 @@ import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.TableName;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.backup.mv.MvBackupInfo;
@@ -506,7 +505,7 @@ public class OlapTable extends Table {
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
             Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
-            expressionRangePartitionInfo.renameTableName(new TableName("", newName));
+            expressionRangePartitionInfo.renameTableName("", newName);
         }
     }
 
