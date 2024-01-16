@@ -343,16 +343,16 @@ public class SimpleSchedulerTest {
                 times = 1;
 
                 // backend 10003, which is not available, will not be be removed
-                Backend backend2 = new Backend();
-                backend2.setAlive(false);
-                backend2.setHost("host10003");
-                backend2.setBrpcPort(10003);
-                backend2.setHttpPort(10013);
+                ComputeNode computeNode1 = new ComputeNode();
+                computeNode1.setAlive(false);
+                computeNode1.setHost("host10003");
+                computeNode1.setBrpcPort(10003);
+                computeNode1.setHttpPort(10013);
                 systemInfoService.getBackendOrComputeNode(10003L);
-                result = backend2;
+                result = computeNode1;
                 times = 2;
 
-                systemInfoService.checkNodeAvailable(backend2);
+                systemInfoService.checkNodeAvailable(computeNode1);
                 result = false;
                 times = 2;
             }
