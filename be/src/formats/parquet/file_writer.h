@@ -275,7 +275,7 @@ private:
     std::shared_ptr<::parquet::ParquetFileWriter> _writer;
     std::shared_ptr<ChunkWriter> _rowgroup_writer;
     std::shared_ptr<ParquetOutputStream> _output_stream;
-    std::optional<pipeline::FileMetrics> _metrics; // set metrics after commit
+    std::optional<FileMetrics> _metrics; // set metrics after commit
     PriorityThreadPool* _executors;
 
     inline static std::future<Status> NON_BLOCKED_OK = make_completed_future(Status::OK());

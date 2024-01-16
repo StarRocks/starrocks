@@ -665,7 +665,7 @@ void merge_stats(const std::shared_ptr<::parquet::Statistics>& left,
 
 void ParquetFileWriter::_set_metrics(::parquet::FileMetaData* meta) {
     DCHECK(meta != nullptr);
-    pipeline::FileMetrics file_metrics;
+    FileMetrics file_metrics;
     // field_id -> column_stat
     std::map<int32_t, std::shared_ptr<::parquet::Statistics>> column_stats;
     std::map<int32_t, int64_t> column_sizes;

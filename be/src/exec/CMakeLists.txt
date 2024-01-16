@@ -293,7 +293,11 @@ set(EXEC_FILES
     stream/aggregate/stream_aggregate_operator.cpp
     stream/stream_aggregate_node.cpp
         pipeline/sink/rolling_file_writer.cpp
-        pipeline/sink/rolling_file_writer.h)
+        pipeline/sink/rolling_file_writer.h
+        pipeline/sink/connector_sink_operator.cpp
+        pipeline/sink/connector_sink_operator.h
+        pipeline/sink/connector_chunk_sink.cpp
+        pipeline/sink/connector_chunk_sink.h)
 
 add_library(Exec STATIC
     ${EXEC_FILES}

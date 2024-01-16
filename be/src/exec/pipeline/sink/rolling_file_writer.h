@@ -21,20 +21,6 @@
 
 namespace starrocks::pipeline {
 
-struct FileMetrics {
-    std::string file_location;
-    std::string partition_location;
-    int64_t record_count;
-    int64_t file_size;
-    std::optional<std::vector<int64_t>> split_offsets;
-    // field id to statitics
-    std::optional<std::map<int32_t, int64_t>> column_sizes;
-    std::optional<std::map<int32_t, int64_t>> value_counts;
-    std::optional<std::map<int32_t, int64_t>> null_value_counts;
-    std::optional<std::map<int32_t, std::string>> lower_bounds;
-    std::optional<std::map<int32_t, std::string>> upper_bounds;
-};
-
 class FileWriter {
 public:
     struct FileMetrics {
@@ -43,7 +29,6 @@ public:
         int64_t record_count;
         int64_t file_size;
         std::optional<std::vector<int64_t>> split_offsets;
-        // field id to statitics
         std::optional<std::map<int32_t, int64_t>> column_sizes;
         std::optional<std::map<int32_t, int64_t>> value_counts;
         std::optional<std::map<int32_t, int64_t>> null_value_counts;
@@ -64,6 +49,11 @@ public:
     // virtual std::future<CommitResult> commit() = 0;
     virtual void commitAsync(std::function<void(CommitResult)> callback) = 0;
     virtual void rollback() = 0;
+};
+
+class FileWriterBuilder {
+public:
+
 };
 
 } // namespace starrocks::pipeline
