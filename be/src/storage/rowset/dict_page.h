@@ -162,7 +162,6 @@ private:
     bool _parsed;
     EncodingTypePB _encoding_type;
     std::shared_ptr<Column> _vec_code_buf;
-    uint32_t _max_value_legth = 0;
 };
 
 } // namespace starrocks

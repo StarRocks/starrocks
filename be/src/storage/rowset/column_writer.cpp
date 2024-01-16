@@ -956,15 +956,15 @@ inline Status DictColumnWriter::speculate_column_and_set_encoding(const Column& 
 template <LogicalType Type>
 inline EncodingTypePB DictColumnWriter::speculate_encoding(const Column& column) {
     using ColumnType = typename RunTimeTypeTraits<Type>::ColumnType;
-    const ColumnType* bin_col;
+    const ColumnType* numerical_col;
     if (column.is_nullable()) {
         const auto& data_col = down_cast<const NullableColumn&>(column).data_column();
-        bin_col = &down_cast<ColumnType&>(*data_col);
+        numerical_col = &down_cast<ColumnType&>(*data_col);
     } else {
-        bin_col = &down_cast<const ColumnType&>(column);
+        numerical_col = &down_cast<const ColumnType&>(column);
     }
 
-    auto row_count = bin_col->size();
+    auto row_count = numerical_col->size();
     auto ratio = config::dictionary_encoding_ratio_for_non_string_column;
     auto max_card = static_cast<size_t>(static_cast<double>(row_count) * ratio);
 
@@ -972,7 +972,7 @@ inline EncodingTypePB DictColumnWriter::speculate_encoding(const Column& column)
         using CppType = typename RunTimeTypeTraits<Type>::CppType;
         phmap::flat_hash_set<CppType> hash_set;
         for (size_t i = 0; i < row_count; i++) {
-            CppType value = bin_col->get_data()[i];
+            CppType value = numerical_col->get_data()[i];
             hash_set.insert(value);
             if (hash_set.size() > max_card) {
                 return BIT_SHUFFLE;
