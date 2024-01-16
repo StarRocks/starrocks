@@ -2330,13 +2330,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
 
-<<<<<<< HEAD
-        db.readLock();
-        try {
-            return buildCreatePartitionResponse(olapTable, partitions, tablets, partitionColNames);
-        } finally {
-            db.readUnlock();
-=======
         TransactionState txnState =
                 GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxn_id());
         if (txnState == null) {
@@ -2356,14 +2349,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         // update partition info snapshot for txn should be synchronized
         synchronized (txnState) {
-            Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            db.readLock();
             try {
                 return buildCreatePartitionResponse(olapTable, txnState, partitions, tablets, partitionColNames);
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                db.readUnlock();
             }
->>>>>>> c99d52304d ([BugFix] Fix automatic create partition return inconsistency result when tablet rebalance (#38598))
         }
     }
 
