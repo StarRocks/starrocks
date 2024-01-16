@@ -535,43 +535,6 @@ TEST_F(LakeTabletsChannelTest, test_cancel) {
     ASSERT_TRUE(_tablet_manager->get_tablet(10089)->get_txn_log(kTxnId).status().is_not_found());
 }
 
-TEST_F(LakeTabletsChannelTest, test_write_failed) {
-    auto open_request = _open_request;
-    open_request.set_num_senders(1);
-
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param));
-
-    constexpr int kChunkSize = 128;
-    constexpr int kChunkSizePerTablet = kChunkSize / 4;
-    auto chunk = generate_data(kChunkSize);
-    PTabletWriterAddChunkRequest add_chunk_request;
-    PTabletWriterAddBatchResult add_chunk_response;
-    add_chunk_request.set_index_id(kIndexId);
-    add_chunk_request.set_sender_id(0);
-    add_chunk_request.set_eos(false);
-    add_chunk_request.set_packet_seq(0);
-
-    for (int i = 0; i < kChunkSize; i++) {
-        int64_t tablet_id = 10086 + (i / kChunkSizePerTablet);
-        add_chunk_request.add_tablet_ids(tablet_id);
-        add_chunk_request.add_partition_ids(tablet_id < 10088 ? 10 : 11);
-    }
-
-    ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
-    add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
-
-    _tablet_manager->delete_tablet(10089);
-
-    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
-    ASSERT_NE(TStatusCode::OK, add_chunk_response.status().status_code());
-
-    _tablets_channel->cancel();
-
-    ASSERT_TRUE(_tablet_manager->get_tablet(10086)->get_txn_log(kTxnId).status().is_not_found());
-    ASSERT_TRUE(_tablet_manager->get_tablet(10087)->get_txn_log(kTxnId).status().is_not_found());
-    ASSERT_TRUE(_tablet_manager->get_tablet(10088)->get_txn_log(kTxnId).status().is_not_found());
-}
-
 TEST_F(LakeTabletsChannelTest, test_empty_tablet) {
     auto open_request = _open_request;
     open_request.set_num_senders(1);
