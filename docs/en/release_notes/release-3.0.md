@@ -4,6 +4,173 @@ displayed_sidebar: "English"
 
 # StarRocks version 3.0
 
+<<<<<<< HEAD
+=======
+## 3.0.9
+
+Release date: January 2, 2024
+
+### New features
+
+- Added the [percentile_disc](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/percentile_disc/) function. [#36352](https://github.com/StarRocks/starrocks/pull/36352)
+- Added a new metric `max_tablet_rowset_num` for setting the maximum allowed number of rowsets. This metric helps detect possible compaction issues and thus reduces the occurrences of the error "too many versions". [#36539](https://github.com/StarRocks/starrocks/pull/36539)
+
+### Improvements
+
+- A new value option `GROUP_CONCAT_LEGACY` is added to the session variable [sql_mode](https://docs.starrocks.io/docs/reference/System_variable#sql_mode) to provide compatibility with the implementation logic of the [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) function in versions earlier than v2.5. [#36150](https://github.com/StarRocks/starrocks/pull/36150)
+- When using JDK, the default GC algorithm is G1. [#37386](https://github.com/StarRocks/starrocks/pull/37386)
+- The `be_tablets` view in the `information_schema` database provides a new field `INDEX_DISK`, which records the disk usage (measured in bytes) of persistent indexes [#35615](https://github.com/StarRocks/starrocks/pull/35615)
+- Queries on MySQL external tables and the external tables within JDBC catalogs support including keywords in the WHERE clause. [#35917](https://github.com/StarRocks/starrocks/pull/35917)
+- Supports updates onto the specified partitions of an automatically partitioned table. If the specified partitions do not exist, an error is returned. [#34777](https://github.com/StarRocks/starrocks/pull/34777)
+- The Primary Key table size returned by the [SHOW DATA](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_DATA/) statement includes the sizes of **.cols** files (these are files related to partial column updates and generated columns) and persistent index files. [#34898](https://github.com/StarRocks/starrocks/pull/34898)
+- Optimized the performance of persistent index update when compaction is performed on all rowsets of a Primary Key table, which reduces disk read I/O. [#36819](https://github.com/StarRocks/starrocks/pull/36819)
+- When the string on the right side of the LIKE operator within the WHERE clause does not include `%` or `_`, the LIKE operator is converted into the `=` operator. [#37515](https://github.com/StarRocks/starrocks/pull/37515)
+- Optimized the logic used to compute compaction scores for Primary Key tables, thereby aligning the compaction scores for Primary Key tables within a more consistent range with the other three table types. [#36534](https://github.com/StarRocks/starrocks/pull/36534)
+- The result returned by the [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) statement now includes the timestamps of consumption messages from each partition. [#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- Optimized the performance of some Bitmap-related operations, including:
+  - Optimized nested loop joins. [#340804](https://github.com/StarRocks/starrocks/pull/34804) [#35003](https://github.com/StarRocks/starrocks/pull/35003)
+  - Optimized the `bitmap_xor` function. [#34069](https://github.com/StarRocks/starrocks/pull/34069)
+  - Supports Copy on Write to optimize Bitmap performance and reduce memory consumption. [#34047](https://github.com/StarRocks/starrocks/pull/34047)
+
+### Behavior Change
+
+- Added the session variable `enable_materialized_view_for_insert`, which controls whether materialized views rewrite the queries in INSERT INTO SELECT statements. The default value is `false`. [#37505](https://github.com/StarRocks/starrocks/pull/37505)
+- Changed the FE configuration item `enable_new_publish_mechanism` to a static parameter from a dynamic one. You must restart the FE after you modify the parameter settings. [#35338](https://github.com/StarRocks/starrocks/pull/35338)
+- Changed the default retention period of trash files to 1 day from the original 3 days. [#37113](https://github.com/StarRocks/starrocks/pull/37113)
+
+### Parameter Change
+
+#### Session variables
+
+- Added session variable `cbo_decimal_cast_string_strict`, which controls how the CBO converts data from the DECIMAL type to the STRING type. If this variable is set to `true`, the logic built in v2.5.x and later versions prevails and the system implements strict conversion (namely, the system truncates the generated string and fills 0s based on the scale length). If this variable is set to `false`, the logic built in versions earlier than v2.5.x prevails and the system processes all valid digits to generate a string. The default value is `true`. [#34208](https://github.com/StarRocks/starrocks/pull/34208)
+- Added session variables `transaction_read_only` and `tx_read_only` to specify the transaction access mode, which are compatible with MySQL versions 5.7.20 and above. [#37249](https://github.com/StarRocks/starrocks/pull/37249)
+
+#### FE Parameters
+
+- Added the FE configuration item `routine_load_unstable_threshold_second`. [#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- Added the FE configuration item `http_worker_threads_num`, which specifies the number of threads for HTTP server to deal with HTTP requests. The default value is `0`. If the value for this parameter is set to a negative value or 0, the actual thread number is twice the number of CPU cores. [#37530](https://github.com/StarRocks/starrocks/pull/37530)
+- Added the FE configuration item `default_mv_refresh_immediate`, which specifies whether to immediately refresh the materialized view after the materialized view is created. The default value is `true`. [#37093](https://github.com/StarRocks/starrocks/pull/37093)
+
+#### BE Parameters
+
+- Added the BE configuration item `enable_stream_load_verbose_log`. The default value is `false`. With this parameter set to `true`, StarRocks can record the HTTP requests and responses for Stream Load jobs, making troubleshooting easier. [#36113](https://github.com/StarRocks/starrocks/pull/36113)
+- Added the BE configuration item `pindex_major_compaction_limit_per_disk` to configure the maximum concurrency of compaction on a disk. This addresses the issue of uneven I/O across disks due to compaction. This issue can cause excessively high I/O for certain disks. The default value is `1`. [#36681](https://github.com/StarRocks/starrocks/pull/36681)
+- Added BE configuration items to specify the timeout duration for connecting to object storage:
+  - `object_storage_connect_timeout_ms`: Timeout duration to establish socket connections with object storage. The default value is `-1`, which means to use the default timeout duration of the SDK configurations.
+  - `object_storage_request_timeout_ms`: Timeout duration to establish HTTP connections with object storage. The default value is `-1`, which means to use the default timeout duration of the SDK configurations.
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- In some cases, BEs may crash when a Catalog is used to read ORC external tables. [#27971](https://github.com/StarRocks/starrocks/pull/27971)
+- The BEs crash if users create persistent indexes in the event of data corruption. [#30841](https://github.com/StarRocks/starrocks/pull/30841)
+- BEs occasionally crash after a Bitmap index is added. [#26463](https://github.com/StarRocks/starrocks/pull/26463)
+- Failures in replaying replica operations may cause FEs to crash. [#32295](https://github.com/StarRocks/starrocks/pull/32295)
+- Setting the FE parameter `recover_with_empty_tablet` to `true` may cause FEs to crash. [#33071](https://github.com/StarRocks/starrocks/pull/33071)
+- Queries fail during hash joins, causing BEs to crash. [#32219](https://github.com/StarRocks/starrocks/pull/32219)
+- In a StarRocks shared-nothing cluster, queries against Iceberg or Hive tables may cause BEs to crash. [#34682](https://github.com/StarRocks/starrocks/pull/34682)
+- The error "get_applied_rowsets failed, tablet updates is in error state: tablet:18849 actual row size changed after compaction" is returned for queries. [#33246](https://github.com/StarRocks/starrocks/pull/33246)
+- Running `show proc '/statistic'` may cause a deadlock. [#34237](https://github.com/StarRocks/starrocks/pull/34237/files)
+- The FE performance plunges after the FE configuration item `enable_collect_query_detail_info` is set to `true`. [#35945](https://github.com/StarRocks/starrocks/pull/35945)
+- Errors may be thrown if large amounts of data are loaded into a Primary Key table with persistent index enabled. [#34352](https://github.com/StarRocks/starrocks/pull/34352)
+- After StarRocks is upgraded from v2.4 or earlier to a later version, compaction scores may rise unexpectedly. [#34618](https://github.com/StarRocks/starrocks/pull/34618)
+- If `INFORMATION_SCHEMA` is queried by using the database driver MariaDB ODBC, the `CATALOG_NAME` column returned in the `schemata` view holds only `null` values. [#34627](https://github.com/StarRocks/starrocks/pull/34627)
+- FEs crash due to the abnormal data loaded and cannot restart. [#34590](https://github.com/StarRocks/starrocks/pull/34590)
+- If schema changes are being executed while a Stream Load job is in the **PREPARD** state, a portion of the source data to be loaded by the job is lost. [#34381](https://github.com/StarRocks/starrocks/pull/34381)
+- Including two or more slashes (`/`) at the end of the HDFS storage path causes the backup and restore of the data from HDFS to fail. [#34601](https://github.com/StarRocks/starrocks/pull/34601)
+- The `partition_live_number` property added by using the ALTER TABLE statement does not take effect. [#34842](https://github.com/StarRocks/starrocks/pull/34842)
+- The [array_distinct](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_distinct/) function occasionally causes the BEs to crash. [#36377](https://github.com/StarRocks/starrocks/pull/36377)
+- Deadlocks may occur when users refresh materialized views. [#35736](https://github.com/StarRocks/starrocks/pull/35736)
+- Global Runtime Filter may cause BEs to crash in certain scenarios. [#35776](https://github.com/StarRocks/starrocks/pull/35776)
+- In some cases, `bitmap_to_string` may return incorrect result due to data type overflow. [#37405](https://github.com/StarRocks/starrocks/pull/37405)
+
+## 3.0.8
+
+Release date: November 17, 2023
+
+### Improvements
+
+- The `COLUMNS` view in the system database `INFORMATION_SCHEMA` can display ARRAY, MAP, and STRUCT columns. [#33431](https://github.com/StarRocks/starrocks/pull/33431)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- When `show proc '/current_queries';` is being executed and meanwhile a query begins to be executed, BEs may crash. [#34316](https://github.com/StarRocks/starrocks/pull/34316)
+- When data is continuously loaded into a Primary Key table with a sort key specified at a high frequency, compaction failures may occur. [#26486](https://github.com/StarRocks/starrocks/pull/26486)
+- If a filtering condition is specified in a Broker Load job, BEs may crash during the data loading in certain circumstances. [#29832](https://github.com/StarRocks/starrocks/pull/29832)
+- An unknown error is reported when SHOW GRANTS is executed. [#30100](https://github.com/StarRocks/starrocks/pull/30100)
+- BE may crash for specific data types if the target data type specified in the `cast()` function is the same as the original data type. [#31465](https://github.com/StarRocks/starrocks/pull/31465)
+- `DATA_TYPE` and `COLUMN_TYPE` for BINARY or VARBINARY data types are displayed as `unknown` in the `information_schema.columns` view. [#32678](https://github.com/StarRocks/starrocks/pull/32678)
+- Long-time, frequent data loading into a Primary Key table with persistent index enabled may cause BEs to crash. [#33220](https://github.com/StarRocks/starrocks/pull/33220)
+- The query result is incorrect when Query Cache is enabled. [#32778](https://github.com/StarRocks/starrocks/pull/32778)
+- After a cluster is restarted, the data in a restored table may be inconsistent with the data in that table before being backed up. [#33567](https://github.com/StarRocks/starrocks/pull/33567)
+- If RESTORE is executed and meanwhile Compaction takes place, it may cause BEs to crash. [#32902](https://github.com/StarRocks/starrocks/pull/32902)
+
+## 3.0.7
+
+Release date: October 18, 2023
+
+### Improvements
+
+- Window functions COVAR_SAMP, COVAR_POP, CORR, VARIANCE, VAR_SAMP, STD, and STDDEV_SAMP now support the ORDER BY clause and Window clause. [#30786](https://github.com/StarRocks/starrocks/pull/30786)
+- The Publish phase of a load job that writes data into a Primary Key table is changed from asynchronous mode to synchronous mode. As such, the data loaded can be queried immediately after the load job finishes. [#27055](https://github.com/StarRocks/starrocks/pull/27055)
+- An error instead of NULL is returned if a decimal overflow occurs during queries on the DECIMAL type data. [#30419](https://github.com/StarRocks/starrocks/pull/30419)
+- Executing SQL commands with invalid comments now returns results consistent with MySQL. [#30210](https://github.com/StarRocks/starrocks/pull/30210)
+- For a StarRocks table that uses RANGE partitioning with only one partitioning column or expression partitioning, SQL predicates containing partition column expressions can also be used for partition pruning. [#30421](https://github.com/StarRocks/starrocks/pull/30421)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Concurrently creating and deleting databases and tables can, in certain cases, result in the table not being found and further leads to the failure of data loading into that table. [#28985](https://github.com/StarRocks/starrocks/pull/28985)
+- Using UDFs may lead to memory leaks in certain cases. [#29467](https://github.com/StarRocks/starrocks/pull/29467) [#29465](https://github.com/StarRocks/starrocks/pull/29465)
+- If the ORDER BY clause contains aggregate functions, an error "java.lang.IllegalStateException: null" is returned. [#30108](https://github.com/StarRocks/starrocks/pull/30108)
+- If users run queries against data stored in Tencent COS by using their Hive catalog which consists of multiple levels, the query results will be incorrect. [#30363](https://github.com/StarRocks/starrocks/pull/30363)
+- If some subcfields of the STRUCT in ARRAY&lt;STRUCT&gt; type data are missing, the data length is incorrect when default values are filled in the missing subcfields during queries, which causes BEs to crash.
+- The version of Berkeley DB Java Edition is upgraded to avoid security vulnerabilities.[#30029](https://github.com/StarRocks/starrocks/pull/30029)
+- If users load data into a Primary Key table on which truncate operations and queries are concurrently performed, an error "java.lang.NullPointerException" is thrown in certain cases. [#30573](https://github.com/StarRocks/starrocks/pull/30573)
+- If the Schema Change execution time is too long, it may fail because the tablet of the specified version is garbage-collected. [#31376](https://github.com/StarRocks/starrocks/pull/31376)
+- If users use CloudCanal to load data into table columns that are set to `NOT NULL` but have no default value specified, an error "Unsupported dataFormat value is : \N" is thrown. [#30799](https://github.com/StarRocks/starrocks/pull/30799)
+- In StarRocks shared-data clusters, the information of table keys is not recorded in `information_schema.COLUMNS`. As a result, DELETE operations cannot be performed when data is loaded by using Flink Connector. [#31458](https://github.com/StarRocks/starrocks/pull/31458)
+- During the upgrade, if the types of certain columns are also upgraded (for example, from Decimal type to Decimal v3 type), compaction on certain tables with specific characteristics may cause BEs to crash. [#31626](https://github.com/StarRocks/starrocks/pull/31626)
+- When data is loaded by using Flink Connector, the load job is suspended unexpectedly if there are highly concurrent load jobs and both the number of HTTP threads and the number of Scan threads have reached their upper limits. [#32251](https://github.com/StarRocks/starrocks/pull/32251)
+- BEs crash when libcurl is invoked. [#31667](https://github.com/StarRocks/starrocks/pull/31667)
+- An error occurs when a column of BITMAP type is added to a Primary Key table. [#31763](https://github.com/StarRocks/starrocks/pull/31763)
+
+## 3.0.6
+
+Release date: September 12, 2023
+
+### Behavior Change
+
+- When using the [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) function, you must use the SEPARATOR keyword to declare the separator.
+
+### New Features
+
+- The aggregate function [group_concat](https://docs.starrocks.io/docs/sql-reference/sql-functions/string-functions/group_concat/) supports the DISTINCT keyword and the ORDER BY clause. [#28778](https://github.com/StarRocks/starrocks/pull/28778)
+- Data in partitions can be automatically cooled down over time. (This feature is not supported for [list partitioning](https://docs.starrocks.io/docs/table_design/list_partitioning/).) [#29335](https://github.com/StarRocks/starrocks/pull/29335) [#29393](https://github.com/StarRocks/starrocks/pull/29393)
+
+### Improvements
+
+- Supports implicit conversions for all compound predicates and for all expressions in the WHERE clause. You can enable or disable implicit conversions by using the [session variable](https://docs.starrocks.io/docs/reference/System_variable/) `enable_strict_type`. The default value of this session variable is `false`. [#21870](https://github.com/StarRocks/starrocks/pull/21870)
+- Unifies the logic between FEs and BEs in converting strings to integers. [#29969](https://github.com/StarRocks/starrocks/pull/29969)
+
+### Bug Fixes
+
+- If `enable_orc_late_materialization` is set to `true`, an unexpected result is returned when a Hive catalog is used to query STRUCT-type data in ORC files. [#27971](https://github.com/StarRocks/starrocks/pull/27971)
+- During data queries through Hive Catalog, if a partitioning column and an OR operator are specified in the WHERE clause, the query result is incorrect. [#28876](https://github.com/StarRocks/starrocks/pull/28876)
+- The values returned by the RESTful API action `show_data` for cloud-native tables are incorrect. [#29473](https://github.com/StarRocks/starrocks/pull/29473)
+- If the [shared-data cluster](https://docs.starrocks.io/docs/deployment/shared_data/azure/) stores data in Azure Blob Storage and a table is created, the FE fails to start after the cluster is rolled back to version 3.0. [#29433](https://github.com/StarRocks/starrocks/pull/29433)
+- A user has no permission when querying a table in the Iceberg catalog even if the user is granted permission on that table. [#29173](https://github.com/StarRocks/starrocks/pull/29173)
+- The `Default` field values returned by the [SHOW FULL COLUMNS](https://docs.starrocks.io/docs/sql-reference/sql-statements/Administration/SHOW_FULL_COLUMNS/) statement for columns of the [BITMAP](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-types/BITMAP/) or [HLL](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-types/HLL/) data type are incorrect. [#29510](https://github.com/StarRocks/starrocks/pull/29510)
+- Modifying the FE dynamic parameter `max_broker_load_job_concurrency` using the `ADMIN SET FRONTEND CONFIG` command does not take effect.
+- The FE may fail to start when a materialized view is being refreshed while its refresh strategy is being modified. [#29964](https://github.com/StarRocks/starrocks/pull/29964) [#29720](https://github.com/StarRocks/starrocks/pull/29720)
+- The error `unknown error` is returned when `select count(distinct(int+double)) from table_name` is executed. [#29691](https://github.com/StarRocks/starrocks/pull/29691)
+- After a Primary Key table is restored, metadata errors occur and cause metadata inconsistencies occur if a BE is restarted. [#30135](https://github.com/StarRocks/starrocks/pull/30135)
+
+>>>>>>> f7ab4d6fcf ([Doc] change the default value of a be config (#39088))
 ## 3.0.5
 
 Release date: August 16, 2023
