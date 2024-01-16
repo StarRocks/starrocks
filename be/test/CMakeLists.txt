@@ -409,6 +409,7 @@ set(EXEC_FILES_PART2
         ./storage/push_handler_test.cpp
         ./storage/range_test.cpp
         ./storage/replication_txn_manager_test.cpp
+        ./storage/segment_stream_converter_test.cpp
         ./storage/row_source_mask_test.cpp
         ./storage/union_iterator_test.cpp
         ./storage/unique_iterator_test.cpp
