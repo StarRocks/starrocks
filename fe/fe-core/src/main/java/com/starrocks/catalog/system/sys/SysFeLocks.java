@@ -23,6 +23,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
+import com.starrocks.common.util.QueryableReentrantReadWriteLock;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.server.GlobalStateMgr;
@@ -92,7 +93,7 @@ public class SysFeLocks {
 
     @VisibleForTesting
     protected static TFeLocksItem resolveLockInfo(Database db) {
-        var lock = db.getLock();
+        QueryableReentrantReadWriteLock lock = db.getLock();
         TFeLocksItem lockItem = new TFeLocksItem();
         lockItem.setLock_type("DATABASE");
         lockItem.setLock_object(db.getFullName());

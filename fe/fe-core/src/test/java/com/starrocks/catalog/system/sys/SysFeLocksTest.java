@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TFeLocksItem;
 import com.starrocks.thrift.TFeLocksReq;
+import com.starrocks.thrift.TFeLocksRes;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.thrift.TException;
 import org.junit.jupiter.api.Test;
@@ -38,7 +39,7 @@ public class SysFeLocksTest {
         auth.setUser_ip("127.0.0.1");
         req.setAuth_info(auth);
 
-        var res = SysFeLocks.listLocks(req, false);
+        TFeLocksRes res = SysFeLocks.listLocks(req, false);
         assertTrue(StringUtils.isNotEmpty(res.toString()));
     }
 
