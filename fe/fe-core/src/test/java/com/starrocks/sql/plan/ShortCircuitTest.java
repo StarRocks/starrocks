@@ -109,6 +109,26 @@ public class ShortCircuitTest extends PlanTestBase {
         Assert.assertEquals(true, execFragment.getPlanFragment().isShortCircuit());
     }
 
+    @Test
+    public void testShortCircuitPruneEmpty() throws Exception {
+        // support short circuit read
+        String sql = "select * from tprimary where pk=20";
+        connectContext.setExecutionId(new TUniqueId(0x33, 0x0));
+        ExecPlan execPlan = UtFrameUtils.getPlanAndFragment(connectContext, sql).second;
+
+        DescriptorTable desc = new DescriptorTable();
+        TupleDescriptor tupleDescriptor = desc.createTupleDescriptor();
+        tupleDescriptor.setTable(getTable("tprimary"));
+
+        OlapScanNode scanNode = OlapScanNode.createOlapScanNodeByLocation(execPlan.getNextNodeId(), tupleDescriptor,
+                "OlapScanNodeForShortCircuit", ImmutableList.of());
+
+        DefaultCoordinator coord = new DefaultCoordinator.Factory().createQueryScheduler(connectContext,
+                execPlan.getFragments(), ImmutableList.of(scanNode), execPlan.getDescTbl().toThrift());
+        coord.startScheduling();
+        Assert.assertTrue(coord.getNext().isEos());
+    }
+
     @AfterClass
     public static void afterClass() {
         FeConstants.runningUnitTest = OLD_VALUE;
