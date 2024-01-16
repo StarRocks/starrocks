@@ -210,11 +210,7 @@ public class ConcurrentDDLTest {
                                 starRocksAssert.withMaterializedView(sql);
                             }
                         } catch (Exception e) {
-<<<<<<< HEAD
-                            // System.out.println(sql + " failed, msg: " + e.getMessage());
-=======
                             // do nothing
->>>>>>> 5ca5ff0108 ([UT] Remove too much useless ut stdout logs (#39095))
                         }
                     }
                 });
