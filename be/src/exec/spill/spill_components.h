@@ -214,8 +214,8 @@ struct SpilledPartition : public SpillPartitionInfo {
     }
 
     std::string debug_string() {
-        return fmt::format("[id={},bytes={},mem_size={},in_mem={},is_spliting={}]", partition_id, bytes, mem_size,
-                           in_mem, is_spliting);
+        return fmt::format("[id={},bytes={},mem_size={},num_rows={},in_mem={},is_spliting={}]", partition_id, bytes,
+                           mem_size, num_rows, in_mem, is_spliting);
     }
 
     bool is_spliting = false;

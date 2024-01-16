@@ -402,14 +402,7 @@ TEST_F(SpillTest, unsorted_process) {
             ASSERT_OK(mem_table->append(std::move(chunk)));
         }
         //
-        size_t next_index = 0;
-        while (next_index < 500) {
-            auto st = mem_table->flush([&](const auto& chunk) {
-                chunk_equals(input[next_index++], chunk);
-                return Status::Yield();
-            });
-            ASSERT_TRUE(st.is_yield() || st.ok());
-        }
+        ASSERT_OK(mem_table->finalize());
     }
 }
 

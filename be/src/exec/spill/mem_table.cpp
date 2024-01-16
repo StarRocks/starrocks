@@ -117,8 +117,7 @@ Status UnorderedMemTable::finalize() {
     }
     TRACE_SPILL_LOG << fmt::format("finalize spillable unordered memtable done, rows[{}], size[{}]", num_rows(),
                                    _block->size());
-    // after serializing data, clear all chunks, only keep serialized data in _block
-    _chunks.clear();
+    // since mem table may be read in partition split stage, we can't clear _chunks here
     int64_t old_consumption = _tracker->consumption();
     int64_t new_consumption = _block->get_data().get_size();
     _tracker->set(new_consumption);
