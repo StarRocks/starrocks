@@ -224,7 +224,7 @@ Default value: false, which means this feature is disabled.
 
 Used to enable the strict mode when loading data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md).
 
-### enable_materialized_view_for_insert (3.2.2 and later)
+### enable_materialized_view_for_insert (2.5.18, 3.0.9, 3.1.7, 3.2.2 and later）
 
 Whether to allow StarRocks to rewrite queries in INSERT INTO SELECT statements. The default value is `false`, indicating Query Rewrite in such scenarios is disabled by default.
 
