@@ -396,13 +396,7 @@ public class BDBJEJournal implements Journal {
 
                 // commit
                 try {
-<<<<<<< HEAD
-                    currentTrasaction.commit();
-=======
-                    if (currentTransaction != null) {
-                        currentTransaction.commit();
-                    }
->>>>>>> 488119f2b7 ([Refactor] Add slow log for edit log write and refine some code warnings (backport #39024) (backport #39085) (backport #39102) (#39128))
+                    currentTransaction.commit();
                     return;
                 } catch (DatabaseException e) {
                     String errMsg = String.format("failed to commit journal after retried %d times! txn[%s] db[%s]",
