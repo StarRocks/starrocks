@@ -5329,4 +5329,61 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             }
         });
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testMvRestoreUpdater1() {
+        String mvName = "test0";
+        String mv = String.format("CREATE MATERIALIZED VIEW %s" +
+                " REFRESH DEFERRED MANUAL " +
+                " AS SELECT *  FROM lineorder", mvName);
+        starRocksAssert.withMaterializedView(mv,
+                () -> {
+                    MaterializedView mvTable = (MaterializedView) getTable(MATERIALIZED_DB_NAME, mvName);
+                    Pair<Status, Boolean> result = MVRestoreUpdater.checkMvDefinedQuery(mvTable, Maps.newHashMap(), Pair.create("", ""));
+                    Assert.assertTrue(result.first.ok());
+                });
+
+    }
+
+    @Test
+    public void testMvRestoreUpdater2() {
+        String mvName = "test0";
+        String mv = String.format("CREATE MATERIALIZED VIEW %s" +
+                " REFRESH DEFERRED MANUAL " +
+                " AS SELECT * FROM lineorder", mvName);
+
+        starRocksAssert.withMaterializedView(mv,
+                () -> {
+                    MaterializedView mvTable = (MaterializedView) getTable(MATERIALIZED_DB_NAME, mvName);
+                    Pair<String, String> newDefinedQueries = Pair.create("", "");
+                    Map<TableName, TableName> remoteToLocalTableName = Maps.newHashMap();
+                    remoteToLocalTableName.put(TableName.fromString("test.lineorder"),
+                            TableName.fromString("test.lineorder"));
+                    boolean result = MVRestoreUpdater.renewMvBaseTableNames(mvTable,
+                            remoteToLocalTableName, connectContext, newDefinedQueries);
+                    Assert.assertTrue(result);
+                    Assert.assertTrue(!Strings.isNullOrEmpty(newDefinedQueries.first));
+                    Assert.assertTrue(!Strings.isNullOrEmpty(newDefinedQueries.second));
+                });
+
+    }
+
+    @Test
+    public void testAggregateWithHave() {
+        String mv = "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno having sum(salary) > 1";
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno having sum(salary) > 1");
+        testRewriteOK(mv, "select empid, deptno,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid, deptno having sum(salary) > 10");
+        testRewriteOK(mv, "select empid,\n" +
+                " sum(salary) as total, count(salary)  as cnt\n" +
+                " from emps group by empid having sum(salary) > 10");
+    }
+>>>>>>> 0136208116 ([BugFix] Fix mv rewrite when mv's plan has having expressions (#39089))
 }
