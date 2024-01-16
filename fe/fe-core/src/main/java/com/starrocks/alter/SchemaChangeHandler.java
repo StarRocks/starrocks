@@ -33,6 +33,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.IndexDef;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -371,17 +372,6 @@ public class SchemaChangeHandler extends AlterHandler {
         // retain old column name
         modColumn.setName(oriColumn.getName());
 
-<<<<<<< HEAD
-=======
-        if (!oriColumn.isGeneratedColumn() && modColumn.isGeneratedColumn()) {
-            throw new DdlException("Can not modify a non-generated column to a generated column");
-        }
-
-        if (oriColumn.isGeneratedColumn() && !modColumn.isGeneratedColumn()) {
-            throw new DdlException("Can not modify a generated column to a non-generated column");
-        }
-
->>>>>>> 8fd6a085bf ([BugFix] Add more checks when schema changing has referred materialized views (backport #37388) (#38436))
         // handle the move operation in 'indexForFindingColumn' if has
         if (hasColPos) {
             // move col
@@ -1332,15 +1322,14 @@ public class SchemaChangeHandler extends AlterHandler {
                                             "please drop the rollup index first.",
                                     rollupCol.getName(), olapTable.getIndexNameById(meta.getIndexId())));
                         }
-                        if (rollupCol.getRefColumns() != null) {
-                            for (SlotRef refColumn : rollupCol.getRefColumns()) {
-                                if (modifiedColumns.contains(refColumn.getColumnName())) {
-                                    throw new DdlException(String.format("Can not drop/modify the column %s, " +
-                                                    "because the column is used in the related rollup %s " +
-                                                    "with the define expr:%s, please drop the rollup index first.",
-                                            rollupCol.getName(), olapTable.getIndexNameById(meta.getIndexId()),
-                                            rollupCol.getDefineExpr().toSql()));
-                                }
+                        if (rollupCol.getRefColumn() != null) {
+                            SlotRef refColumn = rollupCol.getRefColumn();
+                            if (modifiedColumns.contains(refColumn.getColumnName())) {
+                                throw new DdlException(String.format("Can not drop/modify the column %s, " +
+                                                "because the column is used in the related rollup %s " +
+                                                "with the define expr:%s, please drop the rollup index first.",
+                                        rollupCol.getName(), olapTable.getIndexNameById(meta.getIndexId()),
+                                        rollupCol.getDefineExpr().toSql()));
                             }
                         }
                     }

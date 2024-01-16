@@ -645,31 +645,6 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         return modifiedColumns;
     }
 
-<<<<<<< HEAD
-    private void inactiveRelatedMv(Set<String> modifiedColumns, OlapTable tbl) {
-        if (modifiedColumns.isEmpty()) {
-            return;
-        }
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        for (MvId mvId : tbl.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
-            if (mv == null) {
-                LOG.warn("Ignore materialized view {} does not exists", mvId);
-                continue;
-            }
-            for (Column mvColumn : mv.getColumns()) {
-                if (modifiedColumns.contains(mvColumn.getName())) {
-                    LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                            "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
-                            tbl.getName(), mvColumn.getName());
-                    mv.setInactiveAndReason(String.format("column changed: %s.%s", tbl.getName(), mvColumn.getName()));
-                }
-            }
-        }
-    }
-
-=======
->>>>>>> 8fd6a085bf ([BugFix] Add more checks when schema changing has referred materialized views (backport #37388) (#38436))
     @Override
     protected void runFinishedRewritingJob() {
         // nothing to do

@@ -8,6 +8,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.common.collect.Table;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
@@ -16,6 +17,8 @@ import com.starrocks.catalog.Index;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
@@ -48,6 +51,7 @@ import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import io.opentelemetry.api.trace.StatusCode;
+import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -505,8 +509,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
     }
 
-<<<<<<< HEAD
-=======
     private Set<String> collectModifiedColumnsForRelatedMVs(@NotNull LakeTable tbl) {
         if (tbl.getRelatedMaterializedViews().isEmpty()) {
             return Sets.newHashSet();
@@ -563,7 +565,6 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
     }
 
->>>>>>> 8fd6a085bf ([BugFix] Add more checks when schema changing has referred materialized views (backport #37388) (#38436))
     boolean tableHasBeenDropped() {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             return db == null || db.getTable(tableId) == null;

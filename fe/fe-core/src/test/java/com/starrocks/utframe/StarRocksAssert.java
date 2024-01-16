@@ -230,23 +230,13 @@ public class StarRocksAssert {
 
     // Add materialized view to the schema
     public StarRocksAssert withMaterializedView(String sql) throws Exception {
-        return withMaterializedView(sql, false, false);
+        return withMaterializedView(sql, true, false);
     }
 
-<<<<<<< HEAD
-    public StarRocksAssert withMaterializedView(String sql, boolean isOnlySingleReplica) throws Exception {
-=======
-    public void assertMVWithoutComplexExpression(String dbName, String tableName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        Table table = db.getTable(tableName);
-        if (!(table instanceof OlapTable)) {
-            return;
-        }
-        OlapTable olapTable = (OlapTable) table;
-        for (MaterializedIndexMeta indexMeta : olapTable.getIndexIdToMeta().values()) {
-            Assert.assertFalse(MVUtils.containComplexExpresses(indexMeta));
-        }
+    public StarRocksAssert withRefreshedMaterializedView(String sql) throws Exception {
+        return withMaterializedView(sql, true, true);
     }
+
 
     public String getMVName(String sql) throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
@@ -260,14 +250,9 @@ public class StarRocksAssert {
         }
     }
 
-    public StarRocksAssert withRefreshedMaterializedView(String sql) throws Exception {
-        return withMaterializedView(sql, true, true);
-    }
-
     public StarRocksAssert withMaterializedView(String sql,
                                                 boolean isOnlySingleReplica,
                                                 boolean isRefresh) throws Exception {
->>>>>>> 8fd6a085bf ([BugFix] Add more checks when schema changing has referred materialized views (backport #37388) (#38436))
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         if (stmt instanceof CreateMaterializedViewStmt) {
             CreateMaterializedViewStmt createMaterializedViewStmt = (CreateMaterializedViewStmt) stmt;
@@ -283,13 +268,7 @@ public class StarRocksAssert {
                 createMaterializedViewStatement.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
             }
             GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
-<<<<<<< HEAD
-=======
             String mvName = createMaterializedViewStatement.getTableName().getTbl();
-            if (isRefresh) {
-                refreshMvPartition(String.format("refresh materialized view %s", mvName));
-            }
->>>>>>> 8fd6a085bf ([BugFix] Add more checks when schema changing has referred materialized views (backport #37388) (#38436))
         }
         checkAlterJob();
         return this;

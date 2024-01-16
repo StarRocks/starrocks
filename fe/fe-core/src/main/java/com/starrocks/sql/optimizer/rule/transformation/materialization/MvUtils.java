@@ -36,13 +36,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.analyzer.RelationFields;
-import com.starrocks.sql.analyzer.RelationId;
-import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
->>>>>>> 8fd6a085bf ([BugFix] Add more checks when schema changing has referred materialized views (backport #37388) (#38436))
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -993,25 +987,6 @@ public class MvUtils {
             onPredicates.addAll(Utils.extractConjuncts(joinOperator.getOnPredicate()));
         }
     }
-<<<<<<< HEAD
-=======
-
-    /**
-     * Return the max refresh timestamp of all partition infos.
-     */
-    public static long  getMaxTablePartitionInfoRefreshTime(
-            Collection<Map<String, MaterializedView.BasePartitionInfo>> partitionInfos) {
-        return partitionInfos.stream()
-                .flatMap(x -> x.values().stream())
-                .map(x -> x.getLastRefreshTime())
-                .max(Long::compareTo)
-                .filter(Objects::nonNull)
-                .orElse(System.currentTimeMillis());
-    }
-
-    public static boolean isSupportViewDelta(OptExpression optExpression) {
-        return getAllJoinOperators(optExpression).stream().allMatch(x -> isSupportViewDelta(x));
-    }
 
     public static boolean isSupportViewDelta(JoinOperator joinOperator) {
         return  joinOperator.isLeftOuterJoin() || joinOperator.isInnerJoin();
@@ -1084,5 +1059,4 @@ public class MvUtils {
             }
         }
     }
->>>>>>> 8fd6a085bf ([BugFix] Add more checks when schema changing has referred materialized views (backport #37388) (#38436))
 }

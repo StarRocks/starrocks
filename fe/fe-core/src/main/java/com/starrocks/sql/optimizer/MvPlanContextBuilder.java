@@ -24,15 +24,12 @@ public class MvPlanContextBuilder {
     public static MvPlanContext getPlanContext(MaterializedView mv) {
         // build mv query logical plan
         MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
-<<<<<<< HEAD
         // optimize the sql by rule and disable rule based materialized view rewrite
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
         optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
         optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
         optimizerConfig.disableRule(RuleType.TF_REWRITE_GROUP_BY_COUNT_DISTINCT);
         optimizerConfig.setMVRewritePlan(true);
-        return mvOptimizer.optimize(mv, new ConnectContext(), optimizerConfig);
-=======
         ConnectContext connectContext = ConnectContext.get();
         // If the caller is not from query (eg. background schema change thread), set thread local info to avoid
         // NPE in the planning.
@@ -40,7 +37,6 @@ public class MvPlanContextBuilder {
             connectContext = new ConnectContext();
             connectContext.setThreadLocalInfo();
         }
-        return mvOptimizer.optimize(mv, connectContext);
->>>>>>> 8fd6a085bf ([BugFix] Add more checks when schema changing has referred materialized views (backport #37388) (#38436))
+        return mvOptimizer.optimize(mv, connectContext, optimizerConfig);
     }
 }

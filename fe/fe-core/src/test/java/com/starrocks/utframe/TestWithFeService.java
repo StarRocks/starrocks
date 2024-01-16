@@ -30,7 +30,6 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
 import org.junit.jupiter.api.AfterAll;
@@ -117,7 +116,7 @@ public abstract class TestWithFeService {
 
     // Help to create a mocked ConnectContext.
     protected ConnectContext createDefaultCtx() throws IOException {
-        return createCtx(UserIdentity.ROOT, "127.0.0.1");
+        return createCtx("127.0.0.1");
     }
 
     protected <T extends StatementBase> T createStmt(String showSql)
@@ -125,10 +124,8 @@ public abstract class TestWithFeService {
         return (T) parseAndAnalyzeStmt(showSql, connectContext);
     }
 
-    protected ConnectContext createCtx(UserIdentity user, String host) throws IOException {
+    protected ConnectContext createCtx(String host) throws IOException {
         ConnectContext ctx = new ConnectContext();
-        ctx.setCurrentUserIdentity(user);
-        ctx.setQualifiedUser(user.getUser());
         ctx.setRemoteIP(host);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setThreadLocalInfo();
