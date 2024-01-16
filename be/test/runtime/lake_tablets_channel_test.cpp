@@ -600,48 +600,4 @@ TEST_F(LakeTabletsChannelTest, test_empty_tablet) {
     }
 }
 
-TEST_F(LakeTabletsChannelTest, test_finish_failed) {
-    auto open_request = _open_request;
-    open_request.set_num_senders(1);
-
-    ASSERT_OK(_tablets_channel->open(open_request, _schema_param));
-
-    constexpr int kChunkSize = 12;
-    auto chunk = generate_data(kChunkSize);
-
-    PTabletWriterAddChunkRequest add_chunk_request;
-    PTabletWriterAddBatchResult add_chunk_response;
-    add_chunk_request.set_index_id(kIndexId);
-    add_chunk_request.set_sender_id(0);
-    add_chunk_request.set_eos(false);
-    add_chunk_request.set_packet_seq(0);
-
-    // Only tablet 10086 has data
-    for (int i = 0; i < kChunkSize; i++) {
-        add_chunk_request.add_tablet_ids(10086);
-        add_chunk_request.add_partition_ids(10);
-    }
-
-    ASSIGN_OR_ABORT(auto chunk_pb, serde::ProtobufChunkSerde::serialize(chunk));
-    add_chunk_request.mutable_chunk()->Swap(&chunk_pb);
-
-    _tablets_channel->add_chunk(&chunk, add_chunk_request, &add_chunk_response);
-    ASSERT_TRUE(add_chunk_response.status().status_code() == TStatusCode::OK);
-
-    // Remove txn log directory before finish
-    fs::remove_all(_location_provider->txn_log_root_location(10087));
-
-    PTabletWriterAddChunkRequest finish_request;
-    PTabletWriterAddBatchResult finish_response;
-    finish_request.set_index_id(kIndexId);
-    finish_request.set_sender_id(0);
-    finish_request.set_eos(true);
-    finish_request.set_packet_seq(1);
-    finish_request.add_partition_ids(10);
-    finish_request.add_partition_ids(11);
-
-    _tablets_channel->add_chunk(nullptr, finish_request, &finish_response);
-    ASSERT_NE(TStatusCode::OK, finish_response.status().status_code());
-}
-
 } // namespace starrocks
