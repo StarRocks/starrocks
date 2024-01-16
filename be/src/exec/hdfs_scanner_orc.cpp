@@ -318,6 +318,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
     auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _file->get_size().value(),
                                                             _shared_buffered_input_stream.get());
+    input_stream->set_lazy_column_coalesce_counter(_scanner_ctx.lazy_column_coalesce_counter);
+    input_stream->set_app_stats(&_app_stats);
     ORCHdfsFileStream* orc_hdfs_file_stream = input_stream.get();
 
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
@@ -509,10 +511,22 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         }
 
         // if has lazy load fields, skip it if chunk_size == 0
+<<<<<<< HEAD
         if (chunk_size == 0) {
             _app_stats.late_materialize_skip_rows += chunk_size_ori;
+=======
+        bool require_load_lazy_columns = chunk_size != 0;
+        if (require_load_lazy_columns) {
+            // still need to load lazy column
+            _scanner_ctx.lazy_column_coalesce_counter->fetch_add(1, std::memory_order_relaxed);
+        } else {
+            // dont need to load lazy column
+            _scanner_ctx.lazy_column_coalesce_counter->fetch_sub(1, std::memory_order_relaxed);
+            _app_stats.late_materialize_skip_rows += init_chunk_size;
+>>>>>>> 234b6214b3 ([Enhancement] Adaptive coalesce active column and lazy column in ORC (#39036))
             continue;
         }
+
         {
             SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
             RETURN_IF_ERROR(_orc_reader->lazy_seek_to(position.row_in_stripe));
@@ -583,6 +597,16 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
 
     COUNTER_UPDATE(stripe_avg_size_counter, avg_stripe_size);
     COUNTER_UPDATE(stripe_number_counter, _app_stats.orc_stripe_sizes.size());
+
+    RuntimeProfile::Counter* stripe_active_lazy_coalesce_together_counter = root->add_child_counter(
+            "StripeActiveLazyColumnIOCoalesceTogether", TUnit::UNIT,
+            RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM), orcProfileSectionPrefix);
+    RuntimeProfile::Counter* stripe_active_lazy_coalesce_seperately_counter = root->add_child_counter(
+            "StripeActiveLazyColumnIOCoalesceSeperately", TUnit::UNIT,
+            RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM), orcProfileSectionPrefix);
+    COUNTER_UPDATE(stripe_active_lazy_coalesce_together_counter, _app_stats.orc_stripe_active_lazy_coalesce_together);
+    COUNTER_UPDATE(stripe_active_lazy_coalesce_seperately_counter,
+                   _app_stats.orc_stripe_active_lazy_coalesce_seperately);
 }
 
 } // namespace starrocks

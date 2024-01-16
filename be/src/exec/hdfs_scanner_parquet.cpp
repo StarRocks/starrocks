@@ -76,6 +76,14 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     group_dict_filter_timer = ADD_CHILD_TIMER(root, "GroupDictFilter", kParquetProfileSectionPrefix);
     group_dict_decode_timer = ADD_CHILD_TIMER(root, "GroupDictDecode", kParquetProfileSectionPrefix);
 
+<<<<<<< HEAD
+=======
+    group_active_lazy_coalesce_together = ADD_CHILD_COUNTER(root, "GroupActiveLazyColumnIOCoalesceTogether",
+                                                            TUnit::UNIT, kParquetProfileSectionPrefix);
+    group_active_lazy_coalesce_seperately = ADD_CHILD_COUNTER(root, "GroupActiveLazyColumnIOCoalesceSeperately",
+                                                              TUnit::UNIT, kParquetProfileSectionPrefix);
+
+>>>>>>> 234b6214b3 ([Enhancement] Adaptive coalesce active column and lazy column in ORC (#39036))
     has_page_statistics = ADD_CHILD_COUNTER(root, "HasPageStatistics", TUnit::UNIT, kParquetProfileSectionPrefix);
     page_skip = ADD_CHILD_COUNTER(root, "PageSkipCounter", TUnit::UNIT, kParquetProfileSectionPrefix);
 
