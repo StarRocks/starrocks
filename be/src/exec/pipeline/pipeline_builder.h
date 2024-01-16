@@ -138,9 +138,6 @@ public:
     void push_dependent_pipeline(const Pipeline* pipeline);
     void pop_dependent_pipeline();
 
-    bool force_disable_adaptive_dop() const { return _force_disable_adaptive_dop; }
-    void set_force_disable_adaptive_dop(bool val) { _force_disable_adaptive_dop = val; }
-
 private:
     OpFactories _maybe_interpolate_local_passthrough_exchange(RuntimeState* state, int32_t plan_node_id,
                                                               OpFactories& pred_operators, int num_receivers,
@@ -165,13 +162,11 @@ private:
     const size_t _degree_of_parallelism;
 
     const bool _is_stream_pipeline;
-
-    bool _force_disable_adaptive_dop = false;
 };
 
 class PipelineBuilder {
 public:
-    PipelineBuilder(PipelineBuilderContext& context) : _context(context) {}
+    explicit PipelineBuilder(PipelineBuilderContext& context) : _context(context) {}
 
     // Build pipeline from exec node tree
     Pipelines build(const FragmentContext& fragment, ExecNode* exec_node);

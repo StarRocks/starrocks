@@ -67,6 +67,8 @@ import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.MetadataTableUtils;
 import org.apache.iceberg.Metrics;
+import org.apache.iceberg.MetricsConfig;
+import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionSpecParser;
@@ -118,12 +120,18 @@ import static com.starrocks.connector.iceberg.IcebergApiConverter.toIcebergApiSc
 import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.HIVE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.REST_CATALOG;
-import static com.starrocks.connector.iceberg.hive.IcebergHiveCatalog.LOCATION_PROPERTY;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
+import static org.apache.iceberg.TableProperties.DEFAULT_WRITE_METRICS_MODE_DEFAULT;
 
 public class IcebergMetadata implements ConnectorMetadata {
 
     private static final Logger LOG = LogManager.getLogger(IcebergMetadata.class);
+
+    public static final String LOCATION_PROPERTY = "location";
+    public static final String FILE_FORMAT = "file_format";
+    public static final String COMPRESSION_CODEC = "compression_codec";
+    public static final String COMMENT = "comment";
+
     private final String catalogName;
     private final HdfsEnvironment hdfsEnvironment;
     private final IcebergCatalog icebergCatalog;
@@ -206,6 +214,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         PartitionSpec partitionSpec = parsePartitionFields(schema, partitionColNames);
         Map<String, String> properties = stmt.getProperties() == null ? new HashMap<>() : stmt.getProperties();
         String tableLocation = properties.get(LOCATION_PROPERTY);
+        properties.put(COMMENT, stmt.getComment());
         Map<String, String> createTableProperties = IcebergApiConverter.rebuildCreateTableProperties(properties);
 
         return icebergCatalog.createTable(dbName, tableName, schema, partitionSpec, tableLocation, createTableProperties);
@@ -222,7 +231,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                     "Failed to load iceberg table: " + stmt.getTbl().toString());
         }
 
-        IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(stmt, table);
+        IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(stmt, table, icebergCatalog);
         executor.execute();
 
         synchronized (this) {
@@ -254,7 +263,9 @@ public class IcebergMetadata implements ConnectorMetadata {
         try {
             IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
             org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(dbName, tblName);
-            return IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
+            Table table = IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
+            table.setComment(icebergTable.properties().getOrDefault(COMMENT, ""));
+            return table;
 
         } catch (StarRocksConnectorException | NoSuchTableException e) {
             LOG.error("Failed to get iceberg table {}", identifier, e);
@@ -474,6 +485,14 @@ public class IcebergMetadata implements ConnectorMetadata {
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         Types.StructType schema = nativeTbl.schema().asStruct();
 
+        Map<String, MetricsModes.MetricsMode> fieldToMetricsMode = getIcebergMetricsConfig(icebergTable);
+        Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".write_metrics_mode_default",
+                DEFAULT_WRITE_METRICS_MODE_DEFAULT);
+        Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".non-default.size",
+                String.valueOf(fieldToMetricsMode.size()));
+        Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".non-default.columns",
+                fieldToMetricsMode.toString());
+
         List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
         Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
@@ -569,6 +588,45 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         splitTasks.put(key, icebergScanTasks);
         scannedTables.add(key);
+    }
+
+    /**
+     * To optimize the MetricsModes of the Iceberg tables, it's necessary to display the columns MetricsMode in the
+     * ICEBERG query profile.
+     * <br>
+     * None:
+     * <p>
+     * Under this mode, value_counts, null_value_counts, nan_value_counts, lower_bounds, upper_bounds
+     * are not persisted.
+     * </p>
+     * Counts:
+     * <p>
+     * Under this mode, only value_counts, null_value_counts, nan_value_counts are persisted.
+     * </p>
+     * Truncate:
+     * <p>
+     * Under this mode, value_counts, null_value_counts, nan_value_counts and truncated lower_bounds,
+     * upper_bounds are persisted.
+     * </p>
+     * Full:
+     * <p>
+     * Under this mode, value_counts, null_value_counts, nan_value_counts and full lower_bounds,
+     * upper_bounds are persisted.
+     * </p>
+     */
+    public static Map<String, MetricsModes.MetricsMode> getIcebergMetricsConfig(IcebergTable table) {
+        MetricsModes.MetricsMode defaultMode = MetricsModes.fromString(DEFAULT_WRITE_METRICS_MODE_DEFAULT);
+        MetricsConfig metricsConf = MetricsConfig.forTable(table.getNativeTable());
+        Map<String, MetricsModes.MetricsMode> filedToMetricsMode = Maps.newHashMap();
+        for (Types.NestedField field : table.getNativeTable().schema().columns()) {
+            MetricsModes.MetricsMode mode = metricsConf.columnMode(field.name());
+            // To reduce printing, only print specific metrics that are not in the
+            // DEFAULT_WRITE_METRICS_MODE_DEFAULT: truncate(16) mode
+            if (!mode.equals(defaultMode)) {
+                filedToMetricsMode.put(field.name(), mode);
+            }
+        }
+        return filedToMetricsMode;
     }
 
     @Override

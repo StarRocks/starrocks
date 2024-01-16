@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "gutil/macros.h"
 #include "storage/storage_engine.h"
 
 namespace starrocks {
@@ -44,17 +45,27 @@ private:
                                 const std::vector<int64_t>* missing_version_ranges, TBackend* src_backend,
                                 std::string* src_snapshot_path);
 
-    Status convert_tablet_meta_file(const std::string& tablet_snapshot_path, const TReplicateSnapshotRequest& request);
+    Status replicate_remote_snapshot(const TReplicateSnapshotRequest& request,
+                                     const TRemoteSnapshotInfo& src_snapshot_info,
+                                     const std::string& tablet_snapshot_dir_path, Tablet* tablet);
+
+    Status convert_snapshot_for_none_primary(const std::string& tablet_snapshot_path,
+                                             const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map,
+                                             const TReplicateSnapshotRequest& request);
+
+    Status convert_snapshot_for_primary(const std::string& tablet_snapshot_path,
+                                        const std::unordered_map<uint32_t, uint32_t>& column_unique_id_map,
+                                        const TReplicateSnapshotRequest& request);
 
     Status publish_snapshot(Tablet* tablet, const string& snapshot_dir, int64_t snapshot_version,
                             bool incremental_snapshot);
+
+    Status publish_snapshot_for_primary(Tablet* tablet, const std::string& snapshot_dir);
 
     Status publish_incremental_meta(Tablet* tablet, const TabletMeta& cloned_tablet_meta, int64_t snapshot_version);
 
     Status publish_full_meta(Tablet* tablet, TabletMeta* cloned_tablet_meta,
                              std::vector<RowsetMetaSharedPtr>& rs_to_clone);
-
-    Status publish_snapshot_primary(Tablet* tablet, const std::string& snapshot_dir);
 
     void clear_txn_snapshots(TTransactionId transaction_id);
 

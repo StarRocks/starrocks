@@ -29,6 +29,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.meta.lock.LockTimeoutException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
@@ -1058,6 +1059,20 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testLoadTxnCommitTimeout() throws UserException, TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        request.commitInfos = new ArrayList<>();
+        doThrow(new LockTimeoutException("get database write lock timeout")).when(impl).loadTxnCommitImpl(any(), any());
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        Assert.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
+    }
+
+    @Test
     public void testLoadTxnCommitFailed() throws UserException, TException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
@@ -1069,6 +1084,19 @@ public class FrontendServiceImplTest {
         doThrow(new UserException("injected error")).when(impl).loadTxnCommitImpl(any(), any());
         TLoadTxnCommitResult result = impl.loadTxnCommit(request);
         Assert.assertEquals(TStatusCode.ANALYSIS_ERROR, result.status.status_code);
+    }
+
+    @Test
+    public void testStreamLoadPutTimeout() throws UserException, TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        doThrow(new LockTimeoutException("get database read lock timeout")).when(impl).streamLoadPutImpl(any());
+        TStreamLoadPutResult result = impl.streamLoadPut(request);
+        Assert.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
     }
 
     @Test

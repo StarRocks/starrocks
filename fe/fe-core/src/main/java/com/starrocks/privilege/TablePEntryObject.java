@@ -28,7 +28,6 @@ import com.starrocks.sql.common.MetaNotFoundException;
 
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 
 public class TablePEntryObject implements PEntryObject {
     @SerializedName(value = "ci")
@@ -170,26 +169,15 @@ public class TablePEntryObject implements PEntryObject {
 
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
-        Database db;
         if (catalogId == InternalCatalog.DEFAULT_INTERNAL_CATALOG_ID) {
-            db = globalStateMgr.getDbIncludeRecycleBin(Long.parseLong(this.databaseUUID));
+            Database db = globalStateMgr.getDbIncludeRecycleBin(Long.parseLong(this.databaseUUID));
             if (db == null) {
                 return false;
             }
             return globalStateMgr.getTableIncludeRecycleBin(db, Long.parseLong(this.tableUUID)) != null;
-        } else {
-            Optional<Catalog> catalog = globalStateMgr.getCatalogMgr().getCatalogById(catalogId);
-            if (!catalog.isPresent()) {
-                return false;
-            }
-            String dbName = ExternalCatalog.getDbNameFromUUID(databaseUUID);
-            String tblName = ExternalCatalog.getTableNameFromUUID(tableUUID);
-            db = globalStateMgr.getMetadataMgr().getDb(catalog.get().getName(), dbName);
-            if (db == null) {
-                return false;
-            }
-            return globalStateMgr.getMetadataMgr().getTable(catalog.get().getName(), dbName, tblName) != null;
         }
+        // do not validate privilege of external table
+        return true;
     }
 
     @Override

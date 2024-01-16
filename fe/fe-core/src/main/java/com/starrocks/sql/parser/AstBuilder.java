@@ -16,6 +16,7 @@ package com.starrocks.sql.parser;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -438,7 +439,6 @@ import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.parquet.Strings;
 
 import java.io.StringWriter;
 import java.math.BigDecimal;
@@ -969,6 +969,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         PartitionDesc partitionDesc = null;
         if (context.partitionDesc() != null) {
             partitionDesc = (PartitionDesc) visit(context.partitionDesc());
+            if (partitionDesc instanceof ListPartitionDesc && context.partitionDesc().LIST() == null) {
+                ((ListPartitionDesc) partitionDesc).setAutoPartitionTable(true);
+            }
         }
 
         CreateTableStmt createTableStmt = new CreateTableStmt(
@@ -976,14 +979,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 false,
                 qualifiedNameToTableName(getQualifiedName(context.qualifiedName())),
                 null,
+                context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
                 "",
+                null,
                 context.keyDesc() == null ? null : getKeysDesc(context.keyDesc()),
                 partitionDesc,
                 context.distributionDesc() == null ? null : (DistributionDesc) visit(context.distributionDesc()),
                 properties,
                 null,
                 context.comment() == null ? null :
-                        ((StringLiteral) visit(context.comment().string())).getStringValue());
+                        ((StringLiteral) visit(context.comment().string())).getStringValue(),
+                null,
+                context.orderByDesc() == null ? null :
+                    visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
+                        .stream().map(Identifier::getValue).collect(toList())
+                );
 
         List<Identifier> columns = visitIfPresent(context.identifier(), Identifier.class);
         return new CreateTableAsSelectStmt(

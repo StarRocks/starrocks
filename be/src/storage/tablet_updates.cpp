@@ -2092,6 +2092,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
                 return;
             }
         }
+        manager->index_cache().update_object_size(index_entry, index.memory_usage());
         DelVectorPtr dv = std::make_shared<DelVector>();
         if (tmp_deletes.empty()) {
             dv->init(version.major_number(), nullptr, 0);
@@ -2113,6 +2114,7 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
         failure_handler(msg);
         return;
     }
+    manager->index_cache().update_object_size(index_entry, index.memory_usage());
 
     {
         std::lock_guard wl(_lock);
@@ -4131,7 +4133,8 @@ void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
     }
 }
 
-Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup) {
+Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup,
+                                    bool save_source_schema) {
 #define CHECK_FAIL(status)                                                                       \
     do {                                                                                         \
         Status st = (status);                                                                    \
@@ -4335,6 +4338,13 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
 
         _to_updates_pb_unlocked(new_tablet_meta_pb.mutable_updates());
         VLOG(2) << new_tablet_meta_pb.updates().DebugString();
+
+        // Save source schema in tablet meta
+        if (save_source_schema && snapshot_meta.tablet_meta().has_schema()) {
+            new_tablet_meta_pb.mutable_source_schema()->CopyFrom(snapshot_meta.tablet_meta().schema());
+            _tablet.tablet_meta()->set_source_schema(TabletSchema::create(new_tablet_meta_pb.source_schema()));
+        }
+
         CHECK_FAIL(TabletMetaManager::put_tablet_meta(data_store, &wb, new_tablet_meta_pb));
 
         if (auto st = meta_store->write_batch(&wb); !st.ok()) {
@@ -4512,7 +4522,7 @@ static StatusOr<std::unique_ptr<ColumnIterator>> new_dcg_column_iterator(GetDelt
     ASSIGN_OR_RETURN(auto dcg_segment, get_dcg_segment(ctx, ucid, &col_index, read_tablet_schema));
     if (dcg_segment != nullptr) {
         if (ctx.dcg_read_files.count(dcg_segment->file_name()) == 0) {
-            ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(dcg_segment->file_name()));
+            ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file(dcg_segment->file_info()));
             ctx.dcg_read_files[dcg_segment->file_name()] = std::move(read_file);
         }
         iter_opts.read_file = ctx.dcg_read_files[dcg_segment->file_name()].get();
@@ -4604,7 +4614,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
         iter_opts.use_page_cache = true;
-        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file((*segment)->file_name()));
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file((*segment)->file_info()));
         iter_opts.read_file = read_file.get();
 
         if (full_row_column) {
@@ -4665,7 +4675,7 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
         ColumnIteratorOptions iter_opts;
         OlapReaderStatistics stats;
         iter_opts.stats = &stats;
-        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file((*segment)->file_name()));
+        ASSIGN_OR_RETURN(auto read_file, fs->new_random_access_file((*segment)->file_info()));
         for (auto i = 0; i < column_ids.size(); ++i) {
             // try to build iterator from delta column file first
             ASSIGN_OR_RETURN(auto col_iter,

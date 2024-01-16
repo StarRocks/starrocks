@@ -124,7 +124,7 @@ public class SysObjectDependencies {
     private static String getRefObjectType(BaseTableInfo refObj, String mvName) {
         String refObjType = "UNKNOWN";
         try {
-            refObjType = Optional.ofNullable(refObj.getTable())
+            refObjType = refObj.mayGetTable()
                     .map(x -> x.getType().toString())
                     .orElse("UNKNOWN");
         } catch (Exception e) {

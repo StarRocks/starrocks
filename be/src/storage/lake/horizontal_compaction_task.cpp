@@ -29,7 +29,7 @@
 
 namespace starrocks::lake {
 
-Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_func) {
+Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_func, ThreadPool* flush_pool) {
     if (progress == nullptr) {
         return Status::InvalidArgument("progress is null");
     }
@@ -57,7 +57,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     reader_params.fill_data_cache = false;
     RETURN_IF_ERROR(reader.open(reader_params));
 
-    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kHorizontal, _txn_id))
+    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kHorizontal, _txn_id, 0, flush_pool))
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 

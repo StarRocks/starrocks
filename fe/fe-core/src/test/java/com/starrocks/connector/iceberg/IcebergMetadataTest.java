@@ -47,12 +47,14 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableCommentClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ModifyColumnClause;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -64,6 +66,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.StatsConstants;
@@ -80,9 +83,12 @@ import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.Snapshot;
+import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.Transaction;
+import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchNamespaceException;
@@ -109,6 +115,9 @@ import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
 import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
+import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
+import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.RESOURCE_MAPPING_CATALOG_PREFIX;
 
 public class IcebergMetadataTest extends TableTestBase {
@@ -1144,11 +1153,68 @@ public class IcebergMetadataTest extends TableTestBase {
         clauses.add(modifyColumnClause);
         metadata.alterTable(new AlterTableStmt(tableName, clauses));
 
-        // unsupported alter operation
+        // rename table
         clauses.clear();
         TableRenameClause tableRenameClause = new TableRenameClause("newTbl");
         clauses.add(tableRenameClause);
-        Assert.assertThrows(DdlException.class,
-                () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
+        metadata.alterTable(new AlterTableStmt(tableName, clauses));
+
+        // modify table properties/comment
+        clauses.clear();
+        Map<String, String> newProperties = new HashMap<>();
+        newProperties.put(FILE_FORMAT, "orc");
+        newProperties.put(LOCATION_PROPERTY, "new location");
+        newProperties.put(COMPRESSION_CODEC, "gzip");
+        newProperties.put(TableProperties.ORC_BATCH_SIZE, "10240");
+        ModifyTablePropertiesClause modifyTablePropertiesClause = new ModifyTablePropertiesClause(newProperties);
+        AlterTableCommentClause alterTableCommentClause = new AlterTableCommentClause("new comment", NodePosition.ZERO);
+        clauses.add(modifyTablePropertiesClause);
+        clauses.add(alterTableCommentClause);
+        metadata.alterTable(new AlterTableStmt(tableName, clauses));
+
+        // modify empty properties
+        clauses.clear();
+        Map<String, String> emptyProperties = new HashMap<>();
+        ModifyTablePropertiesClause emptyPropertiesClause = new ModifyTablePropertiesClause(emptyProperties);
+        clauses.add(emptyPropertiesClause);
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
+
+        // modify unsupported properties
+        clauses.clear();
+        Map<String, String> invalidProperties = new HashMap<>();
+        invalidProperties.put(FILE_FORMAT, "parquet");
+        invalidProperties.put(COMPRESSION_CODEC, "zzz");
+        ModifyTablePropertiesClause invalidCompressionClause = new ModifyTablePropertiesClause(invalidProperties);
+        clauses.add(invalidCompressionClause);
+        Assert.assertThrows(DdlException.class, () -> metadata.alterTable(new AlterTableStmt(tableName, clauses)));
+    }
+
+    @Test
+    public void testGetIcebergMetricsConfig() {
+        List<Column> columns = Lists.newArrayList(new Column("k1", INT),
+                new Column("k2", STRING),
+                new Column("k3", STRING),
+                new Column("k4", STRING),
+                new Column("k5", STRING));
+        IcebergTable icebergTable = new IcebergTable(1, "srTableName", "iceberg_catalog", "resource_name", "db_name",
+                "table_name", columns, mockedNativeTableH, Maps.newHashMap());
+        Assert.assertEquals(0, IcebergMetadata.getIcebergMetricsConfig(icebergTable).size());
+        Map<String, String> icebergProperties = Maps.newHashMap();
+        icebergProperties.put("write.metadata.metrics.column.k1", "none");
+        icebergProperties.put("write.metadata.metrics.column.k2", "counts");
+        icebergProperties.put("write.metadata.metrics.column.k3", "truncate(16)");
+        icebergProperties.put("write.metadata.metrics.column.k4", "truncate(32)");
+        icebergProperties.put("write.metadata.metrics.column.k5", "full");
+        UpdateProperties updateProperties = mockedNativeTableH.updateProperties();
+        icebergProperties.forEach(updateProperties::set);
+        updateProperties.commit();
+        Map<String, MetricsModes.MetricsMode> actual2 = IcebergMetadata.getIcebergMetricsConfig(icebergTable);
+        Assert.assertEquals(4, actual2.size());
+        Map<String, MetricsModes.MetricsMode> expected2 = Maps.newHashMap();
+        expected2.put("k1", MetricsModes.None.get());
+        expected2.put("k2", MetricsModes.Counts.get());
+        expected2.put("k4", MetricsModes.Truncate.withLength(32));
+        expected2.put("k5", MetricsModes.Full.get());
+        Assert.assertEquals(expected2, actual2);
     }
 }

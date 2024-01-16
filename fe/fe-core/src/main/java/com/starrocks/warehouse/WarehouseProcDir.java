@@ -14,6 +14,7 @@
 
 package com.starrocks.warehouse;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.BaseProcResult;
@@ -21,7 +22,6 @@ import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.server.WarehouseManager;
-import org.apache.parquet.Strings;
 
 import java.util.List;
 

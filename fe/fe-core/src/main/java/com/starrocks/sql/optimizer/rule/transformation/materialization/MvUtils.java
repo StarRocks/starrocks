@@ -321,15 +321,37 @@ public class MvUtils {
         if (root == null) {
             return false;
         }
+        // 1. check whether is SPJ first
         if (isLogicalSPJ(root)) {
             return true;
         }
-        if (isLogicalSPJG(root)) {
-            LogicalAggregationOperator agg = (LogicalAggregationOperator) root.getOp();
-            // having is not supported now
-            return agg.getPredicate() == null;
+        // 2. check whether it's SPJG then
+        return isLogicalSPJG(root);
+    }
+
+    public static String getInvalidReason(OptExpression expr) {
+        List<Operator> operators = collectOperators(expr);
+        if (operators.stream().anyMatch(op -> !isLogicalSPJGOperator(op))) {
+            String nonSPJGOperators =
+                    operators.stream().filter(x -> !isLogicalSPJGOperator(x))
+                            .map(Operator::toString)
+                            .collect(Collectors.joining(","));
+            return "MV contains non-SPJG operators: " + nonSPJGOperators;
         }
-        return false;
+        return "MV is not SPJG structure";
+    }
+
+    private static List<Operator> collectOperators(OptExpression expr) {
+        List<Operator> operators = Lists.newArrayList();
+        collectOperators(expr, operators);
+        return operators;
+    }
+
+    private static void collectOperators(OptExpression expr, List<Operator> result) {
+        result.add(expr.getOp());
+        for (OptExpression child : expr.getInputs()) {
+            collectOperators(child, result);
+        }
     }
 
     public static boolean isLogicalSPJG(OptExpression root) {
@@ -386,6 +408,14 @@ public class MvUtils {
         return true;
     }
 
+    public static boolean isLogicalSPJGOperator(Operator operator) {
+        return (operator instanceof LogicalScanOperator)
+                || (operator instanceof LogicalProjectOperator)
+                || (operator instanceof LogicalFilterOperator)
+                || (operator instanceof LogicalJoinOperator)
+                || (operator instanceof LogicalAggregationOperator);
+    }
+
     public static Pair<OptExpression, LogicalPlan> getRuleOptimizedLogicalPlan(
             MaterializedView mv,
             String sql,
@@ -408,7 +438,7 @@ public class MvUtils {
         QueryRelation query = ((QueryStatement) mvStmt).getQueryRelation();
         TransformerContext transformerContext =
                 new TransformerContext(columnRefFactory, connectContext, inlineView);
-        LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
+        LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transform(query);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
                 connectContext,
