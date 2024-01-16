@@ -54,8 +54,11 @@ Status CacheInputStream::read_at_fully(int64_t offset, void* out, int64_t count)
     char* pe = p + count;
 
     auto read_one_block = [&](size_t offset, size_t size) {
-        StatusOr<size_t> res;
+        if (UNLIKELY(size == 0)) {
+            return Status::OK();
+        }
 
+        StatusOr<size_t> res;
         DCHECK(size <= BLOCK_SIZE);
         {
             SCOPED_RAW_TIMER(&_stats.read_cache_ns);
