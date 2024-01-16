@@ -105,7 +105,7 @@ public class EditLog {
     public static final Logger LOG = LogManager.getLogger(EditLog.class);
     private static final int OUTPUT_BUFFER_INIT_SIZE = 128;
 
-    private BlockingQueue<JournalTask> journalQueue;
+    private final BlockingQueue<JournalTask> journalQueue;
 
     public EditLog(BlockingQueue<JournalTask> journalQueue) {
         this.journalQueue = journalQueue;
@@ -723,7 +723,7 @@ public class EditLog {
                 }
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_MODIFY_IN_MEMORY:
-                case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
+                case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
@@ -983,7 +983,15 @@ public class EditLog {
      * submit log in queue and return immediately
      */
     private Future<Boolean> submitLog(short op, Writable writable, long maxWaitIntervalMs) {
+<<<<<<< HEAD
         Preconditions.checkState(GlobalStateMgr.getCurrentState().isLeader(),
+=======
+        // do not check whether global state mgr is leader in non shared-nothing mode,
+        // because starmgr state change happens before global state mgr state change,
+        // it will write log before global state mgr becomes leader
+        Preconditions.checkState(RunMode.getCurrentRunMode() != RunMode.SHARED_NOTHING ||
+                                 GlobalStateMgr.getCurrentState().isLeader(),
+>>>>>>> 488119f2b7 ([Refactor] Add slow log for edit log write and refine some code warnings (backport #39024) (backport #39085) (backport #39102) (#39128))
                 "Current node is not leader, submit log is not allowed");
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
@@ -995,7 +1003,7 @@ public class EditLog {
             entity.write(buffer);
         } catch (IOException e) {
             // The old implementation swallow exception like this
-            LOG.info("failed to serialized: {}", e);
+            LOG.info("failed to serialize, ", e);
         }
         JournalTask task = new JournalTask(buffer, maxWaitIntervalMs);
 
@@ -1046,7 +1054,7 @@ public class EditLog {
 
         // for now if journal writer fails, it will exit directly, so this property should always be true.
         assert (result);
-        if (MetricRepo.isInit) {
+        if (MetricRepo.hasInit) {
             MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTime) / 1000000);
         }
     }
@@ -1406,8 +1414,8 @@ public class EditLog {
         logEdit(OperationType.OP_DROP_FUNCTION, function);
     }
 
-    public void logSetHasForbitGlobalDict(ModifyTablePropertyOperationLog info) {
-        logEdit(OperationType.OP_SET_FORBIT_GLOBAL_DICT, info);
+    public void logSetHasForbiddenGlobalDict(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT, info);
     }
 
     public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
