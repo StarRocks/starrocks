@@ -3023,15 +3023,10 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
         unit_text->append("second");
         auto unit_column = ConstColumn::create(unit_text, 1);
 
-        auto boundary_text = BinaryColumn::create();
-        boundary_text->append("floor");
-        auto boundary_column = ConstColumn::create(boundary_text, 1);
-
         Columns columns;
         columns.emplace_back(tc);
         columns.emplace_back(period_column);
         columns.emplace_back(unit_column);
-        columns.emplace_back(boundary_column);
 
         time_slice_context->set_constant_columns(columns);
 
