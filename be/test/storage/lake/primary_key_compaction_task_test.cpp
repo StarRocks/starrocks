@@ -957,7 +957,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pk_recover_rowset_order_after_compact)
     EXPECT_FALSE(new_tablet_metadata1->rowsets(1).has_max_compact_input_rowset_id());
     EXPECT_FALSE(new_tablet_metadata1->rowsets(2).has_max_compact_input_rowset_id());
 
-    config::max_update_compaction_num_singleton_deltas = 2;
+    config::lake_pk_compaction_max_input_rowsets = 2;
     auto txn_id = next_id();
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(_tablet_metadata->id(), version, txn_id));
     check_task(task);
@@ -983,7 +983,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pk_recover_rowset_order_after_compact)
     EXPECT_TRUE(rs_list[0]->metadata().id() > rs_list[1]->metadata().id());
     EXPECT_TRUE(rs_list[0]->metadata().max_compact_input_rowset_id() < rs_list[1]->metadata().id());
 
-    config::max_update_compaction_num_singleton_deltas = 1000;
+    config::lake_pk_compaction_max_input_rowsets = 1000;
 }
 
 INSTANTIATE_TEST_SUITE_P(LakePrimaryKeyCompactionTest, LakePrimaryKeyCompactionTest,

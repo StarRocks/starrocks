@@ -45,46 +45,61 @@ Status PrimaryKeyRecover::recover() {
     RETURN_IF_ERROR(rowset_iterator(
             pkey_schema, stats,
             [&](const std::vector<ChunkIteratorPtr>& itrs,
-                const std::vector<std::unique_ptr<RandomAccessFile>>& del_rfs, uint32_t rowset_id) {
+                const std::vector<std::unique_ptr<RandomAccessFile>>& del_rfs, const std::vector<uint32_t>& delidxs,
+                uint32_t rowset_id) {
                 // handle upsert
-                for (size_t i = 0; i < itrs.size(); i++) {
-                    auto itr = itrs[i].get();
-                    if (itr == nullptr) {
-                        continue;
-                    }
-                    uint32_t rssid = rowset_id + i;
-                    uint32_t row_id_start = 0;
-                    new_deletes[rssid] = {};
-                    while (true) {
-                        chunk->reset();
-                        rowids.clear();
-                        auto st = itr->get_next(chunk, &rowids);
-                        if (st.is_end_of_file()) {
-                            break;
-                        } else if (!st.ok()) {
-                            return st;
-                        } else {
-                            pk_column->reset_column();
-                            PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
-                            // upsert and generate new deletes
-                            RETURN_IF_ERROR(index.upsert(rssid, row_id_start, *pk_column, &new_deletes));
-                            row_id_start += pk_column->size();
+                if (del_rfs.size() != delidxs.size()) {
+                    return Status::InternalError(
+                            fmt::format("invalid delete files when recover, del files {} vs del idxs {}",
+                                        del_rfs.size(), delidxs.size()));
+                }
+                const size_t total_size = itrs.size() + del_rfs.size();
+                size_t itr_index = 0;
+                size_t del_index = 0;
+                for (size_t i = 0; i < total_size; i++) {
+                    if (del_index < delidxs.size() && i == delidxs[del_index]) {
+                        // this one is delete op
+                        pk_column->reset_column();
+                        const auto& read_file = del_rfs[del_index];
+                        ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
+                        std::vector<uint8_t> read_buffer(file_size);
+                        RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
+                        auto col = pk_column->clone();
+                        if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
+                            return Status::InternalError("column deserialization failed");
                         }
+                        RETURN_IF_ERROR(index.erase(*col, &new_deletes));
+                        del_index++;
+                    } else {
+                        // this one is upsert op
+                        itr_index = i - del_index;
+                        auto itr = itrs[itr_index].get();
+                        if (itr == nullptr) {
+                            continue;
+                        }
+                        uint32_t rssid = rowset_id + itr_index;
+                        uint32_t row_id_start = 0;
+                        new_deletes[rssid] = {};
+                        while (true) {
+                            chunk->reset();
+                            rowids.clear();
+                            auto st = itr->get_next(chunk, &rowids);
+                            if (st.is_end_of_file()) {
+                                break;
+                            } else if (!st.ok()) {
+                                return st;
+                            } else {
+                                pk_column->reset_column();
+                                PrimaryKeyEncoder::encode(pkey_schema, *chunk, 0, chunk->num_rows(), pk_column.get());
+                                // upsert and generate new deletes
+                                RETURN_IF_ERROR(index.upsert(rssid, row_id_start, *pk_column, &new_deletes));
+                                row_id_start += pk_column->size();
+                            }
+                        }
+                        itr->close();
                     }
-                    itr->close();
                 }
-                // handle delete
-                pk_column->reset_column();
-                for (const auto& read_file : del_rfs) {
-                    ASSIGN_OR_RETURN(auto file_size, read_file->get_size());
-                    std::vector<uint8_t> read_buffer(file_size);
-                    RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
-                    auto col = pk_column->clone();
-                    if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
-                        return Status::InternalError("column deserialization failed");
-                    }
-                    RETURN_IF_ERROR(index.erase(*col, &new_deletes));
-                }
+
                 return Status::OK();
             }));
     LOG(INFO) << "PrimaryKeyRecover rebuild index finish. tablet_id: " << tablet_id();

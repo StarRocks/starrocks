@@ -73,7 +73,8 @@ Status LakePrimaryKeyRecover::sort_rowsets(std::vector<RowsetPtr>* rowsets) {
 Status LakePrimaryKeyRecover::rowset_iterator(
         const starrocks::Schema& pkey_schema, OlapReaderStatistics& stats,
         const std::function<Status(const std::vector<ChunkIteratorPtr>&,
-                                   const std::vector<std::unique_ptr<RandomAccessFile>>&, uint32_t)>& handler) {
+                                   const std::vector<std::unique_ptr<RandomAccessFile>>&, const std::vector<uint32_t>&,
+                                   uint32_t)>& handler) {
     auto rowsets = _tablet->get_rowsets(_metadata);
     // Sort the rowsets in order of primary key occurrence,
     // so we can generate correct delvecs
@@ -84,7 +85,7 @@ Status LakePrimaryKeyRecover::rowset_iterator(
             return res.status();
         }
         auto& itrs = res.value();
-        RETURN_IF_ERROR(handler(itrs, {}, rowset->id()));
+        RETURN_IF_ERROR(handler(itrs, {}, {}, rowset->id()));
     }
     return Status::OK();
 }
