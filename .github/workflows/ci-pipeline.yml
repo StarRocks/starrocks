@@ -414,7 +414,12 @@ jobs:
           mkdir -p thirdparty/installed/bin/
           cd thirdparty/installed/bin/ && ln -s /usr/local/bin/thrift thrift
           cd ${{ github.workspace }}/fe
-          mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
+          mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+            -Dsonar.projectKey=StarRocks_starrocks \
+            -Dsonar.pullrequest.key=${{ github.event.number }} \
+            -Dsonar.pullrequest.base=${{ github.base_ref }} \
+            -Dsonar.pullrequest.branch=${{ github.head_ref }} \
+            -Dsonar.scanner.force-deprecated-java-version=true
 
   fe-ut:
     runs-on: [self-hosted, normal]

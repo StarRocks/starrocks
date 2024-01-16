@@ -121,6 +121,7 @@ import static com.starrocks.sql.optimizer.rule.mv.MVUtils.MATERIALIZED_VIEW_NAME
 
 public class InsertPlanner {
     // Only for unit test
+    // test
     public static boolean enableSingleReplicationShuffle = false;
     private boolean shuffleServiceEnable = false;
     private boolean forceReplicatedStorage = false;
