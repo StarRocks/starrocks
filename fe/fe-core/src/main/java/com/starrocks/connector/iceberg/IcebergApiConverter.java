@@ -197,6 +197,9 @@ public class IcebergApiConverter {
 
     // get iceberg properties
     public static Map<String, String> toIcebergProps(Map<String, String> nativeProperties, String nativeCatalogType) {
+        if (nativeProperties == null) {
+            throw new IllegalArgumentException("iceberg properties cannot be null");
+        }
         Map<String, String> options = new HashMap<>();
         Map<String, String> mutableMap = new HashMap<>(nativeProperties);
         String fileFormat = mutableMap.getOrDefault(TableProperties.DEFAULT_FILE_FORMAT,

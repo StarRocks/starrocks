@@ -38,6 +38,7 @@ import org.junit.ClassRule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -150,13 +151,11 @@ public class ShowCreateTableStmtTest {
 
     @Test
     public void testIcebergShowCreateTable() throws Exception {
-        starRocksAssert.useCatalog("iceberg0");
-
-        String showSql = "show create table partitioned_db.t1";
+        String showSql = "show create table iceberg0.partitioned_db.t1";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, showCreateTableStmt);
         ShowResultSet resultSet = executor.execute();
-        String tableLocation = MockIcebergMetadata.getStarRocksHome() + "partitioned_db/t1";
+        String tableLocation = new File(MockIcebergMetadata.getStarRocksHome() + "/partitioned_db/t1").toString();
         Assert.assertEquals("CREATE TABLE `t1` (\n" +
                 "  `id` int(11) DEFAULT NULL,\n" +
                 "  `data` varchar(1048576) DEFAULT NULL,\n" +
