@@ -914,7 +914,7 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
     auto period_unit = format_slice.to_string();
 
     std::string time_base;
-    if (context->get_num_constant_columns() == 3) {
+    if (UNLIKELY(context->get_num_constant_columns() == 3)) {
         time_base = "floor";
     } else {
         ColumnPtr column_time_base = context->get_constant_column(3);
