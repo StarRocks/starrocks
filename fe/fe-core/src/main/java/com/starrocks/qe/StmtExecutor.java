@@ -658,21 +658,22 @@ public class StmtExecutor {
             // the exception happens when interact with client
             // this exception shows the connection is gone
             context.getState().setError(e.getMessage());
-            throw e;
         } catch (UserException e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             // analysis exception only print message, not print the stack
             LOG.info("execute Exception, sql: {}, error: {}", sql, e.getMessage());
             context.getState().setError(e.getMessage());
-            context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            if (parsedStmt instanceof KillStmt) {
+                // ignore kill stmt execute err(not monitor it)
+                context.getState().setErrType(QueryState.ErrType.IGNORE_ERR);
+            } else {
+                context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+            }
         } catch (Throwable e) {
             String sql = originStmt != null ? originStmt.originStmt : "";
             LOG.warn("execute Exception, sql " + sql, e);
             context.getState().setError(e.getMessage());
-            if (parsedStmt instanceof KillStmt) {
-                // ignore kill stmt execute err(not monitor it)
-                context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
-            }
+            context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError() && coord != null) {

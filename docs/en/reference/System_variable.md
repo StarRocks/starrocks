@@ -224,9 +224,11 @@ Default value: false, which means this feature is disabled.
 
 Used to enable the strict mode when loading data using the INSERT statement. The default value is `true`, indicating the strict mode is enabled by default. For more information, see [Strict mode](../loading/load_concept/strict_mode.md).
 
-### enable_materialized_view_rewrite_for_insert (3.2.2 and later)
+### enable_materialized_view_for_insert
 
-Whether to allow StarRocks to rewrite queries in INSERT INTO SELECT statements. The default value is `false`, indicating Query Rewrite in such scenarios is disabled by default.
+* Description: Whether to allow StarRocks to rewrite queries in INSERT INTO SELECT statements.
+* Default: false, which means Query Rewrite in such scenarios is disabled by default.
+* Introduced in: v2.5.18, v3.0.9, v3.1.7, v3.2.2
 
 ### enable_materialized_view_union_rewrite (2.5 and later)
 
@@ -235,6 +237,10 @@ Boolean value to control whether to enable materialized view Union query rewrite
 ### enable_rule_based_materialized_view_rewrite (2.5 and later)
 
 Boolean value to control whether to enable rule-based materialized view query rewrite. This variable is mainly used in single-table query rewrite. Default: `true`.
+
+### enable_short_circuit (3.2.3 and later)
+
+Whether to enable short circuiting for queries. Default: `false`. If it is set to true, when the table uses hybrid row-column storage and the query meets the criteria (to evaluate whether the query is a point query): the conditional columns in the WHERE clause include all primary key columns, and the operators in the WHERE clause are `=` or `IN`, the query takes the short circuit to directly query the data stored in the row-by-row fashion.
 
 ### enable_spill (3.0 and later)
 

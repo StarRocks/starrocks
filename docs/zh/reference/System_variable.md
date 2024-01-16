@@ -215,9 +215,11 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。默认为 `true`，即开启严格模式。关于该模式的介绍，可以参阅[严格模式](../loading/load_concept/strict_mode.md)。
 
-### enable_materialized_view_rewrite_for_insert (3.2.2 and later)
+### enable_materialized_view_for_insert
 
-是否允许 StarRocks 改写 INSERT INTO SELECT 语句中的查询。默认为 `false`，即默认关闭该场景下的物化视图查询改写。
+* 含义：是否允许 StarRocks 改写 INSERT INTO SELECT 语句中的查询。
+* 默认值：false，即默认关闭该场景下的物化视图查询改写。
+* 引入版本：v2.5.18, v3.0.9, v3.1.7, v3.2.2
 
 ### enable_materialized_view_union_rewrite（2.5 及以后）
 
@@ -226,6 +228,11 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 ### enable_rule_based_materialized_view_rewrite（2.5 及以后）
 
 是否开启基于规则的物化视图查询改写功能，主要用于处理单表查询改写。默认值：`true`。
+
+### enable_short_circuit（3.2.3 及以后）
+
+是否启用短路径查询。默认值：`false`。如果将其设置为 `true`，当表为[行列混存表](../table_design/hybrid_table.md)，并且[查询满足条件](../table_design/hybrid_table.md#查询数据)
+（用于评估是否为点查）：WHERE 子句的条件列必须包含所有主键列，并且运算符为 `=` 或者 `IN`，则该查询才会走短路径，直接查询按行存储的数据。
 
 ### enable_spill（3.0 及以后）
 
