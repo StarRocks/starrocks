@@ -204,7 +204,7 @@ public class IcebergMetadataTest extends TableTestBase {
             {
                 hiveTableOperations.current().properties();
                 Map<String, String> properties = new HashMap<>();
-                properties.put(FILE_FORMAT, "orc");
+                properties.put(TableProperties.DEFAULT_FILE_FORMAT, "orc");
                 properties.put(COMMENT, "xxx");
                 result = properties;
                 minTimes = 0;

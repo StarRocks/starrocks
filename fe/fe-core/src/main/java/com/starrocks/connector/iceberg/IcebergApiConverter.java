@@ -199,14 +199,14 @@ public class IcebergApiConverter {
     public static Map<String, String> toIcebergProps(Map<String, String> nativeProperties, String nativeCatalogType) {
         Map<String, String> options = new HashMap<>();
         Map<String, String> mutableMap = new HashMap<>(nativeProperties);
+        String fileFormat = mutableMap.getOrDefault(TableProperties.DEFAULT_FILE_FORMAT,
+                TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
 
         // transform to starrocks properties
         if (mutableMap.get(TableProperties.DEFAULT_FILE_FORMAT) != null) {
             options.put(FILE_FORMAT, mutableMap.remove(TableProperties.DEFAULT_FILE_FORMAT));
         }
 
-        String fileFormat = mutableMap.getOrDefault(TableProperties.DEFAULT_FILE_FORMAT,
-                TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
         switch (FileFormat.fromString(fileFormat)) {
             case PARQUET:
                 if (mutableMap.get(TableProperties.PARQUET_COMPRESSION) != null) {
