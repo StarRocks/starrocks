@@ -76,7 +76,7 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
 1. 拷贝 [`ranger-servicedef-starrocks.json](https://github.com/StarRocks/ranger/blob/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json) 至 StarRocks FE 机器或 Ranger 集群机器上的任意目录。
 
    ```SQL
-   wget https://github.com/StarRocks/ranger/blob/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json
+   wget https://raw.githubusercontent.com/StarRocks/ranger/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json
    ```
 
 2. 使用 Ranger 的管理员账户运行以下命令，添加 StarRocks Service。
