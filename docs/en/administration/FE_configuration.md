@@ -1146,10 +1146,10 @@ This section provides an overview of the static parameters that you can configur
 - **Default:** 1024
 - **Description:** The size of the blocking queue that stores heartbeat tasks run by the Heartbeat Manager.
 
-#### metadata_failure_recovery
+#### reset_election_group
 
 - **Default:** FALSE
-- **Description:** Specifies whether to forcibly reset the metadata of the FE. Exercise caution when you set this parameter.
+- **Description:** If true, FE will reset bdbje replication group(that is, to remove all electable nodes' info) and is supposed to start as Leader. After reset, this node will be the only member in the cluster, and the others node should be rejoin to this cluster by `Alter system add/drop follower/observer 'xxx'`; Use this configuration only when the leader cannot be successfully elected (Because most of the follower data has been damaged).
 
 #### edit_log_port
 

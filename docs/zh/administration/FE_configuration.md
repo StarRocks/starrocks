@@ -1061,9 +1061,9 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：Heartbeat Manager 中存储心跳任务的阻塞队列大小。
 - 默认值：1024
 
-#### metadata_failure_recovery
+#### reset_election_group
 
-- 含义：是否强制重置 FE 的元数据。请谨慎使用该配置项。
+- 含义：如果为 true，FE 将重置 bdbje 复制组（即删除所有节点的信息）并应以 Leader 身份启动。 重置后，该节点将成为集群中唯一的成员，其他节点应通过`Alter system add/drop follower/observer 'xxx'`重新加入该集群； 仅当无法成功选举出leader时（因为大部分follower数据已损坏）才使用此配置。
 - 默认值：FALSE
 
 #### edit_log_port
