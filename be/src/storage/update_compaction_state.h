@@ -26,7 +26,7 @@ public:
     Status load(Rowset* rowset);
 
     Status load_segments(Rowset* rowset, uint32_t segment_id);
-    void release_segments(Rowset* rowset, uint32_t segment_id);
+    void release_segment(uint32_t segment_id);
 
     size_t memory_usage() const { return _memory_usage; }
 

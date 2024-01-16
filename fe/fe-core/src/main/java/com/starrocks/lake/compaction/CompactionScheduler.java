@@ -94,11 +94,13 @@ public class CompactionScheduler extends Daemon {
         if (finishedWaiting) {
             return true;
         }
+        // Note: must call getMinActiveTxnId() before getNextTransactionId(), otherwise if there are no running transactions
+        // waitTxnId <= minActiveTxnId will always be false.
+        long minActiveTxnId = transactionMgr.getMinActiveTxnId();
         if (waitTxnId < 0) {
             waitTxnId = transactionMgr.getTransactionIDGenerator().getNextTransactionId();
         }
-        Long minActiveTxnId = transactionMgr.getMinActiveTxnId();
-        finishedWaiting = (minActiveTxnId == null) || minActiveTxnId > waitTxnId;
+        finishedWaiting = waitTxnId <= minActiveTxnId;
         return finishedWaiting;
     }
 

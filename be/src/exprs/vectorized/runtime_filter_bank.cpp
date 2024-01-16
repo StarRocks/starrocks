@@ -93,21 +93,21 @@ struct FilterIniter {
 
         if (column->is_nullable()) {
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
-            auto& data_array = ColumnHelper::as_raw_column<ColumnType>(nullable_column->data_column())->get_data();
+            const auto& data_array = GetContainer<ptype>().get_data(nullable_column->data_column());
             for (size_t j = column_offset; j < data_array.size(); j++) {
                 if (!nullable_column->is_null(j)) {
-                    filter->insert(&data_array[j]);
+                    filter->insert(data_array[j]);
                 } else {
                     if (eq_null) {
-                        filter->insert(nullptr);
+                        filter->insert_null();
                     }
                 }
             }
 
         } else {
-            auto& data_ptr = ColumnHelper::as_raw_column<ColumnType>(column)->get_data();
+            const auto& data_ptr = GetContainer<ptype>().get_data(column);
             for (size_t j = column_offset; j < data_ptr.size(); j++) {
-                filter->insert(&data_ptr[j]);
+                filter->insert(data_ptr[j]);
             }
         }
         return nullptr;
@@ -432,6 +432,7 @@ void RuntimeFilterProbeCollector::compute_hash_values(vectorized::Chunk* chunk, 
     if (filter->num_hash_partitions() == 0) {
         return;
     }
+
     if (rf_desc->partition_by_expr_contexts()->empty()) {
         filter->compute_hash({column}, &eval_context.running_context);
     } else {

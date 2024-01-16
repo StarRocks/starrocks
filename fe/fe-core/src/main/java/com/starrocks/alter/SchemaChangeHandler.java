@@ -109,8 +109,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
-import static java.lang.Math.min;
-
 public class SchemaChangeHandler extends AlterHandler {
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandler.class);
 
@@ -409,13 +407,30 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
 
+            String originalModColumnName = modColumn.getName();
+            if (typeChanged) {
+                /*
+                 * In new alter table process (AlterJobV2), any modified columns are treated as new columns.
+                 * But the modified columns' name does not changed. So in order to distinguish this, we will add
+                 * a prefix in the name of these modified columns.
+                 * This prefix only exist during the schema change process. Once the schema change is finished,
+                 * it will be removed.
+                 *
+                 * After adding this prefix, modify a column is just same as 'add' a column.
+                 *
+                 * And if the column type is not changed, the same column name is still to the same column type,
+                 * so no need to add prefix.
+                 */
+                modColumn.setName(SHADOW_NAME_PRFIX + originalModColumnName);
+            }
+
             if (KeysType.AGG_KEYS == olapTable.getKeysType() || KeysType.UNIQUE_KEYS == olapTable.getKeysType() ||
                     KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
                 for (Long otherIndexId : otherIndexIds) {
                     List<Column> otherIndexSchema = indexSchemaMap.get(otherIndexId);
                     modColIndex = -1;
                     for (int i = 0; i < otherIndexSchema.size(); i++) {
-                        if (otherIndexSchema.get(i).getName().equalsIgnoreCase(modColumn.getName())) {
+                        if (otherIndexSchema.get(i).getName().equalsIgnoreCase(originalModColumnName)) {
                             modColIndex = i;
                             break;
                         }
@@ -430,7 +445,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     List<Column> otherIndexSchema = indexSchemaMap.get(otherIndexId);
                     modColIndex = -1;
                     for (int i = 0; i < otherIndexSchema.size(); i++) {
-                        if (otherIndexSchema.get(i).getName().equalsIgnoreCase(modColumn.getName())) {
+                        if (otherIndexSchema.get(i).getName().equalsIgnoreCase(originalModColumnName)) {
                             modColIndex = i;
                             break;
                         }
@@ -450,22 +465,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
         } // end for handling other indices
-
-        if (typeChanged) {
-            /*
-             * In new alter table process (AlterJobV2), any modified columns are treated as new columns.
-             * But the modified columns' name does not changed. So in order to distinguish this, we will add
-             * a prefix in the name of these modified columns.
-             * This prefix only exist during the schema change process. Once the schema change is finished,
-             * it will be removed.
-             *
-             * After adding this prefix, modify a column is just same as 'add' a column.
-             *
-             * And if the column type is not changed, the same column name is still to the same column type,
-             * so no need to add prefix.
-             */
-            modColumn.setName(SHADOW_NAME_PRFIX + modColumn.getName());
-        }
     }
 
     private void processReorderColumn(ReorderColumnsClause alterClause, OlapTable olapTable,
@@ -1147,20 +1146,17 @@ public class SchemaChangeHandler extends AlterHandler {
         getAlterJobV2Infos(db, ImmutableList.copyOf(alterJobsV2.values()), schemaChangeJobInfos);
     }
 
-    @Nullable
-    public Long getMinActiveTxnId() {
-        long result = Long.MAX_VALUE;
+    public Optional<Long> getMinActiveTxnId() {
+        long minId = Long.MAX_VALUE;
         Map<Long, AlterJobV2> alterJobV2Map = getAlterJobsV2();
         for (AlterJobV2 job : alterJobV2Map.values()) {
             AlterJobV2.JobState jobState = job.getJobState();
             if (jobState == AlterJobV2.JobState.FINISHED || jobState == AlterJobV2.JobState.CANCELLED) {
                 continue;
             }
-            if (job instanceof LakeTableSchemaChangeJob) {
-                result = min(result, ((LakeTableSchemaChangeJob) job).getWatershedTxnId());
-            }
+            minId = Math.min(minId, job.getTransactionId().orElse(Long.MAX_VALUE));
         }
-        return result == Long.MAX_VALUE ? null : result;
+        return minId == Long.MAX_VALUE ? Optional.empty() : Optional.of(minId);
     }
 
     @VisibleForTesting
@@ -1200,7 +1196,14 @@ public class SchemaChangeHandler extends AlterHandler {
                     return null;
                 } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
                     if (!olapTable.dynamicPartitionExists()) {
-                        DynamicPartitionUtil.checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
+                        try {
+                            DynamicPartitionUtil
+                                    .checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
+                        } catch (DdlException e) {
+                            // This table is not a dynamic partition table and didn't supply all dynamic partition properties
+                            throw new DdlException("Table " + db.getOriginName() + "." +
+                                    olapTable.getName() + " is not a dynamic partition table.");
+                        }
                     }
                     if (properties.containsKey(DynamicPartitionProperty.BUCKETS)) {
                         String colocateGroup = olapTable.getColocateGroup();

@@ -59,7 +59,8 @@ void init_s3client() {
     const char* ak = config::object_storage_access_key_id.c_str();
     const char* sk = config::object_storage_secret_access_key.c_str();
     auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk);
-    g_s3client = std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config));
+    g_s3client = std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config),
+                                                     Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
 }
 
 void init_bucket() {

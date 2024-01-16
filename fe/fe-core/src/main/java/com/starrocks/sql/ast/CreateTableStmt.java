@@ -299,7 +299,7 @@ public class CreateTableStmt extends DdlStmt {
 
     @Override
     public boolean needAuditEncryption() {
-        return !isOlapOrLakeEngine();
+        return !Strings.isNullOrEmpty(engineName) && !isOlapOrLakeEngine();
     }
 
     @Override

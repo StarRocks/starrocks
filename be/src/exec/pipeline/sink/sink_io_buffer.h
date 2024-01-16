@@ -73,10 +73,11 @@ public:
     virtual void cancel_one_sinker() { _is_cancelled = true; }
 
     virtual void close(RuntimeState* state) {
-        _is_finished = true;
         if (_exec_queue_id != nullptr) {
-            bthread::execution_queue_stop(*_exec_queue_id);
+            int ok = bthread::execution_queue_stop(*_exec_queue_id);
+            LOG_IF(WARNING, !ok) << fmt::format("Fail to stop execution queue: {}", std::strerror(errno));
         }
+        _is_finished = true;
     }
 
     inline void set_io_status(const Status& status) {
@@ -92,6 +93,9 @@ public:
     }
 
     static int execute_io_task(void* meta, bthread::TaskIterator<ChunkPtr>& iter) {
+        if (iter.is_queue_stopped()) {
+            return 0;
+        }
         auto* sink_io_buffer = static_cast<SinkIOBuffer*>(meta);
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(sink_io_buffer->_state->query_mem_tracker_ptr().get());
         for (; iter; ++iter) {

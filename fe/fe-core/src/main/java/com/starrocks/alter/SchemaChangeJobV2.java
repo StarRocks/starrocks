@@ -81,6 +81,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -313,6 +314,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     }
                     if (sortKeyIdxes != null) {
                         copiedSortKeyIdxes = sortKeyIdxes;
+                    } else if (copiedSortKeyIdxes != null && !copiedSortKeyIdxes.isEmpty()) {
+                        sortKeyIdxes = copiedSortKeyIdxes;
                     }
                     for (Tablet shadowTablet : shadowIdx.getTablets()) {
                         long shadowTabletId = shadowTablet.getId();
@@ -418,12 +421,18 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         for (long shadowIdxId : indexIdMap.keySet()) {
+            long orgIndexId = indexIdMap.get(shadowIdxId);
             tbl.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId),
                     indexSchemaMap.get(shadowIdxId),
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion,
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
                     tbl.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyIdxes);
+            MaterializedIndexMeta orgIndexMeta = tbl.getIndexMetaByIndexId(orgIndexId);
+            Preconditions.checkNotNull(orgIndexMeta);
+            MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(shadowIdxId);
+            Preconditions.checkNotNull(indexMeta);
+            rebuildMaterializedIndexMeta(orgIndexMeta, indexMeta);
         }
 
         tbl.rebuildFullSchema();
@@ -652,7 +661,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     LOG.warn("Setting the materialized view {}({}) to invalid because " +
                             "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
                             tbl.getName(), mvColumn.getName());
-                    mv.setActive(false);
+                    mv.setInactiveAndReason(String.format("column changed: %s.%s", tbl.getName(), mvColumn.getName()));
                 }
             }
         }
@@ -753,7 +762,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
 
         tbl.setState(OlapTableState.NORMAL);
-        tbl.lastSchemaUpdateTime.set(System.currentTimeMillis());
+        tbl.lastSchemaUpdateTime.set(System.nanoTime());
     }
 
     /*
@@ -1166,4 +1175,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
         }
     }
 
+    @Override
+    public Optional<Long> getTransactionId() {
+        return watershedTxnId < 0 ? Optional.empty() : Optional.of(watershedTxnId);
+    }
 }

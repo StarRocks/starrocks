@@ -110,8 +110,6 @@ private:
     // And we just pick the maximum accumulated_network_time among all destination
     int64_t _network_time();
 
-    void _try_to_merge_query_statistics(TransmitChunkInfo& request);
-
     FragmentContext* _fragment_ctx;
     MemTracker* const _mem_tracker;
     const int32_t _brpc_timeout_ms;
@@ -143,7 +141,6 @@ private:
     phmap::flat_hash_map<int64_t, int32_t> _num_finished_rpcs;
     phmap::flat_hash_map<int64_t, int32_t> _num_in_flight_rpcs;
     phmap::flat_hash_map<int64_t, TimeTrace> _network_times;
-    phmap::flat_hash_map<int64_t, std::shared_ptr<QueryStatistics>> _eos_query_stats;
     phmap::flat_hash_map<int64_t, std::unique_ptr<Mutex>> _mutexes;
 
     // True means that SinkBuffer needn't input chunk and send chunk anymore,
@@ -178,6 +175,10 @@ private:
     int64_t _first_send_time = -1;
     int64_t _last_receive_time = -1;
     int64_t _rpc_http_min_size = 0;
+
+    std::atomic<int64_t> _request_sequence = 0;
+    int64_t _sent_audit_stats_frequency = 1;
+    int64_t _sent_audit_stats_frequency_upper_limit = 64;
 };
 
 } // namespace starrocks::pipeline

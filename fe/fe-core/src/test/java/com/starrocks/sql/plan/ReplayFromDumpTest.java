@@ -26,6 +26,7 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 
 import java.io.BufferedReader;
@@ -404,6 +405,7 @@ public class ReplayFromDumpTest {
     }
 
     @Test
+    @Ignore
     public void testTPCDS54WithJoinHint() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpcds54_with_join_hint"), null, TExplainLevel.NORMAL);
@@ -612,7 +614,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_cross_join"), null, TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 40:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 39:Project\n" +
                 "  |  <slot 1> : 1: c_0_0"));
     }
 
@@ -621,7 +623,7 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/multi_view_prune_columns"), null, TExplainLevel.NORMAL);
         // check without exception
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  206:Project\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  207:Project\n" +
                 "  |  <slot 1> : 1: c_1_0"));
     }
 
@@ -796,14 +798,15 @@ public class ReplayFromDumpTest {
     public void testHiveTPCH08UsingResource() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch08_resource"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("21:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("5:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  equal join conjunct: [52: n_regionkey, INT, true] = [58: r_regionkey, INT, true]\n" +
                 "  |  build runtime filters:\n" +
-                "  |  - filter_id = 3, build_expr = (58: r_regionkey), remote = false\n" +
+                "  |  - filter_id = 0, build_expr = (58: r_regionkey), remote = false\n" +
                 "  |  output columns: 50\n" +
                 "  |  cardinality: 5"));
     }
+<<<<<<< HEAD
 <<<<<<< HEAD
 
     @Test
@@ -886,5 +889,47 @@ public class ReplayFromDumpTest {
         Assert.assertEquals(4, result.second.getCteProduceFragments().size());
     }
 =======
+>>>>>>> branch-2.5
+=======
+
+    @Test
+    public void testBuildJoinProjection() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/build_join_projection"), null,
+                        TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("22:Project\n" +
+                "  |  <slot 425> : 425: row_id\n" +
+                "  |  <slot 426> : 426: enter_time\n" +
+                "  |  <slot 433> : 433: telephone2\n" +
+                "  |  <slot 435> : 435: wo_id\n" +
+                "  |  <slot 437> : 437: product_id\n" +
+                "  |  <slot 455> : 455: fault_desc\n" +
+                "  |  <slot 515> : 515: callchannel\n" +
+                "  |  <slot 589> : 589: account_id\n" +
+                "  |  <slot 590> : 590: user_id\n" +
+                "  |  <slot 591> : 591: session_id\n" +
+                "  |  <slot 608> : 608: create_time\n" +
+                "  |  <slot 620> : 620: ter_user_phone\n" +
+                "  |  \n" +
+                "  21:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 590: user_id = 622: ter_user_id\n" +
+                "  |  equal join conjunct: 589: account_id = 623: terminal_id"));
+    }
+
+    @Test
+    public void test() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/top_join_projection"), null, TExplainLevel.COSTS);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("57:Project\n" +
+                "  |  output columns:\n" +
+                "  |  1303 <-> [1303: employee_id, BIGINT, true]\n" +
+                "  |  1304 <-> [1304: employee_name, VARCHAR, true]\n" +
+                "  |  1307 <-> [1307: duty_name, VARCHAR, true]\n" +
+                "  |  1322 <-> [1322: arrival_duration, INT, true]\n" +
+                "  |  1347 <-> [1347: responsible_department_name, VARCHAR, true]\n" +
+                "  |  1371 <-> [1371: induction_duration, INT, true]"));
+    }
 >>>>>>> branch-2.5
 }

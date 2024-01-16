@@ -460,7 +460,7 @@ bool Aggregator::should_expand_preagg_hash_tables(size_t prev_row_returned, size
     return current_reduction > min_reduction;
 }
 
-void Aggregator::compute_single_agg_state(size_t chunk_size) {
+Status Aggregator::compute_single_agg_state(size_t chunk_size) {
     SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
     bool use_intermediate = _use_intermediate_as_input();
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
@@ -473,9 +473,11 @@ void Aggregator::compute_single_agg_state(size_t chunk_size) {
                                                         _single_agg_state + _agg_states_offsets[i]);
         }
     }
+    RETURN_IF_ERROR(check_has_error());
+    return Status::OK();
 }
 
-void Aggregator::compute_batch_agg_states(size_t chunk_size) {
+Status Aggregator::compute_batch_agg_states(size_t chunk_size) {
     SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
     bool use_intermediate = _use_intermediate_as_input();
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
@@ -488,9 +490,11 @@ void Aggregator::compute_batch_agg_states(size_t chunk_size) {
                                            _agg_input_columns[i][0].get(), _tmp_agg_states.data());
         }
     }
+    RETURN_IF_ERROR(check_has_error());
+    return Status::OK();
 }
 
-void Aggregator::compute_batch_agg_states_with_selection(size_t chunk_size) {
+Status Aggregator::compute_batch_agg_states_with_selection(size_t chunk_size) {
     SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
     bool use_intermediate = _use_intermediate_as_input();
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
@@ -505,6 +509,8 @@ void Aggregator::compute_batch_agg_states_with_selection(size_t chunk_size) {
                                                        _tmp_agg_states.data(), _streaming_selection);
         }
     }
+    RETURN_IF_ERROR(check_has_error());
+    return Status::OK();
 }
 
 Status Aggregator::_evaluate_const_columns(int i) {
@@ -529,6 +535,7 @@ Status Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {
     } else {
         TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(_single_agg_state, agg_result_column));
     }
+    RETURN_IF_ERROR(check_has_error());
 
     // For agg function column is non-nullable and table is empty
     // sum(zero_row) should be null, not 0.
@@ -571,7 +578,7 @@ Status Aggregator::evaluate_exprs(vectorized::Chunk* chunk) {
     return _evaluate_exprs(chunk);
 }
 
-void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
+Status Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
     // The input chunk is already intermediate-typed, so there is no need to convert it again.
     // Only when the input chunk is input-typed, we should convert it into intermediate-typed chunk.
     // is_passthrough is on indicate that the chunk is input-typed.
@@ -599,6 +606,7 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
                 result_chunk->append_column(std::move(agg_result_column[i]), slot_id);
             }
         }
+        RETURN_IF_ERROR(check_has_error());
     }
 
     _num_pass_through_rows += result_chunk->num_rows();
@@ -606,9 +614,10 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
     _num_rows_processed += result_chunk->num_rows();
     *chunk = std::move(result_chunk);
     COUNTER_SET(_agg_stat->pass_through_row_count, _num_pass_through_rows);
+    return Status::OK();
 }
 
-void Aggregator::output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* chunk) {
+Status Aggregator::output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* chunk) {
     // Streaming aggregate at least has one group by column
     size_t chunk_size = _group_by_columns[0]->size();
     for (auto& _group_by_column : _group_by_columns) {
@@ -637,7 +646,8 @@ void Aggregator::output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* 
             }
         }
     }
-    output_chunk_by_streaming(chunk);
+    RETURN_IF_ERROR(output_chunk_by_streaming(chunk));
+    return Status::OK();
 }
 
 void Aggregator::try_convert_to_two_level_map() {
@@ -1008,28 +1018,31 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, vectorized::Chu
             }
         }
 
-        {
-            SCOPED_TIMER(_agg_stat->group_by_append_timer);
-            hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index);
-        }
+        if (read_index > 0) {
+            {
+                SCOPED_TIMER(_agg_stat->group_by_append_timer);
+                hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index);
+            }
 
-        {
-            SCOPED_TIMER(_agg_stat->agg_append_timer);
-            if (!use_intermediate) {
-                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                    TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
-                                                                          _agg_states_offsets[i],
-                                                                          agg_result_columns[i].get()));
-                }
-            } else {
-                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                    TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
-                                                                           _agg_states_offsets[i],
-                                                                           agg_result_columns[i].get()));
+            {
+                SCOPED_TIMER(_agg_stat->agg_append_timer);
+                if (!use_intermediate) {
+                    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                        TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index,
+                                                                              _tmp_agg_states, _agg_states_offsets[i],
+                                                                              agg_result_columns[i].get()));
+                    }
+                } else {
+                    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                        TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index,
+                                                                               _tmp_agg_states, _agg_states_offsets[i],
+                                                                               agg_result_columns[i].get()));
+                    }
                 }
             }
         }
 
+        RETURN_IF_ERROR(check_has_error());
         _is_ht_eos = (it == end);
 
         // If there is null key, output it last
@@ -1048,6 +1061,7 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, vectorized::Chu
                         TRY_CATCH_BAD_ALLOC(_serialize_to_chunk(hash_map_with_key.null_key_data, agg_result_columns));
                     }
 
+                    RETURN_IF_ERROR(check_has_error());
                     ++read_index;
                 } else {
                     // Output null key in next round

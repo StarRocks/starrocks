@@ -177,14 +177,19 @@ bool ExportSinkOperator::is_finished() const {
 
 Status ExportSinkOperator::set_finishing(RuntimeState* state) {
     if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        _is_audit_report_done = false;
         auto* executor = state->fragment_ctx()->enable_resource_group() ? state->exec_env()->wg_driver_executor()
                                                                         : state->exec_env()->driver_executor();
-        executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx());
+        executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx(), &_is_audit_report_done);
     }
     return _export_sink_buffer->set_finishing();
 }
 
 bool ExportSinkOperator::pending_finish() const {
+    // audit report not finish, we need check until finish
+    if (!_is_audit_report_done) {
+        return true;
+    }
     return !_export_sink_buffer->is_finished();
 }
 

@@ -1771,13 +1771,13 @@ public class LowCardinalityTest extends PlanTestBase {
                 "    );";
 
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "5:Project\n" +
+        assertContains(plan, "6:Project\n" +
                 "  |  <slot 22> : 22\n" +
                 "  |  <slot 37> : if(31: S_ADDRESS IN ('hz', 'bj'), 22, CAST(if(31: S_ADDRESS = 'hz', 1035, 32: S_NATIONKEY) " +
                 "AS VARCHAR))\n" +
                 "  |  <slot 38> : if(30: S_NAME = '', 31: S_ADDRESS, NULL)\n" +
                 "  |  \n" +
-                "  4:Decode\n" +
+                "  5:Decode\n" +
                 "  |  <dict id 40> : <string id 22>");
     }
 
@@ -1812,12 +1812,12 @@ public class LowCardinalityTest extends PlanTestBase {
                 "    );";
 
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "5:Project\n" +
+        assertContains(plan, "6:Project\n" +
                 "  |  <slot 37> : if(31: S_ADDRESS IN ('hz', 'bj'), 22, CAST(if(31: S_ADDRESS = 'hz', 1035, 32: S_NATIONKEY) " +
                 "AS VARCHAR))\n" +
                 "  |  <slot 38> : if(30: S_NAME = '', 31: S_ADDRESS, NULL)\n" +
                 "  |  \n" +
-                "  4:Decode\n" +
+                "  5:Decode\n" +
                 "  |  <dict id 40> : <string id 22>");
     }
 <<<<<<< HEAD
@@ -1842,6 +1842,21 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  9:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(24: fee_zb)\n" +
                 "  |  group by: 54: c_mr");
+    }
+<<<<<<< HEAD
+>>>>>>> branch-2.5
+=======
+
+    @Test
+    public void testInformationFunc() throws Exception {
+        String sql = "select if(CURRENT_USER = 'root', concat(S_ADDRESS, 'ccc'), '***') from supplier order by 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:SORT\n" +
+                "  |  order by: <slot 9> 9: if ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 9> : if(CURRENT_USER() = 'root', DictExpr(10: S_ADDRESS,[concat(<place-holder>, 'ccc')]), '***')");
     }
 >>>>>>> branch-2.5
 }

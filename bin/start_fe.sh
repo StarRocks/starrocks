@@ -55,6 +55,8 @@ export DORIS_HOME="$STARROCKS_HOME"
 
 source $STARROCKS_HOME/bin/common.sh
 
+check_and_update_max_processes
+
 # export env variables from fe.conf
 #
 # JAVA_OPTS
@@ -115,8 +117,20 @@ if [[ "$JAVA_VERSION" -gt 8 ]]; then
     final_java_opt=$JAVA_OPTS_FOR_JDK_9
 fi
 
+# detect xmx
+# if detect_jvm_xmx failed to detect xmx, xmx will be empty
+xmx=$(detect_jvm_xmx)
+final_java_opt="${final_java_opt} ${xmx}"
+
 if [[ "$JAVA_VERSION" -lt 11 ]]; then
     echo "Tips: current JDK version is $JAVA_VERSION, JDK 11 or 17 is highly recommended for better GC performance(lower version JDK may not be supported in the future)"
+    if [[ "$JAVA_VERSION" == 8 ]]; then
+        export JAVA=${JAVA_HOME}/bin/java
+        JAVA_UPDATE_VER=$(${JAVA} -version 2>&1 | sed -n 's/.* version "1\.8\.0_\([0-9]*\)".*/\1/p')
+        if [[ $JAVA_UPDATE_VER -lt 192 ]]; then
+            echo "Tips: JAVA_UPDATE_VER is $JAVA_UPDATE_VER, Please upgrade the JAVA version to at least 1.8.0_192 to avoid potential issues of G1 gc on jdk8."
+        fi
+    fi
 fi
 
 if [ ${ENABLE_DEBUGGER} -eq 1 ]; then

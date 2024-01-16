@@ -138,7 +138,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             if (op.isPresent()) {
                 predicate.getChildren().set(0, op.get());
                 return predicate;
-            } else if (rightChild.getType().isDateType() && Type.canCastTo(leftChild.getType(), rightChild.getType())) {
+            } else if (rightChild.getType().isDateType() && !leftChild.getType().isDateType() &&
+                    Type.canCastTo(leftChild.getType(), rightChild.getType())) {
                 // For like MySQL, convert to date type as much as possible
                 addCastChild(rightChild.getType(), predicate, 0);
                 return predicate;
@@ -148,7 +149,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             if (op.isPresent()) {
                 predicate.getChildren().set(1, op.get());
                 return predicate;
-            } else if (leftChild.getType().isDateType() && Type.canCastTo(rightChild.getType(), leftChild.getType())) {
+            } else if (leftChild.getType().isDateType() && !rightChild.getType().isDateType() &&
+                    Type.canCastTo(rightChild.getType(), leftChild.getType())) {
                 // For like MySQL, convert to date type as much as possible
                 addCastChild(leftChild.getType(), predicate, 1);
                 return predicate;

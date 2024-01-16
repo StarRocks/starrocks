@@ -1417,7 +1417,7 @@ public class PlanFragmentBuilder {
             PlanFragment originalInputFragment = visit(optExpr.inputAt(0), context);
 
             PlanFragment inputFragment = removeExchangeNodeForLocalShuffleAgg(originalInputFragment, context);
-            boolean withLocalShuffle = inputFragment != originalInputFragment;
+            boolean withLocalShuffle = inputFragment != originalInputFragment || inputFragment.isWithLocalShuffle();
 
             /*
              * Create aggregate TupleDescriptor
@@ -1621,6 +1621,7 @@ public class PlanFragmentBuilder {
 >>>>>>> branch-2.5
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
+                inputFragment.setWithLocalShuffleIfTrue(withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
             }
 
@@ -2657,7 +2658,7 @@ public class PlanFragmentBuilder {
                     cteFragment.getPlanRoot(), DistributionSpec.DistributionType.SHUFFLE);
 
             exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
-                    .map(ColumnRefOperator::getId).collect(Collectors.toList()));
+                    .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
 
             exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());

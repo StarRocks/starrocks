@@ -620,4 +620,162 @@ public class MvRewritePartialPartitionTest extends MvRewriteTestBase {
         PlanTestBase.assertContains(getFragmentPlan(query), mvName);
         dropMv("test", mvName);
     }
+
+    @Test
+    public void testPartialPartitionRewriteWithDateTruncExpr1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_tbl1 (\n" +
+                " k1 datetime,\n" +
+                " v1 INT,\n" +
+                " v2 INT)\n" +
+                " DUPLICATE KEY(k1)\n" +
+                " PARTITION BY RANGE(`k1`)\n" +
+                " (\n" +
+                "  PARTITION `p1` VALUES LESS THAN ('2020-01-01'),\n" +
+                "  PARTITION `p2` VALUES LESS THAN ('2020-02-01'),\n" +
+                "  PARTITION `p3` VALUES LESS THAN ('2020-03-01')\n" +
+                " )\n" +
+                " DISTRIBUTED BY HASH(k1) properties('replication_num'='1');");
+        cluster.runSql("test", "insert into base_tbl1 values " +
+                " (\"2020-01-01\",1,1),(\"2020-01-01\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2);");
+
+        createAndRefreshMv("test", "test_mv1", "CREATE MATERIALIZED VIEW test_mv1 \n" +
+                " PARTITION BY ds \n" +
+                " DISTRIBUTED BY HASH(ds) BUCKETS 10\n" +
+                " REFRESH MANUAL\n" +
+                " AS SELECT " +
+                " date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                " FROM base_tbl1 " +
+                " group by ds;");
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 where date_trunc('minute', `k1`) = '2020-02-11' group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "ds = '2020-02-11 00:00:00'");
+        }
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 where `k1` = '2020-02-11' group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "ds = '2020-02-11 00:00:00'");
+        }
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+
+        cluster.runSql("test", "insert into base_tbl1 partition('p3') values (\"2020-02-02\",1,1)");
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 " +
+                    " WHERE date_trunc('minute', `k1`) >= '2020-01-01 00:00:00'" +
+                    " group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "test_mv1");
+        }
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 " +
+                    " WHERE date_trunc('minute', `k1`) >= '2020-01-01 00:00:00' and " +
+                    "   date_trunc('minute', `k1`) <= '2020-03-01 00:00:00' " +
+                    " group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertNotContains(plan, "test_mv1");
+        }
+
+        dropMv("test", "test_mv1");
+        starRocksAssert.dropTable("base_tbl1");
+    }
+
+    @Test
+    public void testPartialPartitionRewriteWithDateTruncExpr2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE base_tbl1 (\n" +
+                " k1 datetime,\n" +
+                " v1 INT,\n" +
+                " v2 INT)\n" +
+                " DUPLICATE KEY(k1)\n" +
+                " PARTITION BY RANGE(`k1`)\n" +
+                " (\n" +
+                "  PARTITION `p1` VALUES [('2020-01-01') , ('2020-02-01')),\n" +
+                "  PARTITION `p2` VALUES [('2020-02-01') , ('2020-03-01')),\n" +
+                "  PARTITION `p3` VALUES [('2020-03-01') , ('2020-04-01'))\n" +
+                " )\n" +
+                " DISTRIBUTED BY HASH(k1) properties('replication_num'='1');");
+        cluster.runSql("test", "insert into base_tbl1 values " +
+                " (\"2020-01-01\",1,1),(\"2020-01-01\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2);");
+
+        createAndRefreshMv("test", "test_mv1", "CREATE MATERIALIZED VIEW test_mv1 \n" +
+                " PARTITION BY ds \n" +
+                " DISTRIBUTED BY HASH(ds) BUCKETS 10\n" +
+                " REFRESH MANUAL\n" +
+                " AS SELECT " +
+                " date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                " FROM base_tbl1 " +
+                " group by ds;");
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 where date_trunc('minute', `k1`) = '2020-02-11' group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "ds = '2020-02-11 00:00:00'");
+        }
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 where `k1` = '2020-02-11' group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "ds = '2020-02-11 00:00:00'");
+        }
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+
+        cluster.runSql("test", "insert into base_tbl1 partition('p3') values (\"2020-02-02\",1,1)");
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "UNION");
+        }
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 " +
+                    " WHERE date_trunc('minute', `k1`) >= '2020-01-01 00:00:00' " +
+                    " group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "UNION");
+        }
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 " +
+                    " WHERE date_trunc('minute', `k1`) <= '2020-03-01 00:00:00' " +
+                    " group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "UNION");
+        }
+
+        {
+            String query = "select date_trunc('minute', `k1`) AS ds, sum(v1) " +
+                    " FROM base_tbl1 " +
+                    " WHERE date_trunc('minute', `k1`) >= '2020-01-01 00:00:00' and " +
+                    "   date_trunc('minute', `k1`) <= '2020-03-01 00:00:00' " +
+                    " group by ds";
+            String plan = getFragmentPlan(query);
+            PlanTestBase.assertContains(plan, "test_mv1", "UNION");
+        }
+
+        dropMv("test", "test_mv1");
+        starRocksAssert.dropTable("base_tbl1");
+    }
 }

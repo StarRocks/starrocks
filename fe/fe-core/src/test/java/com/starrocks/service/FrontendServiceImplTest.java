@@ -9,6 +9,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -19,6 +20,8 @@ import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TResourceUsage;
+import com.starrocks.thrift.TSetConfigRequest;
+import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TTableInfo;
 import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUniqueId;
@@ -212,4 +215,16 @@ public class FrontendServiceImplTest {
         TGetLoadTxnStatusResult result4 = impl.getLoadTxnStatus(request);
         Assert.assertEquals(TTransactionStatus.PREPARE, result4.getStatus());
     }
+
+    @Test
+    public void testSetFrontendConfig() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TSetConfigRequest request = new TSetConfigRequest();
+        request.keys = Lists.newArrayList("mysql_server_version");
+        request.values = Lists.newArrayList("5.1.1");
+
+        TSetConfigResponse result = impl.setConfig(request);
+        Assert.assertEquals("5.1.1", GlobalVariable.version);
+    }
+
 }

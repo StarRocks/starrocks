@@ -197,7 +197,8 @@ public:
     Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
                         vectorized::ChunkChanger* chunk_changer);
 
-    Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version);
+    Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
+                        vectorized::ChunkChanger* chunk_changer);
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false);
 
@@ -367,6 +368,8 @@ private:
 
     std::string _debug_version_info(bool lock) const;
 
+    std::string _debug_compaction_stats(const std::vector<uint32_t>& input_rowsets, const uint32_t output_rowset);
+
     void _print_rowsets(std::vector<uint32_t>& rowsets, std::string* dst, bool abbr) const;
 
     void _set_error(const string& msg);
@@ -401,6 +404,8 @@ private:
     void stop_apply(bool apply_stopped) { _apply_stopped = apply_stopped; }
 
     void check_for_apply() { _check_for_apply(); }
+
+    std::timed_mutex* get_index_lock() { return &_index_lock; }
 
 private:
     Tablet& _tablet;

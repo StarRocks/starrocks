@@ -1842,6 +1842,45 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+    public void testCreateMVWithSessionProperties1() {
+        String sql = "create materialized view mv_with_property1 " +
+                "partition by ss " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"session.query_timeout\" = \"10000\"" +
+                ") " +
+                "as select tbl1.k1 ss, k2 from tbl1;";
+
+        try {
+            CreateMaterializedViewStatement stmt =
+                    (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+            currentState.createMaterializedView(stmt);
+            Table mv1 = testDb.getTable("mv_with_property1");
+            Assert.assertTrue(mv1 instanceof MaterializedView);
+        } catch (Exception e) {
+            Assert.fail();;
+        }
+    }
+
+    @Test
+    public void testCreateMVWithSessionProperties2() {
+        String sql = "create materialized view mv_with_property1 " +
+                "partition by ss " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"query_timeout\" = \"10000\"" +
+                ") " +
+                "as select tbl1.k1 ss, k2 from tbl1;";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals("Analyze materialized properties failed because unknown propertie", e.getMessage());
+        }
+    }
+
+    @Test
     public void testNoDuplicateKey() {
         String sql = "create materialized view mv1 " +
                 "partition by s1 " +
@@ -2380,7 +2419,6 @@ public class CreateMaterializedViewTest {
         } catch (Exception e) {
             Assert.fail();
         }
-
     }
 
     private Table getTable(String dbName, String mvName) {

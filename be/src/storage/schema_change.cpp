@@ -771,14 +771,36 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         const auto& base_sort_key_idxes = base_tablet->tablet_schema().sort_key_idxes();
         const auto& new_sort_key_idxes = new_tablet->tablet_schema().sort_key_idxes();
-        if (std::mismatch(new_sort_key_idxes.begin(), new_sort_key_idxes.end(), base_sort_key_idxes.begin()).first !=
-            new_sort_key_idxes.end()) {
-            sc_params.sc_directly = !(sc_params.sc_sorting = true);
+        std::vector<int32_t> base_sort_key_unique_ids;
+        std::vector<int32_t> new_sort_key_unique_ids;
+        for (auto idx : base_sort_key_idxes) {
+            base_sort_key_unique_ids.emplace_back(base_tablet->tablet_schema().column(idx).unique_id());
+        }
+        for (auto idx : new_sort_key_idxes) {
+            new_sort_key_unique_ids.emplace_back(new_tablet->tablet_schema().column(idx).unique_id());
+        }
+
+        if (new_sort_key_unique_ids.size() > base_sort_key_unique_ids.size()) {
+            // new sort keys' size is greater than base sort keys, must be sc_sorting
+            sc_params.sc_sorting = true;
+            sc_params.sc_directly = false;
+        } else {
+            auto base_iter = base_sort_key_unique_ids.cbegin();
+            auto new_iter = new_sort_key_unique_ids.cbegin();
+            // check wheather new sort keys are just subset of base sort keys
+            while (new_iter != new_sort_key_unique_ids.cend() && *base_iter == *new_iter) {
+                ++base_iter;
+                ++new_iter;
+            }
+            if (new_iter != new_sort_key_unique_ids.cend()) {
+                sc_params.sc_sorting = true;
+                sc_params.sc_directly = false;
+            }
         }
 
         // pk table can handle the case that convert version > request version, duplicate versions will be skipped
         int64_t request_version = request.alter_version;
-        int64_t base_max_version = base_tablet->max_version().first;
+        int64_t base_max_version = base_tablet->max_version().second;
         if (base_max_version > request_version) {
             LOG(INFO) << " base_tablet's max_version:" << base_max_version << " > request_version:" << request_version
                       << " using max_version instead, base_tablet:" << base_tablet->tablet_id()
@@ -788,7 +810,8 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         if (sc_params.sc_directly) {
             status = new_tablet->updates()->convert_from(base_tablet, request_version, sc_params.chunk_changer.get());
         } else if (sc_params.sc_sorting) {
-            status = new_tablet->updates()->reorder_from(base_tablet, request_version);
+            status = new_tablet->updates()->reorder_from(base_tablet, request.alter_version,
+                                                         sc_params.chunk_changer.get());
         } else {
             status = new_tablet->updates()->link_from(base_tablet.get(), request_version);
         }
@@ -1042,12 +1065,6 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
         if (!new_rowset.ok()) {
             LOG(WARNING) << "failed to build rowset: " << new_rowset.status() << ". exit alter process";
             break;
-        }
-        LOG(INFO) << "new rowset has " << (*new_rowset)->num_segments() << " segments";
-        if (sc_params.rowsets_to_change[i]->rowset_meta()->has_delete_predicate()) {
-            (*new_rowset)
-                    ->mutable_delete_predicate()
-                    ->CopyFrom(sc_params.rowsets_to_change[i]->rowset_meta()->delete_predicate());
         }
         status = sc_params.new_tablet->add_rowset(*new_rowset, false);
         if (status.is_already_exist()) {

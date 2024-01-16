@@ -347,9 +347,8 @@ void TabletMeta::modify_rs_metas(const std::vector<RowsetMetaSharedPtr>& to_add,
         auto it = _rs_metas.begin();
         while (it != _rs_metas.end()) {
             if (rs_to_del->version() == (*it)->version()) {
-                if ((*it)->has_delete_predicate()) {
-                    remove_delete_predicate_by_version((*it)->version());
-                }
+                // delay delete "delete predicate" when deleting stale rowset
+                // fix https://github.com/StarRocks/starrocks/pull/20362
                 _rs_metas.erase(it);
                 // there should be only one rowset match the version
                 break;
@@ -384,6 +383,9 @@ void TabletMeta::delete_stale_rs_meta_by_version(const Version& version) {
     auto it = _stale_rs_metas.begin();
     while (it != _stale_rs_metas.end()) {
         if ((*it)->version() == version) {
+            if ((*it)->has_delete_predicate()) {
+                remove_delete_predicate_by_version((*it)->version());
+            }
             it = _stale_rs_metas.erase(it);
             // version wouldn't be duplicate
             break;
@@ -493,13 +495,15 @@ void TabletMeta::create_inital_updates_meta() {
 }
 
 void TabletMeta::reset_tablet_schema_for_restore(const TabletSchemaPB& schema_pb) {
-    _schema.reset();
+    std::shared_ptr<const TabletSchema> new_schema_ptr = nullptr;
     if (schema_pb.has_id() && schema_pb.id() != TabletSchema::invalid_id()) {
         // Does not collect the memory usage of |_schema|.
-        _schema = GlobalTabletSchemaMap::Instance()->emplace(schema_pb).first;
+        new_schema_ptr = GlobalTabletSchemaMap::Instance()->emplace(schema_pb).first;
     } else {
-        _schema = std::make_shared<const TabletSchema>(schema_pb);
+        new_schema_ptr = std::make_shared<const TabletSchema>(schema_pb);
     }
+    // atomic swap
+    _schema.swap(new_schema_ptr);
 }
 
 bool operator==(const TabletMeta& a, const TabletMeta& b) {

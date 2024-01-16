@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -46,7 +47,7 @@ public class MvRewriteTest extends MvRewriteTestBase {
             MaterializedView mv = getMv("test", "mv_with_window");
             MvPlanContext planContext = CachingMvPlanContextBuilder.getInstance().getPlanContext(mv, true);
             Assert.assertNotNull(planContext);
-            Assert.assertFalse(CachingMvPlanContextBuilder.getInstance().contains(mv));
+            Assert.assertTrue(CachingMvPlanContextBuilder.getInstance().contains(mv));
             starRocksAssert.dropMaterializedView("mv_with_window");
         }
 
@@ -70,5 +71,45 @@ public class MvRewriteTest extends MvRewriteTestBase {
                 starRocksAssert.dropMaterializedView(mvName);
             }
         }
+    }
+
+    @Test
+    public void testWithSqlSelectLimit() throws Exception {
+        starRocksAssert.getCtx().getSessionVariable().setSqlSelectLimit(1000);
+        createAndRefreshMv("test", "mv_with_select_limit", "CREATE MATERIALIZED VIEW mv_with_select_limit " +
+                " distributed by hash(empid) " +
+                "AS " +
+                "SELECT /*+set_var(sql_select_limit=1000)*/ empid, sum(salary) as total " +
+                "FROM emps " +
+                "GROUP BY empid");
+        starRocksAssert.query("SELECT empid, sum(salary) as total " +
+                "FROM emps " +
+                "GROUP BY empid").explainContains("mv_with_select_limit");
+        starRocksAssert.getCtx().getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        starRocksAssert.dropMaterializedView("mv_with_select_limit");
+    }
+
+    @Test
+    public void testInsertMV() throws Exception {
+        String mvName = "mv_insert";
+        createAndRefreshMv("test", mvName, "create materialized view " + mvName +
+                " distributed by hash(v1) " +
+                "refresh async as " +
+                "select * from t0");
+        String sql = "insert into t0 select * from t0";
+
+        // enable
+        {
+            starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(true);
+            starRocksAssert.query(sql).explainContains(mvName);
+        }
+
+        // disable
+        {
+            starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(false);
+            starRocksAssert.query(sql).explainWithout(mvName);
+        }
+
+        starRocksAssert.getCtx().getSessionVariable().setEnableMaterializedViewRewriteForInsert(false);
     }
 }

@@ -69,6 +69,7 @@ import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.ClearTransactionTask;
 import com.starrocks.task.CreateReplicaTask;
+import com.starrocks.task.CreateReplicaTask.RecoverySource;
 import com.starrocks.task.DropReplicaTask;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.PublishVersionTask;
@@ -787,7 +788,7 @@ public class ReportHandler extends Daemon {
                                             olapTable.enablePersistentIndex(),
                                             olapTable.getPartitionInfo().getTabletType(partitionId),
                                             olapTable.getCompressionType(), indexMeta.getSortKeyIdxes());
-                                    createReplicaTask.setIsRecoverTask(true);
+                                    createReplicaTask.setRecoverySource(RecoverySource.REPORT);
                                     createReplicaBatchTask.addTask(createReplicaTask);
                                 } else {
                                     // just set this replica as bad

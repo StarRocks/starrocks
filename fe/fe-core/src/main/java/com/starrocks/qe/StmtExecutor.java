@@ -33,6 +33,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
@@ -78,7 +79,6 @@ import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
-import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.PlannerProfile;
@@ -155,6 +155,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
@@ -188,6 +189,7 @@ public class StmtExecutor {
     private ShowResultSet proxyResultSet = null;
     private PQueryStatistics statisticsForAuditLog;
     private List<StmtExecutor> subStmtExecutors;
+    private Optional<Boolean> isForwardToLeaderOpt = Optional.empty();
 
     // this constructor is mainly for proxy
     public StmtExecutor(ConnectContext context, OriginStatement originStmt, boolean isProxy) {
@@ -285,15 +287,39 @@ public class StmtExecutor {
         profile.computeTimeInChildProfile();
     }
 
+    /**
+     * Whether to forward to leader from follower which should be the same in the StmtExecutor's lifecycle.
+     */
     public boolean isForwardToLeader() {
+        return getIsForwardToLeaderOrInit(true);
+    }
+
+    public boolean getIsForwardToLeaderOrInit(boolean isInitIfNoPresent) {
+        if (!isForwardToLeaderOpt.isPresent()) {
+            if (!isInitIfNoPresent) {
+                return false;
+            }
+            isForwardToLeaderOpt = Optional.of(initForwardToLeaderState());
+        }
+        return isForwardToLeaderOpt.get();
+    }
+
+    private boolean initForwardToLeaderState() {
         if (GlobalStateMgr.getCurrentState().isLeader()) {
             return false;
         }
 
         // this is a query stmt, but this non-master FE can not read, forward it to master
-        if (parsedStmt instanceof QueryStatement && !GlobalStateMgr.getCurrentState().isLeader()
-                && !GlobalStateMgr.getCurrentState().canRead()) {
-            return true;
+        if (parsedStmt instanceof QueryStatement) {
+            // When FollowerQueryForwardMode is not default, forward it to leader or follower by default.
+            if (context != null && context.getSessionVariable() != null &&
+                    context.getSessionVariable().isFollowerForwardToLeaderOpt().isPresent()) {
+                return context.getSessionVariable().isFollowerForwardToLeaderOpt().get();
+            }
+
+            if (!GlobalStateMgr.getCurrentState().canRead()) {
+                return true;
+            }
         }
 
         if (redirectStatus == null) {
@@ -354,7 +380,11 @@ public class StmtExecutor {
             // support select hint e.g. select /*+ SET_VAR(query_timeout=1) */ sleep(3);
             if (parsedStmt != null) {
                 Map<String, String> optHints = null;
-                if (parsedStmt instanceof QueryStatement &&
+                boolean isQuery = parsedStmt instanceof QueryStatement;
+                // set isQuery before `forwardToLeader` to make it right for audit log.
+                context.getState().setIsQuery(isQuery);
+
+                if (isQuery &&
                         ((QueryStatement) parsedStmt).getQueryRelation() instanceof SelectRelation) {
                     SelectRelation selectRelation = (SelectRelation) ((QueryStatement) parsedStmt).getQueryRelation();
                     optHints = selectRelation.getSelectList().getOptHints();
@@ -431,8 +461,6 @@ public class StmtExecutor {
             }
 
             if (parsedStmt instanceof QueryStatement) {
-                context.getState().setIsQuery(true);
-
                 // sql's blacklist is enabled through enable_sql_blacklist.
                 if (Config.enable_sql_blacklist && !parsedStmt.isExplain()) {
                     OriginStatement origStmt = parsedStmt.getOrigStmt();
@@ -448,8 +476,11 @@ public class StmtExecutor {
                 Preconditions.checkNotNull(execPlan, "query must has a plan");
 
                 int retryTime = Config.max_query_retry_time;
+                ExecuteExceptionHandler.RetryContext retryContext =
+                        new ExecuteExceptionHandler.RetryContext(0, execPlan, context, parsedStmt);
                 for (int i = 0; i < retryTime; i++) {
                     boolean needRetry = false;
+                    retryContext.setRetryTime(i);
                     try {
                         //reset query id for each retry
                         if (i > 0) {
@@ -462,12 +493,13 @@ public class StmtExecutor {
 
                         Preconditions.checkState(execPlanBuildByNewPlanner, "must use new planner");
 
-                        handleQueryStmt(execPlan);
+                        handleQueryStmt(retryContext.getExecPlan());
                         break;
-                    } catch (RpcException e) {
+                    } catch (Exception e) {
                         if (i == retryTime - 1) {
                             throw e;
                         }
+                        ExecuteExceptionHandler.handle(e, retryContext);
                         if (!context.getMysqlChannel().isSend()) {
                             String originStmt;
                             if (parsedStmt.getOrigStmt() != null) {
@@ -481,7 +513,7 @@ public class StmtExecutor {
                             throw e;
                         }
                     } finally {
-                        if (!needRetry && context.getSessionVariable().isEnableProfile()) {
+                        if (!needRetry && context.isProfileEnabled()) {
                             writeProfile(beginTimeInNanoSecond);
                         }
                         QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
@@ -589,7 +621,7 @@ public class StmtExecutor {
             InsertStmt insertStmt = createTableAsSelectStmt.getInsertStmt();
             ExecPlan execPlan = new StatementPlanner().plan(insertStmt, context);
             handleDMLStmt(execPlan, ((CreateTableAsSelectStmt) parsedStmt).getInsertStmt());
-            if (context.getSessionVariable().isEnableProfile()) {
+            if (context.isProfileEnabled()) {
                 writeProfile(beginTimeInNanoSecond);
             }
             if (context.getState().getStateType() == MysqlStateType.ERR) {
@@ -927,7 +959,6 @@ public class StmtExecutor {
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                 context.getSessionVariable().getStatisticCollectParallelism());
         statsConnectCtx.setThreadLocalInfo();
-        statsConnectCtx.setStatisticsConnection(true);
         executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
     }
 
@@ -1313,7 +1344,7 @@ public class StmtExecutor {
             LOG.warn("DML statement(" + originStmt.originStmt + ") process failed.", t);
             throw t;
         } finally {
-            if (context.getSessionVariable().isEnableProfile()) {
+            if (context.isProfileEnabled()) {
                 writeProfile(beginTimeInNanoSecond);
             }
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
@@ -1556,6 +1587,7 @@ public class StmtExecutor {
             }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
             if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
                     || stmt instanceof UpdateStmt)) {
                 if (targetTable instanceof ExternalOlapTable) {
@@ -1579,6 +1611,25 @@ public class StmtExecutor {
                 return;
             }
 =======
+>>>>>>> branch-2.5
+=======
+            if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
+                    || stmt instanceof UpdateStmt)) {
+                // when the target table is not ExternalOlapTable or OlapTable
+                // if there is no data to load, the result of the insert statement is success
+                // otherwise, the result of the insert statement is failed
+                String errorMsg = TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG;
+                if (!(targetTable instanceof ExternalOlapTable || targetTable instanceof OlapTable)) {
+                    if (!(targetTable instanceof IcebergTable)) {
+                        // schema table and iceberg table does not need txn
+                        GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
+                                database.getId(), transactionId, errorMsg);
+                    }
+                    context.getState().setOk();
+                    insertError = true;
+                    return;
+                }
+            }
 >>>>>>> branch-2.5
 
             if (targetTable instanceof ExternalOlapTable) {

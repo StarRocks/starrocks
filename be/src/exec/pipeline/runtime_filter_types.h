@@ -200,9 +200,10 @@ private:
 // not take effects on operators in front of LocalExchangeSourceOperators before they are merged into a total one.
 class PartialRuntimeFilterMerger {
 public:
-    PartialRuntimeFilterMerger(ObjectPool* pool, size_t limit, size_t num_builders)
+    PartialRuntimeFilterMerger(ObjectPool* pool, size_t local_rf_limit, size_t global_rf_limit, size_t num_builders)
             : _pool(pool),
-              _limit(limit),
+              _local_rf_limit(local_rf_limit),
+              _global_rf_limit(global_rf_limit),
               _num_active_builders(num_builders),
               _ht_row_counts(num_builders),
               _partial_in_filters(num_builders),
@@ -304,17 +305,23 @@ public:
         for (auto count : _ht_row_counts) {
             row_count += count;
         }
+
         for (auto& desc : _bloom_filter_descriptors) {
             desc->set_is_pipeline(true);
             // skip if it does not have consumer.
             if (!desc->has_consumer()) continue;
             // skip if ht.size() > limit, and it's only for local.
-            if (!desc->has_remote_targets() && row_count > _limit) continue;
+            if (!desc->has_remote_targets() && row_count > _local_rf_limit) continue;
             PrimitiveType build_type = desc->build_expr_type();
             vectorized::JoinRuntimeFilter* filter =
                     vectorized::RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
             if (filter == nullptr) continue;
-            filter->init(row_count);
+
+            if (desc->has_remote_targets() && row_count > _global_rf_limit) {
+                filter->clear_bf();
+            } else {
+                filter->init(row_count);
+            }
             filter->set_join_mode(desc->join_mode());
             desc->set_runtime_filter(filter);
         }
@@ -375,7 +382,8 @@ public:
 
 private:
     ObjectPool* _pool;
-    const size_t _limit;
+    const size_t _local_rf_limit;
+    const size_t _global_rf_limit;
     std::atomic<size_t> _num_active_builders;
     std::vector<size_t> _ht_row_counts;
     std::vector<RuntimeInFilters> _partial_in_filters;

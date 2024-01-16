@@ -28,7 +28,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
-import com.google.common.collect.Sets;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
@@ -39,7 +38,6 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.backup.BackupHandler;
-import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.CatalogIdGenerator;
@@ -69,7 +67,6 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MetaReplayState;
 import com.starrocks.catalog.MetaVersion;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -115,13 +112,13 @@ import com.starrocks.common.util.Util;
 import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.connector.iceberg.IcebergRepository;
 import com.starrocks.consistency.ConsistencyChecker;
+import com.starrocks.consistency.LockChecker;
 import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.ha.FrontendNodeType;
@@ -198,6 +195,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -247,6 +245,7 @@ import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
+import com.starrocks.system.PortConnectivityChecker;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -318,6 +317,8 @@ public class GlobalStateMgr {
     // because fair lock has poor performance.
     // Using QueryableReentrantLock to print owner thread in debug mode.
     private QueryableReentrantLock lock;
+
+    private final PortConnectivityChecker portConnectivityChecker;
 
     private Load load;
     private LoadManager loadManager;
@@ -414,6 +415,7 @@ public class GlobalStateMgr {
     private LoadTimeoutChecker loadTimeoutChecker;
     private LoadEtlChecker loadEtlChecker;
     private LoadLoadingChecker loadLoadingChecker;
+    private LockChecker lockChecker;
 
     private RoutineLoadScheduler routineLoadScheduler;
 
@@ -464,6 +466,8 @@ public class GlobalStateMgr {
     private CompactionManager compactionManager;
 
     private ConfigRefreshDaemon configRefreshDaemon;
+
+    private MVActiveChecker mvActiveChecker;
 
     public List<Frontend> getFrontends(FrontendNodeType nodeType) {
         return nodeMgr.getFrontends(nodeType);
@@ -555,6 +559,7 @@ public class GlobalStateMgr {
 
     // if isCheckpointCatalog is true, it means that we should not collect thread pool metric
     private GlobalStateMgr(boolean isCheckpointCatalog) {
+        this.portConnectivityChecker = new PortConnectivityChecker();
         this.load = new Load();
         this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();
@@ -621,6 +626,7 @@ public class GlobalStateMgr {
         this.loadTimeoutChecker = new LoadTimeoutChecker(loadManager);
         this.loadEtlChecker = new LoadEtlChecker(loadManager);
         this.loadLoadingChecker = new LoadLoadingChecker(loadManager);
+        this.lockChecker = new LockChecker();
         this.routineLoadScheduler = new RoutineLoadScheduler(routineLoadManager);
         this.routineLoadTaskScheduler = new RoutineLoadTaskScheduler(routineLoadManager);
 
@@ -650,6 +656,7 @@ public class GlobalStateMgr {
         this.shardManager = new ShardManager();
         this.compactionManager = new CompactionManager();
         this.configRefreshDaemon = new ConfigRefreshDaemon();
+        this.mvActiveChecker = new MVActiveChecker();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -868,6 +875,10 @@ public class GlobalStateMgr {
         return insertOverwriteJobManager;
     }
 
+    public MVActiveChecker getMvActiveChecker() {
+        return mvActiveChecker;
+    }
+
     public ConnectorTblMetaInfoMgr getConnectorTblMetaInfoMgr() {
         return connectorTblMetaInfoMgr;
     }
@@ -1012,6 +1023,7 @@ public class GlobalStateMgr {
 
     // wait until FE is ready.
     public void waitForReady() throws InterruptedException {
+        long lastLoggingTimeMs = System.currentTimeMillis();
         while (true) {
             if (isReady()) {
                 LOG.info("globalStateMgr is ready. FE type: {}", feType);
@@ -1021,6 +1033,22 @@ public class GlobalStateMgr {
 
             Thread.sleep(2000);
             LOG.info("wait globalStateMgr to be ready. FE type: {}. is ready: {}", feType, isReady.get());
+
+            if (System.currentTimeMillis() - lastLoggingTimeMs > 60000L) {
+                lastLoggingTimeMs = System.currentTimeMillis();
+                LOG.warn("It took too much time for FE to transfer to a stable state(LEADER/FOLLOWER), " +
+                        "it maybe caused by one of the following reasons: " +
+                        "1. There are too many BDB logs to replay, because of previous failure of checkpoint" +
+                        "(you can check the create time of image file under meta/image dir). " +
+                        "2. Majority voting members(LEADER or FOLLOWER) of the FE cluster haven't started completely. " +
+                        "3. FE node has multiple IPs, you should configure the priority_networks in fe.conf " +
+                        "to match the ip record in meta/image/ROLE. And we don't support change the ip of FE node. " +
+                        "Ignore this reason if you are using FQDN. " +
+                        "4. The time deviation between FE nodes is greater than 5s, " +
+                        "please use ntp or other tools to keep clock synchronized. " +
+                        "5. The configuration of edit_log_port has changed, please reset to the original value. " +
+                        "6. The replayer thread may get stuck, please use jstack to find the details.");
+            }
         }
     }
 
@@ -1218,6 +1246,7 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
+        mvActiveChecker.start();
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
         taskRunStateSynchronizer = new TaskRunStateSynchronizer();
@@ -1230,6 +1259,7 @@ public class GlobalStateMgr {
 
     // start threads that should running on all FE
     private void startNonLeaderDaemonThreads() {
+        portConnectivityChecker.start();
         tabletStatMgr.start();
         // load and export job label cleaner thread
         labelCleaner.start();
@@ -1248,6 +1278,8 @@ public class GlobalStateMgr {
             compactionManager.start();
         }
         configRefreshDaemon.start();
+
+        lockChecker.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
@@ -1383,47 +1415,12 @@ public class GlobalStateMgr {
         for (String dbName : dbNames) {
             Database db = metadataMgr.getDb(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName);
             for (MaterializedView mv : db.getMaterializedViews()) {
-                List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
-                updateBaseTableRelatedMv(db.getId(), mv, baseTableInfos);
+                mv.onReload();
             }
         }
 
         long duration = System.currentTimeMillis() - startMillis;
         LOG.info("finish processing all tables' related materialized views in {}ms", duration);
-    }
-
-    public void updateBaseTableRelatedMv(Long dbId, MaterializedView mv, List<BaseTableInfo> baseTableInfos) {
-        for (BaseTableInfo baseTableInfo : baseTableInfos) {
-            Table table;
-            try {
-                table = baseTableInfo.getTable();
-            } catch (Exception e) {
-                LOG.warn("there is an exception during get table from mv base table. exception:", e);
-                continue;
-            }
-            if (table == null) {
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                        "the table {} was not exist.", mv.getName(), mv.getId(), baseTableInfo.getTableName());
-                mv.setActive(false);
-                continue;
-            }
-            if (table instanceof MaterializedView && !((MaterializedView) table).isActive()) {
-                MaterializedView baseMv = (MaterializedView) table;
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                "the materialized view{}({}) is invalid.", mv.getName(), mv.getId(),
-                        baseMv.getName(), baseMv.getId());
-                mv.setActive(false);
-                continue;
-            }
-            MvId mvId = new MvId(dbId, mv.getId());
-            table.addRelatedMaterializedView(mvId);
-            if (!table.isMaterializedView()) {
-                connectorTblMetaInfoMgr.addConnectorTableInfo(baseTableInfo.getCatalogName(),
-                        baseTableInfo.getDbName(), baseTableInfo.getTableIdentifier(),
-                        ConnectorTableInfo.builder().setRelatedMaterializedViews(
-                                Sets.newHashSet(mvId)).build());
-            }
-        }
     }
 
     public long loadHeader(DataInputStream dis, long checksum) throws IOException {
@@ -1941,6 +1938,7 @@ public class GlobalStateMgr {
         long lineCnt = 0;
         while (true) {
             JournalEntity entity = null;
+            boolean readSucc = false;
             try {
                 entity = cursor.next();
 
@@ -1948,6 +1946,8 @@ public class GlobalStateMgr {
                 if (entity == null) {
                     break;
                 }
+
+                readSucc = true;
 
                 // apply
                 EditLog.loadJournal(this, entity);
@@ -1957,7 +1957,9 @@ public class GlobalStateMgr {
                             replayedJournalId.incrementAndGet(),
                             entity == null ? null : entity.getData(),
                             e);
-                    cursor.skipNext();
+                    if (!readSucc) {
+                        cursor.skipNext();
+                    }
                     continue;
                 }
                 // handled in outer loop
@@ -2590,7 +2592,7 @@ public class GlobalStateMgr {
         }
     }
 
-    public void replayCreateTable(String dbName, Table table) {
+    public void replayCreateTable(String dbName, Table table) throws DdlException {
         localMetastore.replayCreateTable(dbName, table);
     }
 

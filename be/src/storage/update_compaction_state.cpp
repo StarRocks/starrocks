@@ -62,7 +62,7 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
     vectorized::Schema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
 
     std::unique_ptr<vectorized::Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
 
@@ -107,7 +107,6 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
         CHECK(col->size() == num_rows) << "read segment: iter rows != num rows";
     }
     dest = std::move(col);
-    dest->raw_data();
     _memory_usage += dest->memory_usage();
     tracker->consume(dest->memory_usage());
 
@@ -115,19 +114,22 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
         // currently we can only log error here, and allow memory over usage
         LOG(ERROR) << " memory limit exceeded when loading compaction state pk tablet_id:"
                    << rowset->rowset_meta()->tablet_id() << " rowset #rows:" << rowset->num_rows()
-                   << " size:" << rowset->data_disk_size() << " total segs:" << itrs.size()
-                   << " memory:" << _memory_usage << " stats:" << update_manager->memory_stats();
+                   << " size:" << rowset->data_disk_size() << " seg:" << segment_id << "/" << rowset->num_segments()
+                   << " #rows:" << rowset->segments()[segment_id]->num_rows() << " memory:" << _memory_usage
+                   << " stats:" << update_manager->memory_stats();
     }
 
     if (_memory_usage > large_compaction_memory_threshold) {
         LOG(INFO) << " loading large compaction state tablet_id:" << rowset->rowset_meta()->tablet_id()
                   << " rowset #rows:" << rowset->num_rows() << " size:" << rowset->data_disk_size()
-                  << " memory:" << _memory_usage << " stats:" << update_manager->memory_stats();
+                  << " seg:" << segment_id << "/" << rowset->num_segments()
+                  << " #rows:" << rowset->segments()[segment_id]->num_rows() << " memory:" << _memory_usage
+                  << " stats:" << update_manager->memory_stats();
     }
     return Status::OK();
 }
 
-void CompactionState::release_segments(Rowset* rowset, uint32_t segment_id) {
+void CompactionState::release_segment(uint32_t segment_id) {
     if (segment_id >= pk_cols.size() || pk_cols[segment_id] == nullptr) {
         return;
     }
@@ -135,7 +137,7 @@ void CompactionState::release_segments(Rowset* rowset, uint32_t segment_id) {
     auto tracker = update_manager->compaction_state_mem_tracker();
     _memory_usage -= pk_cols[segment_id]->memory_usage();
     tracker->release(pk_cols[segment_id]->memory_usage());
-    pk_cols[segment_id]->reset_column();
+    pk_cols[segment_id].reset();
 }
 
 Status CompactionState::_do_load(Rowset* rowset) {

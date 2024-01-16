@@ -46,6 +46,7 @@ import com.starrocks.common.util.LogUtil;
 import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.mysql.privilege.Auth;
@@ -220,7 +221,7 @@ public class UtFrameUtils {
             return;
         }
         try {
-            ClientPool.heartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
+            ClientPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
             startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB);
@@ -781,6 +782,25 @@ public class UtFrameUtils {
                     dis.close();
                 }
             }
+        }
+
+        public static synchronized void replayJournalToEnd() throws InterruptedException, IOException {
+            int count = followerJournalQueue.size();
+            while (!followerJournalQueue.isEmpty()) {
+                DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
+                JournalEntity je = new JournalEntity();
+                try (DataInputStream dis = new DataInputStream(
+                        new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()))) {
+                    je.readFields(dis);
+                    EditLog.loadJournal(GlobalStateMgr.getCurrentState(), je);
+                    // System.out.println("replayed journal type: " + je.getOpCode());
+                } catch (JournalInconsistentException e) {
+                    System.err.println("load journal failed, type: " + je.getOpCode() + " , error: " + e.getMessage());
+                    e.printStackTrace();
+                    Assert.fail();
+                }
+            }
+            System.out.println("replayed " + count + " journal(s) from begin to end");
         }
 
         protected static synchronized void tearDown() {

@@ -38,10 +38,10 @@ under the License.
         <maven.compiler.target>1.8</maven.compiler.target>
         <hadoop.version>3.3.6</hadoop.version>
         <guava.version>32.0.1-jre</guava.version>
-        <zookeeper.version>3.9.0</zookeeper.version>
+        <zookeeper.version>3.9.1</zookeeper.version>
         <protobuf.version>3.16.3</protobuf.version>
         <thrift.version>0.14.1</thrift.version>
-        <tomcat.version>8.5.88</tomcat.version>
+        <tomcat.version>8.5.96</tomcat.version>
         <log4j.version>2.17.1</log4j.version>
         <jackson.version>2.13.4.2</jackson.version>
     </properties>
@@ -248,13 +248,6 @@ under the License.
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
             <version>${jackson.version}</version>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/org.apache.htrace/htrace-core -->
-        <dependency>
-            <groupId>org.apache.htrace</groupId>
-            <artifactId>htrace-core</artifactId>
-            <version>3.1.0-incubating</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/junit/junit -->

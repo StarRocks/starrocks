@@ -12,8 +12,10 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.DataSink;
@@ -21,6 +23,7 @@ import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
@@ -113,16 +116,21 @@ public class InsertPlanner {
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
+        SessionVariable currentVariable = session.getSessionVariable();
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
         boolean canUsePipeline = isEnablePipeline && DataSink.canTableSinkUsePipeline(insertStmt.getTargetTable());
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         boolean prevIsEnableLocalShuffleAgg = session.getSessionVariable().isEnableLocalShuffleAgg();
+        boolean previousMVRewrite = currentVariable.isEnableMaterializedViewRewrite();
+        boolean enableMVRewrite = currentVariable.isEnableMaterializedViewRewriteForInsert() &&
+                currentVariable.isEnableMaterializedViewRewrite();
         try (PlannerProfile.ScopedTimer ignore = PlannerProfile.getScopedTimer("InsertPlanner")) {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(false);
             }
             // Non-query must use the strategy assign scan ranges per driver sequence, which local shuffle agg cannot use.
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
+            session.getSessionVariable().setEnableMaterializedViewRewrite(enableMVRewrite);
 
             Optimizer optimizer = new Optimizer();
             PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
@@ -206,6 +214,7 @@ public class InsertPlanner {
             if (forceDisablePipeline) {
                 session.getSessionVariable().setEnablePipelineEngine(true);
             }
+            session.getSessionVariable().setEnableMaterializedViewRewrite(previousMVRewrite);
         }
     }
 
@@ -319,6 +328,28 @@ public class InsertPlanner {
                 Column originColumn = fullSchema.stream()
                         .filter(c -> c.nameEquals(originName, false)).findFirst().get();
                 ColumnRefOperator originColRefOp = outputColumns.get(fullSchema.indexOf(originColumn));
+                if (targetColumn.getDefineExpr() == null) {
+                    Table targetTable = insertStatement.getTargetTable();
+                    // Only olap table can have the synchronized materialized view.
+                    OlapTable targetOlapTable = (OlapTable) targetTable;
+                    MaterializedIndexMeta targetIndexMeta = null;
+                    for (MaterializedIndexMeta indexMeta : targetOlapTable.getIndexIdToMeta().values()) {
+                        if (indexMeta.getIndexId() == targetOlapTable.getBaseIndexId()) {
+                            continue;
+                        }
+                        for (Column column : indexMeta.getSchema()) {
+                            if (column.getName().equals(targetColumn.getName())) {
+                                targetIndexMeta = indexMeta;
+                                break;
+                            }
+                        }
+                    }
+                    String targetIndexMetaName = targetIndexMeta == null ? "" :
+                            targetOlapTable.getIndexNameById(targetIndexMeta.getIndexId());
+                    throw new SemanticException("The define expr of shadow column " + targetColumn.getName() + " is null, " +
+                            "please check the associated materialized view " + targetIndexMetaName
+                            + " of target table:" + insertStatement.getTargetTable().getName());
+                }
 
                 ExpressionAnalyzer.analyzeExpression(targetColumn.getDefineExpr(), new AnalyzeState(),
                         new Scope(RelationId.anonymous(),

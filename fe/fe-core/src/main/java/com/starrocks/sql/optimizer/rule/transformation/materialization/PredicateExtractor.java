@@ -17,11 +17,15 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.TreeRangeSet;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorFunctions;
 
 import java.util.List;
 import java.util.Optional;
@@ -78,9 +82,44 @@ public class PredicateExtractor extends ScalarOperatorVisitor<RangePredicate, Pr
                 residualPredicates.add(predicate);
             }
         } else if (context.isAnd()) {
+            if (checkDateTrunc(left, right)) {
+                ConstantOperator constant = (ConstantOperator) right;
+                TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
+                rangeSet.addAll(range(predicate.getBinaryType(), constant));
+                return new ColumnRangePredicate(left.getChild(1).cast(), rangeSet);
+            } else if (checkDateTrunc(right, left)) {
+                ConstantOperator constant = (ConstantOperator) left;
+                TreeRangeSet<ConstantOperator> rangeSet = TreeRangeSet.create();
+                rangeSet.addAll(range(predicate.getBinaryType(), constant));
+                return new ColumnRangePredicate(right.getChild(1).cast(), rangeSet);
+            }
             residualPredicates.add(predicate);
         }
         return null;
+    }
+
+    public static boolean checkDateTrunc(ScalarOperator op1, ScalarOperator op2) {
+        if (op1 == null || op2 == null) {
+            return false;
+        }
+        if (!(op1 instanceof CallOperator)) {
+            return false;
+        }
+        if (!(op2 instanceof ConstantOperator)) {
+            return false;
+        }
+        CallOperator func = (CallOperator) op1;
+        ConstantOperator constantOperator = (ConstantOperator) op2;
+        if (!func.getFnName().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+            return false;
+        }
+        if (!(func.getChild(1) instanceof ColumnRefOperator)) {
+            return false;
+        }
+        ConstantOperator sliced = ScalarOperatorFunctions.dateTrunc(
+                ((ConstantOperator) op1.getChild(0)),
+                constantOperator);
+        return sliced.equals(constantOperator);
     }
 
     @Override

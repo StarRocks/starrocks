@@ -189,7 +189,11 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(vectorized::Chunk* chun
         _chunks[driver_sequence]->set_num_rows(0);
     }
 
-    _chunks[driver_sequence]->append_selective(*chunk, indexes, from, size);
+    {
+        SCOPED_TIMER(_parent->_shuffle_chunk_append_timer);
+        _chunks[driver_sequence]->append_selective(*chunk, indexes, from, size);
+        COUNTER_UPDATE(_parent->_shuffle_chunk_append_counter, 1);
+    }
     return Status::OK();
 }
 
@@ -242,9 +246,6 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
     if (_current_request_bytes > config::max_transmit_batched_bytes || eos) {
         _chunk_request->set_eos(eos);
         _chunk_request->set_use_pass_through(_use_pass_through);
-        if (auto delta_statistic = state->intermediate_query_statistic()) {
-            delta_statistic->to_pb(_chunk_request->mutable_query_statistics());
-        }
         butil::IOBuf attachment;
         int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(_chunk_request), attachment,
@@ -269,11 +270,6 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
     chunk_request->set_be_number(_parent->_be_number);
     chunk_request->set_eos(false);
     chunk_request->set_use_pass_through(_use_pass_through);
-
-    if (auto delta_statistic = state->intermediate_query_statistic()) {
-        delta_statistic->to_pb(chunk_request->mutable_query_statistics());
-    }
-
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(chunk_request), attachment,
                               attachment_physical_bytes,   _brpc_dest_addr};
     RETURN_IF_ERROR(_parent->_buffer->add_request(info));
@@ -427,6 +423,8 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     _uncompressed_bytes_counter = ADD_COUNTER(_unique_metrics, "UncompressedBytes", TUnit::BYTES);
     _serialize_chunk_timer = ADD_TIMER(_unique_metrics, "SerializeChunkTime");
     _shuffle_hash_timer = ADD_TIMER(_unique_metrics, "ShuffleHashTime");
+    _shuffle_chunk_append_counter = ADD_COUNTER(_unique_metrics, "ShuffleChunkAppendCounter", TUnit::UNIT);
+    _shuffle_chunk_append_timer = ADD_TIMER(_unique_metrics, "ShuffleChunkAppendTime");
     _compress_timer = ADD_TIMER(_unique_metrics, "CompressTime");
 
     for (auto& [_, channel] : _instance_id2channel) {

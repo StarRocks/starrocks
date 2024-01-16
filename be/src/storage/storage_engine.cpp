@@ -932,7 +932,6 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
         StarRocksMetrics::instance()->update_compaction_request_failed.increment(1);
         LOG(WARNING) << "failed to perform update compaction. res=" << res.to_string()
                      << ", tablet=" << best_tablet->full_name();
-        return res;
     }
     return Status::OK();
 }
@@ -1144,14 +1143,25 @@ double StorageEngine::delete_unused_rowset() {
     constexpr int64_t batch_size = 4096;
     double deleted_pct = 1;
     delete_rowsets.reserve(batch_size);
+    size_t total_unused_rowsets = 0;
+    size_t num_multi_ref_rowsets = 0;
+    string multi_ref_rowsets_str;
     {
         std::lock_guard lock(_gc_mutex);
+        total_unused_rowsets = _unused_rowsets.size();
         for (auto it = _unused_rowsets.begin(); it != _unused_rowsets.end();) {
             if (it->second.use_count() != 1) {
+                ++num_multi_ref_rowsets;
+                if (num_multi_ref_rowsets < 5) {
+                    multi_ref_rowsets_str += fmt::format("{}/{}/{}\n", it->second->rowset_meta()->tablet_id(),
+                                                         it->second->rowset_id().to_string(), it->second.use_count());
+                }
                 ++it;
             } else if (it->second->need_delete_file()) {
                 delete_rowsets.emplace_back(it->second);
                 it = _unused_rowsets.erase(it);
+            } else {
+                ++it;
             }
             if (delete_rowsets.size() >= batch_size) {
                 deleted_pct = static_cast<double>(batch_size) / (_unused_rowsets.size() + batch_size);
@@ -1170,8 +1180,10 @@ double StorageEngine::delete_unused_rowset() {
         Status status = rowset->remove();
         LOG_IF(WARNING, !status.ok()) << "remove rowset:" << rowset->rowset_id() << " finished. status:" << status;
     }
-    LOG(INFO) << "remove " << delete_rowsets.size() << " rowsets collect cost " << collect_time << "ms total "
-              << timer.elapsed_time() / (1000 * 1000) << "ms";
+    LOG(INFO) << fmt::format("remove {}/{} rowsets num_multi_ref_rowsets:{} {} collect cost {}ms total {}ms",
+                             delete_rowsets.size(), total_unused_rowsets, num_multi_ref_rowsets,
+                             num_multi_ref_rowsets > 1000 ? multi_ref_rowsets_str : "", collect_time,
+                             timer.elapsed_time() / (1000 * 1000));
 
     return deleted_pct;
 }

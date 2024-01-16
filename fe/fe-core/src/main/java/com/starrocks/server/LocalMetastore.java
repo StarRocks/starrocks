@@ -91,6 +91,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.MarkedCountDownLatch;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
@@ -146,6 +147,7 @@ import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -185,6 +187,7 @@ import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
@@ -420,37 +423,45 @@ public class LocalMetastore implements ConnectorMetadata {
     @Override
     public void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
         // 1. check if database exists
+        Database db;
         if (!tryLock(false)) {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
-        List<Runnable> runnableList;
         try {
             if (!fullNameToDb.containsKey(dbName)) {
                 throw new MetaNotFoundException("Database not found");
             }
+            db = this.fullNameToDb.get(dbName);
+        } finally {
+            unlock();
+        }
 
-            // 2. drop tables in db
-            Database db = this.fullNameToDb.get(dbName);
-            db.writeLock();
-            try {
-                if (!isForceDrop && stateMgr.getGlobalTransactionMgr().existCommittedTxns(db.getId(), null, null)) {
-                    throw new DdlException("There are still some transactions in the COMMITTED state waiting to be completed. " +
-                            "The database [" + dbName +
-                            "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
-                            " please use \"DROP DATABASE <database> FORCE\".");
-                }
+        List<Runnable> runnableList;
+        // 2. drop tables in db
+        db.writeLock();
+        try {
+            if (!db.isExist()) {
+                throw new MetaNotFoundException("Database '" + dbName + "' not found");
+            }
+            if (!isForceDrop && stateMgr.getGlobalTransactionMgr().existCommittedTxns(db.getId(), null, null)) {
+                throw new DdlException(
+                        "There are still some transactions in the COMMITTED state waiting to be completed. " +
+                                "The database [" + dbName +
+                                "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
+                                " please use \"DROP DATABASE <database> FORCE\".");
+            }
 
-                // save table names for recycling
-                Set<String> tableNames = new HashSet(db.getTableNamesViewWithLock());
-                runnableList = unprotectDropDb(db, isForceDrop, false);
-                if (!isForceDrop) {
-                    recycleBin.recycleDatabase(db, tableNames);
-                } else {
-                    stateMgr.onEraseDatabase(db.getId());
-                }
-                db.setExist(false);
-            } finally {
-                db.writeUnlock();
+            // save table names for recycling
+            Set<String> tableNames = new HashSet<>(db.getTableNamesViewWithLock());
+            runnableList = unprotectDropDb(db, isForceDrop, false);
+            if (!isForceDrop) {
+                recycleBin.recycleDatabase(db, tableNames);
+            } else {
+                stateMgr.onEraseDatabase(db.getId());
+            }
+            db.setExist(false);
+            if (!fullNameToDb.containsKey(dbName)) {
+                throw new MetaNotFoundException("Database not found");
             }
 
             // 3. remove db from globalStateMgr
@@ -470,7 +481,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
             LOG.info("finish drop database[{}], id: {}, is force : {}", dbName, db.getId(), isForceDrop);
         } finally {
-            unlock();
+            db.writeUnlock();
         }
 
         for (Runnable runnable : runnableList) {
@@ -1243,9 +1254,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 editLog.logAddPartitions(infos);
             }
 
-            for (Partition partition : partitionList) {
-                LOG.info("succeed in creating partitions[{}], name: {}, temp: {}", partition.getId(),
-                        partition.getName(), isTempPartition);
+            for (PartitionPersistInfoV2 infoV2 : partitionInfoV2List) {
+                LOG.info("succeed in creating partition[{}], name: {}, temp: {}", infoV2.getPartition().getId(),
+                        infoV2.getPartition().getName(), isTempPartition);
             }
         }
     }
@@ -1708,8 +1719,12 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         if (numReplicas > Config.create_table_max_serial_replicas) {
+            LOG.info("start to build {} partitions concurrently for table {}.{} with {} replicas",
+                    partitions.size(), db.getFullName(), table.getName(), numReplicas);
             buildPartitionsConcurrently(db.getId(), table, partitions, numReplicas, numAliveBackends);
         } else {
+            LOG.info("start to build {} partitions sequentially for table {}.{} with {} replicas",
+                    partitions.size(), db.getFullName(), table.getName(), numReplicas);
             buildPartitionsSequentially(db.getId(), table, partitions, numReplicas, numAliveBackends);
         }
     }
@@ -1727,6 +1742,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // Try to bundle at least 200 CreateReplicaTask's in a single AgentBatchTask.
         // The number 200 is just an experiment value that seems to work without obvious problems, feel free to
         // change it if you have a better choice.
+        long start = System.currentTimeMillis();
         int avgReplicasPerPartition = numReplicas / partitions.size();
         int partitionGroupSize = Math.max(1, numBackends * 200 / Math.max(1, avgReplicasPerPartition));
         for (int i = 0; i < partitions.size(); i += partitionGroupSize) {
@@ -1739,7 +1755,11 @@ public class LocalMetastore implements ConnectorMetadata {
             // Here we assume that all partitions have the same number of indexes.
             int maxTimeout = partitionCount * indexCountPerPartition * Config.max_create_table_timeout_second;
             try {
+                LOG.info("build partitions sequentially, send task one by one, all tasks timeout {}s",
+                        Math.min(timeout, maxTimeout));
                 sendCreateReplicaTasksAndWaitForFinished(tasks, Math.min(timeout, maxTimeout));
+                LOG.info("build partitions sequentially, all tasks finished, took {}ms",
+                        System.currentTimeMillis() - start);
                 tasks.clear();
             } finally {
                 for (CreateReplicaTask task : tasks) {
@@ -1751,6 +1771,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
     private void buildPartitionsConcurrently(long dbId, OlapTable table, List<Partition> partitions, int numReplicas,
                                              int numBackends) throws DdlException {
+        long start = System.currentTimeMillis();
         int timeout = Math.max(1, numReplicas / numBackends) * Config.tablet_create_timeout_second;
         int numIndexes = partitions.stream().mapToInt(Partition::getVisibleMaterializedIndicesCount).sum();
         int maxTimeout = numIndexes * Config.max_create_table_timeout_second;
@@ -1801,7 +1822,11 @@ public class LocalMetastore implements ConnectorMetadata {
         }, "partition-build");
         t.start();
         try {
+            LOG.info("build partitions concurrently for {}, waiting for all tasks finish with timeout {}s",
+                    table.getName(), Math.min(timeout, maxTimeout));
             waitForFinished(countDownLatch, Math.min(timeout, maxTimeout));
+            LOG.info("build partitions concurrently for {}, all tasks finished, took {}ms",
+                    table.getName(), System.currentTimeMillis() - start);
         } catch (Exception e) {
             countDownLatch.countDownToZero(new Status(TStatusCode.UNKNOWN, e.getMessage()));
             throw e;
@@ -2442,21 +2467,37 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
             }
             try {
+                /*
+                 * When creating table or mv, we need to create the tablets and prepare some of the
+                 * metadata first before putting this new table or mv in the database. So after the
+                 * first step, we need to acquire the global lock and double check whether the db still
+                 * exists because it maybe dropped by other concurrent client. And if we don't use the lock
+                 * protection and handle the concurrency properly, the replay of table/mv creation may fail
+                 * on restart or on follower.
+                 *
+                 * After acquire the db lock, we also need to acquire the db lock and write edit log. Since the
+                 * db lock maybe under high contention and IO is busy, current thread can hold the global lock
+                 * for quite a long time and make the other operation waiting for the global lock fail.
+                 *
+                 * So here after the confirmation of existence of modifying database, we release the global lock
+                 * When dropping database, we will set the `exist` field of db object to false. And in the following
+                 * creation process, we will double-check the `exist` field.
+                 */
                 if (getDb(db.getId()) == null) {
                     throw new DdlException("database has been dropped when creating table");
                 }
-                createTblSuccess = db.createTableWithLock(olapTable, false);
-                if (!createTblSuccess) {
-                    if (!stmt.isSetIfNotExists()) {
-                        ErrorReport
-                                .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
-                    } else {
-                        LOG.info("Create table[{}] which already exists", tableName);
-                        return;
-                    }
-                }
             } finally {
                 unlock();
+            }
+            createTblSuccess = db.createTableWithLock(olapTable, false);
+            if (!createTblSuccess) {
+                if (!stmt.isSetIfNotExists()) {
+                    ErrorReport
+                            .reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
+                } else {
+                    LOG.info("Create table[{}] which already exists", tableName);
+                    return;
+                }
             }
 
             // NOTE: The table has been added to the database, and the following procedure cannot throw exception.
@@ -2515,7 +2556,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // check database exists again, because database can be dropped when creating table
         if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
+            throw new DdlException("Failed to acquire globalStateMgr lock. " +
+                    "Try again or increasing value of `catalog_try_lock_timeout_ms` configuration.");
         }
         try {
             if (getDb(db.getId()) == null) {
@@ -2684,7 +2726,7 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    public void replayCreateTable(String dbName, Table table) {
+    public void replayCreateTable(String dbName, Table table) throws DdlException {
         Database db = this.fullNameToDb.get(dbName);
         db.createTableWithLock(table, true);
 
@@ -3058,47 +3100,48 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
-    private void unprotectAddReplica(ReplicaPersistInfo info) {
-        LOG.debug("replay add a replica {}", info);
-        Database db = getDbIncludeRecycleBin(info.getDbId());
-        OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
-        Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
-        MaterializedIndex materializedIndex = partition.getIndex(info.getIndexId());
-        LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
-
-        // for compatibility
-        int schemaHash = info.getSchemaHash();
-        if (schemaHash == -1) {
-            schemaHash = olapTable.getSchemaHashByIndexId(info.getIndexId());
-        }
-
-        Replica replica = new Replica(info.getReplicaId(), info.getBackendId(), info.getVersion(),
-                schemaHash, info.getDataSize(), info.getRowCount(),
-                Replica.ReplicaState.NORMAL,
-                info.getLastFailedVersion(),
-                info.getLastSuccessVersion(),
-                info.getMinReadableVersion());
-        tablet.addReplica(replica);
-    }
-
-    private void unprotectUpdateReplica(ReplicaPersistInfo info) {
-        LOG.debug("replay update a replica {}", info);
-        Database db = getDbIncludeRecycleBin(info.getDbId());
-        OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
-        Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
-        MaterializedIndex materializedIndex = partition.getIndex(info.getIndexId());
-        LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
-        Replica replica = tablet.getReplicaByBackendId(info.getBackendId());
-        Preconditions.checkNotNull(replica, info);
-        replica.updateRowCount(info.getVersion(), info.getMinReadableVersion(), info.getDataSize(), info.getRowCount());
-        replica.setBad(false);
-    }
-
     public void replayAddReplica(ReplicaPersistInfo info) {
         Database db = getDbIncludeRecycleBin(info.getDbId());
+        if (db == null) {
+            LOG.warn("replay add replica failed, db is null, info: {}", info);
+            return;
+        }
         db.writeLock();
         try {
-            unprotectAddReplica(info);
+            OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
+            if (olapTable == null) {
+                LOG.warn("replay add replica failed, table is null, info: {}", info);
+                return;
+            }
+            Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
+            if (partition == null) {
+                LOG.warn("replay add replica failed, partition is null, info: {}", info);
+                return;
+            }
+            MaterializedIndex materializedIndex = partition.getIndex(info.getIndexId());
+            if (materializedIndex == null) {
+                LOG.warn("replay add replica failed, materializedIndex is null, info: {}", info);
+                return;
+            }
+            LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
+            if (tablet == null) {
+                LOG.warn("replay add replica failed, tablet is null, info: {}", info);
+                return;
+            }
+
+            // for compatibility
+            int schemaHash = info.getSchemaHash();
+            if (schemaHash == -1) {
+                schemaHash = olapTable.getSchemaHashByIndexId(info.getIndexId());
+            }
+
+            Replica replica = new Replica(info.getReplicaId(), info.getBackendId(), info.getVersion(),
+                    schemaHash, info.getDataSize(), info.getRowCount(),
+                    Replica.ReplicaState.NORMAL,
+                    info.getLastFailedVersion(),
+                    info.getLastSuccessVersion(),
+                    info.getMinReadableVersion());
+            tablet.addReplica(replica);
         } finally {
             db.writeUnlock();
         }
@@ -3106,28 +3149,73 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public void replayUpdateReplica(ReplicaPersistInfo info) {
         Database db = getDbIncludeRecycleBin(info.getDbId());
+        if (db == null) {
+            LOG.warn("replay update replica failed, db is null, info: {}", info);
+            return;
+        }
         db.writeLock();
         try {
-            unprotectUpdateReplica(info);
+            OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
+            if (olapTable == null) {
+                LOG.warn("replay update replica failed, table is null, info: {}", info);
+                return;
+            }
+            Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
+            if (partition == null) {
+                LOG.warn("replay update replica failed, partition is null, info: {}", info);
+                return;
+            }
+            MaterializedIndex materializedIndex = partition.getIndex(info.getIndexId());
+            if (materializedIndex == null) {
+                LOG.warn("replay update replica failed, materializedIndex is null, info: {}", info);
+                return;
+            }
+            LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
+            if (tablet == null) {
+                LOG.warn("replay update replica failed, tablet is null, info: {}", info);
+                return;
+            }
+            Replica replica = tablet.getReplicaByBackendId(info.getBackendId());
+            if (replica == null) {
+                LOG.warn("replay update replica failed, replica is null, info: {}", info);
+                return;
+            }
+            replica.updateRowCount(info.getVersion(), info.getMinReadableVersion(), info.getDataSize(), info.getRowCount());
+            replica.setBad(false);
         } finally {
             db.writeUnlock();
         }
     }
 
-    public void unprotectDeleteReplica(ReplicaPersistInfo info) {
-        Database db = getDbIncludeRecycleBin(info.getDbId());
-        OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
-        Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
-        MaterializedIndex materializedIndex = partition.getIndex(info.getIndexId());
-        LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
-        tablet.deleteReplicaByBackendId(info.getBackendId());
-    }
-
     public void replayDeleteReplica(ReplicaPersistInfo info) {
         Database db = getDbIncludeRecycleBin(info.getDbId());
+        if (db == null) {
+            LOG.warn("replay delete replica failed, db is null, info: {}", info);
+            return;
+        }
         db.writeLock();
         try {
-            unprotectDeleteReplica(info);
+            OlapTable olapTable = (OlapTable) getTableIncludeRecycleBin(db, info.getTableId());
+            if (olapTable == null) {
+                LOG.warn("replay delete replica failed, table is null, info: {}", info);
+                return;
+            }
+            Partition partition = getPartitionIncludeRecycleBin(olapTable, info.getPartitionId());
+            if (partition == null) {
+                LOG.warn("replay delete replica failed, partition is null, info: {}", info);
+                return;
+            }
+            MaterializedIndex materializedIndex = partition.getIndex(info.getIndexId());
+            if (materializedIndex == null) {
+                LOG.warn("replay delete replica failed, materializedIndex is null, info: {}", info);
+                return;
+            }
+            LocalTablet tablet = (LocalTablet) materializedIndex.getTablet(info.getTabletId());
+            if (tablet == null) {
+                LOG.warn("replay delete replica failed, tablet is null, info: {}", info);
+                return;
+            }
+            tablet.deleteReplicaByBackendId(info.getBackendId());
         } finally {
             db.writeUnlock();
         }
@@ -3567,6 +3655,14 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         try {
             if (getDb(db.getId()) == null) {
+                throw new DdlException("database has been dropped when creating materialized view");
+            }
+        } finally {
+            unlock();
+        }
+        db.writeLock();
+        try {
+            if (!db.isExist()) {
                 throw new DdlException("Database has been dropped when creating materialized view");
             }
             createMvSuccess = db.createMaterializedWithLock(materializedView, false);
@@ -3584,7 +3680,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
         } finally {
-            unlock();
+            db.writeUnlock();
         }
         LOG.info("Successfully create materialized view [{}:{}]", mvName, materializedView.getMvId());
 
@@ -3691,8 +3787,24 @@ public class LocalMetastore implements ConnectorMetadata {
             }
 
             if (!properties.isEmpty()) {
-                // here, all properties should be checked
-                throw new DdlException("Unknown properties: " + properties);
+                // analyze properties
+                List<SetVar> setListItems = Lists.newArrayList();
+                for (Map.Entry<String, String> entry : properties.entrySet()) {
+                    if (!entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                        throw new AnalysisException("Analyze materialized properties failed " +
+                                "because unknown properties: " + properties +
+                                ", please add `session.` prefix if you want add session variables for mv(" +
+                                "eg, \"session.query_timeout\"=\"30000000\").");
+                    }
+                    String varKey = entry.getKey().substring(
+                            PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+                    SetVar variable = new SetVar(varKey, new StringLiteral(entry.getValue()));
+                    setListItems.add(variable);
+                }
+                SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
+
+                // set properties if there are no exceptions
+                materializedView.getTableProperty().getProperties().putAll(properties);
             }
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage(), e);
@@ -3916,20 +4028,23 @@ public class LocalMetastore implements ConnectorMetadata {
 
         db.dropTable(oldTableName);
         db.createTable(olapTable);
-        disableMaterializedViewForRenameTable(db, olapTable);
+        inactiveRelatedMaterializedView(db, olapTable,
+                MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(table.getName()));
 
         TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), olapTable.getId(), newTableName);
         editLog.logTableRename(tableInfo);
         LOG.info("rename table[{}] to {}, tableId: {}", oldTableName, newTableName, olapTable.getId());
     }
 
-    private void disableMaterializedViewForRenameTable(Database db, OlapTable olapTable) {
+    public static void inactiveRelatedMaterializedView(Database db, Table olapTable, String reason) {
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
             if (mv != null) {
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                "the table {} was renamed.", mv.getName(), mv.getId(), olapTable.getName());
-                mv.setActive(false);
+                LOG.warn("Setting the materialized view {}({}) to invalid because {}",
+                        mv.getName(), mv.getId(), reason);
+                mv.setInactiveAndReason(reason);
+                inactiveRelatedMaterializedView(db, mv,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableActive(mv.getName()));
             } else {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
             }
@@ -3949,7 +4064,7 @@ public class LocalMetastore implements ConnectorMetadata {
             db.dropTable(tableName);
             table.setName(newTableName);
             db.createTable(table);
-            disableMaterializedViewForRenameTable(db, table);
+            inactiveRelatedMaterializedView(db, table, "base-table renamed: " + tableName);
 
             LOG.info("replay rename table[{}] to {}, tableId: {}", tableName, newTableName, table.getId());
         } finally {
@@ -4436,6 +4551,8 @@ public class LocalMetastore implements ConnectorMetadata {
                     olapTable.setEnablePersistentIndex(tableProperty.enablePersistentIndex());
                 }
             }
+        } catch (Exception ex) {
+            LOG.warn("The replay log failed and this log was ignored.", ex);
         } finally {
             db.writeUnlock();
         }
@@ -4495,12 +4612,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 throw new DdlException("failed to init view stmt", e);
             }
 
-            // check database exists again, because database can be dropped when creating table
-            if (!tryLock(false)) {
-                throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
-            }
+            db.writeLock();
             try {
-                if (getDb(db.getId()) == null) {
+                if (!db.isExist()) {
                     throw new DdlException("database has been dropped when creating view");
                 }
                 if (!db.createTableWithLock(view, false)) {
@@ -4513,7 +4627,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
             } finally {
-                unlock();
+                db.writeUnlock();
             }
 
             LOG.info("successfully create view[" + tableName + "-" + view.getId() + "]");
@@ -4909,6 +5023,8 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
             }
+        } catch (Exception ex) {
+            LOG.warn("The replay log failed and this log was ignored.", ex);
         } finally {
             db.writeUnlock();
         }
@@ -5249,5 +5365,4 @@ public class LocalMetastore implements ConnectorMetadata {
         }
         return newPartitions;
     }
-
 }

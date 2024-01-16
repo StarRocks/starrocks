@@ -532,6 +532,7 @@ public class ScalarType extends Type implements Cloneable {
             case DATETIME:
             case HLL:
             case BITMAP:
+            case BINARY:
             case PERCENTILE:
             case JSON:
             case FUNCTION:
@@ -734,6 +735,35 @@ public class ScalarType extends Type implements Cloneable {
             return String.format("DECIMAL(%d,%d)", precision, scale);
         } else {
             return toString();
+        }
+    }
+
+    // This implementation is the same as BE schema_columns_scanner.cpp to_mysql_data_type_string
+    public String toMysqlDataTypeString() {
+        switch (type) {
+            case BOOLEAN:
+                return "tinyint";
+            case LARGEINT:
+                return "bigint unsigned";
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+            case DECIMALV2:
+                return "decimal";
+            default:
+                return type.toString().toLowerCase();
+        }
+    }
+
+    // This implementation is the same as BE schema_columns_scanner.cpp type_to_string
+    public String toMysqlColumnTypeString() {
+        switch (type) {
+            case BOOLEAN:
+                return "tinyint(1)";
+            case LARGEINT:
+                return "bigint(20) unsigned";
+            default:
+                return toSql();
         }
     }
 }

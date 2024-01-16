@@ -137,9 +137,6 @@ void SharedBufferedInputStream::release() {
 }
 
 void SharedBufferedInputStream::release_to_offset(int64_t offset) {
-    if (_align_size != 0) {
-        offset = (offset + _align_size - 1) / _align_size * _align_size;
-    }
     auto it = _map.upper_bound(offset);
     _map.erase(_map.begin(), it);
 }

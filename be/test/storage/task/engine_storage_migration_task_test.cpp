@@ -39,10 +39,11 @@ class EngineStorageMigrationTaskTest : public testing::Test {
 public:
     static void SetUpTestCase() { init(); }
 
-    static void TearDownTestCase() {}
+    static void TearDownTestCase() { config::enable_event_based_compaction_framework = true; }
 
     static void init() {
-        // create tablet first
+        config::enable_event_based_compaction_framework = false;
+
         TCreateTabletReq request;
         set_default_create_tablet_request(&request);
         auto res = StorageEngine::instance()->create_tablet(request);

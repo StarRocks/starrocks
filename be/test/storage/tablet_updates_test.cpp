@@ -1785,6 +1785,7 @@ void TabletUpdatesTest::test_horizontal_compaction(bool enable_persistent_index)
     ASSERT_EQ(best_tablet->updates()->version_history_count(), 5);
     // the time interval is not enough after last compaction
     EXPECT_EQ(best_tablet->updates()->get_compaction_score(), -1);
+    EXPECT_TRUE(best_tablet->verify().ok());
 }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction) {
@@ -2314,13 +2315,35 @@ void TabletUpdatesTest::test_reorder_from(bool enable_persistent_index) {
     ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset_schema_change_sort_key(_tablet, keys)).ok());
 
     tablet_with_sort_key1->set_tablet_state(TABLET_NOTREADY);
-    ASSERT_TRUE(tablet_with_sort_key1->updates()->reorder_from(_tablet, 4).ok());
+    auto chunk_changer = 
+                std::make_unique<vectorized::ChunkChanger>(tablet_with_sort_key1->tablet_schema());
+    for (int i = 0; i < tablet_with_sort_key1->tablet_schema().num_columns(); ++i) {
+        const auto& new_column = tablet_with_sort_key1->tablet_schema().column(i);
+        int32_t column_index = _tablet->field_index(std::string{new_column.name()});
+        auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
+        if (column_index >= 0) {
+            column_mapping->ref_column = column_index;
+            column_mapping->ref_base_reader_column_index = i;
+        }
+    }
+
+    ASSERT_TRUE(tablet_with_sort_key1->updates()->reorder_from(_tablet, 4, chunk_changer.get()).ok());
 
     ASSERT_EQ(N, read_tablet_and_compare_schema_changed_sort_key1(tablet_with_sort_key1, 4, keys));
 
     const auto& tablet_with_sort_key2 = create_tablet_with_sort_key(rand(), rand(), {2});
     tablet_with_sort_key2->set_tablet_state(TABLET_NOTREADY);
-    ASSERT_TRUE(tablet_with_sort_key2->updates()->reorder_from(tablet_with_sort_key1, 4).ok());
+    chunk_changer = std::make_unique<vectorized::ChunkChanger>(tablet_with_sort_key2->tablet_schema());
+    for (int i = 0; i < tablet_with_sort_key2->tablet_schema().num_columns(); ++i) {
+        const auto& new_column = tablet_with_sort_key2->tablet_schema().column(i);
+        int32_t column_index = _tablet->field_index(std::string{new_column.name()});
+        auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
+        if (column_index >= 0) {
+            column_mapping->ref_column = column_index;
+            column_mapping->ref_base_reader_column_index = i;
+        }
+    }
+    ASSERT_TRUE(tablet_with_sort_key2->updates()->reorder_from(tablet_with_sort_key1, 4, chunk_changer.get()).ok());
     ASSERT_EQ(N, read_tablet_and_compare_schema_changed_sort_key2(tablet_with_sort_key2, 4, keys));
 }
 

@@ -21,6 +21,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
@@ -46,6 +47,7 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.lang.reflect.Field;
 import java.util.List;
+import java.util.Optional;
 
 // System variable
 @SuppressWarnings("FieldMayBeFinal")
@@ -101,7 +103,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String RESOURCE_GROUP = "resource_group";
     public static final String AUTO_COMMIT = "autocommit";
     public static final String TX_ISOLATION = "tx_isolation";
+    public static final String TX_READ_ONLY = "tx_read_only";
     public static final String TRANSACTION_ISOLATION = "transaction_isolation";
+    public static final String TRANSACTION_READ_ONLY = "transaction_read_only";
     public static final String CHARACTER_SET_CLIENT = "character_set_client";
     public static final String CHARACTER_SET_CONNNECTION = "character_set_connection";
     public static final String CHARACTER_SET_RESULTS = "character_set_results";
@@ -265,6 +269,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE = "global_runtime_filter_probe_min_size";
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY =
             "global_runtime_filter_probe_min_selectivity";
+    public static final String GLOBAL_RUNTIME_FILTER_WAIT_TIMEOUT = "global_runtime_filter_wait_timeout";
+    public static final String GLOBAL_RUNTIME_FILTER_RPC_TIMEOUT = "global_runtime_filter_rpc_timeout";
     public static final String RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY = "runtime_filter_early_return_selectivity";
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
@@ -305,6 +311,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
 
+    public static final String ENABLE_QUERY_QUEUE = "enable_query_queue";
+
     public static final String WINDOW_PARTITION_MODE = "window_partition_mode";
 
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
@@ -335,7 +343,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+    // Flag to control whether to proxy follower's query statement to leader/follower.
+    public enum FollowerQueryForwardMode {
+        DEFAULT,    // proxy queries by the follower's replay progress (default)
+        FOLLOWER,   // proxy queries to follower no matter the follower's replay progress
+        LEADER      // proxy queries to leader no matter the follower's replay progress
+    }
+    public static final String FOLLOWER_QUERY_FORWARD_MODE = "follower_query_forward_mode";
+
+>>>>>>> branch-2.5
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
         DEFAULT,            // default, choose the materialized view or not by cost optimizer
@@ -356,6 +375,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
     public static final String MATERIALIZED_VIEW_REWRITE_MODE = "materialized_view_rewrite_mode";
 
+<<<<<<< HEAD
+>>>>>>> branch-2.5
+=======
+    public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_FOR_INSERT = "enable_materialized_view_for_insert";
+
 >>>>>>> branch-2.5
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_rule_based_materialized_view_rewrite";
@@ -372,6 +396,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_INCLUDING_MV_NAMES = "query_including_mv_names";
 
     public static final String ENABLE_MATERIALIZED_VIEW_PLAN_CACHE = "enable_materialized_view_plan_cache";
+
+<<<<<<< HEAD
+>>>>>>> branch-2.5
+=======
+    public static final String BIG_QUERY_PROFILE_SECOND_THRESHOLD = "big_query_profile_second_threshold";
 
 >>>>>>> branch-2.5
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
@@ -415,6 +444,17 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SIMPLIFY_CASE_WHEN = "enable_simplify_case_when";
 
     public static final String ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS = "enable_collect_table_level_scan_stats";
+
+<<<<<<< HEAD
+>>>>>>> branch-2.5
+=======
+    public static final String CROSS_JOIN_COST_PENALTY = "cross_join_cost_penalty";
+
+    public static final String CBO_DECIMAL_CAST_STRING_STRICT = "cbo_decimal_cast_string_strict";
+
+    public static final String CBO_EQ_BASE_TYPE = "cbo_eq_base_type";
+
+    public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
 
 >>>>>>> branch-2.5
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
@@ -550,6 +590,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // this is used to compatible mysql 5.8
     @VariableMgr.VarAttr(name = TRANSACTION_ISOLATION)
     private String transactionIsolation = "REPEATABLE-READ";
+    @VariableMgr.VarAttr(name = TRANSACTION_READ_ONLY, alias = TX_READ_ONLY)
+    private String transactionReadOnly = "OFF";
     // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = CHARACTER_SET_CLIENT)
     private String charsetClient = "utf8";
@@ -676,6 +718,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PIPELINE_PROFILE_LEVEL)
     private int pipelineProfileLevel = 1;
 
+    @VariableMgr.VarAttr(name = BIG_QUERY_PROFILE_SECOND_THRESHOLD)
+    private int bigQueryProfileSecondThreshold = 0;
+
     @VariableMgr.VarAttr(name = RESOURCE_GROUP_ID, alias = RESOURCE_GROUP_ID_V2,
             show = RESOURCE_GROUP_ID_V2, flag = VariableMgr.INVISIBLE)
     private int resourceGroupId = 0;
@@ -791,6 +836,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long globalRuntimeFilterProbeMinSize = 100L * 1024L;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float globalRuntimeFilterProbeMinSelectivity = 0.5f;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_WAIT_TIMEOUT, flag = VariableMgr.INVISIBLE)
+    private int globalRuntimeFilterWaitTimeout = 20;
+    @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_RPC_TIMEOUT, flag = VariableMgr.INVISIBLE)
+    private int globalRuntimeFilterRpcTimeout = 400;
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float runtimeFilterEarlyReturnSelectivity = 0.05f;
 
@@ -943,6 +992,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE)
     private boolean enableMaterializedViewRewrite = true;
 
+    /**
+     * Whether enable materialized-view rewrite for INSERT statement
+     */
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE_FOR_INSERT)
+    private boolean enableMaterializedViewRewriteForInsert = false;
+
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_UNION_REWRITE)
     private boolean enableMaterializedViewUnionRewrite = true;
 
@@ -1028,7 +1083,50 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_COLLECT_TABLE_LEVEL_SCAN_STATS)
     private boolean enableCollectTableLevelScanStats = true;
 
+    @VarAttr(name = CROSS_JOIN_COST_PENALTY, flag = VariableMgr.INVISIBLE)
+    private long crossJoinCostPenalty = 1000000;
+
     private int exprChildrenLimit = -1;
+
+    @VarAttr(name = CBO_DECIMAL_CAST_STRING_STRICT, flag = VariableMgr.INVISIBLE)
+    private boolean cboDecimalCastStringStrict = true;
+
+    @VarAttr(name = CBO_EQ_BASE_TYPE, flag = VariableMgr.INVISIBLE)
+    private String cboEqBaseType = "varchar";
+
+
+    @VarAttr(name = ENABLE_QUERY_QUEUE, flag = VariableMgr.INVISIBLE)
+    private boolean enableQueryQueue = true;
+
+    public boolean isEnableQueryQueue() {
+        return enableQueryQueue;
+    }
+
+    public boolean isCboDecimalCastStringStrict() {
+        return cboDecimalCastStringStrict;
+    }
+
+    public String getCboEqBaseType() {
+        return cboEqBaseType;
+    }
+
+    @VarAttr(name = FOLLOWER_QUERY_FORWARD_MODE, flag = VariableMgr.INVISIBLE | VariableMgr.DISABLE_FORWARD_TO_LEADER)
+    private String followerForwardMode = "";
+
+    @VarAttr(name = ENABLE_STRICT_ORDER_BY)
+    private boolean enableStrictOrderBy = true;
+
+    public void setFollowerQueryForwardMode(String mode) {
+        this.followerForwardMode = mode;
+    }
+
+    public Optional<Boolean> isFollowerForwardToLeaderOpt() {
+        if (Strings.isNullOrEmpty(this.followerForwardMode) ||
+                followerForwardMode.equalsIgnoreCase(FollowerQueryForwardMode.DEFAULT.toString())) {
+            return Optional.empty();
+        }
+        return Optional.of(followerForwardMode.equalsIgnoreCase(FollowerQueryForwardMode.LEADER.toString()));
+    }
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -1181,6 +1279,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableProfile(boolean enableProfile) {
         this.enableProfile = enableProfile;
+    }
+
+    public boolean isEnableBigQueryProfile() {
+        return bigQueryProfileSecondThreshold > 0;
+    }
+
+    public int getBigQueryProfileSecondThreshold() {
+        return bigQueryProfileSecondThreshold;
     }
 
     public int getWaitTimeoutS() {
@@ -1805,6 +1911,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableMaterializedViewRewrite = enableMaterializedViewRewrite;
     }
 
+    public boolean isEnableMaterializedViewRewriteForInsert() {
+        return enableMaterializedViewRewriteForInsert;
+    }
+
+    public void setEnableMaterializedViewRewriteForInsert(boolean value) {
+        this.enableMaterializedViewRewriteForInsert = value;
+    }
+
     public boolean isEnableMaterializedViewUnionRewrite() {
         return enableMaterializedViewUnionRewrite;
     }
@@ -1927,6 +2041,25 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableSimplifyCaseWhen = enableSimplifyCaseWhen;
     }
 
+<<<<<<< HEAD
+>>>>>>> branch-2.5
+=======
+    public long getCrossJoinCostPenalty() {
+        return crossJoinCostPenalty;
+    }
+
+    public void setCrossJoinCostPenalty(long crossJoinCostPenalty) {
+        this.crossJoinCostPenalty = crossJoinCostPenalty;
+    }
+
+    public boolean isEnableStrictOrderBy() {
+        return enableStrictOrderBy;
+    }
+
+    public void setEnableStrictOrderBy(boolean enableStrictOrderBy) {
+        this.enableStrictOrderBy = enableStrictOrderBy;
+    }
+
 >>>>>>> branch-2.5
     // Serialize to thrift object
     // used for rest api
@@ -1946,6 +2079,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
         tResult.setEnable_profile(enableProfile);
         tResult.setCodegen_level(0);
+        tResult.setBig_query_profile_second_threshold(bigQueryProfileSecondThreshold);
         tResult.setBatch_size(chunkSize);
         tResult.setDisable_stream_preaggregations(disableStreamPreaggregations);
         tResult.setLoad_mem_limit(loadMemLimit);
@@ -1977,10 +2111,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
 
         tResult.setRuntime_join_filter_pushdown_limit(runtimeJoinFilterPushDownLimit);
-        final int global_runtime_filter_wait_timeout = 20;
-        final int global_runtime_filter_rpc_timeout = 400;
-        tResult.setRuntime_filter_wait_timeout_ms(global_runtime_filter_wait_timeout);
-        tResult.setRuntime_filter_send_timeout_ms(global_runtime_filter_rpc_timeout);
+        tResult.setGlobal_runtime_filter_build_max_size(globalRuntimeFilterBuildMaxSize);
+        tResult.setRuntime_filter_wait_timeout_ms(globalRuntimeFilterWaitTimeout);
+        tResult.setRuntime_filter_send_timeout_ms(globalRuntimeFilterRpcTimeout);
         tResult.setRuntime_filter_scan_wait_time_ms(runtimeFilterScanWaitTime);
         tResult.setPipeline_dop(pipelineDop);
         switch (pipelineProfileLevel) {
@@ -2166,7 +2299,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
 
     @Override
-    public Object clone() throws CloneNotSupportedException {
-        return super.clone();
+    public Object clone() {
+        try {
+            return super.clone();
+        } catch (CloneNotSupportedException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

@@ -45,6 +45,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.logging.log4j.LogManager;
@@ -270,6 +271,19 @@ public class ConnectContext {
         threadLocalInfo.set(this);
     }
 
+    /**
+     * Set this connect to thread-local if not exists
+     *
+     * @return set or not
+     */
+    public boolean setThreadLocalInfoIfNotExists() {
+        if (threadLocalInfo.get() == null) {
+            threadLocalInfo.set(this);
+            return true;
+        }
+        return false;
+    }
+
     public void setGlobalStateMgr(GlobalStateMgr globalStateMgr) {
         this.globalStateMgr = globalStateMgr;
     }
@@ -388,7 +402,7 @@ public class ConnectContext {
         return returnRows;
     }
 
-    public void resetRetureRows() {
+    public void resetReturnRows() {
         returnRows = 0;
     }
 
@@ -503,6 +517,20 @@ public class ConnectContext {
 
     public void setLastQueryId(UUID queryId) {
         this.lastQueryId = queryId;
+    }
+
+    public boolean isProfileEnabled() {
+        if (sessionVariable == null) {
+            return false;
+        }
+        if (sessionVariable.isEnableProfile()) {
+            return true;
+        }
+        if (!sessionVariable.isEnableBigQueryProfile()) {
+            return false;
+        }
+        return System.currentTimeMillis() - getStartTime() >
+                1000L * sessionVariable.getBigQueryProfileSecondThreshold();
     }
 
     public byte[] getAuthDataSalt() {
@@ -713,6 +741,44 @@ public class ConnectContext {
         } catch (Exception e) {
             LOG.warn("construct SSLChannelImp class failed");
             throw new IOException("construct SSLChannelImp class failed");
+        }
+    }
+
+    public StmtExecutor executeSql(String sql) throws Exception {
+        StatementBase sqlStmt = SqlParser.parse(sql, getSessionVariable()).get(0);
+        sqlStmt.setOrigStmt(new OriginStatement(sql, 0));
+        StmtExecutor executor = new StmtExecutor(this, sqlStmt);
+        setExecutor(executor);
+        setThreadLocalInfo();
+        executor.execute();
+        return executor;
+    }
+
+    public ScopeGuard bindScope() {
+        return ScopeGuard.setIfNotExists(this);
+    }
+
+    /**
+     * Set thread-local context for the scope, and remove it after leaving the scope
+     */
+    public static class ScopeGuard implements AutoCloseable {
+
+        private boolean set = false;
+
+        private ScopeGuard() {
+        }
+
+        public static ScopeGuard setIfNotExists(ConnectContext session) {
+            ScopeGuard res = new ScopeGuard();
+            res.set = session.setThreadLocalInfoIfNotExists();
+            return res;
+        }
+
+        @Override
+        public void close() {
+            if (set) {
+                ConnectContext.remove();
+            }
         }
     }
 

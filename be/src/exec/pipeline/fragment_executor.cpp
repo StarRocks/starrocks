@@ -131,6 +131,9 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
     if (query_options.__isset.enable_profile && query_options.enable_profile) {
         _query_ctx->set_report_profile();
     }
+    if (query_options.__isset.big_query_profile_second_threshold) {
+        _query_ctx->set_big_query_profile_threshold(query_options.big_query_profile_second_threshold);
+    }
     if (query_options.__isset.pipeline_profile_level) {
         _query_ctx->set_profile_level(query_options.pipeline_profile_level);
     }
@@ -215,9 +218,17 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     runtime_state->set_query_ctx(_query_ctx);
 
     // RuntimeFilterWorker::open_query is idempotent
-    if (params.__isset.runtime_filter_params && !params.runtime_filter_params.id_to_prober_params.empty()) {
+    const TRuntimeFilterParams* runtime_filter_params = nullptr;
+    if (request.unique().params.__isset.runtime_filter_params &&
+        !request.unique().params.runtime_filter_params.id_to_prober_params.empty()) {
+        runtime_filter_params = &request.unique().params.runtime_filter_params;
+    } else if (request.common().params.__isset.runtime_filter_params &&
+               !request.common().params.runtime_filter_params.id_to_prober_params.empty()) {
+        runtime_filter_params = &request.common().params.runtime_filter_params;
+    }
+    if (runtime_filter_params != nullptr) {
         _query_ctx->set_is_runtime_filter_coordinator(true);
-        exec_env->runtime_filter_worker()->open_query(query_id, query_options, params.runtime_filter_params, true);
+        exec_env->runtime_filter_worker()->open_query(query_id, query_options, *runtime_filter_params, true);
     }
     _fragment_ctx->prepare_pass_through_chunk_buffer();
 
@@ -347,7 +358,8 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
                                                          ? scan_ranges_per_driver
                                                          : request.per_driver_seq_scan_ranges_of_node(scan_node->id());
 
-        _fragment_ctx->cache_param().num_lanes = scan_node->io_tasks_per_scan_operator();
+        // num_lanes ranges in [1,16] in default 4.
+        _fragment_ctx->cache_param().num_lanes = std::min(16, std::max(1, config::query_cache_num_lanes_per_driver));
 
         for (auto& [driver_seq, scan_ranges] : scan_ranges_per_driver_seq) {
             for (auto& scan_range : scan_ranges) {

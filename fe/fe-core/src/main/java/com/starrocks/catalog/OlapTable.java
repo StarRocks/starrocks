@@ -48,6 +48,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeMetaVersion;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
@@ -60,6 +61,7 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.CreateTableStmt;
 <<<<<<< HEAD
@@ -265,11 +267,19 @@ public class OlapTable extends Table implements GsonPostProcessable {
         olapTable.name = this.name;
         olapTable.fullSchema = Lists.newArrayList(this.fullSchema);
         olapTable.nameToColumn = Maps.newHashMap(this.nameToColumn);
-        olapTable.relatedMaterializedViews = Sets.newHashSet(this.relatedMaterializedViews);
         olapTable.state = this.state;
         olapTable.indexNameToId = Maps.newHashMap(this.indexNameToId);
         olapTable.indexIdToMeta = Maps.newHashMap(this.indexIdToMeta);
         olapTable.keysType = this.keysType;
+        if (this.relatedMaterializedViews != null) {
+            olapTable.relatedMaterializedViews = Sets.newHashSet(this.relatedMaterializedViews);
+        }
+        if (this.uniqueConstraints != null) {
+            olapTable.uniqueConstraints = Lists.newArrayList(this.uniqueConstraints);
+        }
+        if (this.foreignKeyConstraints != null) {
+            olapTable.foreignKeyConstraints = Lists.newArrayList(this.foreignKeyConstraints);
+        }
         if (this.partitionInfo != null) {
             olapTable.partitionInfo = (PartitionInfo) this.partitionInfo.clone();
         }
@@ -2178,17 +2188,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
         // drop all temp partitions of this table, so that there is no temp partitions in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
-        for (MvId mvId : getRelatedMaterializedViews()) {
-            Table tmpTable = db.getTable(mvId.getId());
-            if (tmpTable != null) {
-                MaterializedView mv = (MaterializedView) tmpTable;
-                mv.setActive(false);
-                LOG.warn("Setting the materialized view {}({}}) to invalid because " +
-                        "the table {} was dropped.", mv.getName(), mv.getId(), getName());
-            } else {
-                LOG.warn("Ignore materialized view {} does not exists", mvId);
-            }
-        }
+        LocalMetastore.inactiveRelatedMaterializedView(db, this,
+                MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(getName()));
     }
 
     @Override

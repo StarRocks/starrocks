@@ -26,6 +26,9 @@ import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.mysql.privilege.Role;
 import com.starrocks.sql.analyzer.SemanticException;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public class FeNameFormat {
     private FeNameFormat() {}
 
@@ -45,6 +48,14 @@ public class FeNameFormat {
     private static final String MYSQL_USER_NAME_REGEX = "^\\w{1,64}/?[.\\w-]{0,63}$";
 
     public static final String FORBIDDEN_PARTITION_NAME = "placeholder_";
+
+    private static final Set<String> FORBIDDEN_COLUMN_NAMES;
+
+    static {
+        FORBIDDEN_COLUMN_NAMES = new HashSet<>();
+        FORBIDDEN_COLUMN_NAMES.add("__op");
+        FORBIDDEN_COLUMN_NAMES.add("__row");
+    }
 
     public static void checkDbName(String dbName) throws AnalysisException {
         if (Strings.isNullOrEmpty(dbName) || !dbName.matches(DB_NAME_REGEX)) {
@@ -77,6 +88,14 @@ public class FeNameFormat {
         }
         if (columnName.startsWith(SchemaChangeHandler.SHADOW_NAME_PRFIX_V1)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
+        }
+
+        if (!Config.allow_system_reserved_names) {
+            if (FORBIDDEN_COLUMN_NAMES.contains(columnName)) {
+                throw new SemanticException(
+                        "Column name [" + columnName + "] is a system reserved name. " +
+                        "If you are sure you want to use it, please set FE configuration allow_system_reserved_names");
+            }
         }
     }
 

@@ -1,0 +1,104 @@
+#############################  Display  #############################
+
+# Verbose program output
+# Accepts log level: "error", "warn", "info", "debug", "trace"
+verbose = "info"
+
+# Show progress
+progress = false
+
+# Path to summary output file.
+# output = "report.md"
+
+#############################  Cache  ###############################
+
+# Enable link caching. This can be helpful to avoid checking the same links on
+# multiple runs.
+# If we start checking external links we should enable this, but at the
+# moment we are checking links to Markdown files only with arg --offline
+cache = false
+
+# Discard all cached requests older than this duration.
+# max_cache_age = "2d"
+
+#############################  Runtime  #############################
+
+# Number of threads to utilize.
+# Defaults to number of cores available to the system if omitted.
+# threads = 6
+
+# Maximum number of allowed redirects [default: 10]
+# max_redirects = 10
+
+# Maximum number of concurrent network requests [default: 128]
+max_concurrency = 30
+
+#############################  Requests  ############################
+
+# User agent to send with each request
+user_agent = "curl/7.83.1"
+
+# Website timeout from connect to response finished
+timeout = 10
+
+# Comma-separated list of accepted status codes for valid links.
+# Omit to accept all response types.
+#accept = "text/html"
+
+# Proceed for server connections considered insecure (invalid TLS)
+insecure = false
+
+# Comma-separated list of accepted status codes for valid links.
+accept = [200, 204, 301, 429]
+
+# Only test links with the given schemes (e.g. https).
+# Omit to check links with any scheme.
+scheme = [ "https" ]
+
+# When links are available using HTTPS, treat HTTP links as errors.
+require_https = true
+
+# Request method
+method = "get"
+
+# Custom request headers
+headers = []
+
+# Remap URI matching pattern to different URI.
+# remap = [ "https://example.com http://example.invalid" ]
+
+
+#############################  Exclusions  ##########################
+
+# Exclude URLs from checking (supports regex)
+
+ exclude = [
+   ]
+
+# Exclude these filesystem paths from getting checked.
+# We exclude StarRocks_intro as it generates the URLs
+# via a component that takes the path without the `.md`
+# extension, and lychee is looking for a valid path
+# including extension.
+exclude_path = ["docs/README.md", "docs/introduction/StarRocks_intro.md", "docs/assets/", "docs/TOC.md"]
+
+include = []
+
+# This prevents checking inside codeblocks
+include_verbatim = false
+
+# Exclude all private IPs from checking
+# Equivalent to setting `exclude_private`, `exclude_link_local`, and `exclude_loopback` to true
+exclude_all_private = true
+
+# # Exclude private IP address ranges from checking
+# exclude_private = false
+
+# # Exclude link-local IP address range from checking
+# exclude_link_local = false
+
+# # Exclude loopback IP address range and localhost from checking
+# exclude_loopback = false
+
+# Exclude all mail addresses from checking
+exclude_mail = true

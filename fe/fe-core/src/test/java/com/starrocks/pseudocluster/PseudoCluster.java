@@ -353,7 +353,7 @@ public class PseudoCluster {
         dataSource.setMaxIdle(40);
         cluster.dataSource = dataSource;
 
-        ClientPool.heartbeatPool = cluster.heartBeatPool;
+        ClientPool.beHeartbeatPool = cluster.heartBeatPool;
         ClientPool.backendPool = cluster.backendThriftPool;
         BrpcProxy.setInstance(cluster.brpcProxy);
 

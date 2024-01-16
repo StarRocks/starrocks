@@ -54,7 +54,7 @@ Status AggregateDistinctStreamingSinkOperator::push_chunk(RuntimeState* state, c
 Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_force_streaming() {
     SCOPED_TIMER(_aggregator->streaming_timer());
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
-    _aggregator->output_chunk_by_streaming(&chunk);
+    RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(&chunk));
     _aggregator->offer_chunk_to_buffer(chunk);
     return Status::OK();
 }
@@ -99,11 +99,11 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const size_t 
             size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection());
             if (zero_count == 0) {
                 vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
-                _aggregator->output_chunk_by_streaming(&chunk);
+                RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming(&chunk));
                 _aggregator->offer_chunk_to_buffer(chunk);
             } else if (zero_count != _aggregator->streaming_selection().size()) {
                 vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
-                _aggregator->output_chunk_by_streaming_with_selection(&chunk);
+                RETURN_IF_ERROR(_aggregator->output_chunk_by_streaming_with_selection(&chunk));
                 _aggregator->offer_chunk_to_buffer(chunk);
             }
         }

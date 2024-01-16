@@ -59,6 +59,7 @@ public:
 
     brpc::Controller cntl;
     T result;
+    int64_t request_size;
 
 private:
     brpc::CallId cid;

@@ -42,6 +42,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -193,17 +194,25 @@ public class DynamicPartitionUtil {
             return false;
         }
 
-        String timeUnit = properties.get(DynamicPartitionProperty.TIME_UNIT);
-        String prefix = properties.get(DynamicPartitionProperty.PREFIX);
-        String start = properties.get(DynamicPartitionProperty.START);
-        String timeZone = properties.get(DynamicPartitionProperty.TIME_ZONE);
-        String end = properties.get(DynamicPartitionProperty.END);
-        String enable = properties.get(DynamicPartitionProperty.ENABLE);
+        Map<String, String> checkProp = new CaseInsensitiveMap<>(properties);
+
+        String timeUnit = checkProp.get(DynamicPartitionProperty.TIME_UNIT);
+        String prefix = checkProp.get(DynamicPartitionProperty.PREFIX);
+        String start = checkProp.get(DynamicPartitionProperty.START);
+        String timeZone = checkProp.get(DynamicPartitionProperty.TIME_ZONE);
+        String end = checkProp.get(DynamicPartitionProperty.END);
+        String enable = checkProp.get(DynamicPartitionProperty.ENABLE);
+        String buckets = checkProp.get(DynamicPartitionProperty.BUCKETS);
 
         if (!(Strings.isNullOrEmpty(enable) && Strings.isNullOrEmpty(timeUnit) && Strings.isNullOrEmpty(timeZone)
+<<<<<<< HEAD
                 && Strings.isNullOrEmpty(prefix) && Strings.isNullOrEmpty(start) && Strings.isNullOrEmpty(end))) {
 <<<<<<< HEAD
 =======
+=======
+                && Strings.isNullOrEmpty(prefix) && Strings.isNullOrEmpty(start) && Strings.isNullOrEmpty(end)
+                && Strings.isNullOrEmpty(buckets))) {
+>>>>>>> branch-2.5
 
             if (partitionInfo.getType() != PartitionType.RANGE || partitionInfo.isMultiColumnPartition()) {
                 throw new DdlException("Dynamic partition only support single-column range partition");

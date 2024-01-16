@@ -46,6 +46,7 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.SchedException.Status;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.clone.TabletSchedCtx.Type;
@@ -63,10 +64,12 @@ import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.CloneTask;
+import com.starrocks.task.CreateReplicaTask;
 import com.starrocks.task.DropReplicaTask;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TGetTabletScheduleRequest;
 import com.starrocks.thrift.TGetTabletScheduleResponse;
+import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -131,7 +134,7 @@ public class TabletScheduler extends LeaderDaemon {
      * pendingTablets, allTabletIds, runningTablets and schedHistory are protected by 'synchronized'
      */
     private PriorityQueue<TabletSchedCtx> pendingTablets = new PriorityQueue<>();
-    private Set<Long> allTabletIds = Sets.newHashSet();
+    private final Set<Long> allTabletIds = Sets.newConcurrentHashSet();
     // contains all tabletCtxs which state are RUNNING
     private Map<Long, TabletSchedCtx> runningTablets = Maps.newHashMap();
     // save the latest 1000 scheduled tablet info
@@ -629,7 +632,7 @@ public class TabletScheduler extends LeaderDaemon {
             if (AgentTaskQueue.addTask(task)) {
                 stat.counterCloneTask.incrementAndGet();
             }
-            LOG.info("add clone task to agent task queue: {}", task);
+            LOG.info("add task to agent task queue: {}", task);
         }
 
         // send task immediately
@@ -639,7 +642,7 @@ public class TabletScheduler extends LeaderDaemon {
         stat.counterTabletScheduleCostMs.addAndGet(cost);
     }
 
-    private synchronized void addToRunningTablets(TabletSchedCtx tabletCtx) {
+    protected synchronized void addToRunningTablets(TabletSchedCtx tabletCtx) {
         runningTablets.put(tabletCtx.getTabletId(), tabletCtx);
     }
 
@@ -907,7 +910,9 @@ public class TabletScheduler extends LeaderDaemon {
         Preconditions.checkNotNull(destPath);
         tabletCtx.setDest(destPath.getBeId(), destPath.getPathHash());
 
-        if (Config.recover_with_empty_tablet && tabletCtx.getReplicas().size() == 1) {
+        if (Config.recover_with_empty_tablet
+                && tabletCtx.getReplicas().size() == 1
+                && isDataLost(tabletCtx.getReplicas())) {
             batchTask.addTask(tabletCtx.createEmptyReplicaAndTask());
             return;
         }
@@ -917,6 +922,16 @@ public class TabletScheduler extends LeaderDaemon {
 
         // create clone task
         batchTask.addTask(tabletCtx.createCloneReplicaAndTask());
+    }
+
+    private boolean isDataLost(List<Replica> replicas) {
+        int unavailableCnt = 0;
+        for (Replica replica : replicas) {
+            if (GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId()) == null || replica.isBad()) {
+                unavailableCnt++;
+            }
+        }
+        return unavailableCnt == replicas.size();
     }
 
     /**
@@ -1567,16 +1582,12 @@ public class TabletScheduler extends LeaderDaemon {
         return list;
     }
 
-    /**
-     * return true if we want to remove the clone task from AgentTaskQueue
-     */
-    public boolean finishCloneTask(CloneTask cloneTask, TFinishTaskRequest request) {
+    public void finishCloneTask(CloneTask cloneTask, TFinishTaskRequest request) {
         long tabletId = cloneTask.getTabletId();
         TabletSchedCtx tabletCtx = takeRunningTablets(tabletId);
         if (tabletCtx == null) {
             LOG.warn("tablet info does not exist, tablet:{} backend:{}", tabletId, cloneTask.getBackendId());
-            // tablet does not exist, no need to keep task.
-            return true;
+            return;
         }
 
         Preconditions.checkState(tabletCtx.getState() == TabletSchedCtx.State.RUNNING, tabletCtx.getState());
@@ -1589,18 +1600,18 @@ public class TabletScheduler extends LeaderDaemon {
                 // unrecoverable
                 stat.counterTabletScheduledDiscard.incrementAndGet();
                 finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.CANCELLED, e.getMessage());
-                return true;
+                return;
             } else if (e.getStatus() == Status.FINISHED) {
                 // tablet is already healthy, just remove
                 finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.CANCELLED, e.getMessage());
-                return true;
+                return;
             }
         } catch (Exception e) {
             LOG.warn("got unexpected exception when finish clone task. tablet: {}",
                     tabletCtx.getTabletId(), e);
             stat.counterTabletScheduledDiscard.incrementAndGet();
             finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.UNEXPECTED, e.getMessage());
-            return true;
+            return;
         }
 
         Preconditions.checkState(tabletCtx.getState() == TabletSchedCtx.State.FINISHED);
@@ -1608,7 +1619,42 @@ public class TabletScheduler extends LeaderDaemon {
         gatherStatistics(tabletCtx);
         ColocateTableBalancer.getInstance().increaseScheduledTabletNumForBucket(tabletCtx);
         finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.FINISHED, "finished");
-        return true;
+    }
+
+    public void finishCreateReplicaTask(CreateReplicaTask task, TFinishTaskRequest request) {
+        long tabletId = task.getTabletId();
+        TabletSchedCtx tabletCtx = takeRunningTablets(tabletId);
+        if (tabletCtx == null) {
+            LOG.warn("tablet info does not exist, tablet:{} backend:{}", tabletId, task.getBackendId());
+            return;
+        }
+
+        // check if clone task success
+        if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
+            LOG.warn("create replica task failed: {}", request.getTask_status().getError_msgs().get(0));
+            finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.CANCELLED, request.getTask_status().getError_msgs().get(0));
+            return;
+        }
+
+        Replica replica = tabletCtx.getTablet().getReplicaByBackendId(task.getBackendId());
+        if (replica == null) {
+            LOG.warn("replica dose not exist, tablet:{} backend:{}", tabletId, task.getBackendId());
+            finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.CANCELLED, "replica not exist");
+            return;
+        }
+
+        // write edit log
+        replica.setState(ReplicaState.NORMAL);
+        TabletMeta meta = GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(tabletId);
+        ReplicaPersistInfo info = ReplicaPersistInfo.createForAdd(meta.getDbId(),
+                meta.getTableId(), meta.getPartitionId(), meta.getIndexId(),
+                tabletId, replica.getBackendId(), replica.getId(), replica.getVersion(),
+                replica.getSchemaHash(), replica.getDataSize(), replica.getRowCount(),
+                replica.getLastFailedVersion(), replica.getLastSuccessVersion(),
+                replica.getMinReadableVersion());
+        GlobalStateMgr.getCurrentState().getEditLog().logAddReplica(info);
+        finalizeTabletCtx(tabletCtx, TabletSchedCtx.State.FINISHED, "create replica finished");
+        LOG.info("create replica for recovery successfully, tablet:{} backend:{}", tabletId, task.getBackendId());
     }
 
     /**
@@ -1737,7 +1783,7 @@ public class TabletScheduler extends LeaderDaemon {
         return schedHistory.size();
     }
 
-    public synchronized int getTotalNum() {
+    public int getTotalNum() {
         return allTabletIds.size();
     }
 

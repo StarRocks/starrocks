@@ -74,7 +74,18 @@ public:
                 duration_cast<milliseconds>(steady_clock::now().time_since_epoch() + _query_expire_seconds).count();
     }
     void set_report_profile() { _is_report_profile = true; }
-    bool is_report_profile() { return _is_report_profile; }
+    bool is_report_profile() {
+        if (_is_report_profile) {
+            return true;
+        }
+        if (_big_query_profile_threshold_ns <= 0) {
+            return false;
+        }
+        return MonotonicNanos() - _query_begin_time > _big_query_profile_threshold_ns;
+    }
+    void set_big_query_profile_threshold(int64_t big_query_profile_threshold_s) {
+        _big_query_profile_threshold_ns = 1'000'000'000L * big_query_profile_threshold_s;
+    }
     void set_profile_level(const TPipelineProfileLevel::type& profile_level) { _profile_level = profile_level; }
     const TPipelineProfileLevel::type& profile_level() { return _profile_level; }
 
@@ -174,6 +185,7 @@ private:
     std::once_flag _init_mem_tracker_once;
     std::shared_ptr<RuntimeProfile> _profile;
     bool _is_report_profile = false;
+    int64_t _big_query_profile_threshold_ns = 0;
     TPipelineProfileLevel::type _profile_level;
     std::shared_ptr<MemTracker> _mem_tracker;
     ObjectPool _object_pool;

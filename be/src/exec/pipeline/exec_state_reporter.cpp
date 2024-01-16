@@ -164,10 +164,23 @@ ExecStateReporter::ExecStateReporter() {
     if (!status.ok()) {
         LOG(FATAL) << "Cannot create thread pool for ExecStateReport: error=" << status.to_string();
     }
+
+    status = ThreadPoolBuilder("priority_ex_state_report") // priority exec state reporter with infinite queue
+                     .set_min_threads(1)
+                     .set_max_threads(2)
+                     .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                     .build(&_priority_thread_pool);
+    if (!status.ok()) {
+        LOG(FATAL) << "Cannot create thread pool for priority ExecStateReport: error=" << status.to_string();
+    }
 }
 
-void ExecStateReporter::submit(std::function<void()>&& report_task) {
-    _thread_pool->submit_func(std::move(report_task));
+void ExecStateReporter::submit(std::function<void()>&& report_task, bool priority) {
+    if (priority) {
+        (void)_priority_thread_pool->submit_func(std::move(report_task));
+    } else {
+        (void)_thread_pool->submit_func(std::move(report_task));
+    }
 }
 
 } // namespace starrocks::pipeline

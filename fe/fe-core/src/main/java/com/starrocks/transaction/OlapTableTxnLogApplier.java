@@ -63,7 +63,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
 
         long maxPartitionVersionTime = -1;
 
-        table.lastVersionUpdateStartTime.set(System.currentTimeMillis());
+        table.lastVersionUpdateStartTime.set(System.nanoTime());
 
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             long partitionId = partitionCommitInfo.getPartitionId();
@@ -88,7 +88,29 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                         long lastFailedVersion = replica.getLastFailedVersion();
                         long newVersion = version;
                         long lastSucessVersion = replica.getLastSuccessVersion();
-                        if (!errorReplicaIds.contains(replica.getId())) {
+                        if (!txnState.tabletCommitInfosContainsReplica(tablet.getId(), replica.getBackendId(),
+                                replica.getState())
+                                || errorReplicaIds.contains(replica.getId())) {
+                            // There are 2 cases that we can't update version to visible version and need to 
+                            // set lastFailedVersion.
+                            // 1. this replica doesn't have version publish yet. This maybe happen when clone concurrent 
+                            //    with data loading.
+                            // 2. this replica has data loading failure.
+                            //
+                            // for example, A,B,C 3 replicas, B,C failed during publish version (Or never publish),
+                            // then B C will be set abnormal and all loadings will be failed, B,C will have to recover
+                            // by clone, it is very inefficient and may lose data.
+                            // Using this method, B,C will publish failed, and fe will publish again,
+                            // not update their last failed version.
+                            // if B is published successfully in next turn, then B is normal and C will be set
+                            // abnormal so that quorum is maintained and loading will go on.
+                            LOG.warn("skip update replica[{}.{}] to visible version", tablet.getId(), replica.getBackendId());
+                            newVersion = replica.getVersion();
+                            if (version > lastFailedVersion) {
+                                lastFailedVersion = version;
+                                hasFailedVersion = true;
+                            }
+                        } else {
                             if (replica.getLastFailedVersion() > 0) {
                                 // if the replica is a failed replica, then not changing version
                                 newVersion = replica.getVersion();
@@ -105,19 +127,6 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
 
                             // success version always move forward
                             lastSucessVersion = version;
-                        } else {
-                            // for example, A,B,C 3 replicas, B,C failed during publish version,
-                            // then B C will be set abnormal and all loadings will be failed, B,C will have to recover
-                            // by clone, it is very inefficient and may lose data.
-                            // Using this method, B,C will publish failed, and fe will publish again,
-                            // not update their last failed version.
-                            // if B is published successfully in next turn, then B is normal and C will be set
-                            // abnormal so that quorum is maintained and loading will go on.
-                            newVersion = replica.getVersion();
-                            if (version > lastFailedVersion) {
-                                lastFailedVersion = version;
-                                hasFailedVersion = true;
-                            }
                         }
                         replica.updateVersionInfo(newVersion, lastFailedVersion, lastSucessVersion);
                     } // end for replicas
@@ -143,7 +152,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             maxPartitionVersionTime = Math.max(maxPartitionVersionTime, versionTime);
         }
 
-        table.lastVersionUpdateEndTime.set(System.currentTimeMillis());
+        table.lastVersionUpdateEndTime.set(System.nanoTime());
         if (!GlobalStateMgr.isCheckpointThread() && dictCollectedVersions.size() == validDictCacheColumns.size()) {
             for (int i = 0; i < validDictCacheColumns.size(); i++) {
                 String columnName = validDictCacheColumns.get(i);

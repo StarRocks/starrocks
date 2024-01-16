@@ -20,16 +20,16 @@ package com.starrocks.planner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.catalog.ListPartitionInfo;
-import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -47,6 +47,7 @@ import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
@@ -63,7 +64,6 @@ import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -76,11 +76,6 @@ public class OlapTableSinkTest {
 
     @Injectable
     public OlapTable dstTable;
-
-    @Before
-    public void setUp() {
-
-    }
 
     private TupleDescriptor getTuple() {
         DescriptorTable descTable = new DescriptorTable();

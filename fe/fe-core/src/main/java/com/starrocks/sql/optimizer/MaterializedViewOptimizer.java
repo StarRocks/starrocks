@@ -32,10 +32,11 @@ public class MaterializedViewOptimizer {
                 MvUtils.getRuleOptimizedLogicalPlan(mv, mvSql, columnRefFactory, connectContext, optimizerConfig);
 >>>>>>> branch-2.5
         if (plans == null) {
-            return null;
+            return new MvPlanContext(false, "No query plan for it");
         }
         OptExpression mvPlan = plans.first;
         if (!MvUtils.isValidMVPlan(mvPlan)) {
+<<<<<<< HEAD
 <<<<<<< HEAD
             return new MvRewriteContext();
         }
@@ -47,5 +48,10 @@ public class MaterializedViewOptimizer {
                 new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory);
 >>>>>>> branch-2.5
         return mvRewriteContext;
+=======
+            return new MvPlanContext(false, MvUtils.getInvalidReason(mvPlan));
+        }
+        return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory);
+>>>>>>> branch-2.5
     }
 }
