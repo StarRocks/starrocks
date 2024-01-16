@@ -1963,7 +1963,7 @@ public class GlobalStateMgr {
                 if (canSkipBadReplayedJournal(e)) {
                     LOG.error("!!! DANGER: SKIP JOURNAL {}: {} !!!",
                             replayedJournalId.incrementAndGet(),
-                            entity == null ? null : entity.getData(),
+                            entity == null ? null : GsonUtils.GSON.toJson(entity.getData()),
                             e);
                     if (!readSucc) {
                         cursor.skipNext();
@@ -2034,11 +2034,11 @@ public class GlobalStateMgr {
         if (opCode != OperationType.OP_INVALID
                 && OperationType.IGNORABLE_OPERATIONS.contains(opCode)) {
             if (Config.metadata_journal_ignore_replay_failure) {
-                LOG.error("skip recoverable journal load failure, opCode: {}", opCode);
+                LOG.error("skip ignorable journal load failure, opCode: {}", opCode);
                 return true;
             } else {
-                LOG.error("the failure of opCode: {} is recoverable, " +
-                        "you can set recover_on_load_journal_failed to true to ignore this failure", opCode);
+                LOG.error("the failure of opCode: {} is ignorable, " +
+                        "you can set metadata_journal_ignore_replay_failure to true to ignore this failure", opCode);
                 return false;
             }
         }
