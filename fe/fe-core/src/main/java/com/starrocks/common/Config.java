@@ -342,6 +342,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int edit_log_roll_num = 50000;
 
+    @ConfField(mutable = true)
+    public static int edit_log_write_slow_log_threshold_ms = 2000;
+
     /**
      * whether ignore unknown log id
      * when fe rolls back to low version, there may be log id that low version fe can not recognise
