@@ -603,15 +603,6 @@ public class EditLog {
                     LOG.debug("opcode: {}, tid: {}", opCode, state.getTransactionId());
                     break;
                 }
-<<<<<<< HEAD
-=======
-                case OperationType.OP_UPSERT_TRANSACTION_STATE_BATCH: {
-                    final TransactionStateBatch stateBatch = (TransactionStateBatch) journal.getData();
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().replayUpsertTransactionStateBatch(stateBatch);
-                    LOG.debug("opcode: {}, txn ids: {}", opCode, stateBatch.getTxnIds());
-                    break;
-                }
->>>>>>> 9d8bab659d ([Refactor] Add slow log for edit log write and refine some code warnings (backport #39024) (backport #39085) (#39102))
                 case OperationType.OP_DELETE_TRANSACTION_STATE: {
                     final TransactionState state = (TransactionState) journal.getData();
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().replayDeleteTransactionState(state);
@@ -1447,23 +1438,9 @@ public class EditLog {
     public void logExportUpdateState(long jobId, ExportJob.JobState newState,
                                      List<Pair<TNetworkAddress, String>> snapshotPaths, String exportTempPath,
                                      Set<String> exportedFiles, ExportFailMsg failMsg) {
-<<<<<<< HEAD
         ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState,
                 snapshotPaths, exportTempPath, exportedFiles, failMsg);
         logEdit(OperationType.OP_EXPORT_UPDATE_INFO, updateInfo);
-=======
-        ExportJob.ExportUpdateInfo updateInfo = new ExportJob.ExportUpdateInfo(jobId, newState, stateChangeTime,
-                snapshotPaths, exportTempPath, exportedFiles, failMsg);
-        if (FeConstants.STARROCKS_META_VERSION >= StarRocksFEMetaVersion.VERSION_4) {
-            logJsonObject(OperationType.OP_EXPORT_UPDATE_INFO_V2, updateInfo);
-        } else {
-            logEdit(OperationType.OP_EXPORT_UPDATE_INFO, updateInfo);
-        }
-    }
-
-    public void logUpdateClusterAndBackendState(BackendIdsUpdateInfo info) {
-        logEdit(OperationType.OP_UPDATE_CLUSTER_AND_BACKENDS, info);
->>>>>>> 9d8bab659d ([Refactor] Add slow log for edit log write and refine some code warnings (backport #39024) (backport #39085) (#39102))
     }
 
     // for TransactionState
