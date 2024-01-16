@@ -338,7 +338,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     if (runtime_state->query_options().query_type == TQueryType::LOAD) {
         for (size_t i = 0; i < config::max_load_status_report_retry_times; i++) {
             // sleep with backoff
-            std::this_thread::sleep_for(std::chrono::seconds((2 << i) * 10));
+            std::this_thread::sleep_for(std::chrono::seconds((4 << i)));
 
             st = report_exec_status(params);
             if (st.ok()) {
