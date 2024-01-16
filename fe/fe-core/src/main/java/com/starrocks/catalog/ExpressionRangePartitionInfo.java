@@ -38,6 +38,7 @@ import com.starrocks.sql.parser.SqlParser;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.parquet.Strings;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -228,7 +229,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         Text.writeString(out, GsonUtils.GSON.toJson(serializedPartitionExprs));
     }
 
-    public void renameTableName(String newTableName) {
+    public void renameTableName(TableName newTableName) {
         AstVisitor<Void, Void> renameVisitor = new AstVisitor<Void, Void>() {
             @Override
             public Void visitExpression(Expr expr, Void context) {
@@ -242,7 +243,10 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
             public Void visitSlot(SlotRef node, Void context) {
                 TableName tableName = node.getTblNameWithoutAnalyzed();
                 if (tableName != null) {
-                    tableName.setTbl(newTableName);
+                    if (!Strings.isNullOrEmpty(newTableName.getDb())) {
+                        tableName.setDb(newTableName.getDb());
+                    }
+                    tableName.setTbl(newTableName.getTbl());
                 }
                 return null;
             }
