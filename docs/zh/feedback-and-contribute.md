@@ -47,7 +47,7 @@ displayed_sidebar: "Chinese"
 
 ### 编写流程
 
-1. 登录 GitHub 帐户，直接在[中文文档仓库](https://github.com/StarRocks/docs.zh-cn)单击 Add file，进入新文档编辑页面。
+1. 登录 GitHub 帐户，直接在[中文文档仓库](https://github.com/StarRocks/starrocks/tree/main/docs/zh)单击 Add file，进入新文档编辑页面。
    ![image](https://user-images.githubusercontent.com/98087056/183546267-f05f6afc-4d58-40f8-ba73-437f82d5f662.png)
 
 2. 编写文档（markdown格式），并在索引（TOC.md）中添加索引。
