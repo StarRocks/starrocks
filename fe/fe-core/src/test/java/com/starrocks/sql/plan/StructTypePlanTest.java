@@ -296,6 +296,9 @@ public class StructTypePlanTest extends PlanTestBase {
                 "c3.d[false]", "c2.a[false]", "c1.a[false]");
         // we don't support non-copy for this expr now
         assertVerbosePlanContains(sql, "c1.b[true][1].a[true]");
+        // test common project expr
+        sql = "select c1.a, c1.a + 1 as c1a, c1.a + 2 as c2a from test";
+        assertVerbosePlanContains(sql, "c1.a[true]", "cast(2: c1.a[true] as BIGINT)");
     }
 
     @Test

@@ -30,7 +30,6 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
@@ -180,13 +179,15 @@ public class StatementPlanner {
             logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
         }
 
+        OptExpression root = ShortCircuitPlanner.checkSupportShortCircuitRead(logicalPlan.getRoot(), session);
+
         OptExpression optimizedPlan;
         try (Timer ignored = Tracers.watchScope("Optimizer")) {
             // 2. Optimize logical plan and build physical plan
             Optimizer optimizer = new Optimizer();
             optimizedPlan = optimizer.optimize(
                     session,
-                    logicalPlan.getRoot(),
+                    root,
                     new PhysicalPropertySet(),
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
@@ -395,14 +396,14 @@ public class StatementPlanner {
             return;
         }
 
-        String label = DebugUtil.printId(session.getExecutionId());
+        String label;
         if (stmt instanceof InsertStmt) {
             String stmtLabel = ((InsertStmt) stmt).getLabel();
-            label = Strings.isNullOrEmpty(stmtLabel) ? "insert_" + label : stmtLabel;
+            label = Strings.isNullOrEmpty(stmtLabel) ? MetaUtils.genInsertLabel(session.getExecutionId()) : stmtLabel;
         } else if (stmt instanceof UpdateStmt) {
-            label = "update_" + label;
+            label = MetaUtils.genUpdateLabel(session.getExecutionId());
         } else if (stmt instanceof DeleteStmt) {
-            label = "delete_" + label;
+            label = MetaUtils.genDeleteLabel(session.getExecutionId());
         } else {
             throw UnsupportedException.unsupportedException("Unsupported dml statement " + stmt.getClass().getSimpleName());
         }
@@ -411,7 +412,13 @@ public class StatementPlanner {
         TransactionState.LoadJobSourceType sourceType = TransactionState.LoadJobSourceType.INSERT_STREAMING;
         long txnId = -1L;
         if (targetTable instanceof ExternalOlapTable) {
-            ExternalOlapTable tbl = (ExternalOlapTable) targetTable;
+            if (!(stmt instanceof InsertStmt)) {
+                throw UnsupportedException.unsupportedException("External OLAP table only supports insert statement");
+            }
+            // sync OLAP external table meta here,
+            // because beginRemoteTransaction will use the dbId and tableId as request param.
+            ExternalOlapTable tbl = MetaUtils.syncOLAPExternalTableMeta((ExternalOlapTable) targetTable);
+            ((InsertStmt) stmt).setTargetTable(tbl);
             TAuthenticateParams authenticateParams = new TAuthenticateParams();
             authenticateParams.setUser(tbl.getSourceTableUser());
             authenticateParams.setPasswd(tbl.getSourceTablePassword());

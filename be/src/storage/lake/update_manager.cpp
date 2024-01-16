@@ -46,7 +46,7 @@ UpdateManager::UpdateManager(LocationProvider* location_provider, MemTracker* me
 
     int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
-    _index_cache.set_capacity(byte_limits * update_mem_percent);
+    _index_cache.set_capacity(byte_limits * update_mem_percent / 100);
 }
 
 UpdateManager::~UpdateManager() {
@@ -619,6 +619,12 @@ void UpdateManager::remove_primary_index_cache(uint32_t tablet_id) {
 
 bool UpdateManager::try_remove_primary_index_cache(uint32_t tablet_id) {
     return _index_cache.try_remove_by_key(tablet_id);
+}
+
+void UpdateManager::unload_primary_index(int64_t tablet_id) {
+    auto index_entry = _index_cache.get_or_create(tablet_id);
+    index_entry->value().unload();
+    _index_cache.release(index_entry);
 }
 
 Status UpdateManager::check_meta_version(const Tablet& tablet, int64_t base_version) {

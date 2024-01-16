@@ -364,9 +364,6 @@ struct TTableStatus {
     5: optional i64 last_check_time
     6: optional i64 create_time
     20: optional string ddl_sql
-
-    21: optional string id
-    22: optional string rows
 }
 
 struct TListTableStatusResult {
@@ -1561,7 +1558,8 @@ struct TFeLocksItem {
     1: optional string lock_type
     2: optional string lock_object
     3: optional string lock_mode
-    4: optional i64 lock_start_time
+    4: optional i64 start_time
+    5: optional i64 hold_time_ms
     
     11: optional string thread_info
     12: optional bool granted
@@ -1651,6 +1649,7 @@ struct TTableReplicationRequest {
     6: optional Types.TTableType src_table_type
     7: optional i64 src_table_data_size
     8: optional map<i64, TPartitionReplicationInfo> partition_replication_infos
+    9: optional string job_id
 }
 
 struct TTableReplicationResponse {

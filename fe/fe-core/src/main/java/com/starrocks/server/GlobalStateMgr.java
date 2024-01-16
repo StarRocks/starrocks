@@ -184,6 +184,7 @@ import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
+import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
@@ -1837,7 +1838,7 @@ public class GlobalStateMgr {
                     if (cursor == null) {
                         // 1. set replay to the end
                         LOG.info("start to replay from {}", replayedJournalId.get());
-                        cursor = journal.read(replayedJournalId.get() + 1, JournalCursor.CUROSR_END_KEY);
+                        cursor = journal.read(replayedJournalId.get() + 1, JournalCursor.CURSOR_END_KEY);
                     } else {
                         cursor.refresh();
                     }
@@ -2010,7 +2011,7 @@ public class GlobalStateMgr {
             if (feType != FrontendNodeType.LEADER) {
                 journalObservable.notifyObservers(replayedJournalId.get());
             }
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 // Metric repo may not init after this replay thread start
                 MetricRepo.COUNTER_EDIT_LOG_READ.increase(1L);
             }
@@ -3146,6 +3147,10 @@ public class GlobalStateMgr {
 
     public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
         this.alterJobMgr.replayAlterMaterializedViewStatus(log);
+    }
+
+    public void replayAlterMaterializedViewBaseTableInfos(AlterMaterializedViewBaseTableInfosLog log) {
+        this.alterJobMgr.replayAlterMaterializedViewBaseTableInfos(log);
     }
 
     /*

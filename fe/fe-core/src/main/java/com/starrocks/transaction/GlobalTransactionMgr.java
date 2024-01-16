@@ -43,6 +43,7 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.meta.lock.LockTimeoutException;
 import com.starrocks.meta.lock.LockType;
 import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
@@ -361,9 +362,11 @@ public class GlobalTransactionMgr {
         while (true) {
             try {
                 return commitTransactionUnderDatabaseWLock(db, transactionId, tabletCommitInfos, tabletFailInfos,
-                        txnCommitAttachment);
+                        txnCommitAttachment, timeoutMs);
             } catch (CommitRateExceededException e) {
                 throttleCommitOnRateExceed(e, startTime, timeoutMs);
+            } catch (LockTimeoutException e) {
+                throw e;
             } catch (Exception e) {
                 throw new UserException("fail to execute commit task: " + e.getMessage(), e);
             }
@@ -391,12 +394,15 @@ public class GlobalTransactionMgr {
     private VisibleStateWaiter commitTransactionUnderDatabaseWLock(
             @NotNull Database db, long transactionId, @NotNull List<TabletCommitInfo> tabletCommitInfos,
             @NotNull List<TabletFailInfo> tabletFailInfos,
-            @Nullable TxnCommitAttachment attachment) throws UserException {
+            @Nullable TxnCommitAttachment attachment, long timeoutMs) throws UserException {
+
         TransactionState transactionState = getTransactionState(db.getId(), transactionId);
         List<Long> tableId = transactionState.getTableIdList();
-
         Locker locker = new Locker();
-        locker.lockTables(db, tableId, LockType.WRITE);
+        if (!locker.tryLockTables(db, tableId, LockType.WRITE, timeoutMs)) {
+            throw new LockTimeoutException(
+                    "get database write lock timeout, database=" + db.getFullName() + ", timeout=" + timeoutMs + "ms");
+        }
         try {
             return commitTransaction(db.getId(), transactionId, tabletCommitInfos, tabletFailInfos, attachment);
         } finally {
@@ -635,15 +641,6 @@ public class GlobalTransactionMgr {
             dbTransactionMgr.replayUpsertTransactionStateBatch(transactionStateBatch);
         } catch (AnalysisException e) {
             LOG.warn("replay upsert transaction batch[" + transactionStateBatch + "] failed", e);
-        }
-    }
-
-    public void replayDeleteTransactionState(TransactionState transactionState) {
-        try {
-            DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(transactionState.getDbId());
-            dbTransactionMgr.deleteTransaction(transactionState);
-        } catch (AnalysisException e) {
-            LOG.warn("replay delete transaction [" + transactionState.getTransactionId() + "] failed", e);
         }
     }
 

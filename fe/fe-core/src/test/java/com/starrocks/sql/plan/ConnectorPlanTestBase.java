@@ -124,6 +124,19 @@ public class ConnectorPlanTestBase extends PlanTestBase {
         }
     }
 
+    public static void dropAllCatalogs() {
+        try {
+            dropCatalog(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME);
+            dropCatalog(MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
+            dropCatalog(MOCK_PAIMON_CATALOG_NAME);
+            dropCatalog(MockIcebergMetadata.MOCKED_ICEBERG_CATALOG_NAME);
+            dropCatalog(MockedDeltaLakeMetadata.MOCKED_CATALOG_NAME);
+        } catch (Exception e) {
+            // ignore error
+            e.printStackTrace();
+        }
+    }
+
     public static void dropCatalog(String catalog) {
         GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(new DropCatalogStmt(catalog));
     }

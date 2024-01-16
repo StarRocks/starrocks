@@ -100,15 +100,6 @@ public class AnalyzeInsertTest {
                 "Unknown catalog 'err_catalog'");
 
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
-        new Expectations(metadata) {
-            {
-                metadata.getDb("iceberg_catalog", "err_db");
-                result = null;
-                minTimes = 0;
-            }
-        };
-        analyzeFail("insert into iceberg_catalog.err_db.tbl values (1)",
-                "Unknown database 'err_db'");
 
         new Expectations(metadata) {
             {
@@ -235,9 +226,6 @@ public class AnalyzeInsertTest {
         MetadataMgr metadata = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
         new Expectations(metadata) {
             {
-                metadata.getDb(anyString, anyString);
-                result = new Database();
-
                 metadata.getTable(anyString, anyString, anyString);
                 result = hiveTable;
             }
@@ -287,14 +275,14 @@ public class AnalyzeInsertTest {
                         "\t\"compression\" = \"uncompressed\" ) \n" +
                         "select \"abc\" as k1",
                 "format is a mandatory property. " +
-                        "Use \"path\" = \"parquet\" as only parquet format is supported now");
+                        "Use \"format\" = \"parquet\" as only parquet format is supported now");
 
         analyzeFail("insert into files ( \n" +
                 "\t\"path\" = \"s3://path/to/directory/\", \n" +
                 "\t\"format\"=\"orc\", \n" +
                 "\t\"compression\" = \"uncompressed\" ) \n" +
                 "select \"abc\" as k1",
-                "use \"path\" = \"parquet\", as only parquet format is supported now");
+                "use \"format\" = \"parquet\", as only parquet format is supported now");
 
         analyzeFail("insert into files ( \n" +
                         "\t\"path\" = \"s3://path/to/directory/\", \n" +
