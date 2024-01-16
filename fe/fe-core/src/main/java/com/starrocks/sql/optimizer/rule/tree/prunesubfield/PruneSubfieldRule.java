@@ -60,25 +60,21 @@ public class PruneSubfieldRule extends TransformationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         // project expression
         LogicalProjectOperator project = input.getOp().cast();
-        SubfieldExpressionCollector collector = new SubfieldExpressionCollector();
+        SubfieldExpressionCollector collector =
+                new SubfieldExpressionCollector(context.getSessionVariable().isCboPruneJsonSubfield());
         for (ScalarOperator value : project.getColumnRefMap().values()) {
             value.accept(collector, null);
         }
 
-        List<ScalarOperator> allSubfieldExpr = Lists.newArrayList();
-        allSubfieldExpr.addAll(collector.getComplexExpressions());
-
         // scan predicate
         LogicalScanOperator scan = input.getInputs().get(0).getOp().cast();
         if (scan.getPredicate() != null) {
-            SubfieldExpressionCollector cc = new SubfieldExpressionCollector();
-            scan.getPredicate().accept(cc, null);
-            allSubfieldExpr.addAll(cc.getComplexExpressions());
+            scan.getPredicate().accept(collector, null);
         }
 
         // normalize access path
         SubfieldAccessPathNormalizer normalizer = new SubfieldAccessPathNormalizer();
-        normalizer.collect(allSubfieldExpr);
+        normalizer.collect(collector.getComplexExpressions());
 
         List<ColumnAccessPath> accessPaths = Lists.newArrayList();
         for (ColumnRefOperator ref : scan.getColRefToColumnMetaMap().keySet()) {

@@ -109,6 +109,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     public void setUp() {
         super.setUp();
         connectContext.getSessionVariable().setCboPruneSubfield(true);
+        connectContext.getSessionVariable().setCboPruneJsonSubfield(true);
         connectContext.getSessionVariable().setEnablePruneComplexTypes(false);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
         connectContext.getSessionVariable().setCboCteReuse(true);
@@ -120,6 +121,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
     public void tearDown() {
         connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setCboPruneSubfield(false);
+        connectContext.getSessionVariable().setCboPruneJsonSubfield(false);
         connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000);
         connectContext.getSessionVariable().setCboCTERuseRatio(1.5);

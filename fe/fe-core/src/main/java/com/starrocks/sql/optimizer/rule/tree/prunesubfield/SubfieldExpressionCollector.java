@@ -31,8 +31,18 @@ import java.util.List;
 public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Void> {
     private final List<ScalarOperator> complexExpressions = Lists.newArrayList();
 
+    private final boolean enableJsonCollect;
+
     public List<ScalarOperator> getComplexExpressions() {
         return complexExpressions;
+    }
+
+    public SubfieldExpressionCollector() {
+        this(true);
+    }
+
+    public SubfieldExpressionCollector(boolean enableJsonCollect) {
+        this.enableJsonCollect = enableJsonCollect;
     }
 
     @Override
@@ -80,7 +90,7 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
         }
 
         // Json function has multi-version, support use path version
-        if (PruneSubfieldRule.SUPPORT_JSON_FUNCTIONS.contains(call.getFnName())) {
+        if (enableJsonCollect && PruneSubfieldRule.SUPPORT_JSON_FUNCTIONS.contains(call.getFnName())) {
             Type[] args = call.getFunction().getArgs();
             if (args.length <= 1 || !args[0].isJsonType() || !args[1].isStringType()) {
                 return visit(call, context);
