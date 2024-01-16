@@ -201,29 +201,30 @@ public class IcebergApiConverter {
         Map<String, String> mutableMap = new HashMap<>(nativeProperties);
 
         // transform to starrocks properties
-        String fileFormat = nativeProperties.getOrDefault(TableProperties.DEFAULT_FILE_FORMAT,
-                TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
-        if (nativeProperties.get(TableProperties.DEFAULT_FILE_FORMAT) != null) {
+        if (mutableMap.get(TableProperties.DEFAULT_FILE_FORMAT) != null) {
             options.put(FILE_FORMAT, mutableMap.remove(TableProperties.DEFAULT_FILE_FORMAT));
         }
 
+        String fileFormat = mutableMap.getOrDefault(TableProperties.DEFAULT_FILE_FORMAT,
+                TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
         switch (FileFormat.fromString(fileFormat)) {
             case PARQUET:
-                if (nativeProperties.get(TableProperties.PARQUET_COMPRESSION) != null) {
+                if (mutableMap.get(TableProperties.PARQUET_COMPRESSION) != null) {
                     options.put(COMPRESSION_CODEC, mutableMap.remove(TableProperties.PARQUET_COMPRESSION));
                 }
                 break;
             case ORC:
-                if (nativeProperties.get(TableProperties.ORC_COMPRESSION) != null) {
+                if (mutableMap.get(TableProperties.ORC_COMPRESSION) != null) {
                     options.put(COMPRESSION_CODEC, mutableMap.remove(TableProperties.ORC_COMPRESSION));
                 }
                 break;
             case AVRO:
-                if (nativeProperties.get(TableProperties.AVRO_COMPRESSION) != null) {
+                if (mutableMap.get(TableProperties.AVRO_COMPRESSION) != null) {
                     options.put(COMPRESSION_CODEC, mutableMap.remove(TableProperties.AVRO_COMPRESSION));
                 }
                 break;
             default:
+                throw new StarRocksConnectorException("Unsupported file format %s", fileFormat);
         }
         options.putAll(mutableMap);
         options.put(ICEBERG_CATALOG_TYPE, nativeCatalogType);

@@ -101,7 +101,6 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.connector.iceberg.IcebergMetadata;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.load.DeleteMgr;
@@ -1122,20 +1121,28 @@ public class ShowExecutor {
         // Location
         String location = null;
         Map<String, String> properties = new HashMap<>();
-        if (table.isHiveTable() || table.isHudiTable()) {
-            location = ((HiveMetaStoreTable) table).getTableLocation();
-        } else if (table.isIcebergTable()) {
-            location = table.getTableLocation();
-            properties.putAll(table.getProperties());
-            properties.remove(ICEBERG_CATALOG_TYPE);
-        } else if (table.isDeltalakeTable()) {
-            location = table.getTableLocation();
-        } else if (table.isPaimonTable()) {
-            location = table.getTableLocation();
+
+        switch (table.getType()) {
+            case HIVE:
+            case HUDI:
+                location = ((HiveMetaStoreTable) table).getTableLocation();
+                break;
+            case ICEBERG:
+                location = table.getTableLocation();
+                if (table.getProperties() != null) {
+                    properties.putAll(table.getProperties());
+                }
+                properties.remove(ICEBERG_CATALOG_TYPE);
+                break;
+            case PAIMON:
+            case DELTALAKE:
+                location = table.getTableLocation();
+                break;
+            default:
         }
 
         if (!Strings.isNullOrEmpty(location)) {
-            properties.put(IcebergMetadata.LOCATION_PROPERTY, location);
+            properties.put("location", location);
         }
 
         // Comment

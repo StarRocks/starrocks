@@ -22,17 +22,21 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.hive.HiveStorageFormat;
+import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -43,6 +47,9 @@ import java.util.stream.Collectors;
 public class ShowCreateTableStmtTest {
     private static ConnectContext ctx;
     private static StarRocksAssert starRocksAssert;
+    @ClassRule
+    public static TemporaryFolder temp = new TemporaryFolder();
+    private static String warehouse;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -50,6 +57,8 @@ public class ShowCreateTableStmtTest {
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         ctx = UtFrameUtils.createDefaultCtx();
+        warehouse = temp.newFolder().toURI().toString();
+        ConnectorPlanTestBase.mockAllCatalogs(ctx, warehouse);
         starRocksAssert = new StarRocksAssert(ctx);
     }
 
@@ -137,5 +146,28 @@ public class ShowCreateTableStmtTest {
         String value = result.get(0);
         System.out.println(value);
         Assert.assertTrue(value.contains("\"COLUMN_STATS_ACCURATE\"  =  \"{\\\"BASIC_STATS\\\":\\\"true\\\"}\""));
+    }
+
+    @Test
+    public void testIcebergShowCreateTable() throws Exception {
+        starRocksAssert.useCatalog("iceberg0");
+
+        String showSql = "show create table partitioned_db.t1";
+        ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(showSql, ctx);
+        ShowExecutor executor = new ShowExecutor(ctx, showCreateTableStmt);
+        ShowResultSet resultSet = executor.execute();
+        String tableLocation = MockIcebergMetadata.getStarRocksHome() + "partitioned_db/t1";
+        Assert.assertEquals("CREATE TABLE `t1` (\n" +
+                "  `id` int(11) DEFAULT NULL,\n" +
+                "  `data` varchar(1048576) DEFAULT NULL,\n" +
+                "  `date` varchar(1048576) DEFAULT NULL\n" +
+                ")\n" +
+                "PARTITION BY ( date )\n" +
+                "COMMENT (\"partitioned table\")\n" +
+                "PROPERTIES (\n" +
+                "\"file_format\" = \"orc\",\n" +
+                "\"location\" = \"" + tableLocation +"\",\n" +
+                "\"compression_codec\" = \"gzip\"\n" +
+                ");", resultSet.getResultRows().get(0).get(1));
     }
 }
