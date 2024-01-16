@@ -229,7 +229,8 @@ Status FragmentExecState::report_exec_status(const TReportExecStatusParams& para
     FrontendServiceConnection coord(_exec_env->frontend_client_cache(), _coord_addr, &st);
     if (!st.ok()) {
         std::stringstream ss;
-        ss << "couldn't get a client for " << _coord_addr;
+        ss << "couldn't get a client for " << _coord_addr << ", error: " << st;
+        LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
     }
 
@@ -336,6 +337,9 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     // we try our best to report the load status.
     if (runtime_state->query_options().query_type == TQueryType::LOAD) {
         for (size_t i = 0; i < config::max_load_status_report_retry_times; i++) {
+            // sleep with backoff
+            std::this_thread::sleep_for(std::chrono::seconds((2 << i) * 10));
+
             st = report_exec_status(params);
             if (st.ok()) {
                 return;
@@ -343,13 +347,10 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
             LOG(WARNING) << "Failed to report exec status to coordinator, instance_id: "
                          << print_id(_fragment_instance_id) << ", retry: " << i + 1 << "/"
                          << config::max_load_status_report_retry_times;
-            // sleep with backoff
-            std::this_thread::sleep_for(std::chrono::seconds((2 << i) * 10));
         }
+        LOG(WARNING) << "Abort to report exec status to coordinator, instance_id: " << print_id(_fragment_instance_id)
+                     << ", retry times:  " << config::max_load_status_report_retry_times;
     }
-
-    LOG(WARNING) << "Abort to report exec status to coordinator, instance_id: " << print_id(_fragment_instance_id)
-                 << ", retry times:  " << config::max_load_status_report_retry_times;
 
     if (!st.ok()) {
         // we need to cancel the execution of this fragment
