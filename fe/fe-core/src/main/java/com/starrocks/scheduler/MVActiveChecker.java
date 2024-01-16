@@ -99,6 +99,7 @@ public class MVActiveChecker extends LeaderDaemon {
         try {
             ConnectContext connect = StatisticUtils.buildConnectContext();
             connect.setDatabase(dbName.get());
+            connect.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
             connect.executeSql(sql);
             if (mv.isActive()) {
