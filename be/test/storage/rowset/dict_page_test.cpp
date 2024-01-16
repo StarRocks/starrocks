@@ -233,7 +233,7 @@ TEST_F(DictPageTest, TestSameValueWithFloat) {
         float random_value = static_cast<float>(20000 + i) / (static_cast<float>(RAND_MAX / upper));
         floats.get()[i] = random_value;
     }
-    std::unique_ptr<float[]> floats_expand(new float [size * 2]);
+    std::unique_ptr<float[]> floats_expand(new float[size * 2]);
     std::memcpy(floats_expand.get(), floats.get(), size * sizeof(float));
     std::memcpy(floats_expand.get() + size, floats.get(), size * sizeof(float));
     test_encode_decode_page_template<TYPE_FLOAT>(floats_expand.get(), size, size * 2);
@@ -258,7 +258,7 @@ TEST_F(DictPageTest, TestSameValueWithDouble) {
         double random_value = static_cast<double>(20000 + i) / (static_cast<double>(RAND_MAX / upper));
         doubles.get()[i] = random_value;
     }
-    std::unique_ptr<double[]> doubles_expand(new double [size * 2]);
+    std::unique_ptr<double[]> doubles_expand(new double[size * 2]);
     std::memcpy(doubles_expand.get(), doubles.get(), size * sizeof(double));
     std::memcpy(doubles_expand.get() + size, doubles.get(), size * sizeof(double));
     test_encode_decode_page_template<TYPE_DOUBLE>(doubles_expand.get(), size, size * 2);
