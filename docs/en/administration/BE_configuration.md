@@ -489,14 +489,14 @@ BE static parameters are as follows.
 #### object_storage_connect_timeout_ms
 
 - **Default**: `-1`, which means to use the default timeout duration of the SDK configurations.
-- **Unit** ms
+- **Unit**: ms
 - **Description**: Timeout duration to establish socket connections with object storage.
 - **Introduced in:** 3.0.9
 
 #### object_storage_request_timeout_ms
 
 - **Default**: `-1`, which means to use the default timeout duration of the SDK configurations.
-- **Unit** ms
+- **Unit**: ms
 - **Description**: Timeout duration to establish HTTP connections with object storage.
 - **Introduced in:** 3.0.9
 
