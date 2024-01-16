@@ -1930,25 +1930,61 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<TOlapTablePartition> partitions = Lists.newArrayList();
         List<TTabletLocation> tablets = Lists.newArrayList();
 
-        db.readLock();
-        try {
-            return buildCreatePartitionResponse(olapTable, partitions, tablets, partitionColNames);
-        } finally {
-            db.readUnlock();
+        TransactionState txnState =
+                GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), request.getTxn_id());
+        if (txnState == null) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    String.format("automatic create partition failed. error: txn %d not exist", request.getTxn_id())));
+            result.setStatus(errorStatus);
+            return result;
+        }
+
+        if (txnState.getTransactionStatus().isFinalStatus()) {
+            errorStatus.setError_msgs(Lists.newArrayList(
+                    String.format("automatic create partition failed. error: txn %d is %s", request.getTxn_id(),
+                            txnState.getTransactionStatus().name())));
+            result.setStatus(errorStatus);
+            return result;
+        }
+
+        // update partition info snapshot for txn should be synchronized
+        synchronized (txnState) {
+            db.readLock();
+            try {
+                return buildCreatePartitionResponse(olapTable, txnState, partitions, tablets, partitionColNames);
+            } finally {
+                db.readUnlock();
+            }
         }
     }
 
     private static TCreatePartitionResult buildCreatePartitionResponse(OlapTable olapTable,
+                                                                       TransactionState txnState,
                                                                        List<TOlapTablePartition> partitions,
                                                                        List<TTabletLocation> tablets,
                                                                        List<String> partitionColNames) {
         TCreatePartitionResult result = new TCreatePartitionResult();
         TStatus errorStatus = new TStatus(RUNTIME_ERROR);
         for (String partitionName : partitionColNames) {
+            // get partition info from snapshot
+            TOlapTablePartition tPartition = txnState.getPartitionNameToTPartition().get(partitionName);
+            if (tPartition != null) {
+                partitions.add(tPartition);
+                for (TOlapTableIndexTablets index : tPartition.getIndexes()) {
+                    for (long tabletId : index.getTablets()) {
+                        TTabletLocation tablet = txnState.getTabletIdToTTabletLocation().get(tabletId);
+                        if (tablet != null) {
+                            tablets.add(tablet);
+                        }
+                    }
+                }
+                continue;
+            }
+
             Partition partition = olapTable.getPartition(partitionName);
-            TOlapTablePartition tPartition = new TOlapTablePartition();
+            tPartition = new TOlapTablePartition();
             tPartition.setId(partition.getId());
-            buildPartitionInfo(olapTable, partitions, partition, tPartition);
+            buildPartitionInfo(olapTable, partitions, partition, tPartition, txnState);
             // tablet
             int quorum = olapTable.getPartitionInfo().getQuorumNum(partition.getId(), olapTable.writeQuorum());
             for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
@@ -1958,7 +1994,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         try {
                             // use default warehouse nodes
                             long primaryId = cloudNativeTablet.getPrimaryComputeNodeId();
-                            tablets.add(new TTabletLocation(tablet.getId(), Collections.singletonList(primaryId)));
+                            TTabletLocation tabletLocation = new TTabletLocation(tablet.getId(),
+                                    Collections.singletonList(primaryId));
+                            tablets.add(tabletLocation);
+                            txnState.getTabletIdToTTabletLocation().put(tablet.getId(), tabletLocation);
                         } catch (UserException exception) {
                             errorStatus.setError_msgs(Lists.newArrayList(
                                     "Tablet lost replicas. Check if any backend is down or not. tablet_id: "
@@ -1982,10 +2021,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                             return result;
                         }
                         // replicas[0] will be the primary replica
-                        // getNormalReplicaBackendPathMap returns a linkedHashMap, it's keysets is stable
                         List<Replica> replicas = Lists.newArrayList(bePathsMap.keySet());
-                        tablets.add(new TTabletLocation(tablet.getId(), replicas.stream().map(Replica::getBackendId)
-                                .collect(Collectors.toList())));
+                        Collections.shuffle(replicas);
+                        TTabletLocation tabletLocation = new TTabletLocation(tablet.getId(),
+                                replicas.stream().map(Replica::getBackendId).collect(Collectors.toList()));
+                        tablets.add(tabletLocation);
+                        txnState.getTabletIdToTTabletLocation().put(tablet.getId(), tabletLocation);
                     }
                 }
             }
@@ -2007,7 +2048,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private static void buildPartitionInfo(OlapTable olapTable, List<TOlapTablePartition> partitions,
-                                           Partition partition, TOlapTablePartition tPartition) {
+                                           Partition partition, TOlapTablePartition tPartition, TransactionState txnState) {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) olapTable.getPartitionInfo();
@@ -2060,6 +2101,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             tPartition.setNum_buckets(index.getTablets().size());
         }
         partitions.add(tPartition);
+        txnState.getPartitionNameToTPartition().put(partition.getName(), tPartition);
     }
 
     @Override
