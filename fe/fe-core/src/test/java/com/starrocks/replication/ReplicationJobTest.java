@@ -21,6 +21,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
@@ -97,7 +98,18 @@ public class ReplicationJobTest {
         partition.updateVersionForRestore(10);
         srcPartition.updateVersionForRestore(partition.getCommittedVersion() + 100);
 
-        job = new ReplicationJob("test_token", db.getId(), table, srcTable, GlobalStateMgr.getCurrentSystemInfo());
+        job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentSystemInfo());
+    }
+
+    @Test
+    public void testJobId() {
+        ReplicationJob jobWithoutId = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentSystemInfo());
+        Assert.assertFalse(jobWithoutId.getJobId().isEmpty());
+        ReplicationJob jobWithId = new ReplicationJob("fake_id", "test_token", db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentSystemInfo());
+        Assert.assertEquals("fake_id", jobWithId.getJobId());
     }
 
     @Test

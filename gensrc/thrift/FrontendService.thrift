@@ -1648,6 +1648,7 @@ struct TTableReplicationRequest {
     6: optional Types.TTableType src_table_type
     7: optional i64 src_table_data_size
     8: optional map<i64, TPartitionReplicationInfo> partition_replication_infos
+    9: optional string job_id
 }
 
 struct TTableReplicationResponse {
