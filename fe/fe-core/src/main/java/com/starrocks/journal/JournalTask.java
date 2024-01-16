@@ -75,13 +75,13 @@ public class JournalTask implements Future<Boolean> {
 
     @Override
     public boolean cancel(boolean mayInterruptIfRunning) {
-        // cannot canceled for now
+        // cannot be canceled for now
         return false;
     }
 
     @Override
     public boolean isCancelled() {
-        // cannot canceled for now
+        // cannot be canceled for now
         return false;
     }
 }

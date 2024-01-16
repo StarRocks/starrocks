@@ -4326,7 +4326,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
                 ModifyTablePropertyOperationLog info =
                         new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
-                editLog.logSetHasForbitGlobalDict(info);
+                editLog.logSetHasForbiddenGlobalDict(info);
             }
         } finally {
             db.readUnlock();
@@ -4362,7 +4362,7 @@ public class LocalMetastore implements ConnectorMetadata {
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
-            if (opCode == OperationType.OP_SET_FORBIT_GLOBAL_DICT) {
+            if (opCode == OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT) {
                 String enAble = properties.get(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE);
                 Preconditions.checkState(enAble != null);
                 if (olapTable != null) {

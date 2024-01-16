@@ -46,20 +46,19 @@ public class BDBJournalCursor implements JournalCursor {
     private static final int RETRY_TIME = 3;
     private static final long SLEEP_INTERVAL_SEC = 3;
 
-    private long toKey;
+    private final long toKey;
     private long nextKey;
-    private BDBEnvironment environment;
-    // names of all local databases, will set on initialization, and will update every time `prelong()` is called
+    private final BDBEnvironment environment;
+    // names of all local databases, will set on initialization, and will update every time `refresh()` is called
     protected List<Long> localDBNames = null;
     // index of next db to be opened
     protected int nextDbPositionIndex = -1;
     // the database of current log
     protected CloseSafeDatabase database = null;
-    private String prefix;
+    private final String prefix;
 
     /**
      * handle DatabaseException carefully
-     *
      * 1. wrap as JournalException and return if it's a normal DatabaseException.
      * 2. RestartRequiredException is a fatal error since we're replaying as a follower, we must exit by raising an
      * JournalInconsistentException. Same with EnvironmentFailureException when replicated environment is invalid.
@@ -99,13 +98,13 @@ public class BDBJournalCursor implements JournalCursor {
 
     /**
      * init journal cursor
-     * if toKey = -1(CUROSR_END_KEY), it will automatically search the end.
+     * if toKey = -1(CURSOR_END_KEY), it will automatically search the end.
      */
     public static BDBJournalCursor getJournalCursor(BDBEnvironment env, String prefix, long fromKey, long toKey)
             throws JournalException, JournalInconsistentException, InterruptedException {
         if (fromKey < 0  // fromKey must be a positive number
                 || (toKey > 0 && toKey < fromKey)  // if toKey is a positive number, it must be smaller than fromKey
-                || (toKey <= 0 && toKey != JournalCursor.CUROSR_END_KEY)  // if toKey is a negative number, it must be END
+                || (toKey <= 0 && toKey != JournalCursor.CURSOR_END_KEY)  // if toKey is a negative number, it must be END
             ) {
             throw new JournalException(String.format("Invalid key range! fromKey %s toKey %s", fromKey, toKey));
         }
@@ -116,7 +115,6 @@ public class BDBJournalCursor implements JournalCursor {
 
     /**
      * calculate the index of next db to be opened
-     *
      * there are two cases:
      * 1. if this is the first time, we're actually looking for the db of nextKey
      * 2. otherwise, we've already opened a db for previous key. Now we're looking for the next db of the previous key
@@ -182,7 +180,7 @@ public class BDBJournalCursor implements JournalCursor {
         }
 
         // 3. update db index
-        LOG.info("update dbnames {} -> {}", localDBNames, dbNames);
+        LOG.info("update dbNames {} -> {}", localDBNames, dbNames);
         localDBNames = dbNames;
         calculateNextDbIndex();
     }
@@ -207,7 +205,7 @@ public class BDBJournalCursor implements JournalCursor {
             database = null;
         }
 
-        String dbName = prefix + Long.toString(localDBNames.get(nextDbPositionIndex));
+        String dbName = prefix + localDBNames.get(nextDbPositionIndex);
         JournalException exception = null;
         for (int i = 0; i < RETRY_TIME; ++ i) {
             try {
@@ -282,7 +280,7 @@ public class BDBJournalCursor implements JournalCursor {
                     return entity;
                 } else if (operationStatus == OperationStatus.NOTFOUND) {
                     // read until there is no more log exists, return
-                    if (toKey == JournalCursor.CUROSR_END_KEY) {
+                    if (toKey == JournalCursor.CURSOR_END_KEY) {
                         return null;
                     }
                     // In the case:
