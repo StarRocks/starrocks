@@ -217,7 +217,9 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 ### enable_materialized_view_for_insert (2.5.18、3.0.9、3.1.7、3.2.2 及以后）
 
-是否允许 StarRocks 改写 INSERT INTO SELECT 语句中的查询。默认为 `false`，即默认关闭该场景下的物化视图查询改写。
+* 含义：是否允许 StarRocks 改写 INSERT INTO SELECT 语句中的查询。
+* 默认值：false，即默认关闭该场景下的物化视图查询改写。
+* 引入版本：v2.5.18, v3.0.9, v3.1.7, v3.2.2
 
 ### enable_materialized_view_union_rewrite（2.5 及以后）
 
