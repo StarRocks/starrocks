@@ -179,9 +179,15 @@ group-by-count-distinct 查询中为 count distinct 列设置的分桶数。该�
 
 用于设置通过 INSERT 语句进行数据导入时，是否开启严格模式 (Strict Mode)。默认为 `true`，即开启严格模式。关于该模式的介绍，可以参阅[严格模式](../loading/load_concept/strict_mode.md)。
 
+<<<<<<< HEAD
 ### enable_materialized_view_rewrite_for_insert (2.5.18 and later)
+=======
+### enable_materialized_view_for_insert
+>>>>>>> f7ab4d6fcf ([Doc] change the default value of a be config (#39088))
 
-是否允许 StarRocks 改写 INSERT INTO SELECT 语句中的查询。默认为 `false`，即默认关闭该场景下的物化视图查询改写。
+* 含义：是否允许 StarRocks 改写 INSERT INTO SELECT 语句中的查询。
+* 默认值：false，即默认关闭该场景下的物化视图查询改写。
+* 引入版本：v2.5.18, v3.0.9, v3.1.7, v3.2.2
 
 ### enable_materialized_view_union_rewrite（2.5 及以后）
 
