@@ -983,15 +983,7 @@ public class EditLog {
      * submit log in queue and return immediately
      */
     private Future<Boolean> submitLog(short op, Writable writable, long maxWaitIntervalMs) {
-<<<<<<< HEAD
         Preconditions.checkState(GlobalStateMgr.getCurrentState().isLeader(),
-=======
-        // do not check whether global state mgr is leader in non shared-nothing mode,
-        // because starmgr state change happens before global state mgr state change,
-        // it will write log before global state mgr becomes leader
-        Preconditions.checkState(RunMode.getCurrentRunMode() != RunMode.SHARED_NOTHING ||
-                                 GlobalStateMgr.getCurrentState().isLeader(),
->>>>>>> 488119f2b7 ([Refactor] Add slow log for edit log write and refine some code warnings (backport #39024) (backport #39085) (backport #39102) (#39128))
                 "Current node is not leader, submit log is not allowed");
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
