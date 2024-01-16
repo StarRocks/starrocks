@@ -23,6 +23,7 @@
 
 #include "column/binary_column.h"
 #include "column/fixed_length_column.h"
+#include "exec/avro_test.h"
 #include "runtime/types.h"
 #include "util/defer_op.h"
 
@@ -38,12 +39,15 @@ namespace starrocks {
 
 class AvroAddBinaryColumnTest : public ::testing::Test {};
 
+<<<<<<< HEAD
 struct AvroHelper {
     avro_schema_t schema = NULL;
     avro_value_iface_t* iface = NULL;
     avro_value_t avro_val;
 };
 
+=======
+>>>>>>> c898f4735c ([UT] Refractor Avro scanner UT (#38972))
 static void init_avro_value(std::string schema_path, AvroHelper& avro_helper) {
     std::ifstream infile_schema;
     infile_schema.open(schema_path);
