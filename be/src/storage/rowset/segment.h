@@ -96,9 +96,11 @@ public:
                                                    bool skip_fill_local_cache = true,
                                                    lake::TabletManager* tablet_manager = nullptr);
 
-    [[nodiscard]] static Status parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
-                                                     size_t* footer_length_hint,
-                                                     const FooterPointerPB* partial_rowset_footer);
+    [[nodiscard]] static StatusOr<size_t> parse_segment_footer(RandomAccessFile* read_file, SegmentFooterPB* footer,
+                                                               size_t* footer_length_hint,
+                                                               const FooterPointerPB* partial_rowset_footer);
+
+    [[nodiscard]] static Status write_segment_footer(WritableFile* write_file, const SegmentFooterPB& footer);
 
     Segment(std::shared_ptr<FileSystem> fs, FileInfo segment_file_info, uint32_t segment_id,
             const TabletSchema* tablet_schema);
