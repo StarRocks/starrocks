@@ -68,13 +68,13 @@ uint32_t DictPageBuilder<Type>::add(const uint8_t* vals, uint32_t count) {
         }
 
         for (int i = 0; i < count; ++i) {
-            Slice s = Slice(vals + i * SIZE_OF_TYPE, SIZE_OF_TYPE);
-            auto iter = _dictionary.find(s);
+            ValueType value = *reinterpret_cast<const ValueType*>(vals + i * SIZE_OF_TYPE);
+            auto iter = _dictionary.find(value);
             if (iter != _dictionary.end()) {
                 value_code = iter->second;
             } else if (_dict_builder->add(vals + i * SIZE_OF_TYPE, 1) > 0) {
                 value_code = _dictionary.size();
-                _dictionary.insert_or_assign(std::string(s.data, s.size), value_code);
+                _dictionary.insert_or_assign(value, value_code);
             } else {
                 return i;
             }
@@ -157,12 +157,7 @@ Status DictPageBuilder<Type>::get_last_value(void* value) const {
 
 template <LogicalType Type>
 bool DictPageBuilder<Type>::is_valid_global_dict(const GlobalDictMap* global_dict) const {
-    for (const auto& it : _dictionary) {
-        if (auto iter = global_dict->find(it.first); iter == global_dict->end()) {
-            return false;
-        }
-    }
-    return true;
+    return false;
 }
 
 template <LogicalType Type>

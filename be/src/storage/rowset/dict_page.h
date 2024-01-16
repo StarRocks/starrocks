@@ -105,22 +105,6 @@ public:
     bool all_dict_encoded() const override { return _encoding_type == DICT_ENCODING; }
 
 private:
-    struct HashOfSlice {
-        // Enable heterogeneous lookup.
-        typedef bool is_transparent;
-
-        size_t operator()(const Slice& slice) const { return HashStringThoroughly(slice.data, slice.size); }
-
-        size_t operator()(const std::string& s) const { return HashStringThoroughly(s.data(), s.size()); }
-    };
-
-    struct Eq {
-        // Enable heterogeneous lookup.
-        typedef bool is_transparent;
-
-        bool operator()(const Slice& s1, const Slice& s2) const { return s1 == s2; }
-    };
-
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
 
     PageBuilderOptions _options;
@@ -132,7 +116,7 @@ private:
 
     EncodingTypePB _encoding_type;
     // query for dict item -> dict id
-    phmap::flat_hash_map<std::string, ValueCodeType, HashOfSlice, Eq> _dictionary;
+    phmap::flat_hash_map<ValueType, ValueCodeType> _dictionary;
     ValueType _first_value;
 };
 
