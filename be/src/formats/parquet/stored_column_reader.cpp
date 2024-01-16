@@ -50,9 +50,7 @@ public:
 
     Status load_specific_page(size_t cur_page_idx, uint64_t offset, uint64_t first_row) override;
 
-    void set_page_change_on_record_boundry() override {
-        _page_change_on_record_boundry = true;
-    }
+    void set_page_change_on_record_boundry() override { _page_change_on_record_boundry = true; }
 
 protected:
     bool page_selected(size_t num_values) override;
@@ -814,7 +812,8 @@ StatusOr<size_t> RepeatedStoredColumnReader::_convert_row_to_value(size_t* row) 
         _delimit_rows(&row_to_parse, &level_parsed);
         _levels_parsed += level_parsed;
         num_parsed_levels += level_parsed;
-        if (num_parsed_levels == _num_values_left_in_cur_page && (_page_change_on_record_boundry || _reader->is_last_page())) {
+        if (num_parsed_levels == _num_values_left_in_cur_page &&
+            (_page_change_on_record_boundry || _reader->is_last_page())) {
             row_to_parse += 1;
             _meet_first_record = false;
         }
