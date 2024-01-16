@@ -32,7 +32,7 @@ public:
         _type.len = 6000;
     }
 
-    Slice hex_binary(const Slice& str) {
+    std::string hex_binary(const Slice& str) {
         std::stringstream ss;
         ss << std::hex << std::uppercase << std::setfill('0');
         for (int i = 0; i < str.size; ++i) {
