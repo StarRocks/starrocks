@@ -70,6 +70,14 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
   The CPU core limit for this resource group on a single BE node. It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. Default: 0.
 
+- `spill_mem_limit_threshold`
+
+  Introduced since version 3.1.7, this parameter specifies the memory threshold percentage of the resource group that triggers query spill on the current BE node. If the memory used by the resource group exceeds a certain percentage of the upper limit of the memory that the resource group can use for queries , queries with `enable_spill=true` will try to trigger spill to reduce memory usage. The value range is (0, 1), and the default value is 1.
+
+  > **NOTE**
+  >
+  > For example, assume that the memory limit of the BE node is M, the `mem_limit` set by a certain resource group is 0.9, and the `spill_mem_limit_threshold` is 0.7. Then when the memory used by the resource group exceeds `M*0.9*0.7`, all qeries in this resource group with `enable_spill=true` will try to trigger spill to reduce memory usage.
+
 On the basis of the above resource consumption restrictions, you can further restrict the resource consumption for big queries with the following parameters:
 
 - `big_query_cpu_second_limit`: This parameter specifies the CPU upper time limit for a big query on a single BE. Concurrent queries add up the time. The unit is second. This parameter takes effect only when it is set greater than 0. Default: 0.
@@ -318,6 +326,7 @@ The resource limits of `default_wg` are as follows:
 - `big_query_cpu_second_limit`: 0.
 - `big_query_scan_rows_limit`: 0.
 - `big_query_mem_limit`: 0.
+- `spill_mem_limit_threshold`: 100%.
 
 ### Monitoring resource groups
 
