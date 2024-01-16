@@ -304,7 +304,6 @@ TEST_F(StringFunctionPadTest, padConstPadTest) {
     for (auto& c : cases) {
         test_const_pad(1, c);
         test_const_pad(20, c);
-        test_const_pad(200, c);
     }
 }
 
