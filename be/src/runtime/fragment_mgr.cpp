@@ -340,15 +340,16 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
             if (st.ok()) {
                 return;
             }
-            LOG(WARNING) << "Failed to report exec status to coordinator, instance_id: " << print_id(_fragment_instance_id)
-                      << ", retry: " << i + 1 << "/" << config::max_load_status_report_retry_times;
+            LOG(WARNING) << "Failed to report exec status to coordinator, instance_id: "
+                         << print_id(_fragment_instance_id) << ", retry: " << i + 1 << "/"
+                         << config::max_load_status_report_retry_times;
             // sleep with backoff
             std::this_thread::sleep_for(std::chrono::seconds((2 << i) * 10));
         }
     }
 
     LOG(WARNING) << "Abort to report exec status to coordinator, instance_id: " << print_id(_fragment_instance_id)
-              << ", retry times:  " << config::max_load_status_report_retry_times;
+                 << ", retry times:  " << config::max_load_status_report_retry_times;
 
     if (!st.ok()) {
         // we need to cancel the execution of this fragment
