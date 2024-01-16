@@ -313,11 +313,11 @@ ExecStateReporter::ExecStateReporter() {
     }
 }
 
-void ExecStateReporter::submit(std::function<void()>&& report_task, bool priority) {
+Status ExecStateReporter::submit(std::function<void()>&& report_task, bool priority) {
     if (priority) {
-        (void)_priority_thread_pool->submit_func(std::move(report_task));
+        _priority_thread_pool->submit_func(std::move(report_task));
     } else {
-        (void)_thread_pool->submit_func(std::move(report_task));
+        _thread_pool->submit_func(std::move(report_task));
     }
 }
 

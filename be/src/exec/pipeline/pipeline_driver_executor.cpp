@@ -346,7 +346,13 @@ void GlobalDriverExecutor::report_exec_state(QueryContext* query_ctx, FragmentCo
     // if it is done exec state report, We need to ensure that this report is executed with priority
     // and is retried as much as possible to ensure success.
     // Otherwise, it may result in the query or ingestion status getting stuck.
-    this->_exec_state_reporter->submit(std::move(report_task), done);
+    auto st = this->_exec_state_reporter->submit(std::move(report_task), done);
+    if (!st.ok()) {
+        LOG(ERROR) << "[Driver] Submit exec state report task with failure: fragment_instance_id=" << print_id(fragment_id)
+                << ", is_done=" << done << ", we will retry submit";
+        // just retry submit one more time here
+        this->_exec_state_reporter->submit(std::move(report_task), done);
+    }
     VLOG(1) << "[Driver] Submit exec state report task: fragment_instance_id=" << print_id(fragment_id)
             << ", is_done=" << done;
 }
