@@ -209,6 +209,37 @@ Suppose you have an OLAP table named `olap_tbl`, you can transform and load data
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM mc_table;
 ```
 
+## Type mapping
+
+MaxCompute Catalog maps the MaxCompute(ODPS) type to the StarRocks type, and the type conversion is
+as follows
+
+| MaxCompute(ODPS) type | StarRocks type      |
+|-----------------------|---------------------|
+| BOOLEAN               | BOOLEAN             |
+| TINYINT               | TINYINT             |
+| SMALLINT              | SMALLINT            |
+| INT                   | INT                 |
+| BIGINT                | BIGINT              |
+| FLOAT                 | FLOAT               |
+| DOUBLE                | DOUBLE              |
+| DECIMAL(p, s)         | DECIMAL(p, s)       |
+| STRING                | VARCHAR(1073741824) |
+| VARCHAR(n)            | VARCHAR(n)          |
+| CHAR(n)               | CHAR(n)             |
+| JSON                  | VARCHAR(1073741824) |
+| BINARY                | VARBINARY           |
+| DATE                  | DATE                |
+| DATETIME              | DATETIME            |
+| DATETIME              | DATETIME            |
+| DATETIME              | DATETIME            |
+| TIMESTAMP             | DATETIME            |
+| ARRAY                 | ARRAY               |
+| MAP                   | MAP                 |
+| STRUCT                | STRUCT              |
+
+Note: The TIMESTAMP type will lose precision due to type conversion in StarRocks
+
 ## CBO Statistics Collection
 
 Since the MaxCompute (ODPS) Catalog cannot automatically collect CBO statistics for MaxCompute (

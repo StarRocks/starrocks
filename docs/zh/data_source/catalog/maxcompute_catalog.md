@@ -202,6 +202,35 @@ DROP CATALOG odps_catalog;
 INSERT INTO default_catalog.olap_db.olap_tbl SELECT * FROM mc_table;
 ```
 
+## 类型映射
+MaxCompute Catalog 将 MaxCompute(ODPS) 类型映射到 StarRocks 类型，类型转换如下
+
+| MaxCompute(ODPS) 类型 | StarRocks 类型        |
+|---------------------|---------------------|
+| BOOLEAN             | BOOLEAN             |
+| TINYINT             | TINYINT             |
+| SMALLINT            | SMALLINT            |
+| INT                 | INT                 |
+| BIGINT              | BIGINT              |
+| FLOAT               | FLOAT               |
+| DOUBLE              | DOUBLE              |
+| DECIMAL(p, s)       | DECIMAL(p, s)       |
+| STRING              | VARCHAR(1073741824) |
+| VARCHAR(n)          | VARCHAR(n)          |
+| CHAR(n)             | CHAR(n)             |
+| JSON                | VARCHAR(1073741824) |
+| BINARY              | VARBINARY           |
+| DATE                | DATE                |
+| DATETIME            | DATETIME            |
+| DATETIME            | DATETIME            |
+| DATETIME            | DATETIME            |
+| TIMESTAMP           | DATETIME            |
+| ARRAY               | ARRAY               |
+| MAP                 | MAP                 |
+| STRUCT              | STRUCT              |
+
+注意：TIMESTAMP类型在 StarRocks 中由于类型转换，会损失精度
+
 ## CBO 统计信息采集
 
 由于 MaxCompute(ODPS) Catalog 在当前版本还无法自动采集 MaxCompute(ODPS) 表的 CBO
