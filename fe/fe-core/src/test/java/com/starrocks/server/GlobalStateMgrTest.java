@@ -204,8 +204,8 @@ public class GlobalStateMgrTest {
 
     @Test
     public void testCanSkipBadReplayedJournal() {
-        boolean originVal = Config.ignore_journal_replay_failure;
-        Config.ignore_journal_replay_failure = false;
+        boolean originVal = Config.metadata_journal_ignore_replay_failure;
+        Config.metadata_journal_ignore_replay_failure = false;
 
         // when recover_on_load_journal_failed is false, the failure of every operation type can not be skipped.
         Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
@@ -217,7 +217,7 @@ public class GlobalStateMgrTest {
         Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
                 new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
 
-        Config.ignore_journal_replay_failure = true;
+        Config.metadata_journal_ignore_replay_failure = true;
         // when recover_on_load_journal_failed is false, the failure of recoverable operation type can be skipped.
         Assert.assertTrue(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
                 new JournalException(OperationType.OP_ADD_ANALYZE_STATUS, "failed")));
@@ -228,6 +228,6 @@ public class GlobalStateMgrTest {
         Assert.assertFalse(GlobalStateMgr.getServingState().canSkipBadReplayedJournal(
                 new JournalInconsistentException(OperationType.OP_CREATE_DB_V2, "failed")));
 
-        Config.ignore_journal_replay_failure = originVal;
+        Config.metadata_journal_ignore_replay_failure = originVal;
     }
 }

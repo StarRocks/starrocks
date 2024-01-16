@@ -2033,7 +2033,7 @@ public class GlobalStateMgr {
 
         if (opCode != OperationType.OP_INVALID
                 && OperationType.IGNORABLE_OPERATIONS.contains(opCode)) {
-            if (Config.ignore_journal_replay_failure) {
+            if (Config.metadata_journal_ignore_replay_failure) {
                 LOG.error("skip recoverable journal load failure, opCode: {}", opCode);
                 return true;
             } else {
