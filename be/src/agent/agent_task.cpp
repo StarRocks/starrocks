@@ -580,7 +580,8 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
             st = new_schema->build_current_tablet_schema(schema_id, schema_version, pcolumn_param, ori_tablet_schema);
             if (!st.ok()) {
                 status_code = TStatusCode::RUNTIME_ERROR;
-                std::string msg = strings::Substitute("update schema fail because build tablet schema fail: $0", st.to_string());
+                std::string msg =
+                        strings::Substitute("update schema fail because build tablet schema fail: $0", st.to_string());
                 LOG(WARNING) << msg;
                 error_msgs.emplace_back(msg);
                 break;
