@@ -27,7 +27,12 @@ size_t Pipeline::degree_of_parallelism() const {
 }
 
 void Pipeline::count_down_driver(RuntimeState* state) {
+<<<<<<< HEAD
     bool all_drivers_finished = ++_num_finished_drivers == _drivers.size();
+=======
+    size_t num_drivers = _drivers.size();
+    bool all_drivers_finished = ++_num_finished_drivers >= num_drivers;
+>>>>>>> 76f85cc18b ([BugFix] Fix pipeline may use-after-free in count_down_drivers (#39107))
     if (all_drivers_finished) {
         state->fragment_ctx()->count_down_pipeline();
     }
