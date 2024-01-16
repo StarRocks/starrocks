@@ -4326,11 +4326,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
                 ModifyTablePropertyOperationLog info =
                         new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
-<<<<<<< HEAD
-                editLog.logSetHasForbitGlobalDict(info);
-=======
-                GlobalStateMgr.getCurrentState().getEditLog().logSetHasForbiddenGlobalDict(info);
->>>>>>> 488119f2b7 ([Refactor] Add slow log for edit log write and refine some code warnings (backport #39024) (backport #39085) (backport #39102) (#39128))
+                editLog.logSetHasForbiddenGlobalDict(info);
             }
         } finally {
             db.readUnlock();
