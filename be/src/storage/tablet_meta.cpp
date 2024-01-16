@@ -76,12 +76,20 @@ TabletMetaSharedPtr TabletMeta::create() {
     return std::make_shared<TabletMeta>();
 }
 
-RowsetMetaSharedPtr& TabletMeta::rowset_meta_with_max_rowset_version(std::vector<RowsetMetaSharedPtr> rowsets) {
+const RowsetMetaSharedPtr& TabletMeta::rowset_meta_with_max_rowset_version(
+        const std::vector<RowsetMetaSharedPtr>& rowsets) {
     return *std::max_element(
             rowsets.begin(), rowsets.end(), [](const RowsetMetaSharedPtr& a, const RowsetMetaSharedPtr& b) {
                 return !a->tablet_schema() || (b->tablet_schema() && a->tablet_schema()->schema_version() <
                                                                              b->tablet_schema()->schema_version());
             });
+}
+
+const RowsetMetaPB& TabletMeta::rowset_meta_pb_with_max_rowset_version(const std::vector<RowsetMetaPB>& rowsets) {
+    return *std::max_element(rowsets.begin(), rowsets.end(), [](const RowsetMetaPB& a, const RowsetMetaPB& b) {
+        return !a.has_tablet_schema() ||
+               (b.has_tablet_schema() && a.tablet_schema().schema_version() < b.tablet_schema().schema_version());
+    });
 }
 
 TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash,
@@ -133,6 +141,17 @@ Status TabletMeta::create_from_file(const string& file_path) {
     Status st = file.load(&tablet_meta_pb);
     if (!st.ok()) {
         LOG(WARNING) << "Fail to load tablet meta file: " << st;
+        return st;
+    }
+    init_from_pb(&tablet_meta_pb);
+    return Status::OK();
+}
+
+Status TabletMeta::create_from_memory(std::string_view data) {
+    TabletMetaPB tablet_meta_pb;
+    Status st = ProtobufFileWithHeader::load(&tablet_meta_pb, data);
+    if (!st.ok()) {
+        LOG(WARNING) << "Fail to load tablet meta from memory: " << st;
         return st;
     }
     init_from_pb(&tablet_meta_pb);
@@ -311,6 +330,10 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
 
     _enable_shortcut_compaction = tablet_meta_pb.enable_shortcut_compaction();
     _primary_index_cache_expire_sec = tablet_meta_pb.primary_index_cache_expire_sec();
+
+    if (tablet_meta_pb.has_source_schema()) {
+        _source_schema = std::make_shared<const TabletSchema>(tablet_meta_pb.source_schema());
+    }
 }
 
 void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
@@ -346,10 +369,10 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
     }
 
     for (auto& rs : _rs_metas) {
-        rs->to_rowset_pb(tablet_meta_pb->add_rs_metas());
+        rs->get_full_meta_pb(tablet_meta_pb->add_rs_metas());
     }
     for (const auto& rs : _inc_rs_metas) {
-        rs->to_rowset_pb(tablet_meta_pb->add_inc_rs_metas());
+        rs->get_full_meta_pb(tablet_meta_pb->add_inc_rs_metas());
     }
     if (_schema != nullptr) {
         _schema->to_schema_pb(tablet_meta_pb->mutable_schema());
@@ -373,6 +396,10 @@ void TabletMeta::to_meta_pb(TabletMetaPB* tablet_meta_pb) {
 
     tablet_meta_pb->set_enable_shortcut_compaction(_enable_shortcut_compaction);
     tablet_meta_pb->set_primary_index_cache_expire_sec(_primary_index_cache_expire_sec);
+
+    if (_source_schema != nullptr) {
+        _source_schema->to_schema_pb(tablet_meta_pb->mutable_source_schema());
+    }
 }
 
 void TabletMeta::to_json(string* json_string, json2pb::Pb2JsonOptions& options) {
@@ -420,9 +447,8 @@ void TabletMeta::modify_rs_metas(const std::vector<RowsetMetaSharedPtr>& to_add,
         auto it = _rs_metas.begin();
         while (it != _rs_metas.end()) {
             if (rs_to_del->version() == (*it)->version()) {
-                if ((*it)->has_delete_predicate()) {
-                    remove_delete_predicate_by_version((*it)->version());
-                }
+                // delay delete "delete predicate" when deleting stale rowset
+                // fix https://github.com/StarRocks/starrocks/pull/20362
                 _rs_metas.erase(it);
                 // there should be only one rowset match the version
                 break;
@@ -456,6 +482,9 @@ void TabletMeta::delete_stale_rs_meta_by_version(const Version& version) {
     auto it = _stale_rs_metas.begin();
     while (it != _stale_rs_metas.end()) {
         if ((*it)->version() == version) {
+            if ((*it)->has_delete_predicate()) {
+                remove_delete_predicate_by_version((*it)->version());
+            }
             it = _stale_rs_metas.erase(it);
             // version wouldn't be duplicate
             break;

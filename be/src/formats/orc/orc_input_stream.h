@@ -14,18 +14,15 @@
 
 #pragma once
 
+#include <exec/hdfs_scanner.h>
+
 #include <boost/algorithm/string.hpp>
 #include <orc/OrcFile.hh>
 
-#include "column/column_helper.h"
-#include "common/object_pool.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/runtime_filter_bank.h"
-#include "formats/orc/orc_mapping.h"
 #include "io/shared_buffered_input_stream.h"
-#include "runtime/descriptors.h"
-#include "runtime/types.h"
 namespace starrocks {
 
 class RandomAccessFile;
@@ -68,14 +65,20 @@ public:
 
     const std::string& getName() const override;
 
-    bool isIORangesEnabled() const override { return config::orc_coalesce_read_enable; }
+    void set_lazy_column_coalesce_counter(const std::atomic<int32_t>* lazy_column_coalesce_counter) {
+        _lazy_column_coalesce_counter = lazy_column_coalesce_counter;
+    }
+    void set_app_stats(HdfsScanStats* stats) { _app_stats = stats; }
+    bool isIOCoalesceEnabled() const override { return config::orc_coalesce_read_enable; }
+    bool isIOAdaptiveCoalesceEnabled() const override { return config::io_coalesce_adaptive_lazy_active; }
+
     void clearIORanges() override;
-    void setIORanges(std::vector<IORange>& io_ranges) override;
+    void setIORanges(std::vector<IORange>& io_ranges, const bool is_from_stripe) override;
     void setStripes(std::vector<StripeInformation>&& stripes);
 
 private:
     void doRead(void* buf, uint64_t length, uint64_t offset);
-    bool canUseCacheBuffer(uint64_t offset, uint64_t length);
+    bool isAlreadyCachedInBuffer(uint64_t offset, uint64_t length);
     uint64_t computeCacheFullStripeSize(uint64_t offset, uint64_t length);
 
     RandomAccessFile* _file;
@@ -87,5 +90,8 @@ private:
     bool _tiny_stripe_read = false;
     uint64_t _last_stripe_index = 0;
     std::vector<StripeInformation> _stripes;
+
+    const std::atomic<int32_t>* _lazy_column_coalesce_counter = nullptr;
+    HdfsScanStats* _app_stats = nullptr;
 };
 } // namespace starrocks

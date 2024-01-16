@@ -1,0 +1,77 @@
+-- name: test_materialized_view_union_all_rewrite
+CREATE TABLE `mt1` (
+ k1 INT,
+  k2 string,
+  v1 INT,
+  v2 INT
+) ENGINE=OLAP
+PARTITION BY RANGE(`k1`)
+(
+  PARTITION `p1` VALUES LESS THAN ('3'),
+  PARTITION `p2` VALUES LESS THAN ('6'),
+  PARTITION `p3` VALUES LESS THAN ('9')
+)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into mt1 values (1,'a',1,1), (4,'aa',1,1);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW union_mv0 
+PARTITION BY (k1) 
+DISTRIBUTED BY HASH(k1) 
+REFRESH DEFERRED MANUAL 
+AS SELECT k1,k2, v1,v2 from mt1;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW union_mv0 PARTITION START ('1') END ('3') with sync mode;
+function: check_hit_materialized_view("select * from mt1 where k1 < 3", "union_mv0")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select * from mt1 where k1 = 1", "union_mv0")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where k1<6 and k2 like 'a%'", "union_mv0")
+-- result:
+None
+-- !result
+function: check_no_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where k1>0 and k2 like 'a%'", "union_mv0")
+-- result:
+None
+-- !result
+set query_debug_options = "{'enableMVEagerUnionAllRewrite':true}";
+-- result:
+-- !result
+function: check_hit_materialized_view("SELECT k1,k2, v1,v2 from mt1 where k1>0 and k2 like 'a%'", "union_mv0")
+-- result:
+None
+-- !result
+select * from mt1 where k1 < 3 order by 1;
+-- result:
+1	a	1	1
+-- !result
+select * from mt1 where k1 = 1 order by 1;
+-- result:
+1	a	1	1
+-- !result
+select * from mt1 where k1<6 and k2  like 'a%' order by 1;
+-- result:
+1	a	1	1
+4	aa	1	1
+-- !result
+select * from mt1 where k1>0 and k2  like 'a%' order by 1;
+-- result:
+1	a	1	1
+4	aa	1	1
+-- !result
+drop table mt1;
+-- result:
+-- !result
+drop materialized view union_mv0;
+-- result:
+-- !result

@@ -28,6 +28,11 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 public class MaterializedViewOptimizer {
     public MvPlanContext optimize(MaterializedView mv,
                                   ConnectContext connectContext) {
+        return optimize(mv, connectContext, true);
+    }
+    public MvPlanContext optimize(MaterializedView mv,
+                                  ConnectContext connectContext,
+                                  boolean inlineView) {
         // optimize the sql by rule and disable rule based materialized view rewrite
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
         optimizerConfig.disableRuleSet(RuleSetType.PARTITION_PRUNE);
@@ -42,16 +47,14 @@ public class MaterializedViewOptimizer {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         String mvSql = mv.getViewDefineSql();
         Pair<OptExpression, LogicalPlan> plans =
-                MvUtils.getRuleOptimizedLogicalPlan(mv, mvSql, columnRefFactory, connectContext, optimizerConfig);
+                MvUtils.getRuleOptimizedLogicalPlan(mv, mvSql, columnRefFactory, connectContext, optimizerConfig, inlineView);
         if (plans == null) {
-            return null;
+            return new MvPlanContext(false, "No query plan for it");
         }
         OptExpression mvPlan = plans.first;
         if (!MvUtils.isValidMVPlan(mvPlan)) {
-            return new MvPlanContext();
+            return new MvPlanContext(false, MvUtils.getInvalidReason(mvPlan));
         }
-        MvPlanContext mvRewriteContext =
-                new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory);
-        return mvRewriteContext;
+        return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory);
     }
 }

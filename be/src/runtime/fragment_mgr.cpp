@@ -464,7 +464,7 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
     if (!st.ok()) {
         exec_state->cancel(PPlanFragmentCancelReason::INTERNAL_ERROR);
         std::string error_msg = strings::Substitute("Put planfragment $0 to thread pool failed. err = $1",
-                                                    print_id(fragment_instance_id), st.get_error_msg());
+                                                    print_id(fragment_instance_id), st.message());
         LOG(WARNING) << error_msg;
         {
             // Remove the exec state added

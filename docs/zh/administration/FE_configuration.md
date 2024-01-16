@@ -26,7 +26,6 @@ FE 启动后，您可以在 MySQL 客户端执行 ADMIN SHOW FRONTEND CONFIG 命
 >
 > 只有拥有 `cluster_admin` 角色的用户才可以执行集群管理相关命令。
 
-
 ## 配置 FE 动态参数
 
 您可以通过 [ADMIN SET FRONTEND CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令在线修改 FE 动态参数。
@@ -391,6 +390,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：秒
 - 默认值：60
 
+#### routine_load_unstable_threshold_second
+
+- 含义：Routine Load 导入作业的任一导入任务消费延迟，即正在消费的消息时间戳与当前时间的差值超过该阈值，且数据源中存在未被消费的消息，则导入作业置为 UNSTABLE 状态。
+- 单位：秒
+- 默认值：3600
+
 #### max_tolerable_backend_down_num
 
 - 含义：允许的最大故障 BE 数。如果故障的 BE 节点数超过该阈值，则不能自动恢复 Routine Load 作业。
@@ -498,7 +503,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### enable_auto_tablet_distribution
 
-- 含义：是否开启自动设置分桶功能。<ul><li>设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[确定分桶数量)](../table_design/Data_distribution.md#确定分桶数量)。</li><li>设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。<br />新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。</li></ul>
+- 含义：是否开启自动设置分桶功能。<ul><li>设置为 `true` 表示开启，您在建表或新增分区时无需指定分桶数目，StarRocks 自动决定分桶数量。自动设置分桶数目的策略，请参见[确定分桶数量](../table_design/Data_distribution.md#设置分桶数量)。</li><li>设置为 `false` 表示关闭，您在建表时需要手动指定分桶数量。<br />新增分区时，如果您不指定分桶数量，则新分区的分桶数量继承建表时候的分桶数量。当然您也可以手动指定新增分区的分桶数量。</li></ul>
 - 默认值：TRUE
 - 引入版本：2.5.6
 
@@ -525,14 +530,14 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：秒
 - 默认值：86400
 
-#### fast_schema_evolution
+#### enable_fast_schema_evolution
 
-- 含义：是否开启集群内所有表的 fast schema evolution，取值：`TRUE`（默认） 或 `FALSE`。开启后增删列时可以提高 schema change 速度并降低资源使用。
+- 含义：是否开启集群内所有表的 fast schema evolution，取值：`TRUE` 或 `FALSE`（默认）。开启后增删列时可以提高 schema change 速度并降低资源使用。
   > **NOTE**
   >
   > - StarRocks 存算分离集群不支持该参数。
   > - 如果您需要为某张表设置该配置，例如关闭该表的 fast schema evolution，则可以在建表时设置表属性 [`fast_schema_evolution`](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md#设置-fast-schema-evolution)。
-- 默认值：TRUE
+- 默认值：FALSE
 - 引入版本：3.2.0
 
 #### recover_with_empty_tablet
@@ -585,12 +590,12 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 #### tablet_sched_balance_load_disk_safe_threshold
 
-- 含义：判断 BE 磁盘使用率是否均衡的阈值。只有 `tablet_sched_balancer_strategy` 设置为 `disk_and_tablet`时，该参数才生效。<br />如果所有 BE 的磁盘使用率低于 50%，认为磁盘使用均衡。<br />对于 disk_and_tablet 策略，如果最大和最小 BE 磁盘使用率之差高于 10%，认为磁盘使用不均衡，会触发 tablet 重新均衡。参数别名`balance_load_disk_safe_threshold`。
+- 含义：判断 BE 磁盘使用率是否均衡的百分比阈值。如果所有 BE 的磁盘使用率低于该值，认为磁盘使用均衡。当有 BE 磁盘使用率超过该阈值时，如果最大和最小 BE 磁盘使用率之差高于 10%，则认为磁盘使用不均衡，会触发 Tablet 重新均衡。参数别名`balance_load_disk_safe_threshold`。
 - 默认值：0.5
 
 #### tablet_sched_balance_load_score_threshold
 
-- 含义：用于判断 BE 负载是否均衡。只有 `tablet_sched_balancer_strategy` 设置为 `be_load_score`时，该参数才生效。<br />负载比平均负载低 10% 的 BE 处于低负载状态，比平均负载高 10% 的 BE 处于高负载状态。参数别名 `balance_load_score_threshold`。
+- 含义：用于判断 BE 负载是否均衡的百分比阈值。如果一个 BE 的负载低于所有 BE 的平均负载，且差值大于该阈值，则认为该 BE 处于低负载状态。相反，如果一个 BE 的负载比平均负载高且差值大于该阈值，则认为该 BE 处于高负载状态。参数别名 `balance_load_score_threshold`。
 - 默认值：0.1
 
 #### tablet_sched_repair_delay_factor_second
@@ -806,6 +811,28 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：在创建同步物化视图时，是否将同步物化视图的索引与基表加入到相同的 Colocate Group。如果设置为 `true`，TabletSink 将加速同步物化视图的写入性能。该参数自 v3.2.0 起新增。
 - 默认值: TRUE
 
+#### enable_mv_automatic_active_check
+
+- 含义：是否允许系统自动检查和重新激活异步物化视图。启用此功能后，系统将会自动激活因基表（或视图）Schema Change 或重建而失效（Inactive）的物化视图。请注意，此功能不会激活由用户手动设置为 Inactive 的物化视图。此项功能支持从 v3.1.6 版本开始。
+- 默认值: TRUE
+
+##### jdbc_meta_default_cache_enable
+
+- 含义：JDBC Catalog 元数据缓存是否开启的默认值。当设置为TRUE时，新创建的 JDBC Catalog 会默认开启元数据缓存。
+- 默认值：FALSE
+
+##### jdbc_meta_default_cache_expire_sec
+
+- 含义：JDBC Catalog 元数据缓存的默认过期时间。当 jdbc_meta_default_cache_enable 设置为 TRUE 时，新创建的 JDBC Catalog 会默认设置元数据缓存的过期时间。
+- 单位：秒
+- 默认值：600
+
+##### default_mv_refresh_immediate
+
+- 含义：创建异步物化视图后，是否立即刷新该物化视图。当设置为 `true` 时，异步物化视图创建后会立即刷新。
+- 默认值：TRUE
+- 引入版本：v3.2.3
+
 ## 配置 FE 静态参数
 
 以下 FE 配置项为静态参数，不支持在线修改，您需要在 `fe.conf` 中修改并重启 FE。
@@ -924,6 +951,12 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 含义：FE 节点上 HTTP 服务器的端口。
 - 默认值：8030
+
+#### http_worker_threads_num
+
+- 含义：Http Server 用于处理 HTTP 请求的线程数。如果配置为负数或 0 ，线程数将设置为 CPU 核数的 2 倍。
+- 默认值：0
+- 引入版本：2.5.18，3.0.10，3.1.7，3.2.2
 
 #### http_backlog_num
 
@@ -1168,10 +1201,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ### 存储（FE 静态）
 
-#### tablet_sched_balancer_strategy
-
-- 含义：Tablet 均衡策略。参数别名为 `tablet_balancer_strategy`。取值范围：`disk_and_tablet` 和 `be_load_score`。
-- 默认值：`disk_and_tablet`
 
 #### tablet_sched_storage_cooldown_second
 

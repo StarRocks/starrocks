@@ -4,6 +4,9 @@
 # /docs/ belong to docs-maintainer
 /docs/  @StarRocks/docs-maintainer
 
+# /docker
+/docker/  @StarRocks/docker-maintainer
+
 # parser
 /fe/fe-core/src/main/java/com/starrocks/planner/  @StarRocks/parser
 /fe/fe-core/src/main/java/com/starrocks/sql/ast/ @StarRocks/parser
@@ -30,3 +33,19 @@
 /be/src/storage/lake/ @StarRocks/cloud-native
 /be/src/runtime/lake_tablets_channel.h @StarRocks/cloud-native
 /be/src/runtime/lake_tablets_channel.cpp @StarRocks/cloud-native
+
+# error message
+/fe/fe-core/src/main/java/com/starrocks/common/ErrorCode.java  @StarRocks/msg-reviewer
+
+# StorageEngine/ExecEnv/GlobalEnv
+/be/src/runtime/exec_env.h @StarRocks/thread-committer
+/be/src/runtime/exec_env.cpp @StarRocks/thread-committer
+/be/src/storage/olap_server.cpp @StarRocks/thread-committer
+/be/src/storage/storage_engine.h @StarRocks/thread-committer
+/be/src/storage/storage_engine.cpp @StarRocks/thread-committer
+/be/src/service/starrocks_main.cpp @StarRocks/thread-committer
+/be/src/service/service_be/starrocks_be.cpp @StarRocks/thread-committer
+
+# restful
+/fe/fe-core/src/main/java/com/starrocks/http @StarRocks/restful-maintainer
+/be/src/http @StarRocks/restful-maintainer

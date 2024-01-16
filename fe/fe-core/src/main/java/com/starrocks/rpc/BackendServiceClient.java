@@ -42,25 +42,19 @@ import com.starrocks.proto.ExecuteCommandRequestPB;
 import com.starrocks.proto.ExecuteCommandResultPB;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
-import com.starrocks.proto.PClearDictionaryCacheRequest;
-import com.starrocks.proto.PClearDictionaryCacheResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;
-import com.starrocks.proto.PGetDictionaryStatisticRequest;
-import com.starrocks.proto.PGetDictionaryStatisticResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.proto.PPlanFragmentCancelReason;
+import com.starrocks.proto.PProcessDictionaryCacheRequest;
+import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
-import com.starrocks.proto.PRefreshDictionaryCacheBeginRequest;
-import com.starrocks.proto.PRefreshDictionaryCacheBeginResult;
-import com.starrocks.proto.PRefreshDictionaryCacheCommitRequest;
-import com.starrocks.proto.PRefreshDictionaryCacheCommitResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
@@ -307,49 +301,13 @@ public class BackendServiceClient {
         }
     }
 
-    public Future<PRefreshDictionaryCacheBeginResult> refreshDictionaryCacheBegin(
-            TNetworkAddress address, PRefreshDictionaryCacheBeginRequest request) throws RpcException {
+    public Future<PProcessDictionaryCacheResult> processDictionaryCache(
+            TNetworkAddress address, PProcessDictionaryCacheRequest request) throws RpcException {
         try {
             final PBackendService service = BrpcProxy.getBackendService(address);
-            return service.refreshDictionaryCacheBegin(request);
+            return service.processDictionaryCache(request);
         } catch (Throwable e) {
-            LOG.warn("failed to execute refreshDictionaryCacheBegin, address={}:{}", address.getHostname(), address.getPort(), e);
-            throw new RpcException(address.hostname, e.getMessage());
-        }
-    }
-
-    public Future<PRefreshDictionaryCacheCommitResult> refreshDictionaryCacheCommit(
-            TNetworkAddress address, PRefreshDictionaryCacheCommitRequest request) throws RpcException {
-        try {
-            final PBackendService service = BrpcProxy.getBackendService(address);
-            return service.refreshDictionaryCacheCommit(request);
-        } catch (Throwable e) {
-            LOG.warn("failed to execute refreshDictionaryCacheCommit, address={}:{}",
-                     address.getHostname(), address.getPort(), e);
-            throw new RpcException(address.hostname, e.getMessage());
-        }
-    }
-
-    public Future<PClearDictionaryCacheResult> clearDictionaryCache(
-            TNetworkAddress address, PClearDictionaryCacheRequest request) throws RpcException {
-        try {
-            final PBackendService service = BrpcProxy.getBackendService(address);
-            return service.clearDictionaryCache(request);
-        } catch (Throwable e) {
-            LOG.warn("failed to execute clearDictionaryCache, address={}:{}",
-                     address.getHostname(), address.getPort(), e);
-            throw new RpcException(address.hostname, e.getMessage());
-        }
-    }
-
-    public Future<PGetDictionaryStatisticResult> getDictionaryStatistic(
-            TNetworkAddress address, PGetDictionaryStatisticRequest request) throws RpcException {
-        try {
-            final PBackendService service = BrpcProxy.getBackendService(address);
-            return service.getDictionaryStatistic(request);
-        } catch (Throwable e) {
-            LOG.warn("failed to execute getDictionaryStatistic, address={}:{}",
-                     address.getHostname(), address.getPort(), e);
+            LOG.warn("failed to execute processDictionaryCache, address={}:{}", address.getHostname(), address.getPort(), e);
             throw new RpcException(address.hostname, e.getMessage());
         }
     }

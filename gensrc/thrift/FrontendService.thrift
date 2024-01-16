@@ -399,6 +399,8 @@ struct TMaterializedViewStatus {
     23: optional string task_id
     24: optional string task_name
     25: optional string inactive_reason
+
+    26: optional string extra_message
 }
 
 struct TListPipesParams {
@@ -409,6 +411,7 @@ struct TListPipesInfo {
     // pipe entity
     1: optional i64 pipe_id
     2: optional string pipe_name
+    3: optional string properties
 
     // schema info
     10: optional string database_name
@@ -481,6 +484,7 @@ struct TTaskInfo {
     4: optional string database
     5: optional string definition
     6: optional i64 expire_time
+    7: optional string properties
 }
 
 struct TGetTaskInfoResult {
@@ -1554,7 +1558,8 @@ struct TFeLocksItem {
     1: optional string lock_type
     2: optional string lock_object
     3: optional string lock_mode
-    4: optional i64 lock_start_time
+    4: optional i64 start_time
+    5: optional i64 hold_time_ms
     
     11: optional string thread_info
     12: optional bool granted
@@ -1611,6 +1616,44 @@ struct TGetDictQueryParamResponse {
   2: required Descriptors.TOlapTablePartitionParam partition
   3: required Descriptors.TOlapTableLocationParam location
   4: required Descriptors.TNodesInfo nodes_info
+}
+
+struct TReplicaReplicationInfo {
+    1: optional Types.TBackend src_backend
+}
+
+struct TTabletReplicationInfo {
+    1: optional i64 tablet_id
+    2: optional i64 src_tablet_id
+    3: optional list<TReplicaReplicationInfo> replica_replication_infos
+}
+
+struct TIndexReplicationInfo {
+    1: optional i64 index_id
+    2: optional i32 src_schema_hash
+    3: optional map<i64, TTabletReplicationInfo> tablet_replication_infos
+}
+
+struct TPartitionReplicationInfo {
+    1: optional i64 partition_id
+    2: optional i64 src_version
+    3: optional map<i64, TIndexReplicationInfo> index_replication_infos
+}
+
+struct TTableReplicationRequest {
+    1: optional string username
+    2: optional string password
+    3: optional i64 database_id
+    4: optional i64 table_id
+    5: optional string src_token
+    6: optional Types.TTableType src_table_type
+    7: optional i64 src_table_data_size
+    8: optional map<i64, TPartitionReplicationInfo> partition_replication_infos
+    9: optional string job_id
+}
+
+struct TTableReplicationResponse {
+    1: optional Status.TStatus status
 }
 
 service FrontendService {
@@ -1708,5 +1751,7 @@ service FrontendService {
     TGetLoadTxnStatusResult getLoadTxnStatus(1: TGetLoadTxnStatusRequest request)
 
     TGetDictQueryParamResponse getDictQueryParam(1: TGetDictQueryParamRequest request)
+
+    TTableReplicationResponse startTableReplication(1: TTableReplicationRequest request)
 }
 

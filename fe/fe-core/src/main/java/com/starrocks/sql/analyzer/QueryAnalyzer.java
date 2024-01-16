@@ -713,7 +713,7 @@ public class QueryAnalyzer {
                 queryOutputScope = process(node.getQueryStatement(), scope);
             } catch (SemanticException e) {
                 throw new SemanticException("View " + node.getName() + " references invalid table(s) or column(s) or " +
-                        "function(s) or definer/invoker of view lack rights to use them");
+                        "function(s) or definer/invoker of view lack rights to use them: " + e.getMessage(), e);
             }
             View view = node.getView();
             List<Field> fields = Lists.newArrayList();
@@ -862,8 +862,12 @@ public class QueryAnalyzer {
                 AnalyzerUtils.verifyNoWindowFunctions(args.get(i), "Table Function");
                 AnalyzerUtils.verifyNoGroupingFunctions(args.get(i), "Table Function");
             }
-
-            Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes,
+            List<String> names = node.getFunctionParams().getExprsNames();
+            String[] namesArray = null;
+            if (names != null && !names.isEmpty()) {
+                namesArray = names.toArray(String[]::new);
+            }
+            Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes, namesArray,
                     Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
 
             if (fn == null) {
@@ -871,9 +875,23 @@ public class QueryAnalyzer {
             }
 
             if (fn == null) {
-                throw new SemanticException("Unknown table function '%s(%s)'", node.getFunctionName().getFunction(),
-                        Arrays.stream(argTypes).map(Object::toString).collect(Collectors.joining(",")));
+                if (namesArray == null) {
+                    throw new SemanticException("Unknown table function '%s(%s)'", node.getFunctionName().getFunction(),
+                            Arrays.stream(argTypes).map(Object::toString).collect(Collectors.joining(",")));
+                } else {
+                    throw new SemanticException("Unknown table function '%s(%s)', the function doesn't support named " +
+                            "arguments or has invalid arguments",
+                            node.getFunctionName().getFunction(), node.getFunctionParams().getNamedArgStr());
+                }
             }
+
+            if (namesArray != null) {
+                Preconditions.checkState(fn.hasNamedArg());
+                node.getFunctionParams().reorderNamedArgAndAppendDefaults(fn);
+            } else if (node.getFunctionParams().exprs().size() < fn.getNumArgs()) {
+                node.getFunctionParams().appendPositionalDefaultArgExprs(fn);
+            }
+            Preconditions.checkState(node.getFunctionParams().exprs().size() == fn.getNumArgs());
 
             if (!(fn instanceof TableFunction)) {
                 throw new SemanticException("'%s(%s)' is not table function", node.getFunctionName().getFunction(),

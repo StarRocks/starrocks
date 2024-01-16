@@ -31,7 +31,7 @@
 
 namespace starrocks::lake {
 
-Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_func) {
+Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_func, ThreadPool* flush_pool) {
     if (progress == nullptr) {
         return Status::InvalidArgument("progress is null");
     }
@@ -52,7 +52,7 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
 
     uint32_t max_rows_per_segment =
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _total_num_rows, _total_data_size);
-    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kVertical, _txn_id, max_rows_per_segment));
+    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kVertical, _txn_id, max_rows_per_segment, flush_pool));
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
@@ -93,8 +93,10 @@ Status VerticalCompactionTask::execute(Progress* progress, CancelFunc cancel_fun
         op_compaction->add_input_rowsets(rowset->id());
     }
     for (auto& file : writer->files()) {
-        op_compaction->mutable_output_rowset()->add_segments(file);
+        op_compaction->mutable_output_rowset()->add_segments(std::move(file.path));
+        op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
     }
+
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);
@@ -143,15 +145,14 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
                                                        ? ChunkHelper::convert_schema(_tablet_schema, column_group)
                                                        : ChunkHelper::get_sort_key_schema(_tablet_schema))
                                             : ChunkHelper::convert_schema(_tablet_schema, column_group);
-    Tablet tablet(_tablet.tablet_manager(), _tablet.id());
-    TabletReader reader(tablet, _tablet.version(), schema, _input_rowsets, is_key, mask_buffer);
+    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets, is_key, mask_buffer);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CUMULATIVE_COMPACTION;
     reader_params.chunk_size = chunk_size;
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
-    reader_params.fill_data_cache = false;
+    reader_params.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache;
     RETURN_IF_ERROR(reader.open(reader_params));
 
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);

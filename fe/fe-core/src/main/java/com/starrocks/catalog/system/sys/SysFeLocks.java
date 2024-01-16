@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
@@ -52,9 +53,10 @@ public class SysFeLocks {
                         .column("lock_type", ScalarType.createVarcharType(64))
                         .column("lock_object", ScalarType.createVarcharType(64))
                         .column("lock_mode", ScalarType.createVarcharType(64))
-                        .column("lock_start_time", ScalarType.createVarcharType(64))
+                        .column("start_time", ScalarType.createType(PrimitiveType.DATETIME))
+                        .column("hold_time_ms", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("thread_info", ScalarType.createVarcharType(64))
-                        .column("granted", ScalarType.createVarchar(64))
+                        .column("granted", ScalarType.createType(PrimitiveType.BOOLEAN))
                         .column("waiter_list", ScalarType.createVarcharType(SystemTable.NAME_CHAR_LEN))
                         .build(),
                 TSchemaTableType.SYS_FE_LOCKS);
@@ -97,6 +99,7 @@ public class SysFeLocks {
 
         Thread owner = lock.getOwner();
         List<Long> sharedLockThreadIds = lock.getSharedLockThreadIds();
+        long currentTime = System.currentTimeMillis();
 
         if (owner != null) {
             lockItem.setLock_mode("EXCLUSIVE");
@@ -108,7 +111,8 @@ public class SysFeLocks {
 
             // wait start
             long lockStartTime = lock.getExclusiveLockTime();
-            lockItem.setLock_start_time(lockStartTime);
+            lockItem.setStart_time(lockStartTime);
+            lockItem.setHold_time_ms(currentTime - lockStartTime);
         } else if (CollectionUtils.isNotEmpty(sharedLockThreadIds)) {
             lockItem.setLock_mode("SHARED");
             lockItem.setGranted(true);
@@ -118,7 +122,8 @@ public class SysFeLocks {
                     .map(lock::getSharedLockTime)
                     .filter(x -> x > 0)
                     .min(Comparator.naturalOrder()).orElse(0L);
-            lockItem.setLock_start_time(lockStart);
+            lockItem.setStart_time(lockStart);
+            lockItem.setHold_time_ms(currentTime - lockStart);
 
             // thread info
             JsonArray sharedLockInfo = new JsonArray();

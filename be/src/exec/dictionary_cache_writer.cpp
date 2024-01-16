@@ -95,7 +95,7 @@ Status DictionaryCacheWriter::_submit() {
     if (!st.ok()) {
         _num_pending_tasks.fetch_sub(1, std::memory_order_release);
         DCHECK(_num_pending_tasks.load(std::memory_order_acquire) >= 0);
-        LOG(WARNING) << "refresh dictionary cache task submit failed, " << st.get_error_msg();
+        LOG(WARNING) << "refresh dictionary cache task submit failed, " << st.message();
     }
     return st;
 }
@@ -104,10 +104,10 @@ void DictionaryCacheWriter::sync_dictionary_cache(const Chunk* chunk) {
     Status st = Status::OK();
 
     // construct closures
-    std::vector<RefCountClosure<PRefreshDictionaryCacheResult>*> closures;
+    std::vector<RefCountClosure<PProcessDictionaryCacheResult>*> closures;
     closures.resize(_t_dictionary_cache_sink.nodes.size());
     for (auto& closure : closures) {
-        closure = new RefCountClosure<PRefreshDictionaryCacheResult>();
+        closure = new RefCountClosure<PProcessDictionaryCacheResult>();
         closure->ref();
     }
 
@@ -145,7 +145,7 @@ void DictionaryCacheWriter::sync_dictionary_cache(const Chunk* chunk) {
 
     if (!st.ok()) {
         std::stringstream ss;
-        ss << "RPC failed when refreshing dictionary cache, " << st.get_error_msg();
+        ss << "RPC failed when refreshing dictionary cache, " << st.message();
         LOG(WARNING) << ss.str();
         // manually cancel fragment context, because sync_dictionary_cache is not
         // in pipeline driver executor thread
@@ -154,18 +154,19 @@ void DictionaryCacheWriter::sync_dictionary_cache(const Chunk* chunk) {
 }
 
 Status DictionaryCacheWriter::_send_request(ChunkPB* pchunk, POlapTableSchemaParam* pschema,
-                                            std::vector<RefCountClosure<PRefreshDictionaryCacheResult>*>& closures) {
+                                            std::vector<RefCountClosure<PProcessDictionaryCacheResult>*>& closures) {
     const auto& nodes = _t_dictionary_cache_sink.nodes;
     DCHECK(closures.size() == nodes.size());
 
     for (size_t i = 0; i < nodes.size(); ++i) {
-        PRefreshDictionaryCacheRequest request;
+        PProcessDictionaryCacheRequest request;
         request.set_allocated_chunk(pchunk);
-        request.set_dictionary_id(_t_dictionary_cache_sink.dictionary_id);
+        request.set_dict_id(_t_dictionary_cache_sink.dictionary_id);
         request.set_txn_id(_t_dictionary_cache_sink.txn_id);
         request.set_allocated_schema(pschema);
         request.set_memory_limit(_t_dictionary_cache_sink.memory_limit);
         request.set_key_size(_t_dictionary_cache_sink.key_size);
+        request.set_type(PProcessDictionaryCacheRequestType::REFRESH);
 
         auto& closure = closures[i];
         closure->ref();
@@ -174,10 +175,12 @@ Status DictionaryCacheWriter::_send_request(ChunkPB* pchunk, POlapTableSchemaPar
 
         auto res = HttpBrpcStubCache::getInstance()->get_http_stub(nodes[i]);
         if (!res.ok()) {
-            LOG(WARNING) << "create brpc stub failed, " << res.status().get_error_msg();
+            request.release_chunk();
+            request.release_schema();
+            LOG(WARNING) << "create brpc stub failed, " << res.status().message();
             return res.status();
         }
-        res.value()->refresh_dictionary_cache(&closure->cntl, &request, &closure->result, closure);
+        res.value()->process_dictionary_cache(&closure->cntl, &request, &closure->result, closure);
 
         request.release_chunk();
         request.release_schema();
@@ -185,7 +188,7 @@ Status DictionaryCacheWriter::_send_request(ChunkPB* pchunk, POlapTableSchemaPar
     return Status::OK();
 }
 
-Status DictionaryCacheWriter::_wait_response(std::vector<RefCountClosure<PRefreshDictionaryCacheResult>*>& closures) {
+Status DictionaryCacheWriter::_wait_response(std::vector<RefCountClosure<PProcessDictionaryCacheResult>*>& closures) {
     Status st = Status::OK();
     for (size_t i = 0; i < closures.size(); ++i) {
         auto& closure = closures[i];
@@ -232,7 +235,7 @@ Status DictionaryCacheWriter::ChunkUtil::compress_and_serialize_chunk(const Chun
         StatusOr<ChunkPB> res = Status::OK();
         TRY_CATCH_BAD_ALLOC(res = serde::ProtobufChunkSerde::serialize(*src));
         if (!res.ok()) {
-            LOG(WARNING) << "serialize chunk failed when refreshing dictionary cache, " << res.status().get_error_msg();
+            LOG(WARNING) << "serialize chunk failed when refreshing dictionary cache, " << res.status().message();
             return res.status();
         }
         res->Swap(dst);
@@ -262,7 +265,7 @@ Status DictionaryCacheWriter::ChunkUtil::compress_and_serialize_chunk(const Chun
         auto st = compress_codec->compress(input, &compressed_slice, true, uncompressed_size, nullptr,
                                            &compression_scratch);
         if (!st.ok()) {
-            LOG(WARNING) << "compress chunk failed when refreshing dictionary cache, " << st.get_error_msg();
+            LOG(WARNING) << "compress chunk failed when refreshing dictionary cache, " << st.message();
             return st;
         }
 

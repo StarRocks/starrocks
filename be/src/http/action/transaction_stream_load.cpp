@@ -469,7 +469,7 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
 #endif
     Status plan_status(ctx->put_result.status);
     if (!plan_status.ok()) {
-        LOG(WARNING) << "plan streaming load failed. errmsg=" << plan_status.get_error_msg() << " " << ctx->brief();
+        LOG(WARNING) << "plan streaming load failed. errmsg=" << plan_status.message() << " " << ctx->brief();
         return plan_status;
     }
     VLOG(3) << "params is " << apache::thrift::ThriftDebugString(ctx->put_result.params);

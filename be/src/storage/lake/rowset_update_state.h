@@ -59,10 +59,10 @@ public:
     ~RowsetUpdateState();
 
     Status load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version, Tablet* tablet,
-                const MetaFileBuilder* builder, bool need_check_conflict);
+                const MetaFileBuilder* builder, bool need_check_conflict, bool need_lock);
 
     Status rewrite_segment(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet,
-                           std::map<int, std::string>* replace_segments, std::vector<std::string>* orphan_files);
+                           std::map<int, FileInfo>* replace_segments, std::vector<std::string>* orphan_files);
 
     const std::vector<ColumnUniquePtr>& upserts() const { return _upserts; }
     const std::vector<ColumnUniquePtr>& deletes() const { return _deletes; }
@@ -80,13 +80,13 @@ public:
     const std::vector<std::unique_ptr<Column>>& auto_increment_deletes() const;
 
 private:
-    Status _do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet);
+    Status _do_load(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, Tablet* tablet, bool need_lock);
 
     Status _do_load_upserts_deletes(const TxnLogPB_OpWrite& op_write, const TabletSchemaCSPtr& tablet_schema,
                                     Tablet* tablet, Rowset* rowset_ptr);
 
     Status _prepare_partial_update_states(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata,
-                                          Tablet* tablet, const TabletSchemaCSPtr& tablet_schema);
+                                          Tablet* tablet, const TabletSchemaCSPtr& tablet_schema, bool need_lock);
 
     Status _resolve_conflict(const TxnLogPB_OpWrite& op_write, const TabletMetadata& metadata, int64_t base_version,
                              Tablet* tablet, const MetaFileBuilder* builder);
@@ -103,7 +103,7 @@ private:
 
     Status _prepare_auto_increment_partial_update_states(const TxnLogPB_OpWrite& op_write,
                                                          const TabletMetadata& metadata, Tablet* tablet,
-                                                         const TabletSchemaCSPtr& tablet_schema);
+                                                         const TabletSchemaCSPtr& tablet_schema, bool need_lock);
 
     std::once_flag _load_once_flag;
     Status _status;

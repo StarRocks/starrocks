@@ -83,7 +83,7 @@ public class CreateTableTest {
 
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
     }
 
     private static void alterTableWithNewParser(String sql) throws Exception {
@@ -288,6 +288,50 @@ public class CreateTableTest {
         Assert.assertTrue(tbl7.getColumn("k1").isKey());
         Assert.assertFalse(tbl7.getColumn("k2").isKey());
         Assert.assertTrue(tbl7.getColumn("k2").getAggregationType() == AggregateType.NONE);
+    }
+
+    @Test
+    public void testPartitionByExprDynamicPartition() {
+        ExceptionChecker
+                .expectThrowsNoException(() -> createTable("CREATE TABLE test.partition_str2date (\n" +
+                        "        create_time varchar(100),\n" +
+                        "        sku_id varchar(100),\n" +
+                        "        total_amount decimal,\n" +
+                        "        id int\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(str2date(create_time, '%Y-%m-%d %H:%i:%s'))(\n" +
+                        "START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                        ")\n" +
+                        "PROPERTIES(\n" +
+                        "\t\"replication_num\" = \"1\",\n" +
+                        "    \"dynamic_partition.enable\" = \"true\",\n" +
+                        "    \"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                        "    \"dynamic_partition.start\" = \"-3\",\n" +
+                        "    \"dynamic_partition.end\" = \"3\",\n" +
+                        "    \"dynamic_partition.prefix\" = \"p\",\n" +
+                        "    \"dynamic_partition.buckets\" = \"32\",\n" +
+                        "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
+                        ");"));
+        ExceptionChecker
+                .expectThrowsNoException(() -> createTable("CREATE TABLE test.partition_from_unixtime (\n" +
+                        "        create_time bigint,\n" +
+                        "        sku_id varchar(100),\n" +
+                        "        total_amount decimal,\n" +
+                        "        id int\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(from_unixtime(create_time))(\n" +
+                        "START (\"2021-01-01\") END (\"2021-01-10\") EVERY (INTERVAL 1 DAY)\n" +
+                        ")\n" +
+                        "PROPERTIES(\n" +
+                        "\t\"replication_num\" = \"1\",\n" +
+                        "    \"dynamic_partition.enable\" = \"true\",\n" +
+                        "    \"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                        "    \"dynamic_partition.start\" = \"-3\",\n" +
+                        "    \"dynamic_partition.end\" = \"3\",\n" +
+                        "    \"dynamic_partition.prefix\" = \"p\",\n" +
+                        "    \"dynamic_partition.buckets\" = \"32\",\n" +
+                        "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
+                        ");"));
     }
 
     @Test
@@ -585,7 +629,7 @@ public class CreateTableTest {
         ExceptionChecker.expectThrowsNoException(
                 () -> createTable("create table test.tmp1\n" + "(k1 int, k2 int)\n"));
         ExceptionChecker.expectThrowsNoException(
-                () -> createTable("create table test.tmp2\n" + "(k1 int, k2 float)\n"));
+                () -> createTable("create table test.tmp2\n" + "(k1 int, k2 float) PROPERTIES(\"replication_num\" = \"1\");\n"));
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Data type of first column cannot be HLL",
                 () -> createTable("create table test.tmp3\n" + "(k1 hll, k2 float)\n"));
     }
@@ -607,7 +651,7 @@ public class CreateTableTest {
                 .getTable("aggregate_table_sum");
         String columns = table.getColumns().toString();
         System.out.println("columns = " + columns);
-        Assert.assertTrue(columns.contains("`sum_decimal` decimal128(38, 4) SUM"));
+        Assert.assertTrue(columns.contains("`sum_decimal` decimal(38, 4) SUM"));
         Assert.assertTrue(columns.contains("`sum_bigint` bigint(20) SUM "));
     }
 

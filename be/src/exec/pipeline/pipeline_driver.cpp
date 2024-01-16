@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/pipeline_driver.h"
 
+#include <random>
 #include <sstream>
 
 #include "column/chunk.h"
@@ -28,6 +29,7 @@
 #include "exec/query_cache/multilane_operator.h"
 #include "exec/query_cache/ticket_checker.h"
 #include "exec/workgroup/work_group.h"
+#include "gen_cpp/InternalService_types.h"
 #include "gutil/casts.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -61,6 +63,12 @@ void PipelineDriver::check_operator_close_states(std::string func_name) {
 }
 
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
+    DeferOp defer([&]() {
+        if (this->_state != DriverState::READY) {
+            LOG(WARNING) << to_readable_string() << " prepare failed";
+        }
+    });
+
     _runtime_state = runtime_state;
 
     auto* prepare_timer = ADD_TIMER(_runtime_profile, "DriverPrepareTime");
@@ -297,7 +305,7 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                 }
                 return_status = maybe_chunk.status();
                 if (!return_status.ok() && !return_status.is_end_of_file()) {
-                    curr_op->common_metrics()->add_info_string("ErrorMsg", return_status.get_error_msg());
+                    curr_op->common_metrics()->add_info_string("ErrorMsg", std::string(return_status.message()));
                     LOG(WARNING) << "pull_chunk returns not ok status " << return_status.to_string();
                     return return_status;
                 }
@@ -337,7 +345,8 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
                         }
 
                         if (!return_status.ok() && !return_status.is_end_of_file()) {
-                            next_op->common_metrics()->add_info_string("ErrorMsg", return_status.get_error_msg());
+                            next_op->common_metrics()->add_info_string("ErrorMsg",
+                                                                       std::string(return_status.message()));
                             LOG(WARNING) << "push_chunk returns not ok status " << return_status.to_string();
                             return return_status;
                         }
@@ -525,6 +534,9 @@ void PipelineDriver::finish_operators(RuntimeState* runtime_state) {
 }
 
 void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
+    if (this->query_ctx()->is_query_expired()) {
+        LOG(WARNING) << "begin to cancel operators for " << to_readable_string();
+    }
     for (auto& op : _operators) {
         WARN_IF_ERROR(_mark_operator_cancelled(op, runtime_state),
                       fmt::format("cancel pipeline driver error [driver={}]", to_readable_string()));
@@ -544,6 +556,15 @@ void PipelineDriver::_adjust_memory_usage(RuntimeState* state, MemTracker* track
     auto& mem_resource_mgr = op->mem_resource_manager();
 
     if (!state->enable_spill() || !mem_resource_mgr.releaseable()) return;
+
+    if (UNLIKELY(state->spill_mode() == TSpillMode::RANDOM)) {
+        static thread_local std::mt19937_64 generator{std::random_device{}()};
+        static std::uniform_real_distribution<double> distribution(0.0, 1.0);
+        if (distribution(generator) < state->spill_rand_ratio()) {
+            mem_resource_mgr.to_low_memory_mode();
+        }
+        return;
+    }
 
     // try to release buffer if memusage > mid level threhold
     _try_to_release_buffer(state, op);
@@ -658,10 +679,15 @@ void PipelineDriver::_update_driver_level_timer() {
 
 std::string PipelineDriver::to_readable_string() const {
     std::stringstream ss;
+    std::string block_reasons = "";
+    if (_state == PRECONDITION_BLOCK) {
+        block_reasons = const_cast<PipelineDriver*>(this)->get_preconditions_block_reasons();
+    }
     ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
        << " fragment_id="
        << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()))
-       << " driver=" << _driver_name << ", status=" << ds_to_string(this->driver_state()) << ", operator-chain: [";
+       << " driver=" << _driver_name << ", status=" << ds_to_string(this->driver_state()) << block_reasons
+       << ", operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {
         if (i == 0) {
             ss << _operators[i]->get_name();
@@ -746,7 +772,7 @@ Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* s
     if (!res.ok()) {
         LOG(WARNING) << fmt::format("fragment_id {} driver {} cancels operator {} with finished error {}",
                                     print_id(state->fragment_instance_id()), to_readable_string(), op->get_name(),
-                                    res.get_error_msg());
+                                    res.message());
     }
     auto& op_state = _operator_stages[op->get_id()];
     if (op_state >= OperatorStage::CANCELLED) {

@@ -467,6 +467,7 @@ YEAR: 'YEAR';
 LOCK: 'LOCK';
 UNLOCK: 'UNLOCK';
 LOW_PRIORITY: 'LOW_PRIORITY';
+DISK: 'DISK';
 
 EQ  : '=';
 NEQ : '<>' | '!=';
@@ -563,7 +564,11 @@ SIMPLE_COMMENT
     ;
 
 BRACKETED_COMMENT
-    : '/*' ('+'? [ \r\n\t\u3000]* | ~'+' .*?) '*/' -> channel(HIDDEN)
+    : '/*'([ \r\n\t\u3000]* | ~'+' .*?) '*/' -> channel(HIDDEN)
+    ;
+
+OPTIMIZER_HINT
+    : '/*+' .*? '*/' -> channel(2)
     ;
 
 SEMICOLON: ';';

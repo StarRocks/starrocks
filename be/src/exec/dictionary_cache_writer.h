@@ -61,9 +61,9 @@ public:
 
 private:
     Status _send_request(ChunkPB* pchunk, POlapTableSchemaParam* pschema,
-                         std::vector<RefCountClosure<PRefreshDictionaryCacheResult>*>& closures);
+                         std::vector<RefCountClosure<PProcessDictionaryCacheResult>*>& closures);
 
-    Status _wait_response(std::vector<RefCountClosure<PRefreshDictionaryCacheResult>*>& closures);
+    Status _wait_response(std::vector<RefCountClosure<PProcessDictionaryCacheResult>*>& closures);
 
     Status _submit();
 

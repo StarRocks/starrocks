@@ -36,6 +36,7 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
+import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.scheduler.Coordinator;
@@ -100,8 +101,7 @@ public final class QeProcessorImpl implements QeProcessor {
 
     @Override
     public void registerQuery(TUniqueId queryId, QueryInfo info) throws UserException {
-        if (info.getConnectContext() != null && (info.getConnectContext().getCommand() != COM_STMT_EXECUTE ||
-                info.getConnectContext().getSessionVariable().isAuditExecuteStmt())) {
+        if (needLogRegisterAndUnregisterQueryId(info)) {
             LOG.info("register query id = {}", DebugUtil.printId(queryId));
         }
         final QueryInfo result = coordinatorMap.putIfAbsent(queryId, info);
@@ -142,8 +142,7 @@ public final class QeProcessorImpl implements QeProcessor {
             if (info.getCoord() != null) {
                 info.getCoord().onFinished();
             }
-            if (info.getConnectContext() != null && (info.getConnectContext().getCommand() != COM_STMT_EXECUTE ||
-                    info.getConnectContext().getSessionVariable().isAuditExecuteStmt())) {
+            if (needLogRegisterAndUnregisterQueryId(info)) {
                 LOG.info("deregister query id = {}", DebugUtil.printId(queryId));
             }
         }
@@ -331,5 +330,13 @@ public final class QeProcessorImpl implements QeProcessor {
         public long getStartExecTime() {
             return startExecTime;
         }
+    }
+
+    private static boolean needLogRegisterAndUnregisterQueryId(QueryInfo inf) {
+        ConnectContext context = inf.getConnectContext();
+        return Config.log_register_and_unregister_query_id &&
+                context != null &&
+                (context.getCommand() != COM_STMT_EXECUTE ||
+                        context.getSessionVariable().isAuditExecuteStmt());
     }
 }

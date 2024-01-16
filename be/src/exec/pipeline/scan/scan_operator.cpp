@@ -418,6 +418,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             int64_t prev_scan_rows = chunk_source->get_scan_rows();
             int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
             auto status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
+
             if (!status.ok() && !status.is_end_of_file()) {
                 LOG(ERROR) << "scan fragment " << print_id(state->fragment_instance_id()) << " driver "
                            << get_driver_sequence() << " Scan tasks error: " << status.to_string();
@@ -553,8 +554,8 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
         profiles[i] = _chunk_source_profiles[i].get();
     }
 
-    RuntimeProfile* merged_profile =
-            RuntimeProfile::merge_isomorphic_profiles(query_ctx->object_pool(), profiles, false);
+    ObjectPool obj_pool;
+    RuntimeProfile* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, profiles, false);
 
     _unique_metrics->copy_all_info_strings_from(merged_profile);
     _unique_metrics->copy_all_counters_from(merged_profile);

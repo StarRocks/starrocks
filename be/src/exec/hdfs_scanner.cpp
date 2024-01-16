@@ -20,7 +20,6 @@
 #include "io/shared_buffered_input_stream.h"
 #include "util/compression/stream_compression.h"
 
-static constexpr int64_t ROW_FORMAT_ESTIMATED_MEMORY_USAGE = 32LL * 1024 * 1024;
 namespace starrocks {
 
 class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
@@ -81,7 +80,11 @@ bool HdfsScannerParams::is_lazy_materialization_slot(SlotId slot_id) const {
 Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     _runtime_state = runtime_state;
     _scanner_params = scanner_params;
+
+    RETURN_IF_ERROR(_init_mor_processor(runtime_state, scanner_params.mor_params));
     Status status = do_init(runtime_state, scanner_params);
+    RETURN_IF_ERROR(_mor_processor->build_hash_table(runtime_state));
+
     return status;
 }
 
@@ -146,6 +149,17 @@ Status HdfsScanner::_build_scanner_context() {
     return Status::OK();
 }
 
+Status HdfsScanner::_init_mor_processor(RuntimeState* runtime_state, const MORParams& params) {
+    if (params.equality_slots.empty()) {
+        _mor_processor = std::make_shared<DefaultMORProcessor>();
+        return Status::OK();
+    }
+
+    _mor_processor = std::make_shared<IcebergMORProcessor>(params.runtime_profile);
+    RETURN_IF_ERROR(_mor_processor->init(runtime_state, params));
+    return Status::OK();
+}
+
 Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_total_running_time);
     RETURN_IF_CANCELLED(_runtime_state);
@@ -156,6 +170,7 @@ Status HdfsScanner::get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
             SCOPED_RAW_TIMER(&_app_stats.expr_filter_ns);
             RETURN_IF_ERROR(ExecNode::eval_conjuncts(_scanner_params.conjunct_ctxs, (*chunk).get()));
         }
+        RETURN_IF_ERROR(_mor_processor->get_next(runtime_state, chunk));
     } else if (status.is_end_of_file()) {
         // do nothing.
     } else {
@@ -196,6 +211,8 @@ void HdfsScanner::close() noexcept {
     if (_opened && _scanner_params.open_limit != nullptr) {
         _scanner_params.open_limit->fetch_sub(1, std::memory_order_relaxed);
     }
+
+    _mor_processor->close(_runtime_state);
 }
 
 void HdfsScanner::enter_pending_queue() {
@@ -218,6 +235,23 @@ Status HdfsScanner::open_random_access_file() {
 
     input_stream = std::make_shared<CountedSeekableInputStream>(input_stream, &_fs_stats);
 
+    _shared_buffered_input_stream = std::make_shared<io::SharedBufferedInputStream>(input_stream, filename, file_size);
+    const io::SharedBufferedInputStream::CoalesceOptions options = {
+            .max_dist_size = config::io_coalesce_read_max_distance_size,
+            .max_buffer_size = config::io_coalesce_read_max_buffer_size};
+    _shared_buffered_input_stream->set_coalesce_options(options);
+    input_stream = _shared_buffered_input_stream;
+
+    // input_stream = CacheInputStream(input_stream)
+    if (_scanner_params.use_datacache) {
+        _cache_input_stream = std::make_shared<io::CacheInputStream>(_shared_buffered_input_stream, filename, file_size,
+                                                                     _scanner_params.modification_time);
+        _cache_input_stream->set_enable_populate_cache(_scanner_params.enable_populate_datacache);
+        _cache_input_stream->set_enable_block_buffer(config::datacache_block_buffer_enable);
+        _shared_buffered_input_stream->set_align_size(_cache_input_stream->get_align_size());
+        input_stream = _cache_input_stream;
+    }
+
     // if compression
     // input_stream = DecompressInputStream(input_stream)
     if (_compression_type != CompressionTypePB::NO_COMPRESSION) {
@@ -228,26 +262,7 @@ Status HdfsScanner::open_random_access_file() {
                 std::make_shared<io::CompressedInputStream>(input_stream, DecompressorPtr(dec.release()));
         input_stream = std::make_shared<io::CompressedSeekableInputStream>(compressed_input_stream);
     }
-    // input_stream = SharedBufferedInputStream(input_stream)
-    if (_compression_type == CompressionTypePB::NO_COMPRESSION) {
-        _shared_buffered_input_stream =
-                std::make_shared<io::SharedBufferedInputStream>(input_stream, filename, file_size);
-        io::SharedBufferedInputStream::CoalesceOptions options = {
-                .max_dist_size = config::io_coalesce_read_max_distance_size,
-                .max_buffer_size = config::io_coalesce_read_max_buffer_size};
-        _shared_buffered_input_stream->set_coalesce_options(options);
-        input_stream = _shared_buffered_input_stream;
 
-        // input_stream = CacheInputStream(input_stream)
-        if (_scanner_params.use_datacache) {
-            _cache_input_stream = std::make_shared<io::CacheInputStream>(_shared_buffered_input_stream, filename,
-                                                                         file_size, _scanner_params.modification_time);
-            _cache_input_stream->set_enable_populate_cache(_scanner_params.enable_populate_datacache);
-            _cache_input_stream->set_enable_block_buffer(config::datacache_block_buffer_enable);
-            _shared_buffered_input_stream->set_align_size(_cache_input_stream->get_align_size());
-            input_stream = _cache_input_stream;
-        }
-    }
     // input_stream = CountedInputStream(input_stream)
     // NOTE: make sure `CountedInputStream` is last applied, so io time can be accurately timed.
     input_stream = std::make_shared<CountedSeekableInputStream>(input_stream, &_app_stats);
@@ -275,11 +290,11 @@ void HdfsScanner::do_update_iceberg_v2_counter(RuntimeProfile* parent_profile, c
 }
 
 int64_t HdfsScanner::estimated_mem_usage() const {
-    if (_shared_buffered_input_stream == nullptr) {
-        // don't read data in columnar format(such as CSV format), usually in a fixed size.
-        return ROW_FORMAT_ESTIMATED_MEMORY_USAGE;
+    if (_shared_buffered_input_stream != nullptr) {
+        return _shared_buffered_input_stream->estimated_mem_usage();
     }
-    return _shared_buffered_input_stream->estimated_mem_usage();
+    // return 0 if we don't know estimated memory usage with high confidence.
+    return 0;
 }
 
 void HdfsScanner::update_hdfs_counter(HdfsScanProfile* profile) {

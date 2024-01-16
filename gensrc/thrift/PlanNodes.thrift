@@ -42,6 +42,7 @@ include "Descriptors.thrift"
 include "Partitions.thrift"
 include "RuntimeFilter.thrift"
 include "CloudConfiguration.thrift"
+include "DataCache.thrift"
 
 enum TPlanNodeType {
   OLAP_SCAN_NODE,
@@ -264,6 +265,7 @@ struct TBrokerScanRangeParams {
     // confluent schema registry url for pb import
     28: optional string confluent_schema_registry_url
     29: optional i64 json_file_size_limit;
+    30: optional i64 schema_sample_file_count
 }
 
 // Broker scan range
@@ -296,10 +298,6 @@ struct TIcebergDeleteFile {
     2: optional Descriptors.THdfsFileFormat file_format
     3: optional TIcebergFileContent file_content
     4: optional i64 length
-}
-
-struct TDataCacheOptions {
-    1: optional i32 priority
 }
 
 // Hdfs scan range
@@ -352,10 +350,17 @@ struct THdfsScanRange {
     // last modification time of the hdfs file, for data cache
     16: optional i64 modification_time
 
-    17: optional TDataCacheOptions datacache_options
+    17: optional DataCache.TDataCacheOptions datacache_options
 
     // identity partition column slots
     18: optional list<Types.TSlotId> identity_partition_slot_ids;
+
+    19: optional bool use_odps_jni_reader
+
+    20: optional map<string, string> odps_split_infos
+
+    // delete columns slots like iceberg equality delete column slots
+    21: optional list<Types.TSlotId> delete_column_slot_ids;
 }
 
 struct TBinlogScanRange {
@@ -1047,6 +1052,8 @@ struct THdfsScanNode {
     15: optional bool can_use_min_max_count_opt;
 
     16: optional bool use_partition_column_value_only;
+
+    17: optional Types.TTupleId mor_tuple_id;
 }
 
 struct TProjectNode {

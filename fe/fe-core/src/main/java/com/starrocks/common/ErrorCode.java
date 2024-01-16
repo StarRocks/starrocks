@@ -43,8 +43,7 @@ public enum ErrorCode {
     ERR_DB_CREATE_EXISTS(1007, new byte[] {'H', 'Y', '0', '0', '0'}, "Can't create database '%s'; database exists"),
     ERR_DB_DROP_EXISTS(1008, new byte[] {'H', 'Y', '0', '0', '0'},
             "Can't drop database '%s'; database doesn't exist"),
-    ERR_DB_ACCESS_DENIED(1044, new byte[] {'4', '2', '0', '0', '0'}, "Access denied for user '%s' to database '%s'"),
-    ERR_ACCESS_DENIED_ERROR(1045, new byte[] {'2', '8', '0', '0', '0'},
+    ERR_AUTHENTICATION_FAIL(1045, new byte[] {'2', '8', '0', '0', '0'},
             "Access denied for user '%s' (using password: %s)"),
     ERR_NO_DB_ERROR(1046, new byte[] {'3', 'D', '0', '0', '0'}, "No database selected"),
     ERR_UNKNOWN_COM_ERROR(1047, new byte[] {'0', '8', 'S', '0', '1'}, "Unknown command"),
@@ -72,26 +71,13 @@ public enum ErrorCode {
     ERR_UNKNOWN_CHARACTER_SET(1115, new byte[] {'4', '2', '0', '0', '0'}, "Unknown character set: '%s'"),
     ERR_IP_NOT_ALLOWED(1130, new byte[] {'4', '2', '0', '0', '0'},
             "Host %s is not allowed to connect to this MySQL server"),
-    ERR_PASSWORD_NOT_ALLOWED(1132, new byte[] {'4', '2', '0', '0', '0'},
-            "You must have privileges to "
-                    + "update tables in the mysql database to be able to change passwords for others"),
     ERR_NONEXISTING_GRANT(1141, new byte[] {'4', '2', '0', '0', '0'},
             "There is no such grant defined for user '%s' on host '%s'"),
-    ERR_TABLEACCESS_DENIED_ERROR(1142, new byte[] {'4', '2', '0', '0', '0'},
-            "%s command denied to user '%s'@'%s' for table '%s'"),
-    ERR_MV_ACCESS_DENIED_ERROR(1143, new byte[] {'4', '2', '0', '0', '0'},
-            "%s command denied to user '%s'@'%s' for materialized view '%s'"),
-    ERR_FUNC_ACCESS_DENIED_ERROR(1144, new byte[] {'4', '2', '0', '0', '0'},
-            "%s command denied to user '%s'@'%s' for function '%s'"),
     ERR_WRONG_COLUMN_NAME(1166, new byte[] {'4', '2', '0', '0', '0'}, "Incorrect column name '%s'"),
     ERR_UNKNOWN_SYSTEM_VARIABLE(1193, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown system variable '%s', " +
             "the most similar variables are %s"),
     ERR_TOO_MANY_USER_CONNECTIONS(1203, new byte[] {'4', '2', '0', '0', '0'},
             "User %s already has more than 'max_user_connections' active connections"),
-    ERR_NO_PERMISSION_TO_CREATE_USER(1211, new byte[] {'4', '2', '0', '0', '0'},
-            "'%s' is not allowed to create new users"),
-    ERR_SPECIFIC_ACCESS_DENIED_ERROR(1227, new byte[] {'4', '2', '0', '0', '0'},
-            "Access denied; you need (at least one of) the %s privilege(s) for this operation"),
     ERR_LOCAL_VARIABLE(1228, new byte[] {'H', 'Y', '0', '0', '0'},
             "Variable '%s' is a SESSION variable and can't be used with SET GLOBAL"),
     ERR_GLOBAL_VARIABLE(1229, new byte[] {'H', 'Y', '0', '0', '0'},
@@ -100,24 +86,10 @@ public enum ErrorCode {
     ERR_WRONG_VALUE_FOR_VAR(1231, new byte[] {'4', '2', '0', '0', '0'},
             "Variable '%s' can't be set to the value of '%s'"),
     ERR_WRONG_TYPE_FOR_VAR(1232, new byte[] {'4', '2', '0', '0', '0'}, "Incorrect argument type to variable '%s'"),
-    ERR_ANY_ACTION_IN_DB_ACCESS_DENIED_ERROR(1233, new byte[] {'4', '2', '0', '0', '0'},
-            "You need any privilege on any TABLE/VIEW/MV in database %s to perform this operation"),
     ERR_DERIVED_MUST_HAVE_ALIAS(1248, new byte[] {'4', '2', '0', '0', '0'},
             "Every derived table must have its own alias"),
-
-    ERR_SQL_IN_BLACKLIST_ERROR(1249, new byte[] {'4', '2', '0', '0', '0'},
-            "Access denied; This sql is in blacklist, please contact your admin"),
-
     ERR_NOT_SUPPORTED_AUTH_MODE(1251, new byte[] {'0', '8', '0', '0', '4'},
             "Client does not support authentication protocol requested by server; consider upgrading MySQL client"),
-
-    ERR_ACCESS_DENIED(1252, new byte[] {'4', '2', '0', '0', '0'},
-            "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation. " +
-                    "Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. " +
-                    "Current role(s): %s. Inactivated role(s): %s."),
-    ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER(1253, new byte[] {'4', '2', '0', '0', '0'},
-            "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
-
     ERR_UNKNOWN_STORAGE_ENGINE(1286, new byte[] {'4', '2', '0', '0', '0'}, "Unknown storage engine '%s'"),
     ERR_UNKNOWN_TIME_ZONE(1298, new byte[] {'H', 'Y', '0', '0', '0'}, "Unknown or incorrect time zone: '%s'"),
     ERR_WRONG_OBJECT(1347, new byte[] {'H', 'Y', '0', '0', '0'}, "'%s'.'%s' is not '%s'"),
@@ -125,8 +97,7 @@ public enum ErrorCode {
             "View's SELECT and view's field list have different column counts"),
     ERR_NO_DEFAULT_FOR_FIELD(1364, new byte[] {'H', 'Y', '0', '0', '0'},
             "Field '%s' is not null but doesn't have a default value"),
-    ERR_PASSWD_LENGTH(1372, new byte[] {'H', 'Y', '0', '0', '0'},
-            "Password hash should be a %d-digit hexadecimal number"),
+
     ERR_CANNOT_USER(1396, new byte[] {'H', 'Y', '0', '0', '0'}, "Operation %s failed for %s"),
     ERR_NON_INSERTABLE_TABLE(1471, new byte[] {'H', 'Y', '0', '0', '0'},
             "The target table %s of the %s is not insertable-into"),
@@ -145,7 +116,7 @@ public enum ErrorCode {
             "data cannot be inserted into table with empty partition. " +
                     "Use `SHOW PARTITIONS FROM %s` to see the currently partitions of this table. "),
     ERR_NO_SUCH_PARTITION(1749, new byte[] {'H', 'Y', '0', '0', '0'}, "partition '%s' doesn't exist"),
-    
+
     // Following is StarRocks's error code, which start from 5000
     ERR_NOT_OLAP_TABLE(5000, new byte[] {'H', 'Y', '0', '0', '0'}, "Table '%s' is not a OLAP table"),
     ERR_WRONG_PROC_PATH(5001, new byte[] {'H', 'Y', '0', '0', '0'}, "Proc path '%s' doesn't exist"),
@@ -302,22 +273,14 @@ public enum ErrorCode {
             "Incorrect label name '%s'"),
     ERR_CHANGE_TO_SSL_CONNECTION_FAILED(5083, new byte[] {'4', '2', '0', '0', '0'},
             "Change to ssl connection failed"),
-    ERR_CATALOG_ACCESS_DENIED(5084, new byte[] {'4', '2', '0', '0', '0'},
-            "Access denied for user '%s' to catalog '%s'"),
     ERR_PRIVILEGE_TABLE_NOT_FOUND(5085, new byte[] {'4', '2', '0', '0', '0'},
             "Table not found when checking privilege"),
     ERR_PRIVILEGE_DB_NOT_FOUND(5086, new byte[] {'4', '2', '0', '0', '0'},
             "Db [%s] not found when checking privilege"),
-    ERR_PRIVILEGE_ACCESS_RESOURCE_DENIED(5087, new byte[] {'4', '2', '0', '0', '0'},
-            "%s denied to user '%s'@'%s' for resource '%s' when checking privilege"),
-    ERR_PRIVILEGE_ACCESS_TABLE_DENIED(5088, new byte[] {'4', '2', '0', '0', '0'},
-            "Access denied for user '%s' to table '%s' when checking privilege"),
     ERR_PRIVILEGE_ROUTINELODE_JOB_NOT_FOUND(5089, new byte[] {'4', '2', '0', '0', '0'},
             "Routine load job [%s] not found when checking privilege"),
     ERR_PRIVILEGE_EXPORT_JOB_NOT_FOUND(5090, new byte[] {'4', '2', '0', '0', '0'},
             "Export job [%s] not found when checking privilege"),
-    ERR_PRIVILEGE_BACKUP_JOB_NOT_FOUND(5091, new byte[] {'4', '2', '0', '0', '0'},
-            "Backup job not found when checking privilege"),
     ERROR_DYNAMIC_PARTITION_HISTORY_PARTITION_NUM_ZERO(5092, new byte[] {'4', '2', '0', '0', '0'},
             "Dynamic history partition num must greater than 0"),
     ERR_PLAN_VALIDATE_ERROR(6000, new byte[] {'0', '7', '0', '0', '0'},
@@ -333,8 +296,25 @@ public enum ErrorCode {
     ERR_UNKNOWN_PROPERTY(6013, new byte[] {'4', '2', '0', '0', '0'}, "Unknown property %s"),
     ERR_INVALID_PARAMETER(6013, new byte[] {'4', '2', '0', '0', '0'}, "Invalid parameter %s"),
 
-    ERR_PRIVILEGE_STORAGE_VOLUME_DENIED(6020, new byte[] {'4', '2', '0', '0', '0'},
-            "Access denied for user '%s' to storage volume '%s' when checking privilege"),
+    /*
+     * The following ErrorCode has been reviewed.
+     * If you want to add an error code, please add it in the specific
+     * number segment according to the number segment of your own module.
+     */
+
+    /**
+     * 5200 - 5299: Authentication and Authorization
+     */
+    ERR_PASSWD_LENGTH(5201, new byte[] {'H', 'Y', '0', '0', '0'},
+            "Password hash should be a %d-digit hexadecimal number"),
+    ERR_SQL_IN_BLACKLIST_ERROR(5202, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; This sql is in blacklist, please contact your admin"),
+    ERR_ACCESS_DENIED(5203, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation. " +
+                    "Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. " +
+                    "Current role(s): %s. Inactivated role(s): %s."),
+    ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER(5204, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
 
     ERR_LOCK_ERROR(6030, new byte[] {'4', '2', '0', '0', '0'},
             "Attempt to acquire lock fail : %s");
@@ -346,11 +326,11 @@ public enum ErrorCode {
     }
 
     // This is error code
-    private int code;
+    private final int code;
     // This sql state is compatible with ANSI SQL
-    private byte[] sqlState;
+    private final byte[] sqlState;
     // Error message format
-    private String errorMsg;
+    private final String errorMsg;
 
     public int getCode() {
         return code;

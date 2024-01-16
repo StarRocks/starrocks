@@ -3042,15 +3042,10 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
         unit_text->append("second");
         auto unit_column = ConstColumn::create(unit_text, 1);
 
-        auto boundary_text = BinaryColumn::create();
-        boundary_text->append("floor");
-        auto boundary_column = ConstColumn::create(boundary_text, 1);
-
         Columns columns;
         columns.emplace_back(tc);
         columns.emplace_back(period_column);
         columns.emplace_back(unit_column);
-        columns.emplace_back(boundary_column);
 
         time_slice_context->set_constant_columns(columns);
 
@@ -3492,7 +3487,7 @@ TEST_F(TimeFunctionsTest, timeSliceTestWithThrowExceptions) {
 
         StatusOr<ColumnPtr> result = TimeFunctions::time_slice(time_slice_context.get(), columns);
         ASSERT_TRUE(result.status().is_invalid_argument());
-        ASSERT_EQ(result.status().get_error_msg(), "time used with time_slice can't before 0001-01-01 00:00:00");
+        ASSERT_EQ(result.status().message(), "time used with time_slice can't before 0001-01-01 00:00:00");
 
         ASSERT_TRUE(
                 TimeFunctions::time_slice_close(time_slice_context.get(),

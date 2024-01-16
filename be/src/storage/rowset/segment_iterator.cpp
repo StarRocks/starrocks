@@ -56,6 +56,8 @@
 #include "storage/storage_engine.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
+#include "types/array_type_info.h"
+#include "types/logical_type.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -99,10 +101,7 @@ class SegmentIterator final : public ChunkIterator {
 public:
     SegmentIterator(std::shared_ptr<Segment> segment, Schema _schema, SegmentReadOptions options);
 
-    ~SegmentIterator() override {
-        _get_del_vec_st.permit_unchecked_error();
-        _get_dcg_st.permit_unchecked_error();
-    }
+    ~SegmentIterator() override = default;
 
     void close() override;
 
@@ -528,7 +527,7 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         auto tablet_schema = _opts.tablet_schema ? _opts.tablet_schema : _segment->tablet_schema_share_ptr();
         const auto& col = tablet_schema->column(cid);
         ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, access_path));
-        ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_name()));
+        ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_info()));
         iter_opts.read_file = rfile.get();
         _column_files[cid] = std::move(rfile);
     } else {
@@ -1345,7 +1344,16 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
 
         if (use_dict_code || use_global_dict_code) {
             // create FixedLengthColumn<int64_t> for saving dict codewords.
-            auto f2 = std::make_shared<Field>(cid, f->name(), kDictCodeType, -1, -1, f->is_nullable());
+            FieldPtr f2;
+            if (f->type()->type() == TYPE_ARRAY && f->sub_field(0).type()->type() == TYPE_VARCHAR) {
+                auto child = f->sub_field(0);
+                TypeInfoPtr typeInfo = get_array_type_info(get_type_info(kDictCodeType, -1, -1));
+                f2 = std::make_shared<Field>(cid, f->name(), typeInfo, STORAGE_AGGREGATE_NONE, 0, false,
+                                             f->is_nullable());
+                f2->add_sub_field(Field(child.id(), child.name(), kDictCodeType, -1, -1, child.is_nullable()));
+            } else {
+                f2 = std::make_shared<Field>(cid, f->name(), kDictCodeType, -1, -1, f->is_nullable());
+            }
             ColumnIterator* iter = nullptr;
             if (use_global_dict_code) {
                 iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid].get(),

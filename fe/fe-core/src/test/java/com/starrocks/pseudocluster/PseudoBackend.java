@@ -34,6 +34,8 @@ import com.starrocks.proto.DeleteDataRequest;
 import com.starrocks.proto.DeleteDataResponse;
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
+import com.starrocks.proto.DeleteTxnLogRequest;
+import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
 import com.starrocks.proto.ExecuteCommandRequestPB;
@@ -42,27 +44,21 @@ import com.starrocks.proto.LockTabletMetadataRequest;
 import com.starrocks.proto.LockTabletMetadataResponse;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
-import com.starrocks.proto.PClearDictionaryCacheRequest;
-import com.starrocks.proto.PClearDictionaryCacheResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
 import com.starrocks.proto.PExecShortCircuitResult;
 import com.starrocks.proto.PFetchDataResult;
-import com.starrocks.proto.PGetDictionaryStatisticRequest;
-import com.starrocks.proto.PGetDictionaryStatisticResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
+import com.starrocks.proto.PProcessDictionaryCacheRequest;
+import com.starrocks.proto.PProcessDictionaryCacheResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.PPulsarProxyRequest;
 import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PQueryStatistics;
-import com.starrocks.proto.PRefreshDictionaryCacheBeginRequest;
-import com.starrocks.proto.PRefreshDictionaryCacheBeginResult;
-import com.starrocks.proto.PRefreshDictionaryCacheCommitRequest;
-import com.starrocks.proto.PRefreshDictionaryCacheCommitResult;
 import com.starrocks.proto.PTabletInfo;
 import com.starrocks.proto.PTabletWithPartition;
 import com.starrocks.proto.PTabletWriterAddBatchResult;
@@ -1041,26 +1037,7 @@ public class PseudoBackend {
         }
 
         @Override
-        public Future<PRefreshDictionaryCacheBeginResult> refreshDictionaryCacheBegin(
-                PRefreshDictionaryCacheBeginRequest request) {
-            return null;
-        }
-
-        @Override
-        public Future<PRefreshDictionaryCacheCommitResult> refreshDictionaryCacheCommit(
-                PRefreshDictionaryCacheCommitRequest request) {
-            return null;
-        }
-
-        @Override
-        public Future<PClearDictionaryCacheResult> clearDictionaryCache(
-                PClearDictionaryCacheRequest request) {
-            return null;
-        }
-
-        @Override
-        public Future<PGetDictionaryStatisticResult> getDictionaryStatistic(
-                PGetDictionaryStatisticRequest request) {
+        public Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request) {
             return null;
         }
 
@@ -1114,6 +1091,11 @@ public class PseudoBackend {
 
         @Override
         public Future<DeleteTabletResponse> deleteTablet(DeleteTabletRequest request) {
+            return CompletableFuture.completedFuture(null);
+        }
+
+        @Override
+        public Future<DeleteTxnLogResponse> deleteTxnLog(DeleteTxnLogRequest request) {
             return CompletableFuture.completedFuture(null);
         }
 

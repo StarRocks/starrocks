@@ -23,7 +23,7 @@ insert into t values(1);
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='kkk';
 alter table t set('bucket_size'='1');
 
--- name: test_range_partition
+-- name: test_range_partition @sequential
 create database ttt;
 use ttt;
 create table t(k date, v int) PARTITION BY RANGE(`k`)
@@ -48,7 +48,7 @@ insert into t values('2021-01-01', 1);
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ttt';
 select * from t;
 
--- name: test_list_partition
+-- name: test_list_partition @sequential
 create database ddd;
 use ddd;
 create table t(k date not null, v int) PARTITION BY LIST(`k`)
@@ -73,7 +73,7 @@ insert into t values('2021-01-01', 1);
 select count(*) from information_schema.be_tablets t1, information_schema.tables_config t2 where TABLE_NAME='t' and t1.TABLE_ID=t2.TABLE_ID and TABLE_SCHEMA='ddd';
 select * from t;
 
--- name: test_expr_partition
+-- name: test_expr_partition @sequential
 create database eee;
 use eee;
 create table t(k date, v int) PARTITION BY DATE_TRUNC('DAY', `k`)

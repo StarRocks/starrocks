@@ -28,6 +28,12 @@ public class QueryDebugOptions {
     @SerializedName(value = "maxRefreshMaterializedViewRetryNum")
     private int maxRefreshMaterializedViewRetryNum = 1;
 
+    @SerializedName(value = "enableMVEagerUnionAllRewrite")
+    private boolean enableMVEagerUnionAllRewrite = false;
+
+    @SerializedName(value = "enableQueryTraceLog")
+    private boolean enableQueryTraceLog = false;
+
     public QueryDebugOptions() {
         // To make unit test more stable, add retry times for refreshing materialized views.
         if (FeConstants.runningUnitTest) {
@@ -49,6 +55,22 @@ public class QueryDebugOptions {
 
     public void setMaxRefreshMaterializedViewRetryNum(int maxRefreshMaterializedViewRetryNum) {
         this.maxRefreshMaterializedViewRetryNum = maxRefreshMaterializedViewRetryNum;
+    }
+
+    public boolean isEnableMVEagerUnionAllRewrite() {
+        return enableMVEagerUnionAllRewrite;
+    }
+
+    public void setEnableMVEagerUnionAllRewrite(boolean enableMVEagerUnionAllRewrite) {
+        this.enableMVEagerUnionAllRewrite = enableMVEagerUnionAllRewrite;
+    }
+
+    public boolean isEnableQueryTraceLog() {
+        return enableQueryTraceLog;
+    }
+
+    public void setEnableQueryTraceLog(boolean enableQueryTraceLog) {
+        this.enableQueryTraceLog = enableQueryTraceLog;
     }
 
     public static QueryDebugOptions getInstance() {

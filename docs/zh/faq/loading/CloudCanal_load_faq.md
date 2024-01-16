@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# CloudCanal数据导入常见问题
+# CloudCanal 导入常见问题
 
 ## 导入时任务异常，报错 close index failed/too many tablet versions
 

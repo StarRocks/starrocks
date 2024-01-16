@@ -14,15 +14,19 @@
 
 package com.starrocks.sql.optimizer.rule.tree.lowcardinality;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
@@ -35,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -69,11 +74,10 @@ import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
 public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo> {
     private static final Logger LOG = LogManager.getLogger(DecodeCollector.class);
 
-    public static final Set<String> LOW_CARD_AGGREGATE_FUNCTIONS =
-            Sets.newHashSet(FunctionSet.COUNT, FunctionSet.MULTI_DISTINCT_COUNT, FunctionSet.MAX, FunctionSet.MIN,
-                    FunctionSet.APPROX_COUNT_DISTINCT);
+    public static final Set<String> LOW_CARD_AGGREGATE_FUNCTIONS = Sets.newHashSet(FunctionSet.COUNT,
+            FunctionSet.MULTI_DISTINCT_COUNT, FunctionSet.MAX, FunctionSet.MIN, FunctionSet.APPROX_COUNT_DISTINCT);
 
-    public static final Set<String> LOW_CARD_FUNCTIONS =
+    public static final Set<String> LOW_CARD_STRING_FUNCTIONS =
             ImmutableSet.of(FunctionSet.APPEND_TRAILING_CHAR_IF_ABSENT, FunctionSet.CONCAT, FunctionSet.CONCAT_WS,
                     FunctionSet.HEX, FunctionSet.LEFT, FunctionSet.LIKE, FunctionSet.LOWER, FunctionSet.LPAD,
                     FunctionSet.LTRIM, FunctionSet.REGEXP_EXTRACT, FunctionSet.REGEXP_REPLACE, FunctionSet.REPEAT,
@@ -81,6 +85,17 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                     FunctionSet.SPLIT_PART, FunctionSet.SUBSTR, FunctionSet.SUBSTRING, FunctionSet.SUBSTRING_INDEX,
                     FunctionSet.TRIM, FunctionSet.UPPER, FunctionSet.IF);
 
+    // array<string> support:
+    //  array<string> -> array<string>: array function
+    //  array<string> -> string       : array element
+    public static final Set<String> LOW_CARD_ARRAY_FUNCTIONS = ImmutableSet.of(
+            FunctionSet.ARRAY_MIN,  // ARRAY -> STRING
+            FunctionSet.ARRAY_MAX, FunctionSet.ARRAY_DISTINCT, // ARRAY -> ARRAY
+            FunctionSet.ARRAY_SORT, FunctionSet.REVERSE, FunctionSet.ARRAY_SLICE, FunctionSet.ARRAY_FILTER,
+            FunctionSet.ARRAY_LENGTH, // ARRAY -> bigint, return direct
+            FunctionSet.CARDINALITY);
+
+    private final SessionVariable sessionVariable;
 
     // These fields are the same as the fields in the DecodeContext,
     // the difference: these fields store all string information, the
@@ -100,6 +115,10 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     private final Map<Integer, Integer> expressionStringRefCounter = Maps.newHashMap();
 
     private final List<Integer> scanStringColumns = Lists.newArrayList();
+
+    public DecodeCollector(SessionVariable session) {
+        this.sessionVariable = session;
+    }
 
     public void collect(OptExpression root, DecodeContext context) {
         collectImpl(root, null);
@@ -356,8 +375,8 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     public DecodeInfo visitPhysicalOlapScan(OptExpression optExpression, DecodeInfo context) {
         PhysicalOlapScanOperator scan = optExpression.getOp().cast();
         OlapTable table = (OlapTable) scan.getTable();
-        long version =
-                table.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo).orElse(0L);
+        long version = table.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo)
+                .orElse(0L);
 
         if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
             return DecodeInfo.EMPTY;
@@ -369,12 +388,17 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         // check dict column
         DecodeInfo info = new DecodeInfo();
         for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
-            if (!column.getType().isVarchar()) {
+            // Condition 1:
+            if (!supportLowCardinality(column.getType())) {
                 continue;
             }
 
-            ColumnStatistic columnStatistic =
-                    GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(table, column.getName());
+            if (!sessionVariable.isEnableArrayLowCardinalityOptimize() && column.getType().isArrayType()) {
+                continue;
+            }
+
+            ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentStatisticStorage()
+                    .getColumnStatistic(table, column.getName());
             // Condition 2: the varchar column is low cardinality string column
             if (!FeConstants.USE_MOCK_DICT_MANAGER && (columnStatistic.isUnknown() ||
                     columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD)) {
@@ -452,14 +476,19 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                     stringExpressions.computeIfAbsent(c, l -> Lists.newArrayList()).addAll(exprs);
                 }
 
-                // whole expression support dictionary, define new dict column, only support varchar column
-                if (exprs.contains(value) && value.getType().isVarchar()) {
+                // whole expression support dictionary, define new dict column
+                // only support varchar/array<varchar> column
+                if (exprs.contains(value) && supportLowCardinality(value.getType())) {
                     stringRefToDefineExprMap.put(key.getId(), value);
                     expressionStringRefCounter.putIfAbsent(key.getId(), 0);
                     info.outputStringColumns.union(key.getId());
                 }
             });
         }
+    }
+
+    private static boolean supportLowCardinality(Type type) {
+        return type.isVarchar() || (type.isArrayType() && ((ArrayType) type).getItemType().isVarchar());
     }
 
     // Check if an expression can be optimized using a dictionary
@@ -478,10 +507,19 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         public void collect(ScalarOperator scalarOperator) {
-            ScalarOperator res = scalarOperator.accept(this, null);
-            if (res.isColumnRef()) {
-                dictExpressions.computeIfAbsent(((ColumnRefOperator) res).getId(), x -> Lists.newArrayList())
-                        .add(scalarOperator);
+            ScalarOperator dictColumn = scalarOperator.accept(this, null);
+            saveDictExpr(dictColumn, scalarOperator);
+        }
+
+        private void saveDictExpr(ScalarOperator dictColumn, ScalarOperator dictExpr) {
+            if (dictColumn.isColumnRef()) {
+                dictExpressions.computeIfAbsent(((ColumnRefOperator) dictColumn).getId(),
+                        x -> Lists.newArrayList()).add(dictExpr);
+            } else if (!dictColumn.isConstant()) {
+                // array[x], array_min(x)
+                List<ColumnRefOperator> used = dictColumn.getColumnRefs();
+                Preconditions.checkState(used.stream().distinct().count() == 1);
+                this.dictExpressions.computeIfAbsent(used.get(0).getId(), x -> Lists.newArrayList()).add(dictExpr);
             }
         }
 
@@ -501,28 +539,21 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             return children;
         }
 
-        private ScalarOperator merge(List<ScalarOperator> collectors, ScalarOperator scalarOperator) {
+        private ScalarOperator mergeWithArray(List<ScalarOperator> collectors, ScalarOperator scalarOperator) {
             // all constant
             if (collectors.stream().allMatch(CONSTANTS::equals)) {
                 return CONSTANTS;
             }
 
             long variableExpr = collectors.stream().filter(VARIABLES::equals).count();
-            long dictCount = collectors.stream().filter(ScalarOperator::isColumnRef).distinct().count();
-            // only one columnRef
+            long dictCount = collectors.stream().filter(s -> !s.isConstant()).distinct().count();
+            // only one scalar operator, and it's a dict column
             if (dictCount == 1 && variableExpr == 0) {
-                for (ScalarOperator c : collectors) {
-                    if (c.isColumnRef()) {
-                        return c;
-                    }
-                }
+                return collectors.stream().filter(s -> !s.isConstant()).findFirst().get();
             }
 
             for (int i = 0; i < collectors.size(); i++) {
-                if (collectors.get(i).isColumnRef()) {
-                    dictExpressions.computeIfAbsent(((ColumnRefOperator) collectors.get(i)).getId(),
-                            x -> Lists.newArrayList()).add(scalarOperator.getChildren().get(i));
-                }
+                saveDictExpr(collectors.get(i), scalarOperator.getChild(i));
             }
             return VARIABLES;
         }
@@ -534,13 +565,16 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             }
 
             for (int i = 0; i < collectors.size(); i++) {
-                ScalarOperator c = collectors.get(i);
-                if (c.isColumnRef()) {
-                    this.dictExpressions.computeIfAbsent(((ColumnRefOperator) c).getId(), x -> Lists.newArrayList())
-                            .add(scalarOperator.getChildren().get(i));
-                }
+                saveDictExpr(collectors.get(i), scalarOperator.getChild(i));
             }
             return VARIABLES;
+        }
+
+        private ScalarOperator merge(List<ScalarOperator> collectors, ScalarOperator scalarOperator) {
+            if (collectors.stream().anyMatch(s -> s.getType().isArrayType())) {
+                return forbidden(collectors, scalarOperator);
+            }
+            return mergeWithArray(collectors, scalarOperator);
         }
 
         @Override
@@ -567,11 +601,37 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             if (FunctionSet.nonDeterministicFunctions.contains(call.getFnName())) {
                 return VARIABLES;
             }
-            if (LOW_CARD_FUNCTIONS.contains(call.getFnName()) ||
+
+            if (FunctionSet.ARRAY_FILTER.equalsIgnoreCase(call.getFnName())) {
+                List<ScalarOperator> result = visitChildren(call, context);
+                return CONSTANTS.equals(result.get(1)) ? mergeWithArray(result, call) : forbidden(result, call);
+            }
+
+            if (FunctionSet.ARRAY_MIN.equalsIgnoreCase(call.getFnName()) ||
+                    FunctionSet.ARRAY_MAX.equalsIgnoreCase(call.getFnName())) {
+                // for support: `dictExpr(array_min(array) = 'a')`, not `dictExpr(array_min(array)) = 'a'`
+                ScalarOperator result = mergeWithArray(visitChildren(call, context), call);
+                return !result.isConstant() ? call : result;
+            }
+
+            if (LOW_CARD_STRING_FUNCTIONS.contains(call.getFnName()) ||
+                    LOW_CARD_ARRAY_FUNCTIONS.contains(call.getFnName()) ||
                     LOW_CARD_AGGREGATE_FUNCTIONS.contains(call.getFnName())) {
-                return merge(visitChildren(call, context), call);
+                return mergeWithArray(visitChildren(call, context), call);
             }
             return forbidden(visitChildren(call, context), call);
+        }
+
+        @Override
+        public ScalarOperator visitCollectionElement(CollectionElementOperator collectionElementOp, Void context) {
+            List<ScalarOperator> children = visitChildren(collectionElementOp, context);
+            if (supportLowCardinality(collectionElementOp.getChild(0).getType())) {
+                ScalarOperator result = mergeWithArray(children, collectionElementOp);
+                // for support: `dictExpr(array[0] = 'a')`, not `dictExpr(array[0]) = 'a'`
+                return !result.isConstant() ? collectionElementOp : result;
+
+            }
+            return forbidden(children, collectionElementOp);
         }
 
         @Override

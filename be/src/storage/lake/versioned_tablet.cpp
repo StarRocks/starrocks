@@ -16,7 +16,6 @@
 
 #include "storage/lake/pk_tablet_writer.h"
 #include "storage/lake/rowset.h"
-#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
@@ -36,42 +35,45 @@ int64_t VersionedTablet::version() const {
     return _metadata->version();
 }
 
-StatusOr<VersionedTablet::RowsetList> VersionedTablet::get_rowsets() const {
-    std::vector<RowsetPtr> rowsets;
-    rowsets.reserve(_metadata->rowsets_size());
-    Tablet tablet(_tablet_mgr, _metadata->id());
-    for (int i = 0, size = _metadata->rowsets_size(); i < size; ++i) {
-        const auto& rowset_metadata = _metadata->rowsets(i);
-        auto rowset = std::make_shared<Rowset>(tablet, std::make_shared<const RowsetMetadata>(rowset_metadata), i);
-        rowsets.emplace_back(std::move(rowset));
-    }
-    return rowsets;
-}
-
 StatusOr<std::unique_ptr<TabletWriter>> VersionedTablet::new_writer(WriterType type, int64_t txn_id,
-                                                                    uint32_t max_rows_per_segment) {
+                                                                    uint32_t max_rows_per_segment,
+                                                                    ThreadPool* flush_pool) {
     auto tablet_schema = get_schema();
     if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
         if (type == kHorizontal) {
-            return std::make_unique<HorizontalPkTabletWriter>(_tablet_mgr, id(), tablet_schema, txn_id);
+            return std::make_unique<HorizontalPkTabletWriter>(_tablet_mgr, id(), tablet_schema, txn_id, flush_pool);
         } else {
             DCHECK(type == kVertical);
             return std::make_unique<VerticalPkTabletWriter>(_tablet_mgr, id(), tablet_schema, txn_id,
-                                                            max_rows_per_segment);
+                                                            max_rows_per_segment, flush_pool);
         }
     } else {
         if (type == kHorizontal) {
-            return std::make_unique<HorizontalGeneralTabletWriter>(_tablet_mgr, id(), tablet_schema, txn_id);
+            return std::make_unique<HorizontalGeneralTabletWriter>(_tablet_mgr, id(), tablet_schema, txn_id,
+                                                                   flush_pool);
         } else {
             DCHECK(type == kVertical);
             return std::make_unique<VerticalGeneralTabletWriter>(_tablet_mgr, id(), tablet_schema, txn_id,
-                                                                 max_rows_per_segment);
+                                                                 max_rows_per_segment, flush_pool);
         }
     }
 }
 
 StatusOr<std::unique_ptr<TabletReader>> VersionedTablet::new_reader(Schema schema) {
-    return std::make_unique<TabletReader>(Tablet(_tablet_mgr, id()), version(), std::move(schema));
+    return std::make_unique<TabletReader>(_tablet_mgr, _metadata, std::move(schema));
+}
+
+bool VersionedTablet::has_delete_predicates() const {
+    for (const auto& rowset : _metadata->rowsets()) {
+        if (rowset.has_delete_predicate()) {
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<RowsetPtr> VersionedTablet::get_rowsets() const {
+    return Rowset::get_rowsets(_tablet_mgr, _metadata);
 }
 
 } // namespace starrocks::lake

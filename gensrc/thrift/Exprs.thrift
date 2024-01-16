@@ -85,7 +85,9 @@ enum TExprNodeType {
   DICT_QUERY_EXPR,
 
   // query DICTIONARY object
-  DICTIONARY_EXPR,
+  DICTIONARY_GET_EXPR,
+  
+  JIT_EXPR,
 }
 
 struct TAggregateExpr {
@@ -184,7 +186,7 @@ struct TDictQueryExpr {
   6: required bool strict_mode
 }
 
-struct TDictionaryExpr {
+struct TDictionaryGetExpr {
   1: optional i64 dict_id
   2: optional i64 txn_id
   3: optional i32 key_size
@@ -242,7 +244,7 @@ struct TExprNode {
 
   55: optional TDictQueryExpr dict_query_expr
 
-  56: optional TDictionaryExpr dictionary_expr
+  56: optional TDictionaryGetExpr dictionary_get_expr
 }
 
 struct TPartitionLiteral {

@@ -71,6 +71,7 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.spark.sql.AnalysisException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -490,6 +491,7 @@ public class BrokerLoadJobTest {
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         Map<String, String> properties = Maps.newHashMap();
         properties.put(LoadStmt.PARTIAL_UPDATE_MODE, "column");
+        properties.put(LoadStmt.MERGE_CONDITION, "v1");
         brokerLoadJob.setJobProperties(properties);
         brokerLoadJob.onTaskFinished(attachment1);
     }
@@ -596,5 +598,25 @@ public class BrokerLoadJobTest {
         Assert.assertEquals("0", loadingStatus.getCounters().get(BrokerLoadJob.DPP_ABNORMAL_ALL));
         int progress = Deencapsulation.getField(brokerLoadJob, "progress");
         Assert.assertEquals(99, progress);
+    }
+
+    @Test
+    public void testSetProperties(@Injectable BrokerPendingTaskAttachment attachment1,
+                                                       @Injectable LoadTask loadTask1,
+                                                       @Mocked GlobalStateMgr globalStateMgr,
+                                  @Injectable Database database) throws AnalysisException, DdlException {
+
+        BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put(LoadStmt.JSONPATHS, "[\"$.key2\"");
+        properties.put(LoadStmt.STRIP_OUTER_ARRAY, "true");
+        properties.put(LoadStmt.JSONROOT, "$.key1");
+        brokerLoadJob.setJobProperties(properties);
+
+        LoadJob.JSONOptions options = Deencapsulation.getField(brokerLoadJob, "jsonOptions");
+
+        Assert.assertEquals("[\"$.key2\"", options.jsonPaths);
+        Assert.assertTrue(options.stripOuterArray);
+        Assert.assertEquals("$.key1", options.jsonRoot);
     }
 }

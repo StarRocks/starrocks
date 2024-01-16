@@ -56,7 +56,8 @@ std::string to_json(const Status& status) {
     if (status.ok()) {
         writer.String("OK");
     } else {
-        writer.String(status.get_error_msg().c_str());
+        std::string_view msg = status.message();
+        writer.String(msg.data(), msg.size());
     }
     writer.EndObject();
     return s.GetString();

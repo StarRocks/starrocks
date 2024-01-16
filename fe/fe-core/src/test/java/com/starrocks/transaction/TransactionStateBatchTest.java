@@ -16,6 +16,7 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.UserException;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TUniqueId;
 import org.junit.After;
 import org.junit.Assert;
@@ -28,7 +29,9 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public class TransactionStateBatchTest {
@@ -86,6 +89,47 @@ public class TransactionStateBatchTest {
         Assert.assertEquals(TransactionStatus.VISIBLE, state.getTransactionStatus());
 
         in.close();
+    }
+
+    @Test
+    public void testPutBeTablets() {
+        Long dbId = 1000L;
+        Long tableId = 20000L;
+        UUID uuid = UUID.randomUUID();
+        List<TransactionState> transactionStateList = new ArrayList<TransactionState>();
+        TransactionState transactionState1 = new TransactionState(dbId, Lists.newArrayList(tableId),
+                3000, "label1", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+        uuid = UUID.randomUUID();
+        TransactionState transactionState2 = new TransactionState(dbId, Lists.newArrayList(tableId),
+                3001, "label2", new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits()),
+                TransactionState.LoadJobSourceType.BACKEND_STREAMING,
+                new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "127.0.0.1"), 50000L,
+                60 * 1000L);
+        transactionStateList.add(transactionState1);
+        transactionStateList.add(transactionState2);
+        TransactionStateBatch stateBatch = new TransactionStateBatch(transactionStateList);
+
+        long partitionId1 = 1;
+        long partitionId2 = 2;
+        Map<ComputeNode, List<Long>> nodeToTablets1 = new HashMap<>();
+        ComputeNode node1 = new ComputeNode(1, "host", 9050);
+        ComputeNode node2 = new ComputeNode(2, "host", 9050);
+        nodeToTablets1.put(node1, Lists.newArrayList(1L, 2L));
+        nodeToTablets1.put(node2, Lists.newArrayList(3L, 4L));
+        Map<ComputeNode, List<Long>> nodeToTablets2 = new HashMap<>();
+        nodeToTablets2.put(node1, Lists.newArrayList(2L, 3L, 4L));
+
+        stateBatch.putBeTablets(partitionId1, nodeToTablets1);
+        stateBatch.putBeTablets(partitionId1, nodeToTablets2);
+        Assert.assertEquals(1, stateBatch.getPartitionToTablets().size());
+        Assert.assertEquals(4, stateBatch.getPartitionToTablets().get(partitionId1).get(node1).size());
+        Assert.assertEquals(2, stateBatch.getPartitionToTablets().get(partitionId1).get(node2).size());
+
+        stateBatch.putBeTablets(partitionId2, nodeToTablets2);
+        Assert.assertEquals(2, stateBatch.getPartitionToTablets().size());
     }
 
 }

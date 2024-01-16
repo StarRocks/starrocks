@@ -112,6 +112,12 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+    public boolean tableExists(String dbName, String tblName) {
+        ConnectorMetadata metadata = metadataOfDb(dbName);
+        return metadata.tableExists(dbName, tblName);
+    }
+
+    @Override
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String tblName) {
         return normal.getMaterializedViewIndex(dbName, tblName);
     }
@@ -188,6 +194,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     @Override
     public void finishSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
         normal.finishSink(dbName, table, commitInfos);
+    }
+
+    @Override
+    public void abortSink(String dbName, String table, List<TSinkCommitInfo> commitInfos) {
+        normal.abortSink(dbName, table, commitInfos);
     }
 
     @Override
@@ -276,5 +287,10 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     @Override
     public CloudConfiguration getCloudConfiguration() {
         return normal.getCloudConfiguration();
+    }
+
+    @Override
+    public List<PartitionInfo> getChangedPartitionInfo(Table table, long mvSnapShotID) {
+        return normal.getChangedPartitionInfo(table, mvSnapShotID);
     }
 }

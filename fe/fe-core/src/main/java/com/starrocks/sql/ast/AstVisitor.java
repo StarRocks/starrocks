@@ -31,6 +31,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.GroupByClause;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.InformationFunction;
 import com.starrocks.analysis.IsNullPredicate;
@@ -38,9 +39,11 @@ import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MultiInPredicate;
+import com.starrocks.analysis.NamedArgument;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Parameter;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
@@ -1247,7 +1250,11 @@ public abstract class AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    public R visitDictionaryExpr(DictionaryExpr node, C context) {
+    public R visitDictionaryGetExpr(DictionaryGetExpr node, C context) {
+        return visitExpression(node, context);
+    }
+
+    public R visitNamedArgument(NamedArgument node, C context) {
         return visitExpression(node, context);
     }
 
@@ -1267,5 +1274,13 @@ public abstract class AstVisitor<R, C> {
 
     public R visitDictQueryExpr(DictQueryExpr node, C context) {
         return visitExpression(node, context);
+    }
+
+    public R visitHintNode(HintNode node, C context) {
+        return visitNode(node, context);
+    }
+
+    public R visitSetVarHint(SetVarHint node, C context) {
+        return visitNode(node, context);
     }
 }

@@ -48,6 +48,7 @@ SchemaScanner::ColumnDesc SchemaMaterializedViewsScanner::_s_tbls_columns[] = {
         {"LAST_REFRESH_ERROR_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"TABLE_ROWS", TYPE_VARCHAR, sizeof(StringValue), false},
         {"MATERIALIZED_VIEW_DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"EXTRA_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), false},
 };
 
 SchemaMaterializedViewsScanner::SchemaMaterializedViewsScanner()
@@ -110,6 +111,7 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
             Slice(info.last_refresh_error_message),
             Slice(info.rows),
             Slice(info.text),
+            Slice(info.extra_message),
     };
 
     for (const auto& [slot_id, index] : slot_id_map) {
@@ -119,7 +121,6 @@ Status SchemaMaterializedViewsScanner::fill_chunk(ChunkPtr* chunk) {
     _table_index++;
     return {};
 }
-
 Status SchemaMaterializedViewsScanner::get_materialized_views() {
     TGetTablesParams table_params;
     table_params.__set_db(_db_result.dbs[_db_index++]);

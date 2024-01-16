@@ -27,6 +27,7 @@
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
 #include "storage/lake/update_manager.h"
+#include "storage/lake/versioned_tablet.h"
 #include "storage/options.h"
 #include "storage/tablet_schema.h"
 #include "testutil/assert.h"
@@ -61,8 +62,7 @@ public:
     void TearDown() override {
         delete _tablet_manager;
         delete _location_provider;
-        auto st = FileSystem::Default()->delete_dir_recursive(_test_dir);
-        st.permit_unchecked_error();
+        (void)FileSystem::Default()->delete_dir_recursive(_test_dir);
     }
 
     starrocks::lake::TabletManager* _tablet_manager{nullptr};
@@ -361,8 +361,8 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         c2.is_allow_null = false;
         EXPECT_OK(_tablet_manager->create_tablet(req));
 
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(65535));
-        ASSIGN_OR_ABORT(auto schema, tablet.get_schema());
+        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(65535, 1));
+        auto schema = tablet.get_schema();
         ASSERT_EQ(0, schema->column(0).unique_id());
         ASSERT_EQ(1, schema->column(1).unique_id());
         ASSERT_EQ(2, schema->column(2).unique_id());
@@ -405,8 +405,8 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         c2.is_allow_null = false;
         EXPECT_OK(_tablet_manager->create_tablet(req));
 
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(65536));
-        ASSIGN_OR_ABORT(auto schema, tablet.get_schema());
+        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(65536, 1));
+        auto schema = tablet.get_schema();
         ASSERT_EQ(0, schema->column(0).unique_id());
         ASSERT_EQ(1, schema->column(1).unique_id());
         ASSERT_EQ(2, schema->column(2).unique_id());
@@ -448,8 +448,8 @@ TEST_F(LakeTabletManagerTest, create_from_base_tablet) {
         c2.is_allow_null = false;
         EXPECT_OK(_tablet_manager->create_tablet(req));
 
-        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(65537));
-        ASSIGN_OR_ABORT(auto schema, tablet.get_schema());
+        ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(65537, 1));
+        auto schema = tablet.get_schema();
         ASSERT_EQ(0, schema->column(0).unique_id());
         ASSERT_EQ(1, schema->column(1).unique_id());
         ASSERT_EQ(2, schema->column(2).unique_id());

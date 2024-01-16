@@ -414,15 +414,37 @@ public class DatabaseTransactionMgrTest {
                 () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK));
         ExceptionChecker.expectThrowsNoException(
                 () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.LAKE_COMPACTION));
-        ExceptionChecker.expectThrows(BeginTransactionException.class,
+        ExceptionChecker.expectThrows(RunningTxnExceedException.class,
                 () -> mgr.checkRunningTxnExceedLimit(TransactionState.LoadJobSourceType.BACKEND_STREAMING));
     }
 
+    @Test
     public void testGetReadyToPublishTxnListBatch() throws AnalysisException {
         DatabaseTransactionMgr masterDbTransMgr = masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
         List<TransactionStateBatch> stateBatchesList = masterDbTransMgr.getReadyToPublishTxnListBatch();
         assertEquals(1, stateBatchesList.size());
         assertEquals(3, stateBatchesList.get(0).size());
+
+        // Table was dropped before committing the txn 'testTxnLabel8'
+        masterDbTransMgr.getLabelTransactionState(GlobalStateMgrTestUtil.testTxnLable8)
+                .removeTable(GlobalStateMgrTestUtil.testTableId1);
+        stateBatchesList = masterDbTransMgr.getReadyToPublishTxnListBatch();
+        assertEquals(1, stateBatchesList.size());
+        assertEquals(2, stateBatchesList.get(0).size());
+
+        // Table was dropped before committing the txn 'testTxnLabel7'
+        masterDbTransMgr.getLabelTransactionState(GlobalStateMgrTestUtil.testTxnLable7)
+                .removeTable(GlobalStateMgrTestUtil.testTableId1);
+        stateBatchesList = masterDbTransMgr.getReadyToPublishTxnListBatch();
+        assertEquals(1, stateBatchesList.size());
+        assertEquals(1, stateBatchesList.get(0).size());
+
+        // Table was dropped before committing the txn 'testTxnLabel6'
+        masterDbTransMgr.getLabelTransactionState(GlobalStateMgrTestUtil.testTxnLable6)
+                .removeTable(GlobalStateMgrTestUtil.testTableId1);
+        stateBatchesList = masterDbTransMgr.getReadyToPublishTxnListBatch();
+        assertEquals(1, stateBatchesList.size());
+        assertEquals(1, stateBatchesList.get(0).size());
     }
 
     @Test

@@ -26,6 +26,7 @@ import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.paimon.PaimonSplitsInfo;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
@@ -123,11 +124,13 @@ public class PaimonScanNode extends ScanNode {
             return;
         }
 
+        boolean forceJNIReader = ConnectContext.get().getSessionVariable().getPaimonForceJNIReader();
+
         Map<BinaryRow, Long> selectedPartitions = Maps.newHashMap();
         for (Split split : splits) {
             DataSplit dataSplit = (DataSplit) split;
             Optional<List<RawFile>> optionalRawFiles = dataSplit.convertToRawFiles();
-            if (optionalRawFiles.isPresent()) {
+            if (!forceJNIReader && optionalRawFiles.isPresent()) {
                 List<RawFile> rawFiles = optionalRawFiles.get();
                 boolean validFormat = rawFiles.stream().allMatch(p -> fromType(p.format()) != THdfsFileFormat.UNKNOWN);
                 if (validFormat) {

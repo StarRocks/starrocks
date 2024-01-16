@@ -503,13 +503,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         if (db == null) {
             throw new MetaNotFoundException("Database " + dbId + "has been deleted");
         }
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            return db.getFullName();
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
+        return db.getFullName();
     }
 
     public long getTableId() {
@@ -756,7 +750,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         this.receivedBytes += receivedBytes;
         this.totalTaskExcutionTimeMs += taskExecutionTime;
 
-        if (MetricRepo.isInit && !isReplay) {
+        if (MetricRepo.hasInit && !isReplay) {
             MetricRepo.COUNTER_ROUTINE_LOAD_ROWS.increase(numOfTotalRows);
             MetricRepo.COUNTER_ROUTINE_LOAD_ERROR_ROWS.increase(numOfErrorRows);
             MetricRepo.COUNTER_ROUTINE_LOAD_RECEIVED_BYTES.increase(receivedBytes);
@@ -1315,7 +1309,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             GlobalStateMgr.getCurrentState().getEditLog().logOpRoutineLoadJob(new RoutineLoadOperation(id, jobState));
         }
 
-        if (!isReplay && MetricRepo.isInit && JobState.PAUSED == jobState) {
+        if (!isReplay && MetricRepo.hasInit && JobState.PAUSED == jobState) {
             MetricRepo.COUNTER_ROUTINE_LOAD_PAUSED.increase(1L);
         }
         LOG.info(new LogBuilder(LogKey.ROUTINE_LOAD_JOB, id)

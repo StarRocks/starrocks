@@ -152,14 +152,15 @@ Before querying Iceberg data, you must add the mapping between the host names an
 
 The following table describes the parameter you need to configure in `MetastoreParams`.
 
+##### iceberg.catalog.type
 
-#####  iceberg.catalog.type                
-Required:  Yes      
-Description:  The type of metastore that you use for your Iceberg cluster. Set the value to `hive`. 
+Required: Yes
+Description: The type of metastore that you use for your Iceberg cluster. Set the value to `hive`. 
 
-#####  hive.metastore.uris                 
-Required:  Yes      
-Description:  The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br />If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. 
+##### hive.metastore.uris
+
+Required: Yes
+Description: The URI of your Hive metastore. Format: `thrift://<metastore_IP_address>:<metastore_port>`.<br />If high availability (HA) is enabled for your Hive metastore, you can specify multiple metastore URIs and separate them with commas (`,`), for example, `"thrift://<metastore_IP_address_1>:<metastore_port_1>,thrift://<metastore_IP_address_2>:<metastore_port_2>,thrift://<metastore_IP_address_3>:<metastore_port_3>"`. 
 
 </TabItem>
 <TabItem value="GLUE" label="AWS Glue">
@@ -197,29 +198,35 @@ If you choose AWS Glue as the metastore of your data source, which is supported 
 
 `MetastoreParams` for AWS Glue:
 
-######  iceberg.catalog.type          
-Required:  Yes      
-Description:  The type of metastore that you use for your Iceberg cluster. Set the value to `glue`. 
+###### iceberg.catalog.type
 
-######  aws.glue.use_instance_profile 
-Required:  Yes      
-Description:  Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. 
+Required: Yes
+Description: The type of metastore that you use for your Iceberg cluster. Set the value to `glue`. 
 
-######  aws.glue.iam_role_arn         
-Required:  No       
-Description:  The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter. 
+###### aws.glue.use_instance_profile
 
-######  aws.glue.region               
-Required:  Yes      
-Description:  The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`. 
+Required: Yes
+Description: Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. 
 
-######  aws.glue.access_key           
-Required:  No       
-Description:  The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. 
+###### aws.glue.iam_role_arn
 
-######  aws.glue.secret_key           
-Required:  No       
-Description:  The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter. 
+Required: No
+Description: The ARN of the IAM role that has privileges on your AWS Glue Data Catalog. If you use the assumed role-based authentication method to access AWS Glue, you must specify this parameter. 
+
+###### aws.glue.region
+
+Required: Yes
+Description: The region in which your AWS Glue Data Catalog resides. Example: `us-west-1`. 
+
+###### aws.glue.access_key
+
+Required: No
+Description: The access key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter.
+
+###### aws.glue.secret_key
+
+Required: No
+Description: The secret key of your AWS IAM user. If you use the IAM user-based authentication method to access AWS Glue, you must specify this parameter.
 
 For information about how to choose an authentication method for accessing AWS Glue and how to configure an access control policy in the AWS IAM Console, see [Authentication parameters for accessing AWS Glue](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-glue).
 
@@ -239,21 +246,25 @@ If you use Tabular as metastore, you must specify the metastore type as REST (`"
 
 `MetastoreParams` for Tabular:
 
-######  iceberg.catalog.type       
-Required:  Yes      
-Description:  The type of metastore that you use for your Iceberg cluster. Set the value to `rest`.           
+###### iceberg.catalog.type
 
-######  iceberg.catalog.uri        
-Required:  Yes      
-Description:  The URI of the Tabular service endpoint. Example: `https://api.tabular.io/ws`.      
+Required: Yes
+Description: The type of metastore that you use for your Iceberg cluster. Set the value to `rest`.
 
-######  iceberg.catalog.credential 
-Required:  Yes      
-Description:  The authentication information of the Tabular service.                                        
+###### iceberg.catalog.uri
 
-######  iceberg.catalog.warehouse  
-Required:  No       
-Description:  The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`. 
+Required: Yes
+Description: The URI of the Tabular service endpoint. Example: `https://api.tabular.io/ws`.      
+
+###### iceberg.catalog.credential
+
+Required: Yes
+Description: The authentication information of the Tabular service.
+
+###### iceberg.catalog.warehouse
+
+Required: No
+Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` or `sandbox`.
 
 The following example creates an Iceberg catalog named `tabular` that uses Tabular as metastore:
 
@@ -319,25 +330,30 @@ If you choose AWS S3 as storage for your Iceberg cluster, take one of the follow
 
 `StorageCredentialParams` for AWS S3:
 
-######  aws.s3.use_instance_profile 
-Required:  Yes      
+###### aws.s3.use_instance_profile
+
+Required: Yes
 Description:  Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. 
 
-######  aws.s3.iam_role_arn         
-Required:  No       
-Description:  The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter. 
+###### aws.s3.iam_role_arn
 
-######  aws.s3.region               
-Required:  Yes      
+Required: No
+Description: The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter. 
+
+###### aws.s3.region
+
+Required: Yes
 Description:  The region in which your AWS S3 bucket resides. Example: `us-west-1`. 
 
-######  aws.s3.access_key           
-Required:  No       
-Description:  The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. 
+###### aws.s3.access_key
 
-######  aws.s3.secret_key           
-Required:  No       
-Description:  The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. 
+Required: No
+Description: The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter.
+
+###### aws.s3.secret_key
+
+Required: No
+Description:  The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter.
 
 For information about how to choose an authentication method for accessing AWS S3 and how to configure an access control policy in AWS IAM Console, see [Authentication parameters for accessing AWS S3](../../integrations/authenticate_to_aws_resources.md#authentication-parameters-for-accessing-aws-s3).
 
@@ -367,25 +383,30 @@ If you choose an S3-compatible storage system, such as MinIO, as storage for you
 
 `StorageCredentialParams` for MinIO and other S3 compatible systems:
 
-######  aws.s3.enable_ssl                
-Required:  Yes      
-Description:  Specifies whether to enable SSL connection.<br />Valid values: `true` and `false`. Default value: `true`. 
+###### aws.s3.enable_ssl
 
-######  aws.s3.enable_path_style_access  
-Required:  Yes      
-Description:  Specifies whether to enable path-style access.<br />Valid values: `true` and `false`. Default value: `false`. For MinIO, you must set the value to `true`.<br />Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`. 
+Required: Yes
+Description:  Specifies whether to enable SSL connection.<br />Valid values: `true` and `false`. Default value: `true`.
 
-######  aws.s3.endpoint                  
-Required:  Yes      
-Description:  The endpoint that is used to connect to your S3-compatible storage system instead of AWS S3. 
+###### aws.s3.enable_path_style_access
 
-######  aws.s3.access_key                
-Required:  Yes      
-Description:  The access key of your IAM user. 
+Required: Yes
+Description: Specifies whether to enable path-style access.<br />Valid values: `true` and `false`. Default value: `false`. For MinIO, you must set the value to `true`.<br />Path-style URLs use the following format: `https://s3.<region_code>.amazonaws.com/<bucket_name>/<key_name>`. For example, if you create a bucket named `DOC-EXAMPLE-BUCKET1` in the US West (Oregon) Region, and you want to access the `alice.jpg` object in that bucket, you can use the following path-style URL: `https://s3.us-west-2.amazonaws.com/DOC-EXAMPLE-BUCKET1/alice.jpg`.
 
-######  aws.s3.secret_key                
-Required:  Yes      
-Description:  The secret key of your IAM user. 
+###### aws.s3.endpoint
+
+Required: Yes
+Description: The endpoint that is used to connect to your S3-compatible storage system instead of AWS S3.
+
+###### aws.s3.access_key
+
+Required: Yes
+Description: The access key of your IAM user.
+
+###### aws.s3.secret_key
+
+Required: Yes
+Description: The secret key of your IAM user.
 
 </TabItem>
 
@@ -402,39 +423,44 @@ If you choose Blob Storage as storage for your Iceberg cluster, take one of the 
 - To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.shared_key" = "<storage_account_shared_key>"
   ```
 
 - To choose the SAS Token authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.container" = "<blob_container_name>",
-  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.container" = "<container_name>",
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
 `StorageCredentialParams` for Microsoft Azure:
 
-######  azure.blob.storage_account 
-Required:  Yes          
-Description:  The username of your Blob Storage account.   
+###### azure.blob.storage_account
 
-######  azure.blob.shared_key      
-Required:  Yes          
-Description:  The shared key of your Blob Storage account. 
+Required: Yes
+Description: The username of your Blob Storage account.
 
-######  azure.blob.account_name   
-Required:  Yes          
-Description:  The username of your Blob Storage account.                   
+###### azure.blob.shared_key
 
-######  azure.blob.container 
-Required:  Yes          
-Description:  The name of the blob container that stores your data.        
+Required: Yes
+Description: The shared key of your Blob Storage account.
 
-######  azure.blob.sas_token      
-Required:  Yes          
-Description:  The SAS token that is used to access your Blob Storage account. 
+###### azure.blob.account_name
+
+Required: Yes
+Description: The username of your Blob Storage account.
+
+###### azure.blob.container
+
+Required: Yes
+Description: The name of the blob container that stores your data.
+
+###### azure.blob.sas_token
+
+Required: Yes
+Description: The SAS token that is used to access your Blob Storage account.
 
 ###### Azure Data Lake Storage Gen1
 
@@ -468,16 +494,16 @@ If you choose Data Lake Storage Gen2 as storage for your Iceberg cluster, take o
   "azure.adls2.oauth2_client_id" = "<service_client_id>"
   ```
 
-  Or:        
+  Or:
 
 - To choose the Shared Key authentication method, configure `StorageCredentialParams` as follows:
 
   ```SQL
   "azure.adls2.storage_account" = "<storage_account_name>",
-  "azure.adls2.shared_key" = "<shared_key>"
+  "azure.adls2.shared_key" = "<storage_account_shared_key>"
   ```
 
-Or:
+  Or:
 
 - To choose the Service Principal authentication method, configure `StorageCredentialParams` as follows:
 
@@ -518,7 +544,7 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
     ```SQL
     "gcp.gcs.use_compute_engine_service_account" = "true",
     "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"
-    ```          
+    ```
 
   - Make a service account (temporarily named as meta service account) impersonate another service account (temporarily named as data service account):
 
@@ -531,22 +557,26 @@ If you choose Google GCS as storage for your Iceberg cluster, take one of the fo
 
 `StorageCredentialParams` for Google GCS:
 
-######  gcp.gcs.service_account_email          
-Default value:  ""                
-Example:  "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)" 
-Description:  The email address in the JSON file generated at the creation of the service account. 
+###### gcp.gcs.service_account_email
 
-######  gcp.gcs.service_account_private_key_id 
-Default value:  ""                
-Example:  "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"                   
-Description:  The private key ID in the JSON file generated at the creation of the service account. 
+Default value: ""
+Example: "[user@hello.iam.gserviceaccount.com](mailto:user@hello.iam.gserviceaccount.com)"
+Description: The email address in the JSON file generated at the creation of the service account.
 
-######  gcp.gcs.service_account_private_key    
-Default value:  ""                
-Example:  "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  
-Description:  The private key in the JSON file generated at the creation of the service account. 
+###### gcp.gcs.service_account_private_key_id
+
+Default value: ""
+Example: "61d257bd8479547cb3e04f0b9b6b9ca07af3b7ea"
+Description: The private key ID in the JSON file generated at the creation of the service account.
+
+###### gcp.gcs.service_account_private_key
+
+Default value: ""
+Example: "-----BEGIN PRIVATE KEY----xxxx-----END PRIVATE KEY-----\n"  
+Description:  The private key in the JSON file generated at the creation of the service account.
 
 ###### gcp.gcs.impersonation_service_account
+
 Default value: ""  
 Example: "hello"  
 Description: The service account that you want to impersonate.
@@ -560,7 +590,6 @@ Description: The service account that you want to impersonate.
 ### Examples
 
 The following examples create an Iceberg catalog named `iceberg_catalog_hms` or `iceberg_catalog_glue`, depending on the type of metastore you use, to query data from your Iceberg cluster. Chose the tab that matches your storage type:
-
 
 <Tabs groupId="storage">
 <TabItem value="AWS" label="AWS S3" default>
@@ -577,7 +606,7 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2"
   );
@@ -608,7 +637,7 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2"
@@ -642,7 +671,7 @@ The following examples create an Iceberg catalog named `iceberg_catalog_hms` or 
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
@@ -682,7 +711,7 @@ PROPERTIES
 (
     "type" = "iceberg",
     "iceberg.catalog.type" = "hive",
-    "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ```
 
@@ -700,7 +729,7 @@ PROPERTIES
 (
     "type" = "iceberg",
     "iceberg.catalog.type" = "hive",
-    "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
     "aws.s3.enable_ssl" = "true",
     "aws.s3.enable_path_style_access" = "true",
     "aws.s3.endpoint" = "<s3_endpoint>",
@@ -724,7 +753,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
   );
@@ -738,7 +767,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.blob.storage_account" = "<blob_storage_account_name>",
       "azure.blob.container" = "<blob_container_name>",
       "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
@@ -755,7 +784,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls1.use_managed_service_identity" = "true"    
   );
   ```
@@ -768,7 +797,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls1.oauth2_client_id" = "<application_client_id>",
       "azure.adls1.oauth2_credential" = "<application_client_credential>",
       "azure.adls1.oauth2_endpoint" = "<OAuth_2.0_authorization_endpoint_v2>"
@@ -785,7 +814,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.oauth2_use_managed_identity" = "true",
       "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
       "azure.adls2.oauth2_client_id" = "<service_client_id>"
@@ -800,7 +829,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.storage_account" = "<storage_account_name>",
       "azure.adls2.shared_key" = "<shared_key>"     
   );
@@ -814,7 +843,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "azure.adls2.oauth2_client_id" = "<service_client_id>",
       "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
       "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
@@ -835,7 +864,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "gcp.gcs.use_compute_engine_service_account" = "true"    
   );
   ```
@@ -848,7 +877,7 @@ PROPERTIES
   (
       "type" = "iceberg",
       "iceberg.catalog.type" = "hive",
-      "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
       "gcp.gcs.service_account_email" = "<google_service_account_email>",
       "gcp.gcs.service_account_private_key_id" = "<google_service_private_key_id>",
       "gcp.gcs.service_account_private_key" = "<google_service_private_key>"    
@@ -865,7 +894,7 @@ PROPERTIES
     (
         "type" = "iceberg",
         "iceberg.catalog.type" = "hive",
-        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
         "gcp.gcs.use_compute_engine_service_account" = "true",
         "gcp.gcs.impersonation_service_account" = "<assumed_google_service_account_email>"    
     );
@@ -879,7 +908,7 @@ PROPERTIES
     (
         "type" = "iceberg",
         "iceberg.catalog.type" = "hive",
-        "hive.metastore.uris" = "thrift://34.132.15.127:9083",
+        "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083",
         "gcp.gcs.service_account_email" = "<google_service_account_email>",
         "gcp.gcs.service_account_private_key_id" = "<meta_google_service_account_email>",
         "gcp.gcs.service_account_private_key" = "<meta_google_service_account_email>",
@@ -1000,27 +1029,35 @@ You can use the `location` parameter to specify the file path in which you want 
 
 The `prefix` varies based on the storage system you use:
 
-####  HDFS                                                       
-`Prefix` value:  `hdfs`                                                       
+#### HDFS
 
-####  Google GCS                                                 
-`Prefix` value:  `gs`                                                         
+`Prefix` value: `hdfs`
 
-####  Azure Blob Storage                                         
+#### Google GCS
+
+`Prefix` value: `gs`
+
+#### Azure Blob Storage
+
 `Prefix` value:
+
 - If your storage account allows access over HTTP, the `prefix` is `wasb`.
 - If your storage account allows access over HTTPS, the `prefix` is `wasbs`.
 
-####  Azure Data Lake Storage Gen1                               
-`Prefix` value:  `adl`                                                        
+#### Azure Data Lake Storage Gen1
 
-####  Azure Data Lake Storage Gen2                               
+`Prefix` value: `adl`
+
+#### Azure Data Lake Storage Gen2
+
 `Prefix` value:
+
 - If your storage account allows access over HTTP, the`prefix` is `abfs`.
 - If your storage account allows access over HTTPS, the `prefix` is `abfss`.
 
-####  AWS S3 or other S3-compatible storage (for example, MinIO) 
-`Prefix` value:  `s3`                                                         
+#### AWS S3 or other S3-compatible storage (for example, MinIO)
+
+`Prefix` value: `s3`
 
 ---
 
@@ -1093,18 +1130,20 @@ You can specify the table attributes in the `"key" = "value"` format in `PROPERT
 
 The following table describes a few key properties.
 
-######  location          
-Description:  The file path in which you want to create the Iceberg table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Iceberg catalog. When you use AWS Glue as metastore:
+###### location
+
+Description: The file path in which you want to create the Iceberg table. When you use HMS as metastore, you do not need to specify the `location` parameter, because StarRocks will create the table in the default file path of the current Iceberg catalog. When you use AWS Glue as metastore:
+
 - If you have specified the `location` parameter for the database in which you want to create the table, you do not need to specify the `location` parameter for the table. As such, the table defaults to the file path of the database to which it belongs.
 - If you have not specified the `location` for the database in which you want to create the table, you must specify the `location` parameter for the table.
 
+###### file_format
 
-######  file_format       
-Description:  The file format of the Iceberg table. Only the Parquet format is supported. Default value: `parquet`. 
+Description: The file format of the Iceberg table. Only the Parquet format is supported. Default value: `parquet`.
 
+###### compression_codec
 
-######  compression_codec 
-Description:  The compression algorithm used for the Iceberg table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`. 
+Description: The compression algorithm used for the Iceberg table. The supported compression algorithms are SNAPPY, GZIP, ZSTD, and LZ4. Default value: `gzip`.
 
 ---
 
@@ -1169,26 +1208,33 @@ Partition columns do not allow `NULL` values. Therefore, you must make sure that
 
 #### Parameters
 
-#####  INTO        
-To append the data of the StarRocks table to the Iceberg table.                                       
+##### INTO
 
-#####  OVERWRITE   
-To overwrite the existing data of the Iceberg table with the data of the StarRocks table.                                       
+To append the data of the StarRocks table to the Iceberg table.
 
-#####  column_name 
-The name of the destination column to which you want to load data. You can specify one or more columns. If you specify multiple columns, separate them with commas (`,`). You can only specify columns that actually exist in the Iceberg table, and the destination columns that you specify must include the partition columns of the Iceberg table. The destination columns you specify are mapped one on one in sequence to the columns of the StarRocks table, regardless of what the destination column names are. If no destination columns are specified, the data is loaded into all columns of the Iceberg table. If a non-partition column of the StarRocks table cannot be mapped to any column of the Iceberg table, StarRocks writes the default value `NULL` to the Iceberg table column. If the INSERT statement contains a query statement whose returned column types differ from the data types of the destination columns, StarRocks performs an implicit conversion on the mismatched columns. If the conversion fails, a syntax parsing error will be returned. 
+##### OVERWRITE
 
-#####  expression  
-Expression that assigns values to the destination column.                                   
+To overwrite the existing data of the Iceberg table with the data of the StarRocks table.
 
-#####  DEFAULT     
-Assigns a default value to the destination column.                                         
+##### column_name
 
-#####  query       
-Query statement whose result will be loaded into the Iceberg table. It can be any SQL statement supported by StarRocks. 
+The name of the destination column to which you want to load data. You can specify one or more columns. If you specify multiple columns, separate them with commas (`,`). You can only specify columns that actually exist in the Iceberg table, and the destination columns that you specify must include the partition columns of the Iceberg table. The destination columns you specify are mapped one on one in sequence to the columns of the StarRocks table, regardless of what the destination column names are. If no destination columns are specified, the data is loaded into all columns of the Iceberg table. If a non-partition column of the StarRocks table cannot be mapped to any column of the Iceberg table, StarRocks writes the default value `NULL` to the Iceberg table column. If the INSERT statement contains a query statement whose returned column types differ from the data types of the destination columns, StarRocks performs an implicit conversion on the mismatched columns. If the conversion fails, a syntax parsing error will be returned.
 
-#####  PARTITION   
-The partitions into which you want to load data. You must specify all partition columns of the Iceberg table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement. If you specify this property, you cannot specify the `column_name` property. 
+##### expression
+
+Expression that assigns values to the destination column.
+
+##### DEFAULT
+
+Assigns a default value to the destination column.
+
+##### query
+
+Query statement whose result will be loaded into the Iceberg table. It can be any SQL statement supported by StarRocks.
+
+##### PARTITION
+
+The partitions into which you want to load data. You must specify all partition columns of the Iceberg table in this property. The partition columns that you specify in this property can be in a different sequence than the partition columns that you have defined in the table creation statement. If you specify this property, you cannot specify the `column_name` property.
 
 #### Examples
 
@@ -1269,37 +1315,44 @@ StarRocks uses the Least Recently Used (LRU) algorithm to cache and evict data. 
 
 #### Iceberg metadata caching parameters
 
-#####  enable_iceberg_metadata_disk_cache               
-Unit:  N/A      
-Default value:  `false`                                              
-Description:  Specifies whether to enable the disk cache.                  
+##### enable_iceberg_metadata_disk_cache
 
-#####  iceberg_metadata_cache_disk_path                 
-Unit:  N/A      
-Default value:  `StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg"` 
-Description:  The save path of cached metadata files on disk.              
+Unit: N/A
+Default value: `false`
+Description: Specifies whether to enable the disk cache.
 
-#####  iceberg_metadata_disk_cache_capacity             
-Unit:  Bytes    
-Default value:  `2147483648`, equivalent to 2 GB                     
-Description:  The maximum size of cached metadata allowed on disk.         
+##### iceberg_metadata_cache_disk_path
 
-#####  iceberg_metadata_memory_cache_capacity           
-Unit:  Bytes    
-Default value:  `536870912`, equivalent to 512 MB                    
-Description:  The maximum size of cached metadata allowed in memory.       
+Unit: N/A
+Default value: `StarRocksFE.STARROCKS_HOME_DIR + "/caches/iceberg"`
+Description: The save path of cached metadata files on disk.
 
-#####  iceberg_metadata_memory_cache_expiration_seconds 
-Unit:  Seconds  
-Default value:  `86500`                                              
-Description:  The amount of time after which a cache entry in memory expires counting from its last access. 
+##### iceberg_metadata_disk_cache_capacity
 
-#####  iceberg_metadata_disk_cache_expiration_seconds   
-Unit:  Seconds  
-Default value:  `604800`, equivalent to one week                     
-Description:  The amount of time after which a cache entry on disk expires counting from its last access. 
+Unit: Bytes
+Default value: `2147483648`, equivalent to 2 GB
+Description: The maximum size of cached metadata allowed on disk.
 
-#####  iceberg_metadata_cache_max_entry_size            
-Unit:  Bytes    
-Default value:  `8388608`, equivalent to 8 MB                        
-Description:  The maximum size of a file that can be cached. Files whose size exceeds the value of this parameter cannot be cached. If a query requests these files, StarRocks retrieves them from the remote storage. 
+##### iceberg_metadata_memory_cache_capacity
+
+Unit: Bytes
+Default value: `536870912`, equivalent to 512 MB
+Description: The maximum size of cached metadata allowed in memory.
+
+##### iceberg_metadata_memory_cache_expiration_seconds
+
+Unit: Seconds  
+Default value: `86500`
+Description: The amount of time after which a cache entry in memory expires counting from its last access.
+
+##### iceberg_metadata_disk_cache_expiration_seconds
+
+Unit: Seconds  
+Default value: `604800`, equivalent to one week
+Description: The amount of time after which a cache entry on disk expires counting from its last access.
+
+##### iceberg_metadata_cache_max_entry_size
+
+Unit: Bytes
+Default value: `8388608`, equivalent to 8 MB
+Description: The maximum size of a file that can be cached. Files whose size exceeds the value of this parameter cannot be cached. If a query requests these files, StarRocks retrieves them from the remote storage.

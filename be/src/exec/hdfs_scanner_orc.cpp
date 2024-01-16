@@ -150,8 +150,14 @@ bool OrcRowReaderFilter::filterMinMax(size_t rowGroupIdx,
                 max_chunk->columns()[i]->append_nulls(1);
             } else {
                 auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(_scanner_ctx.partition_values[part_idx]);
-                min_chunk->columns()[i]->append(*const_column->data_column(), 0, 1);
-                max_chunk->columns()[i]->append(*const_column->data_column(), 0, 1);
+                ColumnPtr data_column = const_column->data_column();
+                if (data_column->is_nullable()) {
+                    min_chunk->columns()[i]->append_nulls(1);
+                    max_chunk->columns()[i]->append_nulls(1);
+                } else {
+                    min_chunk->columns()[i]->append(*data_column, 0, 1);
+                    max_chunk->columns()[i]->append(*data_column, 0, 1);
+                }
             }
         }
     }
@@ -312,6 +318,8 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
     RETURN_IF_ERROR(open_random_access_file());
     auto input_stream = std::make_unique<ORCHdfsFileStream>(_file.get(), _file->get_size().value(),
                                                             _shared_buffered_input_stream.get());
+    input_stream->set_lazy_column_coalesce_counter(_scanner_ctx.lazy_column_coalesce_counter);
+    input_stream->set_app_stats(&_app_stats);
     ORCHdfsFileStream* orc_hdfs_file_stream = input_stream.get();
 
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
@@ -402,7 +410,7 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             s.offset = stripeInfo.offset();
             s.length = stripeInfo.datalength() + stripeInfo.indexlength() + stripeInfo.footerlength();
             stripes.emplace_back(s);
-            _app_stats.stripe_sizes.push_back(s.length);
+            _app_stats.orc_stripe_sizes.push_back(s.length);
         }
         orc_hdfs_file_stream->setStripes(std::move(stripes));
     }
@@ -446,10 +454,10 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         }
 
         size_t chunk_size = 0;
-        size_t chunk_size_ori = 0;
+        size_t init_chunk_size = 0;
         if (_orc_reader->get_cvb_size() != 0) {
             chunk_size = _orc_reader->get_cvb_size();
-            chunk_size_ori = chunk_size;
+            init_chunk_size = chunk_size;
             {
                 StatusOr<ChunkPtr> ret;
                 SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
@@ -504,10 +512,17 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         }
 
         // if has lazy load fields, skip it if chunk_size == 0
-        if (chunk_size == 0) {
-            _app_stats.late_materialize_skip_rows += chunk_size_ori;
+        bool require_load_lazy_columns = chunk_size != 0;
+        if (require_load_lazy_columns) {
+            // still need to load lazy column
+            _scanner_ctx.lazy_column_coalesce_counter->fetch_add(1, std::memory_order_relaxed);
+        } else {
+            // dont need to load lazy column
+            _scanner_ctx.lazy_column_coalesce_counter->fetch_sub(1, std::memory_order_relaxed);
+            _app_stats.late_materialize_skip_rows += init_chunk_size;
             continue;
         }
+
         {
             SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
             RETURN_IF_ERROR(_orc_reader->lazy_seek_to(position.row_in_stripe));
@@ -534,13 +549,17 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
     _should_skip_file = false;
     _use_orc_sargs = true;
     // todo: build predicate hook and ranges hook.
+
     if (!scanner_params.deletes.empty()) {
         SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
-        IcebergDeleteBuilder iceberg_delete_builder(scanner_params.fs, scanner_params.path,
-                                                    scanner_params.conjunct_ctxs, scanner_params.materialize_slots,
-                                                    &_need_skip_rowids);
+        const IcebergDeleteBuilder iceberg_delete_builder(scanner_params.fs, scanner_params.path,
+                                                          scanner_params.conjunct_ctxs,
+                                                          scanner_params.materialize_slots, &_need_skip_rowids);
+
         for (const auto& tdelete_file : scanner_params.deletes) {
-            RETURN_IF_ERROR(iceberg_delete_builder.build_orc(runtime_state->timezone(), *tdelete_file));
+            RETURN_IF_ERROR(iceberg_delete_builder.build_orc(runtime_state->timezone(), *tdelete_file,
+                                                             scanner_params.mor_params.equality_slots, runtime_state,
+                                                             _mor_processor));
         }
         _app_stats.iceberg_delete_files_per_scan += scanner_params.deletes.size();
     }
@@ -548,26 +567,43 @@ Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPar
     return Status::OK();
 }
 
-static const std::string kORCProfileSectionPrefix = "ORC";
-
 void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
-    RuntimeProfile::Counter* stripe_sizes_counter = nullptr;
-    RuntimeProfile::Counter* stripe_number_counter = nullptr;
+    const std::string orcProfileSectionPrefix = "ORC";
+
     RuntimeProfile* root = profile->runtime_profile;
+    ADD_COUNTER(root, orcProfileSectionPrefix, TUnit::NONE);
 
-    ADD_COUNTER(root, kORCProfileSectionPrefix, TUnit::NONE);
+    do_update_iceberg_v2_counter(root, orcProfileSectionPrefix);
 
-    do_update_iceberg_v2_counter(root, kORCProfileSectionPrefix);
-
-    // we expect to get average stripe size instead of sum.
-    stripe_sizes_counter = root->add_child_counter("StripeSizes", TUnit::BYTES,
-                                                   RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
-                                                   kORCProfileSectionPrefix);
-    stripe_number_counter = ADD_CHILD_COUNTER(root, "StripeNumber", TUnit::UNIT, kORCProfileSectionPrefix);
-    for (auto v : _app_stats.stripe_sizes) {
-        COUNTER_UPDATE(stripe_sizes_counter, v);
+    double total_stripe_size = 0;
+    for (const auto& v : _app_stats.orc_stripe_sizes) {
+        total_stripe_size += v;
     }
-    COUNTER_UPDATE(stripe_number_counter, _app_stats.stripe_sizes.size());
+    double avg_stripe_size = 0;
+    if (_app_stats.orc_stripe_sizes.size() > 0) {
+        // _app_stats.orc_stripe_sizes maybe zero
+        avg_stripe_size = total_stripe_size / _app_stats.orc_stripe_sizes.size();
+    }
+
+    RuntimeProfile::Counter* stripe_avg_size_counter = root->add_child_counter(
+            "PerFilePerStripeAvgSize", TUnit::BYTES,
+            RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG), orcProfileSectionPrefix);
+    RuntimeProfile::Counter* stripe_number_counter = root->add_child_counter(
+            "PerFileStripeNumber", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TCounterAggregateType::AVG),
+            orcProfileSectionPrefix);
+
+    COUNTER_UPDATE(stripe_avg_size_counter, avg_stripe_size);
+    COUNTER_UPDATE(stripe_number_counter, _app_stats.orc_stripe_sizes.size());
+
+    RuntimeProfile::Counter* stripe_active_lazy_coalesce_together_counter = root->add_child_counter(
+            "StripeActiveLazyColumnIOCoalesceTogether", TUnit::UNIT,
+            RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM), orcProfileSectionPrefix);
+    RuntimeProfile::Counter* stripe_active_lazy_coalesce_seperately_counter = root->add_child_counter(
+            "StripeActiveLazyColumnIOCoalesceSeperately", TUnit::UNIT,
+            RuntimeProfile::Counter::create_strategy(TCounterAggregateType::SUM), orcProfileSectionPrefix);
+    COUNTER_UPDATE(stripe_active_lazy_coalesce_together_counter, _app_stats.orc_stripe_active_lazy_coalesce_together);
+    COUNTER_UPDATE(stripe_active_lazy_coalesce_seperately_counter,
+                   _app_stats.orc_stripe_active_lazy_coalesce_seperately);
 }
 
 } // namespace starrocks

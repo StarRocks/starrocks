@@ -4,7 +4,7 @@ insert into files (
 	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/", 
 	"format"="parquet", 
 	"compression" = "uncompressed"
-) 
+)
 select 1 as k1, "A" as k2;
 
 set pipeline_sink_dop = 1;
@@ -13,12 +13,51 @@ insert into files (
 	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/", 
 	"format"="parquet", 
 	"compression" = "uncompressed"
-) 
+)
 select 2 as k1, "B" as k2;
 
 select * from files (
 	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/*",
 	"format" = "parquet"
 );
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/test_files_sink/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+
+-- name: test_read_write_parquet_file
+
+-- src table
+create table t1 (c1 int, c2 binary);
+insert into t1 select 1, bitmap_to_binary(bitmap_agg(generate_series)) from TABLE(generate_series(1,10));
+
+insert into files (
+	"path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/",
+	"format"="parquet",
+	"compression" = "uncompressed"
+) select * from t1;
+
+-- insert into binary table
+create table t2 (c1 int, c2 binary);
+
+insert into t2 select * from files (
+    "path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/*",
+    "format" = "parquet"
+);
+select c1, bitmap_to_string(bitmap_from_binary(c2)) from t2;
+
+-- insert into string table
+create table t3 (c1 int, c2 string);
+insert into t3 select * from files (
+    "path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/*",
+    "format" = "parquet"
+);
+select c1, bitmap_to_string(bitmap_from_binary(c2)) from t3;
+
+-- create table as
+create table t4 as select * from files (
+    "path" = "oss://${oss_bucket}/test_sink/test_files_sink/${uuid0}/*",
+    "format" = "parquet"
+);
+select c1, bitmap_to_string(bitmap_from_binary(c2)) from t4;
+desc t4;
 
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_sink/test_files_sink/${uuid0} >/dev/null || echo "exit 0" >/dev/null

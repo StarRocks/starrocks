@@ -471,6 +471,13 @@ withRowAccessPolicy
     : WITH ROW ACCESS POLICY policyName=qualifiedName (ON identifierList)?
     ;
 
+orReplace:
+    (OR REPLACE)?
+    ;
+ifNotExists:
+    (IF NOT EXISTS)?
+    ;
+
 createTemporaryTableStatement
     : CREATE TEMPORARY TABLE qualifiedName
         queryStatement
@@ -478,11 +485,12 @@ createTemporaryTableStatement
 
 createTableAsSelectStatement
     : CREATE TABLE (IF NOT EXISTS)? qualifiedName
-        ('(' identifier (',' identifier)* ')')?
+        ('(' (identifier (',' identifier)*  (',' indexDesc)* | indexDesc (',' indexDesc)*) ')')?
         keyDesc?
         comment?
         partitionDesc?
         distributionDesc?
+        orderByDesc?
         properties?
         AS queryStatement
     ;
@@ -604,7 +612,7 @@ columnNameWithComment
 // ------------------------------------------- Task Statement ----------------------------------------------------------
 
 submitTaskStatement
-    : SUBMIT setVarHint* TASK qualifiedName?
+    : SUBMIT TASK qualifiedName? properties?
     AS (createTableAsSelectStatement | insertStatement )
     ;
 
@@ -876,6 +884,10 @@ alterClause
     | alterLoadErrorUrlClause
     | createImageClause
     | cleanTabletSchedQClause
+    | decommissionDiskClause
+    | cancelDecommissionDiskClause
+    | disableDiskClause
+    | cancelDisableDiskClause
 
     //Alter table clause
     | createIndexClause
@@ -962,6 +974,22 @@ createImageClause
 
 cleanTabletSchedQClause
     : CLEAN TABLET SCHEDULER QUEUE
+    ;
+
+decommissionDiskClause
+    : DECOMMISSION DISK string (',' string)* ON BACKEND string
+    ;
+
+cancelDecommissionDiskClause
+    : CANCEL DECOMMISSION DISK string (',' string)* ON BACKEND string
+    ;
+
+disableDiskClause
+    : DISABLE DISK string (',' string)* ON BACKEND string
+    ;
+
+cancelDisableDiskClause
+    : CANCEL DISABLE DISK string (',' string)* ON BACKEND string
     ;
 
 // ---------Alter table clause---------
@@ -1072,17 +1100,17 @@ partitionRenameClause
 // ------------------------------------------- DML Statement -----------------------------------------------------------
 
 insertStatement
-    : explainDesc? INSERT setVarHint* (INTO | OVERWRITE) (qualifiedName | (FILES propertyList) | (BLACKHOLE '(' ')')) partitionNames?
+    : explainDesc? INSERT (INTO | OVERWRITE) (qualifiedName | (FILES propertyList) | (BLACKHOLE '(' ')')) partitionNames?
         (WITH LABEL label=identifier)? columnAliases?
         (queryStatement | (VALUES expressionsWithDefault (',' expressionsWithDefault)*))
     ;
 
 updateStatement
-    : explainDesc? withClause? UPDATE setVarHint* qualifiedName SET assignmentList fromClause (WHERE where=expression)?
+    : explainDesc? withClause? UPDATE qualifiedName SET assignmentList fromClause (WHERE where=expression)?
     ;
 
 deleteStatement
-    : explainDesc? withClause? DELETE setVarHint* FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
+    : explainDesc? withClause? DELETE FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
@@ -1297,12 +1325,12 @@ typeList
 // ------------------------------------------- Load Statement ----------------------------------------------------------
 
 loadStatement
-    : LOAD setVarHint* LABEL label=labelName
+    : LOAD LABEL label=labelName
         data=dataDescList?
         broker=brokerDesc?
         (BY system=identifierOrString)?
         (PROPERTIES props=propertyList)?
-    | LOAD setVarHint* LABEL label=labelName
+    | LOAD LABEL label=labelName
         data=dataDescList?
         resource=resourceDesc
         (PROPERTIES props=propertyList)?
@@ -1852,7 +1880,7 @@ showSmallFilesStatement
 // -------------------------------------------- Pipe Statement ---------------------------------------------------------
 
 createPipeStatement
-    : CREATE PIPE (IF NOT EXISTS)? qualifiedName
+    : CREATE orReplace PIPE ifNotExists qualifiedName
         properties?
         AS insertStatement
     ;
@@ -2012,7 +2040,7 @@ limitElement
     ;
 
 querySpecification
-    : SELECT setVarHint* setQuantifier? selectItem (',' selectItem)*
+    : SELECT setQuantifier? selectItem (',' selectItem)*
       fromClause
       ((WHERE where=expression)? (GROUP BY groupingElement)? (HAVING having=expression)?
        (QUALIFY qualifyFunction=selectItem comparisonOperator limit=INTEGER_VALUE)?)
@@ -2066,11 +2094,24 @@ relationPrimary
     | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
     | qualifiedName '(' expressionList ')'
         (AS? alias=identifier columnAliases?)?                                          #tableFunction
-    | TABLE '(' qualifiedName '(' expressionList ')' ')'
+    | TABLE '(' qualifiedName '(' argumentList ')' ')'
         (AS? alias=identifier columnAliases?)?                                          #normalizedTableFunction
     | FILES propertyList
         (AS? alias=identifier columnAliases?)?                                          #fileTableFunction
     | '(' relations ')'                                                                 #parenthesizedRelation
+    ;
+
+argumentList
+    : expressionList
+    | namedArgumentList
+    ;
+
+namedArgumentList
+    : namedArgument (',' namedArgument)*
+    ;
+
+namedArgument
+    : identifier '=>' expression                                                        #namedArguments
     ;
 
 joinRelation
@@ -2096,10 +2137,6 @@ outerAndSemiJoinType
 bracketHint
     : '[' identifier (',' identifier)* ']'
     | '[' identifier '|' primaryExpression literalExpressionList']'
-    ;
-
-setVarHint
-    : '/*+' SET_VAR '(' hintMap (',' hintMap)* ')' '*/'
     ;
 
 hintMap
@@ -2706,7 +2743,7 @@ nonReserved
     | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
-    | DATA | DATE | DATACACHE | DATETIME | DAY | DECOMMISSION | DISABLE | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
+    | DATA | DATE | DATACACHE | DATETIME | DAY | DECOMMISSION | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS

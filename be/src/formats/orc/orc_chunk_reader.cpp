@@ -87,7 +87,7 @@ Status OrcChunkReader::init(std::unique_ptr<orc::InputStream> input_stream) {
     try {
         _reader_options.setMemoryPool(*getOrcMemoryPool());
         auto reader = orc::createReader(std::move(input_stream), _reader_options);
-        return init(std::move(reader));
+        RETURN_IF_ERROR(init(std::move(reader)));
     } catch (std::exception& e) {
         auto s = strings::Substitute("OrcChunkReader::init failed. reason = $0, file = $1", e.what(),
                                      _current_file_name);
@@ -364,6 +364,13 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
         result->len = len;
         result->precision = precision;
         result->scale = scale;
+        // To support iceberg table time type
+        // When orc type is bigint and orc attribute iceberg.long-type is TIME, then convert result type to TYPE_TIME
+        if (result->type == TYPE_BIGINT && orc_type->hasAttributeKey("iceberg.long-type")) {
+            if ("TIME" == orc_type->getAttributeValue("iceberg.long-type")) {
+                result->type = TYPE_TIME;
+            }
+        }
     }
     return Status::OK();
 }

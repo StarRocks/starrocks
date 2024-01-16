@@ -44,6 +44,7 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.TableFunctionTable;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
@@ -158,6 +159,8 @@ public class FileScanNode extends LoadScanNode {
     // 3. use vectorized engine
     private boolean useVectorizedLoad;
 
+    private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
+
     private boolean nullExprInAutoIncrement;
     private static class ParamCreateContext {
         public BrokerFileGroup fileGroup;
@@ -256,6 +259,10 @@ public class FileScanNode extends LoadScanNode {
 
     public void setUseVectorizedLoad(boolean useVectorizedLoad) {
         this.useVectorizedLoad = useVectorizedLoad;
+    }
+
+    public void setJSONOptions(LoadJob.JSONOptions options) {
+        this.jsonOptions = options;
     }
 
     public boolean nullExprInAutoIncrement() {
@@ -608,6 +615,11 @@ public class FileScanNode extends LoadScanNode {
             TBrokerRangeDesc rangeDesc =
                     createBrokerRangeDesc(curFileOffset, fileStatus, formatType, rangeBytes, columnsFromPath,
                             numberOfColumnsFromFile);
+
+            rangeDesc.setStrip_outer_array(jsonOptions.stripOuterArray);
+            rangeDesc.setJsonpaths(jsonOptions.jsonPaths);
+            rangeDesc.setJson_root(jsonOptions.jsonRoot);
+
             brokerScanRange(smallestLocations.first).addToRanges(rangeDesc);
             smallestLocations.second += rangeBytes;
             locationsHeap.add(smallestLocations);

@@ -913,9 +913,14 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
     Slice format_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_format);
     auto period_unit = format_slice.to_string();
 
-    ColumnPtr column_time_base = context->get_constant_column(3);
-    Slice time_base_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_time_base);
-    auto time_base = time_base_slice.to_string();
+    std::string time_base;
+    if (UNLIKELY(context->get_num_constant_columns() == 3)) {
+        time_base = "floor";
+    } else {
+        ColumnPtr column_time_base = context->get_constant_column(3);
+        Slice time_base_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_time_base);
+        time_base = time_base_slice.to_string();
+    }
 
     ScalarFunction function;
     const FunctionContext::TypeDesc* boundary = context->get_arg_type(0);
@@ -1526,12 +1531,51 @@ StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime(FunctionContext* con
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+template <LogicalType TIMESTAMP_TYPE>
+StatusOr<ColumnPtr> TimeFunctions::_t_from_unix_to_datetime_ms(FunctionContext* context, const Columns& columns) {
+    DCHECK_EQ(columns.size(), 1);
+
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    ColumnViewer<TIMESTAMP_TYPE> data_column(columns[0]);
+
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; ++row) {
+        if (data_column.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        auto date = data_column.value(row) / 1000;
+        if (date < 0 || date > MAX_UNIX_TIMESTAMP) {
+            result.append_null();
+            continue;
+        }
+
+        DateTimeValue dtv;
+        if (!dtv.from_unixtime(date, context->state()->timezone_obj())) {
+            result.append_null();
+            continue;
+        }
+        char buf[64];
+        dtv.to_string(buf);
+        result.append(Slice(buf));
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
 StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_64(FunctionContext* context, const Columns& columns) {
     return _t_from_unix_to_datetime<TYPE_BIGINT>(context, columns);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_32(FunctionContext* context, const Columns& columns) {
     return _t_from_unix_to_datetime<TYPE_INT>(context, columns);
+}
+
+StatusOr<ColumnPtr> TimeFunctions::from_unix_to_datetime_ms_64(FunctionContext* context, const Columns& columns) {
+    return _t_from_unix_to_datetime_ms<TYPE_BIGINT>(context, columns);
 }
 
 std::string TimeFunctions::convert_format(const Slice& format) {

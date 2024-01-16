@@ -99,6 +99,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+    public boolean tableExists(String dbName, String tableName) throws StarRocksConnectorException {
+        return delegate.tableExists(dbName, tableName);
+    }
+
+    @Override
     public boolean createTable(String dbName,
                                String tableName,
                                Schema schema,
@@ -113,6 +118,12 @@ public class CachingIcebergCatalog implements IcebergCatalog {
         boolean dropped = delegate.dropTable(dbName, tableName, purge);
         tables.invalidate(new IcebergTableName(dbName, tableName));
         return dropped;
+    }
+
+    @Override
+    public void renameTable(String dbName, String tblName, String newTblName) throws StarRocksConnectorException {
+        delegate.renameTable(dbName, tblName, newTblName);
+        invalidateCache(new IcebergTableName(dbName, tblName));
     }
 
     @Override

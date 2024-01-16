@@ -139,6 +139,9 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             case Types.DATE:
                 primitiveType = PrimitiveType.DATE;
                 break;
+            case Types.TIME:
+                primitiveType = PrimitiveType.TIME;
+                break;
             case Types.TIMESTAMP:
                 primitiveType = PrimitiveType.DATETIME;
                 break;
@@ -220,7 +223,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 while (rs.next()) {
                     String[] partitionNames = rs.getString("NAME").
                             replace("'", "").split(",");
-                    long createTime = rs.getDate("MODIFIED_TIME").getTime();
+                    long createTime = rs.getTimestamp("MODIFIED_TIME").getTime();
                     for (String partitionName : partitionNames) {
                         list.add(new Partition(partitionName, createTime));
                     }
@@ -234,6 +237,42 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
         }
     }
 
+    /**
+     * Fetch jdbc table's partition info from `INFORMATION_SCHEMA.PARTITIONS`.
+     * eg:
+     * mysql> desc INFORMATION_SCHEMA.PARTITIONS;
+     * +-------------------------------+---------------------+------+-----+---------+-------+
+     * | Field                         | Type                | Null | Key | Default | Extra |
+     * +-------------------------------+---------------------+------+-----+---------+-------+
+     * | TABLE_CATALOG                 | varchar(512)        | NO   |     |         |       |
+     * | TABLE_SCHEMA                  | varchar(64)         | NO   |     |         |       |
+     * | TABLE_NAME                    | varchar(64)         | NO   |     |         |       |
+     * | PARTITION_NAME                | varchar(64)         | YES  |     | NULL    |       |
+     * | SUBPARTITION_NAME             | varchar(64)         | YES  |     | NULL    |       |
+     * | PARTITION_ORDINAL_POSITION    | bigint(21) unsigned | YES  |     | NULL    |       |
+     * | SUBPARTITION_ORDINAL_POSITION | bigint(21) unsigned | YES  |     | NULL    |       |
+     * | PARTITION_METHOD              | varchar(18)         | YES  |     | NULL    |       |
+     * | SUBPARTITION_METHOD           | varchar(12)         | YES  |     | NULL    |       |
+     * | PARTITION_EXPRESSION          | longtext            | YES  |     | NULL    |       |
+     * | SUBPARTITION_EXPRESSION       | longtext            | YES  |     | NULL    |       |
+     * | PARTITION_DESCRIPTION         | longtext            | YES  |     | NULL    |       |
+     * | TABLE_ROWS                    | bigint(21) unsigned | NO   |     | 0       |       |
+     * | AVG_ROW_LENGTH                | bigint(21) unsigned | NO   |     | 0       |       |
+     * | DATA_LENGTH                   | bigint(21) unsigned | NO   |     | 0       |       |
+     * | MAX_DATA_LENGTH               | bigint(21) unsigned | YES  |     | NULL    |       |
+     * | INDEX_LENGTH                  | bigint(21) unsigned | NO   |     | 0       |       |
+     * | DATA_FREE                     | bigint(21) unsigned | NO   |     | 0       |       |
+     * | CREATE_TIME                   | datetime            | YES  |     | NULL    |       |
+     * | UPDATE_TIME                   | datetime            | YES  |     | NULL    |       |
+     * | CHECK_TIME                    | datetime            | YES  |     | NULL    |       |
+     * | CHECKSUM                      | bigint(21) unsigned | YES  |     | NULL    |       |
+     * | PARTITION_COMMENT             | varchar(80)         | NO   |     |         |       |
+     * | NODEGROUP                     | varchar(12)         | NO   |     |         |       |
+     * | TABLESPACE_NAME               | varchar(64)         | YES  |     | NULL    |       |
+     * +-------------------------------+---------------------+------+-----+---------+-------+
+     * @param table
+     * @return
+     */
     @NotNull
     private static String getPartitionQuery(Table table) {
         final String partitionsQuery = "SELECT PARTITION_DESCRIPTION AS NAME, " +

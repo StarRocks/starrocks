@@ -94,7 +94,7 @@ protected:
             return;
         }
         if (!status.ok()) {
-            std::cout << status.get_error_msg() << std::endl;
+            std::cout << status.message() << std::endl;
         }
         ASSERT_TRUE(status.ok());
 
@@ -114,7 +114,7 @@ protected:
             chunk->reset();
             status = file_reader->get_next(&chunk);
             if (!status.ok() && !status.is_end_of_file()) {
-                std::cout << status.get_error_msg() << std::endl;
+                std::cout << status.message() << std::endl;
                 break;
             }
             check_chunk_values(chunk, expected_value);
@@ -357,14 +357,14 @@ TEST_F(ColumnConverterTest, Int64Test) {
         const std::string col_name = "time_micros";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
-            check(file_path, col_type, col_name, "[5]", expected_rows, true);
+            check(file_path, col_type, col_name, "[3600]", expected_rows);
         }
     }
     {
         const std::string col_name = "time_nanos";
         {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_TIME);
-            check(file_path, col_type, col_name, "[5]", expected_rows, true);
+            check(file_path, col_type, col_name, "[3.6e+06]", expected_rows);
         }
     }
     {

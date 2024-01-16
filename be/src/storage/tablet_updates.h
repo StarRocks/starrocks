@@ -232,7 +232,8 @@ public:
                         ChunkChanger* chunk_changer, const TabletSchemaCSPtr& base_tablet_schema,
                         const std::string& err_msg_header = "");
 
-    Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false);
+    Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false,
+                         bool save_source_schema = false);
 
     Status get_latest_applied_version(EditVersion* latest_applied_version);
 
@@ -446,7 +447,7 @@ private:
 
     std::timed_mutex* get_index_lock() { return &_index_lock; }
 
-    Status _get_extra_file_size(int64_t* pindex_size, int64_t* col_size);
+    Status _get_extra_file_size(int64_t* pindex_size, int64_t* col_size) const;
 
 private:
     Tablet& _tablet;

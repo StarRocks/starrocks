@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <hs/hs.h>
+#include <re2/re2.h>
 #include <runtime/decimalv3.h>
 
 #include <iomanip>
@@ -22,6 +24,8 @@
 #include "column/column_viewer.h"
 #include "exprs/function_context.h"
 #include "exprs/function_helper.h"
+#include "runtime/current_thread.h"
+#include "util/phmap/phmap.h"
 #include "util/url_parser.h"
 
 namespace starrocks {
@@ -46,7 +50,60 @@ struct ConcatState {
     std::string tail;
 };
 
-struct StringFunctionsState;
+struct StringFunctionsState {
+    using DriverMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<re2::RE2>, phmap::Hash<int32_t>,
+                                                    phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>,
+                                                    NUM_LOCK_SHARD_LOG, std::mutex>;
+
+    std::string pattern;
+    std::unique_ptr<re2::RE2> regex;
+    std::unique_ptr<re2::RE2::Options> options;
+    bool const_pattern{false};
+    DriverMap driver_regex_map; // regex for each pipeline_driver, to make it driver-local
+
+    bool use_hyperscan = false;
+    int size_of_pattern = -1;
+
+    // a pointer to the generated database that responsible for parsed expression.
+    hs_database_t* database = nullptr;
+    // a type containing error details that is returned by the compile calls on failure.
+    hs_compile_error_t* compile_err = nullptr;
+    // A Hyperscan scratch space, Used to call hs_scan,
+    // one scratch space per thread, or concurrent caller, is required
+    hs_scratch_t* scratch = nullptr;
+
+    StringFunctionsState() : regex(), options() {}
+
+    // Implement a driver-local regex, to avoid lock contention on the RE2::cache_mutex
+    re2::RE2* get_or_prepare_regex() {
+        DCHECK(const_pattern);
+        int32_t driver_id = CurrentThread::current().get_driver_id();
+        if (driver_id == 0) {
+            return regex.get();
+        }
+        re2::RE2* res = nullptr;
+        driver_regex_map.lazy_emplace_l(
+                driver_id, [&](auto& value) { res = value.get(); },
+                [&](auto build) {
+                    auto regex = std::make_unique<re2::RE2>(pattern, *options);
+                    DCHECK(regex->ok());
+                    res = regex.get();
+                    build(driver_id, std::move(regex));
+                });
+        DCHECK(!!res);
+        return res;
+    }
+
+    ~StringFunctionsState() {
+        if (scratch != nullptr) {
+            hs_free_scratch(scratch);
+        }
+
+        if (database != nullptr) {
+            hs_free_database(database);
+        }
+    }
+};
 
 struct MatchInfo {
     size_t from;
@@ -335,6 +392,9 @@ public:
      */
     DEFINE_VECTORIZED_FN(regexp_replace);
 
+    static StatusOr<ColumnPtr> regexp_replace_use_hyperscan(StringFunctionsState* state, const Columns& columns);
+    static StatusOr<ColumnPtr> regexp_replace_use_hyperscan_vec(StringFunctionsState* state, const Columns& columns);
+
     /**
      * @param: [string_value, pattern_value, replace_value]
      * @paramType: [BinaryColumn, BinaryColumn, BinaryColumn]
@@ -485,6 +545,14 @@ public:
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
     DEFINE_VECTORIZED_FN(crc32);
+
+    DEFINE_VECTORIZED_FN(ngram_search);
+
+    DEFINE_VECTORIZED_FN(ngram_search_case_insensitive);
+    static Status ngram_search_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status ngram_search_case_insensitive_prepare(FunctionContext* context,
+                                                        FunctionContext::FunctionStateScope scope);
+    static Status ngram_search_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
 private:
     static int index_of(const char* source, int source_count, const char* target, int target_count, int from_index);

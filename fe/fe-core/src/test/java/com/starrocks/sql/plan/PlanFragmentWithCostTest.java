@@ -1557,7 +1557,55 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  0:OlapScanNode");
 
-            // case 2: use one-phase local aggregation without local shuffle for high-cardinality agg and single BE.
+            // case 2: use multiple one-phase local aggregation with local shuffle for high-cardinality agg and single BE.
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgHighCardinality);
+            sql = "with w1 as (select v2, count(v2) as cnt from colocate_t0 group by v2) " +
+                    "select v2, sum(cnt) from w1 group by v2, cnt";
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            Assert.assertFalse(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
+            Assert.assertFalse(execPlan.getFragments().get(1).isAssignScanRangesPerDriverSeq());
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            assertContains(plan, "  3:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(4: count)\n" +
+                    "  |  group by: 2: v2, 4: count\n" +
+                    "  |  withLocalShuffle: true\n" +
+                    "  |  \n" +
+                    "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: count(2: v2)\n" +
+                    "  |  group by: 2: v2\n" +
+                    "  |  withLocalShuffle: true\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            // case 3: use one-phase local aggregation without local shuffle for high-cardinality agg and single BE.
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgHighCardinality);
+            sql = "with w1 as (select v1, count(v1) as cnt from colocate_t0 group by v1) " +
+                    "select sum(cnt) from w1 group by cnt";
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            Assert.assertTrue(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
+            Assert.assertTrue(execPlan.getFragments().get(2).isAssignScanRangesPerDriverSeq());
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            assertContains(plan, "  3:AGGREGATE (update serialize)\n" +
+                    "  |  STREAMING\n" +
+                    "  |  output: sum(4: count)\n" +
+                    "  |  group by: 4: count\n" +
+                    "  |  \n" +
+                    "  2:Project\n" +
+                    "  |  <slot 4> : 4: count\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: count(1: v1)\n" +
+                    "  |  group by: 1: v1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            // case 4: use one-phase local aggregation without local shuffle when grouping key contains all the bucket keys.
             isSingleBackendAndComputeNode.setRef(true);
             cardinality.setRef(avgHighCardinality);
             sql = "select sum(v1) from colocate_t0 group by v1";
@@ -1572,7 +1620,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  0:OlapScanNode");
 
-            // case 3: use two-phase aggregation for non-grouping agg.
+            // case 5: use two-phase aggregation for non-grouping agg.
             isSingleBackendAndComputeNode.setRef(true);
             cardinality.setRef(avgHighCardinality);
             sql = "select sum(v2) from t0";
@@ -1591,7 +1639,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  2:EXCHANGE");
 
-            // case 4: use two-phase aggregation for multiple BEs.
+            // case 6: use two-phase aggregation for multiple BEs.
             isSingleBackendAndComputeNode.setRef(false);
             cardinality.setRef(avgHighCardinality);
             sql = "select sum(v2) from t0 group by v2";
@@ -1605,7 +1653,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  2:EXCHANGE");
 
-            // case 5: use two-phase aggregation for low-cardinality agg.
+            // case 7: use two-phase aggregation for low-cardinality agg.
             isSingleBackendAndComputeNode.setRef(true);
             cardinality.setRef(avgLowCardinality);
             sql = "select sum(v2) from t0 group by v2";
@@ -1625,7 +1673,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  2:EXCHANGE");
 
-            // case 6: insert into cannot use one-phase local aggregation with local shuffle.
+            // case 8: insert into cannot use one-phase local aggregation with local shuffle.
             isSingleBackendAndComputeNode.setRef(true);
             cardinality.setRef(avgHighCardinality);
             sql = "insert into colocate_t0 select v2, v2, sum(v2) from t0 group by v2";
@@ -1640,7 +1688,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  2:EXCHANGE");
 
-            // case 7: Plan with join cannot use one-phase local aggregation with local shuffle.
+            // case 9: Plan with join cannot use one-phase local aggregation with local shuffle.
             isSingleBackendAndComputeNode.setRef(true);
             cardinality.setRef(avgHighCardinality);
             sql = "select count(1) from " +

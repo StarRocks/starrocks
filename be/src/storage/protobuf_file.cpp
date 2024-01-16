@@ -102,6 +102,36 @@ Status ProtobufFileWithHeader::load(::google::protobuf::Message* message, bool f
     return Status::OK();
 }
 
+Status ProtobufFileWithHeader::load(::google::protobuf::Message* message, std::string_view data) {
+    FixedFileHeader header;
+    if (data.size() < sizeof(header)) {
+        return Status::Corruption(fmt::format("failed to read header of protobuf data, data size {}", data.size()));
+    }
+    ::memcpy(&header, data.data(), sizeof(header));
+    data.remove_prefix(sizeof(header));
+    if (header.magic_number != OLAP_FIX_HEADER_MAGIC_NUMBER) {
+        return Status::Corruption(fmt::format("invalid magic number of protobuf data, data size {}", data.size()));
+    }
+
+    uint32_t unused_flag; // unused, read for compatibility
+    if (UNLIKELY(data.size() < sizeof(unused_flag))) {
+        return Status::Corruption(fmt::format("fail to read flag of protobuf data, data size {}", data.size()));
+    }
+    data.remove_prefix(sizeof(unused_flag));
+
+    if (data.size() < header.protobuf_length) {
+        return Status::Corruption(fmt::format("mismatched message size of protobuf data. real={} expect={}",
+                                              data.size(), (int64_t)header.protobuf_length));
+    }
+    if (olap_adler32(ADLER32_INIT, data.data(), header.protobuf_length) != header.protobuf_checksum) {
+        return Status::Corruption(fmt::format("mismatched checksum of protobuf data, data size {}", data.size()));
+    }
+    if (!message->ParseFromArray(data.data(), header.protobuf_length)) {
+        return Status::Corruption(fmt::format("failed to parse protobuf data, data size {}", data.size()));
+    }
+    return Status::OK();
+}
+
 Status ProtobufFile::save(const ::google::protobuf::Message& message, bool sync) {
     std::string serialized_message;
     bool r = message.SerializeToString(&serialized_message);

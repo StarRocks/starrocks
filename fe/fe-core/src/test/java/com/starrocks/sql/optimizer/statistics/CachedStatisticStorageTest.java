@@ -15,14 +15,17 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.github.benmanes.caffeine.cache.AsyncLoadingCache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.LoadingCache;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.connector.ConnectorColumnStatsCacheLoader;
 import com.starrocks.connector.ConnectorTableColumnKey;
 import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
@@ -50,6 +53,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 public class CachedStatisticStorageTest {
     public static ConnectContext connectContext;
@@ -203,61 +207,71 @@ public class CachedStatisticStorageTest {
     }
 
     @Test
-    public void testGetConnectorTableStatistics(@Mocked
-                                                AsyncLoadingCache<ConnectorTableColumnKey,
-                                                        Optional<ConnectorTableColumnStats>> connectorTableCachedStatistics,
-                                                @Mocked
-                                                CompletableFuture<Map<ConnectorTableColumnKey,
-                                                        Optional<ConnectorTableColumnStats>>> res)
-            throws ExecutionException, InterruptedException {
-        Table table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("hive0", "partitioned_db", "t1");
-        List<ConnectorTableColumnKey> cacheKeys =
-                ImmutableList.of(new ConnectorTableColumnKey(table.getUUID(), "c1"),
-                        new ConnectorTableColumnKey(table.getUUID(), "c2"));
-
-        Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> columnKeyOptionalMap = Maps.newHashMap();
-        columnKeyOptionalMap.put(new ConnectorTableColumnKey(table.getUUID(), "c1"),
-                Optional.of(new ConnectorTableColumnStats(
-                        new ColumnStatistic(0, 10, 0, 20, 5), 5)));
-        columnKeyOptionalMap.put(new ConnectorTableColumnKey(table.getUUID(), "c2"),
-                Optional.of(new ConnectorTableColumnStats(
-                        new ColumnStatistic(0, 100, 0, 200, 50), 50)));
-
-        new Expectations() {
-            {
-                connectorTableCachedStatistics.getAll(cacheKeys);
-                result = res;
-                minTimes = 0;
-
-                res.isDone();
-                result = true;
-                minTimes = 0;
-
-                res.get();
-                result = columnKeyOptionalMap;
-                minTimes = 0;
-            }
-        };
-
-        new MockUp<StatisticUtils>() {
+    public void testGetConnectorTableStatistics() throws ExecutionException, InterruptedException {
+        AsyncLoadingCache<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>>
+                connectorTableCachedStatistics =
+                Caffeine.newBuilder().expireAfterWrite(Config.statistic_update_interval_sec * 2, TimeUnit.SECONDS)
+                        .refreshAfterWrite(Config.statistic_update_interval_sec, TimeUnit.SECONDS)
+                        .maximumSize(Config.statistic_cache_columns)
+                        .buildAsync(new ConnectorColumnStatsCacheLoader());
+        new MockUp<ConnectorColumnStatsCacheLoader>() {
             @Mock
-            public boolean checkStatisticTableStateNormal() {
-                return true;
+            public List<TStatisticData> queryStatisticsData(ConnectContext context, String tableUUID,
+                                                            List<String> columns) {
+                TStatisticData data1 = new TStatisticData();
+                data1.setColumnName("c1");
+                data1.setRowCount(5);
+                data1.setDataSize(100);
+                data1.setCountDistinct(5);
+                data1.setNullCount(0);
+                data1.setMin("0");
+                data1.setMax("10");
+
+                TStatisticData data2 = new TStatisticData();
+                data2.setColumnName("c2");
+                data2.setRowCount(5);
+                data2.setDataSize(100);
+                data2.setCountDistinct(5);
+                data2.setNullCount(0);
+                data2.setMin("a");
+                data2.setMax("z");
+
+                TStatisticData data3 = new TStatisticData();
+                data3.setColumnName("c3");
+                data3.setRowCount(5);
+                data3.setDataSize(100);
+                data3.setCountDistinct(5);
+                data3.setNullCount(0);
+                data3.setMin("x");
+                data3.setMax("y");
+
+                return ImmutableList.of(data1, data2, data3);
             }
+
+            @Mock
+            public Table getTableByUUID(String tableUUID) {
+                return connectContext.getGlobalStateMgr().getMetadataMgr().
+                        getTable("hive0", "partitioned_db", "t1");
+            }
+
         };
+        List<ConnectorTableColumnKey> cacheKeys = ImmutableList.of(
+                new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234", "c1"),
+                new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234", "c2"),
+                new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234", "c3"));
+        CompletableFuture<Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>>> future =
+                connectorTableCachedStatistics.getAll(cacheKeys);
+        Map<ConnectorTableColumnKey, Optional<ConnectorTableColumnStats>> result = future.get();
 
-        CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
-
-        List<ConnectorTableColumnStats> connectorColumnStatistics = Deencapsulation
-                .invoke(cachedStatisticStorage, "getConnectorTableStatistics", table,
-                        ImmutableList.of("c1", "c2"));
-        Assert.assertEquals(2, connectorColumnStatistics.size());
-        Assert.assertEquals(5, connectorColumnStatistics.get(0).getRowCount());
-        Assert.assertEquals(0, connectorColumnStatistics.get(0).getColumnStatistic().getMinValue(), 0.0001);
-        Assert.assertEquals(10, connectorColumnStatistics.get(0).getColumnStatistic().getMaxValue(), 0.0001);
-        Assert.assertEquals(0, connectorColumnStatistics.get(0).getColumnStatistic().getNullsFraction(), 0.0001);
-        Assert.assertEquals(20, connectorColumnStatistics.get(0).getColumnStatistic().getAverageRowSize(), 0.0001);
-        Assert.assertEquals(5, connectorColumnStatistics.get(0).getColumnStatistic().getDistinctValuesCount(), 0.0001);
+        Assert.assertEquals(3, result.size());
+        Assert.assertEquals(5, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
+                        "c1")).get().getRowCount());
+        Assert.assertEquals(20, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
+                        "c1")).get().getColumnStatistic().getAverageRowSize(), 0.0001);
+        Assert.assertEquals(10, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
+                        "c1")).get().getColumnStatistic().getMaxValue(), 0.0001);
+        Assert.assertEquals(0, result.get(new ConnectorTableColumnKey("hive0.partitioned_db.t1.1234",
+                        "c1")).get().getColumnStatistic().getMinValue(), 0.0001);
     }
 
     @Test

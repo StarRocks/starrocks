@@ -20,7 +20,7 @@
 #include "exec/cross_join_node.h"
 #include "exec/exchange_node.h"
 #include "exec/olap_scan_node.h"
-#include "exec/pipeline/adaptive/lazy_instantiate_drivers_operator.h"
+#include "exec/pipeline/adaptive/event.h"
 #include "exec/pipeline/exchange/exchange_sink_operator.h"
 #include "exec/pipeline/exchange/multi_cast_local_exchange.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
@@ -74,7 +74,7 @@ namespace starrocks::pipeline {
 using WorkGroupManager = workgroup::WorkGroupManager;
 using WorkGroup = workgroup::WorkGroup;
 using WorkGroupPtr = workgroup::WorkGroupPtr;
-using PipelineGroupMap = std::unordered_map<SourceOperatorFactory*, Pipelines>;
+using PipelineGroupMap = std::unordered_map<SourceOperatorFactory*, std::vector<Pipeline*>>;
 
 /// UnifiedExecPlanFragmentParams.
 const std::vector<TScanRangeParams> UnifiedExecPlanFragmentParams::_no_scan_ranges;
@@ -179,10 +179,6 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
         adaptive_dop_param.max_output_amplification_factor = tadaptive_dop_param.max_output_amplification_factor;
     }
 
-    LOG(INFO) << "Prepare(): query_id=" << print_id(query_id)
-              << " fragment_instance_id=" << print_id(fragment_instance_id)
-              << " is_stream_pipeline=" << is_stream_pipeline << " backend_num=" << request.backend_num();
-
     return Status::OK();
 }
 
@@ -240,7 +236,7 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
         spill_mem_limit_bytes = option_query_mem_limit * query_options.spill_mem_limit_threshold;
     }
     _query_ctx->init_mem_tracker(option_query_mem_limit, parent_mem_tracker, big_query_mem_limit, spill_mem_limit_bytes,
-                                 wg.get());
+                                 wg.get(), runtime_state);
 
     auto query_mem_tracker = _query_ctx->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(query_mem_tracker.get());
@@ -290,9 +286,14 @@ Status FragmentExecutor::_prepare_runtime_state(ExecEnv* exec_env, const Unified
     return Status::OK();
 }
 
-int32_t FragmentExecutor::_calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const {
+uint32_t FragmentExecutor::_calc_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const {
     int32_t degree_of_parallelism = request.pipeline_dop();
     return exec_env->calc_pipeline_dop(degree_of_parallelism);
+}
+
+uint32_t FragmentExecutor::_calc_sink_dop(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) const {
+    int32_t degree_of_parallelism = request.pipeline_sink_dop();
+    return exec_env->calc_pipeline_sink_dop(degree_of_parallelism);
 }
 
 int FragmentExecutor::_calc_delivery_expired_seconds(const UnifiedExecPlanFragmentParams& request) const {
@@ -390,7 +391,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         auto* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges = request.scan_ranges_of_node(scan_node->id());
         const auto& scan_ranges_per_driver_seq = request.per_driver_seq_scan_ranges_of_node(scan_node->id());
-        _fragment_ctx->cache_param().num_lanes = scan_node->io_tasks_per_scan_operator();
+
+        // num_lanes ranges in [1,16] in default 4.
+        _fragment_ctx->cache_param().num_lanes = std::min(16, std::max(1, config::query_cache_num_lanes_per_driver));
 
         if (scan_ranges_per_driver_seq.empty()) {
             _fragment_ctx->set_enable_cache(false);
@@ -520,33 +523,25 @@ Status FragmentExecutor::_prepare_stream_load_pipe(ExecEnv* exec_env, const Unif
     return Status::OK();
 }
 
-Status create_lazy_instantiate_drivers_pipeline(RuntimeState* state, PipelineBuilderContext* ctx,
-                                                QueryContext* query_ctx, FragmentContext* fragment_ctx,
-                                                PipelineGroupMap&& unready_pipeline_groups, Drivers& drivers) {
+void create_adaptive_group_initialize_events(RuntimeState* state, PipelineGroupMap&& unready_pipeline_groups) {
     if (unready_pipeline_groups.empty()) {
-        return Status::OK();
+        return;
     }
 
-    int32_t min_leader_plan_node_id = unready_pipeline_groups.begin()->first->plan_node_id();
-    for (const auto& [leader_source_op, _] : unready_pipeline_groups) {
-        min_leader_plan_node_id = std::min(min_leader_plan_node_id, leader_source_op->plan_node_id());
+    auto* driver_executor = state->exec_env()->wg_driver_executor();
+    for (auto& [leader_source_op, pipelines] : unready_pipeline_groups) {
+        EventPtr group_initialize_event =
+                Event::create_collect_stats_source_initialize_event(driver_executor, std::move(pipelines));
+
+        if (auto blocking_event = leader_source_op->adaptive_blocking_event(); blocking_event != nullptr) {
+            group_initialize_event->add_dependency(blocking_event.get());
+        }
+        for (const auto* dependency_pipeline : leader_source_op->group_dependent_pipelines()) {
+            group_initialize_event->add_dependency(dependency_pipeline->pipeline_event());
+        }
+
+        leader_source_op->set_group_initialize_event(std::move(group_initialize_event));
     }
-
-    auto source_op = std::make_shared<LazyInstantiateDriversOperatorFactory>(
-            ctx->next_operator_id(), min_leader_plan_node_id, std::move(unready_pipeline_groups));
-    source_op->set_degree_of_parallelism(1);
-
-    OpFactories ops;
-    ops.emplace_back(std::move(source_op));
-    ops.emplace_back(std::make_shared<NoopSinkOperatorFactory>(ctx->next_operator_id(), min_leader_plan_node_id));
-
-    auto pipe = std::make_shared<Pipeline>(ctx->next_pipe_id(), ops);
-    fragment_ctx->pipelines().emplace_back(pipe);
-
-    RETURN_IF_ERROR(pipe->prepare(state));
-    pipe->instantiate_drivers(state);
-
-    return Status::OK();
 }
 
 Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
@@ -598,9 +593,9 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     PipelineGroupMap unready_pipeline_groups;
     for (const auto& pipeline : pipelines) {
         auto* source_op = pipeline->source_operator_factory();
-        if (!source_op->is_adaptive_group_active()) {
+        if (!source_op->is_adaptive_group_initial_active()) {
             auto* group_leader_source_op = source_op->group_leader();
-            unready_pipeline_groups[group_leader_source_op].emplace_back(pipeline);
+            unready_pipeline_groups[group_leader_source_op].emplace_back(pipeline.get());
             continue;
         }
 
@@ -608,8 +603,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     }
 
     if (!unready_pipeline_groups.empty()) {
-        RETURN_IF_ERROR(create_lazy_instantiate_drivers_pipeline(
-                runtime_state, &context, _query_ctx, _fragment_ctx.get(), std::move(unready_pipeline_groups), drivers));
+        create_adaptive_group_initialize_events(runtime_state, std::move(unready_pipeline_groups));
     }
 
     // Acquire driver token to avoid overload
@@ -684,8 +678,18 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
             COUNTER_SET(process_mem_counter, profiler.process_mem_bytes);
             auto* num_process_drivers_counter = ADD_COUNTER(profile, "InitialProcessDriverCount", TUnit::UNIT);
             COUNTER_SET(num_process_drivers_counter, static_cast<int64_t>(profiler.num_process_drivers));
+
+            VLOG_QUERY << "Prepare fragment succeed: query_id=" << print_id(request.common().params.query_id)
+                       << " fragment_instance_id=" << print_id(request.fragment_instance_id())
+                       << " is_stream_pipeline=" << request.is_stream_pipeline()
+                       << " backend_num=" << request.backend_num()
+                       << " fragment plan=" << fragment_ctx->plan()->debug_string();
         } else {
             _fail_cleanup(prepare_success);
+            LOG(WARNING) << "Prepare fragment failed: " << print_id(request.common().params.query_id)
+                         << " fragment_instance_id=" << print_id(request.fragment_instance_id())
+                         << " is_stream_pipeline=" << request.is_stream_pipeline()
+                         << " backend_num=" << request.backend_num() << " fragment= " << request.common().fragment;
         }
     });
 
@@ -732,20 +736,41 @@ Status FragmentExecutor::execute(ExecEnv* exec_env) {
     auto* prepare_instance_timer = ADD_TIMER(profile, "FragmentInstancePrepareTime");
     auto* prepare_driver_timer =
             ADD_CHILD_TIMER_THESHOLD(profile, "prepare-pipeline-driver", "FragmentInstancePrepareTime", 10_ms);
+
+    auto iterate_active_drivers = [fragment_ctx = _fragment_ctx.get()](auto call) {
+        using Func = decltype(call);
+        static_assert(DriverPtrCallable<Func>, "Function must be callable with DriverPtr and return void or Status.");
+        using ReturnType = std::invoke_result_t<Func, const DriverPtr&>;
+
+        for (const auto& pipeline : fragment_ctx->pipelines()) {
+            auto* source_op = pipeline->source_operator_factory();
+            if (!source_op->is_adaptive_group_initial_active()) {
+                continue;
+            }
+            for (const auto& driver : pipeline->drivers()) {
+                if constexpr (std::is_same_v<ReturnType, Status>) {
+                    RETURN_IF_ERROR(call(driver));
+                } else {
+                    call(driver);
+                }
+            }
+        }
+        if constexpr (std::is_same_v<ReturnType, Status>) {
+            return Status::OK();
+        }
+    };
+
     {
         SCOPED_TIMER(prepare_instance_timer);
         SCOPED_TIMER(prepare_driver_timer);
-        RETURN_IF_ERROR(_fragment_ctx->iterate_drivers(
+        RETURN_IF_ERROR(iterate_active_drivers(
                 [state = _fragment_ctx->runtime_state()](const DriverPtr& driver) { return driver->prepare(state); }));
     }
     prepare_success = true;
 
     DCHECK(_fragment_ctx->enable_resource_group());
     auto* executor = exec_env->wg_driver_executor();
-    (void)_fragment_ctx->iterate_drivers([executor, fragment_ctx = _fragment_ctx.get()](const DriverPtr& driver) {
-        executor->submit(driver.get());
-        return Status::OK();
-    });
+    iterate_active_drivers([executor](const DriverPtr& driver) { executor->submit(driver.get()); });
 
     return Status::OK();
 }
@@ -868,7 +893,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             auto source_op = std::make_shared<MultiCastLocalExchangeSourceOperatorFactory>(
                     context->next_operator_id(), upstream_plan_node_id, i, mcast_local_exchanger);
             source_op->set_degree_of_parallelism(dop);
-            source_op->set_group_leader(upstream_pipeline->source_operator_factory());
+            source_op->add_upstream_source(upstream_pipeline->source_operator_factory());
 
             // sink op
             auto sink_op = _create_exchange_sink_operator(context, t_stream_sink, sender.get(), dop);
@@ -967,20 +992,16 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         auto* source_operator =
                 down_cast<SourceOperatorFactory*>(fragment_ctx->pipelines().back()->source_operator_factory());
 
-        size_t desired_iceberg_sink_dop = request.pipeline_sink_dop();
+        size_t desired_iceberg_sink_dop = _calc_sink_dop(ExecEnv::GetInstance(), request);
         size_t source_operator_dop = source_operator->degree_of_parallelism();
         OpFactoryPtr iceberg_table_sink_op = std::make_shared<IcebergTableSinkOperatorFactory>(
                 context->next_operator_id(), fragment_ctx, iceberg_table_sink->get_output_expr(), iceberg_table_desc,
                 thrift_sink.iceberg_table_sink, partition_expr_ctxs);
 
         if (iceberg_table_desc->is_unpartitioned_table() || thrift_sink.iceberg_table_sink.is_static_partition_sink) {
-            if (desired_iceberg_sink_dop != source_operator_dop) {
-                context->maybe_interpolate_local_passthrough_exchange_for_sink(
-                        runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, iceberg_table_sink_op,
-                        source_operator_dop, desired_iceberg_sink_dop);
-            } else {
-                fragment_ctx->pipelines().back()->get_op_factories().emplace_back(std::move(iceberg_table_sink_op));
-            }
+            context->maybe_interpolate_local_passthrough_exchange_for_sink(
+                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, iceberg_table_sink_op,
+                    source_operator_dop, desired_iceberg_sink_dop);
         } else {
             context->maybe_interpolate_local_key_partition_exchange_for_sink(
                     runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, iceberg_table_sink_op,
@@ -1000,20 +1021,16 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         auto* source_operator =
                 down_cast<SourceOperatorFactory*>(fragment_ctx->pipelines().back()->source_operator_factory());
 
-        size_t desired_hive_sink_dop = request.pipeline_sink_dop();
+        size_t desired_hive_sink_dop = _calc_sink_dop(ExecEnv::GetInstance(), request);
         size_t source_operator_dop = source_operator->degree_of_parallelism();
         OpFactoryPtr hive_table_sink_op = std::make_shared<HiveTableSinkOperatorFactory>(
                 context->next_operator_id(), fragment_ctx, thrift_sink.hive_table_sink,
                 hive_table_sink->get_output_expr(), partition_expr_ctxs);
 
         if (t_hive_sink.partition_column_names.size() == 0 || t_hive_sink.is_static_partition_sink) {
-            if (source_operator_dop != desired_hive_sink_dop) {
-                context->maybe_interpolate_local_passthrough_exchange_for_sink(
-                        runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, hive_table_sink_op,
-                        source_operator_dop, desired_hive_sink_dop);
-            } else {
-                fragment_ctx->pipelines().back()->get_op_factories().emplace_back(std::move(hive_table_sink_op));
-            }
+            context->maybe_interpolate_local_passthrough_exchange_for_sink(
+                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, hive_table_sink_op,
+                    source_operator_dop, desired_hive_sink_dop);
         } else {
             context->maybe_interpolate_local_key_partition_exchange_for_sink(
                     runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, hive_table_sink_op,
@@ -1058,20 +1075,15 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                 fragment_ctx);
 
         size_t source_dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
-        size_t sink_dop = request.pipeline_sink_dop();
+        size_t sink_dop = _calc_sink_dop(ExecEnv::GetInstance(), request);
 
         if (target_table.write_single_file) {
             sink_dop = 1;
         }
 
         if (partition_expr_ctxs.empty()) {
-            if (sink_dop != source_dop) {
-                context->maybe_interpolate_local_passthrough_exchange_for_sink(
-                        runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, std::move(op), source_dop,
-                        sink_dop);
-            } else {
-                fragment_ctx->pipelines().back()->get_op_factories().emplace_back(std::move(op));
-            }
+            context->maybe_interpolate_local_passthrough_exchange_for_sink(
+                    runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, std::move(op), source_dop, sink_dop);
         } else {
             context->maybe_interpolate_local_key_partition_exchange_for_sink(
                     runtime_state, Operator::s_pseudo_plan_node_id_for_final_sink, op, partition_expr_ctxs, source_dop,

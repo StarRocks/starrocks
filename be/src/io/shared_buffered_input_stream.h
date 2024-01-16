@@ -26,9 +26,11 @@ namespace starrocks::io {
 class SharedBufferedInputStream : public SeekableInputStream {
 public:
     struct IORange {
+        IORange(const int64_t offset, const int64_t size, const bool is_active = true)
+                : offset(offset), size(size), is_active(is_active) {}
         int64_t offset;
         int64_t size;
-        bool active = true;
+        bool is_active = true;
         bool operator<(const IORange& x) const { return offset < x.offset; }
     };
     struct CoalesceOptions {
@@ -71,8 +73,7 @@ public:
         return _stream->get_numeric_statistics();
     }
 
-    Status set_io_ranges(const std::vector<IORange>& ranges);
-    Status set_io_ranges(const std::vector<IORange>& ranges, bool coalesce_together);
+    Status set_io_ranges(const std::vector<IORange>& ranges, bool coalesce_lazy_column = true);
     void release_to_offset(int64_t offset);
     void release();
     void set_coalesce_options(const CoalesceOptions& options) { _options = options; }
@@ -93,7 +94,8 @@ private:
     Status _get_bytes(const uint8_t** buffer, size_t offset, size_t nbytes);
     Status _sort_and_check_overlap(std::vector<IORange>& ranges);
     void _merge_small_ranges(const std::vector<IORange>& ranges);
-    Status _set_io_ranges_separately(const std::vector<IORange>& ranges);
+    Status _set_io_ranges_all_columns(const std::vector<IORange>& ranges);
+    Status _set_io_ranges_active_and_lazy_columns(const std::vector<IORange>& ranges);
     const std::shared_ptr<SeekableInputStream> _stream;
     const std::string _filename;
     std::map<int64_t, SharedBuffer> _map;

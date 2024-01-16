@@ -93,4 +93,16 @@ public class PaimonTableTest {
         Assert.assertEquals(tTableDescriptor.getTableName(), tableName);
     }
 
+    @Test
+    public void testEquals(@Mocked AbstractFileStoreTable paimonNativeTable) {
+        String dbName = "testDB";
+        String tableName = "testTable";
+        PaimonTable table = new PaimonTable("testCatalog", dbName, tableName, null,
+                paimonNativeTable, 100L);
+        PaimonTable table2 = new PaimonTable("testCatalog", dbName, tableName, null,
+                paimonNativeTable, 100L);
+        Assert.assertEquals(table, table2);
+        Assert.assertEquals(table, table);
+        Assert.assertNotEquals(table, null);
+    }
 }

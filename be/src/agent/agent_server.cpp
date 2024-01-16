@@ -68,6 +68,7 @@ const uint32_t REPORT_DISK_STATE_WORKER_COUNT = 1;
 const uint32_t REPORT_OLAP_TABLE_WORKER_COUNT = 1;
 const uint32_t REPORT_WORKGROUP_WORKER_COUNT = 1;
 const uint32_t REPORT_RESOURCE_USAGE_WORKER_COUNT = 1;
+const uint32_t REPORT_DATACACHE_METRICS_WORKER_COUNT = 1;
 
 class AgentServer::Impl {
 public:
@@ -113,6 +114,7 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool_move_dir;
     std::unique_ptr<ThreadPool> _thread_pool_update_tablet_meta_info;
     std::unique_ptr<ThreadPool> _thread_pool_drop_auto_increment_map;
+    std::unique_ptr<ThreadPool> _thread_pool_replication;
 
     std::unique_ptr<PushTaskWorkerPool> _push_workers;
     std::unique_ptr<PublishVersionTaskWorkerPool> _publish_version_workers;
@@ -125,6 +127,7 @@ private:
     std::unique_ptr<ReportOlapTableTaskWorkerPool> _report_tablet_workers;
     std::unique_ptr<ReportWorkgroupTaskWorkerPool> _report_workgroup_workers;
     std::unique_ptr<ReportResourceUsageTaskWorkerPool> _report_resource_usage_workers;
+    std::unique_ptr<ReportDataCacheMetricsTaskWorkerPool> _report_datacache_metrics_workers;
 
     // Compute node only need _report_resource_usage_workers.
     const bool _is_compute_node;
@@ -229,6 +232,10 @@ void AgentServer::Impl::init_or_die() {
                                                 MIN_CLONE_TASK_THREADS_IN_POOL),
                                        DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
 
+        BUILD_DYNAMIC_TASK_THREAD_POOL(
+                "replication", 0, config::replication_threads > 0 ? config::replication_threads : CpuInfo::num_cores(),
+                std::numeric_limits<int>::max(), _thread_pool_replication);
+
         // It is the same code to create workers of each type, so we use a macro
         // to make code to be more readable.
 #ifndef BE_TEST
@@ -252,6 +259,8 @@ void AgentServer::Impl::init_or_die() {
     }
     CREATE_AND_START_POOL(_report_resource_usage_workers, ReportResourceUsageTaskWorkerPool,
                           REPORT_RESOURCE_USAGE_WORKER_COUNT)
+    CREATE_AND_START_POOL(_report_datacache_metrics_workers, ReportDataCacheMetricsTaskWorkerPool,
+                          REPORT_DATACACHE_METRICS_WORKER_COUNT)
 #undef CREATE_AND_START_POOL
 }
 
@@ -275,6 +284,7 @@ void AgentServer::Impl::stop() {
 
 #ifndef BE_TEST
         _thread_pool_clone->shutdown();
+        _thread_pool_replication->shutdown();
 #define STOP_POOL(type, pool_name) pool_name->stop();
 #else
 #define STOP_POOL(type, pool_name)
@@ -289,6 +299,7 @@ void AgentServer::Impl::stop() {
         STOP_POOL(REPORT_WORKGROUP, _report_workgroup_workers);
     }
     STOP_POOL(REPORT_WORKGROUP, _report_resource_usage_workers);
+    STOP_POOL(REPORT_DATACACHE_METRICS, _report_datacache_metrics_workers);
 #undef STOP_POOL
 }
 
@@ -340,6 +351,8 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TYPE(TTaskType::MOVE, move_dir_req);
             HANDLE_TYPE(TTaskType::UPDATE_TABLET_META_INFO, update_tablet_meta_info_req);
             HANDLE_TYPE(TTaskType::DROP_AUTO_INCREMENT_MAP, drop_auto_increment_map_req);
+            HANDLE_TYPE(TTaskType::REMOTE_SNAPSHOT, remote_snapshot_req);
+            HANDLE_TYPE(TTaskType::REPLICATE_SNAPSHOT, replicate_snapshot_req);
 
         case TTaskType::REALTIME_PUSH:
             if (!task.__isset.push_req) {
@@ -372,7 +385,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
 #undef HANDLE_TYPE
 
         if (!ret_st.ok()) {
-            LOG(WARNING) << "fail to submit task. reason: " << ret_st.get_error_msg() << ", task: " << task;
+            LOG(WARNING) << "fail to submit task. reason: " << ret_st.message() << ", task: " << task;
             // For now, all tasks in the batch share one status, so if any task
             // was failed to submit, we can only return error to FE(even when some
             // tasks have already been successfully submitted).
@@ -396,6 +409,9 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
                       << ", task_count_in_queue=" << register_pair.second;                                         \
             ret_st = pool->submit_func(                                                                            \
                     std::bind(do_func, std::make_shared<AGENT_REQ>(*task, task->request, time(nullptr)), env));    \
+            if (!ret_st.ok()) {                                                                                    \
+                LOG(WARNING) << "fail to submit task. reason: " << ret_st.message() << ", task: " << task;         \
+            }                                                                                                      \
         } else {                                                                                                   \
             LOG(INFO) << "Submit task failed, already exists type=" << t_task_type << ", signature=" << signature; \
         }                                                                                                          \
@@ -466,6 +482,14 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TASK(TTaskType::DROP_AUTO_INCREMENT_MAP, all_tasks, run_drop_auto_increment_map_task,
                         DropAutoIncrementMapAgentTaskRequest, drop_auto_increment_map_req, _exec_env);
             break;
+        case TTaskType::REMOTE_SNAPSHOT:
+            HANDLE_TASK(TTaskType::REMOTE_SNAPSHOT, all_tasks, run_remote_snapshot_task, RemoteSnapshotAgentTaskRequest,
+                        remote_snapshot_req, _exec_env);
+            break;
+        case TTaskType::REPLICATE_SNAPSHOT:
+            HANDLE_TASK(TTaskType::REPLICATE_SNAPSHOT, all_tasks, run_replicate_snapshot_task,
+                        ReplicateSnapshotAgentTaskRequest, replicate_snapshot_req, _exec_env);
+            break;
         case TTaskType::REALTIME_PUSH:
         case TTaskType::PUSH: {
             // should not run here
@@ -477,7 +501,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             break;
         default:
             ret_st = Status::InvalidArgument(strings::Substitute("tasks(type=$0) has wrong task type", task_type));
-            LOG(WARNING) << "fail to batch submit task. reason: " << ret_st.get_error_msg();
+            LOG(WARNING) << "fail to batch submit task. reason: " << ret_st.message();
         }
     }
 
@@ -498,7 +522,7 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             default:
                 ret_st = Status::InvalidArgument(strings::Substitute("tasks(type=$0, push_type=$1) has wrong task type",
                                                                      TTaskType::PUSH, push_type));
-                LOG(WARNING) << "fail to batch submit push task. reason: " << ret_st.get_error_msg();
+                LOG(WARNING) << "fail to batch submit push task. reason: " << ret_st.message();
             }
         }
     }
@@ -541,6 +565,10 @@ void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
     switch (type) {
     case TTaskType::CLONE:
         st = _thread_pool_clone->update_max_threads(new_val);
+        break;
+    case TTaskType::REMOTE_SNAPSHOT:
+    case TTaskType::REPLICATE_SNAPSHOT:
+        st = _thread_pool_replication->update_max_threads(new_val > 0 ? new_val : CpuInfo::num_cores());
         break;
     default:
         break;
@@ -599,6 +627,10 @@ ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
         break;
     case TTaskType::DROP_AUTO_INCREMENT_MAP:
         ret = _thread_pool_drop_auto_increment_map.get();
+        break;
+    case TTaskType::REMOTE_SNAPSHOT:
+    case TTaskType::REPLICATE_SNAPSHOT:
+        ret = _thread_pool_replication.get();
         break;
     case TTaskType::PUSH:
     case TTaskType::REALTIME_PUSH:

@@ -41,7 +41,7 @@ FE memory leak caused by blocked LabelCleaner threads. [#28311](https://github.c
 
 Release date: July 31, 2023
 
-## Improvements
+### Improvements
 
 - Optimized tablet scheduling logic to prevent tablets remaining pending for a long period or an FE crashing under certain circumstances. [#21647](https://github.com/StarRocks/starrocks/pull/21647) [#23062](https://github.com/StarRocks/starrocks/pull/23062) [#25785](https://github.com/StarRocks/starrocks/pull/25785)
 - Optimized the scheduling logic of TabletChecker to prevent the checker from repeatedly scheduling tablets that are not repaired. [#27648](https://github.com/StarRocks/starrocks/pull/27648)
@@ -54,8 +54,8 @@ Fixed the following issues:
 - Incorrect table-level scan statistics in the FEs cause inaccurate metrics related to table queries and loading. [#28022](https://github.com/StarRocks/starrocks/pull/28022)
 - BEs may crash if the Join key is a large BINARY column. [#25084](https://github.com/StarRocks/starrocks/pull/25084)
 - An aggregate operator may trigger thread safety issues in certain scenarios, causing BEs to crash. [#26092](https://github.com/StarRocks/starrocks/pull/26092)
-- The version number for a tablet is inconsistent between the BE and FE after data is restored by using [RESTORE](../sql-reference/sql-statements/data-definition/RESTORE.md). [#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
-- Partitions cannot be automatically created after the table is recovered by using [RECOVER](../sql-reference/sql-statements/data-definition/RECOVER.md). [#26813](https://github.com/StarRocks/starrocks/pull/26813)
+- The version number for a tablet is inconsistent between the BE and FE after data is restored by using [RESTORE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/RESTORE/). [#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
+- Partitions cannot be automatically created after the table is recovered by using [RECOVER](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/RECOVER/). [#26813](https://github.com/StarRocks/starrocks/pull/26813)
 - The loading transaction is stuck in the Pending state and DDL statements are hung if data to be loaded using INSERT INTO does not meet quality requirements and the strict mode is enabled for data loading. [#27140](https://github.com/StarRocks/starrocks/pull/27140)
 - Some INSERT jobs return `[42000][1064] Dict Decode failed, Dict can't take cover all key :0` if low-cardinality optimization is enabled. [#27395](https://github.com/StarRocks/starrocks/pull/27395)
 - In certain cases, the INSERT INTO SELECT operation times out when the Pipeline is not enabled. [#26594](https://github.com/StarRocks/starrocks/pull/26594)
@@ -382,20 +382,20 @@ Release date: July 29, 2022
 
 ### New Features
 
-- The Primary Key table supports complete DELETE WHERE syntax. For more information, see [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md#delete-data-by-primary-key).
-- The Primary Key table supports persistent primary key indexes. You can choose to persist the primary key index on disk rather than in memory, significantly reducing memory usage. For more information, see [Primary Key table](../table_design/table_types/primary_key_table.md).
+- The Primary Key table supports complete DELETE WHERE syntax. For more information, see [DELETE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-manipulation/DELETE#delete-data-by-primary-key).
+- The Primary Key table supports persistent primary key indexes. You can choose to persist the primary key index on disk rather than in memory, significantly reducing memory usage. For more information, see [Primary Key table](https://docs.starrocks.io/docs/table_design/table_types/primary_key_table/).
 - Global dictionary can be updated during real-time data ingestion，optimizing query performance and delivering 2X query performance for string data.
-- The CREATE TABLE AS SELECT statement can be executed asynchronously. For more information, see [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md).
+- The CREATE TABLE AS SELECT statement can be executed asynchronously. For more information, see [CREATE TABLE AS SELECT](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT/).
 - Support the following resource group-related features:
-  - Monitor resource groups: You can view the resource group of the query in the audit log and obtain the metrics of the resource group by calling APIs. For more information, see [Monitor and Alerting](../administration/Monitor_and_Alert.md#monitor-and-alerting).
-  - Limit the consumption of large queries on CPU, memory, and I/O resources: You can route queries to specific resource groups based on the classifiers or by configuring session variables. For more information, see [Resource group](../administration/resource_group.md).
-- JDBC external tables can be used to conveniently query data in Oracle, PostgreSQL, MySQL, SQLServer, ClickHouse, and other databases. StarRocks also supports predicate pushdown, improving query performance. For more information, see [External table for a JDBC-compatible database](../data_source/External_table.md#external-table-for-a-JDBC-compatible-database).
-- [Preview] A new Data Source Connector framework is released to support external catalogs. You can use external catalogs to directly access and query Hive data without creating external tables. For more information, see [Use catalogs to manage internal and external data](../data_source/catalog/query_external_data.md).
+  - Monitor resource groups: You can view the resource group of the query in the audit log and obtain the metrics of the resource group by calling APIs. For more information, see [Monitor and Alerting](https://docs.starrocks.io/docs/administration/Monitor_and_Alert#monitor-and-alerting).
+  - Limit the consumption of large queries on CPU, memory, and I/O resources: You can route queries to specific resource groups based on the classifiers or by configuring session variables. For more information, see [Resource group](https://docs.starrocks.io/docs/administration/resource_group/).
+- JDBC external tables can be used to conveniently query data in Oracle, PostgreSQL, MySQL, SQLServer, ClickHouse, and other databases. StarRocks also supports predicate pushdown, improving query performance. For more information, see [External table for a JDBC-compatible database](https://docs.starrocks.io/docs/data_source/External_table#external-table-for-a-JDBC-compatible-database).
+- [Preview] A new Data Source Connector framework is released to support external catalogs. You can use external catalogs to directly access and query Hive data without creating external tables. For more information, see [Use catalogs to manage internal and external data](https://docs.starrocks.io/docs/data_source/catalog/query_external_data/).
 - Added the following functions:
-  - [window_funnel](../sql-reference/sql-functions/aggregate-functions/window_funnel.md)
-  - [ntile](../sql-reference/sql-functions/Window_function.md)
-  - [bitmap_union_count](../sql-reference/sql-functions/bitmap-functions/bitmap_union_count.md), [base64_to_bitmap](../sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md), [array_to_bitmap](../sql-reference/sql-functions/array-functions/array_to_bitmap.md)
-  - [week](../sql-reference/sql-functions/date-time-functions/week.md), [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md)
+  - [window_funnel](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/window_funnel/)
+  - [ntile](https://docs.starrocks.io/docs/sql-reference/sql-functions/Window_function/)
+  - [bitmap_union_count](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/bitmap_union_count/), [base64_to_bitmap](https://docs.starrocks.io/docs/sql-reference/sql-functions/bitmap-functions/base64_to_bitmap/), [array_to_bitmap](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_to_bitmap/)
+  - [week](https://docs.starrocks.io/docs/sql-reference/sql-functions/date-time-functions/week/), [time_slice](https://docs.starrocks.io/docs/sql-reference/sql-functions/date-time-functions/time_slice/)
 
 ### Improvements
 
@@ -406,10 +406,10 @@ Release date: July 29, 2022
   - TopN and sort operators
   - Equivalence comparison operators that contain functions can use Zone Map indexes when these operators are pushed down to scan operators.
 - Optimized Apache Hive™ external tables.
-  - When Apache Hive™ tables are stored in Parquet, ORC, or CSV format, schema changes caused by ADD COLUMN or REPLACE COLUMN on Hive can be synchronized to StarRocks when you execute the REFRESH statement on the corresponding Hive external table. For more information, see [Hive external table](../data_source/External_table.md#hive-external-table).
-  - `hive.metastore.uris` can be modified for Hive resources. For more information, see [ALTER RESOURCE](../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md).
-- Optimized the performance of Apache Iceberg external tables. A custom catalog can be used to create an Iceberg resource. For more information, see [Apache Iceberg external table](../data_source/External_table.md#apache-iceberg-external-table).
-- Optimized the performance of Elasticsearch external tables. Sniffing the addresses of the data nodes in an Elasticsearch cluster can be disabled. For more information, see [Elasticsearch external table](../data_source/External_table.md#elasticsearch-external-table).
+  - When Apache Hive™ tables are stored in Parquet, ORC, or CSV format, schema changes caused by ADD COLUMN or REPLACE COLUMN on Hive can be synchronized to StarRocks when you execute the REFRESH statement on the corresponding Hive external table. For more information, see [Hive external table](https://docs.starrocks.io/docs/2.3/data_source/External_table/#hive-external-table).
+  - `hive.metastore.uris` can be modified for Hive resources. For more information, see [ALTER RESOURCE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/ALTER_RESOURCE/).
+- Optimized the performance of Apache Iceberg external tables. A custom catalog can be used to create an Iceberg resource. For more information, see [Apache Iceberg external table](https://docs.starrocks.io/docs/2.3/data_source/External_table/#deprecated-iceberg-external-table).
+- Optimized the performance of Elasticsearch external tables. Sniffing the addresses of the data nodes in an Elasticsearch cluster can be disabled. For more information, see [Elasticsearch external table](https://docs.starrocks.io/docs/2.3/data_source/External_table/#elasticsearch-external-table).
 - When the sum() function accepts a numeric string, it implicitly converts the numeric string.
 - The year(), month(), and day() functions support the DATE data type.
 
@@ -424,9 +424,9 @@ Fixed the following bugs:
 
 ### Others
 
-- StarGo, a cluster management tool, can deploy, start, upgrade, and roll back clusters and manage multiple clusters. For more information, see [Deploy StarRocks with StarGo](../administration/stargo.md).
+- StarGo, a cluster management tool, can deploy, start, upgrade, and roll back clusters and manage multiple clusters. For more information, see [Deploy StarRocks with StarGo](https://docs.starrocks.io/docs/administration/stargo/).
 - The pipeline engine is enabled by default when you upgrade StarRocks to version 2.3 or deploy StarRocks. The pipeline engine can improve the performance of simple queries in high concurrency scenarios and complex queries. If you detect significant performance regressions when using StarRocks 2.3, you can disable the pipeline engine by executing the `SET GLOBAL` statement to set `enable_pipeline_engine` to `false`.
-- The [SHOW GRANTS](../sql-reference/sql-statements/account-management/SHOW_GRANTS.md) statement is compatible with the MySQL syntax and displays the privileges assigned to a user in the form of GRANT statements.
+- The [SHOW GRANTS](https://docs.starrocks.io/docs/sql-reference/sql-statements/account-management/SHOW_GRANTS/) statement is compatible with the MySQL syntax and displays the privileges assigned to a user in the form of GRANT statements.
 - It is recommended that the memory_limitation_per_thread_for_schema_change ( BE configuration item)  use the default value 2 GB, and data is written to disk when data volume exceeds this limit. Therefore, if you have previously set this parameter to a larger value, it is recommended that you set it to 2 GB, otherwise a schema change task may take up a large amount of memory.
 
 ### Upgrade notes

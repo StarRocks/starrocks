@@ -53,6 +53,7 @@
 #include "http/http_request.h"
 #include "http/http_status.h"
 #include "storage/compaction_manager.h"
+#include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/update_manager.h"
 #include "storage/memtable_flush_executor.h"
@@ -117,7 +118,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             PersistentIndexCompactionManager* mgr =
                     StorageEngine::instance()->update_manager()->get_pindex_compaction_mgr();
             if (mgr != nullptr) {
-                (void)mgr->update_max_threads(config::pindex_major_compaction_num_threads);
+                const int max_pk_index_compaction_thread_cnt = std::max(1, config::pindex_major_compaction_num_threads);
+                (void)mgr->update_max_threads(max_pk_index_compaction_thread_cnt);
             }
         });
         _config_callback.emplace("update_memory_limit_percent", [&]() {
@@ -136,6 +138,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("parallel_clone_task_per_path", [&]() {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::CLONE,
                                                                  config::parallel_clone_task_per_path);
+        });
+        _config_callback.emplace("replication_threads", [&]() {
+            _exec_env->agent_server()->update_max_thread_by_type(TTaskType::REPLICATE_SNAPSHOT,
+                                                                 config::replication_threads);
         });
         _config_callback.emplace("alter_tablet_worker_count", [&]() {
             _exec_env->agent_server()->update_max_thread_by_type(TTaskType::ALTER, config::alter_tablet_worker_count);
@@ -191,6 +197,12 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                     StorageEngine::instance()->async_delta_writer_executor());
             (void)executor->get_thread_pool()->update_max_threads(config::number_tablet_writer_threads);
         });
+        _config_callback.emplace("compact_threads", [&]() {
+            auto tablet_manager = _exec_env->lake_tablet_manager();
+            if (tablet_manager != nullptr) {
+                tablet_manager->compaction_scheduler()->update_compact_threads(config::compact_threads);
+            }
+        });
 #ifdef USE_STAROS
         _config_callback.emplace("starlet_cache_thread_num", [&]() {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_threadpool_size", value).empty()) {
@@ -200,6 +212,16 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("starlet_cache_evict_low_water", [&]() {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_low_water", value).empty()) {
                 LOG(WARNING) << "Failed to update cachemgr_evict_low_water";
+            }
+        });
+        _config_callback.emplace("starlet_cache_evict_percent", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_percent", value).empty()) {
+                LOG(WARNING) << "Failed to update cachemgr_evict_percent";
+            }
+        });
+        _config_callback.emplace("starlet_cache_evict_throughput_mb", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_throughput_mb", value).empty()) {
+                LOG(WARNING) << "Failed to update cachemgr_evict_throughput_mb";
             }
         });
         _config_callback.emplace("starlet_cache_evict_high_water", [&]() {
@@ -226,6 +248,25 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         _config_callback.emplace("starlet_cache_evict_interval", [&]() {
             if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_interval", value).empty()) {
                 LOG(WARNING) << "Failed to update cachemgr_evict_interval";
+            }
+        });
+        _config_callback.emplace("starlet_fslib_s3client_nonread_max_retries", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_nonread_max_retries", value)
+                        .empty()) {
+                LOG(WARNING) << "Failed to update fslib_s3client_nonread_max_retries";
+            }
+        });
+        _config_callback.emplace("starlet_fslib_s3client_nonread_retry_scale_factor", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_nonread_retry_scale_factor",
+                                                                      value)
+                        .empty()) {
+                LOG(WARNING) << "Failed to update fslib_s3client_nonread_retry_scale_factor";
+            }
+        });
+        _config_callback.emplace("starlet_fslib_s3client_connect_timeout_ms", [&]() {
+            if (staros::starlet::common::GFlagsUtils::UpdateFlagValue("fslib_s3client_connect_timeout_ms", value)
+                        .empty()) {
+                LOG(WARNING) << "Failed to update fslib_s3client_connect_timeout_ms";
             }
         });
 #endif // USE_STAROS

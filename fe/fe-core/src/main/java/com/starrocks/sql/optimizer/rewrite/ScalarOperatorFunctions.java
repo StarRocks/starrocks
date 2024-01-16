@@ -347,6 +347,13 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
     }
 
+    @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true)
+    public static ConstantOperator toDate(ConstantOperator dateTime) {
+        LocalDateTime dt = dateTime.getDatetime();
+        dt.truncatedTo(ChronoUnit.DAYS);
+        return ConstantOperator.createDateOrNull(dt);
+    }
+
     @ConstantFunction(name = "years_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator yearsSub(ConstantOperator date, ConstantOperator year) {
         return ConstantOperator.createDatetimeOrNull(date.getDatetime().minusYears(year.getInt()));
@@ -465,6 +472,22 @@ public class ScalarOperatorFunctions {
         }
         ConstantOperator dl = ConstantOperator.createDatetime(
                 LocalDateTime.ofInstant(Instant.ofEpochSecond(value), TimeUtils.getTimeZone().toZoneId()));
+        return ConstantOperator.createVarchar(dl.toString());
+    }
+
+    @ConstantFunction.List(list = {
+            @ConstantFunction(name = "from_unixtime_ms", argTypes = {BIGINT}, returnType = VARCHAR)
+    })
+    public static ConstantOperator fromUnixTimeMs(ConstantOperator unixTime) throws AnalysisException {
+        long millisecond = unixTime.getBigint();
+
+        if (millisecond < 0 || millisecond > TimeUtils.MAX_UNIX_TIMESTAMP * 1000) {
+            throw new AnalysisException(
+                    "unixtime should larger than zero and less than " + TimeUtils.MAX_UNIX_TIMESTAMP);
+        }
+        long second = millisecond / 1000;
+        ConstantOperator dl = ConstantOperator.createDatetime(
+                LocalDateTime.ofInstant(Instant.ofEpochSecond(second), TimeUtils.getTimeZone().toZoneId()));
         return ConstantOperator.createVarchar(dl.toString());
     }
 
