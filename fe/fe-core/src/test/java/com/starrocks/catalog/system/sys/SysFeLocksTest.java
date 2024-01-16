@@ -60,7 +60,8 @@ public class SysFeLocksTest {
 
             assertEquals("EXCLUSIVE", item.getLock_mode());
             assertTrue(item.isGranted());
-            assertTrue(item.getLock_start_time() > 0);
+            assertTrue(item.getStart_time() > 0);
+            assertTrue(item.getHold_time_ms() >= 0);
             assertEquals("[]", item.getWaiter_list());
 
             // add a waiter
@@ -91,6 +92,8 @@ public class SysFeLocksTest {
 
             assertEquals("SHARED", item.getLock_mode());
             assertTrue(item.isGranted());
+            assertTrue(item.getStart_time() > 0);
+            assertTrue(item.getHold_time_ms() >= 0);
             assertEquals("[]", item.getWaiter_list());
 
             // add a waiter
@@ -122,7 +125,6 @@ public class SysFeLocksTest {
             assertEquals(String.format("[{\"threadId\":%d,\"threadName\":\"%s\"}]", waiter.getId(), waiter.getName()),
                     item.getWaiter_list());
             db.readUnlock();
-
         }
     }
 
