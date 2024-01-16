@@ -97,7 +97,18 @@ public class ReplicationJobTest {
         partition.updateVersionForRestore(10);
         srcPartition.updateVersionForRestore(partition.getCommittedVersion() + 100);
 
-        job = new ReplicationJob("test_token", db.getId(), table, srcTable, GlobalStateMgr.getCurrentSystemInfo());
+        job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentSystemInfo());
+    }
+
+    @Test
+    public void testJobId() {
+        ReplicationJob jobWithoutId = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentSystemInfo());
+        Assert.assertFalse(jobWithoutId.getJobId().isEmpty());
+        ReplicationJob jobWithId = new ReplicationJob("fake_id", "test_token", db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentSystemInfo());
+        Assert.assertEquals("fake_id", jobWithId.getJobId());
     }
 
     @Test
