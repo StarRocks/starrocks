@@ -1352,16 +1352,19 @@ public class StmtExecutor {
 
     private void handleAddBackendBlackListStmt() throws UserException {
         AddBackendBlackListStmt addBackendBlackListStmt = (AddBackendBlackListStmt) parsedStmt;
-        long beId = addBackendBlackListStmt.getBackendId();
-        SystemInfoService sis = GlobalStateMgr.getCurrentSystemInfo();
-        if (sis.getBackend(beId) == null) {
-            throw new UserException("Not found backend: " + beId);
+        Authorizer.check(addBackendBlackListStmt, context);
+        for (Long beId : addBackendBlackListStmt.getBackendIds()) {
+            SystemInfoService sis = GlobalStateMgr.getCurrentSystemInfo();
+            if (sis.getBackend(beId) == null) {
+                throw new UserException("Not found backend: " + beId);
+            }
+            SimpleScheduler.getHostBlacklist().addByManual(beId);
         }
-        SimpleScheduler.getHostBlacklist().addByManual(beId);
     }
 
     private void handleDelBackendBlackListStmt() {
         DelBackendBlackListStmt delBackendBlackListStmt = (DelBackendBlackListStmt) parsedStmt;
+        Authorizer.check(delBackendBlackListStmt, context);
         for (Long backendId : delBackendBlackListStmt.getBackendIds()) {
             SimpleScheduler.getHostBlacklist().remove(backendId);
         }

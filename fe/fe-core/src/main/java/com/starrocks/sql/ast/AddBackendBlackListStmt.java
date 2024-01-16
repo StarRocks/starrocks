@@ -17,16 +17,18 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.sql.parser.NodePosition;
 
-public class AddBackendBlackListStmt extends StatementBase {
-    private final long backendId;
+import java.util.List;
 
-    public AddBackendBlackListStmt(long backendId, NodePosition pos) {
+public class AddBackendBlackListStmt extends StatementBase {
+    private final List<Long> backendIds;
+
+    public AddBackendBlackListStmt(List<Long> backendIds, NodePosition pos) {
         super(pos);
-        this.backendId = backendId;
+        this.backendIds = backendIds;
     }
 
-    public long getBackendId() {
-        return backendId;
+    public List<Long> getBackendIds() {
+        return backendIds;
     }
 
     @Override

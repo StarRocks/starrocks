@@ -3041,8 +3041,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitAddBackendBlackListStatement(StarRocksParser.AddBackendBlackListStatementContext ctx) {
-        long backendId = Long.parseLong(ctx.INTEGER_VALUE().getText());
-        return new AddBackendBlackListStmt(backendId, createPos(ctx));
+        List<Long> ids =
+                ctx.INTEGER_VALUE().stream().map(ParseTree::getText).map(Long::parseLong).collect(toList());
+        return new AddBackendBlackListStmt(ids, createPos(ctx));
     }
 
     @Override

@@ -1823,7 +1823,7 @@ showWhiteListStatement
 // ------------------------------------ backend BlackList Statement ---------------------------------------------------
 
 addBackendBlackListStatement
-    : ADD BACKEND BLACKLIST INTEGER_VALUE
+    : ADD BACKEND BLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
     ;
 
 delBackendBlackListStatement
