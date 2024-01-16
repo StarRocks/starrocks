@@ -848,14 +848,9 @@ public final class MetricRepo {
         GAUGE_ROUTINE_LOAD_LAGS = routineLoadLags;
     }
 
-<<<<<<< HEAD
     public static synchronized String getMetric(MetricVisitor visitor, boolean collectTableMetrics,
                                                 boolean minifyTableMetrics) {
-        if (!isInit) {
-=======
-    public static synchronized String getMetric(MetricVisitor visitor, MetricsAction.RequestParams requestParams) {
         if (!hasInit) {
->>>>>>> 9d8bab659d ([Refactor] Add slow log for edit log write and refine some code warnings (backport #39024) (backport #39085) (#39102))
             return "";
         }
 
