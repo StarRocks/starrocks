@@ -94,7 +94,7 @@ public final class MetricRepo {
     private static final MetricRegistry METRIC_REGISTER = new MetricRegistry();
     private static final StarRocksMetricRegistry STARROCKS_METRIC_REGISTER = new StarRocksMetricRegistry();
 
-    public static volatile boolean isInit = false;
+    public static volatile boolean hasInit = false;
     public static final SystemMetrics SYSTEM_METRICS = new SystemMetrics();
 
     public static final String TABLET_NUM = "tablet_num";
@@ -158,7 +158,7 @@ public final class MetricRepo {
     private static final MetricCalculator METRIC_CALCULATOR = new MetricCalculator();
 
     public static synchronized void init() {
-        if (isInit) {
+        if (hasInit) {
             return;
         }
 
@@ -223,14 +223,14 @@ public final class MetricRepo {
         generateBackendsTabletMetrics();
 
         // connections
-        GaugeMetric<Integer> conections = new GaugeMetric<Integer>(
+        GaugeMetric<Integer> connections = new GaugeMetric<Integer>(
                 "connection_total", MetricUnit.CONNECTIONS, "total connections") {
             @Override
             public Integer getValue() {
                 return ExecuteEnv.getInstance().getScheduler().getConnectionNum();
             }
         };
-        STARROCKS_METRIC_REGISTER.addMetric(conections);
+        STARROCKS_METRIC_REGISTER.addMetric(connections);
 
         // journal id
         GaugeMetric<Long> maxJournalId = (GaugeMetric<Long>) new GaugeMetric<Long>(
@@ -396,7 +396,7 @@ public final class MetricRepo {
         COUNTER_TXN_REJECT =
                 new LongCounterMetric("txn_reject", MetricUnit.REQUESTS, "counter of rejected transactions");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_REJECT);
-        COUNTER_TXN_BEGIN = new LongCounterMetric("txn_begin", MetricUnit.REQUESTS, "counter of begining transactions");
+        COUNTER_TXN_BEGIN = new LongCounterMetric("txn_begin", MetricUnit.REQUESTS, "counter of beginning transactions");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_BEGIN);
         COUNTER_TXN_SUCCESS =
                 new LongCounterMetric("txn_success", MetricUnit.REQUESTS, "counter of success transactions");
@@ -454,7 +454,7 @@ public final class MetricRepo {
         initMemoryMetrics();
 
         updateMetrics();
-        isInit = true;
+        hasInit = true;
 
         if (Config.enable_metric_calculator) {
             METRIC_TIMER.scheduleAtFixedRate(METRIC_CALCULATOR, 0, 15 * 1000L, TimeUnit.MILLISECONDS);
@@ -722,7 +722,7 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(agentTaskCount);
     }
 
-    // to generate the metrics related to tablets of each backends
+    // to generate the metrics related to tablets of each backend
     // this metric is reentrant, so that we can add or remove metric along with the backend add or remove
     // at runtime.
     public static void generateBackendsTabletMetrics() {
@@ -739,7 +739,7 @@ public final class MetricRepo {
                 continue;
             }
 
-            // tablet number of each backends
+            // tablet number of each backend
             GaugeMetric<Long> tabletNum = (GaugeMetric<Long>) new GaugeMetric<Long>(TABLET_NUM,
                     MetricUnit.NOUNIT, "tablet number") {
                 @Override
@@ -753,7 +753,7 @@ public final class MetricRepo {
             tabletNum.addLabel(new MetricLabel("backend", be.getHost() + ":" + be.getHeartbeatPort()));
             STARROCKS_METRIC_REGISTER.addMetric(tabletNum);
 
-            // max compaction score of tablets on each backends
+            // max compaction score of tablets on each backend
             GaugeMetric<Long> tabletMaxCompactionScore = (GaugeMetric<Long>) new GaugeMetric<Long>(
                     TABLET_MAX_COMPACTION_SCORE, MetricUnit.NOUNIT,
                     "tablet max compaction score") {
@@ -850,7 +850,7 @@ public final class MetricRepo {
 
     public static synchronized String getMetric(MetricVisitor visitor, boolean collectTableMetrics,
                                                 boolean minifyTableMetrics) {
-        if (!isInit) {
+        if (!hasInit) {
             return "";
         }
 
