@@ -285,6 +285,12 @@ message TabletMetaPB {
     optional BinlogConfigPB binlog_config = 52;
     optional BinlogLsnPB binlog_min_lsn = 53;
     optional bool enable_shortcut_compaction = 60 [default = true];
+<<<<<<< HEAD
+=======
+    optional int32 primary_index_cache_expire_sec = 61 [default = 0];
+    // If the tablet is replicated from another cluster, the source_schema saved the schema in the cluster
+    optional TabletSchemaPB source_schema = 70;
+>>>>>>> 3b85134c27 ([Feature] Support rewriting footer of segment files replicated from another cluster to correct column unique id (#38983))
 }
 
 message OLAPIndexHeaderMessage {

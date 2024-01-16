@@ -99,6 +99,14 @@ public:
 
     static TabletMetaSharedPtr create();
 
+<<<<<<< HEAD
+=======
+    static const RowsetMetaSharedPtr& rowset_meta_with_max_rowset_version(
+            const std::vector<RowsetMetaSharedPtr>& rowsets);
+
+    static const RowsetMetaPB& rowset_meta_pb_with_max_rowset_version(const std::vector<RowsetMetaPB>& rowsets);
+
+>>>>>>> 3b85134c27 ([Feature] Support rewriting footer of segment files replicated from another cluster to correct column unique id (#38983))
     explicit TabletMeta();
     TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash, uint64_t shard_id,
                const TTabletSchema& tablet_schema, uint32_t next_unique_id, bool enable_persistent_index,
@@ -156,7 +164,12 @@ public:
 
     void set_tablet_schema(const std::shared_ptr<const TabletSchema>& tablet_schema) { _schema = tablet_schema; }
 
+<<<<<<< HEAD
     std::shared_ptr<const TabletSchema>& tablet_schema_ptr() { return _schema; }
+=======
+    TabletSchemaCSPtr& tablet_schema_ptr() { return _schema; }
+    const TabletSchemaCSPtr& tablet_schema_ptr() const { return _schema; }
+>>>>>>> 3b85134c27 ([Feature] Support rewriting footer of segment files replicated from another cluster to correct column unique id (#38983))
 
     const std::vector<RowsetMetaSharedPtr>& all_rs_metas() const;
     void add_rs_meta(const RowsetMetaSharedPtr& rs_meta);
@@ -213,6 +226,10 @@ public:
     void set_enable_shortcut_compaction(bool enable_shortcut_compaction) {
         _enable_shortcut_compaction = enable_shortcut_compaction;
     }
+
+    void set_source_schema(const TabletSchemaCSPtr& source_schema) { _source_schema = source_schema; }
+
+    const TabletSchemaCSPtr& source_schema() const { return _source_schema; }
 
 private:
     int64_t _mem_usage() const { return sizeof(TabletMeta); }
@@ -272,6 +289,14 @@ private:
 
     bool _enable_shortcut_compaction = true;
 
+<<<<<<< HEAD
+=======
+    std::string _storage_type;
+
+    // If the tablet is replicated from another cluster, the source_schema saved the schema in the cluster
+    TabletSchemaCSPtr _source_schema = nullptr;
+
+>>>>>>> 3b85134c27 ([Feature] Support rewriting footer of segment files replicated from another cluster to correct column unique id (#38983))
     std::shared_mutex _meta_lock;
 };
 

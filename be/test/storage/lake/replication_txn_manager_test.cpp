@@ -339,7 +339,12 @@ TEST_P(LakeReplicationTxnManagerTest, test_publish_failed) {
     EXPECT_TRUE(status.ok()) << status;
 
     const int64_t txn_ids[] = {_transaction_id};
+<<<<<<< HEAD
     auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_ids, 1, 0);
+=======
+    auto txn_id_span = std::span<const int64_t>(txn_ids, 1);
+    auto status_or = lake::publish_version(_tablet_manager.get(), _tablet_id, _version, _src_version, txn_id_span, 0);
+>>>>>>> 3b85134c27 ([Feature] Support rewriting footer of segment files replicated from another cluster to correct column unique id (#38983))
     EXPECT_TRUE(!status_or.ok()) << status_or.status();
 
     const int32_t txn_types[] = {TxnTypePB::TXN_REPLICATION};
