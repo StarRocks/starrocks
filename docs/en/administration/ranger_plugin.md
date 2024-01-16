@@ -75,7 +75,7 @@ After StarRocks is integrating with Apache Ranger, you can achieve the following
 1. Copy [`ranger-servicedef-starrocks.json`](https://github.com/StarRocks/ranger/blob/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json) to any directory of the StarRocks FE machine or Ranger machine.
 
    ```SQL
-   wget https://github.com/StarRocks/ranger/blob/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json
+   wget https://raw.githubusercontent.com/StarRocks/ranger/master/agents-common/src/main/resources/service-defs/ranger-servicedef-starrocks.json
    ```
 
 2. Add StarRocks Service by running the following command as a Ranger administrator.
