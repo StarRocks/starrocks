@@ -35,6 +35,7 @@ import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
+import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -276,6 +277,13 @@ public class HiveMetastoreTest {
         }
 
         public Table getTable(String dbName, String tblName) {
+            if (dbName.equalsIgnoreCase("transactional_db")) {
+                if (tblName.equalsIgnoreCase("insert_only")) {
+                    return getTransactionalTable(dbName, tblName, true);
+                } else if (tblName.equalsIgnoreCase("full_acid")) {
+                    return getTransactionalTable(dbName, tblName, false);
+                }
+            }
             List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "INT", ""));
             List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
             String hdfsPath = "hdfs://127.0.0.1:10000/hive";
@@ -299,6 +307,35 @@ public class HiveMetastoreTest {
             } else {
                 msTable1.setPartitionKeys(new ArrayList<>());
             }
+
+            return msTable1;
+        }
+
+        private Table getTransactionalTable(String dbName, String tblName, boolean insertOnly) {
+            List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
+            String hdfsPath = "hdfs://127.0.0.1:10000/hive";
+            StorageDescriptor sd = new StorageDescriptor();
+            sd.setCols(unPartKeys);
+            sd.setLocation(hdfsPath);
+            sd.setInputFormat("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat");
+            SerDeInfo serDeInfo = new SerDeInfo();
+            serDeInfo.setParameters(ImmutableMap.of());
+            sd.setSerdeInfo(serDeInfo);
+            Table msTable1 = new Table();
+            msTable1.setDbName(dbName);
+            msTable1.setTableName(tblName);
+
+            msTable1.setSd(sd);
+            msTable1.setTableType("MANAGED_TABLE");
+            if (insertOnly) {
+                msTable1.setParameters(ImmutableMap.of(hive_metastoreConstants.TABLE_IS_TRANSACTIONAL, "true",
+                        hive_metastoreConstants.TABLE_TRANSACTIONAL_PROPERTIES, "insert_only"));
+            } else {
+                msTable1.setParameters(ImmutableMap.of(hive_metastoreConstants.TABLE_IS_TRANSACTIONAL, "true",
+                        hive_metastoreConstants.TABLE_TRANSACTIONAL_PROPERTIES, "default"));
+            }
+
+            msTable1.setPartitionKeys(new ArrayList<>());
 
             return msTable1;
         }
