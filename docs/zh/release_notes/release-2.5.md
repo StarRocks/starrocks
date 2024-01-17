@@ -8,6 +8,10 @@ displayed_sidebar: "Chinese"
 
 发布日期：2024 年 1 月 10 日
 
+### 新增特性
+
+- [CREATE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW/#参数) 和 [ALTER](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW/) 异步物化视图可以修改 session 变量。[#37401](https://github.com/StarRocks/starrocks/pull/37401)
+
 ### 功能优化
 
 - 使用 JDK 时 GC 算法默认采用 G1。[#37498](https://github.com/StarRocks/starrocks/pull/37498)
@@ -20,8 +24,10 @@ displayed_sidebar: "Chinese"
 
 ### 参数变更
 
+- 新增 Session 变量 `transaction_read_only`和`tx_read_only`，设置事务的访问模式并且兼容 MySQL 5.7.20 以上的版本。[#37249](https://github.com/StarRocks/starrocks/pull/37249)
 - 新增 [FE 配置项](https://docs.starrocks.io/zh/docs/administration/FE_configuration/) `routine_load_unstable_threshold_second`。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
 - 新增 FE 配置项 `http_worker_threads_num`，HTTP Server 用于处理 HTTP 请求的线程数。默认取值为 0。如果配置为负数或 0 ，线程数将设置为 CPU 核数的 2 倍。[#37530](https://github.com/StarRocks/starrocks/pull/37530)
+- 新增 BE 配置项 `pindex_major_compaction_limit_per_disk`，配置每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题，默认取值为 1。[#37695](https://github.com/StarRocks/starrocks/pull/37695)
 
 ### 问题修复
 
