@@ -38,9 +38,11 @@ displayed_sidebar: "Chinese"
   > 说明：query_pool 的查看方式，参见 [内存管理](Memory_management.md)。
 - `concurrency_limit`：资源组中并发查询数的上限，用以防止并发查询提交过多而导致的过载。只有大于 0 时才生效，默认值为 0。
 - `max_cpu_cores`：资源组在单个 BE 节点中使用的 CPU 核数上限。仅在设置为大于 `0` 后生效。取值范围：[0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。默认值为 0。
-- `spill_mem_limit_threshold`: 资源组在当前 BE 节点触发落盘的内存占用阈值（百分比）。取值范围：[0,1]，默认值为 1。该参数自 v3.1.7 版本引入。
-  - 如果查询开启落盘功能且命中资源组（包括默认资源组 `default_wg`），那么如果该查询使用的内存超过 `query_mem_limit * mem_limit * spill_mem_limit_threshold`，则会触发中间结果落盘以减少内存占用。其中 `query_mem_limit` 为当前 BE 节点上查询的内存限制，由系统变量 `query_mem_limit` 控制。
-  - 如果查询开启落盘功能，但不受资源组功能管理，系统将根据其实际内存占用决定是否触发中间结果落盘。
+- `spill_mem_limit_threshold`: 资源组在当前 BE 节点触发落盘的内存占用阈值（百分比）。取值范围：(0,1)，默认值为 1，即不生效。该参数自 v3.1.7 版本引入。
+  - 如果开启自动落盘功能（即系统变量 `spill_mode` 设置为 `auto`），但未开启资源组功能，系统将在查询的内存占用超过 `query_mem_limit` 的 80% 时触发中间结果落盘。其中 `query_mem_limit` 为单个查询可使用的内存上限，由系统变量 `query_mem_limit` 控制，默认值为 0，代表不设限制。
+  - 如果开启自动落盘功能且查询命中资源组（包括所有系统内建资源组）后，该查询使用的内存超过以下任意一项，都将触发中间结果落盘：
+    - 当前资源组内所有查询使用的内存超过 `当前 BE 节点内存上限 * mem_limit * spill_mem_limit_threshold` 时
+    - 当前查询占用 `query_mem_limit` 的 80% 时
 
 在以上资源限制的基础上，您可以通过以下大查询限制进一步对资源组进行如下的配置：
 
