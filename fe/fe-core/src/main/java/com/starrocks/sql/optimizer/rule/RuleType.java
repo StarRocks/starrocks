@@ -167,6 +167,8 @@ public enum RuleType {
 
     TF_DERIVE_RANGE_JOIN_PREDICATE,
 
+    TF_CONVERT_TO_EQUAL_FOR_NULL_RULE,
+
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
     IMP_HIVE_LSCAN_TO_PSCAN,
