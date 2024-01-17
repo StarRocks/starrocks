@@ -94,7 +94,7 @@ public class AnalyzeUpdateTest {
     @Test
     public void testColumnWithRowUpdate() {
         analyzeFail("update tmcwr set name = 22",
-                "column with row table must specify where clause for update");
+                "must specify where clause to prevent full table update");
     }
 
     @Test
@@ -123,7 +123,8 @@ public class AnalyzeUpdateTest {
 
                 // Index
                 MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
-                TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD, true);
+                TabletMeta tabletMeta =
+                        new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.HDD, true);
                 index.addTablet(tablet, tabletMeta);
 
                 // Partition
@@ -132,7 +133,8 @@ public class AnalyzeUpdateTest {
                 partitionInfo.setReplicationNum(partitionId, (short) 3);
 
                 // Lake table
-                LakeTable table = new LakeTable(tableId, "t1", columns, KeysType.PRIMARY_KEYS, partitionInfo, distributionInfo);
+                LakeTable table =
+                        new LakeTable(tableId, "t1", columns, KeysType.PRIMARY_KEYS, partitionInfo, distributionInfo);
                 return table;
             }
         };
