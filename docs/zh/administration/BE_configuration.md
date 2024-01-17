@@ -220,11 +220,73 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：秒
 - 默认值：1
 
+#### min_cumulative_compaction_num_singleton_deltas
+
+- 含义：触发 CumulativeCompaction 的最小 segment 数。
+- 默认值：5
+
+#### max_cumulative_compaction_num_singleton_deltas
+
+- 含义：单次 CumulativeCompaction 合并的最大 segment 数。
+- 默认值：1000
+
+#### max_compaction_candidate_num
+
+- 含义：Compaction 候选 tablet 的最大数量。太大会导致内存占用和cpu负载消耗高。
+- 默认值：40960
+
 #### update_compaction_check_interval_seconds
 
 - 含义：Primary key 模型 Update compaction 的检查间隔。
 - 单位：秒
 - 默认值：60
+
+#### update_compaction_num_threads_per_disk
+
+- 含义：每次磁盘 Update Compaction 线程的数目。
+- 默认值：1
+
+#### update_compaction_per_tablet_min_interval_seconds
+
+- 含义：Primary key 模型每个 tablet 做 Update compaction 的最小时间间隔。
+- 默认值：120
+
+#### max_update_compaction_num_singleton_deltas
+
+- 含义：单次 Update Compaction 合并的最大 rowset 数。
+- 默认值：1000
+
+#### update_compaction_size_threshold
+
+- 含义：Primary key 模型的 Compaction Score 是基于文件大小计算的，与其他模型的文件数量不同。通过该参数可以使 Primary key 模型的 Compaction Score 与其他模型的相近，便于用户理解。
+- 单位：字节
+- 默认值：268435456
+
+#### update_compaction_result_bytes
+
+- 含义：单次 Update Compaction 合并的最大结果大小。
+- 单位：字节
+- 默认值：1073741824
+
+#### update_compaction_delvec_file_io_amp_ratio
+
+- 含义：用于控制 Primary Key 表模型包含 delvec 文件的 rowset 做 Compaction 的优先级。该值越大优先级越高。
+- 默认值：2
+
+#### repair_compaction_interval_seconds
+
+- 含义：Repair Compaction 线程轮询的间隔。
+- 默认值：600
+
+#### manual_compaction_threads
+
+- 含义：Manual Compaction 线程数量。
+- 默认值：4
+
+#### enable_rowset_verify
+
+- 含义：开启后，会在 Compaction、Schema Change 后检查生成的 rowset 的正确性。
+- 默认值：false
 
 #### min_compaction_failure_interval_sec
 
@@ -394,6 +456,11 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：Size-tiered Compaction 策略中，相邻两个 level 之间相差的数据量的倍数。
 - 默认值：5
+
+#### size_tiered_level_multiple_dupkey
+
+- 含义：Size-tiered Compaction 策略中，Duplicate表模型相邻两个 level 之间相差的数据量的倍数。
+- 默认值：10
 
 #### size_tiered_min_level_size
 
@@ -665,6 +732,27 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：单次 Compaction 打印 trace 的时间阈值，如果单次 compaction 时间超过该阈值就打印 trace。
 - 单位：秒
 - 默认值：60
+
+#### cumulative_compaction_num_threads_per_disk
+
+- 含义：每个磁盘 CumulativeCompaction 线程的数目。
+- 默认值：1
+
+#### vertical_compaction_max_columns_per_group
+
+- 含义：每组 Vertical Compaction 的最大列数。
+- 默认值：5
+
+#### enable_check_string_lengths
+
+- 含义：是否进行导入时数据长度检查，以解决 VARCHAR 类型数据越界导致的 Compaction 失败问题。
+- 默认值：true
+
+#### max_row_source_mask_memory_bytes
+
+- 含义：最大 row source mask buffer内存占用大小，当 buffer 大于该值时将会持久化到磁盘临时文件中。该值应该小于 compaction_mem_limit 参数。
+- 单位：字节
+- 默认值：209715200
 
 #### be_http_port
 

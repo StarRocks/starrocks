@@ -190,10 +190,75 @@ BE dynamic parameters are as follows.
 - **Default:** 1 second
 - **Description:** The time interval of thread polling for a Cumulative Compaction.
 
+#### min_cumulative_compaction_num_singleton_deltas
+
+- **Default:** 5
+- **Description:** The minimum number of segments to trigger Cumulative Compaction.
+
+#### max_cumulative_compaction_num_singleton_deltas
+
+- **Default:** 1000
+- **Description:** The maximum number of segments merged in a single Cumulative Compaction.
+
+#### max_compaction_candidate_num
+
+- **Default:** 40960
+- **Description:** The maximum number of compaction candidate tablets. If it is too large, it will cause high memory usage and CPU load consumption.
+
 #### update_compaction_check_interval_seconds
 
 - **Default:** 60 seconds
 - **Description:** The time interval at which to check the Update Compaction of the Primary Key table.
+
+#### update_compaction_num_threads_per_disk
+
+- **Default:** 1
+- **Description:** The number of Update Compaction threads per disk.
+
+#### update_compaction_per_tablet_min_interval_seconds
+
+- **Default:** 120
+- **Description:** The minimum time interval for Update Compaction of each tablet in the Primary key model.
+
+#### max_update_compaction_num_singleton_deltas
+
+- **Default:** 1000
+- **Description:** The maximum number of rowsets merged in a single Update Compaction.
+
+#### update_compaction_size_threshold
+
+- **Default:** 268435456 bytes
+- **Description:** The Compaction Score of the Primary key model is calculated based on the file size, which is different from the number of files of other models. This parameter can be used to make the Compaction Score of the Primary key model similar to that of other models, making it easier for users to understand.
+
+#### update_compaction_result_bytes
+
+- **Default:** 1073741824 bytes
+- **Description:** The maximum result size of a single Update Compaction merge.
+
+#### update_compaction_delvec_file_io_amp_ratio
+
+- **Default:** 2
+- **Description:** Used to control the priority of compaction for rowsets containing delvec files in the Primary Key table model. The larger the value, the higher the priority.
+
+#### repair_compaction_interval_seconds
+
+- **Default:** 600
+- **Description:** Repair Compaction thread polling interval.
+
+#### manual_compaction_threads
+
+- **Default:** 4
+- **Description:** Manual Compaction Number of threads.
+
+#### enable_rowset_verify
+
+- **Default:** false
+- **Description:** When enabled, the correctness of the generated rowset will be checked after Compaction and Schema Change.
+
+#### enable_size_tiered_compaction_strategy
+
+- **Default:** true
+- **Description:** Whether to enable the Size-tiered Compaction policy.
 
 #### min_compaction_failure_interval_sec
 
@@ -345,6 +410,11 @@ BE dynamic parameters are as follows.
 
 - **Default:** 5 (Multiple of Data Size Between Contiguous Levels in Size-tiered Compaction)
 - **Description:** The multiple of data size between two contiguous levels in the Size-tiered Compaction strategy.
+
+#### size_tiered_level_multiple_dupkey
+
+- **Default:** 10
+- **Description:** In the Size-tiered Compaction strategy, the multiple of the data amount difference between two adjacent levels of the Duplicate table model.
 
 #### size_tiered_min_level_size
 
@@ -662,6 +732,27 @@ BE static parameters are as follows.
 - **Default**: 60
 - **Unit**: Second
 - **Description**: The time threshold for each compaction. If a compaction takes more time than the time threshold, StarRocks prints the corresponding trace.
+
+#### cumulative_compaction_num_threads_per_disk
+
+- **Default**: 1
+- **Description**: Number of Cumulative Compaction threads per disk.
+
+#### vertical_compaction_max_columns_per_group
+
+- **Default**: 5
+- **Description**: Maximum number of columns per group of Vertical Compactions.
+
+#### enable_check_string_lengths
+
+- **Default**: true
+- **Description**: Whether to check the data length during import to solve the problem of Compaction failure caused by out-of-bounds VARCHAR type data.
+
+#### max_row_source_mask_memory_bytes
+
+- **Default**: 209715200
+- **Unit**: Bytes
+- **Description**: The maximum row source mask buffer memory size. When the buffer is larger than this value, it will be persisted to a temporary file on disk. This value should be less than the compaction_mem_limit parameter.
 
 #### be_http_port
 
