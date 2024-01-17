@@ -45,6 +45,7 @@
 #include "exec/schema_scanner/schema_views_scanner.h"
 #include "exec/schema_scanner/starrocks_grants_to_scanner.h"
 #include "exec/schema_scanner/starrocks_role_edges_scanner.h"
+#include "exec/schema_scanner/sys_fe_locks.h"
 #include "exec/schema_scanner/sys_object_dependencies.h"
 
 namespace starrocks {
@@ -164,6 +165,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<StarrocksGrantsToScanner>(TGrantsToType::USER);
     case TSchemaTableType::STARROCKS_OBJECT_DEPENDENCIES:
         return std::make_unique<SysObjectDependencies>();
+    case TSchemaTableType::SYS_FE_LOCKS:
+        return std::make_unique<SysFeLocks>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }

@@ -285,6 +285,8 @@ message TabletMetaPB {
     optional BinlogConfigPB binlog_config = 52;
     optional BinlogLsnPB binlog_min_lsn = 53;
     optional bool enable_shortcut_compaction = 60 [default = true];
+    // If the tablet is replicated from another cluster, the source_schema saved the schema in the cluster
+    optional TabletSchemaPB source_schema = 70;
 }
 
 message OLAPIndexHeaderMessage {

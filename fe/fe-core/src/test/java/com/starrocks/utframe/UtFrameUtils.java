@@ -40,6 +40,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.staros.starlet.StarletAgentFactory;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Database;
@@ -50,6 +51,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
@@ -70,6 +72,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.PlannerProfile;
@@ -106,6 +109,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.codec.binary.Hex;
 import org.junit.Assert;
 
@@ -211,7 +215,7 @@ public class UtFrameUtils {
         return statementBase;
     }
 
-    private static void startFEServer(String runningDir, boolean startBDB) throws Exception {
+    private static void startFEServer(String runningDir, boolean startBDB, RunMode runMode) throws Exception {
         // get STARROCKS_HOME
         String starRocksHome = System.getenv("STARROCKS_HOME");
         if (Strings.isNullOrEmpty(starRocksHome)) {
@@ -223,17 +227,34 @@ public class UtFrameUtils {
         // start fe in "STARROCKS_HOME/fe/mocked/"
         MockedFrontend frontend = MockedFrontend.getInstance();
         Map<String, String> feConfMap = Maps.newHashMap();
+        // TODO: support startBDB = false in shared-data mode
+        if (!startBDB && runMode == RunMode.SHARED_DATA) {
+            throw new NotImplementedException("Have to set 'startBDB = true' when creating a shared-data cluster");
+        }
         // set additional fe config
-
         if (startBDB) {
             feConfMap.put("edit_log_port", String.valueOf(findValidPort()));
         }
+
+        feConfMap.put("run_mode", runMode.getName());
+        if (runMode == RunMode.SHARED_DATA) {
+            feConfMap.put("cloud_native_meta_port", String.valueOf(findValidPort()));
+            feConfMap.put("enable_load_volume_from_conf", "true");
+            feConfMap.put("cloud_native_storage_type", "S3");
+            feConfMap.put("aws_s3_path", "dummy_unittest_bucket/dummy_sub_path");
+            feConfMap.put("aws_s3_region", "dummy_region");
+            feConfMap.put("aws_s3_endpoint", "http://localhost:55555");
+            feConfMap.put("aws_s3_access_key", "dummy_access_key");
+            feConfMap.put("aws_s3_secret_key", "dummy_secret_key");
+            // turn on mock starletAgent inside StarOS
+            StarletAgentFactory.forTest = true;
+        }
         feConfMap.put("tablet_create_timeout_second", "10");
         frontend.init(starRocksHome + "/" + runningDir, feConfMap);
-        frontend.start(startBDB, new String[0]);
+        frontend.start(startBDB, runMode, new String[0]);
     }
 
-    public static synchronized void createMinStarRocksCluster(boolean startBDB) {
+    public static synchronized void createMinStarRocksCluster(boolean startBDB, RunMode runMode) {
         // to avoid call createMinStarRocksCluster multiple times
         if (CREATED_MIN_CLUSTER.get()) {
             return;
@@ -242,7 +263,7 @@ public class UtFrameUtils {
             ClientPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ClientPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
-            startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB);
+            startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB, runMode);
 
             addMockBackend(10001);
 
@@ -259,7 +280,14 @@ public class UtFrameUtils {
     }
 
     public static void createMinStarRocksCluster() {
-        createMinStarRocksCluster(false);
+        createMinStarRocksCluster(false, RunMode.SHARED_NOTHING);
+    }
+
+    // create a min starrocks cluster with the given runMode
+    public static void createMinStarRocksCluster(RunMode runMode) {
+        // TODO: support creating shared-data cluster without the real BDBJE journal
+        boolean startBdb = (runMode == RunMode.SHARED_DATA);
+        createMinStarRocksCluster(startBdb, runMode);
     }
 
     public static Backend addMockBackend(int backendId) throws Exception {
@@ -279,8 +307,15 @@ public class UtFrameUtils {
         be.setBePort(backend.getBeThriftPort());
         be.setBrpcPort(backend.getBrpcPort());
         be.setHttpPort(backend.getHttpPort());
+        be.setStarletPort(backend.getStarletPort());
         GlobalStateMgr.getCurrentSystemInfo().addBackend(be);
-
+        if (RunMode.isSharedDataMode()) {
+            int starletPort = backend.getStarletPort();
+            Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+            long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
+            String workerAddress = backend.getHost() + ":" + starletPort;
+            GlobalStateMgr.getCurrentStarOSAgent().addWorker(be.getId(), workerAddress, workerGroupId);
+        }
         return be;
     }
 
@@ -398,13 +433,16 @@ public class UtFrameUtils {
             throws Exception {
         if (connectContext.getSessionVariable().getEnableQueryDump()) {
             connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
-            originStmt = LogUtil.removeLineSeparator(originStmt);
             connectContext.getDumpInfo().setOriginStmt(originStmt);
         }
+        originStmt = LogUtil.removeLineSeparator(originStmt);
 
         List<StatementBase> statements;
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Parser")) {
             statements = SqlParser.parse(originStmt, connectContext.getSessionVariable());
+        }
+        if (connectContext.getDumpInfo() != null) {
+            connectContext.getDumpInfo().setOriginStmt(originStmt);
         }
         SessionVariable oldSessionVariable = connectContext.getSessionVariable();
         StatementBase statementBase = statements.get(0);

@@ -1386,6 +1386,26 @@ struct TObjectDependencyRes {
     1: optional list<TObjectDependencyItem> items
 }
 
+struct TFeLocksItem {
+    1: optional string lock_type
+    2: optional string lock_object
+    3: optional string lock_mode
+    4: optional i64 start_time
+    5: optional i64 hold_time_ms
+    
+    11: optional string thread_info
+    12: optional bool granted
+    14: optional string waiter_list
+}
+
+struct TFeLocksReq {
+    1: optional TAuthInfo auth_info
+}
+
+struct TFeLocksRes {
+    1: optional list<TFeLocksItem> items
+}
+
 enum TGrantsToType {
     ROLE,
     USER,
@@ -1449,6 +1469,7 @@ struct TTableReplicationRequest {
     6: optional Types.TTableType src_table_type
     7: optional i64 src_table_data_size
     8: optional map<i64, TPartitionReplicationInfo> partition_replication_infos
+    9: optional string job_id
 }
 
 struct TTableReplicationResponse {
@@ -1534,6 +1555,9 @@ service FrontendService {
 
     // sys.object_dependencies
     TObjectDependencyRes listObjectDependencies(1: TObjectDependencyReq request)
+
+    // sys.fe_locks
+    TFeLocksRes listFeLocks(1: TFeLocksReq request)
 
     TRequireSlotResponse requireSlotAsync(1: TRequireSlotRequest request)
     TFinishSlotRequirementResponse finishSlotRequirement(1: TFinishSlotRequirementRequest request)

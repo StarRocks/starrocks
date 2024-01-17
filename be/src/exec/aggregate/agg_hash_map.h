@@ -15,6 +15,7 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 #include <type_traits>
 
 #include "column/column.h"
@@ -614,7 +615,71 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap, AggHashMa
             DCHECK(not_founds);
             (*not_founds).assign(chunk_size, 0);
         }
+        size_t cur_max_one_row_size = get_max_serialize_size(key_columns);
+        if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
+            size_t batch_allocate_size = (size_t)cur_max_one_row_size * _chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING;
+            // too large, process by rows
+            if (batch_allocate_size > std::numeric_limits<int32_t>::max()) {
+                max_one_row_size = 0;
+                mem_pool->clear();
+                buffer = mem_pool->allocate(cur_max_one_row_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                return compute_agg_states_by_rows<Func, allocate_and_compute_state, compute_not_founds>(
+                        chunk_size, key_columns, pool, std::move(allocate_func), agg_states, not_founds,
+                        cur_max_one_row_size);
+            }
+            max_one_row_size = cur_max_one_row_size;
+            mem_pool->clear();
+            // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
+            // from accessing out-of-bound memory.
+            buffer = mem_pool->allocate(batch_allocate_size);
+        }
+        // process by cols
+        return compute_agg_states_by_cols<Func, allocate_and_compute_state, compute_not_founds>(
+                chunk_size, key_columns, pool, std::move(allocate_func), agg_states, not_founds, cur_max_one_row_size);
+    }
 
+    // There may be additional virtual function overhead, but the bottleneck point for this branch is serialization
+    template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
+    ALWAYS_NOINLINE void compute_agg_states_by_rows(size_t chunk_size, const Columns& key_columns, MemPool* pool,
+                                                    Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
+                                                    std::vector<uint8_t>* not_founds, size_t max_serialize_each_row) {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            auto serialize_cursor = buffer;
+            for (const auto& key_column : key_columns) {
+                serialize_cursor += key_column->serialize(i, serialize_cursor);
+            }
+            DCHECK(serialize_cursor <= buffer + max_serialize_each_row);
+            size_t serialize_size = serialize_cursor - buffer;
+            Slice key = {buffer, serialize_size};
+            if constexpr (allocate_and_compute_state) {
+                auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
+                    if constexpr (compute_not_founds) {
+                        DCHECK(not_founds);
+                        (*not_founds)[i] = 1;
+                    }
+                    // we must persist the slice before insert
+                    uint8_t* pos = pool->allocate(key.size);
+                    strings::memcpy_inlined(pos, key.data, key.size);
+                    Slice pk{pos, key.size};
+                    AggDataPtr pv = allocate_func(pk);
+                    ctor(pk, pv);
+                });
+                (*agg_states)[i] = iter->second;
+            } else if constexpr (compute_not_founds) {
+                DCHECK(not_founds);
+                if (auto iter = this->hash_map.find(key); iter != this->hash_map.end()) {
+                    (*agg_states)[i] = iter->second;
+                } else {
+                    (*not_founds)[i] = 1;
+                }
+            }
+        }
+    }
+
+    template <typename Func, bool allocate_and_compute_state, bool compute_not_founds>
+    ALWAYS_NOINLINE void compute_agg_states_by_cols(size_t chunk_size, const Columns& key_columns, MemPool* pool,
+                                                    Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
+                                                    std::vector<uint8_t>* not_founds, size_t max_serialize_each_row) {
         uint32_t cur_max_one_row_size = get_max_serialize_size(key_columns);
         if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
             max_one_row_size = cur_max_one_row_size;

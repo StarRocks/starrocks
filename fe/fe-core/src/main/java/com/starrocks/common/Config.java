@@ -342,6 +342,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int edit_log_roll_num = 50000;
 
+    @ConfField(mutable = true)
+    public static int edit_log_write_slow_log_threshold_ms = 2000;
+
     /**
      * whether ignore unknown log id
      * when fe rolls back to low version, there may be log id that low version fe can not recognise
@@ -2563,6 +2566,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int adaptive_choose_instances_threshold = 32;
 
+    @ConfField(mutable = true, comment = "Max materialized view rewrite cache size during one query's lifecycle " +
+            "so can avoid repeating compute to reduce optimizer time in materialized view rewrite, " +
+            "but may occupy some extra FE's memory. It's well-done when there are many relative " +
+            "materialized views(>10) or query is complex(multi table joins).")
+    public static long mv_query_context_cache_max_size = 1000;
+
     /**
      * Checking the connectivity of port opened by FE,
      * mainly used for checking edit log port currently.
@@ -2582,16 +2591,20 @@ public class Config extends ConfigBase {
     public static long routine_load_unstable_threshold_second = 3600;
     
     /*
-     * replication transaction config
+     * Replication config
      */
+    @ConfField
+    public static int replication_interval_ms = 10;
     @ConfField(mutable = true)
-    public static int replication_transaction_max_parallel_job_count = 100; // 100
+    public static int replication_max_parallel_table_count = 100; // 100
     @ConfField(mutable = true)
-    public static int replication_transaction_max_parallel_replication_data_size_mb = 10240; // 10g
+    public static int replication_max_parallel_data_size_mb = 10240; // 10g
     @ConfField(mutable = true)
     public static int replication_transaction_timeout_sec = 1 * 60 * 60; // 1hour
+
     @ConfField(mutable = true)
-    public static int replication_transaction_remote_snapshot_timeout_sec = 30 * 60; // 30minute
+    public static boolean jdbc_meta_default_cache_enable = false;
+
     @ConfField(mutable = true)
-    public static int replication_transaction_replicate_snapshot_timeout_sec = 30 * 60; // 30minute
+    public static long jdbc_meta_default_cache_expire_sec = 600L;
 }

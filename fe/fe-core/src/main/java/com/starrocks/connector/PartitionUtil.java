@@ -254,7 +254,7 @@ public class PartitionUtil {
      * partitionName1 : par_col=0/par_date=2020-01-01 => p20200101
      * partitionName2 : par_col=1/par_date=2020-01-01 => p20200101
      */
-    private static String generateMVPartitionName(PartitionKey partitionKey) {
+    public static String generateMVPartitionName(PartitionKey partitionKey) {
         String partitionName = "p" + partitionKey.getKeys().get(0).getStringValue();
         // generate legal partition name
         return partitionName.replaceAll("[^a-zA-Z0-9_]*", "");
@@ -351,6 +351,7 @@ public class PartitionUtil {
                         mvPartitionKeyMap, partitionNameValues.get(partitionColumnIndex));
             }
         }
+
         LinkedHashMap<String, PartitionKey> sortedPartitionLinkMap = mvPartitionKeyMap.entrySet().stream()
                 .sorted(Map.Entry.comparingByValue(PartitionKey::compareTo))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));

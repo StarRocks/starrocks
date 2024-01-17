@@ -60,6 +60,11 @@ public class OptimizerContext {
     private final Stopwatch optimizerTimer = Stopwatch.createStarted();
     private final Map<RuleType, Stopwatch> ruleWatchMap = Maps.newHashMap();
 
+    // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
+    // lifecycle instead of per materialized view.
+    // TODO: refactor materialized view's variables/contexts into this.
+    private QueryMaterializationContext queryMaterializationContext;
+
     @VisibleForTesting
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -221,5 +226,19 @@ public class OptimizerContext {
                 "2. try query again, " +
                 "3. enlarge new_planner_optimize_timeout session variable",
                 ErrorType.INTERNAL_ERROR);
+    }
+
+    public void setQueryMaterializationContext(QueryMaterializationContext queryMaterializationContext) {
+        this.queryMaterializationContext = queryMaterializationContext;
+    }
+
+    public QueryMaterializationContext getQueryMaterializationContext() {
+        return queryMaterializationContext;
+    }
+
+    public void clear() {
+        if (this.queryMaterializationContext != null) {
+            this.queryMaterializationContext.clear();
+        }
     }
 }

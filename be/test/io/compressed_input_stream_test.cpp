@@ -34,6 +34,11 @@ protected:
         size_t compressed_buff_len;
     };
 
+    struct ReadContext {
+        size_t read_buffer_size = 1024;
+        size_t decompressor_buffer_size = 8 * 1024 * 1024;
+    };
+
     std::shared_ptr<InputStream> LZ4F_compress_to_file(const Slice& content) {
         const BlockCompressionCodec* codec = nullptr;
         CHECK(get_block_compression_codec(LZ4_FRAME, &codec).ok());
@@ -66,7 +71,7 @@ protected:
         ASSERT_EQ(t.data, decompressed_data);
     }
 
-    void read_compressed_file(CompressionTypePB type, const char* path, std::string& out, size_t buffer_size = 1024) {
+    void read_compressed_file_ctx(CompressionTypePB type, const char* path, std::string& out, const ReadContext& ctx) {
         auto fs = new_fs_posix();
         auto st = fs->new_random_access_file(path);
         ASSERT_TRUE(st.ok()) << st.status().get_error_msg();
@@ -76,20 +81,25 @@ protected:
         std::unique_ptr<StreamCompression> dec;
         StreamCompression::create_decompressor(type, &dec);
 
-        auto compressed_input_stream =
-                std::make_shared<io::CompressedInputStream>(file->stream(), DecompressorPtr(dec.release()));
+        auto compressed_input_stream = std::make_shared<io::CompressedInputStream>(
+                file->stream(), DecompressorPtr(dec.release()), ctx.decompressor_buffer_size);
 
-        std::vector<char> vec_buf(buffer_size + 1);
+        std::vector<char> vec_buf(ctx.read_buffer_size + 1);
         char* buf = vec_buf.data();
 
         for (;;) {
-            auto st = compressed_input_stream->read(buf, buffer_size);
+            auto st = compressed_input_stream->read(buf, ctx.read_buffer_size);
             ASSERT_TRUE(st.ok()) << st.status().get_error_msg();
             uint64_t sz = st.value();
             if (sz == 0) break;
             buf[sz] = 0;
             out += buf;
         }
+    }
+
+    void read_compressed_file(CompressionTypePB type, const char* path, std::string& out) {
+        ReadContext ctx;
+        read_compressed_file_ctx(type, path, out, ctx);
     }
 };
 
@@ -143,14 +153,21 @@ TEST_F(CompressedInputStreamTest, test_LZO1) {
 99999,100000
 )";
 
-    std::vector<size_t> buffer_sizes = {
+    std::vector<size_t> decompressor_buffer_sizes = {
             1024, 2048, 4096, 128 * 1024, 256 * 1024, 1024 * 1024, 2 * 1024 * 1024, 8 * 1024 * 1024};
-    for (size_t buffer_size : buffer_sizes) {
-        std::string out;
-        read_compressed_file(CompressionTypePB::LZO, path, out, buffer_size);
-        ASSERT_EQ(out.size(), 1177785);
-        ASSERT_EQ(out.substr(0, head.size()), head);
-        ASSERT_EQ(out.substr(out.size() - tail.size(), tail.size()), tail);
+    std::vector<size_t> read_buffer_sizes = {
+            32, 1024, 2048, 4096, 128 * 1024, 256 * 1024, 1024 * 1024, 2 * 1024 * 1024, 8 * 1024 * 1024};
+    for (size_t decompressor_buffer_size : decompressor_buffer_sizes) {
+        for (size_t read_buffer_size : read_buffer_sizes) {
+            std::cout << "test lzo1: read_buffer_size: " << read_buffer_size
+                      << ", decompressor_buffer_size: " << decompressor_buffer_size << std::endl;
+            std::string out;
+            ReadContext ctx{.read_buffer_size = read_buffer_size, .decompressor_buffer_size = decompressor_buffer_size};
+            read_compressed_file_ctx(CompressionTypePB::LZO, path, out, ctx);
+            ASSERT_EQ(out.size(), 1177785);
+            ASSERT_EQ(out.substr(0, head.size()), head);
+            ASSERT_EQ(out.substr(out.size() - tail.size(), tail.size()), tail);
+        }
     }
 }
 
@@ -184,9 +201,10 @@ TEST_F(CompressedInputStreamTest, test_Snappy1) {
 
     std::vector<size_t> buffer_sizes = {
             1024, 2048, 4096, 128 * 1024, 256 * 1024, 1024 * 1024, 2 * 1024 * 1024, 8 * 1024 * 1024};
-    for (size_t buffer_size : buffer_sizes) {
+    for (size_t read_buffer_size : buffer_sizes) {
         std::string out;
-        read_compressed_file(CompressionTypePB::SNAPPY, path, out, buffer_size);
+        ReadContext ctx{.read_buffer_size = read_buffer_size};
+        read_compressed_file_ctx(CompressionTypePB::SNAPPY, path, out, ctx);
         ASSERT_EQ(out.size(), 1177785);
         ASSERT_EQ(out.substr(0, head.size()), head);
         ASSERT_EQ(out.substr(out.size() - tail.size(), tail.size()), tail);

@@ -94,6 +94,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.common.PartitionDiffer;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.common.RangePartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -324,9 +325,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             StatementPlanner.unLock(dbs);
         }
 
+        QueryDebugOptions debugOptions = ctx.getSessionVariable().getQueryDebugOptions();
         // log the final mv refresh plan for each refresh for better trace and debug
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("MV Refresh Final Plan" +
+        if (LOG.isDebugEnabled() || debugOptions.isEnableQueryTraceLog()) {
+            LOG.info("MV Refresh Final Plan" +
                             "\nMV: {}" +
                             "\nMV PartitionsToRefresh: {}" +
                             "\nBase PartitionsToScan: {}" +
@@ -828,12 +830,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         return CollectionUtils.isNotEmpty(materializedView.getUpdatedPartitionNamesOfTable(table, false));
     }
 
-    /**
-     * @param table : Whether this table can be supported for incremental refresh by partition or not.
-     */
-    private boolean unSupportRefreshByPartition(Table table) {
-        return !table.isOlapTableOrMaterializedView() && !table.isHiveTable()
-                && !table.isJDBCTable() && !table.isIcebergTable() && !table.isCloudNativeTable();
+    private static boolean supportPartitionRefresh(Table table) {
+        if (table.getType() == Table.TableType.VIEW) {
+            return false;
+        }
+        return ConnectorPartitionTraits.build(table).supportPartitionRefresh();
     }
 
     /**
@@ -844,7 +845,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private boolean isNonPartitionedMVNeedToRefresh() {
         for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             Table snapshotTable = tablePair.second;
-            if (unSupportRefreshByPartition(snapshotTable)) {
+            if (!supportPartitionRefresh(snapshotTable)) {
                 return true;
             }
             if (needToRefreshTable(snapshotTable)) {
@@ -864,7 +865,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             if (snapshotTable.getId() == partitionTable.getId()) {
                 continue;
             }
-            if (unSupportRefreshByPartition(snapshotTable)) {
+            if (!supportPartitionRefresh(snapshotTable)) {
                 continue;
             }
             if (needToRefreshTable(snapshotTable)) {
@@ -974,7 +975,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private Set<String> getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(Table refBaseTable,
                                                                                   Set<String> mvRangePartitionNames,
                                                                                   boolean force) {
-        if (force || unSupportRefreshByPartition(refBaseTable)) {
+        if (force || !supportPartitionRefresh(refBaseTable)) {
             return Sets.newHashSet(mvRangePartitionNames);
         }
 

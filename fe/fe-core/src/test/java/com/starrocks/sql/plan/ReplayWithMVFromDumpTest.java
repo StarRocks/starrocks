@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
@@ -29,12 +31,22 @@ import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import java.util.Set;
+
 public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         ReplayFromDumpTestBase.beforeClass();
         connectContext.getSessionVariable().setEnableMVOptimizerTraceLog(true);
+        connectContext.getSessionVariable().setEnableQueryDebugTrace(true);
+
+        new MockUp<MaterializedView>() {
+            @Mock
+            Set<String> getPartitionNamesToRefreshForMv(boolean isQueryRewrite) {
+                return Sets.newHashSet();
+            }
+        };
 
         new MockUp<UtFrameUtils>() {
             @Mock
@@ -77,8 +89,8 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     public void testMV_JoinAgg2() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         String jsonStr = getDumpInfoFromFile("query_dump/materialized-view/join_agg2");
-        connectContext.getSessionVariable().setMaterializedViewRewriteMode(
-                SessionVariable.MaterializedViewRewriteMode.MODE_FORCE_OR_ERROR);
+        connectContext.getSessionVariable()
+                .setMaterializedViewRewriteMode(SessionVariable.MaterializedViewRewriteMode.FORCE.toString());
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(jsonStr, connectContext.getSessionVariable());
         Assert.assertTrue(replayPair.second.contains("table: mv1, rollup: mv1"));
         FeConstants.isReplayFromQueryDump = false;
@@ -99,7 +111,7 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
     public void testMV_JoinAgg4() throws Exception {
         FeConstants.isReplayFromQueryDump = true;
         connectContext.getSessionVariable().setMaterializedViewRewriteMode(
-                SessionVariable.MaterializedViewRewriteMode.MODE_FORCE_OR_ERROR);
+                SessionVariable.MaterializedViewRewriteMode.MODE_FORCE.toString());
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/join_agg4"),
                         connectContext.getSessionVariable(), TExplainLevel.NORMAL);
@@ -139,6 +151,16 @@ public class ReplayWithMVFromDumpTest extends ReplayFromDumpTestBase {
                         null, TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second.contains("tbl_mock_017"));
         FeConstants.isReplayFromQueryDump = false;
+    }
+
+    @Test
+    @Ignore
+    public void testMVOnMV2() throws Exception {
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/materialized-view/mv_on_mv2"),
+                        connectContext.getSessionVariable(), TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second.contains("test_mv2"));
     }
 
     @Test

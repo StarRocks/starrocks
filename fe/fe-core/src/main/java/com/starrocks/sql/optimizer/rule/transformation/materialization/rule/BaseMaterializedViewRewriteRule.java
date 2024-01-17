@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
@@ -25,7 +27,7 @@ import com.starrocks.sql.optimizer.MvRewriteContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
-import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -42,6 +44,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.Predicate
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.metric.MaterializedViewMetricsEntity.isUpdateMaterializedViewMetrics;
@@ -112,48 +115,29 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         }
 
         List<OptExpression> results = Lists.newArrayList();
-
         // Construct queryPredicateSplit to avoid creating multi times for multi MVs.
         // Compute Query queryPredicateSplit
         final ColumnRefFactory queryColumnRefFactory = context.getColumnRefFactory();
         final ReplaceColumnRefRewriter queryColumnRefRewriter =
                 MvUtils.getReplaceColumnRefWriter(queryExpression, queryColumnRefFactory);
 
-        // Compensate partition predicates and add them into query predicate.
-        PredicateSplit queryPredicateSplit = null;
-        if (mvCandidateContexts.stream().anyMatch(mvContext -> !mvContext.getMv().getRefreshScheme().isSync())) {
-            queryPredicateSplit = getQuerySplitPredicate(context, queryExpression, queryColumnRefFactory,
-                    queryColumnRefRewriter, true);
-        }
-
-        // sync mv always has the same partition with
-        PredicateSplit queryPredicateWithoutCompensate = null;
-        if (mvCandidateContexts.stream().anyMatch(mvContext -> mvContext.getMv().getRefreshScheme().isSync())) {
-            queryPredicateWithoutCompensate = getQuerySplitPredicate(context, queryExpression, queryColumnRefFactory,
-                    queryColumnRefRewriter, false);
-        }
         List<ScalarOperator> onPredicates = MvUtils.collectOnPredicate(queryExpression);
-        onPredicates = onPredicates.stream().map(MvUtils::canonizePredicateForRewrite).collect(Collectors.toList());
+        QueryMaterializationContext queryMaterializationContext = context.getQueryMaterializationContext();
+        onPredicates = onPredicates.stream()
+                .map(p -> MvUtils.canonizePredicateForRewrite(queryMaterializationContext, p))
+                .collect(Collectors.toList());
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
         ConnectContext connectContext = ConnectContext.get();
         for (MaterializationContext mvContext : mvCandidateContexts) {
             context.checkTimeout();
-            MvRewriteContext mvRewriteContext;
-            if (mvContext.getMv().getRefreshScheme().isSync()) {
-                if (queryPredicateWithoutCompensate == null) {
-                    logMVRewrite(context, this, "Query expression's partition compensate failed from sync mv.");
-                    return results;
-                }
-                mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
-                        queryColumnRefRewriter, queryPredicateWithoutCompensate, onPredicates, this);
-            } else {
-                if (queryPredicateSplit == null) {
-                    logMVRewrite(context, this, "Query expression's partition compensate failed");
-                    return results;
-                }
-                mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
-                        queryColumnRefRewriter, queryPredicateSplit, onPredicates, this);
+            PredicateSplit queryPredicateSplit = getQuerySplitPredicate(context, mvContext, queryExpression,
+                    queryColumnRefFactory, queryColumnRefRewriter);
+            if (queryPredicateSplit == null) {
+                continue;
             }
+            MvRewriteContext mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
+                        queryColumnRefRewriter, queryPredicateSplit, onPredicates, this);
+
             // rewrite query
             MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
             OptExpression candidate = mvRewriter.rewrite();
@@ -198,27 +182,33 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
      * eg: for sync mv without partition columns, we always no need compensate partition predicates because
      * mv and the base table are always synced.
      */
-    private PredicateSplit getQuerySplitPredicate(OptimizerContext context,
+    private PredicateSplit getQuerySplitPredicate(OptimizerContext optimizerContext,
+                                                  MaterializationContext mvContext,
                                                   OptExpression queryExpression,
                                                   ColumnRefFactory queryColumnRefFactory,
-                                                  ReplaceColumnRefRewriter queryColumnRefRewriter,
-                                                  boolean isCompensate) {
-        // sync mv always has the same partition with
-        // Compensate partition predicates and add them into query predicate.
-        final ScalarOperator queryPartitionPredicate =
-                MvUtils.compensatePartitionPredicate(queryExpression, queryColumnRefFactory, isCompensate);
+                                                  ReplaceColumnRefRewriter queryColumnRefRewriter) {
+        // Cache partition predicate predicates because it's expensive time costing if there are too many materialized views or
+        // query expressions are too complex.
+        final ScalarOperator queryPartitionPredicate = MvUtils.compensatePartitionPredicate(mvContext,
+                queryColumnRefFactory, queryExpression);
         if (queryPartitionPredicate == null) {
-            logMVRewrite(context, this, "Compensate query expression's partition predicates " +
-                    "from pruned partitions failed.");
+            logMVRewrite(mvContext.getOptimizerContext(), this, "Compensate query expression's partition " +
+                    "predicates from pruned partitions failed.");
             return null;
         }
-        ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
+        // only add valid predicates into query split predicate
+        Set<ScalarOperator> queryConjuncts = MvUtils.getAllValidPredicates(queryExpression);
         if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
-            logMVRewrite(context, this, "Query compensate partition predicate:{}",
+            logMVRewrite(optimizerContext, this, "Query compensate partition predicate:{}",
                     queryPartitionPredicate);
-            queryPredicate = MvUtils.canonizePredicateForRewrite(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
+            queryConjuncts.addAll(MvUtils.getAllValidPredicates(queryPartitionPredicate));
         }
-        return PredicateSplit.splitPredicate(queryPredicate);
+
+        QueryMaterializationContext queryMaterializationContext = optimizerContext.getQueryMaterializationContext();
+        Cache<Object, Object> predicateSplitCache = queryMaterializationContext.getMvQueryContextCache();
+        Preconditions.checkArgument(predicateSplitCache != null);
+        // Cache predicate split for predicates because it's time costing if there are too many materialized views.
+        return queryMaterializationContext.getPredicateSplit(queryConjuncts, queryColumnRefRewriter);
     }
 
     /**
