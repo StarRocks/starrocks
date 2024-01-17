@@ -140,9 +140,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH)) {
             clause.setNeedTableStable(false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE)) {
-            if (!properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_TYPE).equalsIgnoreCase("column")) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can only change storage type to COLUMN");
-            }
+            ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can't change storage type");
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE)) {
             if (!properties.get(PropertyAnalyzer.PROPERTIES_DISTRIBUTION_TYPE).equalsIgnoreCase("hash")) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Can only change distribution type to HASH");
