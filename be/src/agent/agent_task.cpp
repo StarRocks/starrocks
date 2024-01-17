@@ -563,11 +563,16 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
         }
     }
 
+    TFinishTaskRequest finish_task_request;
+    auto& error_tablet_ids = finish_task_request.error_tablet_ids;
     if (!st.ok()) {
         status_code = TStatusCode::RUNTIME_ERROR;
         std::string msg = strings::Substitute("update schema fail because convert column fail: $0", st.to_string());
         LOG(WARNING) << msg;
         error_msgs.emplace_back(msg);
+        for (auto tablet_id : update_schema_req.tablet_ids) {
+            error_tablet_ids.push_back(tablet_id);
+        }
     } else {
         for (auto tablet_id : update_schema_req.tablet_ids) {
             TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(tablet_id);
@@ -584,7 +589,7 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
                         strings::Substitute("update schema fail because build tablet schema fail: $0", st.to_string());
                 LOG(WARNING) << msg;
                 error_msgs.emplace_back(msg);
-                break;
+                error_tablet_ids.push_back(tablet_id);
             }
             tablet->update_max_version_schema(new_schema);
             LOG(INFO) << "update tablet:" << tablet_id << " schema version from " << ori_tablet_schema->schema_version()
@@ -595,11 +600,13 @@ void run_update_schema_task(const std::shared_ptr<UpdateSchemaTaskRequest>& agen
     task_status.__set_status_code(status_code);
     task_status.__set_error_msgs(error_msgs);
 
-    TFinishTaskRequest finish_task_request;
     finish_task_request.__set_backend(BackendOptions::get_localBackend());
     finish_task_request.__set_task_type(agent_task_req->task_type);
     finish_task_request.__set_signature(agent_task_req->signature);
     finish_task_request.__set_task_status(task_status);
+    if (!error_tablet_ids.empty()) {
+        finish_task_request.__isset.error_tablet_ids = true;
+    }
 
     finish_task(finish_task_request);
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);

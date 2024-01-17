@@ -54,6 +54,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -89,6 +90,16 @@ public class UpdateSchemaHandler extends AlterHandler {
             }
             alterJob.run();
         }
+    }
+
+    // For ut
+    @Override
+    public void clearJobs() {
+        updateSchemaJobs.clear();
+    }
+
+    public Map<Long, AlterJobV2> getUpdateSchemaJobs() {
+        return this.updateSchemaJobs;
     }
 
     @Override

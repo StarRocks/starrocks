@@ -456,6 +456,8 @@ public class LeaderImpl {
         }
     }
 
+    // TODO(zhangqiang)
+    // retry failed tablets
     private void finishUpdateSchemaTask(AgentTask task, TFinishTaskRequest request) {
         UpdateSchemaTask updateSchemaTask = (UpdateSchemaTask) task;
         GlobalStateMgr.getCurrentState().getUpdateSchemaHandler().handleFinishUpdateSchemaTask(updateSchemaTask);

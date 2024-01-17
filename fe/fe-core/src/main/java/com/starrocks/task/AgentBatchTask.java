@@ -168,6 +168,16 @@ public class AgentBatchTask implements Runnable {
         return count;
     }
 
+    public int getFailedTaskNum() {
+        int count = 0;
+        for (Map.Entry<Long, List<AgentTask>> entry : this.backendIdToTasks.entrySet()) {
+            for (AgentTask agentTask : entry.getValue()) {
+                count += agentTask.isFailed() ? 1 : 0;
+            }
+        }
+        return count;
+    }
+
     @Override
     public void run() {
         for (Long backendId : this.backendIdToTasks.keySet()) {

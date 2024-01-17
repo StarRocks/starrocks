@@ -157,6 +157,10 @@ public abstract class AlterJobV2 implements Writable {
         return tableName;
     }
 
+    public long getTimeoutMs() {
+        return timeoutMs;
+    }
+
     public boolean isTimeout() {
         return System.currentTimeMillis() - createTimeMs > timeoutMs;
     }
@@ -175,6 +179,15 @@ public abstract class AlterJobV2 implements Writable {
 
     public void setFinishedTimeMs(long finishedTimeMs) {
         this.finishedTimeMs = finishedTimeMs;
+    }
+
+    // only for ut
+    public void setDbId(long dbId) {
+        this.dbId = dbId;
+    }
+
+    public void setTableId(long tableId) {
+        this.tableId = tableId;
     }
 
     /**

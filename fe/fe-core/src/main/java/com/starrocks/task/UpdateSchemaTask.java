@@ -88,7 +88,7 @@ public class UpdateSchemaTask extends AgentTask implements Runnable {
         return req;
     }
 
-
+    // TODO(zhangqiang)
     public void handleFinishUpdateSchemaTask() throws Exception {
         setFinished(true);
     }

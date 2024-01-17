@@ -166,8 +166,7 @@ public class OlapTable extends Table {
          * doing alter operation.
          * This state is an in-memory state and no need to persist.
          */
-        WAITING_STABLE,
-        UPDATE_SCHEMA
+        WAITING_STABLE
     }
 
     @SerializedName(value = "clusterId")

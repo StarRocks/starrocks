@@ -53,8 +53,8 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
@@ -88,6 +88,10 @@ public class UpdateSchemaJob extends AlterJobV2 {
         super(jobId, JobType.UPDATE_SCHEMA, dbId, tableId, tableName, timeoutMs);
     }
 
+    public AgentBatchTask getUpdateSchemaBatchTask() {
+        return updateSchemaBatchTask;
+    }
+
     @Override
     protected void runPendingJob() throws AlterCancelException {
         LOG.info("start run update schema job: {}", jobId);
@@ -101,14 +105,12 @@ public class UpdateSchemaJob extends AlterJobV2 {
             return;
         }
 
-        if (!checkTableStable(db)) {
-            return;
-        }
-
-        // check table exist
-        OlapTable tbl = (OlapTable) db.getTable(tableId);
-        if (tbl == null) {
-            LOG.info("table does not exist when running update schema job {}", jobId);
+        try {
+            if (!checkTableStable(db)) {
+                return;
+            }
+        } catch (AlterCancelException e) {
+            // table not exist
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
@@ -116,7 +118,8 @@ public class UpdateSchemaJob extends AlterJobV2 {
         }
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockDatabase(db, LockType.READ);        
+        OlapTable tbl = (OlapTable) db.getTable(tableId);
         try {
             // get index schema
             indexToColumnParam.clear();
@@ -190,7 +193,6 @@ public class UpdateSchemaJob extends AlterJobV2 {
                 LOG.info("table[{}] send update scheam task. num: {}", tbl.getName(), updateSchemaBatchTask.getTaskNum());
             }
             this.jobState = JobState.RUNNING;
-            tbl.setState(OlapTableState.UPDATE_SCHEMA);
 
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         } finally {
@@ -284,9 +286,6 @@ public class UpdateSchemaJob extends AlterJobV2 {
 
     private void replayCancelled(UpdateSchemaJob replayedJob) {
         cancelInternal();
-        this.jobState = JobState.CANCELLED;
-        this.finishedTimeMs = replayedJob.finishedTimeMs;
-        this.errMsg = replayedJob.errMsg;
     }
 
     @Override
