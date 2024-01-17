@@ -36,8 +36,10 @@ package com.starrocks.common.proc;
 
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
@@ -59,6 +61,10 @@ public class BackendsProcDirTest {
     private GlobalStateMgr globalStateMgr;
     @Mocked
     private EditLog editLog;
+    @Mocked
+    private StarOSAgent starOsAgent;
+    @Mocked
+    private RunMode runMode;
 
     @Before
     public void setUp() {
@@ -104,6 +110,10 @@ public class BackendsProcDirTest {
                 tabletInvertedIndex.getTabletNumByBackendId(anyLong);
                 minTimes = 0;
                 result = 2;
+
+                starOsAgent.getWorkerTabletNum(anyString);
+                minTimes = 0;
+                result = 100;
             }
         };
 
@@ -124,6 +134,10 @@ public class BackendsProcDirTest {
                 GlobalStateMgr.getCurrentSystemInfo();
                 minTimes = 0;
                 result = systemInfoService;
+
+                GlobalStateMgr.getCurrentStarOSAgent();
+                minTimes = 0;
+                result = starOsAgent;
             }
         };
 
@@ -183,9 +197,36 @@ public class BackendsProcDirTest {
     }
 
     @Test
-    public void testFetchResultNormal() throws AnalysisException {
+    public void testFetchResultSharedNothing() throws AnalysisException {
         BackendsProcDir dir;
         ProcResult result;
+
+        new Expectations() {
+            {
+                runMode.isSharedDataMode();
+                minTimes = 0;
+                result = false;
+            }
+        };
+
+        dir = new BackendsProcDir(systemInfoService);
+        result = dir.fetchResult();
+        Assert.assertNotNull(result);
+        Assert.assertTrue(result instanceof BaseProcResult);
+    }
+
+    @Test
+    public void testFetchResultSharedData() throws AnalysisException {
+        BackendsProcDir dir;
+        ProcResult result;
+
+        new Expectations() {
+            {
+                runMode.isSharedDataMode();
+                minTimes = 0;
+                result = true;
+            }
+        };
 
         dir = new BackendsProcDir(systemInfoService);
         result = dir.fetchResult();

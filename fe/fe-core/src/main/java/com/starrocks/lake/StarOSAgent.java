@@ -274,6 +274,20 @@ public class StarOSAgent {
         return workerId;
     }
 
+    public long getWorkerTabletNum(String workerIpPort) {
+        long tabletNum = 0;
+        try (LockCloseable lock = new LockCloseable(rwLock.readLock())) {
+            try {
+                WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
+                tabletNum = workerInfo.getTabletNum();
+            } catch (StarClientException e) {
+                LOG.info("Failed to get worker tablet num from starMgr, Error: {}.", e.getMessage());
+            }
+        }
+
+        return tabletNum;
+    }
+
     public void addWorker(long nodeId, String workerIpPort, long workerGroupId) {
         prepare();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
