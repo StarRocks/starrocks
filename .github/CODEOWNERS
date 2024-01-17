@@ -7,6 +7,26 @@
 # /docker
 /docker/  @StarRocks/docker-maintainer
 
+# /metadata
+/fe/fe-core/src/main/java/com/starrocks/authentication/             @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/privilege/                  @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/common/util/concurrent/     @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/mysql/                      @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/transaction/                @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/healthchecker/              @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/clone/                      @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/consistency/                @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/ha/                         @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/journal/    @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/leader/     @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/meta/       @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/persist/    @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/alter/      @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/backup/     @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/catalog/    @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/metric/     @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/system/     @StarRocks/metadata-maintainer
+
 # parser
 /fe/fe-core/src/main/java/com/starrocks/planner/  @StarRocks/parser
 /fe/fe-core/src/main/java/com/starrocks/sql/ast/ @StarRocks/parser
