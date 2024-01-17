@@ -478,7 +478,7 @@ vectorized_functions = [
     [50402, 'last_day', 'DATE', ['DATETIME'], 'TimeFunctions::last_day'],
     [50403, 'last_day', 'DATE', ['DATETIME', 'VARCHAR'], 'TimeFunctions::last_day_with_format', 'TimeFunctions::last_day_prepare', 'TimeFunctions::last_day_close'],
     [50501, 'makedate', 'DATE', ['INT','INT'], 'TimeFunctions::make_date'],
-    [50601, 'convert_interval', 'BIGINT', ['INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::convert_interval'],
+    [50601, 'convert_interval', 'BIGINT', ['INT', 'VARCHAR', 'VARCHAR'], 'nullptr'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator

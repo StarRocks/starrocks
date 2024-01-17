@@ -27,8 +27,8 @@ convert_interval(interval N type, to_type)
 
 
 + INTERVAL N type:the time granularity, for example, interval 5 second.
-  + N is the length of time interval. It must be an INT value.
-  + type is the unit, which can be DAY, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND.
+    + N is the length of time interval. It must be an INT value.
+    + type is the unit, which can be DAY, HOUR, MINUTE, SECOND, MILLISECOND, MICROSECOND.
 + to_type: unit that user want to convert to, which can be DAY, HOUR, MINUTE, SECOND,  MILLISECOND, MICROSECOND.
 
 
