@@ -74,9 +74,9 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
   The memory usage threshold (percentage) at which a resource group triggers the spilling of intermediate results. The valid range is (0, 1). The default value is 1, indicating the threshold does not take effect. This parameter was introduced in v3.1.7.
   - If automatic spilling is enabled (that is, the system variable `spill_mode` is set to `auto`) but the resource group feature is disabled, the system will trigger spilling when the memory usage of a query exceeds 80% of `query_mem_limit`. Here, `query_mem_limit` is the maximum memory that a single query can use, controlled by the system variable `query_mem_limit`, with a default value of 0, indicating no limit.
-  - If automatic spilling is enabled, and the query hits a resource group (including all system built-in resource groups), spilling will be triggered if the query meets any of the following:
-    - when the memory used by all queries in the current resource group exceeds `current BE node memory limit * mem_limit * spill_mem_limit_threshold`
-    - when the current query consumes more than 80% of `query_mem_limit`
+  - If automatic spilling is enabled, and the query hits a resource group (including all system built-in resource groups), spilling will be triggered if the query meets any of the following conditions:
+    - The memory used by all queries in the current resource group exceeds `current BE node memory limit * mem_limit * spill_mem_limit_threshold`.
+    - The current query consumes more than 80% of `query_mem_limit`.
 
 On the basis of the above resource consumption restrictions, you can further restrict the resource consumption for big queries with the following parameters:
 
