@@ -85,19 +85,6 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
             Assert.assertEquals(3, tabletObject.getJSONArray("routings").length());
             Assert.assertEquals(testStartVersion, tabletObject.getLong("version"));
             Assert.assertEquals(testSchemaHash, tabletObject.getLong("schemaHash"));
-
-<<<<<<< HEAD
-=======
-            }
-            String queryPlan = jsonObject.getString("opaqued_query_plan");
-            Assert.assertNotNull(queryPlan);
-            byte[] binaryPlanInfo = Base64.getDecoder().decode(queryPlan);
-            TDeserializer deserializer = new TDeserializer();
-            TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
-            deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo);
-            Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
-            expectThrowsNoException(() -> deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo));
->>>>>>> 58b6071dea ([BugFix] add output col names in the TQueryPlanInfo (#39078))
         }
         String queryPlan = jsonObject.getString("opaqued_query_plan");
         Assert.assertNotNull(queryPlan);
@@ -105,8 +92,8 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
         TDeserializer deserializer = new TDeserializer();
         TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
         deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo);
+        Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
         expectThrowsNoException(() -> deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo));
-        System.out.println(tQueryPlanInfo);
     }
 
     @Test
