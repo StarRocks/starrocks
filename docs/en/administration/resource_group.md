@@ -70,13 +70,12 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
   The CPU core limit for this resource group on a single BE node. It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. Default: 0.
 
-- `spill_mem_limit_threshold`
+- `spill_mem_limit_threshold`:
 
-  Introduced since version 3.1.7, this parameter specifies the memory threshold percentage of the resource group that triggers query spill on the current BE node. If the memory used by the resource group exceeds a certain percentage of the upper limit of the memory that the resource group can use for queries , queries with `enable_spill=true` will try to trigger spill to reduce memory usage. The value range is (0, 1), and the default value is 1.
+  The memory usage threshold (percentage) at which a resource group triggers the spilling of intermediate results. The valid range is [0, 1], and the default value is 1. This parameter was introduced in v3.1.7.
 
-  > **NOTE**
-  >
-  > For example, assume that the memory limit of the BE node is M, the `mem_limit` set by a certain resource group is 0.9, and the `spill_mem_limit_threshold` is 0.7. Then when the memory used by the resource group exceeds `M*0.9*0.7`, all qeries in this resource group with `enable_spill=true` will try to trigger spill to reduce memory usage.
+  - If spilling is enabled for a query and the query hits a resource group (including the default resource group `default_wg`), when the memory used by the query exceeds `query_mem_limit * mem_limit * spill_mem_limit_threshold`, intermediate results are spilled to disk to reduce memory usage. Here, `query_mem_limit` indicates the memory limit for a query on a BE node, controlled by the system variable `query_mem_limit`.
+  - If spilling is enabled for a query but the query is not managed by the resource group feature, the system will decide whether to trigger spilling based on query's actual memory usage.
 
 On the basis of the above resource consumption restrictions, you can further restrict the resource consumption for big queries with the following parameters:
 
@@ -326,7 +325,7 @@ The resource limits of `default_wg` are as follows:
 - `big_query_cpu_second_limit`: 0.
 - `big_query_scan_rows_limit`: 0.
 - `big_query_mem_limit`: 0.
-- `spill_mem_limit_threshold`: 100%.
+- `spill_mem_limit_threshold`: 1.
 
 ### Monitoring resource groups
 
