@@ -37,7 +37,9 @@ Status RowStoreEncoderSimple::encode_columns_to_full_row_column(const Schema& sc
     size_t num_value_cols = columns.size();
     int num_key_cols = schema.num_key_fields();
 
-    //TODO prevent stack variables oom when column size is large
+    // TODO prevent stack variables oom when column size is large
+    // TODO slice length stored twice , 1st offsets array. 2st slice object. need reduce this
+    // TODO remove column separator
     std::vector<int32_t> offsets;
     std::string header;
     std::string null_bitmap_str;
@@ -143,8 +145,16 @@ Status RowStoreEncoderSimple::decode_columns_from_full_row_column(const Schema& 
             assert(cur_read_idx < offsets.size());
             auto s_offset = reinterpret_cast<const uint8_t*>(s.data);
             int32_t col_length = offsets[idx];
-            Slice slice(s.data, col_length);
-            dest_column->deserialize_and_append(s_offset);
+            // char(n) need strip trailing '\x00'
+            if (schema.field(j)->type()->type() == TYPE_CHAR) {
+                // slice : 0x0 (column separator) + col length (4) + char(n) value
+                auto char_start = s.data + 1 + 4;
+                Slice slice(char_start, strnlen(char_start, col_length));
+                dest_column->append_datum(slice);
+            } else {
+                Slice slice(s.data, col_length);
+                dest_column->deserialize_and_append(s_offset);
+            }
             s.remove_prefix(col_length);
             cur_read_idx++;
         }
