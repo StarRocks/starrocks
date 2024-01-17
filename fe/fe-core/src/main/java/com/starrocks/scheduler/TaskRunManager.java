@@ -219,13 +219,14 @@ public class TaskRunManager {
                     }
                     TaskRun pendingTaskRun = taskRunQueue.poll();
                     LOG.info("start to schedule pending task run to execute: {}", pendingTaskRun);
-                    taskRunExecutor.executeTaskRun(pendingTaskRun);
-                    runningTaskRunMap.put(taskId, pendingTaskRun);
-                    // RUNNING state persistence is for FE FOLLOWER update state
-                    TaskRunStatusChange statusChange = new TaskRunStatusChange(taskId, pendingTaskRun.getStatus(),
-                            Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
-                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
-                    currentRunning++;
+                    if (taskRunExecutor.executeTaskRun(pendingTaskRun)) {
+                        runningTaskRunMap.put(taskId, pendingTaskRun);
+                        // RUNNING state persistence is for FE FOLLOWER update state
+                        TaskRunStatusChange statusChange = new TaskRunStatusChange(taskId, pendingTaskRun.getStatus(),
+                                Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
+                        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                        currentRunning++;
+                    }
                 }
             }
         }
