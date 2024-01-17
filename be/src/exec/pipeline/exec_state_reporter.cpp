@@ -112,6 +112,13 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
                 params.commitInfos.push_back(info);
             }
         }
+        if (!runtime_state->tablet_fail_infos().empty()) {
+            params.__isset.failInfos = true;
+            params.failInfos.reserve(runtime_state->tablet_fail_infos().size());
+            for (auto& info : runtime_state->tablet_fail_infos()) {
+                params.failInfos.push_back(info);
+            }
+        }
         if (!runtime_state->sink_commit_infos().empty()) {
             params.__isset.sink_commit_infos = true;
             params.sink_commit_infos.reserve(runtime_state->sink_commit_infos().size());
