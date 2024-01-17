@@ -66,8 +66,7 @@ Status PrimaryKeyDump::_dump_rowset_meta() {
     for (const auto& each : (*rowset_map)) {
         RowsetMetaIdPB rowset_meta_id;
         rowset_meta_id.set_rowset_id(each.first);
-        each.second->rowset_meta()->to_rowset_pb(rowset_meta_id.mutable_rowset_meta());
-        rowset_meta_id.mutable_rowset_meta()->clear_tablet_schema();
+        rowset_meta_id.mutable_rowset_meta()->CopyFrom(each.second->rowset_meta()->get_meta_pb_without_schema());
         _dump_pb.add_rowset_metas()->CopyFrom(rowset_meta_id);
     }
     return Status::OK();
@@ -196,14 +195,13 @@ public:
     StatusOr<ChunkIteratorPtr> read(const std::string& dump_filepath, const Schema& schema,
                                     const TabletSchemaCSPtr& tablet_schema, const PrimaryKeyColumnPB& pk_column_pb) {
         RETURN_IF_ERROR(_copy_to_tmp_file(dump_filepath, pk_column_pb));
-        size_t footer_size_hint = 16 * 1024;
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_tmp_file));
         SegmentReadOptions seg_options;
         seg_options.fs = fs;
         seg_options.stats = &_stats;
         seg_options.tablet_schema = tablet_schema;
-        ASSIGN_OR_RETURN(auto seg_ptr, Segment::open(fs, _tmp_file, pk_column_pb.segment_id(), tablet_schema,
-                                                     &footer_size_hint, nullptr));
+        ASSIGN_OR_RETURN(auto seg_ptr,
+                         Segment::open(fs, FileInfo{_tmp_file}, pk_column_pb.segment_id(), tablet_schema));
         return seg_ptr->new_iterator(schema, seg_options);
     }
 
