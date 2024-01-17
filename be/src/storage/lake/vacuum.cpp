@@ -24,6 +24,7 @@
 #include "common/config.h"
 #include "common/status.h"
 #include "fs/fs.h"
+#include "gutil/stl_util.h"
 #include "gutil/strings/util.h"
 #include "storage/lake/filenames.h"
 #include "storage/lake/join_path.h"
@@ -33,6 +34,7 @@
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/update_manager.h"
+#include "storage/protobuf_file.h"
 #include "testutil/sync_point.h"
 #include "util/defer_op.h"
 #include "util/raw_container.h"
@@ -629,6 +631,234 @@ void delete_txn_log(TabletManager* tablet_mgr, const DeleteTxnLogRequest& reques
     }
 
     delete_files_async(files_to_delete);
+}
+
+static Status list_tablet_metadata(const std::string& metadir, std::set<std::string>* metas) {
+    auto fs_or = FileSystem::CreateSharedFromString(metadir);
+    if (!fs_or.ok()) {
+        // Return NotFound only when the file or directory does not exist.
+        if (fs_or.status().is_not_found()) {
+            return Status::InternalError(fs_or.status().message());
+        } else {
+            return fs_or.status();
+        }
+    }
+
+    return (*fs_or)->iterate_dir(metadir, [&](std::string_view name) {
+        if (is_tablet_metadata(name)) {
+            metas->emplace(name);
+        }
+        return true;
+    });
+}
+
+static StatusOr<TabletMetadataPtr> get_tablet_metadata(const string& metadata_location, bool fill_cache) {
+    auto metadata = std::make_shared<TabletMetadataPB>();
+    ProtobufFile file(metadata_location);
+    RETURN_IF_ERROR(file.load(metadata.get(), fill_cache));
+    return metadata;
+}
+
+static StatusOr<TxnLogPtr> get_txn_log(const std::string& txn_log_path, bool fill_cache) {
+    auto txn_log = std::make_shared<TxnLog>();
+    ProtobufFile file(txn_log_path);
+    RETURN_IF_ERROR(file.load(txn_log.get(), fill_cache));
+    return txn_log;
+}
+
+static StatusOr<std::map<std::string, DirEntry>> find_orphan_datafiles(std::string_view root_location,
+                                                                       const std::set<std::string>& tablet_metadatas,
+                                                                       const std::vector<std::string>& txn_logs,
+                                                                       int64_t expire_seconds) {
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
+    const auto now = std::time(nullptr);
+    const auto metadata_root_location = join_path(root_location, kMetadataDirectoryName);
+    const auto txn_log_root_location = join_path(root_location, kTxnLogDirectoryName);
+    const auto segment_root_location = join_path(root_location, kSegmentDirectoryName);
+
+    LOG(INFO) << "Start to list " << segment_root_location;
+
+    std::map<std::string, DirEntry> datafiles;
+
+    int64_t total_files = 0;
+    int64_t total_bytes = 0;
+    // List segment
+    auto st = ignore_not_found(fs->iterate_dir2(segment_root_location, [&](DirEntry entry) {
+        total_files++;
+        total_bytes += entry.size.value_or(0);
+        if (!is_segment(entry.name) && !is_del(entry.name) && !is_delvec(entry.name)) {
+            LOG(WARNING) << "Unrecognized data file " << entry.name;
+            return true;
+        }
+        if (entry.mtime.has_value()) {
+            if (now >= entry.mtime.value() + expire_seconds) {
+                datafiles.emplace(entry.name, entry);
+            } else {
+                return true; // this file has not expired yet and cannot be deleted
+            }
+        } else {
+            auto path = join_path(segment_root_location, entry.name);
+            auto res = fs->get_file_modified_time(path);
+            if (res.ok() && now >= *res + expire_seconds) {
+                datafiles.emplace(entry.name, entry);
+            } else {
+                auto st = ignore_not_found(res.status());
+                LOG_IF(WARNING, !st.ok()) << "Fail to get modified time of " << path << ": " << st;
+            }
+        }
+        return true;
+    }));
+    if (!st.ok()) {
+        LOG(WARNING) << "Failed to list all data files, status: " << st;
+        return st;
+    }
+
+    LOG(INFO) << "Listed all data files, total files: " << total_files << ", total bytes: " << total_bytes;
+
+    if (datafiles.empty()) {
+        return datafiles;
+    }
+
+    auto check_rowset = [&](const RowsetMetadata& rowset) {
+        for (const auto& seg : rowset.segments()) {
+            datafiles.erase(seg);
+        }
+    };
+
+    auto check_dels = [&](const TxnLogPB_OpWrite& opwrite) {
+        for (const auto& del : opwrite.dels()) {
+            datafiles.erase(del);
+        }
+    };
+
+    auto check_delvecs = [&](const DelvecMetadataPB& delvec_meta) {
+        for (const auto& vd : delvec_meta.version_to_file()) {
+            datafiles.erase(vd.second.name());
+        }
+    };
+
+    auto check_rewrite_segments = [&](const TxnLogPB_OpWrite& opwrite) {
+        for (const auto& seg : opwrite.rewrite_segments()) {
+            datafiles.erase(seg);
+        }
+    };
+
+    LOG(INFO) << "Start to filter with metadatas, count: " << tablet_metadatas.size();
+
+    for (const auto& filename : tablet_metadatas) {
+        auto location = join_path(metadata_root_location, filename);
+        auto res = get_tablet_metadata(location, false);
+        if (res.status().is_not_found()) { // This metadata file was deleted by another node
+            LOG(INFO) << location << " is deleted by other node";
+            continue;
+        } else if (!res.ok()) {
+            LOG(WARNING) << "Failed to get meta file: " << location << ", status: " << res.status();
+            continue;
+        }
+
+        auto metadata = std::move(res).value();
+        for (const auto& rowset : metadata->rowsets()) {
+            check_rowset(rowset);
+        }
+        check_delvecs(metadata->delvec_meta());
+
+        LOG(INFO) << "Filtered with metadata: " << filename;
+    }
+
+    for (const auto& filename : txn_logs) {
+        auto location = join_path(txn_log_root_location, filename);
+        auto res = get_txn_log(location, false);
+        if (res.status().is_not_found()) {
+            LOG(INFO) << location << " is deleted by other node";
+            continue;
+        } else if (!res.ok()) {
+            LOG(WARNING) << "Failed to get txn log file: " << location << ", status: " << res.status();
+            continue;
+        }
+
+        auto txn_log = std::move(res).value();
+        if (txn_log->has_op_write()) {
+            check_rowset(txn_log->op_write().rowset());
+            check_dels(txn_log->op_write());
+            check_rewrite_segments(txn_log->op_write());
+        }
+        if (txn_log->has_op_compaction()) {
+            // No need to check input rowsets
+            check_rowset(txn_log->op_compaction().output_rowset());
+        }
+        if (txn_log->has_op_schema_change()) {
+            for (const auto& rowset : txn_log->op_schema_change().rowsets()) {
+                check_rowset(rowset);
+            }
+            if (txn_log->op_schema_change().has_delvec_meta()) {
+                check_delvecs(txn_log->op_schema_change().delvec_meta());
+            }
+        }
+    }
+
+    LOG(INFO) << "Found " << datafiles.size() << " orphan files";
+    return datafiles;
+}
+
+// root_location is a partition dir in s3
+Status datafile_gc(std::string_view root_location, int64_t expire_seconds) {
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
+
+    const auto metadata_root_location = join_path(root_location, kMetadataDirectoryName);
+    const auto txn_log_root_location = join_path(root_location, kTxnLogDirectoryName);
+    const auto segment_root_location = join_path(root_location, kSegmentDirectoryName);
+
+    LOG(INFO) << "Start to list " << metadata_root_location;
+
+    std::set<std::string> tablet_metadatas;
+    RETURN_IF_ERROR(list_tablet_metadata(metadata_root_location, &tablet_metadatas));
+
+    if (tablet_metadatas.empty()) {
+        LOG(INFO) << "Skipped datafile GC of " << root_location << " because there is no tablet metadata";
+        return Status::OK();
+    }
+
+    LOG(INFO) << "Found " << tablet_metadatas.size() << " meta files";
+
+    // List txn log
+    std::vector<std::string> txn_logs;
+    /*
+    RETURN_IF_ERROR(ignore_not_found(fs->iterate_dir(txn_log_root_location, [&](std::string_view name) {
+        txn_logs.emplace_back(name);
+        return true;
+    })));
+    */
+
+    // Find orphan data files, include segment, del, and delvec
+    ASSIGN_OR_RETURN(auto orphan_datafiles,
+                     find_orphan_datafiles(root_location, tablet_metadatas, txn_logs, expire_seconds));
+
+    LOG(INFO) << "Found " << orphan_datafiles.size() << " orphan data files:";
+
+    std::vector<std::string> files_to_delete;
+    int64_t bytes_to_delete = 0;
+    for (const auto& [file, entry] : orphan_datafiles) {
+        files_to_delete.push_back(join_path(segment_root_location, file));
+        bytes_to_delete += entry.size.value_or(0);
+        auto time = entry.mtime.value_or(0);
+        LOG(INFO) << "file: " << file << ", size: " << entry.size.value_or(0)
+                  << ", time: " << std::put_time(std::localtime(&time), "%Y-%m-%d %H:%M:%S");
+    }
+
+    LOG(INFO) << "Found " << orphan_datafiles.size() << " orphan data files, total size: " << bytes_to_delete;
+
+    return Status::OK();
+    /*
+    std::cout << root_location << " has " << orphan_datafiles.size()
+              << " orphan data files, total size: " << bytes_to_delete << ", delete them ? (y/n)" << std::endl;
+
+    std::string input;
+    if (std::cin >> input && input != "y") {
+        return Status::OK();
+    }
+
+    return do_delete_files(fs.get(), files_to_delete);
+    */
 }
 
 } // namespace starrocks::lake

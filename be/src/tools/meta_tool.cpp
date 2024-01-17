@@ -32,6 +32,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include <aws/core/Aws.h>
 #include <gflags/gflags.h>
 
 #include <iostream>
@@ -54,6 +55,7 @@
 #include "storage/data_dir.h"
 #include "storage/delta_column_group.h"
 #include "storage/key_coder.h"
+#include "storage/lake/vacuum.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
@@ -103,6 +105,8 @@ DEFINE_string(tablet_file, "", "file to save a set of tablets");
 DEFINE_string(file, "", "segment file path");
 DEFINE_int32(column_index, -1, "column index");
 DEFINE_int32(key_column_count, 0, "key column count");
+DEFINE_int64(expired_sec, 0, "expired seconds");
+DEFINE_string(conf_file, "", "conf file path");
 
 std::string get_usage(const std::string& progname) {
     std::stringstream ss;
@@ -141,6 +145,7 @@ std::string get_usage(const std::string& progname) {
     ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool.sh --operation=print_lake_metadata\n";
     ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool.sh --operation=print_lake_txn_log\n";
     ss << "cat SCHEMA_000000000004204C | ./meta_tool.sh --operation=print_lake_schema\n";
+    ss << "./meta_tool.sh --operation=lake_datafile_gc --root_path=path --expired_sec=expiredsec --conf_file=path\n";
     return ss.str();
 }
 
@@ -1108,6 +1113,21 @@ int meta_tool_main(int argc, char** argv) {
             return -1;
         }
         std::cout << json << '\n';
+    } else if (FLAGS_operation == "lake_datafile_gc") {
+        if (!starrocks::config::init(FLAGS_conf_file.c_str(), false)) {
+            std::cerr << "Init config failed, conf file: " << FLAGS_conf_file << std::endl;
+            return -1;
+        }
+        if (!starrocks::init_glog("lake_datafile_gc", true)) {
+            std::cerr << "Init glog failed" << std::endl;
+            return -1;
+        }
+        Aws::SDKOptions options;
+        Aws::InitAPI(options);
+        auto status = starrocks::lake::datafile_gc(FLAGS_root_path, FLAGS_expired_sec);
+        if (!status.ok()) {
+            std::cout << status << '\n';
+        }
     } else {
         // operations that need root path should be written here
         std::set<std::string> valid_operations = {"get_meta",

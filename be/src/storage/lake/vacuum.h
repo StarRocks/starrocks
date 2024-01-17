@@ -54,4 +54,6 @@ std::future<Status> delete_files_callable(std::vector<std::string> files_to_dele
 // Run a clear task async
 void run_clear_task_async(std::function<void()> task);
 
+Status datafile_gc(std::string_view root_location, int64_t expire_seconds = 86400);
+
 } // namespace starrocks::lake
