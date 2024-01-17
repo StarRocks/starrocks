@@ -570,7 +570,7 @@ StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t v
 }
 
 StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
-                                                 bool fill_data_cache, bool fill_metadata_cache,
+                                                 const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
                                                  TabletSchemaPtr tablet_schema) {
     auto segment = metacache()->lookup_segment(segment_info.path);
     if (segment == nullptr) {
@@ -588,7 +588,7 @@ StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, i
     // segment->open will read the footer, and it is time-consuming.
     // separate it from static Segment::open is to prevent a large number of cache misses,
     // and many temporary segment objects generation when loading the same segment concurrently.
-    RETURN_IF_ERROR(segment->open(footer_size_hint, nullptr, !fill_data_cache));
+    RETURN_IF_ERROR(segment->open(footer_size_hint, nullptr, lake_io_opts));
     return segment;
 }
 

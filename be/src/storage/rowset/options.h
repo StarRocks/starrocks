@@ -57,7 +57,7 @@ public:
     bool use_page_cache = false;
     bool kept_in_memory = false;
     // for lake tablet
-    bool skip_fill_data_cache = false;
+    LakeIOOptions lake_io_opts{.fill_data_cache = true};
 
     RandomAccessFile* read_file = nullptr;
     OlapReaderStatistics* stats = nullptr;

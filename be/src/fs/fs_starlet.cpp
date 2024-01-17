@@ -276,6 +276,7 @@ public:
         }
         auto opt = ReadOptions();
         opt.skip_fill_local_cache = opts.skip_fill_local_cache;
+        opt.buffer_size = opts.buffer_size;
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
         }
@@ -304,6 +305,7 @@ public:
         }
         auto opt = ReadOptions();
         opt.skip_fill_local_cache = opts.skip_fill_local_cache;
+        opt.buffer_size = opts.buffer_size;
         auto file_st = (*fs_st)->open(pair.first, std::move(opt));
 
         if (!file_st.ok()) {

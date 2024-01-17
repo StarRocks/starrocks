@@ -54,7 +54,7 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     reader_params.chunk_size = chunk_size;
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
-    reader_params.fill_data_cache = false;
+    reader_params.lake_io_opts = {false, config::lake_compaction_stream_buffer_size_bytes};
     RETURN_IF_ERROR(reader.open(reader_params));
 
     ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kHorizontal, _txn_id, 0, flush_pool))
@@ -124,7 +124,10 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
         total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
-        ASSIGN_OR_RETURN(auto segments, rowset->segments(false));
+        LakeIOOptions lake_io_opts{.fill_data_cache = false,
+                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
+        auto fill_meta_cache = false;
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts, fill_meta_cache));
         for (auto& segment : segments) {
             for (size_t i = 0; i < segment->num_columns(); ++i) {
                 const auto* column_reader = segment->column(i);

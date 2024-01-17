@@ -62,7 +62,6 @@ protected:
 
         _opts.use_page_cache = true;
         _opts.kept_in_memory = false;
-        _opts.skip_fill_data_cache = false;
         _opts.stats = &_stats;
     }
     void TearDown() override { StoragePageCache::instance()->prune(); }
@@ -263,7 +262,6 @@ TEST_F(BitmapIndexTest, test_concurrent_load) {
     opts.read_file = rfile.get();
     opts.use_page_cache = true;
     opts.kept_in_memory = false;
-    opts.skip_fill_data_cache = false;
     OlapReaderStatistics stats;
     opts.stats = &stats;
     auto reader = std::make_unique<BitmapIndexReader>();

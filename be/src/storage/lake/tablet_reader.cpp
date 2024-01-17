@@ -142,7 +142,8 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.global_dictmaps = params.global_dictmaps;
     rs_opts.unused_output_column_ids = params.unused_output_column_ids;
     rs_opts.runtime_range_pruner = params.runtime_range_pruner;
-    rs_opts.fill_data_cache = params.fill_data_cache;
+    rs_opts.lake_io_opts = params.lake_io_opts;
+
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _tablet_metadata->version();

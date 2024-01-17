@@ -75,10 +75,11 @@ StatusOr<std::shared_ptr<Segment>> Segment::open(std::shared_ptr<FileSystem> fs,
                                                  uint32_t segment_id, std::shared_ptr<const TabletSchema> tablet_schema,
                                                  size_t* footer_length_hint,
                                                  const FooterPointerPB* partial_rowset_footer,
-                                                 bool skip_fill_local_cache, lake::TabletManager* tablet_manager) {
+                                                 const LakeIOOptions& lake_io_opts,
+                                                 lake::TabletManager* tablet_manager) {
     auto segment = std::make_shared<Segment>(std::move(fs), std::move(segment_file_info), segment_id,
                                              std::move(tablet_schema), tablet_manager);
-    RETURN_IF_ERROR(segment->open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache));
+    RETURN_IF_ERROR(segment->open(footer_length_hint, partial_rowset_footer, lake_io_opts));
     return std::move(segment);
 }
 
@@ -209,13 +210,12 @@ Segment::~Segment() {
 }
 
 Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                     bool skip_fill_local_cache) {
+                     const LakeIOOptions& lake_io_opts) {
     if (invoked(_open_once)) {
         return Status::OK();
     }
 
-    auto res = success_once(_open_once,
-                            [&] { return _open(footer_length_hint, partial_rowset_footer, skip_fill_local_cache); });
+    auto res = success_once(_open_once, [&] { return _open(footer_length_hint, partial_rowset_footer, lake_io_opts); });
 
     // move the cache size update out of the `success_once`,
     // so that the onceflag `_open_once` can be set before the cache_size is updated.
@@ -226,9 +226,10 @@ Status Segment::open(size_t* footer_length_hint, const FooterPointerPB* partial_
 }
 
 Status Segment::_open(size_t* footer_length_hint, const FooterPointerPB* partial_rowset_footer,
-                      bool skip_fill_local_cache) {
+                      const LakeIOOptions& lake_io_opts) {
     SegmentFooterPB footer;
-    RandomAccessFileOptions opts{.skip_fill_local_cache = skip_fill_local_cache};
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
+                                 .buffer_size = lake_io_opts.buffer_size};
 
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(opts, _segment_file_info));
     RETURN_IF_ERROR(Segment::parse_segment_footer(read_file.get(), &footer, footer_length_hint, partial_rowset_footer));
@@ -294,11 +295,11 @@ StatusOr<ChunkIteratorPtr> Segment::new_iterator(const Schema& schema, const Seg
     return _new_iterator(schema, read_options);
 }
 
-Status Segment::load_index(bool skip_fill_local_cache) {
+Status Segment::load_index(const LakeIOOptions& lake_io_opts) {
     auto res = success_once(_load_index_once, [&] {
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(false);
 
-        Status st = _load_index(skip_fill_local_cache);
+        Status st = _load_index(lake_io_opts);
         if (st.ok()) {
             MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->short_key_index_mem_tracker(),
                                      _short_key_index_mem_usage());
@@ -311,9 +312,10 @@ Status Segment::load_index(bool skip_fill_local_cache) {
     return res.status();
 }
 
-Status Segment::_load_index(bool skip_fill_local_cache) {
+Status Segment::_load_index(const LakeIOOptions& lake_io_opts) {
     // read and parse short key index page
-    RandomAccessFileOptions file_opts{.skip_fill_local_cache = skip_fill_local_cache};
+    RandomAccessFileOptions file_opts{.skip_fill_local_cache = !lake_io_opts.fill_data_cache,
+                                      .buffer_size = lake_io_opts.buffer_size};
     ASSIGN_OR_RETURN(auto read_file, _fs->new_random_access_file(file_opts, _segment_file_info));
 
     PageReadOptions opts;
@@ -416,7 +418,8 @@ StatusOr<std::shared_ptr<Segment>> Segment::new_dcg_segment(const DeltaColumnGro
 }
 
 Status Segment::get_short_key_index(std::vector<std::string>* sk_index_values) {
-    RETURN_IF_ERROR(load_index(false));
+    LakeIOOptions lakeIoOptions{.fill_data_cache = false, .buffer_size = -1};
+    RETURN_IF_ERROR(load_index(lakeIoOptions));
     for (size_t i = 0; i < _sk_index_decoder->num_items(); i++) {
         sk_index_values->emplace_back(_sk_index_decoder->key(i).to_string());
     }
