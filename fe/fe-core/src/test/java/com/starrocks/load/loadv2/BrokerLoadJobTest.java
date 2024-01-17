@@ -373,28 +373,45 @@ public class BrokerLoadJobTest {
             }
         };
 
+        // test when retry limit has reached
         BrokerLoadJob brokerLoadJob1 = new BrokerLoadJob();
         brokerLoadJob1.retryTime = 0;
         brokerLoadJob1.unprotectedExecuteJob();
-
         txnOperated = true;
         txnStatusChangeReason = "broker load job timeout";
-
         brokerLoadJob1.afterAborted(txnState, txnOperated, txnStatusChangeReason);
-
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob1, "idToTasks");
         Assert.assertEquals(0, idToTasks.size());
 
+        // test normal retry after timeout
         BrokerLoadJob brokerLoadJob2 = new BrokerLoadJob();
         brokerLoadJob2.retryTime = 1;
         brokerLoadJob2.unprotectedExecuteJob();
-
         txnOperated = true;
         txnStatusChangeReason = "broker load job timeout";
-
         brokerLoadJob2.afterAborted(txnState, txnOperated, txnStatusChangeReason);
-
         idToTasks = Deencapsulation.getField(brokerLoadJob2, "idToTasks");
+        Assert.assertEquals(1, idToTasks.size());
+
+        // test when txnOperated is false
+        BrokerLoadJob brokerLoadJob3 = new BrokerLoadJob();
+        brokerLoadJob3.retryTime = 1;
+        brokerLoadJob3.unprotectedExecuteJob();
+        txnOperated = false;
+        txnStatusChangeReason = "broker load job timeout";
+        brokerLoadJob3.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        idToTasks = Deencapsulation.getField(brokerLoadJob3, "idToTasks");
+        Assert.assertEquals(1, idToTasks.size());
+
+        // test when txn is finished
+        BrokerLoadJob brokerLoadJob4 = new BrokerLoadJob();
+        brokerLoadJob4.retryTime = 1;
+        brokerLoadJob4.unprotectedExecuteJob();
+        txnOperated = true;
+        txnStatusChangeReason = "broker load job timeout";
+        Deencapsulation.setField(brokerLoadJob4, "state", JobState.FINISHED);
+        brokerLoadJob4.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        idToTasks = Deencapsulation.getField(brokerLoadJob4, "idToTasks");
         Assert.assertEquals(1, idToTasks.size());
     }
 
@@ -409,7 +426,7 @@ public class BrokerLoadJobTest {
         };
 
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
-        Deencapsulation.setField(brokerLoadJob, "state", JobState.CANCELLED);
+        failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, "load_run_fail");
         brokerLoadJob.onTaskFailed(taskId, failMsg);
 
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");

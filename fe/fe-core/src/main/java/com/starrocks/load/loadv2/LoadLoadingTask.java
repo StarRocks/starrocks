@@ -152,8 +152,6 @@ public class LoadLoadingTask extends LoadTask {
 
     @Override
     protected void executeTask() throws Exception {
-        LOG.info("begin to execute loading task. load id: {} job: {}. db: {}, tbl: {}.",
-                DebugUtil.printId(loadId), callback.getCallbackId(), db.getOriginName(), table.getName());
         executeOnce();
     }
 

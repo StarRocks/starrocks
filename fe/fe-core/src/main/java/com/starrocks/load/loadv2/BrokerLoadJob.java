@@ -366,10 +366,6 @@ public class BrokerLoadJob extends BulkLoadJob {
                 state = JobState.PENDING;
                 unprotectedExecute();
             } catch (Exception e) {
-                LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
-                        .add("database_id", dbId)
-                        .add("error_msg", "Failed to divide job into loading task.")
-                        .build(), e);
                 cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);
             }
         } finally {
@@ -465,10 +461,6 @@ public class BrokerLoadJob extends BulkLoadJob {
                 // Sleep and retry.
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(Math.max(e.getAllowCommitTime() - System.currentTimeMillis(), 0));
             } catch (UserException e) {
-                LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
-                        .add("database_id", dbId)
-                        .add("error_msg", "Failed to commit txn with error:" + e.getMessage())
-                        .build(), e);
                 cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
                 break;
             }
