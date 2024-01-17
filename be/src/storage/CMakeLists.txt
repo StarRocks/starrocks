@@ -203,4 +203,14 @@ add_library(Storage STATIC
     lake/txn_log_applier.cpp
     lake/lake_local_persistent_index.cpp
     persistent_index_compaction_manager.cpp
+<<<<<<< HEAD
     lake/local_pk_index_manager.cpp)
+=======
+    persistent_index_tablet_loader.cpp
+    lake/lake_local_persistent_index_tablet_loader.cpp
+    lake/lake_persistent_index.cpp
+    lake/persistent_index_memtable.cpp
+    lake/local_pk_index_manager.cpp
+    primary_key_dump.cpp
+    dictionary_cache_manager.cpp)
+>>>>>>> 64a6c8309b ([Feature] support primary key dump (#38297))
