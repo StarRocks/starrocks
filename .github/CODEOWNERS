@@ -15,6 +15,12 @@
 /be/src/exprs/   @StarRocks/execution-maintainer
 /be/src/runtime/ @StarRocks/execution-maintainer
 /be/src/types/   @StarRocks/execution-maintainer
+/be/src/udf/     @StarRocks/execution-maintainer
+
+# storage engine 
+/be/src/fs/       @StarRocks/storage-maintainer
+/be/src/io/       @StarRocks/storage-maintainer
+/be/src/storage/  @StarRocks/storage-maintainer
 
 # /docs/ belong to docs-maintainer
 /docs/  @StarRocks/docs-maintainer
