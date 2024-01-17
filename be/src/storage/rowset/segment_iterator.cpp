@@ -548,9 +548,13 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
         ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, access_path));
         ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_info()));
         if (config::io_coalesce_lake_read_enable && !_segment->is_default_column(col)) {
-            auto buffer_stream = std::make_unique<io::SharedBufferedInputStream>(rfile->stream(), _segment->file_name(),
-                                                                                 rfile->get_size().value());
-            iter_opts.read_file = buffer_stream.release();
+            auto shared_buffered_input_stream = std::make_unique<io::SharedBufferedInputStream>(
+                    rfile->stream(), _segment->file_name(), rfile->get_size().value());
+            const io::SharedBufferedInputStream::CoalesceOptions options = {
+                    .max_dist_size = config::io_coalesce_read_max_distance_size,
+                    .max_buffer_size = config::io_coalesce_read_max_buffer_size};
+            shared_buffered_input_stream->set_coalesce_options(options);
+            iter_opts.read_file = shared_buffered_input_stream.release();
             _column_files[cid] = std::move(rfile);
         } else {
             iter_opts.read_file = rfile.get();
