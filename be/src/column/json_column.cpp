@@ -23,6 +23,7 @@
 #include "common/compiler_util.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
+#include "simd/simd.h"
 #include "util/hash_util.hpp"
 #include "util/mysql_row_buffer.h"
 
@@ -224,6 +225,13 @@ void JsonColumn::append_default(size_t count) {
         }
     } else {
         SuperClass::append_default(count);
+    }
+}
+
+void JsonColumn::resize(size_t n) {
+    BaseClass::resize(n);
+    for (auto& col : _flat_columns) {
+        col->resize(n);
     }
 }
 
