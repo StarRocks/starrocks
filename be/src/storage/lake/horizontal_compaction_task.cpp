@@ -29,11 +29,7 @@
 
 namespace starrocks::lake {
 
-Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_func, ThreadPool* flush_pool) {
-    if (progress == nullptr) {
-        return Status::InvalidArgument("progress is null");
-    }
-
+Status HorizontalCompactionTask::execute(CancelFunc cancel_func, ThreadPool* flush_pool) {
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
     auto tablet_schema = _tablet.get_schema();
@@ -74,23 +70,40 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
 #ifndef BE_TEST
         RETURN_IF_ERROR(tls_thread_status.mem_tracker()->check_mem_limit("Compaction"));
 #endif
-        if (auto st = reader.get_next(chunk.get()); st.is_end_of_file()) {
-            break;
-        } else if (!st.ok()) {
-            return st;
+        {
+            SCOPED_RAW_TIMER(&_context.reader_time_ns);
+            if (auto st = reader.get_next(chunk.get()); st.is_end_of_file()) {
+                break;
+            } else if (!st.ok()) {
+                return st;
+            }
         }
         ChunkHelper::padding_char_columns(char_field_indexes, schema, tablet_schema, chunk.get());
         RETURN_IF_ERROR(writer->write(*chunk));
         chunk->reset();
 
-        progress->update(100 * reader.stats().raw_rows_read / total_num_rows);
-        VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet.id() << ", compaction progress: " << progress->value();
+        _context.progress.update(100 * reader.stats().raw_rows_read / total_num_rows);
+        VLOG_EVERY_N(3, 1000) << "Tablet: " << _tablet.id() << ", compaction progress: " << _context.progress.value();
+        // add reader stats
+        auto stats = reader.stats();
+        _context.io_ns += stats.io_ns;
+        _context.segment_init_ns += stats.segment_init_ns;
+        _context.column_iterator_init_ns += stats.column_iterator_init_ns;
+        _context.io_count_local_disk += stats.io_count_local_disk;
+        _context.io_count_remote += stats.io_count_remote;
+        _context.compressed_bytes_read += stats.compressed_bytes_read;
+        // add writer stats
+        _context.segment_write_ns += writer->stats().segment_write_ns;
     }
+
     // Adjust the progress here for 2 reasons:
     // 1. For primary key, due to the existence of the delete vector, the rows read may be less than "total_num_rows"
     // 2. If the "total_num_rows" is 0, the progress will not be updated above
-    progress->update(100);
+    _context.progress.update(100);
     RETURN_IF_ERROR(writer->finish());
+
+    // update writer stats
+    _context.segment_write_ns += writer->stats().segment_write_ns;
 
     auto txn_log = std::make_shared<TxnLog>();
     auto op_compaction = txn_log->mutable_op_compaction();
@@ -114,6 +127,12 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
         Tablet t(_tablet.tablet_manager(), _tablet.id());
         _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, tablet_schema);
     }
+
+    VLOG(3) << "Horizontal compaction finished. tablet: " << _tablet.id() << ", txn_id: " << _txn_id
+            << ", reader total time cost(ms): " << _context.reader_time_ns / 1000000
+            << ", reader io time cost(ms): " << _context.io_ns / 1000000
+            << ", segment writer total time cost(ms): " << _context.segment_write_ns / 1000000;
+
     return Status::OK();
 }
 

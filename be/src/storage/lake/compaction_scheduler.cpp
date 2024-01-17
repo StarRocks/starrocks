@@ -140,6 +140,14 @@ void CompactionScheduler::list_tasks(std::vector<CompactionTaskInfo>* infos) {
         info.runs = context->runs.load(std::memory_order_relaxed);
         info.start_time = context->start_time.load(std::memory_order_relaxed);
         info.progress = context->progress.value();
+        info.reader_io_ms = context->io_ns / 1000000;
+        info.segment_init_ms = context->segment_init_ns / 1000000;
+        info.column_iterator_init_ms = context->column_iterator_init_ns / 1000000;
+        info.segment_write_ms = context->segment_write_ns / 1000000;
+        info.reader_total_time_ms = context->reader_time_ns / 1000000;
+        info.compressed_bytes_read = context->compressed_bytes_read;
+        info.reader_io_count_local_disk = context->io_count_local_disk;
+        info.reader_io_count_remote = context->io_count_remote;
         // Load "finish_time" with memory_order_acquire and check its value before reading the "status" to avoid
         // the race condition between this thread and the `CompactionScheduler::thread_task` threads.
         info.finish_time = context->finish_time.load(std::memory_order_acquire);
@@ -235,7 +243,7 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     context->runs.fetch_add(1, std::memory_order_relaxed);
 
     auto status = Status::OK();
-    auto task_or = _tablet_mgr->compact(tablet_id, version, txn_id);
+    auto task_or = _tablet_mgr->compact(tablet_id, version, txn_id, *context);
     if (task_or.ok()) {
         auto should_cancel = [&]() { return context->callback->has_error() || context->callback->timeout_exceeded(); };
         TEST_SYNC_POINT("CompactionScheduler::do_compaction:before_execute_task");
@@ -247,7 +255,7 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
                 return Status::InternalError("Get memory table flush pool failed");
             }
         }
-        status.update(task_or.value()->execute(&context->progress, std::move(should_cancel), flush_pool));
+        status.update(task_or.value()->execute(std::move(should_cancel), flush_pool));
     } else {
         status.update(task_or.status());
     }

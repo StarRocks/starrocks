@@ -20,8 +20,8 @@
 #include <memory>
 
 #include "common/status.h"
+#include "compaction_task_context.h"
 #include "gutil/macros.h"
-#include "storage/lake/compaction_task.h"
 #include "util/blocking_queue.hpp"
 #include "util/stack_trace_mutex.h"
 
@@ -39,7 +39,7 @@ namespace starrocks::lake {
 class CompactRequest;
 class CompactResponse;
 class CompactionScheduler;
-struct CompactionTaskContext;
+class CompactionTask;
 class TabletManager;
 
 // For every `CompactRequest` a new `CompactionTaskCallback` instance will be created.
@@ -90,36 +90,20 @@ private:
     std::vector<std::unique_ptr<CompactionTaskContext>> _contexts;
 };
 
-// Context of a single tablet compaction task.
-struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
-    explicit CompactionTaskContext(int64_t txn_id_, int64_t tablet_id_, int64_t version_,
-                                   std::shared_ptr<CompactionTaskCallback> cb_)
-            : txn_id(txn_id_), tablet_id(tablet_id_), version(version_), callback(std::move(cb_)) {}
-
-#ifndef NDEBUG
-    ~CompactionTaskContext() {
-        CHECK(next() == this && previous() == this) << "Must remove CompactionTaskContext from list before destructor";
-    }
-#endif
-
-    const int64_t txn_id;
-    const int64_t tablet_id;
-    const int64_t version;
-    std::atomic<int64_t> start_time{0};
-    std::atomic<int64_t> finish_time{0};
-    std::atomic<bool> skipped{false};
-    std::atomic<int> runs{0};
-    Status status;
-    lake::CompactionTask::Progress progress;
-    std::shared_ptr<CompactionTaskCallback> callback;
-};
-
 struct CompactionTaskInfo {
     int64_t txn_id;
     int64_t tablet_id;
     int64_t version;
     int64_t start_time;
     int64_t finish_time;
+    int64_t reader_io_ms;
+    int64_t reader_io_count_local_disk;
+    int64_t reader_io_count_remote;
+    int64_t segment_init_ms;
+    int64_t column_iterator_init_ms;
+    int64_t compressed_bytes_read;
+    int64_t segment_write_ms;
+    int64_t reader_total_time_ms;
     Status status;
     int runs;     // How many times the compaction task has been executed
     int progress; // 0-100
