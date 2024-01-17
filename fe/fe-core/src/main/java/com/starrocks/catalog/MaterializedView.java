@@ -509,6 +509,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * active the materialized again & reload the state.
      */
     public void setActive() {
+        LOG.warn("set {} to active", name);
         this.active = true;
         this.inactiveReason = null;
         // reset mv rewrite cache when it is active again
@@ -516,6 +517,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public void setInactiveAndReason(String reason) {
+        LOG.warn("set {} to inactive because of {}", name, reason);
         this.active = false;
         this.inactiveReason = reason;
         CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
@@ -1816,7 +1818,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
         List<BaseTableInfo> newBaseTableInfos = Lists.newArrayList();
 
-
         boolean isSetInactive = false;
         Map<TableName, MvBaseTableBackupInfo> mvBaseTableToBackupTableInfo = mvRestoreContext.getMvBaseTableToBackupTableInfo();
         Map<TableName, TableName> remoteToLocalTableName = Maps.newHashMap();
@@ -1831,7 +1832,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 // be backed up and restored before.
                 LOG.info(String.format("Materialized view %s can not find the base table from mvBaseTableToBackupTableInfo, " +
                         "old base table name:%s, try to find in current env", this.name, remoteDbTblName));
-                if (!restoreBaseTableInfoIfNoRestored(db, this, baseTableInfo, newBaseTableInfos)) {
+                if (!restoreBaseTableInfoIfNoRestored(this, baseTableInfo, newBaseTableInfos)) {
                     isSetInactive = true;
                 }
             } else {
@@ -1890,6 +1891,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 String.format("New baseTableInfos' size should be qual to old baseTableInfos, baseTableInfos:%s," +
                                 "newBaseTableInfos:%s", oldBaseTableInfosStr, newBaseTableInfosStr));
         this.baseTableInfos = newBaseTableInfos;
+
+        // change ExpressionRangePartitionInfo because mv's db may be changed.
+        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
+            expressionRangePartitionInfo.renameTableName(db.getFullName(), this.name);
+        }
+
         setActive();
 
         fixRelationship();
