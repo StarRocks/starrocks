@@ -2545,6 +2545,30 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String access_control = "native";
 
+    /**
+     *  Kerberos principal used for mutual authentication with ranger
+     */
+    @ConfField(mutable = true)
+    public static String ranger_spnego_kerberos_principal = "";
+
+    /**
+     *  Kerberos keytab file used for mutual authentication with ranger
+     */
+    @ConfField(mutable = true)
+    public static String ranger_spnego_kerberos_keytab = "";
+
+    /**
+     *  Kerberos krb5.conf configure path, default /etc/krb5.conf
+     */
+    @ConfField(mutable = true)
+    public static String ranger_kerberos_krb5_conf = "";
+
+    /**
+     * Whether to use the unix group as the ranger authentication group
+     */
+    @ConfField(mutable = true)
+    public static boolean ranger_user_ugi = false;
+
     @ConfField(mutable = true)
     public static int catalog_metadata_cache_size = 500;
 
@@ -2589,7 +2613,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;
-    
+
     /*
      * Replication config
      */
