@@ -1093,6 +1093,9 @@ Status OlapTableSink::_init_node_channels(RuntimeState* state) {
                             node_channel = it->second.get();
                         }
                         node_channel->add_tablet(index->index_id, tablet_info);
+                        if (_enable_replicated_storage && i == 0) {
+                            node_channel->set_has_primary_replica(true);
+                        }
                     }
                 }
 
