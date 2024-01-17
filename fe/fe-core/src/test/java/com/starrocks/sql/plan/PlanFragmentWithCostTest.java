@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TQueryPlanInfo;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -2382,4 +2383,66 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         Assert.assertTrue("planCpuCosts should be > 1, but: " + event.planCpuCosts, event.planCpuCosts > 1);
 
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testStringInPredicateEstimate(
+            @Mocked MockTpchStatisticStorage mockedStatisticStorage) throws Exception {
+        new Expectations() {
+            {
+                mockedStatisticStorage.getColumnStatistics((Table) any,
+                        Lists.newArrayList("t1a", (String) any, (String) any, (String) any));
+                result = Lists.newArrayList(new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY,
+                        0.0, 10, 3),
+                        new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY,
+                                0.0, 10, 3, null,
+                                ColumnStatistic.StatisticType.UNKNOWN),
+                        new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY,
+                                0.0, 10, 3, null,
+                                ColumnStatistic.StatisticType.UNKNOWN),
+                        new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY,
+                                0.0, 10, 3, null,
+                                ColumnStatistic.StatisticType.UNKNOWN));
+            }
+        };
+
+        connectContext.getSessionVariable().setEnableShortCircuit(false);
+        String sql = "SELECT t1a from test_all_type where t1a in ('a', 'b', 'c');";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "cardinality: 10000");
+
+        sql = "SELECT t1a from test_all_type where t1a not in ('a', 'b', 'c');";
+        plan = getCostExplain(sql);
+        assertContains(plan, "cardinality: 5000");
+
+        sql = "SELECT t1a from test_all_type where t1a  in ('a', 'b', 'c', 'd', 'e');";
+        plan = getCostExplain(sql);
+        assertContains(plan, "cardinality: 10000");
+
+        sql = "SELECT t1a from test_all_type where t1a != 'a' and  t1a != 'a';";
+        plan = getCostExplain(sql);
+        assertContains(plan, "cardinality: 6667");
+
+        sql = "SELECT t1.L_PARTKEY from lineitem t1 join nation t2 on t1.L_PARTKEY = t2.N_NATIONKEY " +
+                "and t1.L_SUPPKEY = t2.N_NATIONKEY;";
+        plan = getCostExplain(sql);
+        assertContains(plan, "cardinality: 6250000");
+
+        sql = "SELECT t1.L_PARTKEY from lineitem t1 left join nation t2 on t1.L_PARTKEY = t2.N_NATIONKEY " +
+                "and t1.L_SUPPKEY = t2.N_NATIONKEY;";
+        plan = getCostExplain(sql);
+        assertContains(plan, "cardinality: 100000000");
+    }
+
+    @Test
+    public void testOutputColNames() throws Exception {
+        String sql = "select v1 as alias_1, v2 as alias_2, v2, abs(v2) as v2 from t0 where v3 = 1";
+        ExecPlan execPlan = getExecPlan(sql);
+        TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
+        tQueryPlanInfo.output_names = execPlan.getColNames();
+        Assert.assertEquals(4, tQueryPlanInfo.output_names.size());
+        Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
+    }
+>>>>>>> 58b6071dea ([BugFix] add output col names in the TQueryPlanInfo (#39078))
 }
