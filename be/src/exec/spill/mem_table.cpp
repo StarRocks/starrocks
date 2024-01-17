@@ -81,6 +81,7 @@ bool UnorderedMemTable::is_empty() {
 }
 
 Status UnorderedMemTable::append(ChunkPtr chunk) {
+    DCHECK(chunk != nullptr);
     _tracker->consume(chunk->memory_usage());
     COUNTER_ADD(_spiller->metrics().mem_table_peak_memory_usage, chunk->memory_usage());
     _num_rows += chunk->num_rows();
@@ -143,6 +144,7 @@ bool OrderedMemTable::is_empty() {
 }
 
 Status OrderedMemTable::append(ChunkPtr chunk) {
+    DCHECK(chunk != nullptr);
     if (_chunk == nullptr) {
         _chunk = chunk->clone_empty();
     }

@@ -150,7 +150,6 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
     spill::AcquireBlockOptions opts;
     opts.query_id = state->query_id();
     opts.plan_node_id = _spiller->options().plan_node_id;
-    ;
     opts.name = _spiller->options().name;
     opts.block_size = serialized_data.get_size();
     ASSIGN_OR_RETURN(auto block, _spiller->block_manager()->acquire_block(opts));
