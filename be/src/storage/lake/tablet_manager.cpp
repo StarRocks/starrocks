@@ -590,4 +590,35 @@ void TabletManager::TEST_set_global_schema_cache(int64_t schema_id, TabletSchema
     _metacache->cache_tablet_schema(cache_key, std::move(schema), 0);
 }
 
+<<<<<<< HEAD
+=======
+StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t version) {
+    ASSIGN_OR_RETURN(auto metadata, get_tablet_metadata(tablet_id, version));
+    return VersionedTablet(this, std::move(metadata));
+}
+
+StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
+                                                 const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
+                                                 TabletSchemaPtr tablet_schema) {
+    auto segment = metacache()->lookup_segment(segment_info.path);
+    if (segment == nullptr) {
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(segment_info.path));
+        segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, std::move(tablet_schema), this);
+        if (fill_metadata_cache) {
+            // NOTE: the returned segment may be not the same as the parameter passed in
+            // Use the one in cache if the same key already exists
+            if (auto cached_segment = metacache()->cache_segment_if_absent(segment_info.path, segment);
+                cached_segment != nullptr) {
+                segment = cached_segment;
+            }
+        }
+    }
+    // segment->open will read the footer, and it is time-consuming.
+    // separate it from static Segment::open is to prevent a large number of cache misses,
+    // and many temporary segment objects generation when loading the same segment concurrently.
+    RETURN_IF_ERROR(segment->open(footer_size_hint, nullptr, lake_io_opts));
+    return segment;
+}
+
+>>>>>>> 515a360c79 ([Enhancement] Support customizing buffer size for lake compaction (#38291))
 } // namespace starrocks::lake

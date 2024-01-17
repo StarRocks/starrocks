@@ -59,7 +59,6 @@ protected:
 
         _opts.use_page_cache = true;
         _opts.kept_in_memory = false;
-        _opts.skip_fill_data_cache = false;
         _opts.stats = &_stats;
     }
     void TearDown() override { StoragePageCache::release_global_cache(); }

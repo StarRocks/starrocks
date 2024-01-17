@@ -188,11 +188,24 @@ Status SegmentRewriter::rewrite(const std::string& src_path, FileInfo* dest_path
     }
     Schema src_schema = ChunkHelper::convert_schema(tschema, src_column_ids);
 
+<<<<<<< HEAD
     std::unique_ptr<starrocks::lake::Rowset> rowset = std::make_unique<starrocks::lake::Rowset>(
             tablet, std::make_shared<starrocks::lake::RowsetMetadataPB>(op_write.rowset()));
     std::vector<starrocks::lake::SegmentPtr> segments;
     RETURN_IF_ERROR(rowset->load_segments(&segments, false));
     uint32_t num_rows = segments[segment_id]->num_rows();
+=======
+    size_t footer_sine_hint = 16 * 1024;
+    auto tablet_mgr = tablet->tablet_mgr();
+    auto segment_path = tablet->segment_location(op_write.rowset().segments(segment_id));
+    auto segment_info = FileInfo{.path = segment_path};
+    // not fill data and meta cache
+    auto fill_cache = false;
+    LakeIOOptions lake_io_opts{fill_cache, -1};
+    ASSIGN_OR_RETURN(auto segment, tablet_mgr->load_segment(segment_info, segment_id, &footer_sine_hint, lake_io_opts,
+                                                            fill_cache, tschema));
+    uint32_t num_rows = segment->num_rows();
+>>>>>>> 515a360c79 ([Enhancement] Support customizing buffer size for lake compaction (#38291))
 
     auto chunk_shared_ptr = ChunkHelper::new_chunk(src_schema, num_rows);
     auto read_chunk = chunk_shared_ptr.get();

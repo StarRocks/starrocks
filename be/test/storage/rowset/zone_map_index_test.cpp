@@ -94,7 +94,6 @@ protected:
         opts.read_file = rfile.get();
         opts.use_page_cache = true;
         opts.kept_in_memory = false;
-        opts.skip_fill_data_cache = false;
         OlapReaderStatistics stats;
         opts.stats = &stats;
         ZoneMapIndexReader column_zone_map;
@@ -121,6 +120,195 @@ protected:
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 };
 
+<<<<<<< HEAD
+=======
+void ColumnZoneMapTest::check_result(const ZoneMapPB& zone_map, bool has_min, bool has_max, const std::string& min,
+                                     const std::string& max, bool has_null, bool has_not_null) {
+    ASSERT_EQ(has_min, zone_map.has_min());
+    ASSERT_EQ(has_max, zone_map.has_max());
+    ASSERT_EQ(min, zone_map.min());
+    ASSERT_EQ(max, zone_map.max());
+    ASSERT_EQ(has_null, zone_map.has_null());
+    ASSERT_EQ(has_not_null, zone_map.has_not_null());
+}
+
+void ColumnZoneMapTest::write_file(ZoneMapIndexWriter& builder, ColumnIndexMetaPB& meta, std::string filename) {
+    ASSIGN_OR_ABORT(auto file, _fs->new_writable_file(filename))
+    ASSERT_TRUE(builder.finish(file.get(), &meta).ok());
+    ASSERT_EQ(ZONE_MAP_INDEX, meta.type());
+    ASSERT_OK(file->close());
+}
+
+void ColumnZoneMapTest::load_zone_map(ZoneMapIndexReader& reader, ColumnIndexMetaPB& meta, std::string filename) {
+    IndexReadOptions opts;
+    ASSIGN_OR_ABORT(auto rfile, _fs->new_random_access_file(filename))
+    opts.read_file = rfile.get();
+    opts.use_page_cache = false;
+    opts.kept_in_memory = false;
+    OlapReaderStatistics stats;
+    opts.stats = &stats;
+    ASSERT_TRUE(reader.load(opts, meta.zone_map_index()).value());
+    if (!meta.zone_map_index().segment_zone_map().has_not_null()) {
+        delete meta.mutable_zone_map_index()->mutable_segment_zone_map()->release_min();
+        delete meta.mutable_zone_map_index()->mutable_segment_zone_map()->release_max();
+    }
+}
+
+TEST_F(ColumnZoneMapTest, PartialNullPage1) {
+    std::string filename = kTestDir + "/PartialNullPage1";
+
+    TabletColumn int_column = create_int_key(0);
+    TypeInfoPtr type_info = get_type_info(int_column);
+
+    auto writer = ZoneMapIndexWriter::create(type_info.get());
+
+    // add two page
+    writer->add_nulls(10);
+    writer->flush();
+
+    std::vector<int> values = {1, 2, 3, 4, 5};
+    writer->add_values(values.data(), 5);
+    writer->flush();
+
+    // write
+    ColumnIndexMetaPB index_meta;
+    write_file(*writer, index_meta, filename);
+
+    // read
+    ZoneMapIndexReader reader;
+    load_zone_map(reader, index_meta, filename);
+
+    // page zone map
+    ASSERT_EQ(2, reader.num_pages());
+    const auto& zone_maps = reader.page_zone_maps();
+    ASSERT_EQ(2, zone_maps.size());
+
+    check_result(zone_maps[0], false, false, "", "", true, false);
+    check_result(zone_maps[1], true, true, "1", "5", false, true);
+
+    // segment zonemap
+    const auto& segment_zonemap = index_meta.zone_map_index().segment_zone_map();
+    check_result(segment_zonemap, true, true, "1", "5", true, true);
+}
+
+TEST_F(ColumnZoneMapTest, PartialNullPage2) {
+    std::string filename = kTestDir + "/PartialNullPage2";
+
+    TabletColumn int_column = create_int_key(0);
+    TypeInfoPtr type_info = get_type_info(int_column);
+
+    auto writer = ZoneMapIndexWriter::create(type_info.get());
+
+    // add two page
+    std::vector<int> values = {1, 2, 3, 4, 5};
+    writer->add_values(values.data(), 5);
+    writer->flush();
+
+    writer->add_nulls(10);
+    writer->flush();
+
+    // write
+    ColumnIndexMetaPB index_meta;
+    write_file(*writer, index_meta, filename);
+
+    // read
+    ZoneMapIndexReader reader;
+    load_zone_map(reader, index_meta, filename);
+
+    // page zone map
+    ASSERT_EQ(2, reader.num_pages());
+    const auto& zone_maps = reader.page_zone_maps();
+    ASSERT_EQ(2, zone_maps.size());
+
+    check_result(zone_maps[0], true, true, "1", "5", false, true);
+    check_result(zone_maps[1], false, false, "", "", true, false);
+
+    // segment zonemap
+    const auto& segment_zonemap = index_meta.zone_map_index().segment_zone_map();
+    check_result(segment_zonemap, true, true, "1", "5", true, true);
+}
+
+TEST_F(ColumnZoneMapTest, StringResize) {
+    std::string filename = kTestDir + "/StringResize";
+
+    TabletColumn varchar_column = create_varchar_key(0);
+    TypeInfoPtr type_info = get_type_info(varchar_column);
+
+    auto writer = ZoneMapIndexWriter::create(type_info.get());
+
+    // add two page
+    std::string str1 = std::string("01234");
+    std::string str2 = std::string("0123456789");
+    std::string str3;
+    std::string str4;
+    for (size_t i = 0; i < 10; i++) {
+        str3.append(str2);
+    }
+    for (size_t i = 0; i < 20; i++) {
+        str4.append(str2);
+    }
+    std::vector<Slice> values1 = {{str1.data(), str1.size()}, {str2.data(), str2.size()}};
+    writer->add_values(values1.data(), 2);
+    writer->flush();
+
+    std::vector<Slice> values2 = {{str3.data(), str3.size()}, {str4.data(), str4.size()}};
+    writer->add_values(values2.data(), 2);
+    writer->flush();
+
+    // write
+    ColumnIndexMetaPB index_meta;
+    write_file(*writer, index_meta, filename);
+
+    // read
+    ZoneMapIndexReader reader;
+    load_zone_map(reader, index_meta, filename);
+
+    // page zone map
+    ASSERT_EQ(2, reader.num_pages());
+    const auto& zone_maps = reader.page_zone_maps();
+    ASSERT_EQ(2, zone_maps.size());
+
+    check_result(zone_maps[0], true, true, str1, str2, false, true);
+    check_result(zone_maps[1], true, true, str3, str4, false, true);
+
+    // segment zonemap
+    const auto& segment_zonemap = index_meta.zone_map_index().segment_zone_map();
+    check_result(segment_zonemap, true, true, str1, str4, false, true);
+}
+
+TEST_F(ColumnZoneMapTest, AllNullPage) {
+    std::string filename = kTestDir + "/AllNullPage";
+
+    TabletColumn int_column = create_int_key(0);
+    TypeInfoPtr type_info = get_type_info(int_column);
+
+    auto writer = ZoneMapIndexWriter::create(type_info.get());
+
+    // add one page
+    writer->add_nulls(10);
+    writer->flush();
+
+    // write
+    ColumnIndexMetaPB index_meta;
+    write_file(*writer, index_meta, filename);
+
+    // read
+    ZoneMapIndexReader reader;
+    load_zone_map(reader, index_meta, filename);
+
+    // page zone map
+    ASSERT_EQ(1, reader.num_pages());
+    const auto& zone_maps = reader.page_zone_maps();
+    ASSERT_EQ(1, zone_maps.size());
+
+    check_result(zone_maps[0], false, false, "", "", true, false);
+
+    // segment zonemap
+    const auto& segment_zonemap = index_meta.zone_map_index().segment_zone_map();
+    check_result(segment_zonemap, false, false, "", "", true, false);
+}
+
+>>>>>>> 515a360c79 ([Enhancement] Support customizing buffer size for lake compaction (#38291))
 // Test for int
 TEST_F(ColumnZoneMapTest, NormalTestIntPage) {
     std::string filename = kTestDir + "/NormalTestIntPage";

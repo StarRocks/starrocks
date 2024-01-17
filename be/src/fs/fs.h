@@ -85,6 +85,8 @@ struct SequentialFileOptions {
     // Don't cache remote file locally on read requests.
     // This options can be ignored if the underlying filesystem does not support local cache.
     bool skip_fill_local_cache = false;
+    // Specify different buffer size for different read scenarios
+    int64_t buffer_size = -1;
 };
 
 struct RandomAccessFileOptions {
@@ -93,6 +95,8 @@ struct RandomAccessFileOptions {
     // Don't cache remote file locally on read requests.
     // This options can be ignored if the underlying filesystem does not support local cache.
     bool skip_fill_local_cache = false;
+    // Specify different buffer size for different read scenarios
+    int64_t buffer_size = -1;
 };
 
 struct DirEntry {

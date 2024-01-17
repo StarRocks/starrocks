@@ -134,7 +134,8 @@ Status ConvertedSchemaChange::init() {
     _read_params.skip_aggregation = false;
     _read_params.chunk_size = config::vector_chunk_size;
     _read_params.use_page_cache = false;
-    _read_params.fill_data_cache = false;
+    // not fill data cache
+    _read_params.lake_io_opts.fill_data_cache = false;
     _read_params.sorted_by_keys_per_tablet = true;
 
     ASSIGN_OR_RETURN(auto base_tablet_schema, _base_tablet->get_schema());

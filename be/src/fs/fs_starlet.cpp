@@ -280,6 +280,7 @@ public:
         }
         auto opt = ReadOptions();
         opt.skip_fill_local_cache = opts.skip_fill_local_cache;
+        opt.buffer_size = opts.buffer_size;
         if (info.size.has_value()) {
             opt.file_size = info.size.value();
         }
@@ -305,7 +306,14 @@ public:
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
+<<<<<<< HEAD
         auto file_st = (*fs_st)->open(pair.first, ReadOptions{.skip_fill_local_cache = opts.skip_fill_local_cache});
+=======
+        auto opt = ReadOptions();
+        opt.skip_fill_local_cache = opts.skip_fill_local_cache;
+        opt.buffer_size = opts.buffer_size;
+        auto file_st = (*fs_st)->open(pair.first, std::move(opt));
+>>>>>>> 515a360c79 ([Enhancement] Support customizing buffer size for lake compaction (#38291))
 
         if (!file_st.ok()) {
             return to_status(file_st.status());

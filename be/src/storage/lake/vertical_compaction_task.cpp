@@ -117,7 +117,10 @@ StatusOr<int32_t> VerticalCompactionTask::calculate_chunk_size_for_column_group(
         //
         // test case: 4k columns, 150 segments, 60w rows
         // compaction task cost: 272s (fill metadata cache) vs 2400s (not fill metadata cache)
-        ASSIGN_OR_RETURN(auto segments, rowset->segments(false, true));
+        LakeIOOptions lake_io_opts{.fill_data_cache = false,
+                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
+        auto fill_meta_cache = true;
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts, fill_meta_cache));
         for (auto& segment : segments) {
             for (auto column_index : column_group) {
                 const auto* column_reader = segment->column(column_index);
@@ -151,7 +154,8 @@ Status VerticalCompactionTask::compact_column_group(bool is_key, int column_grou
     reader_params.chunk_size = chunk_size;
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
-    reader_params.fill_data_cache = config::lake_enable_vertical_compaction_fill_data_cache;
+    reader_params.lake_io_opts = {config::lake_enable_vertical_compaction_fill_data_cache,
+                                  config::lake_compaction_stream_buffer_size_bytes};
     RETURN_IF_ERROR(reader.open(reader_params));
 
     auto chunk = ChunkHelper::new_chunk(schema, chunk_size);

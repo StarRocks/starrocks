@@ -50,9 +50,15 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     _opts = opts;
 
     IndexReadOptions index_opts;
+<<<<<<< HEAD
     index_opts.use_page_cache = !config::disable_storage_page_cache;
     index_opts.kept_in_memory = false;
     index_opts.skip_fill_data_cache = _skip_fill_data_cache();
+=======
+    index_opts.use_page_cache = config::enable_ordinal_index_memory_page_cache || !config::disable_storage_page_cache;
+    index_opts.kept_in_memory = config::enable_ordinal_index_memory_page_cache;
+    index_opts.lake_io_opts = opts.lake_io_opts;
+>>>>>>> 515a360c79 ([Enhancement] Support customizing buffer size for lake compaction (#38291))
     index_opts.read_file = _opts.read_file;
     index_opts.stats = _opts.stats;
     RETURN_IF_ERROR(_reader->load_ordinal_index(index_opts));
@@ -309,9 +315,15 @@ Status ScalarColumnIterator::get_row_ranges_by_zone_map(const std::vector<const 
     DCHECK(row_ranges->empty());
     if (_reader->has_zone_map()) {
         IndexReadOptions opts;
+<<<<<<< HEAD
         opts.use_page_cache = !config::disable_storage_page_cache;
         opts.kept_in_memory = false;
         opts.skip_fill_data_cache = _skip_fill_data_cache();
+=======
+        opts.use_page_cache = config::enable_zonemap_index_memory_page_cache || !config::disable_storage_page_cache;
+        opts.kept_in_memory = config::enable_zonemap_index_memory_page_cache;
+        opts.lake_io_opts = _opts.lake_io_opts;
+>>>>>>> 515a360c79 ([Enhancement] Support customizing buffer size for lake compaction (#38291))
         opts.read_file = _opts.read_file;
         opts.stats = _opts.stats;
         RETURN_IF_ERROR(_reader->zone_map_filter(predicates, del_predicate, &_delete_partial_satisfied_pages,
@@ -334,7 +346,7 @@ Status ScalarColumnIterator::get_row_ranges_by_bloom_filter(const std::vector<co
     IndexReadOptions opts;
     opts.use_page_cache = !config::disable_storage_page_cache;
     opts.kept_in_memory = false;
-    opts.skip_fill_data_cache = _skip_fill_data_cache();
+    opts.lake_io_opts = _opts.lake_io_opts;
     opts.read_file = _opts.read_file;
     opts.stats = _opts.stats;
     RETURN_IF_ERROR(_reader->bloom_filter(predicates, row_ranges, opts));
