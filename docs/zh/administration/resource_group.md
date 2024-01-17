@@ -38,9 +38,9 @@ displayed_sidebar: "Chinese"
   > 说明：query_pool 的查看方式，参见 [内存管理](Memory_management.md)。
 - `concurrency_limit`：资源组中并发查询数的上限，用以防止并发查询提交过多而导致的过载。只有大于 0 时才生效，默认值为 0。
 - `max_cpu_cores`：资源组在单个 BE 节点中使用的 CPU 核数上限。仅在设置为大于 `0` 后生效。取值范围：[0, `avg_be_cpu_cores`]，其中 `avg_be_cpu_cores` 表示所有 BE 的 CPU 核数的平均值。默认值为 0。
-- `spill_mem_limit_threshold`: 自3.1.7版本引入, 该资源组在当前BE节点触发query spill的内存阈值百分比，如果该资源组已经使用的内存超过该资源组可用于查询的内存上限的一定百分比,开启spill的查询会尝试触发spill来减少内存占用。取值范围为(0, 1), 默认值为1。
-
-  > 说明：假设BE节点的内存上限为M，某个资源组设置的`mem_limit`为 0.9，`spill_mem_limit_threshold`为0.7, 那么当该资源组使用的内存超过`M*0.9*0.7`时，所有设置了`enable_spill=true`的查询会尝试触发spill来减少内存占用。
+- `spill_mem_limit_threshold`: 资源组在当前 BE 节点触发落盘的内存占用阈值（百分比）。取值范围：[0,1]，默认值为 1。该参数自 v3.1.7 版本引入。
+  - 如果查询开启落盘功能且命中资源组（包括默认资源组 `default_wg`），那么如果该查询使用的内存超过 `query_mem_limit * mem_limit * spill_mem_limit_threshold`，则会触发中间结果落盘以减少内存占用。其中 `query_mem_limit` 为当前 BE 节点上查询的内存限制，由系统变量 `query_mem_limit` 控制。
+  - 如果查询开启落盘功能，但不受资源组功能管理，系统将根据其实际内存占用决定是否触发中间结果落盘。
 
 在以上资源限制的基础上，您可以通过以下大查询限制进一步对资源组进行如下的配置：
 
@@ -287,7 +287,7 @@ FE 节点 **fe.audit.log** 的 `ResourceGroup` 列和 `EXPLAIN VERBOSE <query>` 
 - `big_query_cpu_second_limit`：0。
 - `big_query_scan_rows_limit`：0。
 - `big_query_mem_limit`：0。
-- `spill_mem_limit_threshold`: 100%。
+- `spill_mem_limit_threshold`: 1。
 
 ### 监控资源组
 
