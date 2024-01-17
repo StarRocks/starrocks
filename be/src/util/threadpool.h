@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include <bvar/bvar.h>
 #include <fmt/format.h>
 
 #include <atomic>
@@ -66,6 +67,33 @@ class Runnable {
 public:
     virtual void run() = 0;
     virtual ~Runnable() = default;
+};
+
+class ThreadPoolMetrics {
+public:
+    ThreadPoolMetrics() = default;
+
+    void update(int64_t total_task_run_time_ns) {
+        std::lock_guard l(_lock);
+        if (total_task_run_time_ns <= _last_total_task_run_time_ns) {
+            return;
+        }
+
+        int64_t new_update_time_ns = MonotonicNanos();
+        int64_t diff_run_time = total_task_run_time_ns - _last_total_task_run_time_ns;
+        int64_t diff_update_time = new_update_time_ns - _last_update_time_ns;
+        _worker_usage = diff_update_time <= 0 ? 0 : diff_run_time / (double)diff_update_time;
+        _last_update_time_ns = new_update_time_ns;
+        _last_total_task_run_time_ns = total_task_run_time_ns;
+    }
+
+    double worker_usage() const { return _worker_usage; }
+
+private:
+    std::mutex _lock;
+    int64_t _last_update_time_ns;
+    int64_t _last_total_task_run_time_ns;
+    std::atomic<double> _worker_usage;
 };
 
 // ThreadPool takes a lot of arguments. We provide sane defaults with a builder.
@@ -224,6 +252,11 @@ public:
 
     std::unique_ptr<ThreadPoolToken> new_token(ExecutionMode mode);
 
+    const ThreadPoolMetrics& update_and_get_metrics() {
+        // not protect because no need for high accuracy
+        _metrics.update(_total_task_run_time_ns.get_value());
+    }
+
     // Return the number of threads currently running (or in the process of starting up)
     // for this thread pool.
     int num_threads() const {
@@ -371,6 +404,11 @@ private:
 
     // ExecutionMode::CONCURRENT token used by the pool for tokenless submission.
     std::unique_ptr<ThreadPoolToken> _tokenless;
+
+    // Accumulated time in nanoseconds to run task
+    bvar::Adder<int64_t> _total_task_run_time_ns;
+
+    ThreadPoolMetrics _metrics;
 
     ThreadPool(const ThreadPool&) = delete;
     const ThreadPool& operator=(const ThreadPool&) = delete;

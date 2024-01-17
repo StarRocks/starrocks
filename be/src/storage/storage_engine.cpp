@@ -219,6 +219,17 @@ Status StorageEngine::_open(const EngineOptions& options) {
 
     _async_delta_writer_executor =
             std::make_unique<bthreads::ThreadPoolExecutor>(thread_pool.release(), kTakesOwnership);
+    REGISTER_GAUGE_STARROCKS_METRIC(async_delta_writer_num_workers, [this]() {
+        return static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())
+                ->get_thread_pool()
+                ->num_threads();
+    })
+    REGISTER_GAUGE_STARROCKS_METRIC(async_delta_writer_worker_usage, [this]() {
+        return static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())
+                ->get_thread_pool()
+                ->update_and_get_metrics()
+                .worker_usage();
+    })
     REGISTER_GAUGE_STARROCKS_METRIC(async_delta_writer_queue_count, [this]() {
         return static_cast<bthreads::ThreadPoolExecutor*>(_async_delta_writer_executor.get())
                 ->get_thread_pool()
@@ -227,17 +238,32 @@ Status StorageEngine::_open(const EngineOptions& options) {
 
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
+    REGISTER_GAUGE_STARROCKS_METRIC(memtable_flush_num_workers,
+                                    [this]() { return _memtable_flush_executor->get_thread_pool()->num_threads(); })
+    REGISTER_GAUGE_STARROCKS_METRIC(memtable_flush_worker_usage, [this]() {
+        return _memtable_flush_executor->get_thread_pool()->update_and_get_metrics().worker_usage();
+    })
     REGISTER_GAUGE_STARROCKS_METRIC(memtable_flush_queue_count, [this]() {
         return _memtable_flush_executor->get_thread_pool()->num_queued_tasks();
     })
 
     _segment_flush_executor = std::make_unique<SegmentFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_flush_executor->init(dirs), "init SegmentFlushExecutor failed");
+    REGISTER_GAUGE_STARROCKS_METRIC(segment_flush_num_workers,
+                                    [this]() { return _segment_flush_executor->get_thread_pool()->num_threads(); })
+    REGISTER_GAUGE_STARROCKS_METRIC(segment_flush_worker_usage, [this]() {
+        return _segment_flush_executor->get_thread_pool()->update_and_get_metrics().worker_usage();
+    })
     REGISTER_GAUGE_STARROCKS_METRIC(segment_flush_queue_count,
                                     [this]() { return _segment_flush_executor->get_thread_pool()->num_queued_tasks(); })
 
     _segment_replicate_executor = std::make_unique<SegmentReplicateExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_segment_replicate_executor->init(dirs), "init SegmentReplicateExecutor failed");
+    REGISTER_GAUGE_STARROCKS_METRIC(segment_replicate_num_workers,
+                                    [this]() { return _segment_replicate_executor->get_thread_pool()->num_threads(); })
+    REGISTER_GAUGE_STARROCKS_METRIC(segment_replicate_worker_usage, [this]() {
+        return _segment_replicate_executor->get_thread_pool()->update_and_get_metrics().worker_usage();
+    })
     REGISTER_GAUGE_STARROCKS_METRIC(segment_replicate_queue_count, [this]() {
         return _segment_replicate_executor->get_thread_pool()->num_queued_tasks();
     })

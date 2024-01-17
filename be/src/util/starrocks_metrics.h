@@ -269,13 +269,33 @@ public:
     METRIC_DEFINE_UINT_GAUGE(brpc_endpoint_stub_count, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(tablet_writer_count, MetricUnit::NOUNIT);
 
-    // queue task count of thread pool
+    // metrics for thread pool including number of workers, worker usage, and queue task count
+    METRIC_DEFINE_UINT_GAUGE(publish_version_num_workers, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(publish_version_worker_usage, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(publish_version_queue_count, MetricUnit::NOUNIT);
+
+    METRIC_DEFINE_UINT_GAUGE(async_delta_writer_num_workers, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(async_delta_writer_worker_usage, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(async_delta_writer_queue_count, MetricUnit::NOUNIT);
+
+    METRIC_DEFINE_UINT_GAUGE(memtable_flush_num_workers, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(memtable_flush_worker_usage, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(memtable_flush_queue_count, MetricUnit::NOUNIT);
+
+    METRIC_DEFINE_UINT_GAUGE(segment_replicate_num_workers, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(segment_replicate_worker_usage, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(segment_replicate_queue_count, MetricUnit::NOUNIT);
+
+    METRIC_DEFINE_UINT_GAUGE(segment_flush_num_workers, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(segment_flush_worker_usage, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(segment_flush_queue_count, MetricUnit::NOUNIT);
+
+    METRIC_DEFINE_UINT_GAUGE(update_apply_num_workers, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(update_apply_worker_usage, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(update_apply_queue_count, MetricUnit::NOUNIT);
+
+    METRIC_DEFINE_UINT_GAUGE(pk_index_compaction_num_workers, MetricUnit::NOUNIT);
+    METRIC_DEFINE_UINT_GAUGE(pk_index_compaction_worker_usage, MetricUnit::NOUNIT);
     METRIC_DEFINE_UINT_GAUGE(pk_index_compaction_queue_count, MetricUnit::NOUNIT);
 
     METRIC_DEFINE_UINT_GAUGE(load_rpc_threadpool_size, MetricUnit::NOUNIT);
