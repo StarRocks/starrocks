@@ -30,7 +30,7 @@ Release date: January 12, 2024
 
 ### Improvements
 
-- INSERT INTO FILE() SELECT FROM supports reading and writing BINARY-type data to Parquet-formatted external tables. [#36797](https://github.com/StarRocks/starrocks/pull/36797)
+- INSERT INTO FILE() SELECT FROM supports reading BINARY-type data from tables and exporting the data to Parquet-formatted files in remote storage. [#36797](https://github.com/StarRocks/starrocks/pull/36797)
 - Asynchronous materialized views support dynamically setting the `datacache.partition_duration` property, which controls the validity period of the hot data in the data cache. [#35681](https://github.com/StarRocks/starrocks/pull/35681)
 - Wen using JDK, the default GC algorithm is G1. [#37386](https://github.com/StarRocks/starrocks/pull/37386)
 - The `date_trunc`, `adddate`, and `time_slice` functions support setting the `interval` parameter to values that are accurate to the millisecond and microsecond. [#36386](https://github.com/StarRocks/starrocks/pull/36386)
