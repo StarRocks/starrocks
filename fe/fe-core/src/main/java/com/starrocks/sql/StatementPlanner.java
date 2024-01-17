@@ -20,12 +20,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.common.UnsupportedException;
->>>>>>> abafc229a7 ([Enhancement] optimzie plan retry strategy (#38443))
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerTraceUtil;
@@ -211,7 +206,7 @@ public class StatementPlanner {
 
                 // if exists table is applying visible log, we wait 10 ms to retry
                 if (olapTables.stream().anyMatch(t -> t.lastVersionUpdateStartTime.get() > t.lastVersionUpdateEndTime.get())) {
-                    try (Timer timer = Tracers.watchScope("PlanRetrySleepTime")) {
+                    try (PlannerProfile.ScopedTimer ignored1 = PlannerProfile.getScopedTimer("PlanRetrySleepTime")) {
                         Thread.sleep(10);
                     } catch (InterruptedException e) {
                         throw new StarRocksPlannerException("query had been interrupted", INTERNAL_ERROR);
