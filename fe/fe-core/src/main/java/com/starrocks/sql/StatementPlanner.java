@@ -232,7 +232,7 @@ public class StatementPlanner {
 
                 // if exists table is applying visible log, we wait 10 ms to retry
                 if (olapTables.stream().anyMatch(t -> t.lastVersionUpdateStartTime.get() > t.lastVersionUpdateEndTime.get())) {
-                    try (PlannerProfile.ScopedTimer ignored1 = PlannerProfile.getScopedTimer("ExecPlanBuild")) {
+                    try (PlannerProfile.ScopedTimer ignored1 = PlannerProfile.getScopedTimer("PlanRetrySleepTime")) {
                         Thread.sleep(10);
                     } catch (InterruptedException e) {
                         throw new StarRocksPlannerException("query had been interrupted", INTERNAL_ERROR);
