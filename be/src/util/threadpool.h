@@ -255,6 +255,7 @@ public:
     const ThreadPoolMetrics& update_and_get_metrics() {
         // not protect because no need for high accuracy
         _metrics.update(_total_task_run_time_ns.get_value());
+        return _metrics;
     }
 
     // Return the number of threads currently running (or in the process of starting up)
