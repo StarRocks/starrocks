@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedScanColumnRule;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class ScalarOperatorRewriter {
     public static final List<ScalarOperatorRewriteRule> DEFAULT_TYPE_CAST_RULE = Lists.newArrayList(
@@ -59,18 +60,10 @@ public class ScalarOperatorRewriter {
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule()
     );
-    public static final List<ScalarOperatorRewriteRule> MV_SCALAR_REWRITE_RULES = Lists.newArrayList(
-            // required
-            new ImplicitCastRule(),
-            // optional
-            new ReduceCastRule(),
-            new MvNormalizePredicateRule(),
-            new FoldConstantsRule(),
-            new SimplifiedScanColumnRule(),
-            new SimplifiedPredicateRule(),
-            new ExtractCommonPredicateRule(),
-            new ArithmeticCommutativeRule()
-    );
+    public static final List<ScalarOperatorRewriteRule> MV_SCALAR_REWRITE_RULES = DEFAULT_REWRITE_SCAN_PREDICATE_RULES.stream()
+            .map(rule -> rule instanceof NormalizePredicateRule ? new MvNormalizePredicateRule() : rule)
+            .collect(Collectors.toList());
+
     private final ScalarOperatorRewriteContext context;
 
     public ScalarOperatorRewriter() {
