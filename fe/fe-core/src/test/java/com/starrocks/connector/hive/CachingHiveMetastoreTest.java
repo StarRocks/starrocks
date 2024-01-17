@@ -109,6 +109,29 @@ public class CachingHiveMetastoreTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testGetTransactionalTable() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        // get insert only table
+        com.starrocks.catalog.Table table = cachingHiveMetastore.getTable("transactional_db", "insert_only");
+        Assert.assertNotNull(table);
+        // get full acid table
+        Assert.assertThrows(StarRocksConnectorException.class, () -> {
+            cachingHiveMetastore.getTable("transactional_db", "full_acid");
+        });
+    }
+
+    @Test
+    public void testTableExists() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        Assert.assertTrue(cachingHiveMetastore.tableExists("db1", "tbl1"));
+    }
+
+    @Test
+>>>>>>> a685c5fc68 ([BugFix] Banned hive full acid table (#39264))
     public void testRefreshTable() {
         new Expectations(metastore) {
             {

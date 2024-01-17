@@ -14,6 +14,7 @@ import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
+import org.apache.hadoop.hive.ql.io.AcidUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -26,6 +27,14 @@ import java.util.stream.Collectors;
 import static com.google.common.collect.ImmutableList.toImmutableList;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toHiveCommonStats;
+<<<<<<< HEAD
+=======
+import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toMetastoreApiTable;
+import static com.starrocks.connector.hive.HiveMetastoreApiConverter.updateStatisticsParameters;
+import static com.starrocks.connector.hive.HiveMetastoreApiConverter.validateHiveTableType;
+import static com.starrocks.connector.hive.HiveMetastoreOperations.LOCATION_PROPERTY;
+import static com.starrocks.connector.hive.Partition.TRANSIENT_LAST_DDL_TIME;
+>>>>>>> a685c5fc68 ([BugFix] Banned hive full acid table (#39264))
 
 public class HiveMetastore implements IHiveMetastore {
 
@@ -61,7 +70,21 @@ public class HiveMetastore implements IHiveMetastore {
         }
 
         if (!HiveMetastoreApiConverter.isHudiTable(table.getSd().getInputFormat())) {
+<<<<<<< HEAD
             return HiveMetastoreApiConverter.toHiveTable(table, catalogName);
+=======
+            validateHiveTableType(table.getTableType());
+            if (AcidUtils.isFullAcidTable(table)) {
+                throw new StarRocksConnectorException(
+                        String.format("%s.%s is a hive transactional table(full acid), sr didn't support it yet", dbName,
+                                tableName));
+            }
+            if (table.getTableType().equalsIgnoreCase("VIRTUAL_VIEW")) {
+                return HiveMetastoreApiConverter.toHiveView(table, catalogName);
+            } else {
+                return HiveMetastoreApiConverter.toHiveTable(table, catalogName);
+            }
+>>>>>>> a685c5fc68 ([BugFix] Banned hive full acid table (#39264))
         } else {
             return HiveMetastoreApiConverter.toHudiTable(table, catalogName);
         }
