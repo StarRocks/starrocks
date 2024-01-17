@@ -52,7 +52,7 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
     public void testQueryPlanAction() throws IOException, TException {
         super.setUpWithCatalog();
         RequestBody body =
-                RequestBody.create(JSON, "{ \"sql\" :  \" select k1,k2 from " + DB_NAME + "." + TABLE_NAME + " \" }");
+                RequestBody.create(JSON, "{ \"sql\" :  \" select k1 as alias_1,k2 from " + DB_NAME + "." + TABLE_NAME + " \" }");
         Request request = new Request.Builder()
                 .post(body)
                 .addHeader("Authorization", rootAuth)
@@ -73,6 +73,18 @@ public class TableQueryPlanActionTest extends StarRocksHttpTestCase {
             Assert.assertEquals(testStartVersion, tabletObject.getLong("version"));
             Assert.assertEquals(testSchemaHash, tabletObject.getLong("schemaHash"));
 
+<<<<<<< HEAD
+=======
+            }
+            String queryPlan = jsonObject.getString("opaqued_query_plan");
+            Assert.assertNotNull(queryPlan);
+            byte[] binaryPlanInfo = Base64.getDecoder().decode(queryPlan);
+            TDeserializer deserializer = new TDeserializer();
+            TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
+            deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo);
+            Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
+            expectThrowsNoException(() -> deserializer.deserialize(tQueryPlanInfo, binaryPlanInfo));
+>>>>>>> 58b6071dea ([BugFix] add output col names in the TQueryPlanInfo (#39078))
         }
         String queryPlan = jsonObject.getString("opaqued_query_plan");
         Assert.assertNotNull(queryPlan);
