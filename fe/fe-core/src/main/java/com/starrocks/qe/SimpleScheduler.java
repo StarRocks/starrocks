@@ -42,7 +42,6 @@ import com.starrocks.common.Reference;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -70,10 +69,17 @@ public class SimpleScheduler {
     //count id for backend get TNetworkAddress
     private static AtomicLong nextBackendHostId = new AtomicLong(0);
     //count id for get ComputeNode
+<<<<<<< HEAD
     private static Map<Long, Integer> blacklistBackends = Maps.newHashMap();
     private static Lock lock = new ReentrantLock();
     private static UpdateBlacklistThread updateBlacklistThread;
     private static AtomicBoolean enableUpdateBlacklistThread;
+=======
+    private static final ConcurrentMap<Long, Integer> BLOCKLIST_NODES = Maps.newConcurrentMap();
+
+    private static final AtomicBoolean ENABLE_UPDATE_BLOCKLIST_THREAD;
+    private static final UpdateBlocklistThread UPDATE_BLOCKLIST_THREAD;
+>>>>>>> c5270aebc8 ([BugFix] forget remove compute node from blacklist (#38746))
 
     static {
         enableUpdateBlacklistThread = new AtomicBoolean(true);
@@ -85,7 +91,7 @@ public class SimpleScheduler {
     public static TNetworkAddress getHost(long nodeId,
                                           List<TScanRangeLocation> locations,
                                           ImmutableMap<Long, ComputeNode> computeNodes,
-                                          Reference<Long> backendIdRef) {
+                                          Reference<Long> nodeIdRef) {
 
         if (locations == null || computeNodes == null) {
             return null;
@@ -94,6 +100,7 @@ public class SimpleScheduler {
 
         ComputeNode node = computeNodes.get(nodeId);
 
+<<<<<<< HEAD
         lock.lock();
         try {
             if (node != null && node.isAlive() && !blacklistBackends.containsKey(nodeId)) {
@@ -126,12 +133,47 @@ public class SimpleScheduler {
                         backendIdRef.setRef(candidateNode.getId());
                         return new TNetworkAddress(candidateNode.getHost(), candidateNode.getBePort());
                     }
+=======
+        if (node != null && node.isAlive() && !isInBlocklist(nodeId)) {
+            nodeIdRef.setRef(nodeId);
+            return new TNetworkAddress(node.getHost(), node.getBePort());
+        } else {
+            for (TScanRangeLocation location : locations) {
+                if (location.backend_id == nodeId) {
+                    continue;
+                }
+                // choose the first alive backend(in analysis stage, the locations are random)
+                ComputeNode candidateNode = computeNodes.get(location.backend_id);
+                if (candidateNode != null && candidateNode.isAlive() && !isInBlocklist(location.backend_id)) {
+                    nodeIdRef.setRef(location.backend_id);
+                    return new TNetworkAddress(candidateNode.getHost(), candidateNode.getBePort());
+                }
+            }
+
+            // In shared data mode, we can select any alive node to replace the original dead node for query
+            if (RunMode.isSharedDataMode()) {
+                List<ComputeNode> allNodes = new ArrayList<>(computeNodes.size());
+                allNodes.addAll(computeNodes.values());
+                List<ComputeNode> candidateNodes = allNodes.stream()
+                        .filter(x -> x.getId() != nodeId && x.isAlive() && !isInBlocklist(x.getId()))
+                        .collect(Collectors.toList());
+                if (!candidateNodes.isEmpty()) {
+                    // use modulo operation to ensure that the same node is selected for the dead node
+                    ComputeNode candidateNode = candidateNodes.get((int) (nodeId % candidateNodes.size()));
+                    nodeIdRef.setRef(candidateNode.getId());
+                    return new TNetworkAddress(candidateNode.getHost(), candidateNode.getBePort());
+>>>>>>> c5270aebc8 ([BugFix] forget remove compute node from blacklist (#38746))
                 }
             }
         } finally {
             lock.unlock();
         }
+<<<<<<< HEAD
         // no backend returned
+=======
+
+        // no backend or compute node returned
+>>>>>>> c5270aebc8 ([BugFix] forget remove compute node from blacklist (#38746))
         return null;
     }
 
@@ -187,6 +229,7 @@ public class SimpleScheduler {
         return null;
     }
 
+<<<<<<< HEAD
     public static void addToBlacklist(Long backendID) {
         if (backendID == null) {
             return;
@@ -221,11 +264,36 @@ public class SimpleScheduler {
         } finally {
             lock.unlock();
         }
+=======
+    public static void addToBlocklist(Long nodeID) {
+        if (nodeID == null) {
+            return;
+        }
+
+        int tryTime = Config.heartbeat_timeout_second + 1;
+        BLOCKLIST_NODES.put(nodeID, tryTime);
+        LOG.warn("add black list " + nodeID);
+    }
+
+    public static boolean isInBlocklist(long backendId) {
+        return BLOCKLIST_NODES.containsKey(backendId);
+    }
+
+    // The function is used for unit test
+    @VisibleForTesting
+    public static boolean removeFromBlocklist(Long nodeID) {
+        if (nodeID == null) {
+            return true;
+        }
+
+        return BLOCKLIST_NODES.remove(nodeID) != null;
+>>>>>>> c5270aebc8 ([BugFix] forget remove compute node from blacklist (#38746))
     }
 
     public static void updateBlacklist() {
         SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
 
+<<<<<<< HEAD
         lock.lock();
         Map<Long, Integer> blackListBackendsCopy = new HashMap<>(blacklistBackends);
         lock.unlock();
@@ -237,10 +305,18 @@ public class SimpleScheduler {
         while (iterator.hasNext()) {
             Map.Entry<Long, Integer> entry = iterator.next();
             Long backendId = entry.getKey();
+=======
+        List<Long> removedNodes = new ArrayList<>();
+        Map<Long, Integer> retryingNodes = new HashMap<>();
 
-            // 1. If the backend is null, means that the backend has been removed.
+        for (Map.Entry<Long, Integer> entry : BLOCKLIST_NODES.entrySet()) {
+            Long nodeId = entry.getKey();
+>>>>>>> c5270aebc8 ([BugFix] forget remove compute node from blacklist (#38746))
+
+            // 1. If the node is null, means that the node has been removed.
             // 2. check the all ports of the backend
             // 3. retry Config.heartbeat_timeout_second + 1 times
+<<<<<<< HEAD
             // If both of the above conditions are met, the backend is removed from the blacklist
             Backend backend = clusterInfoService.getBackend(backendId);
             if (backend == null) {
@@ -248,24 +324,34 @@ public class SimpleScheduler {
                 LOG.warn("remove backendID {} from blacklist", backendId);
             } else if (clusterInfoService.checkBackendAvailable(backendId)) {
                 String host = backend.getHost();
+=======
+            // If both of the above conditions are met, the node is removed from the blocklist
+            ComputeNode node = clusterInfoService.getBackendOrComputeNode(nodeId);
+            if (node == null) {
+                removedNodes.add(nodeId);
+                LOG.warn("remove nodeID {} from blacklist", nodeId);
+            } else if (clusterInfoService.checkNodeAvailable(node)) {
+                String host = node.getHost();
+>>>>>>> c5270aebc8 ([BugFix] forget remove compute node from blacklist (#38746))
                 List<Integer> ports = new ArrayList<Integer>();
-                Collections.addAll(ports, backend.getBePort(), backend.getBrpcPort(), backend.getHttpPort());
+                Collections.addAll(ports, node.getBePort(), node.getBrpcPort(), node.getHttpPort());
                 if (NetUtils.checkAccessibleForAllPorts(host, ports)) {
-                    removedBackends.add(backendId);
-                    LOG.warn("remove backendID {} from blacklist", backendId);
+                    removedNodes.add(nodeId);
+                    LOG.warn("remove nodeID {} from blacklist", nodeId);
                 }
             } else {
                 Integer retryTimes = entry.getValue();
                 retryTimes = retryTimes - 1;
                 if (retryTimes <= 0) {
-                    removedBackends.add(backendId);
-                    LOG.warn("remove backendID {} from blacklist", backendId);
+                    removedNodes.add(nodeId);
+                    LOG.warn("remove nodeID {} from blacklist", nodeId);
                 } else {
-                    retryingBackends.put(backendId, retryTimes);
+                    retryingNodes.put(nodeId, retryTimes);
                 }
             }
         }
 
+<<<<<<< HEAD
         lock.lock();
         try {
             // remove backends.
@@ -281,6 +367,16 @@ public class SimpleScheduler {
             }
         } finally {
             lock.unlock();
+=======
+        // remove backends.
+        for (Long backendId : removedNodes) {
+            BLOCKLIST_NODES.remove(backendId);
+        }
+
+        // update the retry times.
+        for (Map.Entry<Long, Integer> entry : retryingNodes.entrySet()) {
+            BLOCKLIST_NODES.computeIfPresent(entry.getKey(), (k, v) -> entry.getValue());
+>>>>>>> c5270aebc8 ([BugFix] forget remove compute node from blacklist (#38746))
         }
     }
 
