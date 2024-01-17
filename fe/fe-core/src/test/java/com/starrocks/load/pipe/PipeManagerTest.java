@@ -232,7 +232,8 @@ public class PipeManagerTest {
         pm.dropPipesOfDb(PIPE_TEST_DB, dbId);
 
         // create pipe 1
-        String sql = "create pipe p1 as insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
+        String sql = "create pipe p1 properties ('AUTO_INGEST'='FALSE') as " +
+                "insert into tbl select * from files('path'='fake://pipe', 'format'='parquet')";
         CreatePipeStmt createStmt = (CreatePipeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         pm.createPipe(createStmt);
         UtFrameUtils.PseudoImage image1 = new UtFrameUtils.PseudoImage();
