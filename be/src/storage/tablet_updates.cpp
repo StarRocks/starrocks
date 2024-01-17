@@ -3360,7 +3360,8 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
     uint32_t next_rowset_id = 0;
     std::vector<RowsetLoadInfo> new_rowset_load_infos(src_rowsets.size());
 
-    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema =
+            ChunkHelper::convert_schema(base_tablet->tablet_schema(), chunk_changer->get_selected_column_indexes());
 
     OlapReaderStatistics stats;
 
@@ -3525,7 +3526,8 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
 Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet,
                                                 const ChunkIteratorPtr& seg_iterator, ChunkChanger* chunk_changer,
                                                 const std::unique_ptr<RowsetWriter>& rowset_writer) {
-    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema =
+            ChunkHelper::convert_schema(base_tablet->tablet_schema(), chunk_changer->get_selected_column_indexes());
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
 
     Schema new_schema = ChunkHelper::convert_schema(_tablet.tablet_schema());
@@ -3613,7 +3615,8 @@ Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, i
 
     std::vector<ChunkPtr> chunk_arr;
 
-    Schema base_schema = ChunkHelper::convert_schema(base_tablet->tablet_schema());
+    Schema base_schema =
+            ChunkHelper::convert_schema(base_tablet->tablet_schema(), chunk_changer->get_selected_column_indexes());
     ChunkSorter chunk_sorter;
 
     OlapReaderStatistics stats;
