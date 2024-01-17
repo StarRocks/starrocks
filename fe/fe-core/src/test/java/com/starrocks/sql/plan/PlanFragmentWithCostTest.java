@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TQueryPlanInfo;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -2374,5 +2375,15 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "and t1.L_SUPPKEY = t2.N_NATIONKEY;";
         plan = getCostExplain(sql);
         assertContains(plan, "cardinality: 100000000");
+    }
+
+    @Test
+    public void testOutputColNames() throws Exception {
+        String sql = "select v1 as alias_1, v2 as alias_2, v2, abs(v2) as v2 from t0 where v3 = 1";
+        ExecPlan execPlan = getExecPlan(sql);
+        TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
+        tQueryPlanInfo.output_names = execPlan.getColNames();
+        Assert.assertEquals(4, tQueryPlanInfo.output_names.size());
+        Assert.assertEquals("alias_1", tQueryPlanInfo.output_names.get(0));
     }
 }
