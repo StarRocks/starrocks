@@ -495,7 +495,7 @@ void* pvalloc(size_t size) __THROW ALIAS(my_pvalloc);
 int posix_memalign(void** r, size_t a, size_t s) __THROW ALIAS(my_posix_memalign);
 size_t malloc_usable_size(void* ptr) __THROW ALIAS(my_malloc_usebale_size);
 
-void * __libc_memalign(size_t alignment, size_t size) {
+void* __libc_memalign(size_t alignment, size_t size) {
     return memalign(alignment, size);
 }
 }
