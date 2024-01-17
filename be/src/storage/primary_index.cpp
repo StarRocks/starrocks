@@ -960,7 +960,7 @@ PrimaryIndex::~PrimaryIndex() {
                       << " memory: " << memory_usage();
         }
     }
-    
+
     TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(_tablet_id);
     if (tablet != nullptr) {
         if (_persistent_index != nullptr && !tablet->get_enable_persistent_index()) {
