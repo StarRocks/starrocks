@@ -3443,7 +3443,7 @@ Status PersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue* va
     }
 
     RETURN_IF_ERROR(_update_usage_and_size_by_key_length(add_usage_and_size));
-    return _flush_advance_or_append_wal(n, keys, values);
+    return _flush_advance_or_append_wal(n, keys, values, nullptr);
 }
 
 Status PersistentIndex::insert(size_t n, const Slice* keys, const IndexValue* values, bool check_l1) {
