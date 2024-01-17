@@ -335,11 +335,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownAggToMetaScanRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
-<<<<<<< HEAD
-=======
-        ruleRewriteOnlyOnce(tree, rootTaskContext, new SkewJoinOptimizeRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new ConvertToEqualForNullRule());
->>>>>>> 3c6a426da4 ([Enhancement] covert to equal for null predicate (#38589))
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         deriveLogicalProperty(tree);
