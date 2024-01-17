@@ -379,19 +379,12 @@ public class TransactionState implements Writable {
     public boolean tabletCommitInfosContainsReplica(long tabletId, long backendId, ReplicaState state) {
         TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
         if (this.tabletCommitInfos == null) {
-<<<<<<< HEAD
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-            // if tabletCommitInfos is null, skip this check and return true
-            LOG.debug("tabletCommitInfos is null in TransactionState, tabletid {} backend {} transid {}",
-                    tabletId, backend != null ? backend.toString() : "", transactionId);
-=======
             if (LOG.isDebugEnabled()) {
                 Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
                 // if tabletCommitInfos is null, skip this check and return true
                 LOG.debug("tabletCommitInfos is null in TransactionState, tablet {} backend {} txn {}",
                         tabletId, backend != null ? backend.toString() : "", transactionId);
             }
->>>>>>> abafc229a7 ([Enhancement] optimzie plan retry strategy (#38443))
             return true;
         }
         if (state != ReplicaState.NORMAL) {
