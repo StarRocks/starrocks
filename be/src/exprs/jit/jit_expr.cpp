@@ -60,19 +60,23 @@ Status JITExpr::prepare(RuntimeState* state, ExprContext* context) {
         return Status::JitCompileError("JIT is not supported");
     }
 
-    auto function = jit_engine->compile_scalar_function(context, _expr);
+    bool cached = false;
+    auto function = jit_engine->compile_scalar_function(context, _expr, &cached);
 
     auto elapsed = MonotonicNanos() - start;
     if (!function.ok()) {
         LOG(INFO) << "JIT: JIT compile failed, time cost: " << elapsed / 1000000.0 << " ms"
                   << " Reason: " << function.status();
-    } else {
+    } else if (!cached){
         LOG(INFO) << "JIT: JIT compile success, time cost: " << elapsed / 1000000.0 << " ms";
     }
 
     _jit_function = function.value_or(nullptr);
     if (_jit_function) {
         _jit_expr_name = _expr->debug_string();
+        if (_jit_expr_name.empty()) {
+            return Status::RuntimeError("expr debug_string() is empty");
+        }
     }
     return Status::OK();
 }

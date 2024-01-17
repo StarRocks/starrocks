@@ -1142,7 +1142,7 @@ public:
     StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
                                          const std::vector<LLVMDatum>& datums) const override {
         auto* l = datums[0].value;
-
+        LOG(INFO) << "[JIT] cast generate_ir_impl";
         if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
             return Status::NotSupported("JIT casting does not support JSON");
         } else if constexpr (lt_is_decimal<FromType> || lt_is_decimal<ToType>) {
@@ -1151,6 +1151,7 @@ public:
             LLVMDatum datum(b);
             ASSIGN_OR_RETURN(datum.value, IRHelper::cast_to_type(b, l, FromType, ToType));
 
+#if 0
             if constexpr ((lt_is_integer<FromType> || lt_is_float<FromType>)&&(lt_is_integer<ToType> ||
                                                                                lt_is_float<ToType>)) {
                 if constexpr (std::numeric_limits<RunTimeCppType<ToType>>::max() <
@@ -1166,7 +1167,7 @@ public:
                     b.CreateOr(datum.null_flag, is_overflow);
                 }
             }
-
+#endif
             return datum;
         }
     }

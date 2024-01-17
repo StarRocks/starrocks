@@ -26,6 +26,8 @@
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exprs/jit/jit_functions.h"
+#include <llvm/Analysis/Passes.h>
+#include <llvm/Analysis/TargetTransformInfo.h>
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
 #include "llvm/ExecutionEngine/Orc/SimpleRemoteEPC.h"
@@ -40,7 +42,51 @@
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
+#include <llvm/IR/PassManager.h>
+#include <llvm/Passes/PassPlugin.h>
+#include <llvm/Transforms/IPO/GlobalOpt.h>
+#include <llvm/Transforms/Scalar/NewGVN.h>
+#include <llvm/Transforms/Scalar/SimplifyCFG.h>
+#include <llvm/Transforms/Utils/Mem2Reg.h>
+#include <llvm/Transforms/Vectorize/LoopVectorize.h>
+#include <llvm/Transforms/Vectorize/SLPVectorizer.h>
+#include <llvm/Support/TargetSelect.h>
+#include <llvm/Support/raw_ostream.h>
+#include <llvm/Transforms/IPO.h>
+#include <llvm/Transforms/InstCombine/InstCombine.h>
+#include <llvm/Transforms/Scalar.h>
+#include <llvm/Transforms/Scalar/GVN.h>
+#include <llvm/Transforms/Utils.h>
+#include <llvm/Transforms/Vectorize.h>
+#include <llvm/Analysis/Passes.h>
+#include <llvm/Analysis/TargetTransformInfo.h>
+#include <llvm/Bitcode/BitcodeReader.h>
+#include <llvm/ExecutionEngine/ExecutionEngine.h>
+#include <llvm/ExecutionEngine/Orc/LLJIT.h>
+#include <llvm/IR/DataLayout.h>
+#include <llvm/IR/IRBuilder.h>
+#include <llvm/IR/LLVMContext.h>
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/Verifier.h>
+#include <llvm/Linker/Linker.h>
+#include <llvm/Transforms/Utils/Cloning.h>
+#include <llvm/MC/SubtargetFeature.h>
+#include <llvm/Passes/PassBuilder.h>
+#include <llvm/Support/DynamicLibrary.h>
+#include <llvm/Support/Host.h>
+#include <llvm/Transforms/IPO/GlobalDCE.h>
+#include <llvm/Transforms/IPO/Internalize.h>
+#include <llvm/IR/PassManager.h>
+#include <llvm/MC/TargetRegistry.h>
+#include <llvm/Passes/PassPlugin.h>
+#include <llvm/Transforms/IPO/GlobalOpt.h>
+#include <llvm/Transforms/Scalar/NewGVN.h>
+#include <llvm/Transforms/Scalar/SimplifyCFG.h>
+#include <llvm/Transforms/Utils/Mem2Reg.h>
+#include <llvm/Transforms/Vectorize/LoopVectorize.h>
+#include <llvm/Transforms/Vectorize/SLPVectorizer.h>
 #include "util/defer_op.h"
+
 
 namespace starrocks {
 
@@ -85,18 +131,19 @@ Status JITEngine::init() {
     return Status::OK();
 }
 
-StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* context, Expr* expr) {
+StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* context, Expr* expr, bool* cached) {
     auto* instance = JITEngine::get_instance();
     if (!instance->initialized()) {
         return Status::JitCompileError("JIT engine is not initialized");
     }
 
-    // TODO(Yueyang): optimize module name.
+    // TODO(fzh): shouldn't include uncompilable expr's name
     auto expr_name = expr->debug_string();
     JITScalarFunction compiled_function = nullptr;
     compiled_function = (JITScalarFunction)instance->lookup_function_with_lock(expr_name);
 
     if (compiled_function != nullptr) {
+        *cached = true;
         return compiled_function;
     }
 
@@ -117,7 +164,7 @@ StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* cont
 
     // Compile module, return function pointer (maybe nullptr).
     compiled_function = reinterpret_cast<JITScalarFunction>(
-            instance->compile_module(std::move(module), std::move(llvm_context), expr_name));
+            instance->compile_module(std::move(module), std::move(llvm_context), expr_name, cached));
 
     if (compiled_function == nullptr) {
         return Status::JitCompileError("Failed to compile scalar function");
@@ -146,12 +193,13 @@ void JITEngine::setup_module(llvm::Module* module) const {
 }
 
 void JITEngine::optimize_module(llvm::Module* module) {
+#if 0
     // Create a function pass manager.
     llvm::legacy::FunctionPassManager fpm(module);
 
     // TODO(Yueyang): check if we need to add more passes.
     // fpm.add(llvm::createTargetTransformInfoWrapperPass(machine->getTargetIRAnalysis()));
-    // mpm.add(llvm::createTargetTransformInfoWrapperPass(machine->getTargetIRAnalysis()));
+    //mpm.add(llvm::createTargetTransformInfoWrapperPass(machine->getTargetIRAnalysis()));
 
     _pass_manager_builder.populateFunctionPassManager(fpm);
 
@@ -160,15 +208,54 @@ void JITEngine::optimize_module(llvm::Module* module) {
         fpm.run(function);
     }
     fpm.doFinalization();
+#else
+    auto target_analysis = _target_machine->getTargetIRAnalysis();
+    // Setup an optimiser pipeline
+    llvm::PassBuilder pass_builder;
+    llvm::LoopAnalysisManager loop_am;
+    llvm::FunctionAnalysisManager function_am;
+    llvm::CGSCCAnalysisManager cgscc_am;
+    llvm::ModuleAnalysisManager module_am;
+
+    function_am.registerPass([&] { return target_analysis; });
+
+    // Register required analysis managers
+    pass_builder.registerModuleAnalyses(module_am);
+    pass_builder.registerCGSCCAnalyses(cgscc_am);
+    pass_builder.registerFunctionAnalyses(function_am);
+    pass_builder.registerLoopAnalyses(loop_am);
+    pass_builder.crossRegisterProxies(loop_am, function_am, cgscc_am, module_am);
+
+    pass_builder.registerPipelineStartEPCallback([&](llvm::ModulePassManager& module_pm,
+                                                     llvm::OptimizationLevel Level) {
+        module_pm.addPass(llvm::ModuleInlinerPass());
+
+        llvm::FunctionPassManager function_pm;
+        function_pm.addPass(llvm::InstCombinePass());
+        function_pm.addPass(llvm::PromotePass());
+        function_pm.addPass(llvm::GVNPass());
+        function_pm.addPass(llvm::NewGVNPass());
+        function_pm.addPass(llvm::SimplifyCFGPass());
+        function_pm.addPass(llvm::LoopVectorizePass());
+        function_pm.addPass(llvm::SLPVectorizerPass());
+        module_pm.addPass(llvm::createModuleToFunctionPassAdaptor(std::move(function_pm)));
+
+        module_pm.addPass(llvm::GlobalOptPass());
+    });
+
+    pass_builder.buildPerModuleDefaultPipeline(llvm::OptimizationLevel::O3)
+            .run(*module, module_am);
+#endif
 }
 
 void* JITEngine::compile_module(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
-                                const std::string& expr_name) {
+                                const std::string& expr_name, bool* cached) {
     // print_module(*module);
     std::lock_guard<std::mutex> lock(_mutex);
     auto* func = lookup_function(expr_name);
     // The function has already been compiled.
     if (func != nullptr) {
+        *cached = true;
         return func;
     }
 
@@ -192,6 +279,7 @@ void* JITEngine::compile_module(std::unique_ptr<llvm::Module> module, std::uniqu
 Status JITEngine::remove_module(const std::string& expr_name) {
     std::lock_guard<std::mutex> lock(_mutex);
     if (!_resource_ref_count_map.contains(expr_name)) {
+        DCHECK(false);
         return Status::RuntimeError("Remove a non-existing jit module");
     }
     if (_resource_ref_count_map[expr_name].fetch_sub(1) > 1) {
@@ -230,7 +318,7 @@ void* JITEngine::lookup_function(const std::string& expr_name) {
         if (!addr) {
             handleAllErrors(addr.takeError(), [&](const llvm::ErrorInfoBase& EIB) { error_message = EIB.message(); });
         }
-        LOG(ERROR) << "Failed to find jit function: " << error_message;
+        LOG(INFO) << "Failed to find jit function: " << error_message;
         return nullptr;
     }
     _resource_ref_count_map[expr_name].fetch_add(1);

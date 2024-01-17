@@ -31,6 +31,12 @@ public:
 
     ~ChunkAccumulateOperator() override = default;
 
+    Status prepare(RuntimeState* state) override {
+        RETURN_IF_ERROR(Operator::prepare(state));
+        _acc.set_max_size(state->chunk_size());
+        return Status::OK();
+    }
+
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 

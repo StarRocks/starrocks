@@ -183,6 +183,8 @@ public:
 
         ObjectPool pool;
         auto* jit_expr = JITExpr::create(&pool, expr);
+        ASSERT_TRUE(jit_expr->is_jit_compiled());
+
         ExprContext exprContext(jit_expr);
         std::vector<ExprContext*> expr_ctxs = {&exprContext};
 

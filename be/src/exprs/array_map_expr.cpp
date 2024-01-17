@@ -111,6 +111,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
                 return Status::InternalError(fmt::format(
                         "The size of the captured column {} is less than array's size.", captured->get_name()));
             }
+            captured->reserve(input_array->offsets_column()->get_data().back());
             cur_chunk->append_column(captured->replicate(input_array->offsets_column()->get_data()), id);
         }
         if (cur_chunk->num_rows() <= chunk->num_rows() * 8) {

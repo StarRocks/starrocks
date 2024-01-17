@@ -106,6 +106,71 @@ public:
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
         return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(l, r);
     }
+
+    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
+                                         const std::vector<LLVMDatum>& datums) const override {
+        if constexpr (lt_is_decimal<Type>) {
+            // TODO(yueyang): Implement decimal cmp in LLVM IR.
+            return Status::NotSupported("JIT of decimal cmp not support");
+        } else {
+            auto* l = datums[0].value;
+            auto* r = datums[1].value;
+            LLVMDatum result(b);
+            if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalEq<Type>>>) {
+                if constexpr (lt_is_float<Type>) {
+                    result.value = b.CreateFCmpOEQ(l, r);
+                } else {
+                    result.value = b.CreateICmpEQ(l, r);
+                }
+            } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalNe<Type>>>) {
+                if constexpr (lt_is_float<Type>) {
+                    result.value = b.CreateFCmpUNE(l, r);
+                } else {
+                    result.value = b.CreateICmpNE(l, r);
+                }
+            } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalLt<Type>>>) {
+                if constexpr (lt_is_float<Type>) {
+                    result.value = b.CreateFCmpOLT(l, r);
+                } else {
+                    result.value = b.CreateICmpSLT(l, r);
+                }
+            } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalLe<Type>>>) {
+                if constexpr (lt_is_float<Type>) {
+                    result.value = b.CreateFCmpOLE(l, r);
+                } else {
+                    result.value = b.CreateICmpSLE(l, r);
+                }
+            } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalGt<Type>>>) {
+                if constexpr (lt_is_float<Type>) {
+                    result.value = b.CreateFCmpOGT(l, r);
+                } else {
+                    result.value = b.CreateICmpSGT(l, r);
+                }
+            } else if constexpr (std::is_same_v<OP, BinaryPredFunc<EvalGe<Type>>>) {
+                if constexpr (lt_is_float<Type>) {
+                    result.value = b.CreateFCmpOGE(l, r);
+                } else {
+                    result.value = b.CreateICmpSGE(l, r);
+                }
+            } else {
+                LOG(WARNING) << "unsupported cmp op";
+                return Status::InternalError("unsupported cmp op");
+            }
+            return result;
+        }
+    }
+
+    std::string debug_string() const override {
+        std::stringstream out;
+        auto expr_debug_string = Expr::debug_string();
+        out << "VectorizedBinaryPredicate ("
+            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
+            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+            << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
+        return out.str();
+    }
 };
 
 class ArrayPredicate final : public Predicate {

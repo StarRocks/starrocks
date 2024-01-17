@@ -37,6 +37,8 @@ public:
 
     Expr* clone(ObjectPool* pool) const override { return JITExpr::create(pool, _expr); }
 
+    bool is_jit_compiled() { return _jit_function != nullptr && !_jit_expr_name.empty(); }
+
 protected:
     /**
      * @brief Prepare the expression, including:

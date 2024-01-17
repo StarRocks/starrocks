@@ -747,6 +747,7 @@ Status Expr::replace_compilable_exprs(Expr** expr, ObjectPool* pool) {
     return Status::OK();
 }
 
+// TODO(fzh) add adaptive strategy
 bool Expr::should_compile() const {
     if (!is_compilable() || _children.empty()) {
         return false;
@@ -761,7 +762,7 @@ bool Expr::should_compile() const {
         }
     }
 
-    return false;
+    return true;
 }
 
 } // namespace starrocks

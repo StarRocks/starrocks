@@ -41,7 +41,7 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
     llvm::IRBuilder<> b(module.getContext());
 
     std::vector<Expr*> input_exprs;
-    expr->get_uncompilable_exprs(input_exprs);
+    expr->get_uncompilable_exprs(input_exprs); // duplicated
     size_t args_size = input_exprs.size();
 
     /// Create function type.
@@ -215,6 +215,7 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
     return Status::OK();
 }
 
+// TODO(fzh) refactor to a recursive function.
 StatusOr<LLVMDatum> JITFunction::generate_exprs_ir(ExprContext* context, const llvm::Module& module,
                                                    llvm::IRBuilder<>& b, Expr* expr,
                                                    const std::vector<LLVMDatum>& datums) {

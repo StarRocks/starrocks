@@ -194,6 +194,10 @@ ChunkUniquePtr AggregatorParams::create_result_chunk(bool is_serialize_fmt, cons
 Aggregator::Aggregator(AggregatorParamsPtr params) : _params(std::move(params)) {}
 
 Status Aggregator::open(RuntimeState* state) {
+    if (_is_opened) {
+        return Status::OK();
+    }
+    _is_opened = true;
     RETURN_IF_ERROR(Expr::open(_group_by_expr_ctxs, state));
     for (int i = 0; i < _agg_fn_ctxs.size(); ++i) {
         RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
@@ -311,8 +315,12 @@ Status Aggregator::open(RuntimeState* state) {
 }
 
 Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile) {
-    _state = state;
+    if (_is_prepared) {
+        return Status::OK();
+    }
+    _is_prepared = true;
 
+    _state = state;
     _pool = pool;
     _runtime_profile = runtime_profile;
 
@@ -527,6 +535,8 @@ Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector
 
 Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
     _is_ht_eos = false;
+    _is_prepared = false;
+    _is_opened = false;
     _num_input_rows = 0;
     if (reset_sink_complete) {
         _is_sink_complete = false;

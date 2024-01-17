@@ -497,6 +497,8 @@ protected:
 
     std::shared_ptr<spill::Spiller> _spiller;
     SpillProcessChannelPtr _spill_channel;
+    bool _is_prepared = false;
+    bool _is_opened = false;
 
 public:
     void build_hash_map(size_t chunk_size, bool agg_group_by_with_limit = false);

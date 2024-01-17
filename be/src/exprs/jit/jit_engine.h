@@ -68,7 +68,7 @@ public:
      * @brief Compile the expr into LLVM IR and return the function pointer.
      * TODO(Yueyang): Add a cache to speed up the compilation.
      */
-    static StatusOr<JITScalarFunction> compile_scalar_function(ExprContext* context, Expr* expr);
+    static StatusOr<JITScalarFunction> compile_scalar_function(ExprContext* context, Expr* expr, bool* cached);
 
     /**
      * @brief Remove the function and its related resources(resource tracker and module) from the JIT engine.
@@ -96,7 +96,7 @@ private:
      * @brief Compile the module and return the function pointer.
      */
     void* compile_module(std::unique_ptr<llvm::Module> module, std::unique_ptr<llvm::LLVMContext> context,
-                         const std::string& expr_name);
+                         const std::string& expr_name, bool* cached);
 
     /**
      * @brief Remove the function and its related resources(resource tracker and module) from the JIT engine.
