@@ -22,7 +22,7 @@ displayed_sidebar: "Chinese"
 ### 参数变更
 
 - 增加 FE 配置项 `routine_load_unstable_threshold_second`。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
-- 新增 FE 配置项 `http_worker_threads_num`，指定 HTTP Server 用于处理 HTTP 请求的线程数。默认取值为 `0`。如果配置为负数或 `0` ，线程数将设置为 CPU 核数的 2 倍**。**[#37530](https://github.com/StarRocks/starrocks/pull/37530)
+- 新增 FE 配置项 `http_worker_threads_num`，指定 HTTP Server 用于处理 HTTP 请求的线程数。默认取值为 `0`。如果配置为负数或 `0` ，线程数将设置为 CPU 核数的 2 倍。[#37530](https://github.com/StarRocks/starrocks/pull/37530)
 - 新增 BE 配置项 `pindex_major_compaction_limit_per_disk`，配置每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题，默认取值为 `1`。[#36681](https://github.com/StarRocks/starrocks/pull/36681)
 - 新增 Session 变量 `transaction_read_only` 和 `tx_read_only`，设置事务的访问模式并且兼容 MySQL 5.7.20 以上的版本。[#37249](https://github.com/StarRocks/starrocks/pull/37249)
 - 新增 FE 配置项 `default_mv_refresh_immediate`，用于控制物化视图创建完成后是否立刻进行刷新，默认值为 `true`。[#37093](https://github.com/StarRocks/starrocks/pull/37093)
@@ -34,7 +34,7 @@ displayed_sidebar: "Chinese"
 - 异步物化视图可以设置 `datacache.partition_duration` 属性且支持动态修改，用于控制 Data Cache 的有效时间。[#35681](https://github.com/StarRocks/starrocks/pull/35681)
 - 使用 JDK 时 GC 算法默认采用 G1。[#37386](https://github.com/StarRocks/starrocks/pull/37386)
 - `date_trunc`、`adddate`、`time_slice` 函数的 `interval` 参数可支持毫秒和微秒。[#36386](https://github.com/StarRocks/starrocks/pull/36386)
-- WHERE 子句中 LIKE 运算符右侧字符串中不包括 `%` 或者 `_` 时，LIKE 运算符会转换成 = 运算符。[#37515](https://github.com/StarRocks/starrocks/pull/37515)
+- WHERE 子句中 LIKE 运算符右侧字符串中不包括 `%` 或者 `_` 时，LIKE 运算符会转换成 `=` 运算符。[#37515](https://github.com/StarRocks/starrocks/pull/37515)
 - [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/3.1/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加 `LatestSourcePosition`，记录 Topic 中各个分区中消息的最新消费位点，便于检查任务的延迟情况。[#38298](https://github.com/StarRocks/starrocks/pull/38298)
 - 新增资源组属性 `spill_mem_limit_threshold`，用于设置开启自动落盘（即系统变量 `spill_mode` 设置为 `auto`）时，当前资源组触发落盘的内存占用阈值（百分比）。取值范围：(0,1)。默认取值为 `1`，表示不生效。[#36701](https://github.com/StarRocks/starrocks/pull/36701)
 - [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/3.1/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加时间戳进度信息，展示各个分区当前消费消息的时间戳。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
