@@ -8,6 +8,10 @@ displayed_sidebar: "English"
 
 Release date: Jan 10, 2024
 
+### New Features
+
+- Users can set or modify session variables when they [CREATE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW/#parameters) or [ALTER](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/ALTER_MATERIALIZED_VIEW/) asynchronous materialized views. [#37401](https://github.com/StarRocks/starrocks/pull/37401)
+
 ### Improvements
 
 - When using JDK, the default GC algorithm is G1. [#37498](https://github.com/StarRocks/starrocks/pull/37498)
@@ -20,8 +24,10 @@ Release date: Jan 10, 2024
 
 ### Parameter Change
 
+- Added session variables `transaction_read_only` and `tx_read_only` to specify the transaction access mode, which are compatible with MySQL versions 5.7.20 and above. [#37249](https://github.com/StarRocks/starrocks/pull/37249)
 - Added the FE configuration item `routine_load_unstable_threshold_second`. [#36222](https://github.com/StarRocks/starrocks/pull/36222)
 - Added the FE configuration item `http_worker_threads_num`, which specifies the number of threads for HTTP server to deal with HTTP requests. The default value is `0`. If the value for this parameter is set to a negative value or 0, the actual thread number is twice the number of CPU cores. [#37530](https://github.com/StarRocks/starrocks/pull/37530)
+- Added the BE configuration item `pindex_major_compaction_limit_per_disk` to configure the maximum concurrency of compaction on a disk. This addresses the issue of uneven I/O across disks due to compaction. This issue can cause excessively high I/O for certain disks. The default value is `1`. [#37695](https://github.com/StarRocks/starrocks/pull/37695)
 
 ### Bug Fixes
 
@@ -54,8 +60,8 @@ Release date: December 19, 2023
 
 ### Parameter Change
 
-- A new BE configuration item `enable_stream_load_verbose_log` is added. The default value is `false`. With this parameter set to `true`, StarRocks can record the HTTP requests and responses for Stream Load jobs, making troubleshooting easier. [#36113](https://github.com/StarRocks/starrocks/pull/36113)
-- The BE static parameter `update_compaction_per_tablet_min_interval_seconds` becomes mutable. [#36819](https://github.com/StarRocks/starrocks/pull/36819)
+- Added a BE configuration item `enable_stream_load_verbose_log` is added. The default value is `false`. With this parameter set to `true`, StarRocks can record the HTTP requests and responses for Stream Load jobs, making troubleshooting easier. [#36113](https://github.com/StarRocks/starrocks/pull/36113)
+- Added a BE static parameter `update_compaction_per_tablet_min_interval_seconds` becomes mutable. [#36819](https://github.com/StarRocks/starrocks/pull/36819)
 
 ### Bug Fixes
 
