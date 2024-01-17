@@ -779,14 +779,6 @@ public:
      */
     DEFINE_VECTORIZED_FN(make_date);
 
-    /**
-     * Returns the day-to-second interval as given unit.
-     * @param [INTERVAL N type, to_type]
-     * @paramType [Int, Varchar, Varchar]
-     * @return  a BIGINT value
-     */
-    DEFINE_VECTORIZED_FN(convert_interval);
-
     /** Flags for calc_week() function.  */
     constexpr static const unsigned int WEEK_MONDAY_FIRST = 1;
     constexpr static const unsigned int WEEK_YEAR = 2;
