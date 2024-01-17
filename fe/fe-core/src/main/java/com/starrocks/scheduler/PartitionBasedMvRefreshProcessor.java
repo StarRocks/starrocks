@@ -44,6 +44,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
@@ -60,6 +61,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
@@ -368,9 +370,22 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     private void refreshExternalTable(TaskRunContext context) {
-        for (Pair<BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
-            BaseTableInfo baseTableInfo = tablePair.first;
-            Table table = tablePair.second;
+        List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            Database db = baseTableInfo.getDb();
+            if (db == null) {
+                LOG.warn("database {} do not exist when refreshing materialized view:{}",
+                        baseTableInfo.getDbInfoStr(), materializedView.getName());
+                throw new DmlException("database " + baseTableInfo.getDbInfoStr() + " do not exist.");
+            }
+
+            Table table = baseTableInfo.getTable();
+            if (table == null) {
+                LocalMetastore.inactiveRelatedMaterializedView(db, materializedView,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
+                throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
+            }
+
             if (!table.isNativeTableOrMaterializedView()) {
                 context.getCtx().getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
                         baseTableInfo.getDbName(), table, Lists.newArrayList(), true);

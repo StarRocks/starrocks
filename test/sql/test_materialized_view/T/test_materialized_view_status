@@ -71,18 +71,20 @@ insert into t2 values (1,1,1),(1,2,2),(2,3,3),(2,3,4),(2,5,5);
 CREATE MATERIALIZED VIEW mv2
 DISTRIBUTED BY HASH(k1) BUCKETS 10
 REFRESH MANUAL
-AS SELECT k1,v1 FROM t2;
-refresh materialized view mv2;
-drop table t2;
-CREATE TABLE t2 (
-    k1 INT,
-    v1 INT,
-    v2 INT)
+AS SELECT k1,v1 FROM t1;
+
+drop table t1;
+CREATE TABLE `t1` (
+  `k1` date NULL COMMENT "",
+  `v1` int(11) NULL COMMENT "",
+  `v2` int(11) NULL COMMENT ""
+) ENGINE=OLAP
 DUPLICATE KEY(k1)
 DISTRIBUTED BY HASH(k1)
 PROPERTIES(
     "replication_num" = "1"
 );
+
 alter materialized view mv2 active;
 select sleep(2);
 select * from mv2

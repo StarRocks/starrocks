@@ -115,6 +115,7 @@ import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.ColumnRenameClause;
+import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
@@ -150,9 +151,12 @@ import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.TableProperty.INVALID;
 
@@ -388,20 +392,21 @@ public class AlterJobMgr {
             context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
+            context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
-            List<StatementBase> statementBaseList = SqlParser.parse(viewDefineSql, context.getSessionVariable());
-            QueryStatement queryStatement = (QueryStatement) statementBaseList.get(0);
+            QueryStatement mvQueryStatement = null;
             try {
-                Analyzer.analyze(queryStatement, context);
+                mvQueryStatement = recreateMVQuery(materializedView, context);
             } catch (SemanticException e) {
                 throw new SemanticException("Can not active materialized view [%s]" +
                         " because analyze materialized view define sql: \n\n%s" +
-                        "\n\nCause an error: %s", materializedView.getName(), viewDefineSql, e.getMessage());
+                        "\n\nCause an error: %s", materializedView.getName(), viewDefineSql, e.getMessage(), e);
             }
 
-            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
+            // Skip checks to maintain eventual consistency when replay
+            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(mvQueryStatement);
             List<BaseTableInfo> baseTableInfos =
-                    MaterializedViewAnalyzer.getBaseTableInfos(tableNameTableMap, !isReplay);
+                    Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(tableNameTableMap, !isReplay));
             materializedView.setBaseTableInfos(baseTableInfos);
             materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
             materializedView.onReload();
@@ -409,6 +414,41 @@ public class AlterJobMgr {
         } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
             materializedView.setInactiveAndReason(MANUAL_INACTIVE_MV_REASON);
         }
+    }
+
+    /*
+     * Recreate the MV query and validate the correctness of syntax and schema
+     */
+    private static QueryStatement recreateMVQuery(MaterializedView materializedView, ConnectContext context) {
+        // If we could parse the MV sql successfully, and the schema of mv does not change,
+        // we could reuse the existing MV
+        String createMvSql = materializedView.getMaterializedViewDdlStmt(false);
+        Optional<Database> mayDb = GlobalStateMgr.getCurrentState().mayGetDb(materializedView.getDbId());
+
+        // check database existing
+        String dbName = mayDb.orElseThrow(() ->
+                new SemanticException("database " + materializedView.getDbId() + " not exists")).getFullName();
+        context.setDatabase(dbName);
+
+        // Try to parse and analyze the creation sql
+        List<StatementBase> statementBaseList = SqlParser.parse(createMvSql, context.getSessionVariable());
+        CreateMaterializedViewStatement createStmt = (CreateMaterializedViewStatement) statementBaseList.get(0);
+        Analyzer.analyze(createStmt, context);
+
+        // validate the schema
+        List<Column> newColumns = createStmt.getMvColumnItems().stream()
+                .sorted(Comparator.comparing(Column::getName))
+                .collect(Collectors.toList());
+        List<Column> existedColumns = materializedView.getColumns().stream()
+                .sorted(Comparator.comparing(Column::getName))
+                .collect(Collectors.toList());
+        if (!Objects.equals(newColumns, existedColumns)) {
+            String msg = String.format("mv schema changed: [%s] does not match [%s]",
+                    existedColumns, newColumns);
+            throw new SemanticException(msg);
+        }
+
+        return createStmt.getQueryStatement();
     }
 
     private void processModifyTableProperties(ModifyTablePropertiesClause modifyTablePropertiesClause,

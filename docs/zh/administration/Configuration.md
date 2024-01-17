@@ -157,8 +157,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |tablet_sched_disable_balance|FALSE|是否禁用 Tablet 均衡调度。参数别名 `disable_balance`。|
 |tablet_sched_disable_colocate_balance|FALSE|是否禁用 Colocate Table 的副本均衡。参数别名 `disable_colocate_balance`。|
 |tablet_sched_max_balancing_tablets|500|正在均衡的 tablet 数量的最大值。如果正在均衡的 tablet 数量超过该值，跳过 tablet 重新均衡。参数别名 `max_balancing_tablets`。|
-|tablet_sched_balance_load_disk_safe_threshold|0.5|判断 BE 磁盘使用率是否均衡的阈值。只有 `tablet_sched_balancer_strategy` 设置为 `disk_and_tablet`时，该参数才生效。<br />如果所有 BE 的磁盘使用率低于 50%，认为磁盘使用均衡。<br />对于 disk_and_tablet 策略，如果最大和最小 BE 磁盘使用率之差高于 10%，认为磁盘使用不均衡，会触发 tablet 重新均衡。参数别名`balance_load_disk_safe_threshold`。|
-|tablet_sched_balance_load_score_threshold|0.1|用于判断 BE 负载是否均衡。只有 `tablet_sched_balancer_strategy` 设置为 `be_load_score`时，该参数才生效。<br />负载比平均负载低 10% 的 BE 处于低负载状态，比平均负载高 10% 的 BE 处于高负载状态。参数别名 `balance_load_score_threshold`。|
+|tablet_sched_balance_load_disk_safe_threshold|0.5|判断 BE 磁盘使用率是否均衡的百分比阈值。如果所有 BE 的磁盘使用率低于该值，认为磁盘使用均衡。当有 BE 磁盘使用率超过该阈值时，如果最大和最小 BE 磁盘使用率之差高于 10%，则认为磁盘使用不均衡，会触发 Tablet 重新均衡。参数别名`balance_load_disk_safe_threshold`。|
+|tablet_sched_balance_load_score_threshold|0.1|用于判断 BE 负载是否均衡的百分比阈值。如果一个 BE 的负载低于所有 BE 的平均负载，且差值大于该阈值，则认为该 BE 处于低负载状态。相反，如果一个 BE 的负载比平均负载高且差值大于该阈值，则认为该 BE 处于高负载状态。参数别名 `balance_load_score_threshold`。|
 |tablet_sched_repair_delay_factor_second|60|FE 进行副本修复的间隔，单位为秒。参数别名 `tablet_repair_delay_factor_second`。|
 |tablet_sched_min_clone_task_timeout_sec|3 \* 60|克隆 Tablet 的最小超时时间，单位为秒。|
 |tablet_sched_max_clone_task_timeout_sec|2 \* 60 \* 60|克隆 Tablet 的最大超时时间，单位为秒。参数别名 `max_clone_task_timeout_sec`。|
@@ -284,7 +284,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 | 配置项    | 默认值    | 描述         |
 | -------- | -------- | -----------  |
-| tablet_sched_balancer_strategy | disk_and_tablet | Tablet 均衡策略。参数别名为 `tablet_balancer_strategy`。取值范围：`disk_and_tablet` 和 `be_load_score`。 |
 | tablet_sched_storage_cooldown_second | -1         | 从 Table 创建时间点开始计算，自动降冷的时延。降冷是指从 SSD 介质迁移到 HDD 介质。<br />参数别名为 `storage_cooldown_second`。单位：秒。默认值 `-1` 表示不进行自动降冷。如需启用自动降冷功能，请显式设置参数取值大于 0。 |
 | tablet_stat_update_interval_second| 300         | FE 向每个 BE 请求收集 Tablet 统计信息的时间间隔。单位：秒。  |
 
@@ -426,6 +425,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 |配置项|默认值|描述|
 |---|---|---|
+|object_storage_connect_timeout_ms        | -1     | 对象存储 Socket 连接的超时时间，默认取值 `-1`，表示使用 SDK 中的默认时间。该参数从 3.0.9 版本起支持。 |
+|object_storage_request_timeout_ms        | -1     | 对象存储 HTTP 连接的超时时间，默认取值 `-1`，表示使用 SDK 中的默认时间。该参数从 3.0.9 版本起支持。 |
 |hdfs_client_enable_hedged_read           | false  | 指定是否开启 Hedged Read 功能。该参数从 3.0 版本起支持。 |
 |hdfs_client_hedged_read_threadpool_size  | 128    | 指定 HDFS 客户端侧 Hedged Read 线程池的大小，即 HDFS 客户端侧允许有多少个线程用于服务 Hedged Read。该参数从 3.0 版本起支持，对应 HDFS 集群配置文件 `hdfs-site.xml` 中的 `dfs.client.hedged.read.threadpool.size` 参数。 |
 |hdfs_client_hedged_read_threshold_millis | 2500   | 指定发起 Hedged Read 请求前需要等待多少毫秒。例如，假设该参数设置为 `30`，那么如果一个 Read 任务未能在 30 毫秒内返回结果，则 HDFS 客户端会立即发起一个 Hedged Read，从目标数据块的副本上读取数据。该参数从 3.0 版本起支持，对应 HDFS 集群配置文件 `hdfs-site.xml` 中的 `dfs.client.hedged.read.threshold.millis` 参数。 |

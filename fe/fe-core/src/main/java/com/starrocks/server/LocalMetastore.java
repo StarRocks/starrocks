@@ -4199,8 +4199,8 @@ public class LocalMetastore implements ConnectorMetadata {
         for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
             if (mv != null) {
-                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                        "the table {} was renamed.", mv.getName(), mv.getId(), olapTable.getName());
+                LOG.warn("Setting the materialized view {}({}) to invalid because {}",
+                        mv.getName(), mv.getId(), reason);
                 mv.setInactiveAndReason(reason);
                 inactiveRelatedMaterializedView(db, mv,
                         MaterializedViewExceptions.inactiveReasonForBaseTableActive(mv.getName()));
@@ -4702,7 +4702,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
                 ModifyTablePropertyOperationLog info =
                         new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
-                GlobalStateMgr.getCurrentState().getEditLog().logSetHasForbitGlobalDict(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logSetHasForbiddenGlobalDict(info);
             }
         } finally {
             db.readUnlock();
@@ -4738,7 +4738,7 @@ public class LocalMetastore implements ConnectorMetadata {
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
-            if (opCode == OperationType.OP_SET_FORBIT_GLOBAL_DICT) {
+            if (opCode == OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT) {
                 String enAble = properties.get(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE);
                 Preconditions.checkState(enAble != null);
                 if (olapTable != null) {

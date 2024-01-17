@@ -700,7 +700,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().removeCallback(id);
         state = JobState.FINISHED;
 
-        if (MetricRepo.isInit) {
+        if (MetricRepo.hasInit) {
             MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
         }
         // when load job finished, there is no need to hold the tasks which are the biggest memory consumers.

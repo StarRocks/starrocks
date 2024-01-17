@@ -222,6 +222,12 @@ Whether to allow StarRocks to rewrite queries in INSERT INTO SELECT statements. 
 
   Whether to enable intermediate result spilling. Default: `false`. If it is set to `true`, StarRocks spills the intermediate results to disk to reduce the memory usage when processing aggregate, sort, or join operators in queries.
 
+### enable_strict_order_by
+
+Used to check whether the column name referenced in ORDER BY is ambiguous. When this variable is set to the default value `TRUE`, an error is reported for such a query pattern: Duplicate alias is used in different expressions of the query and this alias is also a sorting field in ORDER BY, for example, `select distinct t1.* from tbl1 t1 order by t1.k1;`. The logic is the same as that in v2.3 and earlier. When this variable is set to `FALSE`, a loose deduplication mechanism is used, which processes such queries as valid SQL queries.
+
+This variable is supported from v2.5.18 and v3.1.7.
+
 ### enable_profile
 
   Specifies whether to send the profile of a query for analysis. The default value is `false`, which means no profile is required.
