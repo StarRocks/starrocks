@@ -336,7 +336,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     // Since the load coordinator is awaiting the result of fragment instance,
     // we try our best to report the load status.
     if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-        for (size_t i = 0; i < config::max_load_status_report_retry_times; i++) {
+        for (size_t i = 0; i < 4; i++) {
             // sleep with backoff
             std::this_thread::sleep_for(std::chrono::seconds((4 << i)));
 
@@ -345,11 +345,10 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
                 return;
             }
             LOG(WARNING) << "Failed to report exec status to coordinator, instance_id: "
-                         << print_id(_fragment_instance_id) << ", retry: " << i + 1 << "/"
-                         << config::max_load_status_report_retry_times;
+                         << print_id(_fragment_instance_id) << ", retry: " << i + 1 << "/4";
         }
         LOG(WARNING) << "Abort to report exec status to coordinator, instance_id: " << print_id(_fragment_instance_id)
-                     << ", retry times:  " << config::max_load_status_report_retry_times;
+                     << ", retry times:  4";
     }
 
     if (!st.ok()) {
