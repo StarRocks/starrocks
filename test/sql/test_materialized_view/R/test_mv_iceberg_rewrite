@@ -178,12 +178,36 @@ true
 -- !result
   
 REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 WITH SYNC MODE;
--- result:
-c45fa9dd-ab93-11ee-9b00-5e4f71f202d3
--- !result
 select * from default_catalog.db_${uuid0}.test_mv1 order by 1, 2;
 -- result:
 2023-12-01	4000
+-- !result
+drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
+-- result:
+-- !result
+drop materialized view default_catalog.db_${uuid0}.test_mv1;
+-- result:
+-- !result
+create table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} (
+  col_str string,
+  col_int int,
+  dt date
+);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1
+REFRESH DEFERRED MANUAL AS SELECT dt,col_int 
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0};
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW default_catalog.db_${uuid0}.test_mv1 WITH SYNC MODE;
+select state from information_schema.task_runs
+  where `database`='db_${uuid0}' and `DEFINITION` like "%test_mv1%";
+-- result:
+SUCCESS
+-- !result
+drop materialized view default_catalog.db_${uuid0}.test_mv1;
+-- result:
 -- !result
 drop table mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0} force;
 -- result:
