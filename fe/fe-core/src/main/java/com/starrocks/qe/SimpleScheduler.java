@@ -43,7 +43,6 @@ import com.starrocks.common.Reference;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -70,7 +69,7 @@ public class SimpleScheduler {
     private static final AtomicLong NEXT_BACKEND_HOST_ID = new AtomicLong(0);
 
     //count id for get ComputeNode
-    private static final ConcurrentMap<Long, Integer> BLOCKLIST_BACKENDS = Maps.newConcurrentMap();
+    private static final ConcurrentMap<Long, Integer> BLOCKLIST_NODES = Maps.newConcurrentMap();
 
     private static final AtomicBoolean ENABLE_UPDATE_BLOCKLIST_THREAD;
     private static final UpdateBlocklistThread UPDATE_BLOCKLIST_THREAD;
@@ -85,7 +84,7 @@ public class SimpleScheduler {
     public static TNetworkAddress getHost(long nodeId,
                                           List<TScanRangeLocation> locations,
                                           ImmutableMap<Long, ComputeNode> computeNodes,
-                                          Reference<Long> backendIdRef) {
+                                          Reference<Long> nodeIdRef) {
 
         if (locations == null || computeNodes == null) {
             return null;
@@ -95,7 +94,7 @@ public class SimpleScheduler {
         ComputeNode node = computeNodes.get(nodeId);
 
         if (node != null && node.isAlive() && !isInBlocklist(nodeId)) {
-            backendIdRef.setRef(nodeId);
+            nodeIdRef.setRef(nodeId);
             return new TNetworkAddress(node.getHost(), node.getBePort());
         } else {
             for (TScanRangeLocation location : locations) {
@@ -103,10 +102,10 @@ public class SimpleScheduler {
                     continue;
                 }
                 // choose the first alive backend(in analysis stage, the locations are random)
-                ComputeNode candidateBackend = computeNodes.get(location.backend_id);
-                if (candidateBackend != null && candidateBackend.isAlive() && !isInBlocklist(location.backend_id)) {
-                    backendIdRef.setRef(location.backend_id);
-                    return new TNetworkAddress(candidateBackend.getHost(), candidateBackend.getBePort());
+                ComputeNode candidateNode = computeNodes.get(location.backend_id);
+                if (candidateNode != null && candidateNode.isAlive() && !isInBlocklist(location.backend_id)) {
+                    nodeIdRef.setRef(location.backend_id);
+                    return new TNetworkAddress(candidateNode.getHost(), candidateNode.getBePort());
                 }
             }
 
@@ -120,13 +119,13 @@ public class SimpleScheduler {
                 if (!candidateNodes.isEmpty()) {
                     // use modulo operation to ensure that the same node is selected for the dead node
                     ComputeNode candidateNode = candidateNodes.get((int) (nodeId % candidateNodes.size()));
-                    backendIdRef.setRef(candidateNode.getId());
+                    nodeIdRef.setRef(candidateNode.getId());
                     return new TNetworkAddress(candidateNode.getHost(), candidateNode.getBePort());
                 }
             }
         }
 
-        // no backend returned
+        // no backend or compute node returned
         return null;
     }
 
@@ -182,75 +181,75 @@ public class SimpleScheduler {
         return null;
     }
 
-    public static void addToBlocklist(Long backendID) {
-        if (backendID == null) {
+    public static void addToBlocklist(Long nodeID) {
+        if (nodeID == null) {
             return;
         }
 
         int tryTime = Config.heartbeat_timeout_second + 1;
-        BLOCKLIST_BACKENDS.put(backendID, tryTime);
-        LOG.warn("add black list " + backendID);
+        BLOCKLIST_NODES.put(nodeID, tryTime);
+        LOG.warn("add black list " + nodeID);
     }
 
     public static boolean isInBlocklist(long backendId) {
-        return BLOCKLIST_BACKENDS.containsKey(backendId);
+        return BLOCKLIST_NODES.containsKey(backendId);
     }
 
     // The function is used for unit test
     @VisibleForTesting
-    public static boolean removeFromBlocklist(Long backendID) {
-        if (backendID == null) {
+    public static boolean removeFromBlocklist(Long nodeID) {
+        if (nodeID == null) {
             return true;
         }
 
-        return BLOCKLIST_BACKENDS.remove(backendID) != null;
+        return BLOCKLIST_NODES.remove(nodeID) != null;
     }
 
     public static void updateBlocklist() {
         SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
 
-        List<Long> removedBackends = new ArrayList<>();
-        Map<Long, Integer> retryingBackends = new HashMap<>();
+        List<Long> removedNodes = new ArrayList<>();
+        Map<Long, Integer> retryingNodes = new HashMap<>();
 
-        for (Map.Entry<Long, Integer> entry : BLOCKLIST_BACKENDS.entrySet()) {
-            Long backendId = entry.getKey();
+        for (Map.Entry<Long, Integer> entry : BLOCKLIST_NODES.entrySet()) {
+            Long nodeId = entry.getKey();
 
-            // 1. If the backend is null, means that the backend has been removed.
+            // 1. If the node is null, means that the node has been removed.
             // 2. check the all ports of the backend
             // 3. retry Config.heartbeat_timeout_second + 1 times
-            // If both of the above conditions are met, the backend is removed from the blocklist
-            Backend backend = clusterInfoService.getBackend(backendId);
-            if (backend == null) {
-                removedBackends.add(backendId);
-                LOG.warn("remove backendID {} from blacklist", backendId);
-            } else if (clusterInfoService.checkBackendAvailable(backendId)) {
-                String host = backend.getHost();
+            // If both of the above conditions are met, the node is removed from the blocklist
+            ComputeNode node = clusterInfoService.getBackendOrComputeNode(nodeId);
+            if (node == null) {
+                removedNodes.add(nodeId);
+                LOG.warn("remove nodeID {} from blacklist", nodeId);
+            } else if (clusterInfoService.checkNodeAvailable(node)) {
+                String host = node.getHost();
                 List<Integer> ports = new ArrayList<Integer>();
-                Collections.addAll(ports, backend.getBePort(), backend.getBrpcPort(), backend.getHttpPort());
+                Collections.addAll(ports, node.getBePort(), node.getBrpcPort(), node.getHttpPort());
                 if (NetUtils.checkAccessibleForAllPorts(host, ports)) {
-                    removedBackends.add(backendId);
-                    LOG.warn("remove backendID {} from blacklist", backendId);
+                    removedNodes.add(nodeId);
+                    LOG.warn("remove nodeID {} from blacklist", nodeId);
                 }
             } else {
                 Integer retryTimes = entry.getValue();
                 retryTimes = retryTimes - 1;
                 if (retryTimes <= 0) {
-                    removedBackends.add(backendId);
-                    LOG.warn("remove backendID {} from blacklist", backendId);
+                    removedNodes.add(nodeId);
+                    LOG.warn("remove nodeID {} from blacklist", nodeId);
                 } else {
-                    retryingBackends.put(backendId, retryTimes);
+                    retryingNodes.put(nodeId, retryTimes);
                 }
             }
         }
 
         // remove backends.
-        for (Long backendId : removedBackends) {
-            BLOCKLIST_BACKENDS.remove(backendId);
+        for (Long backendId : removedNodes) {
+            BLOCKLIST_NODES.remove(backendId);
         }
 
         // update the retry times.
-        for (Map.Entry<Long, Integer> entry : retryingBackends.entrySet()) {
-            BLOCKLIST_BACKENDS.computeIfPresent(entry.getKey(), (k, v) -> entry.getValue());
+        for (Map.Entry<Long, Integer> entry : retryingNodes.entrySet()) {
+            BLOCKLIST_NODES.computeIfPresent(entry.getKey(), (k, v) -> entry.getValue());
         }
     }
 
