@@ -1149,12 +1149,12 @@ This section provides an overview of the static parameters that you can configur
 #### reset_election_group
 
 - **Default:** FALSE
-- **Description:** If true, FE will reset bdbje replication group(that is, to remove all electable nodes' info) and is supposed to start as Leader. After reset, this node will be the only member in the cluster, and the others node should be rejoin to this cluster by `Alter system add/drop follower/observer 'xxx'`; Use this configuration only when the leader cannot be successfully elected (Because most of the follower data has been damaged).
+- **Description:** If this parameter is set to `TRUE`, the FE will reset BDBJE replication group (that is, remove the information of all electable nodes) and start as the leader FE. After the reset, this FE will be the only member in the cluster, and other FEs can rejoin this cluster by using `ALTER SYSTEM ADD/DROP FOLLOWER/OBSERVER 'xxx'`. Use this setting only when no leader FE can be elected because the data of most follower FEs have been damaged.
 
 #### metadata_journal_ignore_replay_failure
 
 - **Default:** FALSE
-- **Description:** Ignore journal replay failures, but this configuration does not take effect for failures that will damage cluster data.
+- **Description:** Whether to ignore journal replay failures. TRUE indicates journal replay failures will be ignored. This configuration does not take effect for failures that will damage cluster data.
 
 #### edit_log_port
 
