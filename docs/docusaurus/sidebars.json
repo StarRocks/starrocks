@@ -128,8 +128,8 @@
         {
           "type": "category",
           "label": "Catalog",
-          "link": {"type": "doc", "id": "data_source/catalog/catalog_overview"},
-          "items": ["data_source/catalog/default_catalog", "data_source/catalog/hive_catalog", "data_source/catalog/iceberg_catalog", "data_source/catalog/hudi_catalog", "data_source/catalog/deltalake_catalog", "data_source/catalog/jdbc_catalog", "data_source/catalog/elasticsearch_catalog", "data_source/catalog/paimon_catalog", "data_source/catalog/query_external_data" ]
+          "link": {"type": "doc", "id": "data_source/catalog/catalog_intro"},
+          "items": ["data_source/catalog/catalog_overview", "data_source/catalog/default_catalog", "data_source/catalog/hive_catalog", "data_source/catalog/iceberg_catalog", "data_source/catalog/hudi_catalog", "data_source/catalog/deltalake_catalog", "data_source/catalog/jdbc_catalog", "data_source/catalog/elasticsearch_catalog", "data_source/catalog/paimon_catalog", "data_source/catalog/query_external_data" ]
         },
         "data_source/External_table",
         "data_source/file_external_table",
@@ -764,8 +764,8 @@
         {
           "type": "category",
           "label": "Catalog",
-          "link": {"type": "doc", "id": "data_source/catalog/catalog_overview"},
-          "items": ["data_source/catalog/default_catalog", "data_source/catalog/hive_catalog", "data_source/catalog/iceberg_catalog", "data_source/catalog/hudi_catalog", "data_source/catalog/deltalake_catalog", "data_source/catalog/jdbc_catalog", "data_source/catalog/elasticsearch_catalog", "data_source/catalog/paimon_catalog", "data_source/catalog/query_external_data" ]
+          "link": {"type": "doc", "id": "data_source/catalog/catalog_intro"},
+          "items": ["data_source/catalog/catalog_overview", "data_source/catalog/default_catalog", "data_source/catalog/hive_catalog", "data_source/catalog/iceberg_catalog", "data_source/catalog/hudi_catalog", "data_source/catalog/deltalake_catalog", "data_source/catalog/jdbc_catalog", "data_source/catalog/elasticsearch_catalog", "data_source/catalog/paimon_catalog", "data_source/catalog/query_external_data" ]
         },
         "data_source/External_table",
         "data_source/file_external_table",
