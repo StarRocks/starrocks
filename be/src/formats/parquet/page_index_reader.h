@@ -33,6 +33,11 @@ struct ColumnOffsetIndexCtx {
 
     void collect_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
                           bool active);
+
+    // be compatible with PARQUET-1850
+    bool check_dictionary_page(int64_t data_page_offset) {
+        return offset_index.page_locations.size() > 0 && offset_index.page_locations[0].offset > data_page_offset;
+    }
 };
 
 class PageIndexReader {
