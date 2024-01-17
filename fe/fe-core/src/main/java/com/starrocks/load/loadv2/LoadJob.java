@@ -285,7 +285,7 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         loadingStatus.setProgress(0);
     }
 
-    private boolean isTimeout() {
+    public boolean isTimeout() {
         return System.currentTimeMillis() > getDeadlineMs();
     }
 
