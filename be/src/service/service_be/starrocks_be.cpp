@@ -282,6 +282,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     // Should stop the query rpc pool first, otherwise brpc_server->join() will block
     // becuase of the done->Run() will not execuete.
     exec_env->query_rpc_pool()->shutdown();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": query_rpc_pool shutdown successfully";
 
     brpc_server->Join();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": brpc server exit successfully";
