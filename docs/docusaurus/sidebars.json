@@ -348,6 +348,7 @@
                 "administration/Load_balance",
                 "administration/Replica",
                 "administration/Blacklist",
+                "administration/BackendBlacklist",
                 "administration/filemanager"
               ]
 
@@ -906,6 +907,7 @@
       "link": {"type": "doc", "id": "cover_pages/query_acceleration"},
       "items": [
         "using_starrocks/Cost_based_optimizer",
+        "using_starrocks/Flat_json.md",
         "using_starrocks/Materialized_view-single_table",
         {
           "type": "category",
