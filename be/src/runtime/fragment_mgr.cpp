@@ -812,6 +812,8 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         return Status::InvalidArgument(msg.str());
     }
 
+    const auto& output_names = t_query_plan_info.output_names;
+    int i = 0;
     for (const auto& expr : t_query_plan_info.plan_fragment.output_exprs) {
         const auto& nodes = expr.nodes;
         if (nodes.empty() || nodes[0].node_type != TExprNodeType::SLOT_REF) {
@@ -831,9 +833,14 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         }
 
         TScanColumnDesc col;
-        col.__set_name(slot_desc->col_name());
+        if (!output_names.empty()) {
+            col.__set_name(output_names[i]);
+        } else {
+            col.__set_name(slot_desc->col_name());
+        }
         col.__set_type(to_thrift(slot_desc->type().type));
         selected_columns->emplace_back(std::move(col));
+        i++;
     }
 
     LOG(INFO) << "BackendService execute open()  TQueryPlanInfo: "
