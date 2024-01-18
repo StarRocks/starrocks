@@ -1153,18 +1153,24 @@ public:
 
             if constexpr ((lt_is_integer<FromType> || lt_is_float<FromType>)&&(lt_is_integer<ToType> ||
                                                                                lt_is_float<ToType>)) {
-                if constexpr ((std::numeric_limits<RunTimeCppType<ToType>>::max() <
-                               std::numeric_limits<RunTimeCppType<FromType>>::max()) ||
-                              (std::numeric_limits<RunTimeCppType<ToType>>::min() >
-                               std::numeric_limits<RunTimeCppType<FromType>>::min())) {
+                if constexpr (std::numeric_limits<RunTimeCppType<ToType>>::max() <
+                              std::numeric_limits<RunTimeCppType<FromType>>::max()) {
                     // Check overflow.
-                    ASSIGN_OR_RETURN(auto cast_l, IRHelper::cast_to_type(b, datum.value, ToType, FromType));
-                    llvm::Value* is_overflow = nullptr;
+                    ASSIGN_OR_RETURN(auto* from_type, IRHelper::logical_to_ir_type(b, FromType));
+                    auto* max = llvm::ConstantInt::get(from_type, std::numeric_limits<RunTimeCppType<ToType>>::max());
+                    auto* min = llvm::ConstantInt::get(from_type, std::numeric_limits<RunTimeCppType<ToType>>::min());
+
+                    llvm::Value* max_overflow = nullptr;
+                    llvm::Value* min_overflow = nullptr;
                     if constexpr (lt_is_integer<FromType>) {
-                        is_overflow = b.CreateICmpNE(l, cast_l);
+                        max_overflow = b.CreateICmpSGT(l, max);
+                        min_overflow = b.CreateICmpSLT(l, min);
+
                     } else if constexpr (lt_is_float<FromType>) {
-                        is_overflow = b.CreateFCmpONE(l, cast_l);
+                        max_overflow = b.CreateFCmpOGT(l, max);
+                        min_overflow = b.CreateFCmpOLT(l, min);
                     }
+                    auto* is_overflow = b.CreateOr(max_overflow, min_overflow);
                     b.CreateOr(datum.null_flag, is_overflow);
                 }
             }

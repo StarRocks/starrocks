@@ -214,32 +214,6 @@ Status Expr::create_expr_tree(ObjectPool* pool, const TExpr& texpr, ExprContext*
         return status;
     }
 
-    // Enable JIT based on the "enable_jit" parameters.
-    if (state == nullptr || !state->is_jit_enabled()) {
-        return status;
-    }
-
-    // Check if JIT compilation is feasible on this platform.
-    auto* jit_engine = JITEngine::get_instance();
-    if (!jit_engine->support_jit()) {
-        return status;
-    }
-
-    const auto* prev_e = e;
-    status = e->replace_compilable_exprs(&e, pool);
-    if (!status.ok()) {
-        LOG(ERROR) << "Can't replace compilable exprs.\n"
-                   << status.message() << "\n"
-                   << apache::thrift::ThriftDebugString(texpr);
-        // Fall back to the non-JIT path.
-        return Status::OK();
-    }
-
-    if (e != prev_e) {
-        // The root node was replaced, so we need to update the context.
-        *ctx = pool->add(new ExprContext(e));
-    }
-
     return status;
 }
 

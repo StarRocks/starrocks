@@ -188,10 +188,13 @@ public:
 
         ASSERT_OK(Expr::prepare(expr_ctxs, runtime_state));
         ASSERT_OK(Expr::open(expr_ctxs, runtime_state));
+        ASSERT_TRUE(jit_expr->is_jit_compiled());
 
-        ptr = expr->evaluate(&exprContext, nullptr);
+        ptr = jit_expr->evaluate(&exprContext, nullptr);
         // Verify the result after JIT.
         test_func(ptr);
+
+        Expr::close(expr_ctxs, runtime_state);
     }
 };
 

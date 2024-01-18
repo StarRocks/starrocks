@@ -250,6 +250,8 @@ struct ArithmeticBinaryOperator {
                     auto* cond_left = b.CreateICmpEQ(l, llvm::ConstantInt::get(l->getType(), signed_minimum<LType>));
                     auto* cond_right = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), -1));
                     auto* fpe = b.CreateAnd(cond_left, cond_right);
+                    // It is difficult to create an if statement here, so we use ternary expressions as an alternative.
+                    // In a ternary expression, the last two expressions are evaluated regardless of the condition.
                     // modify r to prevent overflow.
                     adjusted_r = b.CreateSelect(fpe, llvm::ConstantInt::get(l->getType(), 1), adjusted_r);
                     result.value = b.CreateSelect(fpe, llvm::ConstantInt::get(l->getType(), signed_minimum<ResultType>),
@@ -284,6 +286,8 @@ struct ArithmeticBinaryOperator {
                     auto* cond_left = b.CreateICmpEQ(l, llvm::ConstantInt::get(l->getType(), signed_minimum<LType>));
                     auto* cond_right = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), -1));
                     fpe = b.CreateAnd(cond_left, cond_right);
+                    // It is difficult to create an if statement here, so we use ternary expressions as an alternative.
+                    // In a ternary expression, the last two expressions are evaluated regardless of the condition.
                     // modify r to prevent overflow.
                     adjusted_r = b.CreateSelect(fpe, llvm::ConstantInt::get(l->getType(), 1), adjusted_r);
                     result.value =
