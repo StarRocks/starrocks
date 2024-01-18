@@ -420,6 +420,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_PLAN_SERIALIZE_CONCURRENTLY = "enable_plan_serialize_concurrently";
 
+    public static final String ENABLE_WAIT_DEPENDENT_EVENT = "enable_wait_dependent_event";
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -1516,6 +1518,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = FOLLOWER_QUERY_FORWARD_MODE, flag = VariableMgr.INVISIBLE | VariableMgr.DISABLE_FORWARD_TO_LEADER)
     private String followerForwardMode = "";
+
+    // enable wait dependent event in plan fragment
+    // the operators will wait for the dependent event to be completed before executing
+    // all of the probe side operators will wait for the build side operators to complete.
+    // Scenarios where AGG is present in the probe side will reduce peak memory usage, 
+    // but in some cases will result in increased latency for individual queries.
+    // 
+    @VarAttr(name = ENABLE_WAIT_DEPENDENT_EVENT)
+    private boolean enableWaitDependentEvent = false;
 
     public void setFollowerQueryForwardMode(String mode) {
         this.followerForwardMode = mode;
@@ -2921,6 +2932,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setScan_use_query_mem_ratio(scanUseQueryMemRatio);
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
         tResult.setEnable_pipeline_level_shuffle(enablePipelineLevelShuffle);
+
+        tResult.setEnable_wait_dependent_event(enableWaitDependentEvent);
+
         return tResult;
     }
 

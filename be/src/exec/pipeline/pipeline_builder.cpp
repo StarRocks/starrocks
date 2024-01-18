@@ -472,6 +472,11 @@ void PipelineBuilderContext::pop_dependent_pipeline() {
     _dependent_pipelines.pop_back();
 }
 
+void PipelineBuilderContext::subscribe_pipeline_event(Pipeline* pipeline, Event* event) {
+    pipeline->pipeline_event()->set_need_wait_dependencies_finished(true);
+    pipeline->pipeline_event()->add_dependency(event);
+}
+
 /// PipelineBuilder.
 Pipelines PipelineBuilder::build(const FragmentContext& fragment, ExecNode* exec_node) {
     pipeline::OpFactories operators = exec_node->decompose_to_pipeline(&_context);
