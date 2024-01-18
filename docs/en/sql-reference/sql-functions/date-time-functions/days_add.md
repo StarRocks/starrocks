@@ -11,7 +11,7 @@ Adds a specified number of days to a given date or date time.
 ## Syntax
 
 ```Haskell
-DATETIME days_add(DATETIME date, INT n);
+DATETIME days_add(DATETIME|DATE date, INT n);
 ```
 
 ## Parameters

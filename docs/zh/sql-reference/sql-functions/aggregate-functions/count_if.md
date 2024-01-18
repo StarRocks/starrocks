@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-计算满足指定条件（`true`）的记录数。
+计算满足指定条件（即条件表达试的结果为 `true`）的记录数。
 
 该函数不支持 `DISTINCT`，举例：`count_if(DISTINCT x)`。
 

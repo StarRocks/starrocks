@@ -18,7 +18,7 @@ DATETIME DATE_ADD(DATETIME|DATE date,INTERVAL expr type)
 
 - `date`: It must be a valid date or datetime expression.
 - `expr`: the time interval you want to add. It must be of the INT type.
-- `type`: the unit of the time interval. It can only be set to any of the following values: YEAR, QUARTER, MONTH, DAY, HOUR, MINUTE, SECOND, MILLISECOND (since 3.1.7), and  MICROSECOND (since 3.1.7).
+- `type`: the unit of the time interval. It can only be set to any of the following values: YEAR, QUARTER, MONTH, DAY, HOUR, MINUTE, SECOND, MILLISECOND (since 3.1.7), and MICROSECOND (since 3.1.7).
 
 ## Return value
 

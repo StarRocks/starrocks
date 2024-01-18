@@ -11,7 +11,7 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```Haskell
-DATETIME days_add(DATETIME date, INT n);
+DATETIME days_add(DATETIME|DATE date, INT n);
 ```
 
 ## 参数说明
