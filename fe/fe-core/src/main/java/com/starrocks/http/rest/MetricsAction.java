@@ -133,14 +133,8 @@ public class MetricsAction extends RestBaseAction {
     protected RequestParams parseRequestParams(BaseRequest request) {
         String withTableMetrics = request.getSingleParameter(WITH_TABLE_METRICS_PARAM);
         String withMaterializedViewsMetrics = request.getSingleParameter(WITH_MATERIALIZED_VIEW_METRICS_PARAM);
-        /*
-         * Collect tableMetrics and MVMetrics in minified way by default.
-         * Full metrics collection is only enabled when the following conditions are all satisfied
-         * - explicitly has `?with_table_metrics=all` or `?with_materialized_view_metrics=all`
-         * - the user must have sufficient privileges by checking the request auth info
-         */
-        boolean collectTableMetrics = COLLECT_MODE_METRICS_ALL.equalsIgnoreCase(withTableMetrics);
-        boolean collectMVMetrics = COLLECT_MODE_METRICS_ALL.equalsIgnoreCase(withMaterializedViewsMetrics);
+        boolean collectTableMetrics = !Strings.isNullOrEmpty(withTableMetrics);
+        boolean collectMVMetrics = !Strings.isNullOrEmpty(withMaterializedViewsMetrics);
 
         // check request authorization
         if (collectTableMetrics || collectMVMetrics) {
