@@ -46,6 +46,7 @@ import com.staros.proto.WorkerInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
@@ -585,7 +586,12 @@ public class StarOSAgent {
     public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws UserException {
         Set<Long> backendIds = getAllBackendIdsByShard(shardId, workerGroupId, true);
         if (backendIds.isEmpty()) {
-            throw new UserException("Failed to get primary backend. shard id: " + shardId);
+            // If BE stops, routine load task may catch UserException during load plan,
+            // and the job state will changed to PAUSED.
+            // The job will automatically recover from PAUSED to RUNNING if the error code is REPLICA_FEW_ERR
+            // when all BEs become alive.
+            throw new UserException(InternalErrorCode.REPLICA_FEW_ERR,
+                    "Failed to get primary backend. shard id: " + shardId);
         }
         return backendIds.iterator().next();
     }
