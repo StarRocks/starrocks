@@ -133,4 +133,24 @@ public class PaimonColumnValue implements ColumnValue {
             values.add(cv);
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public LocalDate getDate() {
+        return LocalDate.ofEpochDay((int) fieldData);
+    }
+
+    @Override
+    public LocalDateTime getDateTime(ColumnType.TypeValue type) {
+        switch (dataType.getTypeRoot()) {
+            case TIMESTAMP_WITHOUT_TIME_ZONE:
+                return ((Timestamp) fieldData).toLocalDateTime();
+            case TIMESTAMP_WITH_LOCAL_TIME_ZONE:
+                return LocalDateTime.ofInstant(((Timestamp) fieldData).toInstant(), ZoneId.of(timeZone));
+            default:
+                throw new UnsupportedOperationException("Unsupported type: " + type);
+        }
+    }
+>>>>>>> 53a35df1e5 ([BugFix]Fix paimon timestamp bug (#39381))
 }
