@@ -101,8 +101,8 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [to_tera_timestamp](./date-time-functions/to_tera_timestamp.md)| 将某一个 VARCHAR 类型的值按指定的格式转换成 DATETIME 类型的值。  |
 | [unix_timestamp](./date-time-functions/unix_timestamp.md)| 将 DATE 或 DATETIME 类型的值转化为 UNIX 时间戳。  |
 | [utc_timestamp](./date-time-functions/utc_timestamp.md)| 返回当前 UTC 日期时间。  |
-| [week_iso](./date-time-functions/week_iso.md)| 根据 ISO 标准，计算某一个日期对应的是一年内的第几个周。  |
 | [week](./date-time-functions/week.md)| 根据指定的周数计算逻辑，计算指定的日期时间属于一年中的第几周。  |
+| [week_iso](./date-time-functions/week_iso.md)| 根据 ISO 标准，计算某一个日期对应的是一年内的第几个周。  |
 | [weekofyear](./date-time-functions/weekofyear.md)|  计算指定的日期时间属于一年中的第几周。 |
 | [weeks_add](./date-time-functions/weeks_add.md)|  向原始的日期时间加上指定周数。 |
 | [weeks_diff](./date-time-functions/weeks_diff.md)|  计算开始时间和结束时间相差几周。 |
