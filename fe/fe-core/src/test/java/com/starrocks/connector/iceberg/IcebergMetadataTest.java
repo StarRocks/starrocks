@@ -115,6 +115,7 @@ import static com.starrocks.catalog.Type.INT;
 import static com.starrocks.catalog.Type.STRING;
 import static com.starrocks.connector.iceberg.IcebergConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.connector.iceberg.IcebergMetadata.COMMENT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
@@ -201,6 +202,16 @@ public class IcebergMetadataTest extends TableTestBase {
 
         new Expectations() {
             {
+                hiveTableOperations.current().properties();
+                Map<String, String> properties = new HashMap<>();
+                properties.put(TableProperties.DEFAULT_FILE_FORMAT, "orc");
+                properties.put(COMMENT, "xxx");
+                result = properties;
+                minTimes = 0;
+            }
+        };
+        new Expectations() {
+            {
                 icebergHiveCatalog.getTable("db", "tbl");
                 result = new BaseTable(hiveTableOperations, "tbl");
                 minTimes = 0;
@@ -212,6 +223,8 @@ public class IcebergMetadataTest extends TableTestBase {
         Table actual = metadata.getTable("db", "tbl");
         Assert.assertEquals("tbl", actual.getName());
         Assert.assertEquals(ICEBERG, actual.getType());
+        Assert.assertEquals("orc", actual.getProperties().get(FILE_FORMAT));
+        Assert.assertEquals("xxx", actual.getComment());
     }
 
     @Test

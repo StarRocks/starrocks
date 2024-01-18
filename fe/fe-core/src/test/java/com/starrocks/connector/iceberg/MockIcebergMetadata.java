@@ -45,6 +45,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -135,10 +136,14 @@ public class MockIcebergMetadata implements ConnectorMetadata {
                 schema, spec, 1);
 
         String tableIdentifier = Joiner.on(":").join(MOCKED_UNPARTITIONED_TABLE_NAME0, UUID.randomUUID());
+        Map<String, String> icebergProperties = new HashMap<>();
+        icebergProperties.put(IcebergMetadata.FILE_FORMAT, "orc");
+        icebergProperties.put(IcebergMetadata.COMPRESSION_CODEC, "gzip");
         MockIcebergTable mockIcebergTable = new MockIcebergTable(1, MOCKED_UNPARTITIONED_TABLE_NAME0,
                 MOCKED_ICEBERG_CATALOG_NAME, null, MOCKED_UNPARTITIONED_DB_NAME,
-                MOCKED_UNPARTITIONED_TABLE_NAME0, schemas, baseTable, null,
+                MOCKED_UNPARTITIONED_TABLE_NAME0, schemas, baseTable, icebergProperties,
                 tableIdentifier);
+        mockIcebergTable.setComment("unpartitioned table");
 
         Map<String, ColumnStatistic> columnStatisticMap;
         List<String> colNames = schemas.stream().map(Column::getName).collect(Collectors.toList());
@@ -314,9 +319,14 @@ public class MockIcebergMetadata implements ConnectorMetadata {
         TestTables.TestTable baseTable = getPartitionIdentityTable(tblName, schema);
 
         String tableIdentifier = Joiner.on(":").join(tblName, UUID.randomUUID());
-        return new MockIcebergTable(tblName.hashCode(), tblName, MOCKED_ICEBERG_CATALOG_NAME,
-                null, MOCKED_PARTITIONED_DB_NAME, tblName, schemas, baseTable, null,
+        Map<String, String> icebergProperties = new HashMap<>();
+        icebergProperties.put(IcebergMetadata.FILE_FORMAT, "orc");
+        icebergProperties.put(IcebergMetadata.COMPRESSION_CODEC, "gzip");
+        MockIcebergTable icebergTable = new MockIcebergTable(tblName.hashCode(), tblName, MOCKED_ICEBERG_CATALOG_NAME,
+                null, MOCKED_PARTITIONED_DB_NAME, tblName, schemas, baseTable, icebergProperties,
                 tableIdentifier);
+        icebergTable.setComment("partitioned table");
+        return icebergTable;
     }
 
     public static MockIcebergTable getPartitionTransformIcebergTable(String tblName, List<Column> schemas)

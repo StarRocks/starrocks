@@ -54,6 +54,7 @@ import static com.starrocks.analysis.OutFileClause.PARQUET_COMPRESSION_TYPE_MAP;
 import static com.starrocks.connector.ColumnTypeConverter.fromIcebergType;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.iceberg.IcebergConnector.ICEBERG_CATALOG_TYPE;
+import static com.starrocks.connector.iceberg.IcebergMetadata.COMMENT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
@@ -74,7 +75,7 @@ public class IcebergApiConverter {
                 .setRemoteTableName(remoteTableName)
                 .setNativeTable(nativeTbl)
                 .setFullSchema(toFullSchemas(nativeTbl))
-                .setIcebergProperties(toIcebergProps(nativeCatalogType));
+                .setIcebergProperties(toIcebergProps(nativeTbl.properties(), nativeCatalogType));
 
         return tableBuilder.build();
     }
@@ -194,9 +195,44 @@ public class IcebergApiConverter {
         return fullSchema;
     }
 
-    public static Map<String, String> toIcebergProps(String nativeCatalogType) {
+    // get iceberg table properties
+    public static Map<String, String> toIcebergProps(Map<String, String> nativeProperties, String nativeCatalogType) {
+        if (nativeProperties == null) {
+            throw new IllegalArgumentException("iceberg properties cannot be null");
+        }
         Map<String, String> options = new HashMap<>();
+        Map<String, String> mutableMap = new HashMap<>(nativeProperties);
+        String fileFormat = mutableMap.getOrDefault(TableProperties.DEFAULT_FILE_FORMAT,
+                TableProperties.DEFAULT_FILE_FORMAT_DEFAULT);
+
+        // transform to starrocks properties
+        if (mutableMap.get(TableProperties.DEFAULT_FILE_FORMAT) != null) {
+            options.put(FILE_FORMAT, mutableMap.remove(TableProperties.DEFAULT_FILE_FORMAT));
+        }
+
+        switch (FileFormat.fromString(fileFormat)) {
+            case PARQUET:
+                if (mutableMap.get(TableProperties.PARQUET_COMPRESSION) != null) {
+                    options.put(COMPRESSION_CODEC, mutableMap.remove(TableProperties.PARQUET_COMPRESSION));
+                }
+                break;
+            case ORC:
+                if (mutableMap.get(TableProperties.ORC_COMPRESSION) != null) {
+                    options.put(COMPRESSION_CODEC, mutableMap.remove(TableProperties.ORC_COMPRESSION));
+                }
+                break;
+            case AVRO:
+                if (mutableMap.get(TableProperties.AVRO_COMPRESSION) != null) {
+                    options.put(COMPRESSION_CODEC, mutableMap.remove(TableProperties.AVRO_COMPRESSION));
+                }
+                break;
+            default:
+                throw new StarRocksConnectorException("Unsupported file format %s", fileFormat);
+        }
+        options.putAll(mutableMap);
         options.put(ICEBERG_CATALOG_TYPE, nativeCatalogType);
+        options.remove(COMMENT);
+
         return options;
     }
 
