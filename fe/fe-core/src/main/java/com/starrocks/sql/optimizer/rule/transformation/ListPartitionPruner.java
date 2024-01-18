@@ -34,6 +34,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.HivePartitionEvaluatorVisitor;
+import com.starrocks.sql.optimizer.rewrite.HivePartitionPredicateEvaluator;
 import com.starrocks.sql.plan.ScalarOperatorToExpr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -43,12 +45,20 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableMap;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.stream.Collectors;
 
 public class ListPartitionPruner implements PartitionPruner {
+
+    public enum PartitionType {
+        HIVE,
+        OLAP,
+        ICEBERG
+    }
+
     private static final Logger LOG = LogManager.getLogger(ListPartitionPruner.class);
 
     // example:
@@ -84,16 +94,31 @@ public class ListPartitionPruner implements PartitionPruner {
     private final List<ColumnRefOperator> partitionColumnRefs;
     private final List<Long> specifyPartitionIds;
 
+    private Optional<PartitionType> partitionType;
+
+    private boolean enableExprPrune = false;
+
     public ListPartitionPruner(
             Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
             Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
             List<ScalarOperator> partitionConjuncts, List<Long> specifyPartitionIds) {
+        this(columnToPartitionValuesMap, columnToNullPartitions, partitionConjuncts, specifyPartitionIds,
+                Optional.empty(), false);
+    }
+
+    public ListPartitionPruner(
+            Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
+            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
+            List<ScalarOperator> partitionConjuncts, List<Long> specifyPartitionIds,
+            Optional<PartitionType> partitionType, boolean enableExprPrune) {
         this.columnToPartitionValuesMap = columnToPartitionValuesMap;
         this.columnToNullPartitions = columnToNullPartitions;
         this.partitionConjuncts = partitionConjuncts;
         this.allPartitions = getAllPartitions();
         this.partitionColumnRefs = getPartitionColumnRefs();
         this.specifyPartitionIds = specifyPartitionIds;
+        this.partitionType = partitionType;
+        this.enableExprPrune = enableExprPrune;
     }
 
     private Set<Long> getAllPartitions() {
@@ -152,7 +177,15 @@ public class ListPartitionPruner implements PartitionPruner {
                 continue;
             }
 
-            Pair<Set<Long>, Boolean> matchesPair = evalPartitionPruneFilter(operator);
+            Pair<Set<Long>, Boolean> matchesPair = null;
+            if (partitionType.isPresent() && partitionType.get() == PartitionType.HIVE && enableExprPrune) {
+                HivePartitionPredicateEvaluator evaluator = new HivePartitionPredicateEvaluator();
+                HivePartitionEvaluatorVisitor visitor = new HivePartitionEvaluatorVisitor(partitionColumnRefs,
+                        columnToNullPartitions, allPartitions, columnToPartitionValuesMap);
+                matchesPair = Pair.create(evaluator.prunePartitions(operator, visitor), false);
+            } else {
+                matchesPair = evalPartitionPruneFilter(operator);
+            }
             Set<Long> conjunctMatches = matchesPair.first;
             Boolean existNoEvalConjuncts = matchesPair.second;
             LOG.debug("prune by expr: {}, partitions: {}", operator.toString(), conjunctMatches);

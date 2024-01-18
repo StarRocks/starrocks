@@ -53,6 +53,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner;
+import com.starrocks.sql.optimizer.rule.transformation.ListPartitionPruner.PartitionType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.paimon.table.source.Split;
@@ -121,7 +122,7 @@ public class OptExternalPartitionPruner {
             try {
                 initPartitionInfo(logicalScanOperator, context, columnToPartitionValuesMap, columnToNullPartitions);
                 classifyConjuncts(logicalScanOperator, columnToPartitionValuesMap);
-                computePartitionInfo(logicalScanOperator, columnToPartitionValuesMap, columnToNullPartitions);
+                computePartitionInfo(logicalScanOperator, columnToPartitionValuesMap, columnToNullPartitions, context);
             } catch (Exception e) {
                 LOG.warn("HMS table partition prune failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), ErrorType.INTERNAL_ERROR);
@@ -292,13 +293,14 @@ public class OptExternalPartitionPruner {
 
     private static void computePartitionInfo(LogicalScanOperator operator,
             Map<ColumnRefOperator, ConcurrentNavigableMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
-            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions) throws AnalysisException {
+            Map<ColumnRefOperator, Set<Long>> columnToNullPartitions, OptimizerContext context) throws AnalysisException {
         Table table = operator.getTable();
         ScanOperatorPredicates scanOperatorPredicates = operator.getScanOperatorPredicates();
         if (table instanceof HiveMetaStoreTable) {
             ListPartitionPruner partitionPruner =
                     new ListPartitionPruner(columnToPartitionValuesMap, columnToNullPartitions,
-                            scanOperatorPredicates.getPartitionConjuncts(), null);
+                            scanOperatorPredicates.getPartitionConjuncts(), null,
+                                    Optional.of(PartitionType.HIVE), context.getSessionVariable().isEnableExprPrunePartition());
             Collection<Long> selectedPartitionIds = partitionPruner.prune();
             if (selectedPartitionIds == null) {
                 selectedPartitionIds = scanOperatorPredicates.getIdToPartitionKey().keySet();
