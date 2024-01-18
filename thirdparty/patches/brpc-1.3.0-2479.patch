@@ -1,19 +1,11 @@
-From 1c737c68d3784ab83716bf46c9fe6c04ec0ad302 Mon Sep 17 00:00:00 2001
-From: stdpain <drfeng08@gmail.com>
-Date: Mon, 25 Dec 2023 16:10:25 +0800
-Subject: [PATCH] support gc for ListOfABAFreeId
+commit a98ce2ce1b5dd127743ffa10584d49a154f33d9b
+Author: stdpain <drfeng08@gmail.com>
+Date:   Mon Dec 25 16:10:25 2023 +0800
 
----
- src/bthread/bthread.cpp          |   1 +
- src/bthread/id.cpp               |   1 +
- src/bthread/list_of_abafree_id.h | 154 ++++++++++++++++++++++++++++---
- test/CMakeLists.txt              |   1 +
- test/abalist_unittest.cc         |  46 +++++++++
- 5 files changed, 190 insertions(+), 13 deletions(-)
- create mode 100644 test/abalist_unittest.cc
+    support gc for ListOfABAFreeId
 
 diff --git a/src/bthread/bthread.cpp b/src/bthread/bthread.cpp
-index 201a674592..b94d41384c 100644
+index 201a6745..b94d4138 100644
 --- a/src/bthread/bthread.cpp
 +++ b/src/bthread/bthread.cpp
 @@ -199,6 +199,7 @@ BUTIL_FORCE_INLINE bool can_run_thread_local(const bthread_attr_t* __restrict at
@@ -25,7 +17,7 @@ index 201a674592..b94d41384c 100644
      static bool exists(bthread_t id) { return bthread::TaskGroup::exists(id); }
  };
 diff --git a/src/bthread/id.cpp b/src/bthread/id.cpp
-index 41c49a3f7c..ba77580a04 100644
+index 41c49a3f..ba77580a 100644
 --- a/src/bthread/id.cpp
 +++ b/src/bthread/id.cpp
 @@ -291,6 +291,7 @@ void id_pool_status(std::ostream &os) {
@@ -37,7 +29,7 @@ index 41c49a3f7c..ba77580a04 100644
      static bool exists(bthread_id_t id)
      { return bthread::id_exists_with_true_negatives(id); }
 diff --git a/src/bthread/list_of_abafree_id.h b/src/bthread/list_of_abafree_id.h
-index ac2b223423..b4b584ab32 100644
+index ac2b2234..45043acc 100644
 --- a/src/bthread/list_of_abafree_id.h
 +++ b/src/bthread/list_of_abafree_id.h
 @@ -22,8 +22,10 @@
@@ -81,7 +73,7 @@ index ac2b223423..b4b584ab32 100644
      // Put #entries of each level into `counts'
      // Returns #levels.
      size_t get_sizes(size_t* counts, size_t n);
-@@ -82,19 +88,31 @@ class ListOfABAFreeId {
+@@ -82,19 +88,31 @@ private:
          IdBlock* next;
      };
      void forward_index();
@@ -116,10 +108,11 @@ index ac2b223423..b4b584ab32 100644
      for (size_t i = 0; i < IdTraits::BLOCK_SIZE; ++i) {
          _head_block.ids[i] = IdTraits::ID_INIT;
      }
-@@ -140,6 +158,23 @@ int ListOfABAFreeId<Id, IdTraits>::add(Id id) {
+@@ -140,6 +158,30 @@ int ListOfABAFreeId<Id, IdTraits>::add(Id id) {
          }
          saved_pos[i] = pos;
      }
++    // If we don't expect a GC to occur in abalist, then an error is reported and EAGAIN is returned.
 +    if (_nblock * IdTraits::BLOCK_SIZE > IdTraits::MAX_ENTRIES) {
 +        return EAGAIN;
 +    }
@@ -131,16 +124,22 @@ index ac2b223423..b4b584ab32 100644
 +        // otherwise we let the next GC occur length * 2.
 +        // 
 +        // Condition for a GC to be sufficiently efficient: the number of blocks 
-+        // retained after the GC is 1/8 of the previous one.
-+        if ((before_gc_blocks - _nblock) * IdTraits::BLOCK_SIZE < (_next_gc_size - (_next_gc_size >> 3))) {
++        // retained after the GC is 1/4 of the previous one.
++        if ((before_gc_blocks - _nblock) * IdTraits::BLOCK_SIZE < (_next_gc_size - (_next_gc_size >> 2))) {
 +            _next_gc_size <<= 1;
++            // We want to make sure that GC must occur before MAX_ENTRIES.
++            static_assert(IdTraits::MAX_ENTRIES > IdTraits::BLOCK_SIZE * 2, "MAX_ENTRIES should be greater than 2 * IdTraits::BLOCK_SIZE");
++            if (_next_gc_size >= IdTraits::MAX_ENTRIES) {
++                _next_gc_size = IdTraits::MAX_ENTRIES - IdTraits::BLOCK_SIZE * 2;
++            }
 +        }
++
 +        return rc;
 +    }
      // The list is considered to be "crowded", add a new block and scatter
      // the conflict identifiers by inserting an empty entry after each of
      // them, so that even if the identifiers are still valid when we walk
-@@ -152,9 +187,6 @@ int ListOfABAFreeId<Id, IdTraits>::add(Id id) {
+@@ -152,9 +194,6 @@ int ListOfABAFreeId<Id, IdTraits>::add(Id id) {
      //
      //  [..xxxx....] -> [......yyyy] -> [..........]
      //    block A        new block      block B
@@ -150,7 +149,7 @@ index ac2b223423..b4b584ab32 100644
      IdBlock* new_block = new (std::nothrow) IdBlock;
      if (NULL == new_block) {
          return ENOMEM;
-@@ -188,6 +220,93 @@ int ListOfABAFreeId<Id, IdTraits>::add(Id id) {
+@@ -188,6 +227,93 @@ int ListOfABAFreeId<Id, IdTraits>::add(Id id) {
      return 0;
  }
  
@@ -244,7 +243,7 @@ index ac2b223423..b4b584ab32 100644
  template <typename Id, typename IdTraits>
  template <typename Fn>
  void ListOfABAFreeId<Id, IdTraits>::apply(const Fn& fn) {
-@@ -200,6 +319,15 @@ void ListOfABAFreeId<Id, IdTraits>::apply(const Fn& fn) {
+@@ -200,6 +326,15 @@ void ListOfABAFreeId<Id, IdTraits>::apply(const Fn& fn) {
      }
  }
  
@@ -260,7 +259,7 @@ index ac2b223423..b4b584ab32 100644
  template <typename Id, typename IdTraits>
  size_t ListOfABAFreeId<Id, IdTraits>::get_sizes(size_t* cnts, size_t n) {
      if (n == 0) {
-@@ -210,6 +338,6 @@ size_t ListOfABAFreeId<Id, IdTraits>::get_sizes(size_t* cnts, size_t n) {
+@@ -210,6 +345,6 @@ size_t ListOfABAFreeId<Id, IdTraits>::get_sizes(size_t* cnts, size_t n) {
      return 1;
  }
  
@@ -270,7 +269,7 @@ index ac2b223423..b4b584ab32 100644
 -#endif  // BTHREAD_LIST_OF_ABAFREE_ID_H
 +#endif // BTHREAD_LIST_OF_ABAFREE_ID_H
 diff --git a/test/CMakeLists.txt b/test/CMakeLists.txt
-index 42cb647b82..051f52efb5 100644
+index 42cb647b..051f52ef 100644
 --- a/test/CMakeLists.txt
 +++ b/test/CMakeLists.txt
 @@ -144,6 +144,7 @@ SET(TEST_BUTIL_SOURCES
@@ -283,7 +282,7 @@ index 42cb647b82..051f52efb5 100644
      ${PROJECT_SOURCE_DIR}/test/version_unittest.cc
 diff --git a/test/abalist_unittest.cc b/test/abalist_unittest.cc
 new file mode 100644
-index 0000000000..8a42d3d248
+index 00000000..c22e0d80
 --- /dev/null
 +++ b/test/abalist_unittest.cc
 @@ -0,0 +1,46 @@
@@ -330,7 +329,7 @@ index 0000000000..8a42d3d248
 +    }
 +    size_t cnts[1];
 +    aba_list.get_sizes(cnts, 1);
-+    EXPECT_EQ(cnts[0], (size_t)192);
++    EXPECT_EQ(cnts[0], (size_t)96);
 +}
 +} // namespace bthread
 \ No newline at end of file
