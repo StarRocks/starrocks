@@ -18,12 +18,12 @@ displayed_sidebar: "Chinese"
 ## 语法
 
 ```Haskell
-COUNT_IF(expr)
+COUNT_IF(condition)
 ```
 
 ## 参数说明
 
-`expr`: 条件表达式。可以在一条语句中指定多个 count_if 条件。
+`condition`: 条件表达式。可以在一条语句中指定多个 count_if 条件。
 
 ## 返回值说明
 
