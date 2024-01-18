@@ -141,8 +141,9 @@ public class MetricsAction extends RestBaseAction {
             UserIdentity currentUser = null;
             try {
                 ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
-                // Only check password and no need admin root, otherwise the request privilege is too big.
+                // Only check password and need admin root to collect table/mv level metrics.
                 currentUser = checkPassword(authInfo);
+                checkUserOwnsAdminRole(currentUser);
             } catch (AccessDeniedException e) {
                 // disable Table related metrics collection due to AccessDenied
                 collectTableMetrics = false;
