@@ -19,9 +19,13 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
           _brpc_timeout_ms(fragment_ctx->runtime_state()->query_options().query_timeout * 1000),
           _is_dest_merge(is_dest_merge),
           _num_uncancelled_sinkers(num_sinkers),
+<<<<<<< HEAD
           _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()),
           _sent_audit_stats_frequency_upper_limit(
                   std::max((int64_t)64, BitUtil::RoundUpToPowerOfTwo(fragment_ctx->num_drivers() * 4))) {
+=======
+          _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()) {
+>>>>>>> branch-2.5-mrs
     for (const auto& dest : destinations) {
         const auto& instance_id = dest.fragment_instance_id;
         // instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
@@ -388,6 +392,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
     }
     return Status::OK();
 }
+<<<<<<< HEAD
 
 Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure,
                              const TransmitChunkInfo& request) {
@@ -407,6 +412,27 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         VLOG_ROW << "issue a http rpc, attachment's size = " << attachment_size
                  << " , total size = " << closure->cntl.request_attachment().size();
 
+=======
+
+Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure,
+                             const TransmitChunkInfo& request) {
+    auto expected_iobuf_size = request.attachment.size() + request.params->ByteSizeLong() + sizeof(size_t) * 2;
+    if (UNLIKELY(expected_iobuf_size > _rpc_http_min_size)) {
+        butil::IOBuf iobuf;
+        butil::IOBufAsZeroCopyOutputStream wrapper(&iobuf);
+        request.params->SerializeToZeroCopyStream(&wrapper);
+        // append params to iobuf
+        size_t params_size = iobuf.size();
+        closure->cntl.request_attachment().append(&params_size, sizeof(params_size));
+        closure->cntl.request_attachment().append(iobuf);
+        // append attachment
+        size_t attachment_size = request.attachment.size();
+        closure->cntl.request_attachment().append(&attachment_size, sizeof(attachment_size));
+        closure->cntl.request_attachment().append(request.attachment);
+        VLOG_ROW << "issue a http rpc, attachment's size = " << attachment_size
+                 << " , total size = " << closure->cntl.request_attachment().size();
+
+>>>>>>> branch-2.5-mrs
         if (UNLIKELY(expected_iobuf_size != closure->cntl.request_attachment().size())) {
             LOG(WARNING) << "http rpc expected iobuf size " << expected_iobuf_size << " != "
                          << " real iobuf size " << closure->cntl.request_attachment().size();

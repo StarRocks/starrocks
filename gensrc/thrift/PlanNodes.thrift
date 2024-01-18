@@ -418,8 +418,11 @@ struct TOlapScanNode {
   26: optional list<Exprs.TExpr> bucket_exprs
   27: optional list<string> sort_key_column_names
   28: optional i32 max_parallel_scan_instance_num
+<<<<<<< HEAD
   //29: optional list<TColumnAccessPath> column_access_paths
   30: optional bool use_pk_index
+=======
+>>>>>>> branch-2.5-mrs
 }
 
 struct TJDBCScanNode {

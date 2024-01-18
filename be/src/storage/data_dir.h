@@ -76,9 +76,12 @@ public:
 
     int64_t available_bytes() const { return _available_bytes; }
     int64_t disk_capacity_bytes() const { return _disk_capacity_bytes; }
+<<<<<<< HEAD
     double disk_usage(int64_t incoming_data_size) const {
         return (double)(_disk_capacity_bytes - _available_bytes + incoming_data_size) / (double)_disk_capacity_bytes;
     }
+=======
+>>>>>>> branch-2.5-mrs
 
     // save a cluster_id file under data path to prevent
     // invalid be config for example two be use the same

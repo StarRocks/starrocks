@@ -22,6 +22,10 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.Utils;
+>>>>>>> branch-2.5-mrs
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -40,6 +44,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
 import static com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator.CompoundType;
 
 public class InvertedCaseWhen {
@@ -81,20 +86,9 @@ public class InvertedCaseWhen {
     }
 
 
-    public static ScalarOperator in(boolean isNotIn, ScalarOperator lhs, List<ScalarOperator> values) {
-        Preconditions.checkArgument(!values.isEmpty());
-        List<ScalarOperator> args = Lists.newArrayList(lhs);
-        args.addAll(values);
-        return new InPredicateOperator(isNotIn, args);
-    }
-
-    public static ScalarOperator in(ScalarOperator lhs, List<ScalarOperator> values) {
-        return in(false, lhs, values);
-    }
-
-    public static ScalarOperator notIn(ScalarOperator lhs, List<ScalarOperator> values) {
-        return in(true, lhs, values);
-    }
+=======
+public class InvertedCaseWhen {
+    private final CaseWhenOperator caseWhen;
 
     private static class WhenAndOrdinal {
 
@@ -115,6 +109,94 @@ public class InvertedCaseWhen {
         }
     }
 
+    private final Map<ConstantOperator, WhenAndOrdinal> thenMap;
+
+    private InvertedCaseWhen(CaseWhenOperator caseWhen, Map<ConstantOperator, ScalarOperator> thenToWhen,
+                             Map<ConstantOperator, Integer> thenToOrdinal) {
+        this.caseWhen = caseWhen;
+        Preconditions.checkArgument(thenToWhen.size() == thenToOrdinal.size());
+        this.thenMap = Maps.newHashMap();
+        thenToOrdinal.forEach((k, v) -> {
+            this.thenMap.put(k, new WhenAndOrdinal(v, thenToWhen.get(k)));
+        });
+    }
+
+    private Optional<ScalarOperator> nullToWhen() {
+        return Optional.ofNullable(this.thenMap.get(ConstantOperator.NULL)).map(WhenAndOrdinal::getWhen);
+    }
+
+    // 1. op = { OR(pi)| pi belongs to selected whens} => op OR if(nullWhen, NULL, FALSE)
+    // 2. op = { AND(NOT(pi)| pi belongs to unselected whens} => op AND if(nullWhen, NULL, TRUE)
+    // form 2 can not be reduced, so we do not generate from2, so if case-when has null-value
+    // branches, we do not use unselected whens.
+    private Optional<ScalarOperator> handleNull(ScalarOperator op) {
+        Optional<ScalarOperator> nullWhen = nullToWhen();
+        if (nullWhen.isPresent()) {
+            if (op == ConstantOperator.TRUE) {
+                // Theoretical, here should return if(nullWhen, NULL, true), but it is too complex
+                // and can not be pushed down, so do not rewrite the case-when.
+                return Optional.empty();
+            }
+            return Optional.of(Utils.compoundOr(op, ifThenNullOrFalse(nullWhen.get())));
+        } else {
+            // should not generate NULL result
+            // 1. op is Constant, it never generates NULL, for an example:
+            // case a when 'A' then 1 when 'B' then 2 else 3 end = 4  -- const false
+            // case a when 'A' then 1 when 'B' then 2 else 3 end <> 4 -- const true
+            // Rhs 4 never hits/misses case-when then clauses and the case-when never yields NULL values,
+            // so this predicate is constant false/true. so we just return this op.
+            if (op.isConstantRef()) {
+                return Optional.of(op);
+            }
+            // 2. otherwise, build a new predicate: op AND (op IS NOT NULL), for an example:
+            // case a when 'A' then 1 when 'B' then 2 else 3 end = 1
+            // rhs 1 hit then clause 1, so we get a='A' as simplified result, but a='A' may be yields NULL result,
+            // while the original predicate never yields NULL, so we need handle NULL, the correct result is
+            // a = 'A' and a is NOT NULL
+            ScalarOperator isNotNull = new IsNullPredicateOperator(true,
+                    caseWhen.hasCase() ? caseWhen.getCaseClause() : op);
+            return Optional.of(Utils.compoundAnd(op, isNotNull));
+        }
+    }
+
+>>>>>>> branch-2.5-mrs
+    public static ScalarOperator in(boolean isNotIn, ScalarOperator lhs, List<ScalarOperator> values) {
+        Preconditions.checkArgument(!values.isEmpty());
+        List<ScalarOperator> args = Lists.newArrayList(lhs);
+        args.addAll(values);
+        return new InPredicateOperator(isNotIn, args);
+    }
+
+    public static ScalarOperator in(ScalarOperator lhs, List<ScalarOperator> values) {
+        return in(false, lhs, values);
+    }
+
+    public static ScalarOperator notIn(ScalarOperator lhs, List<ScalarOperator> values) {
+        return in(true, lhs, values);
+    }
+
+<<<<<<< HEAD
+    private static class WhenAndOrdinal {
+
+        private final int ordinal;
+        private final ScalarOperator when;
+
+        public WhenAndOrdinal(int ordinal, ScalarOperator when) {
+            this.ordinal = ordinal;
+            this.when = when;
+        }
+
+        public int getOrdinal() {
+            return ordinal;
+        }
+
+        public ScalarOperator getWhen() {
+            return when;
+        }
+    }
+
+=======
+>>>>>>> branch-2.5-mrs
     private static class InvertCaseWhenVisitor extends ScalarOperatorVisitor<Optional<InvertedCaseWhen>, Void> {
         @Override
         public Optional<InvertedCaseWhen> visit(ScalarOperator scalarOperator, Void context) {
@@ -125,8 +207,13 @@ public class InvertedCaseWhen {
 
             ScalarOperator lhs = operator.getCaseClause();
             Set<ConstantOperator> uniqueWhens = Sets.newHashSet();
+<<<<<<< HEAD
             Map<ConstantOperator, List<ScalarOperator>> thenToWhenValues = Maps.newLinkedHashMap();
             Map<ConstantOperator, Integer> thenToOrdinal = Maps.newLinkedHashMap();
+=======
+            Map<ConstantOperator, List<ScalarOperator>> thenToWhenValues = Maps.newHashMap();
+            Map<ConstantOperator, Integer> thenToOrdinal = Maps.newHashMap();
+>>>>>>> branch-2.5-mrs
             for (int i = 0; i < operator.getWhenClauseSize(); ++i) {
                 ConstantOperator then = operator.getThenClause(i).cast();
                 ConstantOperator when = operator.getWhenClause(i).cast();
@@ -142,15 +229,25 @@ public class InvertedCaseWhen {
                 thenToWhenValues.computeIfAbsent(then, (k) -> Lists.newArrayList()).add(when);
                 thenToOrdinal.merge(then, i, Math::max);
             }
+<<<<<<< HEAD
             Map<ConstantOperator, ScalarOperator> thenToWhen = Maps.newLinkedHashMap();
+=======
+            Map<ConstantOperator, ScalarOperator> thenToWhen = Maps.newHashMap();
+>>>>>>> branch-2.5-mrs
             thenToWhenValues.forEach((k, v) -> thenToWhen.put(k, in(lhs, v)));
 
             List<ScalarOperator> allValues = thenToWhenValues.values().stream().flatMap(Collection::stream).collect(
                     Collectors.toList());
             // if allValues is empty, the elsePredicate is true constant, for an example
             // select (case a when NULL then 1 else 2 end) = 2 from t;
+<<<<<<< HEAD
             ScalarOperator elsePredicate = allValues.isEmpty() ? ConstantOperator.TRUE :
                     NegateFilterShuttle.getInstance().negateFilter(in(lhs, allValues));
+=======
+            ScalarOperator elsePredicate = allValues.isEmpty() ? ConstantOperator.TRUE : notIn(lhs, allValues);
+
+            elsePredicate = CompoundPredicateOperator.or(elsePredicate, new IsNullPredicateOperator(lhs));
+>>>>>>> branch-2.5-mrs
 
             ConstantOperator alt = (operator.hasElse() && !operator.getElseClause().isConstantNull()) ?
                     operator.getElseClause().cast() :
@@ -158,7 +255,11 @@ public class InvertedCaseWhen {
             thenToWhen.put(alt,
                     CompoundPredicateOperator.or(thenToWhen.getOrDefault(alt, ConstantOperator.FALSE), elsePredicate));
             thenToOrdinal.merge(alt, operator.getWhenClauseSize(), Math::max);
+<<<<<<< HEAD
             return Optional.of(new InvertedCaseWhen(true, operator, thenToWhen, thenToOrdinal));
+=======
+            return Optional.of(new InvertedCaseWhen(operator, thenToWhen, thenToOrdinal));
+>>>>>>> branch-2.5-mrs
         }
 
         Optional<InvertedCaseWhen> handleCaseWhen(CaseWhenOperator operator) {
@@ -170,18 +271,32 @@ public class InvertedCaseWhen {
                 whenClauses = whenClauses.stream().skip(1).map(v -> BinaryPredicateOperator.eq(lhs, v))
                         .collect(Collectors.toList());
             }
+<<<<<<< HEAD
             NegateFilterShuttle shuttle = NegateFilterShuttle.getInstance();
             List<ScalarOperator> notWhens =
                     whenClauses.stream().map(shuttle::negateFilter).collect(Collectors.toList());
+=======
+            List<ScalarOperator> notWhens =
+                    whenClauses.stream().map(CompoundPredicateOperator::not).collect(Collectors.toList());
+>>>>>>> branch-2.5-mrs
 
             for (int i = 1; i < whenClauses.size(); ++i) {
                 whenClauses.set(i, CompoundPredicateOperator.and(whenClauses.get(i),
                         CompoundPredicateOperator.and(notWhens.subList(0, i))));
             }
             // else predicates means that any when clauses are not matched, for an example:
+<<<<<<< HEAD
             // case c when c1 then v1 when c2 then v2 when c3 then v3 else v4 end
             // else predicate is ¬c1 ∧ ¬c2 ∧ ¬c3
             ScalarOperator elsePredicate = CompoundPredicateOperator.and(notWhens);
+=======
+            // case c when c1 then v1 when c2 then v2 when c3 then v3 else c4 end
+            // else predicate is (c <> c1 and c <> c2 and c <> c3 and c <> c4) or
+            // (c <> c1 and c <> c2 and c <> c3 and c <> c4) is NULL
+            ScalarOperator elsePredicate = CompoundPredicateOperator.and(notWhens);
+            elsePredicate =
+                    CompoundPredicateOperator.or(elsePredicate, new IsNullPredicateOperator(elsePredicate));
+>>>>>>> branch-2.5-mrs
             whenClauses.add(elsePredicate);
 
             // if case-when has no else clause, append const null to thenClauses.
@@ -191,8 +306,13 @@ public class InvertedCaseWhen {
             }
 
             Preconditions.checkArgument(whenClauses.size() == thenClauses.size());
+<<<<<<< HEAD
             Map<ConstantOperator, List<ScalarOperator>> thenToWhenValues = Maps.newLinkedHashMap();
             Map<ConstantOperator, Integer> thenToOrdinal = Maps.newLinkedHashMap();
+=======
+            Map<ConstantOperator, List<ScalarOperator>> thenToWhenValues = Maps.newHashMap();
+            Map<ConstantOperator, Integer> thenToOrdinal = Maps.newHashMap();
+>>>>>>> branch-2.5-mrs
             for (int i = 0; i < thenClauses.size(); ++i) {
                 ConstantOperator then = thenClauses.get(i).cast();
                 // NULL is apt to bug, so here use a constNull
@@ -203,10 +323,17 @@ public class InvertedCaseWhen {
                 thenToWhenValues.computeIfAbsent(then, (k) -> Lists.newArrayList()).add(when);
                 thenToOrdinal.merge(then, i, Math::max);
             }
+<<<<<<< HEAD
             Map<ConstantOperator, ScalarOperator> thenToWhen = Maps.newLinkedHashMap();
             thenToWhenValues.forEach(
                     (then, when) -> thenToWhen.put(then.cast(), CompoundPredicateOperator.or(when)));
             return Optional.of(new InvertedCaseWhen(false, operator, thenToWhen, thenToOrdinal));
+=======
+            Map<ConstantOperator, ScalarOperator> thenToWhen = Maps.newHashMap();
+            thenToWhenValues.forEach(
+                    (then, when) -> thenToWhen.put(then.cast(), CompoundPredicateOperator.or(when)));
+            return Optional.of(new InvertedCaseWhen(operator, thenToWhen, thenToOrdinal));
+>>>>>>> branch-2.5-mrs
         }
 
         @Override
@@ -241,17 +368,36 @@ public class InvertedCaseWhen {
                 if (!child0.isConstantRef()) {
                     return visit(call, context);
                 }
+<<<<<<< HEAD
 
                 // transform to case when case child1 when child0 then null else child0
                 CaseWhenOperator caseWhen = new CaseWhenOperator(call.getType(), child1, child0,
                         Lists.newArrayList(child0, ConstantOperator.createNull(call.getType())));
+=======
+                CaseWhenOperator caseWhen =
+                        new CaseWhenOperator(call.getType(), null, child0,
+                                Lists.newArrayList(BinaryPredicateOperator.eq(child1, child0),
+                                        ConstantOperator.createNull(call.getType())));
+>>>>>>> branch-2.5-mrs
                 return caseWhen.accept(this, context);
             }
             return visit(call, context);
         }
     }
 
+<<<<<<< HEAD
 
+=======
+    private static Optional<ScalarOperator> or(List<ScalarOperator> args) {
+        if (args.isEmpty()) {
+            return Optional.empty();
+        } else if (args.size() == 1) {
+            return Optional.of(args.get(0));
+        } else {
+            return Optional.of(CompoundPredicateOperator.or(args));
+        }
+    }
+>>>>>>> branch-2.5-mrs
 
     private static final InvertCaseWhenVisitor INVERT_CASE_WHEN_VISITOR = new InvertCaseWhenVisitor();
 
@@ -259,11 +405,20 @@ public class InvertedCaseWhen {
         return op.accept(INVERT_CASE_WHEN_VISITOR, null);
     }
 
+<<<<<<< HEAD
     private static ScalarOperator buildIfThen(ScalarOperator p, ConstantOperator first, ConstantOperator second) {
         Function ifFunc = Expr.getBuiltinFunction(FunctionSet.IF, new Type[] {Type.BOOLEAN, Type.BOOLEAN, Type.BOOLEAN},
                 Function.CompareMode.IS_IDENTICAL);
         return new CallOperator(FunctionSet.IF, Type.BOOLEAN,
                 Lists.newArrayList(p, first, second), ifFunc);
+=======
+    private static ScalarOperator ifThenNullOrFalse(ScalarOperator p) {
+        Function ifFunc = Expr.getBuiltinFunction(FunctionSet.IF, new Type[] {Type.BOOLEAN, Type.BOOLEAN, Type.BOOLEAN},
+                Function.CompareMode.IS_IDENTICAL);
+        Preconditions.checkArgument(ifFunc != null);
+        return new CallOperator(FunctionSet.IF, Type.BOOLEAN,
+                Lists.newArrayList(p, ConstantOperator.NULL, ConstantOperator.FALSE), ifFunc);
+>>>>>>> branch-2.5-mrs
     }
 
     private static class SimplifyVisitor extends ScalarOperatorVisitor<Optional<ScalarOperator>, Void> {
@@ -276,24 +431,39 @@ public class InvertedCaseWhen {
         @Override
         public Optional<ScalarOperator> visitInPredicate(InPredicateOperator predicate, Void context) {
             Set<ScalarOperator> inSet = predicate.getChildren().stream().skip(1).collect(Collectors.toSet());
+<<<<<<< HEAD
             // col in (1, 2, 3) is not equal with col in (1, 2, 3, null). For col = 4, the first return false
             // while the second return null.
             // If there exists null value, we forbid rewriting the predicate.
             if (!inSet.stream().allMatch(e -> e.isConstantRef() && !e.isNullable())) {
+=======
+            if (!inSet.stream().allMatch(ScalarOperator::isConstantRef)) {
+>>>>>>> branch-2.5-mrs
                 return Optional.empty();
             }
             Optional<InvertedCaseWhen> maybeInvertedCaseWhen = from(predicate.getChild(0));
             if (!maybeInvertedCaseWhen.isPresent()) {
                 return Optional.empty();
             }
+<<<<<<< HEAD
 
+=======
+            // case when ... in (NULL, NULL) is equivalent to NULL
+            // case when ... in (NULL, c1) is equivalent to case when ... in (c1)
+            inSet.removeIf(ScalarOperator::isConstantNull);
+>>>>>>> branch-2.5-mrs
             if (inSet.isEmpty()) {
                 return Optional.of(ConstantOperator.NULL);
             }
             InvertedCaseWhen invertedCaseWhen = maybeInvertedCaseWhen.get();
             boolean isNotIn = predicate.isNotIn();
+<<<<<<< HEAD
             Map<ScalarOperator, WhenAndOrdinal> selected = Maps.newLinkedHashMap();
             Map<ScalarOperator, WhenAndOrdinal> unSelected = Maps.newLinkedHashMap();
+=======
+            Map<ScalarOperator, WhenAndOrdinal> selected = Maps.newHashMap();
+            Map<ScalarOperator, WhenAndOrdinal> unSelected = Maps.newHashMap();
+>>>>>>> branch-2.5-mrs
             invertedCaseWhen.thenMap.entrySet().forEach(e -> {
                 if (!e.getKey().isConstantNull()) {
                     if (inSet.contains(e.getKey()) ^ isNotIn) {
@@ -303,6 +473,7 @@ public class InvertedCaseWhen {
                     }
                 }
             });
+<<<<<<< HEAD
 
             int selectedMaxOrdinal = selected.values().stream()
                     .map(WhenAndOrdinal::getOrdinal).max(Comparator.comparingInt(v -> v)).orElse(0);
@@ -408,6 +579,63 @@ public class InvertedCaseWhen {
                 });
             }
             return result;
+=======
+            Optional<ScalarOperator> nullWhen = invertedCaseWhen.nullToWhen();
+            if (selected.isEmpty()) {
+                return invertedCaseWhen.handleNull(ConstantOperator.FALSE);
+            } else if (unSelected.isEmpty() && !nullWhen.isPresent()) {
+                return Optional.of(ConstantOperator.TRUE);
+            }
+            // case-when with case clause can be decomposed into several simple non-overlapping branches,
+            // in practice it is apt to yields simple and efficient simplified predicates.
+            Optional<ScalarOperator> result = Optional.empty();
+            if (invertedCaseWhen.caseWhen.hasCase()) {
+                if (nullWhen.isPresent() || (selected.size() <= unSelected.size())) {
+                    List<ScalarOperator> orArgs = selected.values().stream().map(WhenAndOrdinal::getWhen).collect(
+                            Collectors.toList());
+                    result = or(orArgs);
+                } else {
+                    List<ScalarOperator> orArgs = unSelected.values().stream().map(WhenAndOrdinal::getWhen).collect(
+                            Collectors.toList());
+                    result = or(orArgs).map(CompoundPredicateOperator::not);
+                }
+            } else {
+                // case-when without case clause is apt to yields very complex simplified result, in particular,
+                // when values in in-filter hit then-clauses ranked backward. however, when we build the simplified
+                // predicate, we have two ways:
+                // 1. choose the hit when-clauses: p1,p2,...,pn, then use OR to join them, the result is
+                //  p1 OR p2 OR ... OR pn
+                // 2. choose the missed when-clauses: p1,p2,...,pn, at first use OR to join them, then negate it,
+                //  the result is NOT(p1 OR p2 OR ... OR pn)
+                // for case when q1 then c1 when q2 then c2 ... else pn end, when it converted into InvertedCaseWhen
+                //  thenToWhen records (c1->p1, c2->p2, ..., pn)(lisp style), pi satisfies:
+                //  1. p1 = q1;
+                //  2. pn = ((NOT q1) AND (NOT q2) AND ... AND (NOT qn_1)) OR (q1 AND q2 AND ... AND qn_1) is NULL;
+                //  3. pi = (NOT q1) AND ... AND (NOT qi_1) AND qi.  i < i < n
+                // Because the greater the ordinal of pi is, the more inefficient simplified result is, so when adopt
+                // policy: choose between hit when-clauses and missed when-clauses, who owns the minimum maximum
+                // ordinal wins, if the winner's maximum ordinal is greater than 1, simplification is forbidden.
+                int selectedMaxOrdinal = selected.values().stream()
+                        .map(WhenAndOrdinal::getOrdinal).max(Comparator.comparingInt(v -> v)).orElse(0);
+                int unSelectedMaxOrdinal = unSelected.values().stream()
+                        .map(WhenAndOrdinal::getOrdinal).max(Comparator.comparingInt(v -> v)).orElse(0);
+                if (selectedMaxOrdinal > 1 && unSelectedMaxOrdinal > 1) {
+                    return Optional.empty();
+                }
+                if (selectedMaxOrdinal <= unSelectedMaxOrdinal) {
+                    List<ScalarOperator> orArgs = selected.values().stream().map(WhenAndOrdinal::getWhen).collect(
+                            Collectors.toList());
+                    result = or(orArgs);
+                } else if (!nullWhen.isPresent()) {
+                    List<ScalarOperator> orArgs = unSelected.values().stream().map(WhenAndOrdinal::getWhen).collect(
+                            Collectors.toList());
+                    result = or(orArgs).map(CompoundPredicateOperator::not);
+                } else {
+                    return Optional.empty();
+                }
+            }
+            return result.map(invertedCaseWhen::handleNull).orElse(Optional.empty());
+>>>>>>> branch-2.5-mrs
         }
 
         @Override
@@ -430,6 +658,7 @@ public class InvertedCaseWhen {
             InvertedCaseWhen invertedCaseWhen = maybeInvertedCaseWhen.get();
             if (predicate.isNotNull()) {
                 return Optional.of(
+<<<<<<< HEAD
                         invertedCaseWhen.getBranchToNull().map(NegateFilterShuttle.getInstance()::negateFilter)
                                 .orElse(ConstantOperator.TRUE));
             } else {
@@ -455,6 +684,14 @@ public class InvertedCaseWhen {
         private boolean hitElseBranch(int selectedMaxOrdinal, int unSelectedMaxOrdinal) {
             return selectedMaxOrdinal > unSelectedMaxOrdinal;
         }
+=======
+                        invertedCaseWhen.nullToWhen().map(CompoundPredicateOperator::not)
+                                .orElse(ConstantOperator.TRUE));
+            } else {
+                return Optional.of(invertedCaseWhen.nullToWhen().orElse(ConstantOperator.FALSE));
+            }
+        }
+>>>>>>> branch-2.5-mrs
     }
 
     private static final SimplifyVisitor SIMPLIFY_VISITOR = new SimplifyVisitor();

@@ -27,8 +27,12 @@ public enum PartitionType {
     UNPARTITIONED("UNPARTITIONED"),
     RANGE("RANGE"),
     LIST("LIST"),
+<<<<<<< HEAD
     EXPR_RANGE("EXPR_RANGE"),
     EXPR_RANGE_V2("EXPR_RANGE_V2");
+=======
+    EXPR_RANGE("EXPR_RANGE");
+>>>>>>> branch-2.5-mrs
 
     public String typeString;
 

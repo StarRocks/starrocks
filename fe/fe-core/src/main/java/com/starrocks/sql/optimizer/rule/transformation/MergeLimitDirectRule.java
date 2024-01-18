@@ -6,13 +6,17 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class MergeLimitDirectRule extends TransformationRule {
     public static final MergeLimitDirectRule AGGREGATE = new MergeLimitDirectRule(OperatorType.LOGICAL_AGGR);
@@ -42,7 +46,19 @@ public class MergeLimitDirectRule extends TransformationRule {
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalLimitOperator limit = (LogicalLimitOperator) input.getOp();
-        return limit.isLocal();
+        Operator op = input.inputAt(0).getOp();
+        // Merging limit into AggregateOperator with multi distinct aggregations prohibits
+        // RewriteMultiDistinctByCTERule from transform such a AggregateOperator into MulticastSink+HashJoin or
+        // MulticastSink+NestLoopJoin Plan.
+        if (op instanceof LogicalAggregationOperator) {
+            LogicalAggregationOperator aggOp = op.cast();
+            List<CallOperator> distinctAggOperatorList = aggOp.getAggregations().values().stream()
+                    .filter(CallOperator::isDistinct).collect(Collectors.toList());
+            boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getChildren().size() > 1);
+            return (!hasMultiColumns || distinctAggOperatorList.size() > 1) && limit.isLocal();
+        } else {
+            return limit.isLocal();
+        }
     }
 
     @Override

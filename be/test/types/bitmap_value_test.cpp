@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "types/bitmap_value.h"
+<<<<<<< HEAD
 
 #include <gtest/gtest.h>
 
@@ -851,4 +852,25 @@ TEST_F(BitmapValueTest, split_bitmap) {
     ASSERT_EQ(result.size(), 1);
     ASSERT_EQ(result[0].to_string(), "0,1,2,3,4,5,6,7,8,9,10,11,12,13");
 }
+=======
+#include "util/phmap/phmap.h"
+
+#include <gtest/gtest.h>
+
+namespace starrocks {
+
+class BitmapTest : public testing::Test {};
+
+TEST_F(BitmapTest, Constructor) {
+    BitmapValue bitmap;
+    for (size_t i = 0; i < 64; i++) {
+        bitmap.add(i);
+    }
+
+    BitmapValue shallow_bitmap(bitmap, false);
+    shallow_bitmap.add(64);
+    ASSERT_EQ(bitmap.cardinality(), 65);
+}
+
+>>>>>>> branch-2.5-mrs
 } // namespace starrocks

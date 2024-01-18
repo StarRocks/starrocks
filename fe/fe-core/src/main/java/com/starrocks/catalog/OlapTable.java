@@ -62,7 +62,10 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.CreateTableStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.PartitionValue;
+=======
+>>>>>>> branch-2.5-mrs
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
@@ -975,6 +978,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
             return rangePartitionMap;
         }
 
+<<<<<<< HEAD
         int partitionNum = rangePartitionMap.size();
         if (lastPartitionNum > partitionNum) {
             return rangePartitionMap;
@@ -1015,12 +1019,27 @@ public class OlapTable extends Table implements GsonPostProcessable {
         }
 
         LiteralExpr startExpr = sortedRange.get(startIndex).lowerEndpoint().
+=======
+        List<Range<PartitionKey>> sortedRange = rangePartitionMap.values().stream()
+                .sorted(RangeUtils.RANGE_COMPARATOR).collect(Collectors.toList());
+        int partitionNum = sortedRange.size();
+
+        if (lastPartitionNum > partitionNum) {
+            return rangePartitionMap;
+        }
+
+        LiteralExpr startExpr = sortedRange.get(partitionNum - lastPartitionNum).lowerEndpoint().
+>>>>>>> branch-2.5-mrs
                 getKeys().get(0);
         LiteralExpr endExpr = sortedRange.get(partitionNum - 1).upperEndpoint().getKeys().get(0);
         String start = AnalyzerUtils.parseLiteralExprToDateString(startExpr, 0);
         String end = AnalyzerUtils.parseLiteralExprToDateString(endExpr, 0);
 
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
+<<<<<<< HEAD
+=======
+        Column partitionColumn = ((RangePartitionInfo) partitionInfo).getPartitionColumns().get(0);
+>>>>>>> branch-2.5-mrs
         Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
         for (Map.Entry<String, Range<PartitionKey>> entry : rangePartitionMap.entrySet()) {
             Range<PartitionKey> rangeToCheck = entry.getValue();
@@ -1030,6 +1049,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 result.put(entry.getKey(), entry.getValue());
             }
         }
+<<<<<<< HEAD
+=======
+
+>>>>>>> branch-2.5-mrs
         return result;
     }
 
@@ -1478,8 +1501,11 @@ public class OlapTable extends Table implements GsonPostProcessable {
             partitionInfo = ListPartitionInfo.read(in);
         } else if (partType == PartitionType.EXPR_RANGE) {
             partitionInfo = ExpressionRangePartitionInfo.read(in);
+<<<<<<< HEAD
         } else if (partType == PartitionType.EXPR_RANGE_V2) {
             partitionInfo = ExpressionRangePartitionInfoV2.read(in);
+=======
+>>>>>>> branch-2.5-mrs
         } else {
             throw new IOException("invalid partition type: " + partType);
         }
@@ -2102,7 +2128,15 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return tableProperty.getCompressionType();
     }
 
+<<<<<<< HEAD
     @Override
+=======
+    public boolean hasUniqueConstraints() {
+        List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
+        return uniqueConstraint != null;
+    }
+
+>>>>>>> branch-2.5-mrs
     public List<UniqueConstraint> getUniqueConstraints() {
         if (tableProperty == null) {
             return null;

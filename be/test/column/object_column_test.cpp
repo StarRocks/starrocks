@@ -141,7 +141,12 @@ TEST(ObjectColumnTest, test_object_column_upgrade_if_overflow) {
 // NOLINTNEXTLINE
 TEST(ObjectColumnTest, test_append_value_multiple_times) {
     auto src_col = BitmapColumn::create();
+<<<<<<< HEAD
     auto copy_col = BitmapColumn::create();
+=======
+    auto deep_copy_col = BitmapColumn::create();
+    auto shallow_copy_col = BitmapColumn::create();
+>>>>>>> branch-2.5-mrs
 
     BitmapValue bitmap;
     for (size_t i = 0; i < 64; i++) {
@@ -149,12 +154,22 @@ TEST(ObjectColumnTest, test_append_value_multiple_times) {
     }
     src_col->append(&bitmap);
 
+<<<<<<< HEAD
     copy_col->append_value_multiple_times(*src_col, 0, 4);
     src_col->get_object(0)->add(64);
 
     ASSERT_EQ(src_col->get_object(0)->cardinality(), 65);
     for (size_t i = 0; i < 4; i++) {
         ASSERT_EQ(copy_col->get_object(0)->cardinality(), 64);
+=======
+    deep_copy_col->append_value_multiple_times(*src_col, 0, 4, true);
+    shallow_copy_col->append_value_multiple_times(*src_col, 0, 4, false);
+    src_col->get_object(0)->add(64);
+
+    for (size_t i = 0; i < 4; i++) {
+        ASSERT_EQ(deep_copy_col->get_object(0)->cardinality(), 64);
+        ASSERT_EQ(shallow_copy_col->get_object(0)->cardinality(), 65);
+>>>>>>> branch-2.5-mrs
     }
 }
 

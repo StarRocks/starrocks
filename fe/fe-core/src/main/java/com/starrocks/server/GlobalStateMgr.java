@@ -122,7 +122,10 @@ import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.connector.iceberg.IcebergRepository;
 import com.starrocks.consistency.ConsistencyChecker;
+<<<<<<< HEAD
 import com.starrocks.consistency.LockChecker;
+=======
+>>>>>>> branch-2.5-mrs
 import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.external.elasticsearch.EsRepository;
 import com.starrocks.ha.FrontendNodeType;
@@ -2515,8 +2518,14 @@ public class GlobalStateMgr {
             FileTable fileTable = (FileTable) table;
             Map<String, String> clonedFileProperties = new HashMap<>(fileTable.getFileProperties());
             CloudCredentialUtil.maskCloudCredential(clonedFileProperties);
+<<<<<<< HEAD
             addTableComment(sb, table);
 
+=======
+            if (!Strings.isNullOrEmpty(table.getComment())) {
+                sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
+            }
+>>>>>>> branch-2.5-mrs
             sb.append("\nPROPERTIES (\n");
             sb.append(new PrintableMap<>(clonedFileProperties, " = ", true, true, false).toString());
             sb.append("\n)");

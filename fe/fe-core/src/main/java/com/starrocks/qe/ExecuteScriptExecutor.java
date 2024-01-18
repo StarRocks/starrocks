@@ -14,9 +14,12 @@
 
 package com.starrocks.qe;
 
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
+=======
+>>>>>>> branch-2.5-mrs
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.proto.ExecuteCommandRequestPB;
@@ -32,13 +35,17 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.util.List;
+=======
+>>>>>>> branch-2.5-mrs
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 public class ExecuteScriptExecutor {
     private static final Logger LOG = LogManager.getLogger(ExecuteScriptExecutor.class);
 
+<<<<<<< HEAD
     static ShowResultSet makeResultSet(String result) {
         ShowResultSetMetaData meta =
                 ShowResultSetMetaData.builder().addColumn(new Column("result", Type.STRING)).build();
@@ -60,6 +67,17 @@ public class ExecuteScriptExecutor {
 
     private static ShowResultSet executeFrontendScript(ExecuteScriptStmt stmt, ConnectContext ctx)
             throws UserException {
+=======
+    public static void execute(ExecuteScriptStmt stmt, ConnectContext ctx) throws UserException {
+        if (stmt.isFrontendScript()) {
+            executeFrontendScript(stmt, ctx);
+        } else {
+            executeBackendScript(stmt, ctx);
+        }
+    }
+
+    private static void executeFrontendScript(ExecuteScriptStmt stmt, ConnectContext ctx) throws UserException {
+>>>>>>> branch-2.5-mrs
         if (!Config.enable_execute_script_on_frontend) {
             throw new UserException("execute script on frontend is disabled");
         }
@@ -71,14 +89,22 @@ public class ExecuteScriptExecutor {
             binding.setVariable("globalState", GlobalStateMgr.getCurrentState());
             GroovyShell shell = new GroovyShell(binding);
             shell.evaluate(stmt.getScript());
+<<<<<<< HEAD
             ctx.getState().setOk();
             return makeResultSet(sb.toString());
+=======
+            ctx.getState().setOk(0, 0, sb.toString());
+>>>>>>> branch-2.5-mrs
         } catch (Exception e) {
             throw new UserException("execute script failed: " + e.getMessage());
         }
     }
 
+<<<<<<< HEAD
     private static ShowResultSet executeBackendScript(ExecuteScriptStmt stmt, ConnectContext ctx) throws UserException {
+=======
+    private static void executeBackendScript(ExecuteScriptStmt stmt, ConnectContext ctx) throws UserException {
+>>>>>>> branch-2.5-mrs
         Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(stmt.getBeId());
         if (be == null) {
             throw new UserException("node not found: " + stmt.getBeId());
@@ -98,8 +124,12 @@ public class ExecuteScriptExecutor {
             } else {
                 LOG.info("execute script ok BE: {} script:{} result: {}", stmt.getBeId(),
                         StringUtils.abbreviate(stmt.getScript(), 1000), StringUtils.abbreviate(result.result, 1000));
+<<<<<<< HEAD
                 ctx.getState().setOk();
                 return makeResultSet(result.result);
+=======
+                ctx.getState().setOk(0, 0, result.result);
+>>>>>>> branch-2.5-mrs
             }
         } catch (InterruptedException ie) {
             LOG.warn("got interrupted exception when sending proxy request to " + address);

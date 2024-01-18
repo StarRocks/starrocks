@@ -239,6 +239,7 @@ protected:
         return Status::OK();
     }
 
+<<<<<<< HEAD
     Status _commit_compaction() {
         std::stringstream input_stream_info;
         {
@@ -275,6 +276,9 @@ protected:
 
         return Status::OK();
     }
+=======
+    void _commit_compaction();
+>>>>>>> branch-2.5-mrs
 
     void _success_callback();
 

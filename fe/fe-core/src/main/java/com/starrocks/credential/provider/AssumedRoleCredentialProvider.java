@@ -25,7 +25,6 @@ package com.starrocks.credential.provider;
 
 import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.AWSCredentialsProvider;
-import com.amazonaws.auth.EnvironmentVariableCredentialsProvider;
 import com.amazonaws.auth.STSAssumeRoleSessionCredentialsProvider;
 import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClientBuilder;
 import com.amazonaws.services.securitytoken.model.AWSSecurityTokenServiceException;
@@ -37,24 +36,16 @@ import org.apache.hadoop.fs.s3a.CredentialInitializationException;
 import org.apache.hadoop.fs.s3a.Invoker;
 import org.apache.hadoop.fs.s3a.Retries;
 import org.apache.hadoop.fs.s3a.S3ARetryPolicy;
-import org.apache.hadoop.fs.s3a.S3AUtils;
-import org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider;
-import org.apache.hadoop.fs.s3a.auth.STSClientFactory;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.hadoop.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.hadoop.thirdparty.com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Closeable;
 import java.io.IOException;
 import java.net.URI;
-import java.util.Arrays;
 import java.util.Locale;
 import java.util.concurrent.TimeUnit;
 import javax.annotation.Nullable;
-
-import static org.apache.hadoop.fs.s3a.S3AUtils.buildAWSProviderList;
 
 /**
  * This file is copied from hadoop, we only make a slight change, let this
@@ -113,12 +104,7 @@ public class AssumedRoleCredentialProvider implements AWSCredentialsProvider,
         }
 
         // build up the base provider
-        credentialsToSTS = buildAWSProviderList(fsUri, conf,
-                Constants.ASSUMED_ROLE_CREDENTIALS_PROVIDER,
-                Arrays.asList(
-                        SimpleAWSCredentialsProvider.class,
-                        EnvironmentVariableCredentialsProvider.class),
-                Sets.newHashSet(this.getClass()));
+        credentialsToSTS = null;
         LOG.debug("Credentials to obtain role credentials: {}", credentialsToSTS);
 
         // then the STS binding
@@ -137,16 +123,8 @@ public class AssumedRoleCredentialProvider implements AWSCredentialsProvider,
             builder.withScopeDownPolicy(policy);
         }
         String endpoint = conf.getTrimmed(Constants.ASSUMED_ROLE_STS_ENDPOINT, "");
-        String region = conf.getTrimmed(Constants.ASSUMED_ROLE_STS_ENDPOINT_REGION,
-                Constants.ASSUMED_ROLE_STS_ENDPOINT_REGION_DEFAULT);
         String externalId = conf.getTrimmed(CUSTOM_CONSTANT_HADOOP_EXTERNAL_ID, "");
-        AWSSecurityTokenServiceClientBuilder stsbuilder =
-                STSClientFactory.builder(
-                        conf,
-                        fsUri != null ? fsUri.getHost() : "",
-                        credentialsToSTS,
-                        endpoint,
-                        region);
+        AWSSecurityTokenServiceClientBuilder stsbuilder = null;
         // the STS client is not tracked for a shutdown in close(), because it
         // (currently) throws an UnsupportedOperationException in shutdown().
         builder.withStsClient(stsbuilder.build());
@@ -204,7 +182,6 @@ public class AssumedRoleCredentialProvider implements AWSCredentialsProvider,
      */
     @Override
     public void close() {
-        S3AUtils.closeAutocloseables(LOG, stsProvider, credentialsToSTS);
     }
 
     @Override
@@ -236,7 +213,6 @@ public class AssumedRoleCredentialProvider implements AWSCredentialsProvider,
      * @param session source session
      * @return a string for use in role requests.
      */
-    @VisibleForTesting
     static String sanitize(String session) {
         StringBuilder r = new StringBuilder(session.length());
         for (char c : session.toCharArray()) {

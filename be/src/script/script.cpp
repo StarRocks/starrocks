@@ -16,15 +16,21 @@
 
 #include <google/protobuf/util/json_util.h>
 
+<<<<<<< HEAD
 #include <regex>
 
+=======
+>>>>>>> branch-2.5-mrs
 #include "common/greplog.h"
 #include "common/logging.h"
 #include "exec/vectorized/schema_scanner/schema_be_tablets_scanner.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gutil/strings/substitute.h"
 #include "http/action/compaction_action.h"
+<<<<<<< HEAD
 #include "io/io_profiler.h"
+=======
+>>>>>>> branch-2.5-mrs
 #include "runtime/exec_env.h"
 #include "runtime/mem_tracker.h"
 #include "storage/storage_engine.h"
@@ -76,10 +82,13 @@ static int tablet_tablet_state(Tablet& tablet) {
     return static_cast<int>(tablet.tablet_state());
 }
 
+<<<<<<< HEAD
 static std::string tablet_set_tablet_state(Tablet& tablet, int state) {
     return tablet.set_tablet_state(static_cast<TabletState>(state)).to_string();
 }
 
+=======
+>>>>>>> branch-2.5-mrs
 static const TabletSchema& tablet_tablet_schema(Tablet& tablet) {
     return tablet.tablet_schema();
 }
@@ -126,6 +135,7 @@ static int64_t unix_seconds() {
     return UnixSeconds();
 }
 
+<<<<<<< HEAD
 static std::string exec(const std::string& cmd) {
     std::string ret;
 
@@ -165,6 +175,8 @@ static std::string io_profile_and_get_topn_stats(const std::string& mode, int se
     return IOProfiler::profile_and_get_topn_stats_str(mode, seconds, topn);
 }
 
+=======
+>>>>>>> branch-2.5-mrs
 void bind_exec_env(ForeignModule& m) {
     {
         auto& cls = m.klass<MemTracker>("MemTracker");
@@ -190,12 +202,18 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcStaticExt<&get_stack_trace_for_threads>("get_stack_trace_for_threads");
         cls.funcStaticExt<&get_stack_trace_for_all_threads>("get_stack_trace_for_all_threads");
         cls.funcStaticExt<&get_stack_trace_for_function>("get_stack_trace_for_function");
+<<<<<<< HEAD
         cls.funcStaticExt<&io_profile_and_get_topn_stats>("io_profile_and_get_topn_stats");
         cls.funcStaticExt<&grep_log_as_string>("grep_log_as_string");
         cls.funcStaticExt<&get_file_write_history>("get_file_write_history");
         cls.funcStaticExt<&unix_seconds>("unix_seconds");
         // uncomment this to enable executing shell commands
         // cls.funcStaticExt<&exec_whitelist>("exec");
+=======
+        cls.funcStaticExt<&grep_log_as_string>("grep_log_as_string");
+        cls.funcStaticExt<&get_file_write_history>("get_file_write_history");
+        cls.funcStaticExt<&unix_seconds>("unix_seconds");
+>>>>>>> branch-2.5-mrs
         REG_METHOD(ExecEnv, process_mem_tracker);
         REG_METHOD(ExecEnv, query_pool_mem_tracker);
         REG_METHOD(ExecEnv, load_mem_tracker);
@@ -275,6 +293,7 @@ public:
         }
     }
 
+<<<<<<< HEAD
     static size_t submit_manual_compaction_task_for_table(int64_t table_id, int64_t rowset_size_threshold) {
         auto infos = get_tablet_infos(table_id, -1);
         for (auto& info : infos) {
@@ -307,6 +326,8 @@ public:
         return exec_whitelist(strings::Substitute("ls -al $0", tablet->schema_hash_path()));
     }
 
+=======
+>>>>>>> branch-2.5-mrs
     static void bind(ForeignModule& m) {
         {
             auto& cls = m.klass<TabletBasicInfo>("TabletBasicInfo");
@@ -323,9 +344,12 @@ public:
             REG_VAR(TabletBasicInfo, create_time);
             REG_VAR(TabletBasicInfo, state);
             REG_VAR(TabletBasicInfo, type);
+<<<<<<< HEAD
             REG_VAR(TabletBasicInfo, data_dir);
             REG_VAR(TabletBasicInfo, shard_id);
             REG_VAR(TabletBasicInfo, schema_hash);
+=======
+>>>>>>> branch-2.5-mrs
         }
         {
             auto& cls = m.klass<TabletSchema>("TabletSchema");
@@ -343,7 +367,10 @@ public:
             cls.funcExt<tablet_data_dir>("data_dir");
             cls.funcExt<tablet_keys_type_int>("keys_type_as_int");
             cls.funcExt<tablet_tablet_state>("tablet_state_as_int");
+<<<<<<< HEAD
             cls.funcExt<tablet_set_tablet_state>("set_tablet_state_as_int");
+=======
+>>>>>>> branch-2.5-mrs
             REG_METHOD(Tablet, tablet_footprint);
             REG_METHOD(Tablet, num_rows);
             REG_METHOD(Tablet, version_count);
@@ -354,7 +381,10 @@ public:
             REG_METHOD(Tablet, debug_string);
             REG_METHOD(Tablet, updates);
             REG_METHOD(Tablet, save_meta);
+<<<<<<< HEAD
             REG_METHOD(Tablet, verify);
+=======
+>>>>>>> branch-2.5-mrs
         }
         {
             auto& cls = m.klass<EditVersionPB>("EditVersionPB");
@@ -456,11 +486,14 @@ public:
             REG_STATIC_METHOD(StorageEngineRef, drop_tablet);
             REG_STATIC_METHOD(StorageEngineRef, get_data_dirs);
             REG_STATIC_METHOD(StorageEngineRef, do_compaction);
+<<<<<<< HEAD
             REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_table);
             REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_partition);
             REG_STATIC_METHOD(StorageEngineRef, submit_manual_compaction_task_for_tablet);
             REG_STATIC_METHOD(StorageEngineRef, get_manual_compaction_status);
             REG_STATIC_METHOD(StorageEngineRef, ls_tablet_dir);
+=======
+>>>>>>> branch-2.5-mrs
         }
     }
 };
@@ -481,4 +514,8 @@ Status execute_script(const std::string& script, std::string& output) {
     return Status::OK();
 }
 
+<<<<<<< HEAD
 } // namespace starrocks
+=======
+} // namespace starrocks
+>>>>>>> branch-2.5-mrs

@@ -34,6 +34,7 @@ public class MaterializationContext {
     private final List<Table> baseTables;
 
     private final Set<ColumnRefOperator> originQueryColumns;
+<<<<<<< HEAD
 
     // tables both in query and mv
     private final List<Table> intersectingTables;
@@ -48,6 +49,17 @@ public class MaterializationContext {
     // NOTE: mvUsedCount is a not exact value because MV may be rewritten multi times
     // in Optimizer Transformation phase but not be really used.
     private long mvUsedCount = 0;
+=======
+
+    // tables both in query and mv
+    private final List<Table> intersectingTables;
+
+    // group ids that are rewritten by this mv
+    // used to reduce the rewrite times for the same group and mv
+    private List<Integer> matchedGroups;
+
+    private final ScalarOperator mvPartialPartitionPredicate;
+>>>>>>> branch-2.5-mrs
 
     public MaterializationContext(OptimizerContext optimizerContext,
                                   MaterializedView mv,
@@ -138,6 +150,7 @@ public class MaterializationContext {
     public ScalarOperator getMvPartialPartitionPredicate() {
         return mvPartialPartitionPredicate;
     }
+<<<<<<< HEAD
 
     public long getMVUsedCount() {
         return mvUsedCount;
@@ -146,4 +159,6 @@ public class MaterializationContext {
     public void updateMVUsedCount() {
         this.mvUsedCount += 1;
     }
+=======
+>>>>>>> branch-2.5-mrs
 }

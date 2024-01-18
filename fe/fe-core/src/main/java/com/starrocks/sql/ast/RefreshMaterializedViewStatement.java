@@ -18,6 +18,11 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
                     .addColumn(new Column("QUERY_ID", ScalarType.createVarchar(60)))
                     .build();
 
+    public static final ShowResultSetMetaData META_DATA =
+            ShowResultSetMetaData.builder()
+                    .addColumn(new Column("QUERY_ID", ScalarType.createVarchar(60)))
+                    .build();
+
     public RefreshMaterializedViewStatement(TableName mvName,
                                             PartitionRangeDesc partitionRangeDesc,
                                             boolean forceRefresh, boolean isSync) {

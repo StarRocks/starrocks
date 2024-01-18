@@ -186,7 +186,11 @@ if [ ${RUN_LOG_CONSOLE} -eq 1 ] ; then
         cp $STARROCKS_HOME/conf/fe.conf.readonly $STARROCKS_HOME/conf/fe.conf
     fi
     # force sys_log_to_console = true
+<<<<<<< HEAD
     echo -e "\nsys_log_to_console = true" >> $STARROCKS_HOME/conf/fe.conf
+=======
+    echo "sys_log_to_console = true" >> $STARROCKS_HOME/conf/fe.conf
+>>>>>>> branch-2.5-mrs
 else
     # redirect all subsequent commands' stdout/stderr into $LOG_FILE
     exec &>> $LOG_FILE

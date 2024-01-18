@@ -332,9 +332,13 @@ AggregateFunctionPtr AggregateFactory::MakePercentileDiscAggregateFunction() {
     return std::make_shared<PercentileDiscAggregateFunction<PT>>();
 }
 
+<<<<<<< HEAD
 template <PrimitiveType LT>
 AggregateFunctionPtr AggregateFactory::MakeBitmapAggAggregateFunction() {
     return std::make_shared<BitmapAggAggregateFunction<LT>>();
 }
 
 } // namespace starrocks::vectorized
+=======
+} // namespace starrocks::vectorized
+>>>>>>> branch-2.5-mrs

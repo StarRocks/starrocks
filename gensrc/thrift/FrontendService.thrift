@@ -1210,7 +1210,10 @@ service FrontendService {
     TUpdateResourceUsageResponse updateResourceUsage(1: TUpdateResourceUsageRequest request)
 
     TGetTabletScheduleResponse getTabletSchedule(1: TGetTabletScheduleRequest request)
+<<<<<<< HEAD
     
     TGetLoadTxnStatusResult getLoadTxnStatus(1: TGetLoadTxnStatusRequest request)
+=======
+>>>>>>> branch-2.5-mrs
 }
 

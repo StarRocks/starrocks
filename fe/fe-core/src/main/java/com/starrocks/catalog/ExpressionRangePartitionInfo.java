@@ -118,6 +118,7 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
         for (Expr expr : exprs) {
             if (expr instanceof FunctionCallExpr) {
                 SlotRef slotRef = AnalyzerUtils.getSlotRefFromFunctionCall(expr);
+<<<<<<< HEAD
                 // TODO: Later, for automatically partitioned tables,
                 //  partitions of materialized views (also created automatically),
                 //  and partition by expr tables will use ExpressionRangePartitionInfoV2
@@ -125,6 +126,12 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo {
                     if (slotRef.getColumnName().equalsIgnoreCase(partitionColumn.getName())) {
                         slotRef.setType(partitionColumn.getType());
                         PartitionExprAnalyzer.analyzePartitionExpr(expr, slotRef);
+=======
+                for (Column partitionColumn : partitionColumns) {
+                    if (slotRef.getColumnName().equalsIgnoreCase(partitionColumn.getName())) {
+                        PartitionExprAnalyzer.analyzePartitionExpr(expr, partitionColumn.getType());
+                        slotRef.setType(partitionColumn.getType());
+>>>>>>> branch-2.5-mrs
                     }
                 }
             }

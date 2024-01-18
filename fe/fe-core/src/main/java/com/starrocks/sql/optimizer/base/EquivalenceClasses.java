@@ -19,6 +19,8 @@ public class EquivalenceClasses implements Cloneable {
 
     private final Map<ColumnRefOperator, Set<ColumnRefOperator>> redundantColumnToEquivalenceClass;
 
+    private List<Set<ColumnRefOperator>> cacheColumnToEquivalenceClass;
+
     public EquivalenceClasses() {
         columnToEquivalenceClass = Maps.newHashMap();
         redundantColumnToEquivalenceClass = Maps.newHashMap();
@@ -29,6 +31,7 @@ public class EquivalenceClasses implements Cloneable {
         final EquivalenceClasses ec = new EquivalenceClasses();
         for (Map.Entry<ColumnRefOperator, Set<ColumnRefOperator>> entry :
                 this.columnToEquivalenceClass.entrySet()) {
+<<<<<<< HEAD
             if (!ec.columnToEquivalenceClass.containsKey(entry.getKey())) {
                 Set<ColumnRefOperator> columnEcs = Sets.newLinkedHashSet(entry.getValue());
                 for (ColumnRefOperator column : columnEcs) {
@@ -44,6 +47,9 @@ public class EquivalenceClasses implements Cloneable {
                     ec.redundantColumnToEquivalenceClass.put(column, columnEcs);
                 }
             }
+=======
+            ec.columnToEquivalenceClass.put(entry.getKey(), Sets.newLinkedHashSet(entry.getValue()));
+>>>>>>> branch-2.5-mrs
         }
         ec.cacheColumnToEquivalenceClass = null;
         return ec;
@@ -107,6 +113,7 @@ public class EquivalenceClasses implements Cloneable {
             }
         }
         return cacheColumnToEquivalenceClass;
+<<<<<<< HEAD
     }
 
     public boolean addRedundantEquivalence(ColumnRefOperator left, ColumnRefOperator right) {
@@ -168,5 +175,7 @@ public class EquivalenceClasses implements Cloneable {
             }
         }
         this.cacheColumnToEquivalenceClass = null;
+=======
+>>>>>>> branch-2.5-mrs
     }
 }

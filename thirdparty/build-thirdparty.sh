@@ -366,6 +366,12 @@ build_snappy() {
 build_gperftools() {
     check_if_source_exist $GPERFTOOLS_SOURCE
     cd $TP_SOURCE_DIR/$GPERFTOOLS_SOURCE
+<<<<<<< HEAD
+=======
+
+    OLD_FLAGS=$CFLAGS
+    CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
+>>>>>>> branch-2.5-mrs
 
     if [ ! -f configure ]; then
         ./autogen.sh
@@ -376,6 +382,11 @@ build_gperftools() {
     ./configure --prefix=$TP_INSTALL_DIR/gperftools --disable-shared --enable-static --disable-libunwind --with-pic --enable-frame-pointers
     make -j$PARALLEL
     make install
+<<<<<<< HEAD
+=======
+
+    CFLAGS=$OLD_FLAGS
+>>>>>>> branch-2.5-mrs
 }
 
 # zlib
@@ -926,10 +937,17 @@ build_jemalloc() {
         # change to 64K for arm architecture
         addition_opts=" --with-lg-page=16"
     fi
+<<<<<<< HEAD
     CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
     ./configure --prefix=${TP_INSTALL_DIR} --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl --disable-shared $addition_opts
     make -j$PARALLEL
     make install
+=======
+    ./configure --prefix=${TP_INSTALL_DIR} --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl --disable-shared $addition_opts
+    make -j$PARALLEL
+    make install
+    export CFLAGS=$OLD_CFLAGS
+>>>>>>> branch-2.5-mrs
 }
 
 # google benchmark

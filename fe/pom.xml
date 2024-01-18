@@ -47,7 +47,11 @@ under the License.
         <spark.version>3.4.1</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.10.1</parquet.version>
+<<<<<<< HEAD
         <hadoop.version>3.3.6</hadoop.version>
+=======
+        <hadoop.version>3.1.0</hadoop.version>
+>>>>>>> branch-2.5-mrs
         <skip.plugin>false</skip.plugin>
         <hudi.version>0.12.2</hudi.version>
         <hive-apache.version>3.1.2-13</hive-apache.version>
@@ -249,7 +253,11 @@ under the License.
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
+<<<<<<< HEAD
                 <version>${jackson.version}</version>
+=======
+                <version>${jackson.version}.2</version>
+>>>>>>> branch-2.5-mrs
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.dataformat/jackson-dataformat-yaml -->
@@ -332,7 +340,11 @@ under the License.
             <dependency>
                 <groupId>org.json</groupId>
                 <artifactId>json</artifactId>
+<<<<<<< HEAD
                 <version>20231013</version>
+=======
+                <version>20230227</version>
+>>>>>>> branch-2.5-mrs
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/junit/junit -->
@@ -347,7 +359,7 @@ under the License.
             <dependency>
                 <groupId>org.apache.thrift</groupId>
                 <artifactId>libthrift</artifactId>
-                <version>0.13.0</version>
+                <version>0.14.1</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-api -->

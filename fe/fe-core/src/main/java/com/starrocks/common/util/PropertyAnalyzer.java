@@ -824,6 +824,7 @@ public class PropertyAnalyzer {
                     throw new AnalysisException(
                             String.format("invalid foreign key constraint:%s", foreignKeyConstraintDesc));
                 }
+<<<<<<< HEAD
                 String sourceTablePath = foreignKeyMatcher.group(1);
                 String sourceColumns = foreignKeyMatcher.group(3);
 
@@ -844,9 +845,73 @@ public class PropertyAnalyzer {
                 BaseTableInfo parentTableInfo = parentTablePair.first;
                 Table parentTable = parentTablePair.second;
                 if (!parentColumns.stream().allMatch(parentTable::containColumn)) {
+=======
+                String sourceColumns = foreignKeyMatcher.group(1);
+                String tablePath = foreignKeyMatcher.group(4);
+                String targetColumns = foreignKeyMatcher.group(6);
+                // case insensitive
+                List<String> originalBaseColumns = Arrays.asList(sourceColumns.split(","))
+                        .stream().map(String::trim).collect(Collectors.toList());
+                List<String> originalParentColumns = Arrays.asList(targetColumns.split(","))
+                        .stream().map(String::trim).map(String::toLowerCase).collect(Collectors.toList());
+                if (originalBaseColumns.size() != originalParentColumns.size()) {
+                    throw new AnalysisException(String.format("invalid foreign key constraint:%s," +
+                            " columns' size does not match", foreignKeyConstraintDesc));
+                }
+                List<String> baseColumns =
+                        originalBaseColumns.stream().map(String::toLowerCase).collect(Collectors.toList());
+                List<String> parentColumns =
+                        originalParentColumns.stream().map(String::toLowerCase).collect(Collectors.toList());
+
+                String[] parts = tablePath.split("\\.");
+                String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+                String dbName = db.getFullName();
+                String parentTableName = "";
+                if (parts.length == 3) {
+                    catalogName = parts[0];
+                    dbName = parts[1];
+                    parentTableName = parts[2];
+                } else if (parts.length == 2) {
+                    dbName = parts[0];
+                    parentTableName = parts[1];
+                } else if (parts.length == 1) {
+                    parentTableName = parts[0];
+                } else {
+                    throw new AnalysisException(String.format("invalid foreign key constraint:%s," +
+                            "table path is invalid", foreignKeyConstraintDesc));
+                }
+
+                if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+                    throw new AnalysisException(String.format("catalog: %s do not exist", catalogName));
+                }
+                Database parentDb = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+                if (parentDb == null) {
+                    throw new AnalysisException(String.format("catalog: %s, database: %s do not exist", catalogName, dbName));
+                }
+                Table parentTable =
+                        GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, parentTableName);
+                if (parentTable == null) {
+                    throw new AnalysisException(String.format("catalog:%s, database: %s, table:%s do not exist",
+                            catalogName, dbName, parentTableName));
+                }
+
+                if (!baseTable.isLocalTable()) {
+                    throw new AnalysisException("now do not support add foreign key on external table");
+                }
+
+                OlapTable baseOlapTable = (OlapTable) baseTable;
+                if (!baseColumns.stream().allMatch(baseOlapTable::containColumn)) {
+                    throw new AnalysisException(String.format("some columns of:%s do not exist in table:%s",
+                            baseColumns, baseOlapTable.getName()));
+                }
+
+                OlapTable parentOlapTable = (OlapTable) parentTable;
+                if (!parentColumns.stream().allMatch(parentOlapTable::containColumn)) {
+>>>>>>> branch-2.5-mrs
                     throw new AnalysisException(String.format("some columns of:%s do not exist in parent table:%s",
                             parentColumns, parentTable.getName()));
                 }
+<<<<<<< HEAD
 
                 Pair<BaseTableInfo, Table> childTablePair = Pair.create(null, analyzedTable);
                 Table childTable = analyzedTable;
@@ -872,6 +937,40 @@ public class PropertyAnalyzer {
                 
                 List<Pair<String, String>> columnRefPairs = Streams.zip(childColumns.stream(),
                         parentColumns.stream(), Pair::create).collect(Collectors.toList());
+=======
+                KeysType parentTableKeyType =
+                        parentOlapTable.getIndexMetaByIndexId(parentOlapTable.getBaseIndexId()).getKeysType();
+                if (parentTableKeyType == KeysType.AGG_KEYS) {
+                    throw new AnalysisException(String.format("do not support reference agg table:%s", parentTable.getName()));
+                } else if (parentTableKeyType == KeysType.DUP_KEYS) {
+                    if (!parentOlapTable.hasUniqueConstraints()) {
+                        throw new AnalysisException(
+                                String.format("dup table:%s has no unique constraint", parentTable.getName()));
+                    } else {
+                        List<UniqueConstraint> uniqueConstraints = parentOlapTable.getUniqueConstraints();
+                        boolean matched = false;
+                        for (UniqueConstraint uniqueConstraint : uniqueConstraints) {
+                            if (uniqueConstraint.isMatch(Sets.newHashSet(parentColumns))) {
+                                matched = true;
+                                break;
+                            }
+                        }
+                        if (!matched) {
+                            throw new AnalysisException(String.format("columns:%s are not dup table:%s's unique constraint",
+                                    parentColumns, parentTable.getName()));
+                        }
+                    }
+                } else {
+                    // for PRIMARY_KEYS and UNIQUE_KEYS type table
+                    // parent columns should be keys
+                    if (!parentOlapTable.isKeySet(Sets.newHashSet(parentColumns))) {
+                        throw new AnalysisException(String.format("columns:%s are not key columns of table:%s",
+                                parentColumns, parentTable.getName()));
+                    }
+                }
+                List<Pair<String, String>> columnRefPairs = Streams.zip(originalBaseColumns.stream(),
+                        originalParentColumns.stream(), Pair::create).collect(Collectors.toList());
+>>>>>>> branch-2.5-mrs
                 for (Pair<String, String> pair : columnRefPairs) {
                     Column childColumn = childTable.getColumn(pair.first);
                     Column parentColumn = parentTable.getColumn(pair.second);

@@ -15,7 +15,10 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.SchemaTable;
+<<<<<<< HEAD
 import com.starrocks.pseudocluster.PseudoBackend;
+=======
+>>>>>>> branch-2.5-mrs
 import com.starrocks.pseudocluster.PseudoCluster;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -61,6 +64,7 @@ public class InformationSchemaBeFeTableTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testOnlyScanTargetedBE() throws Exception {
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
@@ -103,6 +107,8 @@ public class InformationSchemaBeFeTableTest {
     }
 
     @Test
+=======
+>>>>>>> branch-2.5-mrs
     public void testUpdateBeConfig() throws Exception {
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();

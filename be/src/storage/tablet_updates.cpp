@@ -1579,7 +1579,10 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
 }
 
 void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info) {
+<<<<<<< HEAD
     auto scope = IOProfiler::scope(IOProfiler::TAG_COMPACTION, _tablet.tablet_id());
+=======
+>>>>>>> branch-2.5-mrs
     DeferOp defer([&]() { _compaction_running = false; });
     auto scoped_span = trace::Scope(Tracer::Instance().start_trace_tablet("apply_compaction", _tablet.tablet_id()));
     // NOTE: after commit, apply must success or fatal crash
@@ -2264,11 +2267,14 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
     if (info->inputs.empty()) {
         LOG(INFO) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
         _compaction_running = false;
+<<<<<<< HEAD
         return Status::OK();
     }
     if (total_segments == 1) {
         LOG(INFO) << "only 1 segment, skip update compaction, tablet:" << _tablet.tablet_id();
         _compaction_running = false;
+=======
+>>>>>>> branch-2.5-mrs
         return Status::OK();
     }
     // do not reset _last_compaction_time_ms so we can continue doing compaction
@@ -4123,6 +4129,7 @@ std::shared_ptr<std::unordered_map<uint32_t, RowsetSharedPtr>> TabletUpdates::ge
     return std::make_shared<std::unordered_map<uint32_t, RowsetSharedPtr>>(_rowsets);
 }
 
+<<<<<<< HEAD
 Status TabletUpdates::get_rowset_and_segment_idx_by_rssid(uint32_t rssid, RowsetSharedPtr* rowset,
                                                           uint32_t* segment_idx) {
     std::lock_guard<std::mutex> l(_rowsets_lock);
@@ -4137,4 +4144,6 @@ Status TabletUpdates::get_rowset_and_segment_idx_by_rssid(uint32_t rssid, Rowset
     return Status::NotFound(strings::Substitute("rowset for rssid $0 not found", rssid));
 }
 
+=======
+>>>>>>> branch-2.5-mrs
 } // namespace starrocks

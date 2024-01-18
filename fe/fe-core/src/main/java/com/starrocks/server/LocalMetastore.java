@@ -98,6 +98,10 @@ import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.TimeUtils;
+>>>>>>> branch-2.5-mrs
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.CountingLatch;
 import com.starrocks.connector.ConnectorMetadata;
@@ -981,6 +985,47 @@ public class LocalMetastore implements ConnectorMetadata {
         }
     }
 
+<<<<<<< HEAD
+=======
+    private int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum) {
+        // 1. If the partition is less than recentPartitionNum, use backendNum to speculate the bucketNum
+        int bucketNum = 0;
+        if (olapTable.getPartitions().size() < recentPartitionNum) {
+            bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+            return bucketNum;
+        }
+
+        // 2. If the partition is not imported anydata, use backendNum to speculate the bucketNum
+        List<Partition> partitions = (List<Partition>) olapTable.getRecentPartitions(recentPartitionNum);
+        boolean dataImported = true;
+        for (Partition partition : partitions) {
+            if (partition.getVisibleVersion() == 1) {
+                dataImported = false;
+                break;
+            }
+        }
+
+        bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+        if (!dataImported) {
+            return bucketNum;
+        }
+
+        // 3. Use the totalSize of recentPartitions to speculate the bucketNum
+        long maxDataSize = 0;
+        for (Partition partition : partitions) {
+            maxDataSize = Math.max(maxDataSize, partition.getDataSize());
+        }
+        // A tablet will be regarded using the 1GB size
+        // And also the number will not be larger than the calBucketNumAccordingToBackends()
+        long speculateTabletNum = (maxDataSize + FeConstants.AUTO_DISTRIBUTION_UNIT - 1) / FeConstants.AUTO_DISTRIBUTION_UNIT;
+        bucketNum = (int) Math.min(bucketNum, speculateTabletNum);
+        if (bucketNum == 0) {
+            bucketNum = 1;
+        }
+        return bucketNum;
+    }
+
+>>>>>>> branch-2.5-mrs
     private DistributionInfo getDistributionInfo(OlapTable olapTable, AddPartitionClause addPartitionClause)
             throws DdlException {
         DistributionInfo distributionInfo;
@@ -1009,7 +1054,21 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
         } else {
+<<<<<<< HEAD
             distributionInfo = defaultDistributionInfo;
+=======
+            if (defaultDistributionInfo.getType() == DistributionInfo.DistributionInfoType.HASH
+                    && Config.enable_auto_tablet_distribution
+                    && !colocateTableIndex.isColocateTable(olapTable.getId())) {
+                // 1. If enable_auto_tablet_distribution = true, AUTO Tablet Distibution
+                //    also take effect on exist table when adding new partitions
+                // 2. ColocateTable should comply the original tablet num when creating table.
+                HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) defaultDistributionInfo;
+                distributionInfo = new HashDistributionInfo(0, hashDistributionInfo.getDistributionColumns());
+            } else {
+                distributionInfo = defaultDistributionInfo;
+            }
+>>>>>>> branch-2.5-mrs
         }
         return distributionInfo;
     }
@@ -1291,10 +1350,17 @@ public class LocalMetastore implements ConnectorMetadata {
             analyzeAddPartition(olapTable, partitionDescs, addPartitionClause, partitionInfo);
 
             // get distributionInfo
+<<<<<<< HEAD
             distributionInfo = getDistributionInfo(olapTable, addPartitionClause).copy();
             if (distributionInfo.getBucketNum() == 0) {
                 int numBucket = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 5,
                                     Config.enable_auto_tablet_distribution);
+=======
+            distributionInfo = getDistributionInfo(olapTable, addPartitionClause);
+
+            if (distributionInfo.getBucketNum() == 0) {
+                int numBucket = calAvgBucketNumOfRecentPartitions(olapTable, 5);
+>>>>>>> branch-2.5-mrs
                 distributionInfo.setBucketNum(numBucket);
             }
 
@@ -1998,7 +2064,7 @@ public class LocalMetastore implements ConnectorMetadata {
             } else {
                 throw new DdlException("Currently only support range or list partition with engine type olap");
             }
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false, true);
         } else {
             if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(stmt.getProperties())) {
                 throw new DdlException("Only support dynamic partition properties on range partition table");
@@ -2048,10 +2114,17 @@ public class LocalMetastore implements ConnectorMetadata {
         if (stmt.isExternal()) {
             olapTable = new ExternalOlapTable(db.getId(), tableId, tableName, baseSchema, keysType, partitionInfo,
                     distributionInfo, indexes, properties);
+<<<<<<< HEAD
             if (GlobalStateMgr.getCurrentState().getNodeMgr()
                     .checkFeExistByRPCPort(((ExternalOlapTable) olapTable).getSourceTableHost(),
                             ((ExternalOlapTable) olapTable).getSourceTablePort())) {
                 throw new DdlException("can not create OLAP external table of self cluster");
+=======
+        } else {
+            if (distributionInfo.getBucketNum() == 0) {
+                int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+                distributionInfo.setBucketNum(bucketNum);
+>>>>>>> branch-2.5-mrs
             }
         } else {
             if (stmt.isLakeEngine()) {
@@ -2346,7 +2419,11 @@ public class LocalMetastore implements ConnectorMetadata {
                             hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
                         }
                         DataProperty dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
+<<<<<<< HEAD
                                 DataProperty.getInferredDefaultDataProperty(), false);
+=======
+                                DataProperty.getInferredDefaultDataProperty());
+>>>>>>> branch-2.5-mrs
                         DynamicPartitionUtil.checkAndSetDynamicPartitionProperty(olapTable, properties);
                         if (olapTable.dynamicPartitionExists() && olapTable.getColocateGroup() != null) {
                             HashDistributionInfo info = (HashDistributionInfo) distributionInfo;
@@ -2512,7 +2589,7 @@ public class LocalMetastore implements ConnectorMetadata {
         PartitionInfo partitionInfo = null;
         Map<String, Long> partitionNameToId = Maps.newHashMap();
         if (partitionDesc != null) {
-            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false);
+            partitionInfo = partitionDesc.toPartitionInfo(baseSchema, partitionNameToId, false, false);
         } else {
             long partitionId = getNextId();
             // use table name as single partition name
@@ -2752,7 +2829,34 @@ public class LocalMetastore implements ConnectorMetadata {
         List<List<Long>> backendsPerBucketSeq = null;
         ColocateTableIndex.GroupId groupId = null;
         boolean initBucketSeqWithSameOrigNameGroup = false;
+<<<<<<< HEAD
         boolean isColocateTable = colocateTableIndex.isColocateTable(tabletMeta.getTableId());
+=======
+        if (colocateTableIndex.isColocateTable(tabletMeta.getTableId())) {
+            // if this is a colocate table, try to get backend seqs from colocation index.
+            Database db = getDb(tabletMeta.getDbId());
+            groupId = colocateTableIndex.getGroup(tabletMeta.getTableId());
+            // Use db write lock here to make sure the backendsPerBucketSeq is
+            // consistent when the backendsPerBucketSeq is updating.
+            // This lock will release very fast.
+            db.writeLock();
+            try {
+                backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+                if (backendsPerBucketSeq.isEmpty()) {
+                    List<ColocateTableIndex.GroupId> colocateWithGroupsInOtherDb =
+                            colocateTableIndex.getColocateWithGroupsInOtherDb(groupId);
+                    if (!colocateWithGroupsInOtherDb.isEmpty()) {
+                        backendsPerBucketSeq =
+                                colocateTableIndex.getBackendsPerBucketSeq(colocateWithGroupsInOtherDb.get(0));
+                        initBucketSeqWithSameOrigNameGroup = true;
+                    }
+                }
+            } finally {
+                db.writeUnlock();
+            }
+        }
+
+>>>>>>> branch-2.5-mrs
         // chooseBackendsArbitrary is true, means this may be the first table of colocation group,
         // or this is just a normal table, and we can choose backends arbitrary.
         // otherwise, backends should be chosen from backendsPerBucketSeq;
@@ -2870,6 +2974,24 @@ public class LocalMetastore implements ConnectorMetadata {
             if (isColocateTable && chooseBackendsArbitrary) {
                 colocateTableCreateSyncer.decrement();
             }
+<<<<<<< HEAD
+=======
+            Preconditions.checkState(chosenBackendIds.size() == replicationNum,
+                    chosenBackendIds.size() + " vs. " + replicationNum);
+        }
+
+        // In the following two situations, we should set the bucket seq for colocate group and persist the info,
+        //   1. This is the first time we add a table to colocate group, and it doesn't have the same original name
+        //      with colocate group in other database.
+        //   2. It's indeed the first time, but it should colocate with group in other db
+        //      (because of having the same original name), we should use the bucket
+        //      seq of other group to initialize our own.
+        if ((groupId != null && chooseBackendsArbitrary) || initBucketSeqWithSameOrigNameGroup) {
+            colocateTableIndex.addBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
+            ColocatePersistInfo info =
+                    ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, backendsPerBucketSeq);
+            editLog.logColocateBackendsPerBucketSeq(info);
+>>>>>>> branch-2.5-mrs
         }
     }
 
@@ -3395,7 +3517,7 @@ public class LocalMetastore implements ConnectorMetadata {
         if (partitionDesc != null) {
             partitionInfo = partitionDesc.toPartitionInfo(
                     Collections.singletonList(stmt.getPartitionColumn()),
-                    Maps.newHashMap(), false);
+                    Maps.newHashMap(), false, false);
         } else {
             partitionInfo = new SinglePartitionInfo();
         }
@@ -3403,6 +3525,13 @@ public class LocalMetastore implements ConnectorMetadata {
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
+<<<<<<< HEAD
+=======
+        if (distributionInfo.getBucketNum() == 0) {
+            int numBucket = CatalogUtils.calBucketNumAccordingToBackends();
+            distributionInfo.setBucketNum(numBucket);
+        }
+>>>>>>> branch-2.5-mrs
         // create refresh scheme
         MaterializedView.MvRefreshScheme mvRefreshScheme;
         RefreshSchemeDesc refreshSchemeDesc = stmt.getRefreshSchemeDesc();
@@ -3793,6 +3922,7 @@ public class LocalMetastore implements ConnectorMetadata {
         return materializedView;
     }
 
+<<<<<<< HEAD
     public String refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
                                           int priority, boolean mergeRedundant, boolean isManual)
             throws DdlException, MetaNotFoundException {
@@ -3802,6 +3932,12 @@ public class LocalMetastore implements ConnectorMetadata {
     public String refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
                                           int priority, boolean mergeRedundant, boolean isManual, boolean isSync)
             throws DdlException, MetaNotFoundException {
+=======
+    @Override
+    public String refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
+                                          int priority, boolean mergeRedundant, boolean isManual)
+            throws DdlException, MetaNotFoundException {
+>>>>>>> branch-2.5-mrs
         MaterializedView materializedView = getMaterializedViewToRefresh(dbName, mvName);
 
         HashMap<String, String> taskRunProperties = new HashMap<>();
@@ -3813,12 +3949,20 @@ public class LocalMetastore implements ConnectorMetadata {
         if (isManual) {
             executeOption.setManual();
         }
+<<<<<<< HEAD
         executeOption.setSync(isSync);
+=======
+>>>>>>> branch-2.5-mrs
         return executeRefreshMvTask(dbName, materializedView, executeOption);
     }
 
     @Override
+<<<<<<< HEAD
     public String refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement)
+=======
+    public String refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement,
+                                          int priority)
+>>>>>>> branch-2.5-mrs
             throws DdlException, MetaNotFoundException {
         String dbName = refreshMaterializedViewStatement.getMvName().getDb();
         String mvName = refreshMaterializedViewStatement.getMvName().getTbl();
@@ -3826,8 +3970,12 @@ public class LocalMetastore implements ConnectorMetadata {
         PartitionRangeDesc range =
                 refreshMaterializedViewStatement.getPartitionRangeDesc();
 
+<<<<<<< HEAD
         return refreshMaterializedView(dbName, mvName, force, range, Constants.TaskRunPriority.HIGH.value(),
                 false, true, refreshMaterializedViewStatement.isSync());
+=======
+        return refreshMaterializedView(dbName, mvName, force, range, priority, false, true);
+>>>>>>> branch-2.5-mrs
     }
 
     @Override

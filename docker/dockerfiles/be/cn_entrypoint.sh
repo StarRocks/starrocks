@@ -173,6 +173,7 @@ if [[ "x$LOG_CONSOLE" == "x1" ]] ; then
     addition_args="--logconsole"
 fi
 $STARROCKS_HOME/bin/start_cn.sh $addition_args
+<<<<<<< HEAD
 ret=$?
 if [[ $ret -ne 0 && "x$LOG_CONSOLE" != "x1" ]] ; then
     nol=50
@@ -182,3 +183,5 @@ if [[ $ret -ne 0 && "x$LOG_CONSOLE" != "x1" ]] ; then
     tail -n $nol $STARROCKS_HOME/log/cn.out
 fi
 exit $ret
+=======
+>>>>>>> branch-2.5-mrs

@@ -16,7 +16,10 @@ package com.starrocks.server;
 
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.system.Frontend;
+<<<<<<< HEAD
 import com.starrocks.system.FrontendHbResponse;
+=======
+>>>>>>> branch-2.5-mrs
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -37,6 +40,7 @@ public class NodeMgrTest {
         Assert.assertTrue(nodeMgr.checkFeExistByIpOrFqdn("localhost"));
         Assert.assertTrue(nodeMgr.checkFeExistByIpOrFqdn("127.0.0.1"));
     }
+<<<<<<< HEAD
 
     @Test
     public void testCheckFeExistByRpcPort() {
@@ -50,4 +54,6 @@ public class NodeMgrTest {
         Assert.assertFalse(nodeMgr.checkFeExistByRPCPort("10.0.0.3", 9030));
         Assert.assertFalse(nodeMgr.checkFeExistByRPCPort("10.0.0.2", 9020));
     }
+=======
+>>>>>>> branch-2.5-mrs
 }

@@ -11,7 +11,10 @@ public class TaskRunBuilder {
     private final Task task;
     private Map<String, String> properties;
     private Constants.TaskType type;
+<<<<<<< HEAD
     private ConnectContext connectContext;
+=======
+>>>>>>> branch-2.5-mrs
 
     public static TaskRunBuilder newBuilder(Task task) {
         return new TaskRunBuilder(task);

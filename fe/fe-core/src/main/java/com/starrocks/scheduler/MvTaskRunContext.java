@@ -84,6 +84,7 @@ public class MvTaskRunContext extends TaskRunContext {
     public Constants.TaskType getTaskType() {
         return this.type;
     }
+<<<<<<< HEAD
 
     public int getPartitionTTLNumber() {
         return partitionTTLNumber;
@@ -92,4 +93,6 @@ public class MvTaskRunContext extends TaskRunContext {
     public void setPartitionTTLNumber(int partitionTTLNumber) {
         this.partitionTTLNumber = partitionTTLNumber;
     }
+=======
+>>>>>>> branch-2.5-mrs
 }

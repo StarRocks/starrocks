@@ -6,10 +6,10 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.HdfsEnvironment;
-import com.starrocks.connector.hive.HiveMetaStoreThriftClient;
 import com.starrocks.connector.iceberg.hive.HiveTableOperations;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -29,7 +29,7 @@ public class IcebergMetadataTest {
     private static final String CATALOG_NAME = "IcebergCatalog";
 
     @Test
-    public void testListDatabaseNames(@Mocked HiveMetaStoreThriftClient metaStoreThriftClient) throws Exception {
+    public void testListDatabaseNames(@Mocked HiveMetaStoreClient metaStoreThriftClient) throws Exception {
         new Expectations() {
             {
                 metaStoreThriftClient.getAllDatabases();

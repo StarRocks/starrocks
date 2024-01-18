@@ -1613,6 +1613,12 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
             if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
+<<<<<<< HEAD
+=======
+                if (optExpr.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
+                    clearOlapScanNodePartitions(aggregationNode);
+                }
+>>>>>>> branch-2.5-mrs
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
                 inputFragment.setWithLocalShuffleIfTrue(withLocalShuffle);
@@ -2420,6 +2426,10 @@ public class PlanFragmentBuilder {
             if (root instanceof SortNode) {
                 SortNode sortNode = (SortNode) root;
                 sortNode.setAnalyticPartitionExprs(analyticEvalNode.getPartitionExprs());
+            }
+
+            if (optExpr.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
+                clearOlapScanNodePartitions(analyticEvalNode);
             }
 
             inputFragment.setPlanRoot(analyticEvalNode);

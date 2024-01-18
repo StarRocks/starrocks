@@ -42,7 +42,11 @@ void FragmentContext::set_stream_load_contexts(const std::vector<StreamLoadConte
 }
 
 void FragmentContext::cancel(const Status& status) {
+<<<<<<< HEAD
     if (!status.ok() && _runtime_state != nullptr && _runtime_state->query_ctx() != nullptr) {
+=======
+    if (_runtime_state != nullptr && _runtime_state->query_ctx() != nullptr) {
+>>>>>>> branch-2.5-mrs
         _runtime_state->query_ctx()->release_workgroup_token_once();
     }
 

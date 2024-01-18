@@ -85,6 +85,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
         }
         final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
+<<<<<<< HEAD
         List<ScalarOperator> onPredicates = MvUtils.collectOnPredicate(queryExpression);
         onPredicates = onPredicates.stream().map(MvUtils::canonizePredicateForRewrite).collect(Collectors.toList());
         List<Table> queryTables = MvUtils.getAllTables(queryExpression);
@@ -101,6 +102,21 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             if (queryExpression.getGroupExpression() != null) {
                 int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
                 mvContext.addMatchedGroup(currentRootGroupId);
+=======
+        List<Table> queryTables = MvUtils.getAllTables(queryExpression);
+        for (MaterializationContext mvContext : mvCandidateContexts) {
+            MvRewriteContext mvRewriteContext =
+                    new MvRewriteContext(mvContext, queryTables, queryExpression, queryColumnRefRewriter, queryPredicateSplit);
+            MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
+            OptExpression candidate = mvRewriter.rewrite();
+            if (candidate != null) {
+                candidate = postRewriteMV(context, mvRewriteContext, candidate);
+                if (queryExpression.getGroupExpression() != null) {
+                    int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
+                    mvContext.addMatchedGroup(currentRootGroupId);
+                }
+                results.add(candidate);
+>>>>>>> branch-2.5-mrs
             }
 
             results.add(candidate);

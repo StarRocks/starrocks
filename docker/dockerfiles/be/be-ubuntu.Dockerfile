@@ -35,8 +35,11 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
 RUN echo "export PATH=/usr/lib/linux-tools/5.15.0-60-generic:$PATH" >> /etc/bash.bashrc
 ENV JAVA_HOME=/lib/jvm/default-java
 
+<<<<<<< HEAD
 RUN touch /.dockerenv
 
+=======
+>>>>>>> branch-2.5-mrs
 WORKDIR $STARROCKS_ROOT
 
 # Run as starrocks user
@@ -56,5 +59,10 @@ COPY --chown=starrocks:starrocks docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
 # Create directory for BE storage, create cn symbolic link to be
 RUN mkdir -p $STARROCKS_ROOT/be/storage && ln -sfT be $STARROCKS_ROOT/cn
 
+<<<<<<< HEAD
 # run as root by default
 USER root
+=======
+# Create directory for BE storage, create cn symbolic link to be
+RUN touch /.dockerenv && mkdir -p $STARROCKS_ROOT/be/storage && ln -sfT be $STARROCKS_ROOT/cn
+>>>>>>> branch-2.5-mrs

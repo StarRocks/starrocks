@@ -149,6 +149,7 @@ public class CatalogUtils {
             bucketNum = Math.min(backendNum, 48);
         }
         return bucketNum;
+<<<<<<< HEAD
     }
 
     public static int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum,
@@ -209,4 +210,8 @@ public class CatalogUtils {
         return output.toString();
     }
 
+=======
+
+    }
+>>>>>>> branch-2.5-mrs
 }

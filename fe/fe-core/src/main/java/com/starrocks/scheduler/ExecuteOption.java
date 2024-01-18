@@ -11,7 +11,10 @@ public class ExecuteOption {
     private Map<String, String> taskRunProperties;
     // indicates whether the current execution is manual
     private boolean isManual = false;
+<<<<<<< HEAD
     private boolean isSync = false;
+=======
+>>>>>>> branch-2.5-mrs
 
     public ExecuteOption() {
     }
@@ -53,6 +56,7 @@ public class ExecuteOption {
     public void setManual() {
         this.isManual = true;
     }
+<<<<<<< HEAD
 
     public boolean getIsSync() {
         return isSync;
@@ -61,4 +65,6 @@ public class ExecuteOption {
     public void setSync(boolean isSync) {
         this.isSync = isSync;
     }
+=======
+>>>>>>> branch-2.5-mrs
 }

@@ -76,6 +76,14 @@ public class PushDownPredicateScanRule extends TransformationRule {
                 .stream().map(rangeExtractor::rewriteOnlyColumn).collect(Collectors.toList())));
         Preconditions.checkState(predicates != null);
 
+<<<<<<< HEAD
+=======
+        // simplify case-when
+        predicates = scalarOperatorRewriter.rewrite(predicates, Lists.newArrayList(
+                SimplifiedCaseWhenRule.INSTANCE,
+                PruneTediousPredicateRule.INSTANCE
+        ));
+>>>>>>> branch-2.5-mrs
         predicates = scalarOperatorRewriter.rewrite(predicates,
                 ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
         predicates = Utils.transTrue2Null(predicates);

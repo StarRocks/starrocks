@@ -43,10 +43,14 @@ public class ShowCreateTableStmtTest {
         // create connect context
         ctx = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(ctx);
+<<<<<<< HEAD
     }
 
     @Test
     public void testShowCreateViewUseMV() throws Exception {
+=======
+
+>>>>>>> branch-2.5-mrs
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.base\n" +
                         "(\n" +
@@ -63,6 +67,13 @@ public class ShowCreateTableStmtTest {
                         "PROPERTIES('replication_num' = '1');")
                 .withMaterializedView("create materialized view test_mv distributed by hash(k1)" +
                         " as select k1 from base");
+<<<<<<< HEAD
+=======
+    }
+
+    @Test
+    public void testShowCreateViewUseMV() throws Exception {
+>>>>>>> branch-2.5-mrs
         String sql = "show create view test_mv";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, showCreateTableStmt);

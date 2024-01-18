@@ -69,7 +69,10 @@ import com.starrocks.task.DropReplicaTask;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TGetTabletScheduleRequest;
 import com.starrocks.thrift.TGetTabletScheduleResponse;
+<<<<<<< HEAD
 import com.starrocks.thrift.TStatusCode;
+=======
+>>>>>>> branch-2.5-mrs
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -649,7 +652,11 @@ public class TabletScheduler extends LeaderDaemon {
     /**
      * Only for test.
      *
+<<<<<<< HEAD
      * @param tabletCtx tablet schedule context
+=======
+     * @param tabletCtx
+>>>>>>> branch-2.5-mrs
      */
     private synchronized void addToPendingTablets(TabletSchedCtx tabletCtx) {
         pendingTablets.add(tabletCtx);
@@ -1227,6 +1234,7 @@ public class TabletScheduler extends LeaderDaemon {
         Set<Long> backendSet = tabletCtx.getColocateBackendsSet();
         Preconditions.checkNotNull(backendSet);
         stat.counterReplicaColocateRedundant.incrementAndGet();
+<<<<<<< HEAD
         Database db = globalStateMgr.getDbIncludeRecycleBin(tabletCtx.getDbId());
         if (db == null) {
             throw new SchedException(Status.UNRECOVERABLE, "db " + tabletCtx.getDbId() + " not exist");
@@ -1255,13 +1263,36 @@ public class TabletScheduler extends LeaderDaemon {
         } finally {
             db.writeUnlock();
         }
+=======
+        List<Replica> replicas = tabletCtx.getReplicas();
+        for (Replica replica : replicas) {
+            boolean forceDropBad = false;
+            if (backendSet.contains(replica.getBackendId())) {
+                if (replica.isBad() && replicas.size() > 1) {
+                    forceDropBad = true;
+                    LOG.info("colocate tablet {}, replica {} is bad," +
+                                    "will forcefully drop it, current backend set: {}",
+                            tabletCtx.getTabletId(), replica.getBackendId(), backendSet);
+                } else {
+                    continue;
+                }
+            }
+
+            deleteReplicaInternal(tabletCtx, replica, "colocate redundant", forceDropBad);
+            throw new SchedException(Status.FINISHED, "colocate redundant replica is deleted");
+        }
+        throw new SchedException(Status.UNRECOVERABLE, "unable to delete any colocate redundant replicas");
+>>>>>>> branch-2.5-mrs
     }
 
     private void deleteReplicaInternal(TabletSchedCtx tabletCtx, Replica replica, String reason, boolean force)
             throws SchedException {
+<<<<<<< HEAD
         if (Config.tablet_sched_always_force_decommission_replica) {
             force = true;
         }
+=======
+>>>>>>> branch-2.5-mrs
         /*
          * Before deleting a replica, we should make sure that there is no running txn on it
          *  and no more txns will be on it.
@@ -1804,6 +1835,7 @@ public class TabletScheduler extends LeaderDaemon {
             tabletCtxs = all.collect(Collectors.toList());
         }
         TGetTabletScheduleResponse response = new TGetTabletScheduleResponse();
+<<<<<<< HEAD
         response.setTablet_schedules(
                 tabletCtxs.stream().map(TabletSchedCtx::toTabletScheduleThrift).collect(Collectors.toList()));
         return response;
@@ -1837,6 +1869,12 @@ public class TabletScheduler extends LeaderDaemon {
         }
     }
 
+=======
+        response.setTablet_schedules(tabletCtxs.stream().map(t -> t.toTabletScheduleThrift()).collect(Collectors.toList()));
+        return response;
+    }
+
+>>>>>>> branch-2.5-mrs
     /**
      * PathSlot keeps track of slot num per path of a Backend.
      * Each path on a Backend has several slot.

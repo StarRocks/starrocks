@@ -490,10 +490,10 @@ void NLJoinProbeOperator::_permute_probe_row(const ChunkPtr& chunk) {
         ColumnPtr& dst_col = chunk->get_column_by_slot_id(slot->id());
         if (is_probe) {
             ColumnPtr& src_col = _probe_chunk->get_column_by_slot_id(slot->id());
-            dst_col->append_value_multiple_times(*src_col, _probe_row_current, cur_build_chunk_rows);
+            dst_col->append_value_multiple_times(*src_col, _probe_row_current, cur_build_chunk_rows, true);
         } else {
             ColumnPtr& src_col = _curr_build_chunk->get_column_by_slot_id(slot->id());
-            dst_col->append(*src_col);
+            dst_col->append_shallow_copy(*src_col);
         }
     }
 }

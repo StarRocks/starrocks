@@ -1,7 +1,10 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator.scalar;
 
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
+=======
+>>>>>>> branch-2.5-mrs
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -27,6 +30,8 @@ public abstract class ScalarOperator implements Cloneable {
 
     // whether the ScalarOperator is pushdown from equivalence derivation
     protected boolean isPushdown = false;
+
+    private List<String> hints = Collections.emptyList();
 
     private List<String> hints = Collections.emptyList();
 
@@ -143,8 +148,11 @@ public abstract class ScalarOperator implements Cloneable {
         try {
             operator = (ScalarOperator) super.clone();
             operator.hints = Lists.newArrayList(hints);
+<<<<<<< HEAD
             operator.isRedundant = this.isRedundant;
             operator.isPushdown = this.isPushdown;
+=======
+>>>>>>> branch-2.5-mrs
         } catch (CloneNotSupportedException ignored) {
         }
         return operator;
@@ -204,6 +212,7 @@ public abstract class ScalarOperator implements Cloneable {
     public List<String> getHints() {
         return hints;
     }
+<<<<<<< HEAD
 
     public boolean isRedundant() {
         return isRedundant;
@@ -257,4 +266,6 @@ public abstract class ScalarOperator implements Cloneable {
         }
         return false;
     }
+=======
+>>>>>>> branch-2.5-mrs
 }

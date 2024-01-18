@@ -3893,6 +3893,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowPrivilegesStatement(StarRocksParser.ShowPrivilegesStatementContext ctx) {
         return new ShowPrivilegesStmt();
     }
+<<<<<<< HEAD
+=======
+
+    @Override
+    public ParseNode visitDropFunctionStatement(StarRocksParser.DropFunctionStatementContext context) {
+        String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
+>>>>>>> branch-2.5-mrs
 
     @Override
     public ParseNode visitDropFunctionStatement(StarRocksParser.DropFunctionStatementContext context) {

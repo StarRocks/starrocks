@@ -28,8 +28,12 @@ class Column;
 enum PersistentIndexFileVersion {
     PERSISTENT_INDEX_VERSION_UNKNOWN = 0,
     PERSISTENT_INDEX_VERSION_1,
+<<<<<<< HEAD
     PERSISTENT_INDEX_VERSION_2,
     PERSISTENT_INDEX_VERSION_3
+=======
+    PERSISTENT_INDEX_VERSION_2
+>>>>>>> branch-2.5-mrs
 };
 
 static constexpr uint64_t NullIndexValue = -1;
@@ -693,7 +697,11 @@ private:
 
     Status _merge_compaction_internal(ImmutableIndexWriter* writer, int l1_start_idx, int l1_end_idx,
                                       std::map<uint32_t, std::pair<int64_t, int64_t>>& usage_and_size_stat,
+<<<<<<< HEAD
                                       bool keep_delete, std::map<size_t, std::unique_ptr<BloomFilter>>* bf_map);
+=======
+                                      bool keep_delete);
+>>>>>>> branch-2.5-mrs
     Status _merge_compaction_advance();
     // merge l0 and l1 into new l1, then clear l0
     Status _merge_compaction();
@@ -711,6 +719,7 @@ private:
     Status _get_from_immutable_index(size_t n, const Slice* keys, IndexValue* values,
                                      std::map<size_t, KeysInfo>& keys_info_by_key_size);
 
+<<<<<<< HEAD
     Status _get_from_immutable_index_parallel(size_t n, const Slice* keys, IndexValue* values,
                                               std::map<size_t, KeysInfo>& keys_info_by_key_size);
 
@@ -746,6 +755,10 @@ protected:
     // Currently there are only concurrent read/write conflicts for _l1_vec between apply_thread and commit_thread
     mutable std::shared_mutex _lock;
 
+=======
+    Status _update_usage_and_size_by_key_length(std::vector<std::pair<int64_t, int64_t>>& add_usage_and_size);
+
+>>>>>>> branch-2.5-mrs
     // index storage directory
     std::string _path;
     size_t _key_size = 0;

@@ -9,6 +9,10 @@ import com.google.common.collect.Sets;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+>>>>>>> branch-2.5-mrs
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
@@ -136,6 +140,67 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
         });
 
         return isIn ? Utils.compoundOr(result) : Utils.compoundAnd(result);
+    }
+
+    // NOTE: View-Delta Join may produce redundant compensation predicates as below.
+    // eg:
+    // A(pk: a1)  <-> B (pk: b1)
+    // A(pk: a2)  <-> C (pk: c1)
+    // Query: a1 = a2
+    // view delta deduce: a1 = a2 , a1 = b1, a2 = c1
+    // src equal classes  : a1, a2, b1, c1
+    // dest equal classes :
+    //            target1 : a1, b1
+    //            target2 : a2, c1
+    // For src equal classes and target1 equal classes, compensation predicates should be:
+    //  query.a2 = target.a1 and c1 = b1
+    // For src equal classes and target2 equal classes, compensation predicates should be:
+    //  query.a1 = target.a2 and b1 = c1
+    public static ScalarOperator pruneRedundantPredicates(ScalarOperator predicate) {
+        List<ScalarOperator> predicates = Utils.extractConjuncts(predicate);
+        List<ScalarOperator> prunedPredicates = pruneRedundantPredicates(predicates);
+        if (predicates != null) {
+            return Utils.compoundAnd(prunedPredicates);
+        }
+        return predicate;
+    }
+
+    public static List<ScalarOperator> pruneRedundantPredicates(List<ScalarOperator> scalarOperators) {
+        List<ScalarOperator> prunedPredicates = pruneEqualBinaryPredicates(scalarOperators);
+        if (prunedPredicates != null) {
+            return prunedPredicates;
+        }
+        return scalarOperators;
+    }
+
+    // a = b & b = a => a = b
+    private static List<ScalarOperator> pruneEqualBinaryPredicates(List<ScalarOperator> scalarOperators) {
+        Map<ColumnRefOperator, ColumnRefOperator> visited = Maps.newHashMap();
+        List<ScalarOperator> prunedPredicates = Lists.newArrayList();
+        for (ScalarOperator scalarOperator : scalarOperators) {
+            if (!(scalarOperator instanceof BinaryPredicateOperator)) {
+                prunedPredicates.add(scalarOperator);
+                continue;
+            }
+            BinaryPredicateOperator binaryPred = (BinaryPredicateOperator) scalarOperator;
+            if (!binaryPred.getBinaryType().isEqual()) {
+                prunedPredicates.add(scalarOperator);
+                continue;
+            }
+            if (!binaryPred.getChild(0).isColumnRef() || !binaryPred.getChild(1).isColumnRef()) {
+                prunedPredicates.add(scalarOperator);
+                continue;
+            }
+            ColumnRefOperator col0 = (ColumnRefOperator) (binaryPred.getChild(0));
+            ColumnRefOperator col1 = (ColumnRefOperator) (binaryPred.getChild(1));
+            if (visited.containsKey(col0) && visited.get(col0).equals(col1) ||
+                    visited.containsKey(col1) && visited.get(col1).equals(col0)) {
+                continue;
+            }
+            prunedPredicates.add(scalarOperator);
+            visited.put(col0, col1);
+        }
+        return prunedPredicates;
     }
 
     // NOTE: View-Delta Join may produce redundant compensation predicates as below.

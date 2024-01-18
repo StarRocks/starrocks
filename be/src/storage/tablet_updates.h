@@ -284,6 +284,7 @@ public:
 
     std::shared_ptr<std::unordered_map<uint32_t, RowsetSharedPtr>> get_rowset_map() const;
 
+<<<<<<< HEAD
     Status get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
                                          std::vector<uint32_t>* rowset_ids);
 
@@ -293,6 +294,8 @@ public:
 
     Status pk_index_major_compaction();
 
+=======
+>>>>>>> branch-2.5-mrs
 private:
     friend class Tablet;
     friend class PrimaryIndex;

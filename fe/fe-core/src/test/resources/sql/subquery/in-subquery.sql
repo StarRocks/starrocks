@@ -532,6 +532,12 @@ CTEAnchor(cteid=1)
 [end]
 
 /* test QuantifiedApply2OuterJoinRule */
+<<<<<<< HEAD
+=======
+/* test QuantifiedApply2OuterJoinRule */
+/* test QuantifiedApply2OuterJoinRule */
+/* test QuantifiedApply2OuterJoinRule */
+>>>>>>> branch-2.5-mrs
 
 [sql]
 select v1, v2 in (select v5 + v4 from t1 where v1 = 1 and v1 = v4 and v2 + v5 = v6) from t0;
@@ -772,6 +778,12 @@ CTEAnchor(cteid=1)
 [end]
 
 /* test QuantifiedApply2JoinRule */
+<<<<<<< HEAD
+=======
+/* test QuantifiedApply2JoinRule */
+/* test QuantifiedApply2JoinRule */
+/* test QuantifiedApply2JoinRule */
+>>>>>>> branch-2.5-mrs
 
 [sql]
 select v1 from t0 where v2 in (select v5 + v4 from t1 where v1 = 1 and v1 = v4 and v2 + v5 = v6);

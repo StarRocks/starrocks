@@ -3,8 +3,11 @@ package com.starrocks.analysis;
 
 import com.starrocks.alter.AlterJobV2Test;
 import com.starrocks.catalog.Catalog;
+<<<<<<< HEAD
 import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
+=======
+>>>>>>> branch-2.5-mrs
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -154,6 +157,7 @@ public class CreateTableAutoTabletTest {
         } finally {
             db.readUnlock();
         }
+<<<<<<< HEAD
         Assert.assertEquals(bucketNum, 10);
     }
 
@@ -205,6 +209,9 @@ public class CreateTableAutoTabletTest {
             db.readUnlock();
         }
         Assert.assertEquals(bucketNum, 10);
+=======
+        Assert.assertEquals(bucketNum, 20);
+>>>>>>> branch-2.5-mrs
     }
 
     @Test
@@ -247,12 +254,15 @@ public class CreateTableAutoTabletTest {
             db.readUnlock();
         }
         Assert.assertEquals(bucketNum, 10);
+<<<<<<< HEAD
 
         Long dbId = db.getId();
         String fullGroupName = dbId + "_g1";
         ColocateTableIndex index = GlobalStateMgr.getCurrentColocateIndex();
         ColocateGroupSchema groupSchema = index.getGroupSchema(fullGroupName);
         Assert.assertEquals(groupSchema.getBucketsNum(), 10);
+=======
+>>>>>>> branch-2.5-mrs
     }
 
 

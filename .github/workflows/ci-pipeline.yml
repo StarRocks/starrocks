@@ -1,7 +1,11 @@
 name: CI PIPELINE
 
 on:
+<<<<<<< HEAD
   pull_request:
+=======
+  pull_request_target:
+>>>>>>> branch-2.5-mrs
     types:
       - opened
       - synchronize
@@ -13,6 +17,7 @@ concurrency:
   group: ${{ github.event.number }}
   cancel-in-progress: true
 
+<<<<<<< HEAD
 
 jobs:
 
@@ -56,10 +61,62 @@ jobs:
           mkdir -p ${{ github.workspace }}
 
       - name: Checkout Code
+=======
+permissions:
+  checks: write
+  actions: write
+  contents: write
+  deployments: write
+  discussions: write
+  issues: write
+  packages: write
+  pages: write
+  pull-requests: write
+  repository-projects: write
+  security-events: write
+  statuses: write
+
+jobs:
+  doc-checker:
+    runs-on: ubuntu-latest
+    name: DOC FILTER
+    outputs:
+      output1: ${{ steps.doc-changes-info.outputs.doc }}
+    steps:
+      - uses: dorny/paths-filter@v2
+        id: changes
+        with:
+          filters: |
+            doc:
+            - 'docs/**'
+      - name: DOC CHECK INFO
+        id: doc-changes-info
+        run: |
+          echo "doc=${{ steps.changes.outputs.doc }}" >> $GITHUB_OUTPUT
+
+  add-doc-label:
+    needs: doc-checker
+    runs-on: ubuntu-latest
+    name: ADD DOC LABEL
+    if: ${{ needs.doc-checker.outputs.output1 == 'true' }}
+    steps:
+      - name: add document label
+        uses: actions-ecosystem/action-add-labels@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: documentation
+
+  markdownlint:
+    runs-on: ubuntu-latest
+    needs: add-doc-label
+    steps:
+      - name: Check out code
+>>>>>>> branch-2.5-mrs
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
 
+<<<<<<< HEAD
       - name: Checkout PR
         run: |
           cd /var/lib/ci-tool/ && git pull && ./bin/checkout.sh check
@@ -95,6 +152,20 @@ jobs:
     outputs:
       output1: ${{ steps.be-changes-info.outputs.be }}
       output2: ${{ steps.be-changes-info.outputs.thirdparty }}
+=======
+      - uses: articulate/actions-markdownlint@v1.1.0
+        with:
+          config: "docs/.markdownlint.yaml"
+          files: 'docs/**/*.md'
+          ignore: node_modules
+          version: 0.28.1
+
+  be-checker:
+    runs-on: ubuntu-latest
+    name: BE FILTER
+    outputs:
+      output1: ${{ steps.be-changes-info.outputs.be }}
+>>>>>>> branch-2.5-mrs
     steps:
       - uses: dorny/paths-filter@v2
         id: changes
@@ -105,36 +176,54 @@ jobs:
             - 'gensrc/**'
             - 'run-be-ut.sh'
             - 'build.sh'
+<<<<<<< HEAD
             - 'thirdparty/**'
             - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
             thirdparty:
             - 'thirdparty/**'
             - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+=======
+>>>>>>> branch-2.5-mrs
 
       - name: BE CHECK INFO
         id: be-changes-info
         run: |
           echo "be=${{ steps.changes.outputs.be }}" >> $GITHUB_OUTPUT
+<<<<<<< HEAD
           echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
 
   clang-format:
     runs-on: [self-hosted, light]
+=======
+
+  clang-format:
+    runs-on: self-hosted
+>>>>>>> branch-2.5-mrs
     needs: be-checker
     name: Clang-Format
     env:
       PR_NUMBER: ${{ github.event.number }}
     if: ${{ needs.be-checker.outputs.output1 == 'true' }}
     steps:
+<<<<<<< HEAD
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
+=======
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
+>>>>>>> branch-2.5-mrs
 
       - name: Checkout Code
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
+<<<<<<< HEAD
 
+=======
+      
+>>>>>>> branch-2.5-mrs
       - name: BRANCH INFO
         id: branch
         run: |
@@ -144,8 +233,11 @@ jobs:
       - name: Checkout PR
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
+<<<<<<< HEAD
           git config --global user.name "wanpengfei-git";
           git config --global user.email "wanpengfei91@163.com";
+=======
+>>>>>>> branch-2.5-mrs
           git checkout $BRANCH;
           git pull;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
@@ -153,12 +245,17 @@ jobs:
           git checkout $BRANCH_NAME;
           git checkout -b merge_pr;
           git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
+<<<<<<< HEAD
 
+=======
+          
+>>>>>>> branch-2.5-mrs
       - name: Run Clang-Format
         run: |
           export PATH=/var/lib/llvm/bin:$PATH
           bash build-support/check-format.sh
 
+<<<<<<< HEAD
       - name: Clean ENV
         if: always()
         run: |
@@ -207,11 +304,19 @@ jobs:
   be-ut:
     runs-on: [self-hosted, normal]
     needs: [ be-checker, thirdparty-update ]
+=======
+  be-ut:
+    runs-on: self-hosted
+    needs: [ clang-format ]
+>>>>>>> branch-2.5-mrs
     timeout-minutes: 90
     name: BE UT
     env:
       PR_NUMBER: ${{ github.event.number }}
+<<<<<<< HEAD
       BRANCH: ${{ github.base_ref }}
+=======
+>>>>>>> branch-2.5-mrs
     steps:
       - name: BRANCH INFO
         id: branch
@@ -224,12 +329,20 @@ jobs:
         shell: bash
         timeout-minutes: 90
         run: |
+<<<<<<< HEAD
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --repository ${{ github.repository }}
+=======
+          set -ex
+          rm -rf ./elastic-service
+          ln -s /var/lib/elastic-service ./elastic-service
+          cd elastic-service && git pull
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be
+>>>>>>> branch-2.5-mrs
 
       - name: clean ECI
         if: always()
@@ -250,6 +363,7 @@ jobs:
         run: |
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
+<<<<<<< HEAD
           rm -rf ${{ github.workspace }}/*
 
   clang-tidy:
@@ -302,6 +416,12 @@ jobs:
     needs: sync-checker
     name: FE FILTER
     if: needs.sync-checker.outputs.PASS == 'true' || needs.sync-checker.outputs.THIRDPARTY == 'true'
+=======
+
+  fe-checker:
+    runs-on: ubuntu-latest
+    name: FE FILTER
+>>>>>>> branch-2.5-mrs
     outputs:
       output1: ${{ steps.fe-changes-info.outputs.fe }}
     steps:
@@ -315,7 +435,10 @@ jobs:
               - 'run-fe-ut.sh'
               - 'java-extensions/**'
               - 'build.sh'
+<<<<<<< HEAD
               - 'test/**'
+=======
+>>>>>>> branch-2.5-mrs
 
       - run: echo ${{ steps.changes.outputs.fe }}
 
@@ -329,6 +452,7 @@ jobs:
     needs: fe-checker
     if: needs.fe-checker.outputs.output1 == 'true'
     name: FE Code Style Check
+<<<<<<< HEAD
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
@@ -337,6 +461,9 @@ jobs:
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
 
+=======
+    steps:
+>>>>>>> branch-2.5-mrs
       - uses: dorny/paths-filter@v2
         id: java-file
         name: JAVA FILE
@@ -347,6 +474,7 @@ jobs:
 
       - run: echo ${{ steps.java-file.outputs.java }}
 
+<<<<<<< HEAD
       - name: BRANCH INFO
         id: branch
         run: |
@@ -369,15 +497,32 @@ jobs:
           git checkout $BRANCH_NAME;
           git checkout -b merge_pr;
           git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
+=======
+      - name: "Checkout ${{ github.ref }} ( ${{ github.sha }} )"
+        id: checkout
+        if: ${{ steps.java-file.outputs.java == 'true' }}
+        uses: actions/checkout@v3
+        with:
+          persist-credentials: false
+          submodules: recursive
+>>>>>>> branch-2.5-mrs
 
       - name: Copy checkstyle files
         if: ${{ steps.java-file.outputs.java == 'true' }}
         run: |
+<<<<<<< HEAD
+=======
+          pwd
+>>>>>>> branch-2.5-mrs
           cp fe/checkstyle* .
 
       - name: Run java checkstyle
         if: ${{ steps.java-file.outputs.java == 'true' }}
+<<<<<<< HEAD
         uses: dbelyaev/action-checkstyle@v0.7.5
+=======
+        uses: dbelyaev/action-checkstyle@v0.6.1
+>>>>>>> branch-2.5-mrs
         with:
           workdir: "./fe"
           checkstyle_config: checkstyle.xml
@@ -385,6 +530,7 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
           level: error
+<<<<<<< HEAD
 
   sonarcloud-fe-checker:
     runs-on: ubuntu-latest
@@ -470,10 +616,22 @@ jobs:
         run: |
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
+=======
+  fe-ut:
+    runs-on: [self-hosted]
+    needs: fe-codestyle-check
+    name: FE UT
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
+>>>>>>> branch-2.5-mrs
 
       - name: BRANCH INFO
         id: branch
         run: |
+<<<<<<< HEAD
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
           repo="${{ github.repository }}"
           bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
@@ -486,23 +644,49 @@ jobs:
       - name: Checkout PR
         run: |
           cd /var/lib/ci-tool/ && git pull && ./bin/checkout.sh
+=======
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+>>>>>>> branch-2.5-mrs
 
       - name: UPDATE ECI & RUN UT
         id: run_ut
         shell: bash
         timeout-minutes: 60
         run: |
+<<<<<<< HEAD
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
+=======
+          set -ex
+          rm -rf ./elastic-service
+          ln -s /var/lib/elastic-service ./elastic-service
+          cd elastic-service && git pull
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe
+>>>>>>> branch-2.5-mrs
 
       - name: Clean ECI
         if: always()
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
+<<<<<<< HEAD
           echo ">>> Dmesg info:"
           eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "dmesg -T"
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
+=======
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+
+      - name: UT Report
+        if: always()
+        uses: mikepenz/action-junit-report@v3
+        with:
+          check_name: 'FE UT Report'
+          detailed_summary: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          report_paths: ${{ steps.run_ut.outputs.FE_REPORT_DIR }}/*.xml
+
+>>>>>>> branch-2.5-mrs
       - name: Upload log
         if: always()
         uses: actions/upload-artifact@v3
@@ -517,6 +701,7 @@ jobs:
           rm -rf ${{ steps.run_ut.outputs.FE_REPORT_DIR }}
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
+<<<<<<< HEAD
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
           rm -rf ${{ github.workspace }}/*
 
@@ -535,6 +720,21 @@ jobs:
       - name: CLEAN
         run: |
           rm -rf ${{ github.workspace }} && mkdir -p ${{ github.workspace }}
+=======
+
+  build:
+    runs-on: self-hosted
+    needs: [be-checker, fe-checker, be-ut, fe-ut]
+    name: BUILD
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    outputs:
+      build_output_tar: ${{ steps.run_build.outputs.OUTPUT_TAR }}
+    if: always() && (needs.be-ut.result == 'success' && needs.fe-ut.result == 'success') || (needs.be-checker.outputs.output1 != 'true' && needs.fe-ut.result == 'success') || (needs.fe-checker.outputs.output1 != 'true' && needs.be-ut.result == 'success')
+    steps:
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
+>>>>>>> branch-2.5-mrs
 
       - name: BRANCH INFO
         id: branch
@@ -547,16 +747,24 @@ jobs:
         shell: bash
         timeout-minutes: 90
         run: |
+<<<<<<< HEAD
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
           ./bin/elastic-build.sh --pr ${PR_NUMBER} --repository ${{ github.repository }} 
+=======
+          rm -rf ./elastic-service
+          ln -s /var/lib/elastic-service ./elastic-service
+          cd elastic-service && git pull
+          ./bin/elastic-build.sh --pr ${PR_NUMBER}
+>>>>>>> branch-2.5-mrs
 
       - name: build result
         run: |
           echo ${{ steps.run_build.outputs.OUTPUT_TAR }}
+<<<<<<< HEAD
           echo ${{ steps.run_build.outputs.BASE_VERSION }} > ./base_version.txt
 
       - name: Upload the Base Version
@@ -565,6 +773,8 @@ jobs:
           name: base_version
           path: ./base_version.txt
           retention-days: 3
+=======
+>>>>>>> branch-2.5-mrs
 
       - name: clean ECI
         if: always()
@@ -572,6 +782,7 @@ jobs:
           echo ${{ steps.run_build.outputs.ECI_ID }}
           eci rm ${{ steps.run_build.outputs.ECI_ID }}
 
+<<<<<<< HEAD
       - name: Clean ENV
         if: always()
         run: |
@@ -581,16 +792,27 @@ jobs:
 
   deploy:
     runs-on: [self-hosted, normal]
+=======
+  deploy:
+    runs-on: self-hosted
+>>>>>>> branch-2.5-mrs
     if: always() && needs.build.result == 'success'
     needs: build
     name: DEPLOY SR
     env:
       PR_NUMBER: ${{ github.event.number }}
+<<<<<<< HEAD
       CLUSTER_NAME: ci-admit
     outputs:
       fe: ${{steps.deploy_sr.outputs.fe}}
       be: ${{steps.deploy_sr.outputs.be}}
       deploy_conf_file: ${{steps.apply_resource.outputs.deploy_conf_file}}
+=======
+      CLUSTER_NAME: admit-default
+    outputs:
+      fe: ${{steps.deploy_sr.outputs.fe}}
+      be: ${{steps.deploy_sr.outputs.be}}
+>>>>>>> branch-2.5-mrs
     steps:
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
@@ -604,24 +826,40 @@ jobs:
       - name: Apply for resources
         id: apply_resource
         run: |
+<<<<<<< HEAD
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-cluster.sh --template ci-admit
           cp conf/starrocks_deploy.conf /var/local/env/${PR_NUMBER}-starrocks_deploy.conf
           echo "deploy_conf_file=/var/local/env/${PR_NUMBER}-starrocks_deploy.conf" >> $GITHUB_OUTPUT
+=======
+          set -x
+          rm -rf ./elastic-service
+          cp -rf /var/lib/elastic-service ./elastic-service
+          cd elastic-service && git pull
+          ./bin/elastic-cluster.sh --template admit-default
+          cp conf/starrocks_deploy.conf /var/lib/elastic-service/conf/starrocks_deploy.conf
+>>>>>>> branch-2.5-mrs
 
       - name: Deploy SR
         id: deploy_sr
         run: |
+<<<<<<< HEAD
           cd ci-tool && source lib/init.sh
           repo="${{ github.repository }}"
           bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'`
           tar_path="oss://${bucket_prefix}-ci-release/${{steps.branch.outputs.branch}}/Release/pr/${{needs.build.outputs.build_output_tar}}"
           echo ${tar_path}
           ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${tar_path} --with-coverage
+=======
+          set -x
+          cd elastic-service
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output oss://starrocks-ci-release/${{steps.branch.outputs.branch}}/Release/pr/${{needs.build.outputs.build_output_tar}}
+>>>>>>> branch-2.5-mrs
 
       - run: |
           echo "FE: ${{steps.deploy_sr.outputs.fe}}, BE: ${{steps.deploy_sr.outputs.be}}"
 
+<<<<<<< HEAD
       - name: Clean ENV
         if: always()
         run: |
@@ -769,3 +1007,45 @@ jobs:
         run: |
           rm -f $CONF_FILE
           rm -rf ${{ github.workspace }}/*
+=======
+  admit:
+    runs-on: self-hosted
+    name: ADMIT TEST
+    needs: deploy
+    if: always() && needs.deploy.result == 'success'
+    timeout-minutes: 60
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+      CLUSTER_NAME: admit-default
+      FE_NODE: ${{ needs.deploy.outputs.fe }}
+      BE_NODE: ${{ needs.deploy.outputs.be }}
+    steps:
+      - name: Clean Workspace
+        uses: AutoModality/action-clean@v1.1.0
+
+      - name: Run Case
+        run: |
+          set -x
+          echo "FE: ${{needs.deploy.outputs.fe}}, BE: ${{needs.deploy.outputs.be}}"
+          
+          cd ${{ github.workspace }}
+          rm -rf ./elastic-service
+          ln -s /var/lib/elastic-service ./elastic-service
+          cd elastic-service && git pull
+          
+          cd ${{ github.workspace }}
+          rm -rf ./StarRocksTest && cp -rf /var/lib/StarRocksTest ./StarRocksTest
+          cd ./StarRocksTest && git pull
+          
+          cd ${{ github.workspace }}/elastic-service
+          ./bin/run-admit.sh
+
+      - name: Publish Test Results
+        uses: mikepenz/action-junit-report@v3
+        if: success() || failure()
+        with:
+          check_name: 'Admit Test Results'
+          detailed_summary: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+          report_paths: 'StarRocksTest/result/*.xml'
+>>>>>>> branch-2.5-mrs

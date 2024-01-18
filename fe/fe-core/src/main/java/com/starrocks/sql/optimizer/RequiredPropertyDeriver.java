@@ -210,8 +210,13 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
     @Override
     public Void visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
         // If scan tablet sum less than 1, do one phase local aggregate is enough
+<<<<<<< HEAD
         int aggStage = ConnectContext.get().getSessionVariable().getNewPlannerAggStage();
         if (aggStage <= 1 && context.getRootProperty().oneTabletProperty().supportOneTabletOpt
+=======
+        if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 0
+                && context.getRootProperty().oneTabletProperty().supportOneTabletOpt
+>>>>>>> branch-2.5-mrs
                 && node.isOnePhaseAgg()) {
             requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY));
             return null;

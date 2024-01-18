@@ -571,6 +571,7 @@ public class Table extends MetaObject implements Writable {
     public boolean supportsUpdate() {
         return false;
     }
+<<<<<<< HEAD
 
     public boolean hasUniqueConstraints() {
         List<UniqueConstraint> uniqueConstraint = getUniqueConstraints();
@@ -592,4 +593,6 @@ public class Table extends MetaObject implements Writable {
     public List<ForeignKeyConstraint> getForeignKeyConstraints() {
         return this.foreignKeyConstraints;
     }
+=======
+>>>>>>> branch-2.5-mrs
 }

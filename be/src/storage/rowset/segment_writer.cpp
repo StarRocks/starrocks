@@ -146,7 +146,11 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
                                         is_zone_map_key_type(column.type());
         const bool enable_dup_zone_map =
                 _tablet_schema->keys_type() == KeysType::DUP_KEYS && is_zone_map_key_type(column.type());
+<<<<<<< HEAD
         opts.need_zone_map = column.is_key() || enable_pk_zone_map || enable_dup_zone_map || column.is_sort_key();
+=======
+        opts.need_zone_map = column.is_key() || enable_pk_zone_map || enable_dup_zone_map;
+>>>>>>> branch-2.5-mrs
         if (column.type() == FieldType::OLAP_FIELD_TYPE_ARRAY) {
             opts.need_zone_map = false;
         }

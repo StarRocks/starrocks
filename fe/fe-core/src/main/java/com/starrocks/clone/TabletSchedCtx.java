@@ -644,7 +644,11 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         }
 
         if (chosenReplica == null) {
+<<<<<<< HEAD
             throw new SchedException(Status.UNRECOVERABLE, "unable to choose dest replica(maybe no incomplete replica");
+=======
+            throw new SchedException(Status.UNRECOVERABLE, "unable to choose dest replica");
+>>>>>>> branch-2.5-mrs
         }
 
         // check if the dest replica has available slot
@@ -816,6 +820,7 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                     throw new SchedException(Status.SCHEDULE_RETRY, "consecutive full clone needs to delay");
                 }
 
+<<<<<<< HEAD
                 Replica cloneReplica = new Replica(
                         GlobalStateMgr.getCurrentState().getNextId(), destBackendId,
                         -1 /* version */, schemaHash,
@@ -842,6 +847,25 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
                 if (tabletStatus != TabletStatus.HEALTHY) {
                     throw new SchedException(Status.SCHEDULE_RETRY, "tablet " + tabletId + " is not healthy");
                 }
+=======
+            // addReplica() method will add this replica to tablet inverted index too.
+            tablet.addReplica(cloneReplica);
+        } else if (tabletStatus == TabletStatus.VERSION_INCOMPLETE) {
+            Preconditions.checkState(type == Type.REPAIR, type);
+            // double check
+            Replica replica = tablet.getReplicaByBackendId(destBackendId);
+            if (replica == null) {
+                throw new SchedException(Status.UNRECOVERABLE, "dest replica does not exist on BE " + destBackendId);
+            }
+
+            if (replica.getPathHash() != destPathHash) {
+                throw new SchedException(Status.UNRECOVERABLE, "dest replica's path hash is changed. "
+                        + "current: " + replica.getPathHash() + ", scheduled: " + destPathHash);
+            }
+        } else if (type == Type.BALANCE && cloneTask.isLocal()) {
+            if (tabletStatus != TabletStatus.HEALTHY) {
+                throw new SchedException(Status.SCHEDULE_RETRY, "tablet " + tabletId + " is not healthy");
+>>>>>>> branch-2.5-mrs
             }
         } finally {
             db.writeUnlock();

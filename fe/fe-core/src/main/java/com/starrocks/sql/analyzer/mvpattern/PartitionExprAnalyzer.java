@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -87,4 +88,35 @@ public class PartitionExprAnalyzer {
         }
     }
 
+=======
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
+
+public class PartitionExprAnalyzer {
+
+    public static void analyzePartitionExpr(Expr expr, Type targetColType) {
+        if (expr instanceof FunctionCallExpr) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+            Function builtinFunction = null;
+            if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+                Type[] dateTruncType = {Type.VARCHAR, targetColType};
+                builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                        dateTruncType, Function.CompareMode.IS_IDENTICAL);
+            } else if (functionCallExpr.getFnName().getFunction().equalsIgnoreCase(FunctionSet.TIME_SLICE)) {
+                Type[] timeSliceType = {targetColType, Type.INT, Type.VARCHAR, Type.VARCHAR};
+                builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                        timeSliceType, Function.CompareMode.IS_IDENTICAL);
+            }
+            if (builtinFunction  == null) {
+                throw new SemanticException("Unsupported partition type %s for function %s", targetColType,
+                        functionCallExpr.toSql());
+            }
+
+            functionCallExpr.setFn(builtinFunction);
+        }
+    }
+>>>>>>> branch-2.5-mrs
 }

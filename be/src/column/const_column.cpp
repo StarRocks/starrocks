@@ -31,7 +31,7 @@ void ConstColumn::append_selective(const Column& src, const uint32_t* indexes, u
     append(src, indexes[from], size);
 }
 
-void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
+void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) {
     append(src, index, size);
 }
 

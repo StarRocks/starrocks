@@ -322,12 +322,17 @@ public class AnalyzeStmtTest {
         String tblName = "insert";
         String sql = "select cast(" + 1 + " as Int), " +
                 "cast(" + 2 + " as bigint), " +
+<<<<<<< HEAD
                 "dict_merge(" + StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
+=======
+                "dict_merge(" +  StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
+>>>>>>> branch-2.5-mrs
                 " from " + StatisticUtils.quoting(catalogName, dbName, tblName) + " [_META_]";
         QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, getConnectContext());
         Assert.assertEquals("select.insert",
                 ((SelectRelation) stmt.getQueryRelation()).getRelation().getResolveTableName().toString());
     }
+<<<<<<< HEAD
 
     @Test
     public void testTypeKeys() throws Exception {
@@ -343,4 +348,6 @@ public class AnalyzeStmtTest {
         analyzeFail("select * from tarray order by v5");
         analyzeFail("select DENSE_RANK() OVER(partition by v5 order by v4) from tarray");
     }
+=======
+>>>>>>> branch-2.5-mrs
 }

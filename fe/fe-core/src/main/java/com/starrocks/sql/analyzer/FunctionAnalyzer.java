@@ -375,6 +375,7 @@ public class FunctionAnalyzer {
                         fnName + " second parameter'value should be between 0 and 1");
             }
         }
+<<<<<<< HEAD
 
         if (fnName.getFunction().equals(FunctionSet.COVAR_POP) || fnName.getFunction().equals(FunctionSet.COVAR_SAMP) ||
                 fnName.getFunction().equals(FunctionSet.CORR)) {
@@ -385,5 +386,7 @@ public class FunctionAnalyzer {
                 throw new SemanticException(fnName + " function 's args must be column");
             }
         }
+=======
+>>>>>>> branch-2.5-mrs
     }
 }

@@ -236,7 +236,13 @@ public class MaterializedViewAnalyzer {
             // convert queryStatement to sql and set
             statement.setInlineViewDef(AstToSQLBuilder.toSQL(queryStatement));
             statement.setSimpleViewDef(AstToSQLBuilder.buildSimple(queryStatement));
+<<<<<<< HEAD
 
+=======
+            // collect table from query statement
+            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
+            List<BaseTableInfo> baseTableInfos = Lists.newArrayList();
+>>>>>>> branch-2.5-mrs
             Database db = context.getGlobalStateMgr().getDb(statement.getTableName().getDb());
             if (db == null) {
                 throw new SemanticException("Can not find database:" + statement.getTableName().getDb());

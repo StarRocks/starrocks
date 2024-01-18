@@ -37,6 +37,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
+import org.spark_project.guava.collect.Sets;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

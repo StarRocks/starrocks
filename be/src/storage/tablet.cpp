@@ -1295,6 +1295,7 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
     }
 }
 
+<<<<<<< HEAD
 Status Tablet::verify() {
     int64_t version = max_continuous_version();
     std::vector<RowsetSharedPtr> rowsets;
@@ -1314,6 +1315,8 @@ Status Tablet::verify() {
     return Status::OK();
 }
 
+=======
+>>>>>>> branch-2.5-mrs
 std::string Tablet::schema_debug_string() const {
     return _tablet_meta->tablet_schema().debug_string();
 }

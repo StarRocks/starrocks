@@ -84,6 +84,7 @@ public class NetUtils {
             fqdn = host;
         }
         return new Pair<>(ip, fqdn);
+<<<<<<< HEAD
     }
 
     public static boolean checkAccessibleForAllPorts(String host, List<Integer> ports) {
@@ -98,5 +99,7 @@ public class NetUtils {
             }
         }
         return accessible;
+=======
+>>>>>>> branch-2.5-mrs
     }
 }

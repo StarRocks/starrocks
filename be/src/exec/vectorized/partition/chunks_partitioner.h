@@ -47,10 +47,25 @@ public:
         if (!_is_passthrough) {
             for (size_t i = 0; i < _partition_exprs.size(); i++) {
                 ASSIGN_OR_RETURN(_partition_columns[i], _partition_exprs[i]->evaluate(chunk.get()));
+<<<<<<< HEAD
                 if (_hash_map_variant.is_nullable() && !_partition_columns[i]->is_nullable()) {
                     _partition_columns[i] = NullableColumn::create(
                             _partition_columns[i], NullColumn::create(_partition_columns[i]->size(), 0));
                 }
+=======
+
+                if (false) {
+                }
+#define HASH_MAP_METHOD(NAME)                                                                                     \
+    else if (_hash_map_variant.type == PartitionHashMapVariant::Type::NAME) {                                     \
+        if (!_partition_columns[i]->is_nullable()) {                                                              \
+            _partition_columns[i] = NullableColumn::create(_partition_columns[i],                                 \
+                                                           NullColumn::create(_partition_columns[i]->size(), 0)); \
+        }                                                                                                         \
+    }
+                APPLY_FOR_PARTITION_VARIANT_NULL(HASH_MAP_METHOD)
+#undef HASH_MAP_METHOD
+>>>>>>> branch-2.5-mrs
             }
         }
 

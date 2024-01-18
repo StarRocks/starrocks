@@ -104,12 +104,16 @@ private:
     void _reset();
 
     size_t _mem_usage() const {
+<<<<<<< HEAD
         if (_num_pages == 0) {
             return sizeof(OrdinalIndexReader);
         } else {
             return sizeof(OrdinalIndexReader) + (_num_pages + 1) * sizeof(ordinal_t) +
                    (_num_pages + 1) * sizeof(uint64_t);
         }
+=======
+        return sizeof(OrdinalIndexReader) + (_num_pages + 1) * sizeof(ordinal_t) + _num_pages * sizeof(PagePointer);
+>>>>>>> branch-2.5-mrs
     }
 
     Status _do_load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta, ordinal_t num_values,
@@ -120,8 +124,13 @@ private:
     int _num_pages = 0;
     // _ordinals[i] = first ordinal of the i-th data page,
     std::unique_ptr<ordinal_t[]> _ordinals;
+<<<<<<< HEAD
     // _pages[i] = page pointer to offset of the i-th data page
     std::unique_ptr<uint64_t[]> _pages;
+=======
+    // _pages[i] = page pointer to the i-th data page
+    std::unique_ptr<PagePointer[]> _pages;
+>>>>>>> branch-2.5-mrs
 };
 
 class OrdinalPageIndexIterator {

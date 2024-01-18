@@ -34,10 +34,12 @@ import com.starrocks.thrift.TExpr;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 import org.apache.thrift.protocol.TCompactProtocol;
+import org.apache.thrift.transport.TTransportException;
 
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
@@ -159,8 +161,8 @@ public class FragmentNormalizer {
     public ByteBuffer normalizeExpr(Expr expr) {
         uncacheable = uncacheable || hasNonDeterministicFunctions(expr);
         TExpr texpr = expr.normalize(this);
-        TSerializer ser = new TSerializer(new TCompactProtocol.Factory());
         try {
+            TSerializer ser = new TSerializer(new TCompactProtocol.Factory());
             return ByteBuffer.wrap(ser.serialize(texpr));
         } catch (Exception ignored) {
             Preconditions.checkArgument(false);
@@ -169,12 +171,19 @@ public class FragmentNormalizer {
     }
 
     public Pair<List<Integer>, List<ByteBuffer>> normalizeSlotIdsAndExprs(Map<SlotId, Expr> exprMap) {
-        List<Pair<SlotId, ByteBuffer>> slotIdsAndStringFunctions = exprMap.entrySet().stream()
-                .map(e -> new Pair<>(e.getKey(), normalizeExpr(e.getValue())))
-                .sorted(Pair.comparingBySecond()).collect(Collectors.toList());
-        List<SlotId> slotIds = slotIdsAndStringFunctions.stream().map(e -> e.first).collect(Collectors.toList());
-        List<ByteBuffer> exprs = slotIdsAndStringFunctions.stream().map(e -> e.second).collect(Collectors.toList());
-        return new Pair<>(remapSlotIds(slotIds), exprs);
+        try {
+            List<Pair<SlotId, ByteBuffer>> slotIdsAndStringFunctions = new ArrayList<>();
+            for (Map.Entry<SlotId, Expr> slotIdExprEntry : exprMap.entrySet()) {
+                Pair<SlotId, ByteBuffer> slotIdByteBufferPair = new Pair<>(slotIdExprEntry.getKey(), normalizeExpr(slotIdExprEntry.getValue()));
+                slotIdsAndStringFunctions.add(slotIdByteBufferPair);
+            }
+            slotIdsAndStringFunctions.sort(Pair.comparingBySecond());
+            List<SlotId> slotIds = slotIdsAndStringFunctions.stream().map(e -> e.first).collect(Collectors.toList());
+            List<ByteBuffer> exprs = slotIdsAndStringFunctions.stream().map(e -> e.second).collect(Collectors.toList());
+            return new Pair<>(remapSlotIds(slotIds), exprs);
+        } catch (Exception e) {
+            throw new RuntimeException(e.getMessage());
+        }
     }
 
     public List<ByteBuffer> normalizeExprs(List<Expr> exprList) {

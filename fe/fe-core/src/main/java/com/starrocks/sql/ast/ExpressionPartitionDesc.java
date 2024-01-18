@@ -28,9 +28,12 @@ import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
+<<<<<<< HEAD
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+=======
+>>>>>>> branch-2.5-mrs
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.PartitionExprAnalyzer;
@@ -43,11 +46,16 @@ import java.util.Map;
 public class ExpressionPartitionDesc extends PartitionDesc {
 
     private Expr expr;
+<<<<<<< HEAD
     // If this value is not null, the type of the partition is different from the type of the partition field.
     private Type partitionType = null;
     // range partition desc == null means this must be materialized view
     private RangePartitionDesc rangePartitionDesc = null;
 
+=======
+    private RangePartitionDesc rangePartitionDesc = null;
+    // No entry created in 2.5, just for compatibility
+>>>>>>> branch-2.5-mrs
     public ExpressionPartitionDesc(RangePartitionDesc rangePartitionDesc, Expr expr) {
         this.rangePartitionDesc = rangePartitionDesc;
         this.expr = expr;
@@ -82,11 +90,16 @@ public class ExpressionPartitionDesc extends PartitionDesc {
         return ((SlotRef) expr);
     }
 
+    public RangePartitionDesc getRangePartitionDesc() {
+        return rangePartitionDesc;
+    }
+
     public boolean isFunction() {
         return expr instanceof FunctionCallExpr;
     }
 
     @Override
+<<<<<<< HEAD
     public void analyze(List<ColumnDef> columnDefs, Map<String, String> otherProperties) throws AnalysisException {
         boolean hasExprAnalyze = false;
         SlotRef slotRef;
@@ -197,6 +210,17 @@ public class ExpressionPartitionDesc extends PartitionDesc {
         if (!find) {
             throw new DdlException("Partition column[" + colName + "] does not found");
         }
+=======
+    public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId,
+                                         boolean isTemp, boolean isExprPartition)
+            throws DdlException {
+        // we will support other PartitionInto in the future
+        PartitionType partitionType = PartitionType.RANGE;
+        if (isExprPartition)  {
+            partitionType = PartitionType.EXPR_RANGE;
+        }
+        return new ExpressionRangePartitionInfo(Arrays.asList(expr), columns, partitionType);
+>>>>>>> branch-2.5-mrs
     }
 
 }

@@ -16,7 +16,10 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ImmutableMap;
+<<<<<<< HEAD
 import com.google.common.collect.Lists;
+=======
+>>>>>>> branch-2.5-mrs
 import com.google.common.collect.Multimap;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Function;
@@ -24,6 +27,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -31,6 +35,14 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.DateTruncReplaceChecker;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.equivalent.PredicateReplaceChecker;
+=======
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
+import jersey.repackaged.com.google.common.collect.Lists;
+>>>>>>> branch-2.5-mrs
 
 import java.util.Map;
 import java.util.Optional;
@@ -38,6 +50,7 @@ import java.util.Optional;
 public class EquationRewriter {
 
     private Multimap<ScalarOperator, Pair<ColumnRefOperator, ScalarOperator>> equationMap;
+<<<<<<< HEAD
     private Multimap<ScalarOperator, Pair<ColumnRefOperator, PredicateReplaceChecker>> predicateProbMap;
     private Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
     private AggregateFunctionRewriter aggregateFunctionRewriter;
@@ -46,12 +59,19 @@ public class EquationRewriter {
     public EquationRewriter() {
         this.equationMap = ArrayListMultimap.create();
         this.predicateProbMap = ArrayListMultimap.create();
+=======
+    private Map<ColumnRefOperator, ColumnRefOperator> columnMapping;
+
+    public EquationRewriter() {
+        this.equationMap = ArrayListMultimap.create();
+>>>>>>> branch-2.5-mrs
     }
 
     public void setOutputMapping(Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
         this.columnMapping = columnMapping;
     }
 
+<<<<<<< HEAD
     public void setAggregateFunctionRewriter(AggregateFunctionRewriter aggregateFunctionRewriter) {
         this.aggregateFunctionRewriter = aggregateFunctionRewriter;
     }
@@ -64,6 +84,8 @@ public class EquationRewriter {
         this.underAggFunctionRewriteContext = underAggFunctionRewriteContext;
     }
 
+=======
+>>>>>>> branch-2.5-mrs
     protected ScalarOperator replaceExprWithTarget(ScalarOperator expr) {
 
         BaseScalarOperatorShuttle shuttle = new BaseScalarOperatorShuttle() {
@@ -73,6 +95,7 @@ public class EquationRewriter {
             }
 
             @Override
+<<<<<<< HEAD
             public Optional<ScalarOperator> preprocess(ScalarOperator scalarOperator) {
                 return replace(scalarOperator);
             }
@@ -141,6 +164,35 @@ public class EquationRewriter {
 
             Optional<ScalarOperator> replace(ScalarOperator scalarOperator) {
                 if (equationMap.containsKey(scalarOperator)) {
+=======
+            public ScalarOperator visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
+                ScalarOperator tmp = replace(predicate);
+                return tmp != null ? tmp : super.visitBinaryPredicate(predicate, context);
+            }
+
+            @Override
+            public ScalarOperator visitCall(CallOperator predicate, Void context) {
+                ScalarOperator tmp = replace(predicate);
+                return tmp != null ? tmp : super.visitCall(predicate, context);
+            }
+
+            @Override
+            public ScalarOperator visitCastOperator(CastOperator cast, Void context) {
+                ScalarOperator tmp = replace(cast);
+                return tmp != null ? tmp : super.visitCastOperator(cast, context);
+            }
+
+            @Override
+            public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
+                ScalarOperator tmp = replace(variable);
+                return tmp != null ? tmp : super.visitVariableReference(variable, context);
+            }
+
+            ScalarOperator replace(ScalarOperator scalarOperator) {
+
+                if (equationMap.containsKey(scalarOperator)) {
+
+>>>>>>> branch-2.5-mrs
                     Optional<Pair<ColumnRefOperator, ScalarOperator>> mappedColumnAndExprRef =
                             equationMap.get(scalarOperator).stream().findFirst();
 
@@ -148,11 +200,16 @@ public class EquationRewriter {
                     ScalarOperator extendedExpr = mappedColumnAndExprRef.get().second;
 
                     if (columnMapping == null) {
+<<<<<<< HEAD
                         return extendedExpr == null ? Optional.of(basedColumn.clone()) : Optional.of(extendedExpr.clone());
+=======
+                        return extendedExpr == null ? basedColumn.clone() : extendedExpr.clone();
+>>>>>>> branch-2.5-mrs
                     }
 
                     ColumnRefOperator replaced = columnMapping.get(basedColumn);
                     if (replaced == null) {
+<<<<<<< HEAD
                         return Optional.empty();
                     }
 
@@ -165,6 +222,21 @@ public class EquationRewriter {
                 }
 
                 return Optional.empty();
+=======
+                        return null;
+                    }
+
+                    if (extendedExpr == null) {
+                        return replaced.clone();
+                    }
+                    ScalarOperator newExpr = extendedExpr.clone();
+                    return replaceColInExpr(newExpr, basedColumn,
+                            replaced.clone()) ? newExpr : null;
+
+                }
+
+                return null;
+>>>>>>> branch-2.5-mrs
             }
 
             private boolean replaceColInExpr(ScalarOperator expr, ColumnRefOperator oldCol, ScalarOperator newCol) {
@@ -183,6 +255,7 @@ public class EquationRewriter {
         return expr.accept(shuttle, null);
     }
 
+<<<<<<< HEAD
     private static CallOperator normalizeCallOperator(CallOperator aggFunc) {
         String aggFuncName = aggFunc.getFnName();
         if (!aggFuncName.equals(FunctionSet.COUNT) || aggFunc.isDistinct()) {
@@ -197,18 +270,24 @@ public class EquationRewriter {
         return aggFunc;
     }
 
+=======
+>>>>>>> branch-2.5-mrs
     public boolean containsKey(ScalarOperator scalarOperator) {
         return equationMap.containsKey(scalarOperator);
     }
 
     public void addMapping(ScalarOperator expr, ColumnRefOperator col) {
         equationMap.put(expr, Pair.create(col, null));
+<<<<<<< HEAD
 
         // Convert a + 1 -> col_f => a => col_f - 1
+=======
+>>>>>>> branch-2.5-mrs
         Pair<ScalarOperator, ScalarOperator> extendedEntry = new EquationTransformer(expr, col).getMapping();
         if (extendedEntry.second != col) {
             equationMap.put(extendedEntry.first, Pair.create(col, extendedEntry.second));
         }
+<<<<<<< HEAD
 
         if (expr instanceof CallOperator) {
             CallOperator aggFunc = (CallOperator) expr;
@@ -225,6 +304,8 @@ public class EquationRewriter {
                 predicateProbMap.put(first, Pair.create(col, new DateTruncReplaceChecker(((CallOperator) expr))));
             }
         }
+=======
+>>>>>>> branch-2.5-mrs
     }
 
     private static class EquationTransformer extends ScalarOperatorVisitor<Void, Void> {
@@ -279,5 +360,11 @@ public class EquationRewriter {
         private Function findArithmeticFunction(CallOperator call, String fnName) {
             return Expr.getBuiltinFunction(fnName, call.getFunction().getArgs(), Function.CompareMode.IS_IDENTICAL);
         }
+<<<<<<< HEAD
     }
+=======
+
+    }
+
+>>>>>>> branch-2.5-mrs
 }

@@ -548,6 +548,7 @@ public class SetTest extends PlanTestBase {
                 "  |    \n" +
                 "  2:EXCHANGE");
     }
+<<<<<<< HEAD
 
     @Test
     public void testUnionNull() throws Exception {
@@ -558,4 +559,6 @@ public class SetTest extends PlanTestBase {
                 "WHERE NULL";
         getThriftPlan(sql);
     }
+=======
+>>>>>>> branch-2.5-mrs
 }

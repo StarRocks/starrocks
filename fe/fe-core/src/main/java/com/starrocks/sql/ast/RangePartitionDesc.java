@@ -129,7 +129,8 @@ public class RangePartitionDesc extends PartitionDesc {
     }
 
     @Override
-    public PartitionInfo toPartitionInfo(List<Column> schema, Map<String, Long> partitionNameToId, boolean isTemp)
+    public PartitionInfo toPartitionInfo(List<Column> schema, Map<String, Long> partitionNameToId,
+                                         boolean isTemp, boolean isExprPartition)
             throws DdlException {
         List<Column> partitionColumns = Lists.newArrayList();
 

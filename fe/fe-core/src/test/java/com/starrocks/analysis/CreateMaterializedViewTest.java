@@ -2350,6 +2350,7 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testCollectAllTableAndView2() {
         String sql = "select * from test.tbl2 " +
                 "inner join (select k2,v1 from test.tbl1 where k2 > 0 and v1 in " +
@@ -2367,6 +2368,8 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
+=======
+>>>>>>> branch-2.5-mrs
     public void testCreateMVWithDifferentDB() {
         try{
             ConnectContext newConnectContext = UtFrameUtils.createDefaultCtx();
@@ -2416,6 +2419,10 @@ public class CreateMaterializedViewTest {
         } catch (Exception e) {
             Assert.fail();
         }
+<<<<<<< HEAD
+=======
+
+>>>>>>> branch-2.5-mrs
     }
 
     private Table getTable(String dbName, String mvName) {
@@ -2491,6 +2498,7 @@ public class CreateMaterializedViewTest {
         starRocksAssert.dropTable("emps");
         starRocksAssert.dropTable("depts");
     }
+<<<<<<< HEAD
 
     @Test
     public void testMvOnUnion() throws Exception {
@@ -2678,5 +2686,7 @@ public class CreateMaterializedViewTest {
         }
     }
 
+=======
+>>>>>>> branch-2.5-mrs
 }
 

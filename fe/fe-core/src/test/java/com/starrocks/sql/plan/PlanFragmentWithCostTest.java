@@ -2163,6 +2163,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         AuditEvent event = connectContext.getAuditEventBuilder().build();
         Assert.assertTrue("planMemCosts should be > 1, but: " + event.planMemCosts, event.planMemCosts > 1);
         Assert.assertTrue("planCpuCosts should be > 1, but: " + event.planCpuCosts, event.planCpuCosts > 1);
+<<<<<<< HEAD
     }
 
     @Test
@@ -2186,4 +2187,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  4:HASH JOIN");
     }
 
+=======
+
+    }
+>>>>>>> branch-2.5-mrs
 }

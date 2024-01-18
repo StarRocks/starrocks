@@ -44,9 +44,16 @@ import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.plan.ExecPlan;
+=======
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+>>>>>>> branch-2.5-mrs
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -311,6 +318,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "partitionRefTableExprs")
     private List<Expr> partitionRefTableExprs;
 
+<<<<<<< HEAD
     // Maintenance plan for this MV
     private transient ExecPlan maintenancePlan;
 
@@ -326,6 +334,60 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
     // it is a property in momery, do not serialize it
     private PlanMode planMode = PlanMode.UNKNOWN;
+=======
+    public static class MvRewriteContext {
+        // mv's logical plan
+        private final OptExpression logicalPlan;
+
+        // mv plan's output columns, used for mv rewrite
+        private final List<ColumnRefOperator> outputColumns;
+
+        // column ref factory used when compile mv plan
+        private final ColumnRefFactory refFactory;
+
+        // indidate whether this mv is a SPJG plan
+        // if not, we do not store other fields to save memory,
+        // because we will not use other fields
+        private boolean isValidMvPlan;
+
+        public MvRewriteContext() {
+            this.logicalPlan = null;
+            this.outputColumns = null;
+            this.refFactory = null;
+            this.isValidMvPlan = false;
+        }
+
+        public MvRewriteContext(
+                OptExpression logicalPlan,
+                List<ColumnRefOperator> outputColumns,
+                ColumnRefFactory refFactory) {
+            this.logicalPlan = logicalPlan;
+            this.outputColumns = outputColumns;
+            this.refFactory = refFactory;
+            this.isValidMvPlan = true;
+        }
+
+        public OptExpression getLogicalPlan() {
+            return logicalPlan;
+        }
+
+        public List<ColumnRefOperator> getOutputColumns() {
+            return outputColumns;
+        }
+
+        public ColumnRefFactory getRefFactory() {
+            return refFactory;
+        }
+
+        public boolean isValidMvPlan() {
+            return isValidMvPlan;
+        }
+    }
+    // context used in mv rewrite
+    // just in memory now
+    // there are only reads after first-time write
+    private MvRewriteContext mvRewriteContext;
+>>>>>>> branch-2.5-mrs
 
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
@@ -1029,6 +1091,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
                 // we can not judge whether mv based on external table is update-to-date,
                 // because we do not know that any changes in external table.
+<<<<<<< HEAD
                 if (!table.isNativeTableOrMaterializedView()) {
                     switch (externalTableRewriteMode) {
                         case DISABLE:
@@ -1043,6 +1106,16 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                             break;
                         default:
                             Preconditions.checkState(false, "unknown force_external_table_rewrite");
+=======
+                if (!table.isNativeTable()) {
+                    if (forceExternalTableQueryRewrite) {
+                        if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
+                            // if forceExternalTableQueryRewrite set to true, no partition need to refresh for mv.
+                            continue;
+                        }
+                    } else {
+                        return getPartitionNames();
+>>>>>>> branch-2.5-mrs
                     }
                 }
                 if (table.isNativeTableOrMaterializedView()) {
@@ -1091,6 +1164,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         TableProperty.QueryRewriteConsistencyMode olapTableRewriteMode = tableProperty.getOlapTableQueryRewrite();
         for (BaseTableInfo tableInfo : baseTableInfos) {
             Table table = tableInfo.getTable();
+<<<<<<< HEAD
             if (!table.isNativeTableOrMaterializedView()) {
                 switch (externalTableRewriteMode) {
                     case DISABLE:
@@ -1116,6 +1190,16 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                     case CHECKED:
                     default:
                         break;
+=======
+            if (!table.isNativeTable()) {
+                if (forceExternalTableQueryRewrite) {
+                    // if forceExternalTableQueryRewrite set to true, no partition need to refresh for mv.
+                    if (!supportPartialPartitionQueryRewriteForExternalTable(table)) {
+                        return Sets.newHashSet();
+                    }
+                } else {
+                    return getPartitionNames();
+>>>>>>> branch-2.5-mrs
                 }
             }
 
@@ -1208,6 +1292,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 String.format("can not find partition info for mv:%s on base tables:%s", name, baseTableNames));
     }
 
+<<<<<<< HEAD
     public ExecPlan getMaintenancePlan() {
         return maintenancePlan;
     }
@@ -1234,5 +1319,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             }
         }
         return properties;
+=======
+    public MvRewriteContext getPlanContext() {
+        return mvRewriteContext;
+    }
+
+    public void setPlanContext(MvRewriteContext mvRewriteContext) {
+        this.mvRewriteContext = mvRewriteContext;
+>>>>>>> branch-2.5-mrs
     }
 }

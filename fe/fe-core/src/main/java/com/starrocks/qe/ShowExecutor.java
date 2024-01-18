@@ -81,7 +81,10 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.PrintableMap;
+<<<<<<< HEAD
 import com.starrocks.common.util.TimeUtils;
+=======
+>>>>>>> branch-2.5-mrs
 import com.starrocks.credential.CloudCredentialUtil;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.load.DeleteHandler;
@@ -1896,7 +1899,11 @@ public class ShowExecutor {
         // Comment
         String comment = catalog.getComment();
         if (comment != null) {
+<<<<<<< HEAD
             createCatalogSql.append("comment \"").append(catalog.getDisplayComment()).append("\"\n");
+=======
+            createCatalogSql.append("comment \"").append(catalog.getComment()).append("\"\n");
+>>>>>>> branch-2.5-mrs
         }
 
         Map<String, String> clonedConfig = new HashMap<>(catalog.getConfig());

@@ -129,6 +129,7 @@ std::string MemTracker::err_msg(const std::string& msg) const {
             str << "Mem usage has exceed the limit of query pool";
         } else {
             str << "Mem usage has exceed the limit of the resource group [" << label() << "]. "
+<<<<<<< HEAD
                 << "You can change the limit by modifying [mem_limit] of this group";
         }
         break;
@@ -136,6 +137,11 @@ std::string MemTracker::err_msg(const std::string& msg) const {
         str << "Mem usage has exceed the big query limit of the resource group [" << label() << "]. "
             << "You can change the limit by modifying [big_query_mem_limit] of this group";
         break;
+=======
+                << "You can change the limit by modify [mem_limit] of this group";
+        }
+        break;
+>>>>>>> branch-2.5-mrs
     default:
         break;
     }

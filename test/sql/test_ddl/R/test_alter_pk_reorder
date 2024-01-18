@@ -52,6 +52,7 @@ select * from tab1;
 500	500	500	500	500
 600	600	600	600	600
 700	700	700	700	700
+<<<<<<< HEAD
 -- !result
 
 -- name: test_alter_pk_reorder_column_type
@@ -82,4 +83,6 @@ E: (1064, 'Unexpected exception: Sort key column[v5] type not supported: FLOAT')
 -- !result
 ALTER TABLE test_alter_pk_reorder_column_type ORDER BY(v3);
 -- result:
+=======
+>>>>>>> branch-2.5-mrs
 -- !result

@@ -203,15 +203,21 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
         // means we cannot optimize this projection and need add a decodeNode before this projection.
         // scalarOperators can be optimized are:
         // 1. if it's a pass-through entry like col1 -> col1, we don't care it.
+<<<<<<< HEAD
         // 2. scalarOperator don't ref cols from encoded string cols, we don't care it.
         // 3. exists multiple columnRef to one dict col, we cannot rewrite this projection.
         // 4. scalarOperator ref cols from encoded string cols should meet these requirements:
+=======
+        // 2. scalarOperator don't ref cols from encoded string cols, we don't care it
+        // 2. scalarOperator ref cols from encoded string cols should meet these requirements:
+>>>>>>> branch-2.5-mrs
         //    a. all these dict cols of these string cols exist in the global dict
         //    b. can gain benefit from the optimization
         private boolean couldApplyStringDict(DecodeContext context, Projection projection) {
             final Set<Integer> globalDictIds =
                     context.globalDicts.stream().map(a -> a.first).collect(Collectors.toSet());
             Set<Integer> encodedStringCols = context.getEncodedStringCols();
+<<<<<<< HEAD
             Map<ColumnRefOperator, ColumnRefOperator> memo = Maps.newHashMap();
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
                 if (entry.getValue().isColumnRef()) {
@@ -222,10 +228,24 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                             return false;
                         } else {
                             memo.put(value, key);
+=======
+
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
+                if (!entry.getValue().equals(entry.getKey())) {
+                    ScalarOperator operator = entry.getValue();
+                    Set<Integer> usedCols = operator.getUsedColumns().getStream().collect(Collectors.toSet());
+                    usedCols.retainAll(encodedStringCols);
+                    if (!usedCols.isEmpty()) {
+                        Set<Integer> dictCols = usedCols.stream().map(e -> context.stringColumnIdToDictColumnIds.get(e))
+                                .collect(Collectors.toSet());
+                        if (!(globalDictIds.containsAll(dictCols) && couldApplyDictOptimize(operator, encodedStringCols))) {
+                            return false;
+>>>>>>> branch-2.5-mrs
                         }
                     }
                 }
             }
+<<<<<<< HEAD
 
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
                 if (!entry.getValue().equals(entry.getKey())) {
@@ -242,8 +262,11 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                     }
                 }
             }
+=======
+>>>>>>> branch-2.5-mrs
             return true;
         }
+
 
         // create a new dictionary column and assign the same property except for the type and column id
         // the input column maybe a dictionary column or a string column

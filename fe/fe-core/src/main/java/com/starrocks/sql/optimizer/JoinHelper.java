@@ -155,6 +155,7 @@ public class JoinHelper {
         // Cross join only support broadcast join
         return type.isCrossJoin() || JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN.equals(type) ||
                 (type.isInnerJoin() && equalOnPredicate.isEmpty()) || JoinOperator.HINT_BROADCAST.equals(hint);
+<<<<<<< HEAD
     }
 
     public static boolean validateJoinExpr(OptExpression joinExpr) {
@@ -167,5 +168,7 @@ public class JoinHelper {
         requiredCols.except(left);
         requiredCols.except(right);
         return requiredCols.isEmpty();
+=======
+>>>>>>> branch-2.5-mrs
     }
 }

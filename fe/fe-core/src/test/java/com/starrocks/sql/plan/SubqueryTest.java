@@ -1867,6 +1867,7 @@ public class SubqueryTest extends PlanTestBase {
         Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         assertContains(pair.first, "CTEAnchor(cteid=2)");
     }
+<<<<<<< HEAD
 
     @Test
     public void testHavingSubqueryNoGroupMode() {
@@ -1911,3 +1912,6 @@ public class SubqueryTest extends PlanTestBase {
         }
     }
 }
+=======
+}
+>>>>>>> branch-2.5-mrs

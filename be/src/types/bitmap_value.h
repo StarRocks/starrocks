@@ -62,7 +62,7 @@ public:
     // Construct an empty bitmap.
     BitmapValue();
 
-    BitmapValue(const BitmapValue& other);
+    BitmapValue(const BitmapValue& other, bool deep_copy = true);
     BitmapValue& operator=(const BitmapValue& other);
 
     BitmapValue(BitmapValue&& other) noexcept;

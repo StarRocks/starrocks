@@ -498,6 +498,7 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
         Preconditions.checkArgument(partitionColumns.size() == 1);
         Type partitionType = partitionColumns.get(0).getType();
         List<Map.Entry<Long, Range<PartitionKey>>> candidatePartitionList = Lists.newArrayList();
+<<<<<<< HEAD
 
         if (partitionType.isDateType()) {
             LocalDateTime currentDateTime = LocalDateTime.now();
@@ -522,6 +523,32 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
 
         candidatePartitionList.sort(Comparator.comparing(o -> o.getValue().upperEndpoint()));
 
+=======
+
+        if (partitionType.isDateType()) {
+            LocalDateTime currentDateTime = LocalDateTime.now();
+            PartitionValue currentPartitionValue = new PartitionValue(currentDateTime.format(DateUtils.DATE_FORMATTER_UNIX));
+            PartitionKey currentPartitionKey = PartitionKey.createPartitionKey(
+                    ImmutableList.of(currentPartitionValue), partitionColumns);
+
+
+            Map<Long, Range<PartitionKey>> idToRange = rangePartitionInfo.getIdToRange(false);
+            for (Map.Entry<Long, Range<PartitionKey>> partitionRange : idToRange.entrySet()) {
+                PartitionKey lowerPartitionKey = partitionRange.getValue().lowerEndpoint();
+
+                if (lowerPartitionKey.compareTo(currentPartitionKey) <= 0) {
+                    candidatePartitionList.add(partitionRange);
+                }
+            }
+        } else if (partitionType.isNumericType()) {
+            candidatePartitionList = new ArrayList<>(rangePartitionInfo.getIdToRange(false).entrySet());
+        } else {
+            throw new AnalysisException("Partition ttl does not support type:" + partitionType);
+        }
+
+        candidatePartitionList.sort(Comparator.comparing(o -> o.getValue().upperEndpoint()));
+
+>>>>>>> branch-2.5-mrs
         int allPartitionNumber = candidatePartitionList.size();
         if (allPartitionNumber <= ttlNumber) {
             return dropPartitionClauses;

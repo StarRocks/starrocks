@@ -60,6 +60,11 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
+<<<<<<< HEAD
+=======
+import org.apache.thrift.transport.TTransportException;
+import org.codehaus.jackson.map.ObjectMapper;
+>>>>>>> branch-2.5-mrs
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -155,7 +160,11 @@ public class TableQueryPlanAction extends RestBaseAction {
             // status code  should conforms to HTTP semantic
             resultMap.put("status", e.getCode().code());
             resultMap.put("exception", e.getMessage());
+        } catch (TTransportException e) {
+            resultMap.put("status", "-1");
+            resultMap.put("exception", e.getMessage());
         }
+
         ObjectMapper mapper = new ObjectMapper();
         try {
             String result = mapper.writeValueAsString(resultMap);
@@ -181,7 +190,7 @@ public class TableQueryPlanAction extends RestBaseAction {
      * @throws StarRocksHttpException
      */
     private void handleQuery(ConnectContext context, String requestDb, String requestTable, String sql,
-                             Map<String, Object> result) {
+                             Map<String, Object> result) throws TTransportException {
         StatementBase statementBase;
         ExecPlan execPlan;
         try {

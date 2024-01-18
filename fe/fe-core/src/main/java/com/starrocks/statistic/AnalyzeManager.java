@@ -426,20 +426,32 @@ public class AnalyzeManager implements Writable {
         }
         TxnCommitAttachment attachment = transactionState.getTxnCommitAttachment();
         if (attachment instanceof RLTaskTxnCommitAttachment) {
+<<<<<<< HEAD
             BasicStatsMeta basicStatsMeta = null;
             if (!transactionState.getTableIdList().isEmpty()) {
                 basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
                         .get(transactionState.getTableIdList().get(0));
             }
+=======
+            BasicStatsMeta basicStatsMeta =
+                    GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
+                            .get(transactionState.getTableIdList().get(0));
+>>>>>>> branch-2.5-mrs
             if (basicStatsMeta != null) {
                 basicStatsMeta.increaseUpdateRows(((RLTaskTxnCommitAttachment) attachment).getLoadedRows());
             }
         } else if (attachment instanceof ManualLoadTxnCommitAttachment) {
+<<<<<<< HEAD
             BasicStatsMeta basicStatsMeta = null;
             if (!transactionState.getTableIdList().isEmpty()) {
                 basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
                         .get(transactionState.getTableIdList().get(0));
             }
+=======
+            BasicStatsMeta basicStatsMeta =
+                    GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
+                            .get(transactionState.getTableIdList().get(0));
+>>>>>>> branch-2.5-mrs
             if (basicStatsMeta != null) {
                 basicStatsMeta.increaseUpdateRows(((ManualLoadTxnCommitAttachment) attachment).getLoadedRows());
             }
@@ -455,11 +467,17 @@ public class AnalyzeManager implements Writable {
                     }
             );
         } else if (attachment instanceof InsertTxnCommitAttachment) {
+<<<<<<< HEAD
             BasicStatsMeta basicStatsMeta = null;
             if (!transactionState.getTableIdList().isEmpty()) {
                 basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
                         .get(transactionState.getTableIdList().get(0));
             }
+=======
+            BasicStatsMeta basicStatsMeta =
+                    GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
+                            .get(transactionState.getTableIdList().get(0));
+>>>>>>> branch-2.5-mrs
             if (basicStatsMeta != null) {
                 long loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
                 if (loadRows == 0) {

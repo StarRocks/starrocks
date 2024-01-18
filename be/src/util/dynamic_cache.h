@@ -300,6 +300,7 @@ public:
     }
 
     void try_evict(size_t target_capacity) {
+<<<<<<< HEAD
         std::vector<Entry*> entry_list;
         {
             std::lock_guard<std::mutex> lg(_lock);
@@ -317,6 +318,15 @@ public:
 
 private:
     bool _evict(size_t target_capacity, std::vector<Entry*>* entry_list) {
+=======
+        std::lock_guard<std::mutex> lg(_lock);
+        _evict(target_capacity);
+        return;
+    }
+
+private:
+    bool _evict(size_t target_capacity) {
+>>>>>>> branch-2.5-mrs
         auto itr = _list.begin();
         while (_size > target_capacity && itr != _list.end()) {
             Entry* entry = (*itr);
@@ -336,6 +346,7 @@ private:
         return _size <= _capacity;
     }
 
+<<<<<<< HEAD
     bool _evict() {
         std::vector<Entry*> entry_list;
         bool ret = _evict(_capacity, &entry_list);
@@ -344,6 +355,9 @@ private:
         }
         return ret;
     }
+=======
+    bool _evict() { return _evict(_capacity); }
+>>>>>>> branch-2.5-mrs
 
     mutable std::mutex _lock;
     List _list;

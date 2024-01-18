@@ -17,8 +17,11 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.MaxLiteral;
+<<<<<<< HEAD
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
+=======
+>>>>>>> branch-2.5-mrs
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
@@ -28,8 +31,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
+<<<<<<< HEAD
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
+=======
+>>>>>>> branch-2.5-mrs
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
@@ -65,7 +71,10 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
+<<<<<<< HEAD
 import java.util.HashMap;
+=======
+>>>>>>> branch-2.5-mrs
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -95,6 +104,7 @@ public class AnalyzerUtils {
         return null;
     }
 
+<<<<<<< HEAD
     public static SlotRef getSlotRefFromCast(Expr expr) {
         if (expr instanceof CastExpr) {
             CastExpr castExpr = (CastExpr) expr;
@@ -116,6 +126,8 @@ public class AnalyzerUtils {
         return null;
     }
 
+=======
+>>>>>>> branch-2.5-mrs
     public static void verifyNoAggregateFunctions(Expr expression, String clause) {
         List<FunctionCallExpr> functions = Lists.newArrayList();
         expression.collectAll((Predicate<Expr>) arg -> arg instanceof FunctionCallExpr &&
@@ -428,6 +440,7 @@ public class AnalyzerUtils {
         return tables;
     }
 
+<<<<<<< HEAD
     public static boolean isOnlyHasOlapTables(StatementBase statementBase) {
         Map<TableName, Table> nonOlapTables = Maps.newHashMap();
         new AnalyzerUtils.NonOlapTableCollector(nonOlapTables).visit(statementBase);
@@ -438,6 +451,8 @@ public class AnalyzerUtils {
         new AnalyzerUtils.OlapTableCollector(olapTables).visit(statementBase);
     }
 
+=======
+>>>>>>> branch-2.5-mrs
     private static class ConnectorTableAndViewCollector extends TableAndViewCollector {
         public ConnectorTableAndViewCollector(Map<TableName, Table> dbs) {
             super(dbs);
@@ -642,6 +657,7 @@ public class AnalyzerUtils {
         public Void visitTable(TableRelation node, Void context) {
             String tblName = node.getTable() != null ? node.getTable().getName() : node.getName().getTbl();
             tableRelations.put(tblName, node);
+<<<<<<< HEAD
             return null;
         }
     }
@@ -673,6 +689,8 @@ public class AnalyzerUtils {
         @Override
         public Void visitTable(TableRelation node, Void context) {
             tableRelations.add(node);
+=======
+>>>>>>> branch-2.5-mrs
             return null;
         }
     }

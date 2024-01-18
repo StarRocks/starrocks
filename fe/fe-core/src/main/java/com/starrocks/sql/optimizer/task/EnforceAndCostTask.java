@@ -44,6 +44,10 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+>>>>>>> branch-2.5-mrs
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

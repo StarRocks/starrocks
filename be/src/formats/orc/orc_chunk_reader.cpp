@@ -1219,4 +1219,68 @@ bool OrcChunkReader::is_implicit_castable(TypeDescriptor& starrocks_type, const 
     return false;
 }
 
+<<<<<<< HEAD
+=======
+void ORCHdfsFileStream::read(void* buf, uint64_t length, uint64_t offset) {
+    if (canUseCacheBuffer(offset, length)) {
+        size_t idx = offset - _cache_offset;
+        memcpy(buf, _cache_buffer.data() + idx, length);
+    } else {
+        doRead(buf, length, offset, false);
+    }
+}
+
+const std::string& ORCHdfsFileStream::getName() const {
+    return _file->filename();
+}
+
+void ORCHdfsFileStream::doRead(void* buf, uint64_t length, uint64_t offset, bool direct) {
+    if (buf == nullptr) {
+        throw orc::ParseError("Buffer is null");
+    }
+    Status status;
+    if (direct || !_buffer_stream_enabled) {
+        status = _file->read_at_fully(offset, buf, length);
+    } else {
+        const uint8_t* ptr = nullptr;
+        size_t nbytes = length;
+        status = _buffer_stream.get_bytes(&ptr, offset, &nbytes, false);
+        DCHECK_EQ(nbytes, length);
+        if (status.ok()) {
+            ::memcpy(buf, ptr, length);
+        }
+    }
+    if (!status.ok()) {
+        auto msg = strings::Substitute("Failed to read $0: $1", _file->filename(), status.to_string());
+        throw orc::ParseError(msg);
+    }
+}
+
+void ORCHdfsFileStream::clearIORanges() {
+    _buffer_stream_enabled = false;
+    _buffer_stream.release();
+}
+
+void ORCHdfsFileStream::setIORanges(std::vector<orc::InputStream::IORange>& io_ranges) {
+    _buffer_stream_enabled = true;
+    std::vector<SharedBufferedInputStream::IORange> bs_io_ranges;
+    bs_io_ranges.reserve(io_ranges.size());
+    for (const auto& r : io_ranges) {
+        bs_io_ranges.emplace_back(SharedBufferedInputStream::IORange{.offset = static_cast<int64_t>(r.offset),
+                                                                     .size = static_cast<int64_t>(r.size)});
+    }
+    Status st = _buffer_stream.set_io_ranges(bs_io_ranges);
+    if (!st.ok()) {
+        auto msg = strings::Substitute("Failed to setIORanges $0: $1", _file->filename(), st.to_string());
+        throw orc::ParseError(msg);
+    }
+}
+
+bool OrcChunkReader::is_implicit_castable(TypeDescriptor& starrocks_type, const TypeDescriptor& orc_type) {
+    if (starrocks_type.is_decimal_type() && orc_type.is_decimal_type()) {
+        return true;
+    }
+    return false;
+}
+>>>>>>> branch-2.5-mrs
 } // namespace starrocks::vectorized

@@ -901,6 +901,7 @@ public class StmtExecutor {
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
         GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
+<<<<<<< HEAD
         int timeout = context.getSessionVariable().getQueryTimeoutS();
         try {
             Future<?> future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
@@ -923,6 +924,19 @@ public class StmtExecutor {
             GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         } finally {
             context.getSessionVariable().setQueryTimeoutS(timeout);
+=======
+        if (analyzeStmt.isAsync()) {
+            try {
+                GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
+                        .submit(() -> executeAnalyze(true, analyzeStmt, analyzeStatus, db, table));
+            } catch (RejectedExecutionException e) {
+                analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+                analyzeStatus.setReason("The statistics tasks running concurrently exceed the upper limit");
+                GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            }
+        } else {
+            executeAnalyze(false, analyzeStmt, analyzeStatus, db, table);
+>>>>>>> branch-2.5-mrs
         }
 
         ShowResultSet resultSet = analyzeStatus.toShowResult();
@@ -935,7 +949,11 @@ public class StmtExecutor {
         sendShowResult(resultSet);
     }
 
+<<<<<<< HEAD
     private void executeAnalyze(AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
+=======
+    private void executeAnalyze(boolean isAsync, AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus, Database db, Table table) {
+>>>>>>> branch-2.5-mrs
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         // from current session, may execute analyze stmt
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
@@ -944,6 +962,15 @@ public class StmtExecutor {
         executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
     }
 
+<<<<<<< HEAD
+=======
+        if (isAsync) {
+            statsConnectCtx.setThreadLocalInfo();
+        }
+        executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
+    }
+
+>>>>>>> branch-2.5-mrs
     private void executeAnalyze(ConnectContext statsConnectCtx, AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus,
                                 Database db, Table table) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
@@ -1019,6 +1046,7 @@ public class StmtExecutor {
         ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
     }
 
+<<<<<<< HEAD
     private void handleExecScriptStmt() throws IOException, UserException {
         ShowResultSet resultSet = ExecuteScriptExecutor.execute((ExecuteScriptStmt) parsedStmt, context);
         if (isProxy) {
@@ -1027,6 +1055,10 @@ public class StmtExecutor {
             return;
         }
         sendShowResult(resultSet);
+=======
+    private void handleExecScriptStmt() throws PrivilegeException, UserException {
+        ExecuteScriptExecutor.execute((ExecuteScriptStmt) parsedStmt, context);
+>>>>>>> branch-2.5-mrs
     }
 
     private void handleSetRole() throws PrivilegeException, UserException {
@@ -1556,6 +1588,7 @@ public class StmtExecutor {
 
             if (loadedRows == 0 && filteredRows == 0 && (stmt instanceof DeleteStmt || stmt instanceof InsertStmt
                     || stmt instanceof UpdateStmt)) {
+<<<<<<< HEAD
                 // when the target table is not ExternalOlapTable or OlapTable
                 // if there is no data to load, the result of the insert statement is success
                 // otherwise, the result of the insert statement is failed
@@ -1569,6 +1602,23 @@ public class StmtExecutor {
                     context.getState().setOk();
                     insertError = true;
                     return;
+=======
+                if (targetTable instanceof ExternalOlapTable) {
+                    ExternalOlapTable externalTable = (ExternalOlapTable) targetTable;
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortRemoteTransaction(
+                            externalTable.getSourceTableDbId(), transactionId,
+                            externalTable.getSourceTableHost(),
+                            externalTable.getSourceTablePort(),
+                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG);
+                } else if (targetTable instanceof SchemaTable) {
+                    // schema table does not need txn
+                } else {
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
+                            database.getId(),
+                            transactionId,
+                            TransactionCommitFailedException.NO_DATA_TO_LOAD_MSG
+                    );
+>>>>>>> branch-2.5-mrs
                 }
             }
 
@@ -1584,6 +1634,10 @@ public class StmtExecutor {
                 } else {
                     txnStatus = TransactionStatus.COMMITTED;
                 }
+<<<<<<< HEAD
+=======
+                // TODO: wait remote txn finished
+>>>>>>> branch-2.5-mrs
             } else if (targetTable instanceof SchemaTable) {
                 // schema table does not need txn
                 txnStatus = TransactionStatus.VISIBLE;
@@ -1634,10 +1688,14 @@ public class StmtExecutor {
                     GlobalStateMgr.getCurrentGlobalTransactionMgr().abortTransaction(
                             database.getId(), transactionId,
                             errMsg,
+<<<<<<< HEAD
                             // DML may fail before coord is initialized, such as dataSink.complete()
                             // may throw exception if disk usage exceeds the limit, so need to check
                             // if coord is null
                             coord == null ? Lists.newArrayList() : TabletFailInfo.fromThrift(coord.getFailInfos()));
+=======
+                            TabletFailInfo.fromThrift(coord.getFailInfos()));
+>>>>>>> branch-2.5-mrs
                 }
             } catch (Exception abortTxnException) {
                 // just print a log if abort txn failed. This failure do not need to pass to user.

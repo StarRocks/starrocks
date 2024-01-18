@@ -54,6 +54,7 @@ public class UniqueConstraint {
         return uniqueColumns;
     }
 
+<<<<<<< HEAD
     // foreignKeys must be in lower case for case-insensitive
     public boolean isMatch(Table parentTable, Set<String> foreignKeys) {
         if (catalogName != null && dbName != null && tableName != null) {
@@ -66,6 +67,10 @@ public class UniqueConstraint {
                 return false;
             }
         }
+=======
+    // foreignKeys must be in lower case for case insensitive
+    public boolean isMatch(Set<String> foreignKeys) {
+>>>>>>> branch-2.5-mrs
         Set<String> uniqueColumnSet = uniqueColumns.stream().map(String::toLowerCase).collect(Collectors.toSet());
         return uniqueColumnSet.equals(foreignKeys);
     }

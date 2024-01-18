@@ -29,16 +29,28 @@ public class TableScanDesc {
     private final int index;
     private final LogicalScanOperator scanOperator;
     // join type of LogicalJoinOperator above scan operator
+<<<<<<< HEAD
     private final OptExpression joinOptExpression;
     private final boolean isLeft;
 
     public TableScanDesc(Table table, int index,
                          LogicalScanOperator scanOperator, OptExpression joinOptExpression,
+=======
+    private final JoinOperator parentJoinType;
+    private final boolean isLeft;
+
+    public TableScanDesc(Table table, int index,
+                         LogicalScanOperator scanOperator, JoinOperator parentJoinType,
+>>>>>>> branch-2.5-mrs
                          boolean isLeft) {
         this.table = table;
         this.index = index;
         this.scanOperator = scanOperator;
+<<<<<<< HEAD
         this.joinOptExpression = joinOptExpression;
+=======
+        this.parentJoinType = parentJoinType;
+>>>>>>> branch-2.5-mrs
         this.isLeft = isLeft;
     }
 
@@ -62,6 +74,7 @@ public class TableScanDesc {
         return scanOperator;
     }
 
+<<<<<<< HEAD
     public JoinOperator getJoinType() {
         if (joinOptExpression == null) {
             return null;
@@ -70,6 +83,8 @@ public class TableScanDesc {
         return joinOperator.getJoinType();
     }
 
+=======
+>>>>>>> branch-2.5-mrs
     public boolean isMatch(TableScanDesc other) {
         boolean matched =  table.equals(other.table);
         if (!matched) {
@@ -79,6 +94,7 @@ public class TableScanDesc {
         // for
         // query: a left join c
         // mv: a inner join b left join c
+<<<<<<< HEAD
         JoinOperator joinOperator = getJoinType();
         JoinOperator otherJoinOperator = other.getJoinType();
         if (joinOperator == null && otherJoinOperator == null) {
@@ -89,14 +105,24 @@ public class TableScanDesc {
         if (joinOperator.isInnerJoin()) {
             return otherJoinOperator.isInnerJoin()
                     || (otherJoinOperator.isLeftOuterJoin() && other.isLeft);
+=======
+        if (parentJoinType.isInnerJoin()) {
+            return other.parentJoinType.isInnerJoin() || (other.parentJoinType.isLeftOuterJoin() && other.isLeft);
+>>>>>>> branch-2.5-mrs
         }
 
         // for
         // query: a inner join c
         // mv: a left outer join b inner join c
+<<<<<<< HEAD
         if (joinOperator.isLeftOuterJoin()) {
             return (isLeft && otherJoinOperator.isInnerJoin())
                     || (otherJoinOperator.isLeftOuterJoin() && isLeft == other.isLeft);
+=======
+        if (parentJoinType.isLeftOuterJoin()) {
+            return (isLeft && other.parentJoinType.isInnerJoin())
+                    || (other.parentJoinType.isLeftOuterJoin() && isLeft == other.isLeft);
+>>>>>>> branch-2.5-mrs
         }
 
         return false;

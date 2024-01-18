@@ -114,6 +114,7 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "SELECT dt, count(DISTINCT id) from test_limit_1 where " +
                 "dt >= '2022-07-01' and dt <= '2022-10-01' group by dt limit 10");
     }
+<<<<<<< HEAD
 
     @Test
     public void testNullableTestCase1() throws Exception {
@@ -203,4 +204,6 @@ public class MaterializedViewManualTest extends MaterializedViewTestBase {
         starRocksAssert.dropMaterializedView("test_partition_expr_mv1");
         starRocksAssert.dropTable("test_partition_expr_tbl1");
     }
+=======
+>>>>>>> branch-2.5-mrs
 }

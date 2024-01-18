@@ -30,6 +30,7 @@ import org.apache.thrift.server.ServerContext;
 import org.apache.thrift.server.TServerEventHandler;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
+import org.apache.thrift.transport.layered.TFramedTransport;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -59,13 +60,40 @@ public class ThriftServerEventProcessor implements TServerEventHandler {
         TTransport transport = input.getTransport();
         Preconditions.checkState(transport instanceof TSocket);
 
+<<<<<<< HEAD
         TSocket tSocket = (TSocket) transport;
+=======
+        switch (thriftServer.getType()) {
+            case THREADED:
+                // class org.apache.thrift.transport.TFramedTransport
+                Preconditions.checkState(transport instanceof TFramedTransport);
+                TFramedTransport framedTransport = (TFramedTransport) transport;
+                // NOTE: we need patch code in TNonblockingServer, we don't use for now.
+                //  see https://issues.apache.org/jira/browse/THRIFT-1053
+                break;
+            case SIMPLE:
+            case THREAD_POOL:
+                // org.apache.thrift.transport.TSocket
+                Preconditions.checkState(transport instanceof TSocket);
+                tSocket = (TSocket) transport;
+                break;
+        }
+        if (tSocket == null) {
+            LOG.warn("fail to get client socket. server type: {}", thriftServer.getType());
+            return null;
+        }
+>>>>>>> branch-2.5-mrs
         SocketAddress socketAddress = tSocket.getSocket().getRemoteSocketAddress();
         InetSocketAddress inetSocketAddress = null;
         if (socketAddress instanceof InetSocketAddress) {
             inetSocketAddress = (InetSocketAddress) socketAddress;
         } else {
+<<<<<<< HEAD
             LOG.warn("fail to get client socket address");
+=======
+            LOG.warn("fail to get client socket address. server type: {}",
+                    thriftServer.getType());
+>>>>>>> branch-2.5-mrs
             return null;
         }
         TNetworkAddress clientAddress = new TNetworkAddress(

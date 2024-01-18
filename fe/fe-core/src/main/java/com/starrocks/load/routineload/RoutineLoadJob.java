@@ -501,10 +501,13 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         return progress;
     }
 
+<<<<<<< HEAD
     public RoutineLoadProgress getTimestampProgress() {
         return timestampProgress;
     }
 
+=======
+>>>>>>> branch-2.5-mrs
     public double getMaxFilterRatio() {
         return maxFilterRatio;
     }

@@ -93,6 +93,21 @@ under the License.
         </profile>
     </profiles>
 
+    <repositories>
+        <repository>
+            <id>huaweicloudsdk</id>
+            <url>https://mirrors.huaweicloud.com/repository/maven/huaweicloudsdk/</url>
+            <releases><enabled>true</enabled></releases>
+            <snapshots><enabled>true</enabled></snapshots>
+        </repository>
+
+        <repository>
+            <id>central</id>
+            <name>Maven Central</name>
+            <url>https://repo1.maven.org/maven2/</url>
+        </repository>
+    </repositories>
+
     <dependencies>
         <dependency>
             <groupId>com.starrocks</groupId>
@@ -280,6 +295,12 @@ under the License.
             <version>0.5.0</version>
         </dependency>
 
+        <dependency>
+            <groupId>org.apache.parquet</groupId>
+            <artifactId>parquet-hive-storage-handler</artifactId>
+            <version>1.8.3</version>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/org.apache.thrift/libthrift -->
         <dependency>
             <groupId>org.apache.thrift</groupId>
@@ -463,6 +484,12 @@ under the License.
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-sql_2.12</artifactId>
             <scope>provided</scope>
+            <exclusions>
+                <exclusion>
+                    <artifactId>antlr4-runtime</artifactId>
+                    <groupId>org.antlr</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.fasterxml.uuid/java-uuid-generator -->
@@ -471,10 +498,68 @@ under the License.
             <artifactId>java-uuid-generator</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/com.facebook.presto.hive/hive-apache -->
         <dependency>
-            <groupId>io.trino.hive</groupId>
-            <artifactId>hive-apache</artifactId>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-jdbc</artifactId>
+            <version>3.1.0-hw-ei-312005</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>log4j-slf4j-impl</artifactId>
+                    <groupId>org.apache.logging.log4j</groupId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.commons</groupId>
+                    <artifactId>commons-pool2</artifactId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>libthrift</artifactId>
+                    <groupId>org.apache.thrift</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>xalan</artifactId>
+                    <groupId>xalan</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-common</artifactId>
+            <version>3.1.0-hw-ei-312005</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>log4j-slf4j-impl</artifactId>
+                    <groupId>org.apache.logging.log4j</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>annotations</artifactId>
+                    <groupId>org.jetbrains</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>xalan</artifactId>
+                    <groupId>xalan</groupId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.hive</groupId>
+            <artifactId>hive-shims</artifactId>
+            <version>3.1.0-hw-ei-312005</version>
+            <exclusions>
+                <exclusion>
+                    <artifactId>log4j-slf4j-impl</artifactId>
+                    <groupId>org.apache.logging.log4j</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>libthrift</artifactId>
+                    <groupId>org.apache.thrift</groupId>
+                </exclusion>
+                <exclusion>
+                    <artifactId>xalan</artifactId>
+                    <groupId>xalan</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.aliyun.datalake/metastore-client-hive3 -->
@@ -513,6 +598,10 @@ under the License.
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
+<<<<<<< HEAD
+=======
+            <version>3.1.0</version>
+>>>>>>> branch-2.5-mrs
             <exclusions>
                 <exclusion>
                     <artifactId>zookeeper</artifactId>
@@ -529,6 +618,12 @@ under the License.
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-client</artifactId>
+            <exclusions>
+                <exclusion>
+                    <artifactId>commons-compress</artifactId>
+                    <groupId>org.apache.commons</groupId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aws -->

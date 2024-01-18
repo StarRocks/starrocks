@@ -98,11 +98,14 @@ CONF_Int32(push_worker_count_high_priority, "3");
 
 // The count of thread to publish version per transaction
 CONF_mInt32(transaction_publish_version_worker_count, "0");
+<<<<<<< HEAD
 
 CONF_mInt32(get_pindex_worker_count, "0");
 // The count of thread to apply rowset in primary key table
 // 0 means apply worker count is equal to cpu core count
 CONF_mInt32(transaction_apply_worker_count, "0");
+=======
+>>>>>>> branch-2.5-mrs
 
 // The count of thread to clear transaction task.
 CONF_Int32(clear_transaction_task_worker_count, "1");
@@ -981,13 +984,19 @@ CONF_String(rocksdb_cf_options_string, "block_based_table_factory={block_cache={
 
 CONF_mInt64(txn_info_history_size, "20000");
 CONF_mInt64(file_write_history_size, "10000");
+<<<<<<< HEAD
 CONF_mInt64(wait_apply_time, "6000")
 
         CONF_mInt32(update_cache_evict_internal_sec, "11");
+=======
+
+CONF_mInt32(update_cache_evict_internal_sec, "11");
+>>>>>>> branch-2.5-mrs
 CONF_mBool(enable_auto_evict_update_cache, "true");
 
 CONF_Bool(enable_preload_column_mode_update_cache, "true");
 
+<<<<<<< HEAD
 CONF_mInt64(load_tablet_timeout_seconds, "60");
 
 CONF_mBool(enable_pk_value_column_zonemap, "true");
@@ -1000,6 +1009,11 @@ CONF_mInt32(finish_publish_version_internal, "100");
 CONF_mBool(enable_stream_load_verbose_log, "false");
 
 CONF_mInt32(get_txn_status_internal_sec, "30");
+=======
+CONF_mInt64(load_tablet_timeout_seconds, "30");
+
+CONF_mBool(enable_pk_value_column_zonemap, "true");
+>>>>>>> branch-2.5-mrs
 
 CONF_mBool(dump_metrics_with_bvar, "true");
 } // namespace starrocks::config

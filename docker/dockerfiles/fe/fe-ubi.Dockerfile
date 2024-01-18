@@ -28,6 +28,7 @@ FROM registry.access.redhat.com/ubi8/ubi:8.7
 ARG STARROCKS_ROOT=/opt/starrocks
 
 RUN yum install -y java-1.8.0-openjdk-devel tzdata openssl curl vim ca-certificates fontconfig gzip tar less hostname procps-ng lsof && \
+<<<<<<< HEAD
     rpm -ivh https://repo.mysql.com/mysql80-community-release-el8-7.noarch.rpm && \
     yum -y install mysql-community-client --nogpgcheck && \
     yum remove -y mysql80-community-release
@@ -56,3 +57,20 @@ RUN mkdir -p /opt/starrocks/fe/meta
 
 # run as root by default
 USER root
+=======
+    rpm -ivh https://repo.mysql.com/mysql57-community-release-el7.rpm && \
+    yum -y install mysql-community-client --nogpgcheck && \
+    yum remove -y mysql57-community-release-el7
+ENV JAVA_HOME=/usr/lib/jvm/java-openjdk
+
+WORKDIR $STARROCKS_ROOT
+
+# Copy all artifacts to the runtime container image
+COPY --from=artifacts /release/fe_artifacts/ $STARROCKS_ROOT/
+
+# Copy fe k8s scripts to the runtime container image
+COPY docker/dockerfiles/fe/*.sh $STARROCKS_ROOT/
+
+# Create directory for FE metadata
+RUN touch /.dockerenv && mkdir -p /opt/starrocks/fe/meta
+>>>>>>> branch-2.5-mrs

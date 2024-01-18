@@ -81,7 +81,11 @@ public class TabletInvertedIndex {
     private final Map<Long, Long> replicaToTabletMap = Maps.newHashMap();
 
     // tablet id -> backend set
+<<<<<<< HEAD
     private final Map<Long, Set<Long>> forceDeleteTablets = Maps.newHashMap();
+=======
+    private Map<Long, Set<Long>> forceDeleteTablets = Maps.newHashMap();
+>>>>>>> branch-2.5-mrs
 
     // tablet id -> (backend id -> replica)
     private final Table<Long, Long, Replica> replicaMetaTable = HashBasedTable.create();
@@ -141,6 +145,7 @@ public class TabletInvertedIndex {
             LOG.debug("begin to do tablet diff with backend[{}]. num: {}", backendId, backendTablets.size());
             // backingReplicaMetaTable.row(backendId) won't return null
             Map<Long, Replica> replicaMetaWithBackend = backingReplicaMetaTable.row(backendId);
+<<<<<<< HEAD
             // traverse replicas in meta with this backend
             for (Map.Entry<Long, Replica> entry : replicaMetaWithBackend.entrySet()) {
                 long tabletId = entry.getKey();
@@ -150,6 +155,59 @@ public class TabletInvertedIndex {
                 if (tabletMeta.isLakeTablet()) {
                     continue;
                 }
+=======
+            if (replicaMetaWithBackend != null) {
+                // traverse replicas in meta with this backend
+                for (Map.Entry<Long, Replica> entry : replicaMetaWithBackend.entrySet()) {
+                    long tabletId = entry.getKey();
+                    Preconditions.checkState(tabletMetaMap.containsKey(tabletId));
+                    TabletMeta tabletMeta = tabletMetaMap.get(tabletId);
+
+                    if (tabletMeta.isLakeTablet()) {
+                        continue;
+                    }
+
+                    if (backendTablets.containsKey(tabletId)) {
+                        TTablet backendTablet = backendTablets.get(tabletId);
+                        Replica replica = entry.getValue();
+                        for (TTabletInfo backendTabletInfo : backendTablet.getTablet_infos()) {
+                            if (backendTabletInfo.isSetIs_error_state()) {
+                                replica.setIsErrorState(backendTabletInfo.is_error_state);
+                            }
+                            if (tabletMeta.containsSchemaHash(backendTabletInfo.getSchema_hash())) {
+                                foundTabletsWithValidSchema.add(tabletId);
+                                // 1. (intersection)
+                                if (needSync(replica, backendTabletInfo)) {
+                                    // need sync
+                                    tabletSyncMap.put(tabletMeta.getDbId(), tabletId);
+                                }
+
+                                // check and set path,
+                                // path info of replica is only saved in Leader FE
+                                if (backendTabletInfo.isSetPath_hash() &&
+                                        replica.getPathHash() != backendTabletInfo.getPath_hash()) {
+                                    replica.setPathHash(backendTabletInfo.getPath_hash());
+                                }
+
+                                if (backendTabletInfo.isSetSchema_hash() && replica.getState() == ReplicaState.NORMAL
+                                        && replica.getSchemaHash() != backendTabletInfo.getSchema_hash()) {
+                                    // update the schema hash only when replica is normal
+                                    replica.setSchemaHash(backendTabletInfo.getSchema_hash());
+                                }
+
+                                if (needRecover(replica, tabletMeta.getOldSchemaHash(), backendTabletInfo)) {
+                                    LOG.warn("replica {} of tablet {} on backend {} need recovery. "
+                                                    + "replica in FE: {}, report version {}, report schema hash: {},"
+                                                    + " is bad: {}, is version missing: {}",
+                                            replica.getId(), tabletId, backendId, replica,
+                                            backendTabletInfo.getVersion(),
+                                            backendTabletInfo.getSchema_hash(),
+                                            backendTabletInfo.isSetUsed() ? backendTabletInfo.isUsed() : "unknown",
+                                            backendTabletInfo.isSetVersion_miss() ? backendTabletInfo.isVersion_miss() :
+                                                    "unset");
+                                    tabletRecoveryMap.put(tabletMeta.getDbId(), tabletId);
+                                }
+>>>>>>> branch-2.5-mrs
 
                 if (backendTablets.containsKey(tabletId)) {
                     TTablet backendTablet = backendTablets.get(tabletId);
@@ -602,6 +660,7 @@ public class TabletInvertedIndex {
         } finally {
             readUnlock();
         }
+<<<<<<< HEAD
     }
 
     public void markTabletForceDelete(long tabletId, long backendId) {
@@ -619,12 +678,35 @@ public class TabletInvertedIndex {
         }
     }
 
+=======
+    }
+
+    public void markTabletForceDelete(long tabletId, long backendId) {
+        writeLock();
+        try {
+            if (forceDeleteTablets.containsKey(tabletId)) {
+                forceDeleteTablets.get(tabletId).add(tabletId);
+            } else {
+                Set<Long> backendIds = Sets.newHashSet();
+                backendIds.add(tabletId);
+                forceDeleteTablets.put(tabletId, backendIds);
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+>>>>>>> branch-2.5-mrs
     public void markTabletForceDelete(long tabletId, Set<Long> backendIds) {
         writeLock();
         forceDeleteTablets.put(tabletId, backendIds);
         writeUnlock();
     }
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> branch-2.5-mrs
     public void eraseTabletForceDelete(long tabletId, long backendId) {
         writeLock();
         try {

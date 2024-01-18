@@ -80,7 +80,11 @@ public class Config extends ConfigBase {
     @ConfField
     public static String sys_log_roll_mode = "SIZE-MB-1024";
     /**
+<<<<<<< HEAD
      * Log to file by default. set to `true` if you want to log to console
+=======
+     * Log to file by default. set to `true` if want to log to console
+>>>>>>> branch-2.5-mrs
      */
     @ConfField
     public static boolean sys_log_to_console = false;
@@ -851,8 +855,13 @@ public class Config extends ConfigBase {
      * Currently, it only limits the load task of broker load, pending and loading phases.
      * It should be less than 'max_running_txn_num_per_db'
      */
+<<<<<<< HEAD
     @ConfField(mutable = true, aliases = {"async_load_task_pool_size"})
     public static int max_broker_load_job_concurrency = 5;
+=======
+    @ConfField
+    public static int async_load_task_pool_size = 2;
+>>>>>>> branch-2.5-mrs
 
     /**
      * Same meaning as *tablet_create_timeout_second*, but used when delete a tablet.
@@ -931,6 +940,7 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int task_runs_concurrency = 4;
+<<<<<<< HEAD
 
     /**
      * max num of thread to handle task runs in task runs executor thread-pool.
@@ -938,6 +948,8 @@ public class Config extends ConfigBase {
     @ConfField
     public static int max_task_runs_threads_num = 512;
 
+=======
+>>>>>>> branch-2.5-mrs
     /**
      * Default timeout of export jobs.
      */
@@ -1155,6 +1167,7 @@ public class Config extends ConfigBase {
      * balance behavior.
      */
     @ConfField(mutable = true)
+<<<<<<< HEAD
     public static boolean tablet_sched_disable_colocate_overall_balance = true;
 
     @ConfField(mutable = true)
@@ -1193,6 +1206,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long tablet_sched_be_down_tolerate_time_s = 900; // 15 min
+=======
+    public static boolean tablet_sched_disable_colocate_overall_balance = false;
+>>>>>>> branch-2.5-mrs
 
     /**
      * If BE is down beyond this time, tablets on that BE of colocate table will be migrated to other available BEs
@@ -1215,6 +1231,7 @@ public class Config extends ConfigBase {
     public static long tablet_sched_storage_cooldown_second = -1L; // won't cool down by default
 
     /**
+<<<<<<< HEAD
      * If the tablet in scheduler queue has not been scheduled for tablet_sched_max_not_being_scheduled_interval_ms,
      * its priority will upgrade.
      * default is 15min
@@ -1223,6 +1240,8 @@ public class Config extends ConfigBase {
     public static long tablet_sched_max_not_being_scheduled_interval_ms = 15 * 60 * 1000;
 
     /**
+=======
+>>>>>>> branch-2.5-mrs
      * FOR DiskAndTabletLoadBalancer:
      * upper limit of the difference in disk usage of all backends, exceeding this threshold will cause
      * disk balance
@@ -1769,11 +1788,16 @@ public class Config extends ConfigBase {
     /**
      * Enable background refresh all external tables all partitions metadata on internal catalog.
      */
+<<<<<<< HEAD
     @ConfField(mutable = true)
+=======
+    @ConfField
+>>>>>>> branch-2.5-mrs
     public static boolean enable_background_refresh_connector_metadata = false;
 
     /**
      * Enable background refresh all external tables all partitions metadata based on resource in internal catalog.
+<<<<<<< HEAD
      */
     @ConfField
     public static boolean enable_background_refresh_resource_table_metadata = false;
@@ -1785,6 +1809,19 @@ public class Config extends ConfigBase {
     public static int background_refresh_file_metadata_concurrency = 4;
 
     /**
+=======
+     */
+    @ConfField
+    public static boolean enable_background_refresh_resource_table_metadata = false;
+
+    /**
+     * Number of threads to refresh remote file's metadata concurrency.
+     */
+    @ConfField
+    public static int background_refresh_file_metadata_concurrency = 4;
+
+    /**
+>>>>>>> branch-2.5-mrs
      * Background refresh external table metadata interval in milliseconds.
      */
     @ConfField(mutable = true)
@@ -2123,6 +2160,7 @@ public class Config extends ConfigBase {
 
     @ConfField
     public static boolean enable_execute_script_on_frontend = true;
+<<<<<<< HEAD
 
     /**
      * If set to <= 0, means that no limitation.
@@ -2175,4 +2213,6 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;
+=======
+>>>>>>> branch-2.5-mrs
 }

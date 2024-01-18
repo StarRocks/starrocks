@@ -152,7 +152,12 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
     size_t segment_num = 0;
     auto keys_type = _tablet->keys_type();
     auto min_compaction_segment_num = std::max(
+<<<<<<< HEAD
             static_cast<int64_t>(2), std::min(config::min_cumulative_compaction_num_singleton_deltas, _level_multiple));
+=======
+            static_cast<int64_t>(2),
+            std::min(config::min_cumulative_compaction_num_singleton_deltas, config::size_tiered_level_multiple));
+>>>>>>> branch-2.5-mrs
     // make sure compact to one nonoverlapping segment
     if (force_base_compaction) {
         min_compaction_segment_num = 2;
@@ -244,7 +249,11 @@ Status SizeTieredCompactionPolicy::_pick_rowsets_to_size_tiered_compact(bool for
         } else if ((!force_base_compaction ||
                     (!transient_rowsets.empty() && transient_rowsets[0]->start_version() != 0)) &&
                    level_size > config::size_tiered_min_level_size && rowset_size < level_size &&
+<<<<<<< HEAD
                    level_size / rowset_size > (_level_multiple - 1)) {
+=======
+                   level_size / rowset_size > (level_multiple - 1)) {
+>>>>>>> branch-2.5-mrs
             if (!transient_rowsets.empty()) {
                 auto level = std::make_unique<SizeTieredLevel>(
                         transient_rowsets, segment_num, level_size, total_size,

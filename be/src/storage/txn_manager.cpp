@@ -357,6 +357,7 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
     int i = 0;
     for (auto& tablet : to_flush_tablet) {
         auto dir = tablet->data_dir();
+<<<<<<< HEAD
         auto st = token->submit_func([&pair_vec, &bthread_latch, dir, i]() {
             pair_vec[i].first = dir->get_meta()->flushWAL();
             bthread_latch.count_down();
@@ -365,6 +366,9 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
             pair_vec[i].first = st;
             bthread_latch.count_down();
         }
+=======
+        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flushWAL(); });
+>>>>>>> branch-2.5-mrs
         pair_vec[i].second = tablet->tablet_id();
         i++;
     }

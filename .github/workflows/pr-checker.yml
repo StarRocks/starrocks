@@ -4,8 +4,15 @@ on:
   pull_request_target:
     branches:
       - main
+<<<<<<< HEAD
       - 'branch-[0-9].[0-9]*'
 
+=======
+      - branch-2.3
+      - branch-2.4
+      - branch-2.5
+      - branch-3.0
+>>>>>>> branch-2.5-mrs
     types:
       - opened
       - reopened
@@ -26,6 +33,7 @@ permissions:
   statuses: write
 
 jobs:
+<<<<<<< HEAD
 
   sync-checker:
     runs-on: ubuntu-latest
@@ -62,6 +70,10 @@ jobs:
       PR_NUMBER: ${{ github.event.number }}
       REPO: ${{ github.repository }}
       BACKPORT_SOURCE_PR: ${{ needs.sync-checker.outputs.BACKPORT_SOURCE_PR }}
+=======
+  title-check:
+    runs-on: ubuntu-latest
+>>>>>>> branch-2.5-mrs
     steps:
       - uses: thehanimo/pr-title-checker@v1.3.5
         with:
@@ -69,6 +81,7 @@ jobs:
           pass_on_octokit_error: false
           configuration_path: ".github/pr-title-checker-config.json"
 
+<<<<<<< HEAD
       - name: update body
         if: always() && github.base_ref != 'main' && (github.event.action == 'opened' || github.event.action == 'reopened')
         env:
@@ -111,6 +124,9 @@ jobs:
           exit 1
 
   backport-check:
+=======
+  branch-info-check:
+>>>>>>> branch-2.5-mrs
     needs: title-check
     runs-on: ubuntu-latest
     if: >
@@ -179,6 +195,7 @@ jobs:
           echo "You must mark this checkbox - I have checked the version labels which the pr will be auto backported to target branch"
           exit 1
 
+<<<<<<< HEAD
   behavior-check:
     runs-on: ubuntu-latest
     if: >
@@ -242,11 +259,21 @@ jobs:
       startsWith(github.head_ref, 'mergify/') &&
       (contains(github.event.pull_request.title, 'cherry-pick') || 
       contains(github.event.pull_request.title, 'backport'))
+=======
+  automerge-check:
+    runs-on: ubuntu-latest
+    needs: branch-info-check
+    if: ${{ !failure() && (contains(github.event.pull_request.title, 'cherry-pick') || contains(github.event.pull_request.title, 'backport')) }}
+>>>>>>> branch-2.5-mrs
     steps:
       - name: add automerge label
         uses: actions-ecosystem/action-add-labels@v1
         with:
+<<<<<<< HEAD
           github_token: ${{ secrets.GITHUB_TOKEN }}
+=======
+          github_token: ${{ secrets.PAT }}
+>>>>>>> branch-2.5-mrs
           labels: automerge
 
       - name: automerge
@@ -254,4 +281,8 @@ jobs:
         with:
           token: ${{ secrets.PAT }}
           pull-request-number: ${{ github.event.pull_request.number }}
+<<<<<<< HEAD
           merge-method: squash
+=======
+          merge-method: rebase
+>>>>>>> branch-2.5-mrs

@@ -175,10 +175,14 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     }
 
     public boolean isZero() {
+<<<<<<< HEAD
         boolean isZero;
         if (isNull || value == null) {
             return false;
         }
+=======
+        boolean isZero = false;
+>>>>>>> branch-2.5-mrs
         if (type.isInt()) {
             Integer val = (Integer) value;
             isZero = (val.compareTo(0) == 0);

@@ -101,6 +101,22 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
                 selectedIndexId, selectedPartitionId, partitionNames, false, selectedTabletId, hintsTabletIds, false);
     }
 
+    public LogicalOlapScanOperator(
+            Table table,
+            Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+            Map<Column, ColumnRefOperator> columnMetaToColRefMap,
+            HashDistributionSpec hashDistributionSpec,
+            long limit,
+            ScalarOperator predicate,
+            long selectedIndexId,
+            List<Long> selectedPartitionId,
+            PartitionNames partitionNames,
+            List<Long> selectedTabletId,
+            List<Long> hintsTabletIds) {
+        this(table, colRefToColumnMetaMap, columnMetaToColRefMap, hashDistributionSpec, limit, predicate,
+                selectedIndexId, selectedPartitionId, partitionNames, false, selectedTabletId, hintsTabletIds);
+    }
+
     private LogicalOlapScanOperator(Builder builder) {
         super(OperatorType.LOGICAL_OLAP_SCAN, builder.table,
                 builder.colRefToColumnMetaMap, builder.columnMetaToColRefMap,
@@ -147,10 +163,13 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return (hintsTabletIds != null && !hintsTabletIds.isEmpty()) || hasHintsPartitionNames;
     }
 
+<<<<<<< HEAD
     public boolean isUsePkIndex() {
         return usePkIndex;
     }
 
+=======
+>>>>>>> branch-2.5-mrs
     public List<ScalarOperator> getPrunedPartitionPredicates() {
         return prunedPartitionPredicates;
     }

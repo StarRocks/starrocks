@@ -16,6 +16,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
+import com.starrocks.meta.LimitExceededException;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -316,7 +317,11 @@ public class TaskManager {
     public SubmitResult executeTaskAsync(Task task, ExecuteOption option) {
         return taskRunManager
                 .submitTaskRun(TaskRunBuilder.newBuilder(task).properties(option.getTaskRunProperties()).type(option).
+<<<<<<< HEAD
                         build(), option);
+=======
+                                build(), option);
+>>>>>>> branch-2.5-mrs
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
@@ -531,6 +536,7 @@ public class TaskManager {
         data.tasks = new ArrayList<>(nameToTaskMap.values());
         checksum ^= data.tasks.size();
         data.runStatus = showTaskRunStatus(null);
+<<<<<<< HEAD
         int beforeSize = data.runStatus.size();
         if (beforeSize >= Config.task_runs_max_history_number) {
             taskRunManager.getTaskRunHistory().forceGC();
@@ -541,6 +547,22 @@ public class TaskManager {
             Text.writeString(dos, s);
         } else {
             String s = GsonUtils.GSON.toJson(data);
+=======
+        String s = GsonUtils.GSON.toJson(data);
+        boolean retry = false;
+        try {
+            Text.writeString(dos, s);
+        } catch (LimitExceededException ex) {
+            retry = true;
+        }
+        if (retry) {
+            int beforeLength = s.length();
+            taskRunManager.getTaskRunHistory().forceGC();
+            data.runStatus = showTaskRunStatus(null);
+            s = GsonUtils.GSON.toJson(data);
+            LOG.warn("Too much task metadata triggers forced task_run GC, " +
+                    "length before GC:{}, length after GC:{}.", beforeLength, s.length());
+>>>>>>> branch-2.5-mrs
             Text.writeString(dos, s);
         }
         return checksum;

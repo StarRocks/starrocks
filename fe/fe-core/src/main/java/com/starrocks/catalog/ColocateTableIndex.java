@@ -787,9 +787,13 @@ public class ColocateTableIndex implements Writable {
     private List<GroupId> getOtherGroupsWithSameOrigNameUnlocked(String origName, long dbId) {
         List<GroupId> groupIds = new ArrayList<>();
         for (Map.Entry<String, GroupId> entry : groupName2Id.entrySet()) {
+<<<<<<< HEAD
             // Get existed group original name
             String existedGroupOrigName = entry.getKey().split("_", 2)[1];
             if (existedGroupOrigName.equals(origName) &&
+=======
+            if (entry.getKey().split("_")[1].equals(origName) &&
+>>>>>>> branch-2.5-mrs
                     entry.getValue().dbId != dbId) {
                 groupIds.add(entry.getValue());
             }

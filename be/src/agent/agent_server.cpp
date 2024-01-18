@@ -150,8 +150,11 @@ void AgentServer::Impl::init_or_die() {
     BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", MIN_TRANSACTION_PUBLISH_WORKER_COUNT,
                                    max_publish_version_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
                                    _thread_pool_publish_version);
+<<<<<<< HEAD
     REGISTER_GAUGE_STARROCKS_METRIC(publish_version_queue_count,
                                     [this]() { return _thread_pool_publish_version->num_queued_tasks(); });
+=======
+>>>>>>> branch-2.5-mrs
 #endif
 
     BUILD_DYNAMIC_TASK_THREAD_POOL("drop", config::drop_tablet_worker_count, config::drop_tablet_worker_count,

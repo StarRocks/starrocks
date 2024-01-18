@@ -956,4 +956,4 @@ INSTANTIATE_TEST_SUITE_P(GetJsonXXXTest, GetJsonXXXTestFixture,
                                  // clang-format: on
                                  ));
 
-} // namespace starrocks::vectorized
+} // namespace starrocks

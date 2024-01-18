@@ -18,7 +18,11 @@ import com.starrocks.analysis.RedirectStatus;
 
 // EXECUTE ON <BE_ID> <SCRIPT>
 public class ExecuteScriptStmt extends StatementBase {
+<<<<<<< HEAD
     static long TIMEOUT_SEC_DEFAULT = 600;
+=======
+    static long TIMEOUT_SEC_DEFAULT = 60;
+>>>>>>> branch-2.5-mrs
 
     long beId;
     String script;

@@ -14,7 +14,10 @@ import com.starrocks.connector.hive.IHiveMetastore;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.analyzer.SemanticException;
+=======
+>>>>>>> branch-2.5-mrs
 
 import java.util.List;
 import java.util.Map;

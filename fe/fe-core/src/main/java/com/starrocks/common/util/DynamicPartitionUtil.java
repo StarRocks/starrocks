@@ -193,6 +193,7 @@ public class DynamicPartitionUtil {
         if (properties == null || properties.isEmpty()) {
             return false;
         }
+<<<<<<< HEAD
 
         Map<String, String> checkProp = new CaseInsensitiveMap<>(properties);
 
@@ -212,6 +213,20 @@ public class DynamicPartitionUtil {
                 throw new DdlException("Dynamic partition only support single-column range partition");
             }
 
+=======
+        if (partitionInfo.getType() != PartitionType.RANGE || partitionInfo.isMultiColumnPartition()) {
+            throw new DdlException("Dynamic partition only support single-column range partition");
+        }
+        String timeUnit = properties.get(DynamicPartitionProperty.TIME_UNIT);
+        String prefix = properties.get(DynamicPartitionProperty.PREFIX);
+        String start = properties.get(DynamicPartitionProperty.START);
+        String timeZone = properties.get(DynamicPartitionProperty.TIME_ZONE);
+        String end = properties.get(DynamicPartitionProperty.END);
+        String enable = properties.get(DynamicPartitionProperty.ENABLE);
+
+        if (!(Strings.isNullOrEmpty(enable) && Strings.isNullOrEmpty(timeUnit) && Strings.isNullOrEmpty(timeZone)
+                && Strings.isNullOrEmpty(prefix) && Strings.isNullOrEmpty(start) && Strings.isNullOrEmpty(end))) {
+>>>>>>> branch-2.5-mrs
             if (Strings.isNullOrEmpty(enable)) {
                 properties.put(DynamicPartitionProperty.ENABLE, "true");
             }
@@ -300,6 +315,11 @@ public class DynamicPartitionUtil {
         }
         if (properties.containsKey(DynamicPartitionProperty.BUCKETS)) {
             String bucketsValue = properties.get(DynamicPartitionProperty.BUCKETS);
+            checkBuckets(bucketsValue);
+            properties.remove(DynamicPartitionProperty.BUCKETS);
+            analyzedProperties.put(DynamicPartitionProperty.BUCKETS, bucketsValue);
+        } else {
+            String bucketsValue = "0";
             checkBuckets(bucketsValue);
             properties.remove(DynamicPartitionProperty.BUCKETS);
             analyzedProperties.put(DynamicPartitionProperty.BUCKETS, bucketsValue);
@@ -429,7 +449,10 @@ public class DynamicPartitionUtil {
                 tableProperty = new TableProperty(dynamicPartitionProperties);
                 olapTable.setTableProperty(tableProperty);
             }
+<<<<<<< HEAD
             tableProperty.buildDynamicProperty();
+=======
+>>>>>>> branch-2.5-mrs
         }
     }
 

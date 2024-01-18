@@ -488,7 +488,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t0_stats_partition")));
         Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t1_stats")));
     }
+<<<<<<< HEAD
 
+=======
+    
+>>>>>>> branch-2.5-mrs
     @Test
     public void testCount() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb("stats");
@@ -615,6 +619,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAnalyzeInIntervalSmallTable() {
         LocalDateTime now = LocalDateTime.now();
         new MockUp<StatisticUtils>() {
@@ -675,6 +680,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
+=======
+>>>>>>> branch-2.5-mrs
     public void testAnalyzeHealth() {
         LocalDateTime now = LocalDateTime.now();
         new MockUp<StatisticUtils>() {

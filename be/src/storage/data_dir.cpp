@@ -262,16 +262,25 @@ Status DataDir::load() {
     Status load_tablet_status =
             TabletMetaManager::walk_until_timeout(_kv_store, load_tablet_func, config::load_tablet_timeout_seconds);
     if (load_tablet_status.is_time_out()) {
+<<<<<<< HEAD
         LOG(WARNING) << "load tablets from rocksdb timeout, try to compact meta and retry. path: " << _path;
         Status s = _kv_store->compact();
         if (!s.ok()) {
             LOG(ERROR) << "data dir " << _path << " compact meta before load failed";
+=======
+        Status s = _kv_store->compact();
+        if (!s.ok()) {
+            LOG(ERROR) << "data dir " << _path << " compact meta befor load failed";
+>>>>>>> branch-2.5-mrs
             return s;
         }
         for (auto tablet_id : tablet_ids) {
             _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
         }
+<<<<<<< HEAD
         LOG(WARNING) << "compact meta finished, retry load tablets from rocksdb. path: " << _path;
+=======
+>>>>>>> branch-2.5-mrs
         tablet_ids.clear();
         failed_tablet_ids.clear();
         load_tablet_status = TabletMetaManager::walk(_kv_store, load_tablet_func);

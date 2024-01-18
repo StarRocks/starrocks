@@ -465,7 +465,11 @@ public class LowCardinalityTest extends PlanTestBase {
         System.out.println(plan);
         Assert.assertTrue(plan, plan.contains(
                 "partition:TDataPartition(type:RANDOM, partition_exprs:[]), " +
+<<<<<<< HEAD
                         "query_global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1]"));
+=======
+                        "query_global_dicts:[TGlobalDict(columnId:10, strings:[6D 6F 63 6B], ids:[1])]"));
+>>>>>>> branch-2.5-mrs
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -1767,13 +1771,21 @@ public class LowCardinalityTest extends PlanTestBase {
                 "    );";
 
         String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         assertContains(plan, "6:Project\n" +
+=======
+        assertContains(plan, "5:Project\n" +
+>>>>>>> branch-2.5-mrs
                 "  |  <slot 22> : 22\n" +
                 "  |  <slot 37> : if(31: S_ADDRESS IN ('hz', 'bj'), 22, CAST(if(31: S_ADDRESS = 'hz', 1035, 32: S_NATIONKEY) " +
                 "AS VARCHAR))\n" +
                 "  |  <slot 38> : if(30: S_NAME = '', 31: S_ADDRESS, NULL)\n" +
                 "  |  \n" +
+<<<<<<< HEAD
                 "  5:Decode\n" +
+=======
+                "  4:Decode\n" +
+>>>>>>> branch-2.5-mrs
                 "  |  <dict id 40> : <string id 22>");
     }
 
@@ -1808,11 +1820,16 @@ public class LowCardinalityTest extends PlanTestBase {
                 "    );";
 
         String plan = getFragmentPlan(sql);
+<<<<<<< HEAD
         assertContains(plan, "6:Project\n" +
+=======
+        assertContains(plan, "5:Project\n" +
+>>>>>>> branch-2.5-mrs
                 "  |  <slot 37> : if(31: S_ADDRESS IN ('hz', 'bj'), 22, CAST(if(31: S_ADDRESS = 'hz', 1035, 32: S_NATIONKEY) " +
                 "AS VARCHAR))\n" +
                 "  |  <slot 38> : if(30: S_NAME = '', 31: S_ADDRESS, NULL)\n" +
                 "  |  \n" +
+<<<<<<< HEAD
                 "  5:Decode\n" +
                 "  |  <dict id 40> : <string id 22>");
     }
@@ -1849,4 +1866,9 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  1:Project\n" +
                 "  |  <slot 9> : if(CURRENT_USER() = 'root', DictExpr(10: S_ADDRESS,[concat(<place-holder>, 'ccc')]), '***')");
     }
+=======
+                "  4:Decode\n" +
+                "  |  <dict id 40> : <string id 22>");
+    }
+>>>>>>> branch-2.5-mrs
 }

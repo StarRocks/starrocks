@@ -93,9 +93,14 @@ public:
     Status get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
 
     std::vector<string> get_store_paths();
+<<<<<<< HEAD
     // Get root path vector for creating tablet. The returned vector is sorted by the disk usage in asc order,
     // then the front portion of the vector excluding paths which have high disk usage is shuffled to avoid
     // the newly created tablet is distributed on only on specific path.
+=======
+    // get root path for creating tablet. The returned vector of root path should be random,
+    // for avoiding that all the tablet would be deployed one disk.
+>>>>>>> branch-2.5-mrs
     std::vector<DataDir*> get_stores_for_create_tablet(TStorageMedium::type storage_medium);
     DataDir* get_store(const std::string& path);
     DataDir* get_store(int64_t path_hash);

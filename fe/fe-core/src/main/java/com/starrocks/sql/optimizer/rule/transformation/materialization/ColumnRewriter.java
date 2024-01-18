@@ -2,7 +2,10 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+<<<<<<< HEAD
 import com.starrocks.common.Pair;
+=======
+>>>>>>> branch-2.5-mrs
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -44,7 +47,11 @@ public class ColumnRewriter {
         return predicate.accept(visitor, null);
     }
 
+<<<<<<< HEAD
     public ColumnRefOperator rewriteColumnViewToQuery(final ColumnRefOperator colRef) {
+=======
+    public ColumnRefOperator rewriteViewToQuery(final ColumnRefOperator colRef) {
+>>>>>>> branch-2.5-mrs
         if (colRef == null) {
             return null;
         }
@@ -59,6 +66,7 @@ public class ColumnRewriter {
             return null;
         }
         return (ColumnRefOperator) target;
+<<<<<<< HEAD
     }
 
     public ScalarOperator rewriteViewToQuery(final ScalarOperator scalarOperator) {
@@ -76,6 +84,8 @@ public class ColumnRewriter {
             return null;
         }
         return target;
+=======
+>>>>>>> branch-2.5-mrs
     }
 
     public ScalarOperator rewriteViewToQueryWithQueryEc(ScalarOperator predicate) {
@@ -118,6 +128,7 @@ public class ColumnRewriter {
         return predicate.accept(visitor, null);
     }
 
+<<<<<<< HEAD
     public ScalarOperator rewriteByEc(ScalarOperator predicate, boolean isMVBased) {
         if (isMVBased) {
             return rewriteByViewEc(predicate);
@@ -146,6 +157,8 @@ public class ColumnRewriter {
 
     }
 
+=======
+>>>>>>> branch-2.5-mrs
     public class ColumnWriterBuilder {
         private RewriteContext rewriteContext;
         private boolean enableRelationRewrite;

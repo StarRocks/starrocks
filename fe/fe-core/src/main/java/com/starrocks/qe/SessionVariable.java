@@ -269,8 +269,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SIZE = "global_runtime_filter_probe_min_size";
     public static final String GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY =
             "global_runtime_filter_probe_min_selectivity";
+<<<<<<< HEAD
     public static final String GLOBAL_RUNTIME_FILTER_WAIT_TIMEOUT = "global_runtime_filter_wait_timeout";
     public static final String GLOBAL_RUNTIME_FILTER_RPC_TIMEOUT = "global_runtime_filter_rpc_timeout";
+=======
+>>>>>>> branch-2.5-mrs
     public static final String RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY = "runtime_filter_early_return_selectivity";
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
@@ -342,6 +345,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
     public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
 
+<<<<<<< HEAD
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -372,6 +376,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_FOR_INSERT = "enable_materialized_view_for_insert";
 
+=======
+>>>>>>> branch-2.5-mrs
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE =
             "enable_rule_based_materialized_view_rewrite";
 
@@ -381,6 +387,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE =
             "enable_materialized_view_single_table_view_delta_rewrite";
 
+<<<<<<< HEAD
     public static final String QUERY_EXCLUDING_MV_NAMES = "query_excluding_mv_names";
     public static final String QUERY_INCLUDING_MV_NAMES = "query_including_mv_names";
 
@@ -388,6 +395,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String BIG_QUERY_PROFILE_SECOND_THRESHOLD = "big_query_profile_second_threshold";
 
+=======
+>>>>>>> branch-2.5-mrs
     public static final String ENABLE_PRUNE_COMPLEX_TYPES = "enable_prune_complex_types";
 
     public static final String GROUP_CONCAT_MAX_LEN = "group_concat_max_len";
@@ -418,6 +427,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_STRICT_TYPE = "enable_strict_type";
 
+<<<<<<< HEAD
     public static final String SCAN_OR_TO_UNION_LIMIT = "scan_or_to_union_limit";
 
     public static final String SCAN_OR_TO_UNION_THRESHOLD = "scan_or_to_union_threshold";
@@ -436,6 +446,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
 
+=======
+>>>>>>> branch-2.5-mrs
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -815,10 +827,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private long globalRuntimeFilterProbeMinSize = 100L * 1024L;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_PROBE_MIN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float globalRuntimeFilterProbeMinSelectivity = 0.5f;
+<<<<<<< HEAD
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_WAIT_TIMEOUT, flag = VariableMgr.INVISIBLE)
     private int globalRuntimeFilterWaitTimeout = 20;
     @VariableMgr.VarAttr(name = GLOBAL_RUNTIME_FILTER_RPC_TIMEOUT, flag = VariableMgr.INVISIBLE)
     private int globalRuntimeFilterRpcTimeout = 400;
+=======
+>>>>>>> branch-2.5-mrs
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_EARLY_RETURN_SELECTIVITY, flag = VariableMgr.INVISIBLE)
     private float runtimeFilterEarlyReturnSelectivity = 0.05f;
 
@@ -986,9 +1001,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE)
     private boolean enableMaterializedViewViewDeltaRewrite = true;
 
+<<<<<<< HEAD
     @VarAttr(name = MATERIALIZED_VIEW_REWRITE_MODE)
     private String materializedViewRewriteMode = MaterializedViewRewriteMode.MODE_DEFAULT;
 
+=======
+>>>>>>> branch-2.5-mrs
     //  Whether to enable view delta compensation for single table,
     //  - try to rewrite single table query into candidate view-delta mvs if enabled which will choose
     //      plan by cost.
@@ -997,6 +1015,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewSingleTableViewDeltaRewrite = false;
 
+<<<<<<< HEAD
     // whether to use materialized view plan context cache to reduce mv rewrite time cost
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_PLAN_CACHE, flag = VariableMgr.INVISIBLE)
     private boolean enableMaterializedViewPlanCache = true;
@@ -1007,6 +1026,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = QUERY_INCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
     private String queryIncludingMVNames = "";
 
+=======
+>>>>>>> branch-2.5-mrs
     @VarAttr(name = ENABLE_PRUNE_COMPLEX_TYPES)
     private boolean enablePruneComplexTypes = true;
 
@@ -1037,6 +1058,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_STRICT_TYPE, flag = VariableMgr.INVISIBLE)
     private boolean enableStrictType = false;
 
+<<<<<<< HEAD
     @VarAttr(name = SCAN_OR_TO_UNION_LIMIT, flag = VariableMgr.INVISIBLE)
     private int scanOrToUnionLimit = 1;
 
@@ -1107,6 +1129,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.exprChildrenLimit = exprChildrenLimit;
     }
 
+=======
+>>>>>>> branch-2.5-mrs
     public void setFullSortMaxBufferedRows(long v) {
         fullSortMaxBufferedRows = v;
     }
@@ -1778,6 +1802,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableOptimizerTraceLog = val;
     }
 
+<<<<<<< HEAD
     public boolean isEnableMVOptimizerTraceLog() {
         return enableMVOptimizerTraceLog || enableOptimizerTraceLog;
     }
@@ -1786,6 +1811,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableMVOptimizerTraceLog = val;
     }
 
+=======
+>>>>>>> branch-2.5-mrs
     public boolean isRuntimeFilterOnExchangeNode() {
         return runtimeFilterOnExchangeNode;
     }
@@ -1927,6 +1954,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableMaterializedViewSingleTableViewDeltaRewrite = enableMaterializedViewSingleTableViewDeltaRewrite;
     }
 
+<<<<<<< HEAD
     public void setEnableMaterializedViewPlanCache(boolean enableMaterializedViewPlanCache) {
         this.enableMaterializedViewPlanCache = enableMaterializedViewPlanCache;
     }
@@ -1951,6 +1979,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.queryIncludingMVNames = queryIncludingMVNames;
     }
 
+=======
+>>>>>>> branch-2.5-mrs
     public boolean getEnablePruneComplexTypes() {
         return this.enablePruneComplexTypes;
     }
@@ -1971,6 +2001,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableStrictType = val;
     }
 
+<<<<<<< HEAD
     public int getScanOrToUnionLimit() {
         return scanOrToUnionLimit;
     }
@@ -2019,6 +2050,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableStrictOrderBy = enableStrictOrderBy;
     }
 
+=======
+>>>>>>> branch-2.5-mrs
     // Serialize to thrift object
     // used for rest api
     public TQueryOptions toThrift() {
@@ -2096,6 +2129,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_query_debug_trace(enableQueryDebugTrace);
         tResult.setEnable_pipeline_query_statistic(enablePipelineQueryStatistic);
         tResult.setRuntime_filter_early_return_selectivity(runtimeFilterEarlyReturnSelectivity);
+<<<<<<< HEAD
 
         tResult.setUse_scan_block_cache(useScanBlockCache);
         tResult.setEnable_populate_block_cache(enablePopulateBlockCache);
@@ -2110,6 +2144,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         tResult.setEnable_collect_table_level_scan_stats(enableCollectTableLevelScanStats);
 
         tResult.setUse_page_cache(usePageCache);
+=======
+
+        tResult.setUse_scan_block_cache(useScanBlockCache);
+        tResult.setEnable_populate_block_cache(enablePopulateBlockCache);
+        tResult.setHudi_mor_force_jni_reader(hudiMORForceJNIReader);
+>>>>>>> branch-2.5-mrs
         return tResult;
     }
 

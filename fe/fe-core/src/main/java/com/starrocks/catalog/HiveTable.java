@@ -421,6 +421,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
+<<<<<<< HEAD
     public List<UniqueConstraint> getUniqueConstraints() {
         return uniqueConstraints;
     }
@@ -431,6 +432,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     }
 
     @Override
+=======
+>>>>>>> branch-2.5-mrs
     public int hashCode() {
         return Objects.hashCode(getCatalogName(), hiveDbName, getTableIdentifier());
     }

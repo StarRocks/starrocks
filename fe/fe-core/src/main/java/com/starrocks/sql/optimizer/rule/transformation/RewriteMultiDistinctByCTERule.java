@@ -134,12 +134,21 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
 
         if (agg.hasSkew() && distinctAggOperatorList.size() > 1 && !agg.getGroupingKeys().isEmpty()) {
             return true;
+<<<<<<< HEAD
         }
 
         if (agg.hasLimit()) {
             return false;
         }
 
+=======
+        }
+
+        if (agg.getLimit() >= 0) {
+            return false;
+        }
+
+>>>>>>> branch-2.5-mrs
         if (!hasMultiColumns && agg.getGroupingKeys().size() > 1) {
             return false;
         }

@@ -30,8 +30,12 @@ RUN apt-get update -y && apt-get install -y --no-install-recommends \
         ln -fs /usr/share/zoneinfo/UTC /etc/localtime && \
         dpkg-reconfigure -f noninteractive tzdata && \
         rm -rf /var/lib/apt/lists/*
+<<<<<<< HEAD
 RUN echo "export PATH=/usr/lib/linux-tools/5.15.0-60-generic:$PATH" >> /etc/bash.bashrc && \
         touch /.dockerenv
+=======
+RUN echo "export PATH=/usr/lib/linux-tools/5.15.0-60-generic:$PATH" >> /etc/bash.bashrc
+>>>>>>> branch-2.5-mrs
 ENV JAVA_HOME=/lib/jvm/default-java
 
 WORKDIR $STARROCKS_ROOT
@@ -51,7 +55,11 @@ COPY --from=artifacts --chown=starrocks:starrocks /release/fe_artifacts/ $STARRO
 COPY --chown=starrocks:starrocks docker/dockerfiles/fe/*.sh $STARROCKS_ROOT/
 
 # Create directory for FE metadata
+<<<<<<< HEAD
 RUN mkdir -p /opt/starrocks/fe/meta
 
 # run as root by default
 USER root
+=======
+RUN touch /.dockerenv && mkdir -p /opt/starrocks/fe/meta
+>>>>>>> branch-2.5-mrs

@@ -14,6 +14,10 @@ WHERE
 AGGREGATE ([GLOBAL] aggregate [{36: sum=sum(36: sum)}] group by [[]] having [null]
     EXCHANGE GATHER
         AGGREGATE ([LOCAL] aggregate [{36: sum=sum(35: expr)}] group by [[]] having [null]
+<<<<<<< HEAD
             SCAN (mv[lineorder_flat_mv] columns[45: LO_QUANTITY, 46: LO_EXTENDEDPRICE, 48: LO_DISCOUNT, 78: d_year, 85: d_weeknuminyear] predicate[48: LO_DISCOUNT >= 5 AND 48: LO_DISCOUNT <= 7 AND 78: d_year = 1994 AND 85: d_weeknuminyear = 6 AND 45: LO_QUANTITY >= 26 AND 45: LO_QUANTITY <= 35])
+=======
+            SCAN (mv[lineorder_flat_mv] columns[45: LO_QUANTITY, 46: LO_EXTENDEDPRICE, 48: LO_DISCOUNT, 78: d_year, 85: d_weeknuminyear] predicate[48: LO_DISCOUNT >= 5 AND 48: LO_DISCOUNT <= 7 AND 45: LO_QUANTITY >= 26 AND 45: LO_QUANTITY <= 35 AND 85: d_weeknuminyear = 6 AND 78: d_year = 1994])
+>>>>>>> branch-2.5-mrs
 [end]
 

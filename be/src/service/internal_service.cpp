@@ -95,6 +95,7 @@ template <typename T>
 void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController* cntl_base,
                                                  const PTransmitChunkParams* request, PTransmitChunkResult* response,
                                                  google::protobuf::Closure* done) {
+<<<<<<< HEAD
     class WrapClosure : public google::protobuf::Closure {
     public:
         WrapClosure(google::protobuf::Closure* done, PTransmitChunkResult* response)
@@ -115,6 +116,8 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
         const int64_t _receive_timestamp = MonotonicNanos();
     };
     google::protobuf::Closure* wrapped_done = new WrapClosure(done, response);
+=======
+>>>>>>> branch-2.5-mrs
     VLOG_ROW << "transmit data: " << (uint64_t)(request) << " fragment_instance_id=" << print_id(request->finst_id())
              << " node=" << request->node_id() << " begin";
     // NOTE: we should give a default value to response to avoid concurrent risk
@@ -133,7 +136,11 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
     }
     Status st;
     st.to_protobuf(response->mutable_status());
+<<<<<<< HEAD
     st = _exec_env->stream_mgr()->transmit_chunk(*request, &wrapped_done);
+=======
+    st = _exec_env->stream_mgr()->transmit_chunk(*request, &done);
+>>>>>>> branch-2.5-mrs
     if (!st.ok()) {
         LOG(WARNING) << "transmit_data failed, message=" << st.get_error_msg()
                      << ", fragment_instance_id=" << print_id(request->finst_id()) << ", node=" << request->node_id();
@@ -178,6 +185,44 @@ void PInternalServiceImplBase<T>::transmit_chunk_via_http(google::protobuf::RpcC
         LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.get_error_msg();
         return;
     }
+<<<<<<< HEAD
+=======
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::transmit_chunk_via_http(google::protobuf::RpcController* cntl_base,
+                                                          const PHttpRequest* request, PTransmitChunkResult* response,
+                                                          google::protobuf::Closure* done) {
+    auto params = std::make_shared<PTransmitChunkParams>();
+    auto get_params = [&]() -> Status {
+        auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+        butil::IOBuf& iobuf = cntl->request_attachment();
+        // deserialize PTransmitChunkParams
+        size_t params_size = 0;
+        iobuf.cutn(&params_size, sizeof(params_size));
+        butil::IOBuf params_from;
+        iobuf.cutn(&params_from, params_size);
+        butil::IOBufAsZeroCopyInputStream wrapper(params_from);
+        params->ParseFromZeroCopyStream(&wrapper);
+        // the left size is from chunks' data
+        size_t attachment_size = 0;
+        iobuf.cutn(&attachment_size, sizeof(attachment_size));
+        if (attachment_size != iobuf.size()) {
+            Status st = Status::InternalError(
+                    fmt::format("{} != {} during deserialization via http", attachment_size, iobuf.size()));
+            return st;
+        }
+        return Status::OK();
+    };
+    // may throw std::bad_alloc exception.
+    Status st = get_params();
+    if (!st.ok()) {
+        st.to_protobuf(response->mutable_status());
+        done->Run();
+        LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.get_error_msg();
+        return;
+    }
+>>>>>>> branch-2.5-mrs
     this->transmit_chunk(cntl_base, params.get(), response, done);
 }
 

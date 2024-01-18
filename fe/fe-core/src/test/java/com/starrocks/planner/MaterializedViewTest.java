@@ -15,9 +15,12 @@
 package com.starrocks.planner;
 
 import com.google.common.collect.ImmutableList;
+<<<<<<< HEAD
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.plan.PlanTestBase;
+=======
+>>>>>>> branch-2.5-mrs
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -32,6 +35,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         MaterializedViewTestBase.setUp();
 
         starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
+<<<<<<< HEAD
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer_unique` (\n" +
                 "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -90,6 +94,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"in_memory\" = \"false\",\n" +
                 "    \"unique_constraints\" = \"c_custkey\"\n" +
                 ")\n");
+=======
+>>>>>>> branch-2.5-mrs
 
         starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `customer` (\n" +
                 "    `c_custkey` int(11) NOT NULL COMMENT \"\",\n" +
@@ -366,6 +372,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "    \"storage_format\" = \"DEFAULT\"\n" +
                 ")");
 
+<<<<<<< HEAD
         String userTagTable = "create table user_tags " +
                 "(time date, user_id int, user_name varchar(20), tag_id int) " +
                 "partition by range (time) (partition p1 values less than MAXVALUE) " +
@@ -400,6 +407,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");");
+=======
+>>>>>>> branch-2.5-mrs
     }
 
     @Test
@@ -532,7 +541,10 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     public void testLeftOuterJoinQueryComplete() {
         String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
                 " left join locations on emps.locationid = locations.locationid";
+<<<<<<< HEAD
 
+=======
+>>>>>>> branch-2.5-mrs
         testRewriteOK(mv, "select count(*) from " +
                 "emps  left join locations on emps.locationid = locations.locationid");
         testRewriteOK(mv, "select empid as col2, emps.locationid from " +
@@ -541,8 +553,12 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteOK(mv, "select count(*) from " +
                 "emps  left join locations on emps.locationid = locations.locationid " +
                 "where emps.deptno > 10");
+<<<<<<< HEAD
 
         testRewriteOK(mv, "select empid as col2, emps.locationid from " +
+=======
+        testRewriteOK(mv, "select empid as col2, locations.locationid from " +
+>>>>>>> branch-2.5-mrs
                 "emps left join locations on emps.locationid = locations.locationid " +
                 "where emps.locationid > 10");
         // TODO: Query's left outer join will be converted to Inner Join.
@@ -555,6 +571,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
         testRewriteFail(mv, "select empid as col2, locations.locationid from " +
                 "emps inner join locations on emps.locationid = locations.locationid " +
                 "and emps.locationid > 10");
+<<<<<<< HEAD
     }
 
     @Test
@@ -582,6 +599,35 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
                 "and emps.locationid > 10");
     }
 
+=======
+    }
+
+    @Test
+    public void testRightOuterJoinQueryComplete() {
+        String mv = "select deptno as col1, empid as col2, emps.locationid as col3 from emps " +
+                " right join locations on emps.locationid = locations.locationid";
+        testRewriteOK(mv, "select count(*) from " +
+                "emps  right join locations on emps.locationid = locations.locationid");
+        // TODO: Query's right outer join will be converted to Inner Join.
+        testRewriteFail(mv, "select empid as col2, emps.locationid from " +
+                "emps  right join locations on emps.locationid = locations.locationid " +
+                "where emps.deptno > 10");
+        // TODO: Query's right outer join will be converted to Inner Join.
+        testRewriteFail(mv, "select count(*) from " +
+                "emps  right join locations on emps.locationid = locations.locationid " +
+                "where emps.deptno > 10");
+        testRewriteOK(mv, "select empid as col2, locations.locationid from " +
+                "emps  right join locations on emps.locationid = locations.locationid " +
+                "where locations.locationid > 10");
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps inner join locations on emps.locationid = locations.locationid " +
+                "and locations.locationid > 10");
+        testRewriteFail(mv, "select empid as col2, locations.locationid from " +
+                "emps inner join locations on emps.locationid = locations.locationid " +
+                "and emps.locationid > 10");
+    }
+
+>>>>>>> branch-2.5-mrs
     @Test
     public void testMultiOuterJoinQueryDelta() {
         for (String joinType: outerJoinTypes) {
@@ -2177,6 +2223,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+<<<<<<< HEAD
     public void testViewDeltaJoinUKFKInMV1() {
         String mv = "select emps.empid, emps.deptno, dependents.name from emps\n"
                 + "join dependents using (empid)";
@@ -2269,6 +2316,8 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
     }
 
     @Test
+=======
+>>>>>>> branch-2.5-mrs
     public void testViewDeltaColumnCaseSensitiveOnDuplicate() throws Exception {
         {
             starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS `tbl_03` (\n" +
@@ -2721,6 +2770,7 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             testRewriteFail(mv, query);
         }
     }
+<<<<<<< HEAD
 
     @Test
     public void testRewriteAvg1() {
@@ -4534,4 +4584,6 @@ public class MaterializedViewTest extends MaterializedViewTestBase {
             starRocksAssert.dropTable("test_sr_table_join");
         }
     }
+=======
+>>>>>>> branch-2.5-mrs
 }

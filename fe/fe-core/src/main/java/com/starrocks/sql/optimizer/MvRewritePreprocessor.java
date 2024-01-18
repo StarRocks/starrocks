@@ -40,7 +40,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+<<<<<<< HEAD
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
+=======
+>>>>>>> branch-2.5-mrs
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils.getMvPartialPartitionPredicates;
 
 public class MvRewritePreprocessor {
@@ -61,6 +64,7 @@ public class MvRewritePreprocessor {
     }
 
     public void prepareMvCandidatesForPlan() {
+<<<<<<< HEAD
         Set<Table> queryTables = MvUtils.getAllTables(logicOperatorTree).stream().collect(Collectors.toSet());
         // get all related materialized views, include nested mvs
         Set<MaterializedView> relatedMvs =
@@ -93,10 +97,21 @@ public class MvRewritePreprocessor {
                 // skip to process unsupported plan tree
                 continue;
             }
+=======
+        List<Table> queryTables = MvUtils.getAllTables(logicOperatorTree);
+
+        // get all related materialized views, include nested mvs
+        Set<MaterializedView> relatedMvs =
+                MvUtils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), queryTables);
+
+        Set<ColumnRefOperator> originQueryColumns = Sets.newHashSet(queryColumnRefFactory.getColumnRefs());
+        for (MaterializedView mv : relatedMvs) {
+>>>>>>> branch-2.5-mrs
             try {
                 preprocessMv(mv, queryTables, originQueryColumns);
             } catch (Exception e) {
                 List<String> tableNames = queryTables.stream().map(Table::getName).collect(Collectors.toList());
+<<<<<<< HEAD
                 LOG.warn("preprocess mv %s failed for query tables:%s", mv.getName(), tableNames, e);
             }
         }
@@ -182,18 +197,81 @@ public class MvRewritePreprocessor {
         if (connectContext.getDumpInfo() != null) {
             String dbName = connectContext.getGlobalStateMgr().getDb(mv.getDbId()).getFullName();
             connectContext.getDumpInfo().addTable(dbName, mv);
+=======
+                LOG.warn("preprocess mv {} failed for query tables:{}", mv.getName(), tableNames, e);
+            }
+        }
+        // all base table related mvs
+        List<String> relatedMvNames = relatedMvs.stream().map(mv -> mv.getName()).collect(Collectors.toList());
+        // all mvs that match SPJG pattern and can ben used to try mv rewrite
+        List<String> candidateMvNames = context.getCandidateMvs().stream()
+                .map(materializationContext -> materializationContext.getMv().getName()).collect(Collectors.toList());
+        String mvInfo = String.format("relatedMvNames: %s, candidateMvNames: %s", relatedMvNames, candidateMvNames);
+        OptimizerTraceUtil.log(connectContext, mvInfo);
+    }
+
+    private void preprocessMv(MaterializedView mv, List<Table> queryTables, Set<ColumnRefOperator> originQueryColumns) {
+        if (!mv.isActive()) {
+            return;
+        }
+
+        MaterializedView.MvRewriteContext mvRewriteContext = mv.getPlanContext();
+        if (mvRewriteContext == null) {
+            // build mv query logical plan
+            MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
+            mvRewriteContext = mvOptimizer.optimize(mv, connectContext);
+            mv.setPlanContext(mvRewriteContext);
+        }
+        if (!mvRewriteContext.isValidMvPlan()) {
+            return;
+        }
+
+        Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv();
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        if (partitionInfo instanceof SinglePartitionInfo) {
+            if (!partitionNamesToRefresh.isEmpty()) {
+                return;
+            }
+        } else if (!mv.getPartitionNames().isEmpty() &&
+                partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
+            // if the mv is partitioned, and all partitions need refresh,
+            // then it can not be an candidate
+            return;
+        }
+
+        OptExpression mvPlan = mvRewriteContext.getLogicalPlan();
+        ScalarOperator mvPartialPartitionPredicates = null;
+        if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
+            // when mv is partitioned and there are some refreshed partitions,
+            // when should calculate latest partition range predicates for partition-by base table
+            mvPartialPartitionPredicates = getMvPartialPartitionPredicates(mv, mvPlan, partitionNamesToRefresh);
+            if (mvPartialPartitionPredicates == null) {
+                return;
+            }
+>>>>>>> branch-2.5-mrs
         }
 
         List<Table> baseTables = MvUtils.getAllTables(mvPlan);
         List<Table> intersectingTables = baseTables.stream().filter(queryTables::contains).collect(Collectors.toList());
         MaterializationContext materializationContext =
                 new MaterializationContext(context, mv, mvPlan, queryColumnRefFactory,
+<<<<<<< HEAD
                         mvPlanContext.getRefFactory(), partitionNamesToRefresh,
                         baseTables, originQueryColumns, intersectingTables, mvPartialPartitionPredicates);
         List<ColumnRefOperator> mvOutputColumns = mvPlanContext.getOutputColumns();
         // generate scan mv plan here to reuse it in rule applications
         LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext, partitionNamesToRefresh);
         materializationContext.setScanMvOperator(scanMvOp);
+=======
+                        mv.getPlanContext().getRefFactory(), partitionNamesToRefresh,
+                        baseTables, originQueryColumns, intersectingTables, mvPartialPartitionPredicates);
+        List<ColumnRefOperator> mvOutputColumns = mv.getPlanContext().getOutputColumns();
+        // generate scan mv plan here to reuse it in rule applications
+        LogicalOlapScanOperator scanMvOp = createScanMvOperator(materializationContext);
+        materializationContext.setScanMvOperator(scanMvOp);
+        String dbName = connectContext.getGlobalStateMgr().getDb(mv.getDbId()).getFullName();
+        connectContext.getDumpInfo().addTable(dbName, mv);
+>>>>>>> branch-2.5-mrs
         // should keep the sequence of schema
         List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
         for (Column column : mv.getFullSchema()) {
@@ -213,7 +291,10 @@ public class MvRewritePreprocessor {
         }
         materializationContext.setOutputMapping(outputMapping);
         context.addCandidateMvs(materializationContext);
+<<<<<<< HEAD
         logMVPrepare(connectContext, mv, "Prepare MV %s success", mv.getName());
+=======
+>>>>>>> branch-2.5-mrs
     }
 
     /**

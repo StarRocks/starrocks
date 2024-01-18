@@ -335,6 +335,7 @@ public:
         return _query_options.__isset.rpc_http_min_size ? _query_options.rpc_http_min_size : kRpcHttpMinSize;
     }
 
+<<<<<<< HEAD
     bool enable_collect_table_level_scan_stats() const {
         return _query_options.__isset.enable_collect_table_level_scan_stats &&
                _query_options.enable_collect_table_level_scan_stats;
@@ -342,6 +343,8 @@ public:
 
     bool use_page_cache();
 
+=======
+>>>>>>> branch-2.5-mrs
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -497,6 +500,7 @@ private:
                 str << "Mem usage has exceed the limit of query pool";                                              \
             } else {                                                                                                \
                 str << "Mem usage has exceed the limit of the resource group [" << tracker->label() << "]. "        \
+<<<<<<< HEAD
                     << "You can change the limit by modifying [mem_limit] of this group";                           \
             }                                                                                                       \
             break;                                                                                                  \
@@ -504,6 +508,11 @@ private:
             str << "Mem usage has exceed the big query limit of the resource group [" << tracker->label() << "]. "  \
                 << "You can change the limit by modifying [big_query_mem_limit] of this group";                     \
             break;                                                                                                  \
+=======
+                    << "You can change the limit by modify [mem_limit] of this group";                              \
+            }                                                                                                       \
+            break;                                                                                                  \
+>>>>>>> branch-2.5-mrs
         default:                                                                                                    \
             break;                                                                                                  \
         }                                                                                                           \

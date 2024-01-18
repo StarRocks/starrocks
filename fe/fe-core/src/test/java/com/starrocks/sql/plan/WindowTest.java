@@ -266,6 +266,7 @@ public class WindowTest extends PlanTestBase {
                 "  |  partition by: 1: v1\n" +
                 "  |  order by: 2: v2 ASC\n" +
                 "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT RO");
+<<<<<<< HEAD
     }
 
     @Test
@@ -279,6 +280,8 @@ public class WindowTest extends PlanTestBase {
                 "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) from test_all_type";
         plan = getFragmentPlan(sql);
         assertContains(plan, "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+=======
+>>>>>>> branch-2.5-mrs
     }
 
     @Test
@@ -743,6 +746,10 @@ public class WindowTest extends PlanTestBase {
         }
     }
 
+<<<<<<< HEAD
+=======
+
+>>>>>>> branch-2.5-mrs
     @Test
     public void testWindowWithHaving() throws Exception {
         String sql =
@@ -754,6 +761,7 @@ public class WindowTest extends PlanTestBase {
         expectedEx.expectMessage("HAVING clause cannot contain window function");
         String plan = getFragmentPlan(sql);
     }
+<<<<<<< HEAD
 
     @Test
     public void testHashBasedWindowTest() throws Exception {
@@ -812,4 +820,6 @@ public class WindowTest extends PlanTestBase {
                 "args nullable: true; result nullable: true]\n" +
                 "  |  cardinality: 1");
     }
+=======
+>>>>>>> branch-2.5-mrs
 }

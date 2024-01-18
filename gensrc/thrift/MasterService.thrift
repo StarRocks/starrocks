@@ -50,7 +50,10 @@ struct TTabletInfo {
     // skip num 17 because num 17 is used in later version, so we skip it in 
     // order to support degrade
     18: optional bool is_error_state
+<<<<<<< HEAD
     19: optional Types.TVersion max_readable_version
+=======
+>>>>>>> branch-2.5-mrs
 }
 
 struct TTabletVersionPair {

@@ -493,6 +493,7 @@ public class RestoreJob extends AbstractJob {
                     if (localOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames, true)
                             != remoteOlapTbl.getSignature(BackupHandler.SIGNATURE_VERSION, intersectPartNames, true) ||
                                 localOlapTbl.getBaseSchema().size() != remoteOlapTbl.getBaseSchema().size()) {
+<<<<<<< HEAD
                         List<Pair<Integer, String>> localCheckSumList = localOlapTbl.getSignatureSequence(
                                 BackupHandler.SIGNATURE_VERSION, intersectPartNames);
                         List<Pair<Integer, String>> remoteCheckSumList = remoteOlapTbl.getSignatureSequence(
@@ -518,6 +519,8 @@ public class RestoreJob extends AbstractJob {
                     }
 
                     if (localOlapTbl.getKeysType() != remoteOlapTbl.getKeysType()) {
+=======
+>>>>>>> branch-2.5-mrs
                         status = new Status(ErrCode.COMMON_ERROR,
                                 "Table " + jobInfo.getAliasByOriginNameIfSet(tblInfo.name)
                                         + " already exist but with different key type");
@@ -531,9 +534,13 @@ public class RestoreJob extends AbstractJob {
                         if (!localColumn.equals(remoteColumn)) {
                             status = new Status(ErrCode.COMMON_ERROR,
                                     "Table " + jobInfo.getAliasByOriginNameIfSet(tblInfo.name)
+<<<<<<< HEAD
                                             + " already exist but with different schema, column: " + localColumn.getName()
                                             + " in existed table is different from the column in backup snapshot, column: "
                                             + remoteColumn.getName());
+=======
+                                            + " already exist but with different schema");
+>>>>>>> branch-2.5-mrs
                             return;
                         }
                     }

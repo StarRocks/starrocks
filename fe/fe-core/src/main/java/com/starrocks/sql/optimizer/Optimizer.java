@@ -35,7 +35,10 @@ import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEPr
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
+=======
+>>>>>>> branch-2.5-mrs
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
 import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
@@ -314,8 +317,11 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 
+<<<<<<< HEAD
         ruleRewriteOnlyOnce(tree, rootTaskContext, SplitScanORToUnionRule.getInstance());
 
+=======
+>>>>>>> branch-2.5-mrs
         if (isEnableSingleTableMVRewrite(rootTaskContext, sessionVariable, tree)) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
@@ -332,9 +338,12 @@ public class Optimizer {
     private boolean isEnableSingleTableMVRewrite(TaskContext rootTaskContext,
                                                  SessionVariable sessionVariable,
                                                  OptExpression queryPlan) {
+<<<<<<< HEAD
         if (sessionVariable.isDisableMaterializedViewRewrite()) {
             return false;
         }
+=======
+>>>>>>> branch-2.5-mrs
         // if disable single mv rewrite, return false.
         if (optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)) {
             return false;
@@ -448,10 +457,13 @@ public class Optimizer {
     }
 
     private boolean isEnableMultiTableRewrite(ConnectContext connectContext, OptExpression queryPlan) {
+<<<<<<< HEAD
         if (connectContext.getSessionVariable().isDisableMaterializedViewRewrite()) {
             return false;
         }
 
+=======
+>>>>>>> branch-2.5-mrs
         if (context.getCandidateMvs().isEmpty()) {
             return false;
         }

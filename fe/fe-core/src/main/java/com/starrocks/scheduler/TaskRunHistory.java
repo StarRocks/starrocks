@@ -33,8 +33,11 @@ public class TaskRunHistory {
             }
         }
     }
+<<<<<<< HEAD
 
     public long getTaskRunCount() {
         return historyDeque.size();
     }
+=======
+>>>>>>> branch-2.5-mrs
 }

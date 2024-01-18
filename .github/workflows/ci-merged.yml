@@ -4,6 +4,7 @@ on:
   pull_request_target:
     branches:
       - main
+<<<<<<< HEAD
       - 'branch-[0-9].[0-9]'
     types:
       - closed
@@ -77,11 +78,20 @@ jobs:
 
   thirdparty-update-image:
     runs-on: [self-hosted, normal]
+=======
+      - 'branch*'
+    types:
+      - closed
+jobs:
+  thirdparty-update-image:
+    runs-on: self-hosted
+>>>>>>> branch-2.5-mrs
     name: Thirdparty Update Image
     if: github.event.pull_request.merged == true
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
+<<<<<<< HEAD
       REPO: ${{ github.repository }}
     steps:
       - name: clean
@@ -89,6 +99,9 @@ jobs:
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
 
+=======
+    steps:
+>>>>>>> branch-2.5-mrs
       - uses: dorny/paths-filter@v2
         id: changes
         with:
@@ -100,6 +113,7 @@ jobs:
       - name: update image
         if: steps.changes.outputs.thirdparty == 'true'
         run: |
+<<<<<<< HEAD
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER
 
@@ -209,4 +223,10 @@ jobs:
           VERSION_LABEL: ${{ steps.prepare_version_label.outputs.LABEL }}
         run: |
           gh pr edit ${PR_NUMBER} -R ${GITHUB_REPOSITORY} --add-label "${VERSION_LABEL}"
+=======
+          rm -rf ./elastic-service
+          cp -rf /var/lib/elastic-service ./elastic-service
+          cd elastic-service && git pull
+          ./bin/elastic-update-image.sh $BRANCH $PR_NUMBER
+>>>>>>> branch-2.5-mrs
           

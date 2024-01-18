@@ -270,6 +270,14 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
     chunk_request->set_be_number(_parent->_be_number);
     chunk_request->set_eos(false);
     chunk_request->set_use_pass_through(_use_pass_through);
+<<<<<<< HEAD
+=======
+
+    if (auto delta_statistic = state->intermediate_query_statistic()) {
+        delta_statistic->to_pb(chunk_request->mutable_query_statistics());
+    }
+
+>>>>>>> branch-2.5-mrs
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub,     std::move(chunk_request), attachment,
                               attachment_physical_bytes,   _brpc_dest_addr};
     RETURN_IF_ERROR(_parent->_buffer->add_request(info));

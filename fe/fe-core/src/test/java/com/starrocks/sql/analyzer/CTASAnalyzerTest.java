@@ -465,6 +465,7 @@ public class CTASAnalyzerTest {
             starRocksAssert.dropTable("emps");
         }
     }
+<<<<<<< HEAD
 
     @Test
     public void testCTASDefaultLimit() throws Exception {
@@ -480,4 +481,6 @@ public class CTASAnalyzerTest {
             ctx.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
         }
     }
+=======
+>>>>>>> branch-2.5-mrs
 }

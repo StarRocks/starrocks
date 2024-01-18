@@ -14,7 +14,10 @@
 
 package com.starrocks.planner;
 
+<<<<<<< HEAD
 import com.google.common.base.Preconditions;
+=======
+>>>>>>> branch-2.5-mrs
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
@@ -64,7 +67,11 @@ public class MaterializedViewTestBase extends PlanTestBase {
         connectContext = UtFrameUtils.createDefaultCtx();
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setEnableQueryCache(false);
+<<<<<<< HEAD
         // connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
+=======
+        connectContext.getSessionVariable().setEnableOptimizerTraceLog(true);
+>>>>>>> branch-2.5-mrs
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         // connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
@@ -90,7 +97,11 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         new MockUp<PlanTestBase>() {
             @Mock
+<<<<<<< HEAD
             boolean isIgnoreExplicitColRefIds() {
+=======
+            boolean isIgnoreColRefIds() {
+>>>>>>> branch-2.5-mrs
                 return true;
             }
         };
@@ -154,6 +165,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
 
+<<<<<<< HEAD
         String empsTableWithoutConstraints = "" +
                 "CREATE TABLE emps_no_constraint\n" +
                 "(\n" +
@@ -170,6 +182,8 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
 
+=======
+>>>>>>> branch-2.5-mrs
         String empsWithBigintTable = "" +
                 "CREATE TABLE emps_bigint\n" +
                 "(\n" +
@@ -185,6 +199,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
+<<<<<<< HEAD
         String nullableEmps = "create table emps_null (\n" +
                 "empid int null,\n" +
                 "deptno int null,\n" +
@@ -200,15 +215,21 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 "distributed by hash(`deptno`) buckets 10\n" +
                 "properties (\"replication_num\" = \"1\");";
 
+=======
+>>>>>>> branch-2.5-mrs
         starRocksAssert
                 .withTable(deptsTable)
                 .withTable(empsTable)
                 .withTable(locationsTable)
                 .withTable(ependentsTable)
+<<<<<<< HEAD
                 .withTable(empsWithBigintTable)
                 .withTable(empsTableWithoutConstraints)
                 .withTable(nullableEmps)
                 .withTable(nullableDepts);
+=======
+                .withTable(empsWithBigintTable);
+>>>>>>> branch-2.5-mrs
 
     }
 
@@ -283,8 +304,13 @@ public class MaterializedViewTestBase extends PlanTestBase {
         }
 
         public MVRewriteChecker match(String targetMV) {
+<<<<<<< HEAD
             contains(targetMV);
             Assert.assertTrue(this.exception == null);
+=======
+            Assert.assertTrue(this.exception == null);
+            Assert.assertTrue(this.rewritePlan.contains(targetMV));
+>>>>>>> branch-2.5-mrs
             return this;
         }
 
@@ -295,6 +321,7 @@ public class MaterializedViewTestBase extends PlanTestBase {
 
         // check plan result without any exception
         public MVRewriteChecker nonMatch() {
+<<<<<<< HEAD
             Preconditions.checkState(exception == null);
             return nonMatch("TABLE: mv0");
         }
@@ -324,6 +351,25 @@ public class MaterializedViewTestBase extends PlanTestBase {
                 LOG.warn("expect: \n{}", expect);
             }
             Assert.assertFalse(contained);
+=======
+            return nonMatch("TABLE: mv0");
+        }
+
+        public MVRewriteChecker nonMatch(String targetMV) {
+            Assert.assertTrue(this.rewritePlan != null);
+            Assert.assertFalse(this.rewritePlan.contains(targetMV));
+            return this;
+        }
+
+        public MVRewriteChecker contains(String expect) {
+            Assert.assertTrue(this.rewritePlan != null);
+            boolean contained = this.rewritePlan.contains(expect);
+            if (!contained) {
+                LOG.warn("rewritePlan: \n{}", rewritePlan);
+                LOG.warn("expect: \n{}", expect);
+            }
+            Assert.assertTrue(contained);
+>>>>>>> branch-2.5-mrs
             return this;
         }
 
@@ -345,10 +391,13 @@ public class MaterializedViewTestBase extends PlanTestBase {
     protected MVRewriteChecker sql(String query) {
         MVRewriteChecker fixture = new MVRewriteChecker(query);
         return fixture.rewrite();
+<<<<<<< HEAD
     }
 
     protected MVRewriteChecker testRewriteOK(String mv, String query) {
         return testRewriteOK(mv, query, null);
+=======
+>>>>>>> branch-2.5-mrs
     }
 
     protected MVRewriteChecker testRewriteOK(String mv, String query, String properties) {
@@ -395,6 +444,17 @@ public class MaterializedViewTestBase extends PlanTestBase {
             taskManager.createTask(task, false);
         }
         taskManager.executeTaskSync(task);
+    }
+
+    protected static void createAndRefreshMV(String db, String sql) throws Exception {
+        Pattern createMvPattern = Pattern.compile("^create materialized view (\\w+) .*");
+        Matcher matcher = createMvPattern.matcher(sql.toLowerCase(Locale.ROOT));
+        if (!matcher.find()) {
+            throw new Exception("create materialized view syntax error.");
+        }
+        String tableName = matcher.group(1);
+        starRocksAssert.withMaterializedView(sql);
+        refreshMaterializedView(db, tableName);
     }
 
     protected static void createAndRefreshMV(String db, String sql) throws Exception {

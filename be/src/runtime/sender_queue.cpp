@@ -675,12 +675,20 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
     // there is no chance to handle deserialize error, so the lazy deserialization is not supported now,
     // we can change related interface's defination to do this later.
     ChunkList chunks;
+<<<<<<< HEAD
     ASSIGN_OR_RETURN(chunks,
                      use_pass_through
                              ? get_chunks_from_pass_through(request.sender_id(), total_chunk_bytes)
                              : (keep_order ? get_chunks_from_request<true>(request, metrics, total_chunk_bytes)
                                            : get_chunks_from_request<false>(request, metrics, total_chunk_bytes)));
     COUNTER_UPDATE(use_pass_through ? metrics.bytes_pass_through_counter : metrics.bytes_received_counter,
+=======
+    ASSIGN_OR_RETURN(chunks, use_pass_through
+                                     ? get_chunks_from_pass_through(request.sender_id(), total_chunk_bytes)
+                                     : (keep_order ? get_chunks_from_request<true>(request, total_chunk_bytes)
+                                                   : get_chunks_from_request<false>(request, total_chunk_bytes)));
+    COUNTER_UPDATE(use_pass_through ? _recvr->_bytes_pass_through_counter : _recvr->_bytes_received_counter,
+>>>>>>> branch-2.5-mrs
                    total_chunk_bytes);
 
     if (_is_cancelled) {

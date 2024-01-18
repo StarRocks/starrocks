@@ -175,6 +175,7 @@ public class StatisticsSQLTest extends PlanTestBase {
             assertCContains(plan.getColNames().get(3).replace("\\", ""), "escape0['abc']");
         }
     }
+<<<<<<< HEAD
 
     @Test
     public void testDropPartitionSQL() throws Exception {
@@ -194,4 +195,6 @@ public class StatisticsSQLTest extends PlanTestBase {
         assertCContains(plan, "table_id IN (4, 5, 6)");
         assertCContains(plan, "partition_id NOT IN (1, 2, 3)");
     }
+=======
+>>>>>>> branch-2.5-mrs
 }

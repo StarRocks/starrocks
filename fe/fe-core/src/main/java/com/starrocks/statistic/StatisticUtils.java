@@ -151,6 +151,20 @@ public class StatisticUtils {
         ScalarType minType = ScalarType.createMaxVarcharType();
         ScalarType bucketsType = ScalarType.createMaxVarcharType();
         ScalarType mostCommonValueType = ScalarType.createMaxVarcharType();
+<<<<<<< HEAD
+=======
+
+        // varchar type column need call setAssignedStrLenInColDefinition here,
+        // otherwise it will be set length to 1 at analyze
+        columnNameType.setAssignedStrLenInColDefinition();
+        tableNameType.setAssignedStrLenInColDefinition();
+        partitionNameType.setAssignedStrLenInColDefinition();
+        dbNameType.setAssignedStrLenInColDefinition();
+        maxType.setAssignedStrLenInColDefinition();
+        minType.setAssignedStrLenInColDefinition();
+        bucketsType.setAssignedStrLenInColDefinition();
+        mostCommonValueType.setAssignedStrLenInColDefinition();
+>>>>>>> branch-2.5-mrs
 
         if (tableName.equals(StatsConstants.SAMPLE_STATISTICS_TABLE_NAME)) {
             return ImmutableList.of(

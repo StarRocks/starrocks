@@ -103,6 +103,7 @@ public class TaskRun implements Comparable<TaskRun> {
         return this.type;
     }
 
+<<<<<<< HEAD
     public Map<String, String>  refreshTaskProperties(ConnectContext ctx) {
         Map<String, String> newProperties = Maps.newHashMap();
         if (task.getSource() != Constants.TaskSource.MV) {
@@ -133,6 +134,8 @@ public class TaskRun implements Comparable<TaskRun> {
         return newProperties;
     }
 
+=======
+>>>>>>> branch-2.5-mrs
     public boolean executeTaskRun() throws Exception {
         TaskRunContext taskRunContext = new TaskRunContext();
         Preconditions.checkNotNull(status.getDefinition(), "The definition of task run should not null");

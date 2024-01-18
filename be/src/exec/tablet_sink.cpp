@@ -212,8 +212,11 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     open_closure->ref();
 
     open_closure->cntl.set_timeout_ms(config::tablet_writer_open_rpc_timeout_sec * 1000);
+<<<<<<< HEAD
     open_closure->cntl.ignore_eovercrowded();
 
+=======
+>>>>>>> branch-2.5-mrs
     if (request.ByteSizeLong() > _parent->_rpc_http_min_size) {
         TNetworkAddress brpc_addr;
         brpc_addr.hostname = _node_info->host;
@@ -532,10 +535,13 @@ Status NodeChannel::_send_request(bool eos) {
     _add_batch_closures[_current_request_index]->ref();
     _add_batch_closures[_current_request_index]->reset();
     _add_batch_closures[_current_request_index]->cntl.set_timeout_ms(_rpc_timeout_ms);
+<<<<<<< HEAD
     _add_batch_closures[_current_request_index]->cntl.ignore_eovercrowded();
     _add_batch_closures[_current_request_index]->request_size = request.ByteSizeLong();
 
     _mem_tracker->consume(_add_batch_closures[_current_request_index]->request_size);
+=======
+>>>>>>> branch-2.5-mrs
 
     if (_enable_colocate_mv_index) {
         request.set_is_repeated_chunk(true);

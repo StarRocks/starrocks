@@ -197,6 +197,10 @@ public class ReplayFromDumpTest {
         sessionVariable.setNewPlanerAggStage(2);
         Pair<QueryDumpInfo, String> replayPair =
                 getCostPlanFragment(getDumpInfoFromFile("query_dump/join_eliminate_nulls"), sessionVariable);
+<<<<<<< HEAD
+=======
+        System.out.println(replayPair.second);
+>>>>>>> branch-2.5-mrs
         Assert.assertTrue(replayPair.second, replayPair.second.contains("11:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  other join predicates: CASE 174: type WHEN '1' THEN concat('ocms_', 90: name) = 'ocms_fengyang56' " +
@@ -206,7 +210,10 @@ public class ReplayFromDumpTest {
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [tid, BIGINT, true] = [5: customer_id, BIGINT, true]\n" +
                 "  |  output columns: 3, 90"));
+<<<<<<< HEAD
         sessionVariable.setNewPlanerAggStage(0);
+=======
+>>>>>>> branch-2.5-mrs
     }
 
     @Test
@@ -838,5 +845,54 @@ public class ReplayFromDumpTest {
                 "  |  1322 <-> [1322: arrival_duration, INT, true]\n" +
                 "  |  1347 <-> [1347: responsible_department_name, VARCHAR, true]\n" +
                 "  |  1371 <-> [1371: induction_duration, INT, true]"));
+    }
+
+    @Test
+    public void testGroupByDistinctColumnSkewHint() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/group_by_count_distinct_skew_hint"), null,
+                        TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  9:Project\n" +
+                "  |  <slot 39> : 39: year\n" +
+                "  |  <slot 42> : 42: case\n" +
+                "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)" +
+                ""));
+    }
+
+    @Test
+    public void testGroupByDistinctColumnOptimization() throws Exception {
+        Pair<QueryDumpInfo, String> replayPair =
+                getPlanFragment(getDumpInfoFromFile("query_dump/group_by_count_distinct_optimize"), null,
+                        TExplainLevel.NORMAL);
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  9:Project\n" +
+                "  |  <slot 39> : 39: year\n" +
+                "  |  <slot 42> : 42: case\n" +
+                "  |  <slot 45> : CAST(murmur_hash3_32(CAST(42: case AS VARCHAR)) % 512 AS SMALLINT)" +
+                ""));
+    }
+
+    @Test
+    public void testTPCH11() throws Exception {
+        try {
+            FeConstants.USE_MOCK_DICT_MANAGER = true;
+            Pair<QueryDumpInfo, String> replayPair =
+                    getCostPlanFragment(getDumpInfoFromFile("query_dump/tpch_query11_mv_rewrite"));
+            Assert.assertTrue(replayPair.second, replayPair.second.contains(
+                    "n_name,[<place-holder> = 'GERMANY'])\n" +
+                            "     dict_col=n_name"));
+        } finally {
+            FeConstants.USE_MOCK_DICT_MANAGER = false;
+        }
+    }
+
+    @Test
+    public void testPruneCTEProperty() throws Exception {
+        String jsonStr = getDumpInfoFromFile("query_dump/cte_reuse");
+        connectContext.getSessionVariable().disableJoinReorder();
+        Pair<String, ExecPlan> result = UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext,
+                getDumpInfoFromJson(jsonStr));
+        OptExpression expression = result.second.getPhysicalPlan().inputAt(1);
+        Assert.assertEquals(new CTEProperty(1), expression.getLogicalProperty().getUsedCTEs());
+        Assert.assertEquals(4, result.second.getCteProduceFragments().size());
     }
 }

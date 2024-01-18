@@ -16,17 +16,26 @@ package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
+=======
+import com.starrocks.analysis.FunctionName;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
+>>>>>>> branch-2.5-mrs
 import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
+<<<<<<< HEAD
 import static com.starrocks.catalog.Function.CompareMode.IS_IDENTICAL;
+=======
+>>>>>>> branch-2.5-mrs
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE;
 
@@ -35,9 +44,12 @@ public class ScalarOperatorUtil {
         Function searchDesc = new Function(new FunctionName(FunctionSet.MULTI_DISTINCT_COUNT),
                 oldFunctionCall.getFunction().getArgs(), Type.INVALID, false);
         Function fn = GlobalStateMgr.getCurrentState().getFunction(searchDesc, IS_NONSTRICT_SUPERTYPE_OF);
+<<<<<<< HEAD
         if (fn == null) {
             return null;
         }
+=======
+>>>>>>> branch-2.5-mrs
 
         ScalarOperatorRewriter scalarOpRewriter = new ScalarOperatorRewriter();
         return (CallOperator) scalarOpRewriter.rewrite(
@@ -57,6 +69,7 @@ public class ScalarOperatorUtil {
                 DEFAULT_TYPE_CAST_RULE);
     }
 
+<<<<<<< HEAD
     public static Function findArithmeticFunction(CallOperator call, String fnName) {
         return findArithmeticFunction(call.getFunction().getArgs(), fnName);
     }
@@ -77,6 +90,8 @@ public class ScalarOperatorUtil {
         return newFn;
     }
 
+=======
+>>>>>>> branch-2.5-mrs
     public static CallOperator buildMultiSumDistinct(CallOperator oldFunctionCall) {
         Function multiDistinctSum = DecimalV3FunctionAnalyzer.convertSumToMultiDistinctSum(
                 oldFunctionCall.getFunction(), oldFunctionCall.getChild(0).getType());

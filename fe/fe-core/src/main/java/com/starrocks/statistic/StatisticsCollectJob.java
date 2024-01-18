@@ -89,7 +89,11 @@ public abstract class StatisticsCollectJob {
         int maxRetryTimes = 5;
         do {
             LOG.debug("statistics collect sql : {}", sql);
+<<<<<<< HEAD
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+=======
+            StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+>>>>>>> branch-2.5-mrs
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             SessionVariable sessionVariable = context.getSessionVariable();
             sessionVariable.setEnableMaterializedViewRewrite(false);

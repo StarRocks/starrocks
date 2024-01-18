@@ -179,7 +179,11 @@ public class ListPartitionDesc extends PartitionDesc {
 
     @Override
     public PartitionInfo toPartitionInfo(List<Column> columns, Map<String, Long> partitionNameToId,
+<<<<<<< HEAD
                                          boolean isTemp) throws DdlException {
+=======
+                                         boolean isTemp, boolean isExprPartition) throws DdlException {
+>>>>>>> branch-2.5-mrs
         try {
             List<Column> partitionColumns = this.findPartitionColumns(columns);
             ListPartitionInfo listPartitionInfo = new ListPartitionInfo(super.type, partitionColumns);

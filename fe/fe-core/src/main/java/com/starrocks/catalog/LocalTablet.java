@@ -167,11 +167,19 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     public int getErrorStateReplicaNum() {
         int num = 0;
+<<<<<<< HEAD
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 if (replica.isErrorState()) {
                     num++;
                 }
+=======
+        Iterator<Replica> iterator = replicas.iterator();
+        while (iterator.hasNext()) {
+            Replica replica = iterator.next();
+            if (replica.isErrorState()) {
+                num++;
+>>>>>>> branch-2.5-mrs
             }
         }
         return num;
@@ -271,6 +279,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                     continue;
                 }
 
+<<<<<<< HEAD
                 ReplicaState state = replica.getState();
                 if (state.canQuery()) {
                     // replica.getSchemaHash() == -1 is for compatibility
@@ -281,6 +290,17 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                         if (localBeId != -1 && replica.getBackendId() == localBeId) {
                             localReplicas.add(replica);
                         }
+=======
+            ReplicaState state = replica.getState();
+            if (state.canQuery()) {
+                // replica.getSchemaHash() == -1 is for compatibility
+                if (replica.checkVersionCatchUp(visibleVersion, false)
+                        && replica.getMinReadableVersion() <= visibleVersion
+                        && (replica.getSchemaHash() == -1 || replica.getSchemaHash() == schemaHash)) {
+                    allQueryableReplicas.add(replica);
+                    if (localBeId != -1 && replica.getBackendId() == localBeId) {
+                        localReplicas.add(replica);
+>>>>>>> branch-2.5-mrs
                     }
                 }
             }
@@ -624,7 +644,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             // condition explain:
             // 1. alive < replicationNum: replica is missing or bad
             // 2. replicas.size() >= aliveBackendsNum: the existing replicas occupies all available backends
+<<<<<<< HEAD
             // 3. aliveBackendsNum >= replicationNum: make sure after deletion, there will be
+=======
+            // 3. aliveBackendsNum >= replicationNum: make sure after deleting, there will be
+>>>>>>> branch-2.5-mrs
             //    at least one backend for new replica.
             // 4. replicationNum > 1: if replication num is set to 1, do not delete any replica, for safety reason
             // For example: 3 replica, 3 be, one set bad, we need to forcefully delete one first

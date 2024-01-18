@@ -25,7 +25,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
+<<<<<<< HEAD
 import java.lang.reflect.InvocationTargetException;
+=======
+>>>>>>> branch-2.5-mrs
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -56,6 +59,8 @@ public class CachingHiveMetastore implements IHiveMetastore {
     private final Map<HiveTableName, Long> lastAccessTimeMap;
     // Used to synchronize the refreshTable process
     protected final Map<HiveTableName, String> tableNameLockMap;
+
+    private Map<HiveTableName, Long> lastAccessTimeMap;
 
     protected LoadingCache<String, List<String>> databaseNamesCache;
     protected LoadingCache<String, List<String>> tableNamesCache;
@@ -92,7 +97,10 @@ public class CachingHiveMetastore implements IHiveMetastore {
         this.metastore = metastore;
         this.enableListNameCache = enableListNamesCache;
         this.lastAccessTimeMap = Maps.newConcurrentMap();
+<<<<<<< HEAD
         this.tableNameLockMap = Maps.newConcurrentMap();
+=======
+>>>>>>> branch-2.5-mrs
 
         databaseNamesCache = newCacheBuilder(NEVER_CACHE, NEVER_CACHE, NEVER_CACHE)
                 .build(asyncReloading(CacheLoader.from(this::loadAllDatabaseNames), executor));
@@ -318,7 +326,11 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     @Override
+<<<<<<< HEAD
     public List<HivePartitionName> refreshTable(String hiveDbName, String hiveTblName,
+=======
+    public synchronized List<HivePartitionName> refreshTable(String hiveDbName, String hiveTblName,
+>>>>>>> branch-2.5-mrs
                                                              boolean onlyCachedPartitions) {
         HiveTableName hiveTableName = HiveTableName.of(hiveDbName, hiveTblName);
         tableNameLockMap.putIfAbsent(hiveTableName, hiveDbName + "_" + hiveTblName + "_lock");
@@ -386,6 +398,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
             if (Config.enable_refresh_hive_partitions_statistics) {
                 refreshPartitions(presentPartitionStatistics, updatedPartitionKeys,
                         this::loadPartitionsStatistics, partitionStatsCache);
+<<<<<<< HEAD
             }
         }
         return refreshPartitionNames;
@@ -411,6 +424,28 @@ public class CachingHiveMetastore implements IHiveMetastore {
         List<HivePartitionName> refreshPartitionNames = refreshTable(hiveDbName, hiveTblName, onlyCachedPartitions);
         Set<HiveTableName> cachedTableNames = getCachedTableNames();
         lastAccessTimeMap.keySet().removeIf(tableName -> !(cachedTableNames.contains(tableName)));
+=======
+            }
+        }
+        return refreshPartitionNames;
+    }
+
+    @Override
+    public List<HivePartitionName> refreshTableBackground(String hiveDbName, String hiveTblName, boolean onlyCachedPartitions) {
+        HiveTableName hiveTableName = HiveTableName.of(hiveDbName, hiveTblName);
+        if (lastAccessTimeMap.containsKey(hiveTableName)) {
+            long lastAccessTime = lastAccessTimeMap.get(hiveTableName);
+            long intervalSec = (System.currentTimeMillis() - lastAccessTime) / 1000;
+            if (intervalSec > Config.background_refresh_metadata_time_secs_since_last_access_secs) {
+                LOG.info("{}.{} skip refresh because of the last access time is {}", hiveDbName, hiveTblName,
+                        LocalDateTime.ofInstant(Instant.ofEpochMilli(lastAccessTime), ZoneId.systemDefault()));
+                return null;
+            }
+        }
+
+        List<HivePartitionName> refreshPartitionNames = refreshTable(hiveDbName, hiveTblName, onlyCachedPartitions);
+        lastAccessTimeMap.keySet().removeIf(tableName -> !getCachedTableNames().contains(tableName));
+>>>>>>> branch-2.5-mrs
         return refreshPartitionNames;
     }
 

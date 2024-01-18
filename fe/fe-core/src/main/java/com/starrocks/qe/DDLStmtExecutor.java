@@ -105,7 +105,10 @@ import org.apache.parquet.Strings;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Arrays;
+<<<<<<< HEAD
 import java.util.Collections;
+=======
+>>>>>>> branch-2.5-mrs
 import java.util.List;
 
 public class DDLStmtExecutor {
@@ -269,8 +272,14 @@ public class DDLStmtExecutor {
             List<String> info = Lists.newArrayList();
             ErrorReport.wrapWithRuntimeException(() -> {
                 // The priority of manual refresh is higher than that of general refresh
+<<<<<<< HEAD
                 String taskRunId = context.getGlobalStateMgr().getLocalMetastore().refreshMaterializedView(stmt);
                 info.add(taskRunId);
+=======
+                String taskId = context.getGlobalStateMgr().getLocalMetastore()
+                        .refreshMaterializedView(stmt, Constants.TaskRunPriority.HIGH.value());
+                info.add(taskId);
+>>>>>>> branch-2.5-mrs
             });
 
             return new ShowResultSet(RefreshMaterializedViewStatement.META_DATA, Arrays.asList(info));

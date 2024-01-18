@@ -33,6 +33,10 @@ TOP-N (order by [[37: d_year ASC NULLS FIRST, 50: sum DESC NULLS LAST]])
             AGGREGATE ([GLOBAL] aggregate [{50: sum=sum(50: sum)}] group by [[106: C_CITY, 107: S_CITY, 37: d_year]] having [null]
                 EXCHANGE SHUFFLE[106, 107, 37]
                     AGGREGATE ([LOCAL] aggregate [{50: sum=sum(21: lo_revenue)}] group by [[106: C_CITY, 107: S_CITY, 37: d_year]] having [null]
+<<<<<<< HEAD
                         SCAN (mv[lineorder_flat_mv] columns[106: C_CITY, 107: S_CITY, 92: d_year, 63: LO_REVENUE] predicate[92: d_year >= 1992 AND 92: d_year <= 1997 AND DictMapping(107: S_CITY{77: S_CITY IN (UNITED KI1, UNITED KI5)}) AND DictMapping(106: C_CITY{70: C_CITY IN (UNITED KI1, UNITED KI5)})])
+=======
+                        SCAN (mv[lineorder_flat_mv] columns[106: C_CITY, 107: S_CITY, 92: d_year, 63: LO_REVENUE] predicate[92: d_year >= 1992 AND 92: d_year <= 1997 AND DictMapping(106: C_CITY{70: C_CITY IN (UNITED KI1, UNITED KI5)}) AND DictMapping(107: S_CITY{77: S_CITY IN (UNITED KI1, UNITED KI5)})])
+>>>>>>> branch-2.5-mrs
 [end]
 

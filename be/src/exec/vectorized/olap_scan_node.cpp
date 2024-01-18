@@ -60,9 +60,15 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
 
     if (_olap_scan_node.__isset.max_parallel_scan_instance_num && _olap_scan_node.max_parallel_scan_instance_num >= 1) {
+<<<<<<< HEAD
         // The parallel scan num will be restricted by the io_tasks_per_scan_operator.
         _io_tasks_per_scan_operator =
                 std::min(_olap_scan_node.max_parallel_scan_instance_num, _io_tasks_per_scan_operator);
+=======
+        // The parallel scan num will be restricted by the config::io_tasks_per_scan_operator.
+        _io_tasks_per_scan_operator =
+                std::min(_olap_scan_node.max_parallel_scan_instance_num, config::io_tasks_per_scan_operator);
+>>>>>>> branch-2.5-mrs
     }
 
     _estimate_scan_and_output_row_bytes();
@@ -730,7 +736,11 @@ void OlapScanNode::_estimate_scan_and_output_row_bytes() {
 }
 
 size_t OlapScanNode::_scanner_concurrency() const {
+<<<<<<< HEAD
     // The max scan parallel num for pipeline engine is io_tasks_per_scan_operator(),
+=======
+    // The max scan parallel num for pipeline engine is config::io_tasks_per_scan_operator,
+>>>>>>> branch-2.5-mrs
     // But the max scan parallel num of non-pipeline engine is kMaxConcurrency.
     // This functions is only used for non-pipeline engine,
     // so use the min value of concurrency which is calculated and max_parallel_scan_instance_num.
