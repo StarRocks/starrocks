@@ -227,13 +227,12 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
                 });
                 Status res;
                 SerdeContext serd_ctx;
-                int yield = false;
 
                 yield_ctx.time_spent_ns = 0;
                 yield_ctx.need_yield = false;
 
                 YieldableRestoreTask task(_stream);
-                res = task.do_read(yield_ctx, serd_ctx, &yield);
+                res = task.do_read(yield_ctx, serd_ctx);
 
                 if (yield_ctx.need_yield) {
                     COUNTER_UPDATE(_spiller->metrics().restore_task_yield_times, 1);

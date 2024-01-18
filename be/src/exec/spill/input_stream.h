@@ -64,7 +64,7 @@ public:
     YieldableRestoreTask(InputStreamPtr input_stream) : _input_stream(std::move(input_stream)) {
         _input_stream->get_io_stream(&_sub_stream);
     }
-    Status do_read(workgroup::YieldContext& ctx, SerdeContext& context, int* yield);
+    Status do_read(workgroup::YieldContext& ctx, SerdeContext& context);
 
 private:
     InputStreamPtr _input_stream;

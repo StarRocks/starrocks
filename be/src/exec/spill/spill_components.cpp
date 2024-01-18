@@ -87,7 +87,7 @@ Status RawSpillerWriter::yieldable_flush_task(workgroup::YieldContext& yield_ctx
         opts.block_size = mem_table->get_serialized_data_size();
 
         ASSIGN_OR_RETURN(auto block, _spiller->block_manager()->acquire_block(opts));
-        LOG(INFO) << fmt::format("allocate block [{}]", block->debug_string());
+        TRACE_SPILL_LOG << fmt::format("allocate block [{}]", block->debug_string());
         flush_ctx->block = block;
     }
     auto block = flush_ctx->block;
@@ -107,7 +107,7 @@ Status RawSpillerWriter::yieldable_flush_task(workgroup::YieldContext& yield_ctx
 
         RETURN_IF_ERROR(block->flush());
     }
-    LOG(INFO) << fmt::format("flush block[{}]", block->debug_string());
+    TRACE_SPILL_LOG << fmt::format("flush block[{}]", block->debug_string());
     RETURN_IF_ERROR(_spiller->block_manager()->release_block(block));
     mem_table->reset();
     {
@@ -392,7 +392,6 @@ Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_
     auto mem_table = partition->spill_writer->mem_table();
     auto mem_table_mem_usage = mem_table->mem_usage();
     if (partition->spill_writer->block() == nullptr) {
-        LOG(INFO) << "allocate block for partition: " << partition->debug_string();
         {
             RETURN_IF_ERROR(mem_table->finalize(yield_ctx));
             RETURN_IF_YIELD(yield_ctx.need_yield);
@@ -404,7 +403,6 @@ Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_
         opts.direct_io = _runtime_state->spill_enable_direct_io();
         opts.block_size = mem_table->get_serialized_data_size();
         ASSIGN_OR_RETURN(auto block, _spiller->block_manager()->acquire_block(opts));
-        LOG(INFO) << "allocate new block: " << block->debug_string();
         COUNTER_UPDATE(_spiller->metrics().block_count, 1);
         {
             std::lock_guard<std::mutex> l(_mutex);
@@ -414,8 +412,9 @@ Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_
     auto block = partition->spill_writer->block();
 
     partition->bytes += mem_table_mem_usage;
-    LOG(INFO) << fmt::format("spill partition[{}], mem_table_size[{}] bytes[{}] rows[{}]", partition->debug_string(),
-                             mem_table->get_serialized_data_size(), mem_table->mem_usage(), mem_table->num_rows());
+    TRACE_SPILL_LOG << fmt::format("spill partition[{}], mem_table_size[{}] bytes[{}] rows[{}]",
+                                   partition->debug_string(), mem_table->get_serialized_data_size(),
+                                   mem_table->mem_usage(), mem_table->num_rows());
 
     {
         do {
@@ -432,14 +431,14 @@ Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_
     {
         std::lock_guard<std::mutex> l(_mutex);
         partition->spill_writer->block_group().append(block);
-        LOG(INFO) << fmt::format("add block to partition[{}], block[{}], num_rows[{}]", partition->partition_id,
-                                 block->debug_string(), mem_table->num_rows());
+        TRACE_SPILL_LOG << fmt::format("add block to partition[{}], block[{}], num_rows[{}]", partition->partition_id,
+                                       block->debug_string(), mem_table->num_rows());
     }
 
     RETURN_IF_ERROR(_spiller->block_manager()->release_block(block));
     partition->spill_writer->reset_block();
     mem_table->reset();
-    LOG(INFO) << fmt::format("spill partition[{}] done ", partition->debug_string());
+    TRACE_SPILL_LOG << fmt::format("spill partition[{}] done ", partition->debug_string());
     return Status::OK();
 }
 
@@ -585,8 +584,8 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
             if (mem_table->num_rows() == 0) {
                 TRACE_SPILL_LOG << "skip to flush empty partition: " << partition->debug_string();
                 return Status::OK();
-                return this->spill_partition(yield_ctx, spill_ctx, partition);
-            };
+            }
+            return this->spill_partition(yield_ctx, spill_ctx, partition);
         };
 
         auto defer = DeferOp([&]() {
