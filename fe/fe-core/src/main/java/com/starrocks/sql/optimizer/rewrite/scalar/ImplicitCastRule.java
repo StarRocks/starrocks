@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -65,6 +66,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                         String.format("Resolved function %s has wildcard decimal as argument type", fn.functionName()));
             }
 
+            boolean needAdjustScale = ArithmeticExpr.DECIMAL_SCALE_ADJUST_OPERATOR_SET
+                    .contains(fn.getFunctionName().getFunction());
             for (int i = 0; i < fn.getNumArgs(); i++) {
                 Type type = fn.getArgs()[i];
                 ScalarOperator child = call.getChild(i);
@@ -76,7 +79,10 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                     continue;
                 }
 
-                if (!type.matchesType(child.getType())) {
+                // for compatibility, decimal ArithmeticExpr(+-*/%) use Type::equals instead of Type::matchesType to
+                // determine whether to cast child of the ArithmeticExpr
+                if ((needAdjustScale && type.isDecimalOfAnyVersion() && !type.equals(child.getType())) ||
+                        !type.matchesType(child.getType())) {
                     addCastChild(type, call, i);
                 }
             }
@@ -132,7 +138,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             if (op.isPresent()) {
                 predicate.getChildren().set(0, op.get());
                 return predicate;
-            } else if (rightChild.getType().isDateType() && Type.canCastTo(leftChild.getType(), rightChild.getType())) {
+            } else if (rightChild.getType().isDateType() && !leftChild.getType().isDateType() &&
+                    Type.canCastTo(leftChild.getType(), rightChild.getType())) {
                 // For like MySQL, convert to date type as much as possible
                 addCastChild(rightChild.getType(), predicate, 0);
                 return predicate;
@@ -142,7 +149,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             if (op.isPresent()) {
                 predicate.getChildren().set(1, op.get());
                 return predicate;
-            } else if (leftChild.getType().isDateType() && Type.canCastTo(rightChild.getType(), leftChild.getType())) {
+            } else if (leftChild.getType().isDateType() && !rightChild.getType().isDateType() &&
+                    Type.canCastTo(rightChild.getType(), leftChild.getType())) {
                 // For like MySQL, convert to date type as much as possible
                 addCastChild(leftChild.getType(), predicate, 1);
                 return predicate;

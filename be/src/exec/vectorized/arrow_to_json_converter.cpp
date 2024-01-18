@@ -157,7 +157,8 @@ static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* outp
 
     case Type::BOOL: {
         auto real_array = down_cast<const BooleanArray*>(array);
-        for (int i = 0; i < array->length(); i++) {
+        auto array_end_idx = std::min(array_start_idx + num_elements, static_cast<size_t>(array->length()));
+        for (size_t i = array_start_idx; i < array_end_idx; i++) {
             vpack::Builder builder;
             JsonValue json = JsonValue::from_bool(real_array->Value(i));
             output->append(std::move(json));
@@ -166,7 +167,8 @@ static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* outp
     }
     case Type::STRING: {
         auto real_array = down_cast<const StringArray*>(array);
-        for (int i = 0; i < array->length(); i++) {
+        auto array_end_idx = std::min(array_start_idx + num_elements, static_cast<size_t>(array->length()));
+        for (size_t i = array_start_idx; i < array_end_idx; i++) {
             vpack::Builder builder;
             auto view = real_array->GetView(i);
             ASSIGN_OR_RETURN(auto json, JsonValue::parse_json_or_string({view.data(), view.length()}));

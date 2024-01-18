@@ -114,6 +114,10 @@ public class GenericPool<VALUE extends org.apache.thrift.TServiceClient> {
         }
     }
 
+    public void setTimeoutMs(int timeoutMs) {
+        this.timeoutMs = timeoutMs;
+    }
+
     private class ThriftClientFactory extends BaseKeyedPooledObjectFactory<TNetworkAddress, VALUE> {
 
         private Object newInstance(String className, TProtocol protocol) throws Exception {

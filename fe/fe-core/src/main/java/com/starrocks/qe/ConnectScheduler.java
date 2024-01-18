@@ -141,6 +141,8 @@ public class ConnectScheduler {
             if (conns != null) {
                 conns.decrementAndGet();
             }
+            LOG.info("Connection closed. remote={}, connectionId={}",
+                    ctx.getMysqlChannel().getRemoteHostPortString(), ctx.getConnectionId());
         }
     }
 

@@ -30,7 +30,7 @@ Status VerticalCompactionTask::run_impl() {
     RETURN_IF_ERROR(_validate_compaction(statistics));
     TRACE("[Compaction] vertical compaction validated");
 
-    _commit_compaction();
+    RETURN_IF_ERROR(_commit_compaction());
     TRACE("[Compaction] vertical compaction committed");
 
     return Status::OK();
@@ -94,6 +94,10 @@ Status VerticalCompactionTask::_vertical_compaction_data(Statistics* statistics)
     TRACE_COUNTER_INCREMENT("output_rowset_data_size", _output_rowset->data_disk_size());
     TRACE_COUNTER_INCREMENT("output_segments_num", _output_rowset->num_segments());
     TRACE("[Compaction] output rowset built");
+
+    if (config::enable_rowset_verify) {
+        RETURN_IF_ERROR(_output_rowset->verify());
+    }
 
     return Status::OK();
 }

@@ -162,6 +162,9 @@ public:
     // number of rows covered by this range. it's the sum of all the sub-ranges span size.
     uint32_t span_size() const;
 
+    // only contains single row or empty
+    bool is_single_row_or_empty() const;
+
     // return a new range that represent the intersection of |this| and |r|.
     SparseRange intersection(const SparseRange& rhs) const;
 
@@ -249,6 +252,10 @@ inline uint32_t SparseRange::span_size() const {
         n += r.span_size();
     }
     return n;
+}
+
+inline bool SparseRange::is_single_row_or_empty() const {
+    return _ranges.empty() || (_ranges.size() == 1 && _ranges[0].span_size() == 1);
 }
 
 inline SparseRangeIterator SparseRange::new_iterator() const {

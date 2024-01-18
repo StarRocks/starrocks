@@ -1,0 +1,37 @@
+-- name: test_split_constant_source_and_delimiter
+select split('测隔试隔试', '');
+-- result:
+["测","隔","试","隔","试"]
+-- !result
+select split('测隔试隔试', '隔');
+-- result:
+["测","试","试"]
+-- !result
+select split('测隔试隔试', 'a');
+-- result:
+["测隔试隔试"]
+-- !result
+select split('测abc隔试隔试', '');
+-- result:
+["测","a","b","c","隔","试","隔","试"]
+-- !result
+select split('测abc隔试隔试', '隔');
+-- result:
+["测abc","试","试"]
+-- !result
+select split('测abc隔试abc隔试', 'a');
+-- result:
+["测","bc隔试","bc隔试"]
+-- !result
+select split('a|b|c|d', '');
+-- result:
+["a","|","b","|","c","|","d"]
+-- !result
+select split('a|b|c|d', '|');
+-- result:
+["a","b","c","d"]
+-- !result
+select split('a|b|c|d', '隔');
+-- result:
+["a|b|c|d"]
+-- !result

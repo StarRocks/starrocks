@@ -60,6 +60,9 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
                     .put(FunctionSet.MAX, Pair.create(FunctionSet.MAX, FunctionSet.MAX))
                     .put(FunctionSet.MIN, Pair.create(FunctionSet.MIN, FunctionSet.MIN))
                     .put(FunctionSet.SUM, Pair.create(FunctionSet.SUM, FunctionSet.SUM))
+                    .put(FunctionSet.HLL_UNION_AGG, Pair.create(FunctionSet.HLL_UNION, FunctionSet.HLL_UNION_AGG))
+                    .put(FunctionSet.BITMAP_UNION_COUNT,
+                            Pair.create(FunctionSet.BITMAP_UNION, FunctionSet.BITMAP_UNION_COUNT))
                     .put(FunctionSet.HLL_UNION, Pair.create(FunctionSet.HLL_UNION, FunctionSet.HLL_UNION))
                     .put(FunctionSet.BITMAP_UNION, Pair.create(FunctionSet.BITMAP_UNION, FunctionSet.BITMAP_UNION))
                     .put(FunctionSet.PERCENTILE_UNION,
@@ -189,7 +192,13 @@ public class GroupByCountDistinctRewriteRule extends TransformationRule {
         } else {
             String secondFuncName = OTHER_FUNCTION_TRANS.get(originFuncName).second;
             Type[] argTypes = args.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-            Function newFunc = origin.getFunction().updateArgType(argTypes);
+            Function newFunc = Expr.getBuiltinFunction(secondFuncName, argTypes,
+                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            Preconditions.checkNotNull(newFunc);
+            newFunc = newFunc.copy();
+            // for decimal
+            newFunc = newFunc.updateArgType(argTypes);
+            newFunc.setRetType(origin.getFunction().getReturnType());
             return new CallOperator(secondFuncName, newFunc.getReturnType(), args, newFunc);
         }
     }

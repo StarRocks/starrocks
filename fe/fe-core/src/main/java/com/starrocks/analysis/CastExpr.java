@@ -23,7 +23,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Function;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
@@ -101,13 +100,10 @@ public class CastExpr extends Expr {
 
     @Override
     public String toSqlImpl() {
-        if (isImplicit) {
-            return getChild(0).toSql();
-        }
-        if (isAnalyzed) {
+        if (targetTypeDef == null) {
             return "CAST(" + getChild(0).toSql() + " AS " + type.toString() + ")";
         } else {
-            return "CAST(" + getChild(0).toSql() + " AS " + targetTypeDef.toString() + ")";
+            return "CAST(" + getChild(0).toSql() + " AS " + targetTypeDef + ")";
         }
     }
 
@@ -165,17 +161,7 @@ public class CastExpr extends Expr {
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
         Preconditions.checkState(!isImplicit);
-        // When cast target type is string and it's length is default -1, the result length
-        // of cast is decided by child.
-        if (targetTypeDef.getType().isScalarType()) {
-            final ScalarType targetType = (ScalarType) targetTypeDef.getType();
-            if (!(targetType.getPrimitiveType().isStringType()
-                    && !targetType.isAssignedStrLenInColDefinition())) {
-                targetTypeDef.analyze(analyzer);
-            }
-        } else {
-            targetTypeDef.analyze(analyzer);
-        }
+        targetTypeDef.analyze(analyzer);
         type = targetTypeDef.getType();
         analyze();
     }

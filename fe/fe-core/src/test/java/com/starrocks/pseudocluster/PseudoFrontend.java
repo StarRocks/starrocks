@@ -163,6 +163,7 @@ public class PseudoFrontend {
             try {
                 // init config
                 new Config().init(frontend.getRunningDir() + "/conf/fe.conf");
+                Config.statistic_collect_query_timeout = 60;
 
                 // check it after Config is initialized, otherwise the config 'check_java_version' won't work.
                 if (!JdkUtils.checkJavaVersion()) {

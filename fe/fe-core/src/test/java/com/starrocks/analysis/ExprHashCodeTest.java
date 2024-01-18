@@ -46,7 +46,7 @@ class ExprHashCodeTest {
                 predicate, predicate);
         ArithmeticExpr arithmeticExpr = new ArithmeticExpr(ArithmeticExpr.Operator.ADD, intLiteral, largeIntLiteral);
         AnalyticExpr analyticExpr = new AnalyticExpr(functionCallExpr, ImmutableList.of(stringLiteral),
-                null, AnalyticWindow.DEFAULT_WINDOW);
+                null, AnalyticWindow.DEFAULT_WINDOW, null);
         List<Expr> exprList = Lists.newArrayList(floatLiteral, intLiteral, largeIntLiteral, stringLiteral, dateLiteral,
                 decimalLiteral, functionCallExpr, likePredicate, existsPredicate, predicate, compoundPredicate,
                 arithmeticExpr, analyticExpr);

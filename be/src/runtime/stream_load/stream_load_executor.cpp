@@ -80,7 +80,7 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                     }
 
                     if (status.ok()) {
-                        StarRocksMetrics::instance()->stream_receive_bytes_total.increment(ctx->receive_bytes);
+                        StarRocksMetrics::instance()->stream_receive_bytes_total.increment(ctx->total_receive_bytes);
                         StarRocksMetrics::instance()->stream_load_rows_total.increment(ctx->number_loaded_rows);
                     }
                 } else {
@@ -161,6 +161,7 @@ Status StreamLoadExecutor::begin_txn(StreamLoadContext* ctx) {
     }
     ctx->txn_id = result.txnId;
     ctx->need_rollback = true;
+    ctx->load_deadline_sec = UnixSeconds() + result.timeout;
 
     return Status::OK();
 }
@@ -210,6 +211,36 @@ Status StreamLoadExecutor::commit_txn(StreamLoadContext* ctx) {
         LOG(WARNING) << "commit transaction failed, errmsg=" << status.get_error_msg() << ctx->brief();
         if (status.code() == TStatusCode::PUBLISH_TIMEOUT) {
             ctx->need_rollback = false;
+            if (ctx->load_deadline_sec > UnixSeconds()) {
+                //wait for apply finish
+                TGetLoadTxnStatusRequest v_request;
+                TGetLoadTxnStatusResult v_result;
+                set_request_auth(&v_request, ctx->auth);
+                v_request.db = ctx->db;
+                v_request.tbl = ctx->table;
+                v_request.txnId = ctx->txn_id;
+                while (ctx->load_deadline_sec > UnixSeconds()) {
+                    sleep(std::min((int64_t)config::get_txn_status_internal_sec,
+                                   ctx->load_deadline_sec - UnixSeconds()));
+                    auto visiable_st = ThriftRpcHelper::rpc<FrontendServiceClient>(
+                            master_addr.hostname, master_addr.port,
+                            [&v_request, &v_result](FrontendServiceConnection& client) {
+                                client->getLoadTxnStatus(v_result, v_request);
+                            },
+                            config::txn_commit_rpc_timeout_ms);
+                    if (!visiable_st.ok()) {
+                        return status;
+                    } else {
+                        if (v_result.status == TTransactionStatus::VISIBLE) {
+                            return Status::OK();
+                        } else if (v_result.status == TTransactionStatus::COMMITTED) {
+                            continue;
+                        } else {
+                            return status;
+                        }
+                    }
+                }
+            }
         }
         return status;
     }
@@ -359,6 +390,8 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
 
         TKafkaRLTaskProgress kafka_progress;
         kafka_progress.partitionCmtOffset = ctx->kafka_info->cmt_offset;
+        kafka_progress.partitionCmtOffsetTimestamp = ctx->kafka_info->cmt_offset_timestamp;
+        kafka_progress.__isset.partitionCmtOffsetTimestamp = true;
 
         rl_attach.kafkaRLTaskProgress = kafka_progress;
         rl_attach.__isset.kafkaRLTaskProgress = true;

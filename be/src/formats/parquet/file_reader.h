@@ -9,8 +9,8 @@
 #include "common/status.h"
 #include "formats/parquet/group_reader.h"
 #include "gen_cpp/parquet_types.h"
+#include "io/shared_buffered_input_stream.h"
 #include "runtime/runtime_state.h"
-#include "util/buffered_stream.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -24,14 +24,15 @@ class HdfsScannerContext;
 
 namespace starrocks::parquet {
 
-constexpr static const uint64_t FOOTER_BUFFER_SIZE = 16 * 1024;
+constexpr static const uint64_t FOOTER_BUFFER_SIZE = 64 * 1024;
 constexpr static const char* PARQUET_MAGIC_NUMBER = "PAR1";
 
 class FileMetaData;
 
 class FileReader {
 public:
-    FileReader(int chunk_size, RandomAccessFile* file, uint64_t file_size);
+    FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
+               io::SharedBufferedInputStream* sb_stream = nullptr);
     ~FileReader();
 
     Status init(vectorized::HdfsScannerContext* scanner_ctx);
@@ -110,7 +111,7 @@ private:
     // not exist column conjuncts eval false, file can be skipped
     bool _is_file_filtered = false;
     vectorized::HdfsScannerContext* _scanner_ctx = nullptr;
-    std::shared_ptr<SharedBufferedInputStream> _sb_stream = nullptr;
+    io::SharedBufferedInputStream* _sb_stream = nullptr;
     GroupReaderParam _group_reader_param;
 };
 

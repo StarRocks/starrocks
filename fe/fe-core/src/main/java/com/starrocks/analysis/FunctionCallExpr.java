@@ -44,6 +44,8 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
+import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
+
 public class FunctionCallExpr extends Expr {
     private FunctionName fnName;
     // private BuiltinAggregateFunction.Operator aggOp;
@@ -192,18 +194,6 @@ public class FunctionCallExpr extends Expr {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (!super.equals(obj)) {
-            return false;
-        }
-        FunctionCallExpr o = (FunctionCallExpr) obj;
-        return /*opcode == o.opcode && aggOp == o.aggOp &&*/ fnName.equals(o.fnName)
-                && fnParams.isDistinct() == o.fnParams.isDistinct()
-                && fnParams.isStar() == o.fnParams.isStar()
-                && nondeterministicId.equals(o.nondeterministicId);
-    }
-
-    @Override
     public String toSqlImpl() {
         StringBuilder sb = new StringBuilder();
         sb.append(fnName);
@@ -324,10 +314,7 @@ public class FunctionCallExpr extends Expr {
         }
 
         // For BE code simply, handle the following window functions with nullable
-        if (fnName.getFunction().equalsIgnoreCase(FunctionSet.LEAD) ||
-                fnName.getFunction().equalsIgnoreCase(FunctionSet.LAG) ||
-                fnName.getFunction().equalsIgnoreCase(FunctionSet.FIRST_VALUE) ||
-                fnName.getFunction().equalsIgnoreCase(FunctionSet.LAST_VALUE)) {
+        if (IGNORE_NULL_WINDOW_FUNCTION.contains(fnName)) {
             return true;
         }
 
@@ -436,8 +423,20 @@ public class FunctionCallExpr extends Expr {
 
     @Override
     public int hashCode() {
-        // fnParams contains all information of children Expr. No need to calculate super's hashcode again.
-        return Objects.hash(type, opcode, fnName, fnParams, nondeterministicId);
+        // @Note: fnParams is different with children Expr. use children plz.
+        return Objects.hash(super.hashCode(), type, opcode, fnName, nondeterministicId);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!super.equals(obj)) {
+            return false;
+        }
+        FunctionCallExpr o = (FunctionCallExpr) obj;
+        return /*opcode == o.opcode && aggOp == o.aggOp &&*/ fnName.equals(o.fnName)
+                && fnParams.isDistinct() == o.fnParams.isDistinct()
+                && fnParams.isStar() == o.fnParams.isStar()
+                && nondeterministicId.equals(o.nondeterministicId);
     }
 
     /**

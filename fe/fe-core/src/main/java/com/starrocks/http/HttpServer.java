@@ -72,6 +72,7 @@ import com.starrocks.http.rest.TableQueryPlanAction;
 import com.starrocks.http.rest.TableRowCountAction;
 import com.starrocks.http.rest.TableSchemaAction;
 import com.starrocks.http.rest.TransactionLoadAction;
+import com.starrocks.http.rest.TriggerAction;
 import com.starrocks.leader.MetaHelper;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
@@ -150,6 +151,7 @@ public class HttpServer {
         ShowProcAction.registerAction(controller);
         ShowRuntimeInfoAction.registerAction(controller);
         GetLogFileAction.registerAction(controller);
+        TriggerAction.registerAction(controller);
         GetSmallFileAction.registerAction(controller);
         RowCountAction.registerAction(controller);
         CheckDecommissionAction.registerAction(controller);
@@ -232,7 +234,8 @@ public class HttpServer {
         public void run() {
             // Configure the server.
             EventLoopGroup bossGroup = new NioEventLoopGroup();
-            EventLoopGroup workerGroup = new NioEventLoopGroup();
+            int numWorkerThreads = Math.max(0, Config.http_worker_threads_num);
+            EventLoopGroup workerGroup = new NioEventLoopGroup(numWorkerThreads);
             try {
                 serverBootstrap = new ServerBootstrap();
                 serverBootstrap.option(ChannelOption.SO_BACKLOG, Config.http_backlog_num);

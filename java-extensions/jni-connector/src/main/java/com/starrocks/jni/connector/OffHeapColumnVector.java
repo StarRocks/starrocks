@@ -319,7 +319,7 @@ public class OffHeapColumnVector {
 
     public int appendString(String str) {
         byte[] bytes = str.getBytes(StandardCharsets.UTF_8);
-        return appendByteArray(bytes, 0, str.length());
+        return appendByteArray(bytes, 0, bytes.length);
     }
 
     public int appendBinary(byte[] binary) {

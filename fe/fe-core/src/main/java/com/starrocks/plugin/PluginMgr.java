@@ -224,7 +224,7 @@ public class PluginMgr implements Writable {
             pluginLoader.setStatus(PluginStatus.INSTALLED);
         } catch (IOException | UserException e) {
             pluginLoader.setStatus(PluginStatus.ERROR, e.getMessage());
-            throw e;
+            LOG.warn("fail to load plugin", e);
         } finally {
             // this is a replay process, so whether it is successful or not, add it's name.
             addDynamicPluginNameIfAbsent(info.getName());

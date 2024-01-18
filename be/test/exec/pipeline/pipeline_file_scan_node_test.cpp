@@ -72,6 +72,7 @@ public:
         _runtime_state->set_chunk_size(config::vector_chunk_size);
         _runtime_state->init_mem_trackers(_query_ctx->mem_tracker());
         _runtime_state->set_be_number(_request.backend_num);
+        _runtime_state->set_query_ctx(_query_ctx);
         _pool = _runtime_state->obj_pool();
 
         _context = _pool->add(new PipelineBuilderContext(_fragment_ctx, degree_of_parallelism));

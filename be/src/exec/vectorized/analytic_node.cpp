@@ -9,6 +9,9 @@
 #include "column/chunk.h"
 #include "exec/pipeline/analysis/analytic_sink_operator.h"
 #include "exec/pipeline/analysis/analytic_source_operator.h"
+#include "exec/pipeline/hash_partition_context.h"
+#include "exec/pipeline/hash_partition_sink_operator.h"
+#include "exec/pipeline/hash_partition_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
@@ -49,6 +52,12 @@ AnalyticNode::AnalyticNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
 
 Status AnalyticNode::init(const TPlanNode& tnode, RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    _use_hash_based_partition = _tnode.analytic_node.order_by_exprs.empty() &&
+                                _tnode.analytic_node.__isset.use_hash_based_partition &&
+                                _tnode.analytic_node.use_hash_based_partition;
+    if (_use_hash_based_partition) {
+        RETURN_IF_ERROR(Expr::create_expr_trees(_pool, tnode.analytic_node.partition_exprs, &_hash_partition_exprs));
+    }
     DCHECK(_conjunct_ctxs.empty());
 
     return Status::OK();
@@ -59,7 +68,7 @@ Status AnalyticNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
     DCHECK(child(0)->row_desc().is_prefix_of(row_desc()));
 
-    _analytor = std::make_shared<Analytor>(_tnode, child(0)->row_desc(), _result_tuple_desc);
+    _analytor = std::make_shared<Analytor>(_tnode, child(0)->row_desc(), _result_tuple_desc, false);
     RETURN_IF_ERROR(_analytor->prepare(state, _pool, runtime_profile()));
 
     return Status::OK();
@@ -304,16 +313,38 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
     using namespace pipeline;
 
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
-
-    // analytic's dop must be 1 if with no partition clause
-    if (_tnode.analytic_node.partition_exprs.empty()) {
-        ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
-    }
     auto* upstream_source_op = context->source_operator(ops_with_sink);
+
+    if (_tnode.analytic_node.partition_exprs.empty()) {
+        // analytic's dop must be 1 if with no partition clause
+        ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
+    } else if (_use_hash_based_partition) {
+        // analytic has only partition by columns but no order by columns
+        auto pseudo_plan_node_id = context->next_pseudo_plan_node_id();
+        HashPartitionContextFactoryPtr hash_partition_ctx_factory =
+                std::make_shared<HashPartitionContextFactory>(_tnode.analytic_node.partition_exprs);
+
+        // prepend local shuffle to PartitionSortSinkOperator
+        ops_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink,
+                                                                          _hash_partition_exprs);
+        upstream_source_op = context->source_operator(ops_with_sink);
+
+        ops_with_sink.emplace_back(std::make_shared<HashPartitionSinkOperatorFactory>(
+                context->next_operator_id(), pseudo_plan_node_id, hash_partition_ctx_factory));
+        context->add_pipeline(ops_with_sink);
+
+        ops_with_sink.clear();
+        auto hash_partition_source_op = std::make_shared<HashPartitionSourceOperatorFactory>(
+                context->next_operator_id(), pseudo_plan_node_id, hash_partition_ctx_factory);
+        context->inherit_upstream_source_properties(hash_partition_source_op.get(), upstream_source_op);
+        ops_with_sink.push_back(std::move(hash_partition_source_op));
+    }
+
+    upstream_source_op = context->source_operator(ops_with_sink);
     auto degree_of_parallelism = upstream_source_op->degree_of_parallelism();
 
-    AnalytorFactoryPtr analytor_factory =
-            std::make_shared<AnalytorFactory>(degree_of_parallelism, _tnode, child(0)->row_desc(), _result_tuple_desc);
+    AnalytorFactoryPtr analytor_factory = std::make_shared<AnalytorFactory>(
+            degree_of_parallelism, _tnode, child(0)->row_desc(), _result_tuple_desc, _use_hash_based_partition);
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
 
     ops_with_sink.emplace_back(

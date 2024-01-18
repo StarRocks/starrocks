@@ -93,7 +93,7 @@ logical project (col)
 select sum(v1) from t0 having avg(v1) - avg(v2) > 10
 [result]
 logical project (col)
-    logical filter (col - col > 10.0)
+    logical filter (col - col > 10)
         logical aggregate () (sum(col),avg(col),avg(col))
             logical project (col,col)
                 logical project (col,col,col)

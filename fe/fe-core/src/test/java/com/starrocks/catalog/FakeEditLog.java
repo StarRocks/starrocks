@@ -26,6 +26,7 @@ import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
+import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.system.Backend;
 import com.starrocks.transaction.TransactionState;
@@ -81,6 +82,11 @@ public class FakeEditLog extends MockUp<EditLog> {
 
     @Mock
     public void logDynamicPartition(ModifyTablePropertyOperationLog info) {
+
+    }
+
+    @Mock
+    public void logAddReplica(ReplicaPersistInfo info) {
 
     }
 

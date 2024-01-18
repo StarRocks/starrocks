@@ -174,6 +174,9 @@ public interface ConnectorMetadata {
             throws DdlException, MetaNotFoundException, AnalysisException {
     }
 
+<<<<<<< HEAD
+    default String refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement)
+=======
     default String refreshMaterializedView(String dbName, String mvName, boolean force, PartitionRangeDesc range,
                                            int priority, boolean mergeRedundant, boolean isManual)
             throws DdlException, MetaNotFoundException {
@@ -182,6 +185,7 @@ public interface ConnectorMetadata {
 
     default String refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement,
                                            int priority)
+>>>>>>> branch-2.5-mrs
             throws DdlException, MetaNotFoundException {
         return null;
     }

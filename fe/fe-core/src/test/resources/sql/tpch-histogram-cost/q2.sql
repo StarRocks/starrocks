@@ -50,20 +50,20 @@ RESULT SINK
 
 25:MERGING-EXCHANGE
 limit: 100
-cardinality: 2
+cardinality: 1
 column statistics:
-* P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0027237042377632] ESTIMATE
-* P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377632] ESTIMATE
-* S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 2.0027237042377632] ESTIMATE
-* S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377632] ESTIMATE
-* S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 2.0027237042377632] ESTIMATE
-* S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 2.0027237042377632] ESTIMATE
-* S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 2.0027237042377632] ESTIMATE
-* S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 2.0027237042377632] ESTIMATE
-* PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 2.0027237042377632] ESTIMATE
-* PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 2.0027237042377632] ESTIMATE
-* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377632] ESTIMATE
-* min-->[1.0, 1000.0, 0.0, 8.0, 2.0027237042377632] ESTIMATE
+* P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1.0] ESTIMATE
+* P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+* S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+* S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.0] ESTIMATE
+* S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.0] ESTIMATE
+* S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 1.0] ESTIMATE
+* S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 1.0] ESTIMATE
+* PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 1.0] ESTIMATE
+* N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+* N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+* R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+* min-->[1.0, 1000.0, 0.0, 8.0, 1.0] ESTIMATE
 
 PLAN FRAGMENT 1(F09)
 
@@ -75,20 +75,20 @@ OutPut Exchange Id: 25
 |  order by: [16, DOUBLE, false] DESC, [26, VARCHAR, false] ASC, [12, VARCHAR, false] ASC, [1, INT, false] ASC
 |  offset: 0
 |  limit: 100
-|  cardinality: 2
+|  cardinality: 1
 |  column statistics:
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0027237042377632] ESTIMATE
-|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377632] ESTIMATE
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 2.0027237042377632] ESTIMATE
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377632] ESTIMATE
-|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 2.0027237042377632] ESTIMATE
-|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 2.0027237042377632] ESTIMATE
-|  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 2.0027237042377632] ESTIMATE
-|  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 2.0027237042377632] ESTIMATE
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 2.0027237042377632] ESTIMATE
-|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 2.0027237042377632] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377632] ESTIMATE
-|  * min-->[1.0, 1000.0, 0.0, 8.0, 2.0027237042377632] ESTIMATE
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1.0] ESTIMATE
+|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.0] ESTIMATE
+|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.0] ESTIMATE
+|  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 1.0] ESTIMATE
+|  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 1.0] ESTIMATE
+|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * min-->[1.0, 1000.0, 0.0, 8.0, 1.0] ESTIMATE
 |
 23:Project
 |  output columns:
@@ -100,51 +100,51 @@ OutPut Exchange Id: 25
 |  16 <-> [16: S_ACCTBAL, DOUBLE, false]
 |  17 <-> [17: S_COMMENT, VARCHAR, false]
 |  26 <-> [26: N_NAME, VARCHAR, false]
-|  cardinality: 2
+|  cardinality: 1
 |  column statistics:
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0027237042377632] ESTIMATE
-|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377632] ESTIMATE
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377632] ESTIMATE
-|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 2.0027237042377632] ESTIMATE
-|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 2.0027237042377632] ESTIMATE
-|  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 2.0027237042377632] ESTIMATE
-|  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 2.0027237042377632] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377632] ESTIMATE
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1.0] ESTIMATE
+|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.0] ESTIMATE
+|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.0] ESTIMATE
+|  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 1.0] ESTIMATE
+|  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |
 22:SELECT
-       |  predicates: 22: PS_SUPPLYCOST = 59: min
-       |  cardinality: 2
-       |  column statistics:
-       |  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 2.0027237042377632] ESTIMATE
-       |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377632] ESTIMATE
-       |  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 2.0027237042377632] ESTIMATE
-       |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377632] ESTIMATE
-       |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 2.0027237042377632] ESTIMATE
-       |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 2.0027237042377632] ESTIMATE
-       |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 2.0027237042377632] ESTIMATE
-       |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 2.0027237042377632] ESTIMATE
-       |  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 2.0027237042377632] ESTIMATE
-       |  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 2.0027237042377632] ESTIMATE
-       |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377632] ESTIMATE
-       |  * min-->[1.0, 1000.0, 0.0, 8.0, 2.0027237042377632] ESTIMATE
-       |
-       21:ANALYTIC
-       |  functions: [, min[([22: PS_SUPPLYCOST, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true], ]
-|  partition by: [1: P_PARTKEY, INT, false]
-|  cardinality: 200000
+|  predicates: 22: PS_SUPPLYCOST = 59: min
+|  cardinality: 1
 |  column statistics:
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100300.0] ESTIMATE
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1.0] ESTIMATE
+|  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 1.0] ESTIMATE
+|  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 1.0] ESTIMATE
+|  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 1.0] ESTIMATE
+|  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 1.0] ESTIMATE
+|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 1.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
+|  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * min-->[1.0, 1000.0, 0.0, 8.0, 1.0] ESTIMATE
+|
+21:ANALYTIC
+|  functions: [, min[([22: PS_SUPPLYCOST, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true], ]
+|  partition by: [1: P_PARTKEY, INT, false]
+|  cardinality: 80240
+|  column statistics:
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 80240.0] ESTIMATE
 |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 200000.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 80240.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
 |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 200000.0] ESTIMATE
-|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * min-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
+|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 80240.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * min-->[1.0, 1000.0, 0.0, 8.0, 80240.0] ESTIMATE
 |
 20:SORT
 |  order by: [1, INT, false] ASC
@@ -155,16 +155,16 @@ OutPut Exchange Id: 25
 |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 80240.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
-|  * S_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
 |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
 |  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 80240.0] ESTIMATE
-|  * N_NATIONKEY-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 19:EXCHANGE
-cardinality: 200000
+cardinality: 80240
 
 PLAN FRAGMENT 2(F00)
 
@@ -183,17 +183,17 @@ OutPut Exchange Id: 19
 |  17 <-> [17: S_COMMENT, VARCHAR, false]
 |  22 <-> [22: PS_SUPPLYCOST, DOUBLE, false]
 |  26 <-> [26: N_NAME, VARCHAR, false]
-|  cardinality: 200000
+|  cardinality: 80240
 |  column statistics:
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100300.0] ESTIMATE
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 80240.0] ESTIMATE
 |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 200000.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 80240.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
 |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
-|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 80240.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |
 17:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
@@ -201,19 +201,19 @@ OutPut Exchange Id: 19
 |  build runtime filters:
 |  - filter_id = 3, build_expr = (20: PS_SUPPKEY), remote = false
 |  output columns: 1, 3, 12, 13, 15, 16, 17, 22, 26
-|  cardinality: 200000
+|  cardinality: 80240
 |  column statistics:
-|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 100300.0] ESTIMATE
+|  * P_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 80240.0] ESTIMATE
 |  * P_MFGR-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * S_SUPPKEY-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
-|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 200000.0] ESTIMATE
+|  * S_NAME-->[-Infinity, Infinity, 0.0, 25.0, 80240.0] ESTIMATE
 |  * S_ADDRESS-->[-Infinity, Infinity, 0.0, 40.0, 10000.0] ESTIMATE
 |  * S_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 10000.0] ESTIMATE
 |  * S_ACCTBAL-->[-998.22, 9999.72, 0.0, 8.0, 9955.0] ESTIMATE
 |  * S_COMMENT-->[-Infinity, Infinity, 0.0, 101.0, 10000.0] ESTIMATE
-|  * PS_SUPPKEY-->[1.0, 1000000.0, 0.0, 8.0, 200000.0] ESTIMATE
-|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
-|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * PS_SUPPLYCOST-->[1.0, 1000.0, 0.0, 8.0, 80240.0] ESTIMATE
+|  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * N_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
+|  * R_REGIONKEY-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 |----16:EXCHANGE
 |       cardinality: 401200

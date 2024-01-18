@@ -65,6 +65,43 @@ bool check_fpe_of_min_div_by_minus_one(LType lhs, RType rhs) {
     }
 }
 
+template <typename Op>
+std::string get_op_name() {
+    if constexpr (is_add_op<Op>) {
+        return "add";
+    } else if constexpr (is_sub_op<Op>) {
+        return "sub";
+    } else if constexpr (is_reverse_sub_op<Op>) {
+        return "reverse_sub";
+    } else if constexpr (is_reverse_mod_op<Op>) {
+        return "reverse_mod";
+    } else if constexpr (is_mul_op<Op>) {
+        return "mul";
+    } else if constexpr (is_div_op<Op>) {
+        return "div";
+    } else if constexpr (is_intdiv_op<Op>) {
+        return "intdiv";
+    } else if constexpr (is_mod_op<Op>) {
+        return "mod";
+    } else if constexpr (is_bitand_op<Op>) {
+        return "bitand";
+    } else if constexpr (is_bitor_op<Op>) {
+        return "bitor";
+    } else if constexpr (is_bitxor_op<Op>) {
+        return "bitxor";
+    } else if constexpr (is_bitnot_op<Op>) {
+        return "bitnot";
+    } else if constexpr (is_bit_shift_left_op<Op>) {
+        return "bit_shift_left";
+    } else if constexpr (is_bit_shift_right_op<Op>) {
+        return "bit_shift_right";
+    } else if constexpr (is_bit_shift_right_logical_op<Op>) {
+        return "bit_shift_right_logical";
+    } else {
+        return "unknown";
+    }
+}
+
 template <typename Op, PrimitiveType Type, typename = guard::Guard, typename = guard::Guard>
 struct ArithmeticBinaryOperator {
     template <typename LType, typename RType, typename ResultType>

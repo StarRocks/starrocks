@@ -35,7 +35,8 @@ public abstract class StatementBase implements ParseNode {
         VERBOSE,
         // True if the describe_stmt print costs information, if `isCosts` is true, `isExplain` must be set to true.
         COST,
-        OPTIMIZER
+        OPTIMIZER,
+        REWRITE
     }
 
     private ExplainLevel explainLevel;
@@ -52,6 +53,11 @@ public abstract class StatementBase implements ParseNode {
 
     public boolean isExplain() {
         return isExplain;
+    }
+
+    public boolean isTrace() {
+        return isExplain && (explainLevel == ExplainLevel.OPTIMIZER ||
+                explainLevel == ExplainLevel.REWRITE);
     }
 
     public ExplainLevel getExplainLevel() {

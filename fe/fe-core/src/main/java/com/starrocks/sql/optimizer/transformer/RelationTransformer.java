@@ -140,9 +140,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         OptExprBuilder root = plan.getRootBuilder();
         // Set limit if user set sql_select_limit.
         long selectLimit = ConnectContext.get().getSessionVariable().getSqlSelectLimit();
-        if (!root.getRoot().getOp().hasLimit() &&
-                selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
-            LogicalLimitOperator limitOperator = LogicalLimitOperator.local(selectLimit);
+        if (!root.getRoot().getOp().hasLimit() && selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
+            LogicalLimitOperator limitOperator = LogicalLimitOperator.init(selectLimit);
             root = root.withNewRoot(limitOperator);
             return new LogicalPlan(root, plan.getOutputColumn(), plan.getCorrelation());
         }
@@ -431,7 +430,10 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         LogicalScanOperator scanOperator;
         if (node.getTable().isNativeTable()) {
             DistributionInfo distributionInfo = ((OlapTable) node.getTable()).getDefaultDistributionInfo();
-            Preconditions.checkState(distributionInfo instanceof HashDistributionInfo);
+            if (!(distributionInfo instanceof HashDistributionInfo)) {
+                throw new StarRocksPlannerException("This table/materialized view using random distribution "
+                        + "which is not support in this version. ", ErrorType.UNSUPPORTED);
+            }
             HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
             List<Column> distributedColumns = hashDistributionInfo.getDistributionColumns();
             List<Integer> hashDistributeColumns = new ArrayList<>();
@@ -455,7 +457,8 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
                         node.getPartitionNames(),
                         node.getHasHintsPartitionNames(),
                         Lists.newArrayList(),
-                        node.getTabletIds());
+                        node.getTabletIds(),
+                        node.isUsePkIndex());
             }
         } else if (Table.TableType.HIVE.equals(node.getTable().getType())) {
             scanOperator = new LogicalHiveScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
@@ -797,12 +800,25 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
 
     private boolean isJoinLeftRelatedSubquery(JoinRelation node, Expr joinOnConjunct) {
         List<Subquery> subqueries = Lists.newArrayList();
-        joinOnConjunct.collect(Subquery.class, subqueries);
-        Preconditions.checkState(subqueries.size() <= 1,
-                "Not support ON Clause conjunct contains more than one subquery");
+
+        List<Expr> elements = Expr.flattenPredicate(joinOnConjunct);
+        List<Expr> predicateWithSubquery = Lists.newArrayList();
+        for (Expr element : elements) {
+            int oldSize = subqueries.size();
+            element.collect(Subquery.class, subqueries);
+            if (subqueries.size() > oldSize) {
+                predicateWithSubquery.add(element);
+            }
+        }
+
+        if (subqueries.size() > 1) {
+            throw new SemanticException("unsupported more than one subquery in join on condition");
+        }
+
         if (subqueries.isEmpty()) {
             return true;
         }
+
         Subquery subquery = subqueries.get(0);
         QueryStatement subqueryStmt = subquery.getQueryStatement();
         SelectRelation selectRelation = (SelectRelation) subqueryStmt.getQueryRelation();
@@ -817,7 +833,7 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
          *       /              \
          *   Outer:R        Inner: E(r)
          * Since join node has two relation, we should to determine which one(left or right or both)
-         * is the outer relation of ApplyOperator
+         * is the outer relation of ApplyOperator for correlated subquery or expr in (un-correlated subquery),
          * usingLeftRelation = true, then the left relation of join will be the outer relation of apply
          * usingLeftRelation = false, then the right relation of join will be the outer relation of apply
          * TODO, both of the left and right relations should be taken into account, and it is not supported yet
@@ -825,42 +841,41 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         final boolean usingLeftRelation;
 
         List<SlotRef> slotRefs = Lists.newArrayList();
-        joinOnConjunct.collect(SlotRef.class, slotRefs);
+        Expr predicate  = predicateWithSubquery.get(0);
+        predicate.collect(SlotRef.class, slotRefs);
         RelationFields leftRelationFields = node.getLeft().getRelationFields();
         RelationFields rightRelationFields = node.getRight().getRelationFields();
-        boolean isJoinLeftNonCorrelated =
+        boolean refLeftNodeCols =
                 slotRefs.stream().anyMatch(slotRef -> !leftRelationFields.resolveFields(slotRef).isEmpty());
-        boolean isJoinRightNonCorrelated =
+        boolean refRightNodeCols =
                 slotRefs.stream().anyMatch(slotRef -> !rightRelationFields.resolveFields(slotRef).isEmpty());
 
-        if (correlatedFieldIds.isEmpty()) {
-            Preconditions.checkState(!(isJoinLeftNonCorrelated && isJoinRightNonCorrelated),
-                    "Not support ON Clause un-correlated subquery referencing columns of more than one table");
-            usingLeftRelation = isJoinLeftNonCorrelated;
-        } else {
-            boolean isJoinLeftCorrelated = false;
-            boolean isJoinRightCorrelated = false;
-            for (FieldId correlatedFieldId : correlatedFieldIds) {
-                Field field = node.getRelationFields().getAllFields().get(correlatedFieldId.getFieldIndex());
-                if (node.getLeft().getRelationFields().getAllFields().contains(field)) {
-                    isJoinLeftCorrelated = true;
-                }
-                if (node.getRight().getRelationFields().getAllFields().contains(field)) {
-                    isJoinRightCorrelated = true;
-                }
+        boolean correlatedLeftNode = false;
+        boolean correlatedRightNode = false;
+        for (FieldId correlatedFieldId : correlatedFieldIds) {
+            Field field = node.getRelationFields().getAllFields().get(correlatedFieldId.getFieldIndex());
+            if (Objects.equals(node.getLeft().getResolveTableName(), field.getRelationAlias())) {
+                correlatedLeftNode = true;
+            } else if (Objects.equals(node.getRight().getResolveTableName(), field.getRelationAlias())) {
+                correlatedRightNode = true;
+            } else {
+                Preconditions.checkState(false, "Cannot find field %s in outer scope", field);
             }
-            Preconditions.checkState(isJoinLeftCorrelated || isJoinRightCorrelated);
-            Preconditions.checkState(!(isJoinLeftCorrelated && isJoinRightCorrelated),
-                    "Not support ON Clause correlated subquery referencing columns of more than one table");
-            if (joinOnConjunct instanceof InPredicate) {
-                // We DO NOT support this kind of in-predicate like below
-                // select * from t0 join t1 on t0.v1 in (select t2.v7 from t2 where t1.v5 = t2.v8)
-                Preconditions.checkState(!(isJoinLeftCorrelated && isJoinRightNonCorrelated ||
-                                isJoinRightCorrelated && isJoinLeftNonCorrelated),
-                        "Not support ON Clause correlated in-subquery referencing columns of more than one table");
-            }
-            usingLeftRelation = isJoinLeftCorrelated;
         }
+
+        if (predicate instanceof InPredicate &&
+                (refLeftNodeCols || correlatedLeftNode) && (refRightNodeCols || correlatedRightNode)) {
+            throw new SemanticException("unsupported correlated predicate referencing columns from more than one table");
+        }
+
+        if (correlatedFieldIds.isEmpty()) {
+            usingLeftRelation = refLeftNodeCols;
+        } else if (correlatedLeftNode && correlatedRightNode) {
+            throw new SemanticException("unsupported correlated predicate referencing columns from more than one table");
+        } else {
+            usingLeftRelation = correlatedLeftNode;
+        }
+
         return usingLeftRelation;
     }
 }

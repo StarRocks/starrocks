@@ -35,7 +35,7 @@ public class DistributionSpec {
         // A.a -> [A.a, B.b, C.c]
         // B.b -> [A.a, B.b, C.c]
         // C.c -> [A.a, B.b, C.c]
-        private final Map<Integer, ColumnRefSet> joinEquivalentColumns = Maps.newHashMap();
+        public final Map<Integer, ColumnRefSet> joinEquivalentColumns = Maps.newHashMap();
 
         public boolean isSinglePartition() {
             return partitionIds.size() == 1;

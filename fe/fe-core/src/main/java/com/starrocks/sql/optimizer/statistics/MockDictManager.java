@@ -29,7 +29,7 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
-    public void updateGlobalDict(long tableId, String columnName, long versionTime) {
+    public void updateGlobalDict(long tableId, String columnName,  long collectedVersion, long versionTime) {
     }
 
     @Override

@@ -25,6 +25,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.Reference;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -36,6 +37,7 @@ import org.junit.Assert;
 import org.junit.Before;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -200,5 +202,31 @@ public class SimpleSchedulerTest {
         // no backend can work
         address = SimpleScheduler.getBackendHost(immutableThreeBackends, ref);
         Assert.assertNull(address);
+    }
+
+    // @Test
+    public void testRemoveBackendFromBlackList() {
+        Config.heartbeat_timeout_second = Integer.MAX_VALUE;
+        TNetworkAddress address = null;
+
+        Backend backendA = new Backend(100, "addressA", 0);
+        backendA.updateOnce(0, 0, 0);
+        Map<Long, Backend> backends = Maps.newHashMap();
+        backends.put((long) 100, backendA);
+        ImmutableMap<Long, Backend> immutableBackends = ImmutableMap.copyOf(backends);
+
+        SimpleScheduler.addToBlacklist(Long.valueOf(100));
+        address = SimpleScheduler.getBackendHost(immutableBackends, ref);
+        Assert.assertNull(address);
+
+        String host = backendA.getHost();
+        List<Integer> ports = new ArrayList<Integer>();
+        Collections.addAll(ports, backendA.getBePort(), backendA.getBrpcPort(), backendA.getHttpPort());
+        boolean accessible = NetUtils.checkAccessibleForAllPorts(host, ports);
+        Assert.assertFalse(accessible);
+
+        SimpleScheduler.removeFromBlacklist(Long.valueOf(100));
+        address = SimpleScheduler.getBackendHost(immutableBackends, ref);
+        Assert.assertEquals(address.hostname, "addressA");
     }
 }

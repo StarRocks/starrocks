@@ -194,6 +194,10 @@ struct StructVectorBatch : public ColumnVectorBatch {
     void filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size) override;
     void filterOnFields(uint8_t* f_data, uint32_t f_size, uint32_t true_size, const std::vector<int>& fields,
                         bool onLazyLoad) override;
+
+private:
+    // Mark that this StructVectorBatch is already called ColumnVectorBatch::filter(f_data, f_size, true_size);
+    bool alreadyFiltered = false;
 };
 
 struct ListVectorBatch : public ColumnVectorBatch {

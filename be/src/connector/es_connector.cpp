@@ -30,6 +30,10 @@ DataSourcePtr ESDataSourceProvider::create_data_source(const TScanRange& scan_ra
     return std::make_unique<ESDataSource>(this, scan_range);
 }
 
+const TupleDescriptor* ESDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_es_scan_node.tuple_id);
+}
+
 // ================================
 
 ESDataSource::ESDataSource(const ESDataSourceProvider* provider, const TScanRange& scan_range)

@@ -29,6 +29,7 @@
 #include "gutil/strings/substitute.h"
 #include "gutil/strings/util.h"
 #include "io/fd_input_stream.h"
+#include "io/io_profiler.h"
 #include "util/errno.h"
 #include "util/slice.h"
 
@@ -184,6 +185,7 @@ public:
         RETURN_IF_ERROR(do_writev_at(_fd, _filename, _filesize, data, cnt, &bytes_written));
         _filesize += bytes_written;
         _pending_sync = true;
+        IOProfiler::add_write(bytes_written);
         return Status::OK();
     }
 

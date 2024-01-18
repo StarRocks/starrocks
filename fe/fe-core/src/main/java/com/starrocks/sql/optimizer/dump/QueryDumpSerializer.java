@@ -24,7 +24,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.lang.reflect.Type;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 
@@ -47,7 +46,6 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         // table meta
         JsonObject tableMetaData = new JsonObject();
         List<Pair<String, Table>> tableMetaPairs = Lists.newArrayList(dumpInfo.getTableMap().values());
-        tableMetaPairs.sort(Comparator.comparing(pair -> pair.first + ":" + pair.second.getName()));
         for (Pair<String, com.starrocks.catalog.Table> entry : tableMetaPairs) {
             String tableName = entry.first + "." + entry.second.getName();
             List<String> createTableStmt = Lists.newArrayList();

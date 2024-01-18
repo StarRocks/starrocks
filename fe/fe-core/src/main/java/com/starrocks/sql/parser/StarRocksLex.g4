@@ -11,6 +11,7 @@ tokens {
     CONCAT
 }
 
+ACTIVE: 'ACTIVE';
 ADD: 'ADD';
 ADMIN: 'ADMIN';
 AFTER: 'AFTER';
@@ -52,6 +53,7 @@ CHAR: 'CHAR';
 CHARACTER: 'CHARACTER';
 CHARSET: 'CHARSET';
 CHECK: 'CHECK';
+CLEAN: 'CLEAN';
 COLLATE: 'COLLATE';
 COLLATION: 'COLLATION';
 COLUMN: 'COLUMN';
@@ -158,6 +160,7 @@ IMPERSONATE: 'IMPERSONATE';
 IGNORE: 'IGNORE';
 IMAGE: 'IMAGE';
 IN: 'IN';
+INACTIVE: 'INACTIVE';
 INDEX: 'INDEX';
 INDEXES: 'INDEXES';
 INFILE: 'INFILE';
@@ -240,6 +243,7 @@ PARTITIONS: 'PARTITIONS';
 PASSWORD: 'PASSWORD';
 PATH: 'PATH';
 PAUSE: 'PAUSE';
+PENDING: 'PENDING';
 PERCENTILE: 'PERCENTILE';
 PERCENTILE_UNION: 'PERCENTILE_UNION';
 PLUGIN: 'PLUGIN';
@@ -255,6 +259,7 @@ PROPERTY: 'PROPERTY';
 QUALIFY: 'QUALIFY';
 QUARTER: 'QUARTER';
 QUERY: 'QUERY';
+QUEUE: 'QUEUE';
 QUOTA: 'QUOTA';
 RANDOM: 'RANDOM';
 RANGE: 'RANGE';
@@ -262,6 +267,7 @@ RANK: 'RANK';
 READ: 'READ';
 RECOVER: 'RECOVER';
 REFRESH: 'REFRESH';
+REWRITE: 'REWRITE';
 REGEXP: 'REGEXP';
 RELEASE: 'RELEASE';
 RENAME: 'RENAME';
@@ -290,6 +296,7 @@ ROW: 'ROW';
 ROWS: 'ROWS';
 ROW_NUMBER: 'ROW_NUMBER';
 SAMPLE: 'SAMPLE';
+SCHEDULER: 'SCHEDULER';
 SCHEMA: 'SCHEMA';
 SCHEMAS: 'SCHEMAS';
 SECOND: 'SECOND';
@@ -430,12 +437,14 @@ DIGIT_IDENTIFIER
     : DIGIT (LETTER | DIGIT | '_')+
     ;
 
-QUOTED_IDENTIFIER
-    : '"' ( ~'"' | '""' )* '"'
-    ;
-
 BACKQUOTED_IDENTIFIER
     : '`' ( ~'`' | '``' )* '`'
+    ;
+
+// Prevent recognize string:         .123somelatin AS ((.123), DECIMAL_LITERAL), ((somelatin), IDENTIFIER)
+// it must recoginze:                .123somelatin AS ((.), DOT), (123somelatin, IDENTIFIER)
+DOT_IDENTIFIER
+    : '.' DIGIT_IDENTIFIER
     ;
 
 fragment EXPONENT
@@ -455,7 +464,7 @@ SIMPLE_COMMENT
     ;
 
 BRACKETED_COMMENT
-    : '/*' ~'+' .*? '*/' -> channel(HIDDEN)
+    : '/*' ('+'? [ \r\n\t\u3000]* | ~'+' .*?) '*/' -> channel(HIDDEN)
     ;
 
 SEMICOLON: ';';
@@ -463,5 +472,5 @@ SEMICOLON: ';';
 DOTDOTDOT: '...';
 
 WS
-    : [ \r\n\t]+ -> channel(HIDDEN)
+    : [ \r\n\t\u3000]+ -> channel(HIDDEN)
     ;

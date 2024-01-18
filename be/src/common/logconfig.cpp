@@ -133,8 +133,8 @@ bool init_glog(const char* basename, bool install_signal_handler) {
         google::InstallFailureSignalHandler();
     }
 
-    // Don't log to stderr.
-    FLAGS_stderrthreshold = 5;
+    // only write fatal log to stderr
+    FLAGS_stderrthreshold = 3;
     // Set glog log dir.
     FLAGS_log_dir = config::sys_log_dir;
     // 0 means buffer INFO only.

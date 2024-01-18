@@ -3,12 +3,15 @@
 #pragma once
 
 #include "column/column_builder.h"
+#include "exprs/overflow.h"
 #include "exprs/vectorized/arithmetic_operation.h"
 #include "exprs/vectorized/binary_function.h"
+#include "gutil/strings/substitute.h"
 #include "runtime/primitive_type.h"
 
 namespace starrocks::vectorized {
-template <bool check_overflow, typename Op>
+
+template <OverflowMode overflow_mode, typename Op>
 struct DecimalBinaryFunction {
     // Adjust the scale of lhs operand, then evaluate binary operation, the rules about operand
     // scaling is defined in function: compute_result_type.  each operations are depicted as
@@ -45,12 +48,17 @@ struct DecimalBinaryFunction {
             lhs_datum = lhs_data[0];
             // adjust left operand
             if constexpr (adjust_left) {
-                overflow = DecimalV3Cast::scale_up<LhsCppType, LhsCppType, check_overflow>(lhs_datum, scale_factor,
-                                                                                           &lhs_datum);
+                overflow = DecimalV3Cast::scale_up<LhsCppType, LhsCppType, check_overflow<overflow_mode>>(
+                        lhs_datum, scale_factor, &lhs_datum);
                 // adjusting operand generates decimal overflow
-                if constexpr (check_overflow) {
+                if constexpr (check_overflow<overflow_mode>) {
                     if (overflow) {
-                        return true;
+                        if constexpr (error_if_overflow<overflow_mode>) {
+                            throw std::overflow_error(strings::Substitute(
+                                    "The '$0' operation involving decimal values overflows", get_op_name<Op>()));
+                        } else {
+                            return true;
+                        }
                     }
                 }
             }
@@ -62,24 +70,32 @@ struct DecimalBinaryFunction {
 
         for (auto i = 0; i < num_rows; ++i) {
             if constexpr (lhs_is_const && rhs_is_const) {
-                overflow = BinaryOperator::template apply<check_overflow, false, LhsCppType, RhsCppType, ResultCppType>(
-                        lhs_datum, rhs_datum, &result_data[i], scale_factor);
+                overflow = BinaryOperator::template apply<check_overflow<overflow_mode>, false, LhsCppType, RhsCppType,
+                                                          ResultCppType>(lhs_datum, rhs_datum, &result_data[i],
+                                                                         scale_factor);
             } else if constexpr (lhs_is_const) {
-                overflow = BinaryOperator::template apply<check_overflow, false, LhsCppType, RhsCppType, ResultCppType>(
-                        lhs_datum, rhs_data[i], &result_data[i], scale_factor);
+                overflow = BinaryOperator::template apply<check_overflow<overflow_mode>, false, LhsCppType, RhsCppType,
+                                                          ResultCppType>(lhs_datum, rhs_data[i], &result_data[i],
+                                                                         scale_factor);
             } else if constexpr (rhs_is_const) {
-                overflow = BinaryOperator::template apply<check_overflow, adjust_left, LhsCppType, RhsCppType,
-                                                          ResultCppType>(lhs_data[i], rhs_datum, &result_data[i],
-                                                                         scale_factor);
+                overflow = BinaryOperator::template apply<check_overflow<overflow_mode>, adjust_left, LhsCppType,
+                                                          RhsCppType, ResultCppType>(lhs_data[i], rhs_datum,
+                                                                                     &result_data[i], scale_factor);
             } else {
-                overflow = BinaryOperator::template apply<check_overflow, adjust_left, LhsCppType, RhsCppType,
-                                                          ResultCppType>(lhs_data[i], rhs_data[i], &result_data[i],
-                                                                         scale_factor);
+                overflow = BinaryOperator::template apply<check_overflow<overflow_mode>, adjust_left, LhsCppType,
+                                                          RhsCppType, ResultCppType>(lhs_data[i], rhs_data[i],
+                                                                                     &result_data[i], scale_factor);
             }
-            if constexpr (check_overflow) {
+            if constexpr (check_overflow<overflow_mode>) {
                 if (overflow) {
-                    *has_null = true;
-                    nulls[i] = DATUM_NULL;
+                    if constexpr (error_if_overflow<overflow_mode>) {
+                        throw std::overflow_error(strings::Substitute(
+                                "The '$0' operation involving decimal values overflows", get_op_name<Op>()));
+                    } else {
+                        static_assert(null_if_overflow<overflow_mode>);
+                        *has_null = true;
+                        nulls[i] = DATUM_NULL;
+                    }
                 }
             }
         }
@@ -109,7 +125,7 @@ struct DecimalBinaryFunction {
         bool has_null = false;
         [[maybe_unused]] bool all_null = false;
 
-        if constexpr (check_overflow) {
+        if constexpr (check_overflow<overflow_mode>) {
             null_column = NullColumn::create();
             null_column->resize(num_rows);
             nulls = &null_column->get_data().front();
@@ -165,7 +181,7 @@ struct DecimalBinaryFunction {
                     num_rows, lhs_data, rhs_data, result_data, nulls, &has_null, adjust_scale);
         }
 
-        if constexpr (check_overflow) {
+        if constexpr (check_overflow<overflow_mode>) {
             if (all_null) {
                 // all the elements of the result are overflow, return const null column
                 return ColumnHelper::create_const_null_column(num_rows);
@@ -196,12 +212,12 @@ struct DecimalBinaryFunction {
     }
 };
 
-template <typename OP, bool check_overflow>
+template <typename OP, OverflowMode overflow_mode>
 class UnpackConstColumnDecimalBinaryFunction {
 public:
     template <PrimitiveType LType, PrimitiveType RType, PrimitiveType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1, const ColumnPtr& v2) {
-        using Function = DecimalBinaryFunction<check_overflow, OP>;
+        using Function = DecimalBinaryFunction<overflow_mode, OP>;
         if (!v1->is_constant() && !v2->is_constant()) {
             return Function::template vector_vector<LType, RType, ResultType>(v1, v2);
         } else if (!v1->is_constant() && v2->is_constant()) {
@@ -218,13 +234,13 @@ public:
     }
 };
 
-template <typename OP, bool check_overflow = false>
+template <typename OP, OverflowMode overflow_mode = OverflowMode::IGNORE>
 using VectorizedStrictDecimalBinaryFunction =
-        UnionNullableColumnBinaryFunction<UnpackConstColumnDecimalBinaryFunction<OP, check_overflow>>;
+        UnionNullableColumnBinaryFunction<UnpackConstColumnDecimalBinaryFunction<OP, overflow_mode>>;
 
-template <PrimitiveType Type, typename OP, bool check_overflow = false>
+template <PrimitiveType Type, typename OP, OverflowMode overflow_mode = OverflowMode::IGNORE>
 using VectorizedUnstrictDecimalBinaryFunction =
         ProduceNullableColumnBinaryFunction<UnpackConstColumnBinaryFunction<ArithmeticRightZeroCheck<Type>>,
-                                            UnpackConstColumnDecimalBinaryFunction<OP, check_overflow>>;
+                                            UnpackConstColumnDecimalBinaryFunction<OP, overflow_mode>>;
 
 } //namespace starrocks::vectorized

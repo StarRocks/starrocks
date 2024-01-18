@@ -18,6 +18,8 @@ void AggregateDistinctBlockingSinkOperator::close(RuntimeState* state) {
 }
 
 Status AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state) {
+    if (_is_finished) return Status::OK();
+
     _is_finished = true;
 
     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
@@ -47,18 +49,19 @@ Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, co
     {
         SCOPED_TIMER(_aggregator->agg_compute_timer());
         bool limit_with_no_agg = _aggregator->limit() != -1;
+        if (limit_with_no_agg) {
+            auto size = _aggregator->hash_set_variant().size();
+            if (size >= _aggregator->limit()) {
+                set_finishing(state);
+                return Status::OK();
+            }
+        }
         TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set(chunk->num_rows()));
 
         _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
 
         _aggregator->update_num_input_rows(chunk->num_rows());
-        if (limit_with_no_agg) {
-            auto size = _aggregator->hash_set_variant().size();
-            if (size >= _aggregator->limit()) {
-                // TODO(hcf) do something
-            }
-        }
     }
 
     return Status::OK();

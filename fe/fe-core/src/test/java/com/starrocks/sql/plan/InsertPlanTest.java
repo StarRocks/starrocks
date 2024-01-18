@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
@@ -224,17 +225,18 @@ public class InsertPlanTest extends PlanTestBase {
         explainString = getInsertExecPlan("insert into ti2(v2,v1,v3) select v1,2,NULL from ti1");
         Assert.assertTrue(explainString.contains("OUTPUT EXPRS:7: v1 | 1: v1 | 8: v3 | 6: to_bitmap"));
         Assert.assertTrue(explainString.contains(
-                "  |  <slot 1> : 1: v1\n" +
-                        "  |  <slot 6> : to_bitmap(CAST(1: v1 AS VARCHAR))\n" +
+                "  1:Project\n" +
+                        "  |  <slot 1> : 1: v1\n" +
+                        "  |  <slot 6> : to_bitmap(1: v1)\n" +
                         "  |  <slot 7> : CAST(2 AS BIGINT)\n" +
                         "  |  <slot 8> : NULL\n"));
 
         explainString = getInsertExecPlan("insert into ti2 select * from ti2");
-        Assert.assertTrue(explainString.contains("  1:Project\n" +
+        Assert.assertTrue(explainString.contains("1:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 3> : 3: v3\n" +
-                "  |  <slot 5> : to_bitmap(CAST(2: v2 AS VARCHAR))"));
+                "  |  <slot 5> : to_bitmap(2: v2)"));
     }
 
     @Test
@@ -345,7 +347,7 @@ public class InsertPlanTest extends PlanTestBase {
     }
 
     public static String getInsertExecPlan(String originStmt) throws Exception {
-        connectContext.setDumpInfo(new QueryDumpInfo(connectContext.getSessionVariable()));
+        connectContext.setDumpInfo(new QueryDumpInfo(connectContext));
         StatementBase statementBase =
                 com.starrocks.sql.parser.SqlParser.parse(originStmt, connectContext.getSessionVariable().getSqlMode())
                         .get(0);
@@ -364,8 +366,9 @@ public class InsertPlanTest extends PlanTestBase {
     public void testBitmapInsertInto() throws Exception {
         String sql = "INSERT INTO test.bitmap_table (id, id2) VALUES (1001, to_bitmap(1000)), (1001, to_bitmap(2000));";
         String plan = getInsertExecPlan(sql);
-        containsKeywords(plan, "OUTPUT EXPRS:1: column_0 | 2: column_1", "OLAP TABLE SINK",
-                "constant exprs:", "1001 | to_bitmap('1000')", "1001 | to_bitmap('2000')");
+        containsKeywords(plan, "constant exprs: \n" +
+                "         1001 | to_bitmap(1000)\n" +
+                "         1001 | to_bitmap(2000)");
 
         sql = "insert into test.bitmap_table select id, bitmap_union(id2) from test.bitmap_table_2 group by id;";
         plan = getInsertExecPlan(sql);
@@ -579,6 +582,7 @@ public class InsertPlanTest extends PlanTestBase {
     public void testInsertExchange() throws Exception {
         FeConstants.runningUnitTest = true;
         InsertPlanner.enableSingleReplicationShuffle = true;
+        Config.eliminate_shuffle_load_by_replicated_storage = false;
         {
             // keysType is DUP_KEYS
             String sql = "explain insert into t0 select * from t0";
@@ -699,6 +703,7 @@ public class InsertPlanTest extends PlanTestBase {
         }
         InsertPlanner.enableSingleReplicationShuffle = false;
         FeConstants.runningUnitTest = false;
+        Config.eliminate_shuffle_load_by_replicated_storage = true;
     }
 
     @Test

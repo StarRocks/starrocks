@@ -91,11 +91,27 @@ public class LimitTest extends PlanTestBase {
         String explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("OUTPUT EXPRS:4: count"));
         Assert.assertTrue(explainString.contains("0:EMPTYSET"));
+
+        queryStr = "select count(*) from t0 order by 1 limit 0";
+        explainString = getFragmentPlan(queryStr);
+        Assert.assertTrue(explainString.contains("OUTPUT EXPRS:4: count"));
+        Assert.assertTrue(explainString.contains("0:EMPTYSET"));
     }
 
     @Test
     public void testSubQueryWithLimit0() throws Exception {
         String queryStr = "select v1 from (select * from t0 limit 0) t";
+        String explainString = getFragmentPlan(queryStr);
+        Assert.assertTrue(explainString.contains("0:EMPTYSET"));
+
+        queryStr = "select v1 from (select * from t0 order by v1 limit 0) t";
+        explainString = getFragmentPlan(queryStr);
+        Assert.assertTrue(explainString.contains("0:EMPTYSET"));
+    }
+
+    @Test
+    public void testSortWithLimit0() throws Exception {
+        String queryStr = "select v1 from t0 order by v1 limit 0";
         String explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("0:EMPTYSET"));
     }
@@ -104,6 +120,9 @@ public class LimitTest extends PlanTestBase {
     public void testAggSubQueryWithLimit0() throws Exception {
         String queryStr = "select sum(a) from (select v1 as a from t0 limit 0) t";
         String explainString = getFragmentPlan(queryStr);
+        Assert.assertTrue(explainString.contains("0:EMPTYSET"));
+        queryStr = "select sum(a) from (select v1 as a from t0 order by 1 limit 0) t";
+        explainString = getFragmentPlan(queryStr);
         Assert.assertTrue(explainString.contains("0:EMPTYSET"));
     }
 
@@ -371,6 +390,7 @@ public class LimitTest extends PlanTestBase {
         String plan;
         sql = "select * from t0 full outer join t1 on t0.v1 = t1.v4 limit 10";
         plan = getFragmentPlan(sql);
+        System.out.println(plan);
         Assert.assertTrue(plan.contains("  4:HASH JOIN\n"
                 + "  |  join op: FULL OUTER JOIN (PARTITIONED)\n"
                 + "  |  colocate: false, reason: \n"
@@ -378,10 +398,8 @@ public class LimitTest extends PlanTestBase {
                 + "  |  limit: 10\n"
                 + "  |  \n"
                 + "  |----3:EXCHANGE\n"
-                + "  |       limit: 10\n"
                 + "  |    \n"
-                + "  1:EXCHANGE\n"
-                + "     limit: 10\n"));
+                + "  1:EXCHANGE\n"));
 
         sql = "select * from t0, t1 limit 10";
         plan = getFragmentPlan(sql);
@@ -773,5 +791,12 @@ public class LimitTest extends PlanTestBase {
         assertNotContains(planFragment, "tabletRatio=1/3");
         assertContains(planFragment, "tabletRatio=3/3");
         FeConstants.runningUnitTest = flag;
+    }
+
+    @Test
+    public void testConstantOrderByLimit() throws Exception {
+        String sql = "select * from t0 order by 'abc' limit 100, 100 ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "limit: 100");
     }
 }

@@ -21,6 +21,7 @@
 
 #include "storage/task/engine_alter_tablet_task.h"
 
+#include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "storage/lake/schema_change.h"
 #include "storage/schema_change.h"
@@ -44,6 +45,8 @@ Status EngineAlterTabletTask::execute() {
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
     StarRocksMetrics::instance()->create_rollup_requests_total.increment(1);
+
+    auto scope = IOProfiler::scope(IOProfiler::TAG_ALTER, _alter_tablet_req.new_tablet_id);
 
     Status res;
     if (_alter_tablet_req.tablet_type == TTabletType::TABLET_TYPE_LAKE) {

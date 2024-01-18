@@ -2,11 +2,25 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Lists;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.List;
+import java.util.stream.Stream;
 
 public class OrderByTest extends PlanTestBase {
+
+    @BeforeAll
+    public static void beforeClass() throws Exception {
+        PlanTestBase.beforeClass();
+    }
 
     @Test
     public void testExistOrderBy() throws Exception {
@@ -481,5 +495,71 @@ public class OrderByTest extends PlanTestBase {
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(2: v2)\n" +
                 "  |  group by: 1: v1");
+    }
+
+    @ParameterizedTest
+    @MethodSource("failToStrictSql")
+    void testFailToStrictOrderByExpression(String sql) {
+        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+    }
+
+    @ParameterizedTest
+    @MethodSource("successToStrictSql")
+    void testSuccessToStrictOrderByExpression(String sql, String expectedPlan) throws Exception {
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, expectedPlan);
+    }
+
+    @ParameterizedTest
+    @MethodSource("allOrderBySql")
+    void testNotStrictOrderByExpression(String sql, String expectedPlan) throws Exception {
+        String hint = "select /*+ set_var(enable_strict_order_by = false) */ ";
+        sql = hint + sql.substring(7);
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, expectedPlan);
+    }
+
+    private static Stream<Arguments> allOrderBySql() {
+        return Stream.concat(successToStrictSql(), failToStrictSql());
+    }
+
+    private static Stream<Arguments> successToStrictSql() {
+        List<Arguments> list = Lists.newArrayList();
+        list.add(Arguments.of("select * from t0 order by 1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select abs(v1) v1, * from t0  order by 1", "order by: <slot 4> 4: abs ASC"));
+        list.add(Arguments.of("select distinct * from t0  order by 1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select * from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select t0.* from t0 order by t0.v1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select distinct t0.* from t0 order by t0.v1", "order by: <slot 1> 1: v1 ASC"));
+
+
+        list.add(Arguments.of("select *, v1 from t0  order by v1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select *, v1 from t0  order by abs(v1)", "order by: <slot 4> 4: abs ASC"));
+        list.add(Arguments.of("select v1, * from t0  order by abs(v1)", "order by: <slot 4> 4: abs ASC"));
+        list.add(Arguments.of("select distinct * from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select distinct *, v1 from t0  order by abs(v1)", "order by: <slot 4> 4: abs ASC"));
+        list.add(Arguments.of("select distinct abs(v1) v1 from t0 order by v1", "order by: <slot 4> 4: abs ASC"));
+        list.add(Arguments.of("select distinct abs(v1) from t0 order by abs(v1)", "order by: <slot 4> 4: abs ASC"));
+        list.add(Arguments.of("select distinct abs(v1) v1 from t0 order by abs(v1)", "order by: <slot 5> 5: abs ASC"));
+        return list.stream();
+    }
+
+    private static Stream<Arguments> failToStrictSql() {
+        List<Arguments> list = Lists.newArrayList();
+        list.add(Arguments.of("select *, v1, abs(v1) v1 from t0  order by 1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select distinct *, v1, abs(v1) v1 from t0  order by 1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select distinct abs(v1) v1, * from t0  order by 1", "order by: <slot 4> 4: abs ASC"));
+        list.add(Arguments.of("select distinct *, v1, abs(v1) v1 from t0  order by v1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select v1, max(v2) v1 from t0 group by v1  order by abs(v1)", "order by: <slot 5> 5: abs ASC"));
+        list.add(Arguments.of("select max(v2) v1, v1 from t0 group by v1  order by abs(v1)", "order by: <slot 5> 5: abs ASC"));
+        list.add(Arguments.of("select v2, max(v2) v2 from t0 group by v2  order by max(v2)", "order by: <slot 4> 4: max ASC"));
+        list.add(Arguments.of("select max(v2) v2, v2 from t0 group by v2  order by max(v2)", "order by: <slot 4> 4: max ASC"));
+        list.add(Arguments.of("select upper(v1) v1, *, v1 from t0 order by v1", "order by: <slot 4> 4: upper ASC"));
+        list.add(Arguments.of("select *, v1, upper(v1) v1 from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select distinct upper(v1) v1, *, v1 from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select distinct *, v1, upper(v1) v1 from t0 order by v1", "order by: <slot 1> 1: v1 ASC"));
+        list.add(Arguments.of("select distinct abs(v1) v1, v1 from t0 order by v1", "order by: <slot 4> 4: abs ASC"));
+
+        return list.stream();
     }
 }

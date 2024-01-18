@@ -12,6 +12,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import java.util.BitSet;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -83,17 +84,20 @@ public class JoinReorderGreedy extends JoinOrder {
                     continue;
                 }
 
-                ExpressionInfo joinExpr = buildJoinExpr(leftGroup, rightGroup);
-                joinExpr.expr.deriveLogicalPropertyItself();
-                calculateStatistics(joinExpr.expr);
+                Optional<ExpressionInfo> joinExpr = buildJoinExpr(leftGroup, rightGroup);
+                if (!joinExpr.isPresent()) {
+                    continue;
+                }
+                joinExpr.get().expr.deriveLogicalPropertyItself();
+                calculateStatistics(joinExpr.get().expr);
 
                 BitSet joinBitSet = new BitSet();
                 joinBitSet.or(leftBitset);
                 joinBitSet.or(rightBitset);
 
-                computeCost(joinExpr, true);
-                getOrCreateGroupInfo(curLevel, joinBitSet, joinExpr);
-                double joinCost = joinExpr.cost;
+                computeCost(joinExpr.get());
+                getOrCreateGroupInfo(curLevel, joinBitSet, joinExpr.get());
+                double joinCost = joinExpr.get().cost;
                 if (joinCost < bestCost) {
                     bestCost = joinCost;
                 }
@@ -161,7 +165,10 @@ public class JoinReorderGreedy extends JoinOrder {
 
         // For top group, we keep multi best join expressions
         if (groupInfo.atoms.cardinality() == atomSize) {
-            topKExpr.offer(expr);
+            // avoid repeated put, check object is enough
+            if (!topKExpr.contains(expr)) {
+                topKExpr.offer(expr);
+            }
         } else {
             if (cost < groupInfo.lowestExprCost) {
                 groupInfo.bestExprInfo = expr;

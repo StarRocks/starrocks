@@ -9,7 +9,7 @@ import java.util.Optional;
 public interface IDictManager {
     boolean hasGlobalDict(long tableId, String columnName, long versionTime);
 
-    void updateGlobalDict(long tableId, String columnName, long versionTime);
+    void updateGlobalDict(long tableId, String columnName, long collectedVersion, long versionTime);
 
     boolean hasGlobalDict(long tableId, String columnName);
 

@@ -54,6 +54,7 @@ public:
     void append_build_chunk(int32_t sinker_id, const vectorized::ChunkPtr& build_chunk);
 
     Status finish_one_right_sinker(RuntimeState* state);
+    Status finish_one_left_prober(RuntimeState* state);
 
     bool is_right_finished() const { return _all_right_finished.load(std::memory_order_acquire); }
 
@@ -70,6 +71,7 @@ private:
     const int32_t _plan_node_id;
 
     std::atomic<int32_t> _num_finished_right_sinkers = 0;
+    std::atomic<int32_t> _num_finished_left_probers = 0;
     std::atomic_bool _all_right_finished = false;
     std::atomic_int64_t _num_build_rows = 0;
 

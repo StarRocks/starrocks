@@ -11,6 +11,7 @@
 #include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 #include "storage/delta_writer.h"
 #include "util/brpc_stub_cache.h"
 #include "util/raw_container.h"
@@ -65,6 +66,12 @@ Status ReplicateChannel::_init() {
         LOG(WARNING) << msg;
         return Status::InternalError(msg);
     }
+    _mem_tracker = ExecEnv::GetInstance()->load_mem_tracker();
+    if (!_mem_tracker) {
+        auto msg = fmt::format("Failed to get load mem tracker for {} failed.", debug_string().c_str());
+        LOG(WARNING) << msg;
+        return Status::InternalError(msg);
+    }
     return Status::OK();
 }
 
@@ -108,7 +115,7 @@ Status ReplicateChannel::async_segment(SegmentPB* segment, butil::IOBuf& data, b
     _send_request(segment, data, eos);
 
     // 4. wait if eos=true
-    if (eos) {
+    if (eos || _mem_tracker->limit_exceeded()) {
         RETURN_IF_ERROR(_wait_response(replicate_tablet_infos, failed_tablet_infos));
     }
 
@@ -130,11 +137,15 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
     _closure->ref();
     _closure->reset();
     _closure->cntl.set_timeout_ms(_opt->timeout_ms);
+    _closure->cntl.ignore_eovercrowded();
 
     if (segment != nullptr) {
         request.set_allocated_segment(segment);
         _closure->cntl.request_attachment().append(data);
     }
+    _closure->request_size = _closure->cntl.request_attachment().size();
+    // brpc send buffer is also considered as part of the memory used by load
+    _mem_tracker->consume(_closure->request_size);
 
     _stub->tablet_writer_add_segment(&_closure->cntl, &request, &_closure->result, _closure);
 
@@ -147,6 +158,7 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
 Status ReplicateChannel::_wait_response(std::vector<std::unique_ptr<PTabletInfo>>* replicate_tablet_infos,
                                         std::vector<std::unique_ptr<PTabletInfo>>* failed_tablet_infos) {
     if (_closure->join()) {
+        _mem_tracker->release(_closure->request_size);
         if (_closure->cntl.Failed()) {
             _st = Status::InternalError(_closure->cntl.ErrorText());
             LOG(WARNING) << "Failed to send rpc to " << debug_string() << " err=" << _st;
@@ -188,6 +200,7 @@ ReplicateToken::ReplicateToken(std::unique_ptr<ThreadPoolToken> replicate_pool_t
     for (size_t i = 1; i < opt->replicas.size(); ++i) {
         _replicate_channels.emplace_back(std::make_unique<ReplicateChannel>(
                 opt, opt->replicas[i].host(), opt->replicas[i].port(), opt->replicas[i].node_id()));
+        _replica_node_ids.emplace_back(opt->replicas[i].node_id());
     }
     if (opt->write_quorum == WriteQuorumTypePB::ONE) {
         _max_fail_replica_num = opt->replicas.size();

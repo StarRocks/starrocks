@@ -34,13 +34,14 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.ast.QueryStatement;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 import static com.google.common.collect.ImmutableSet.toImmutableSet;
 
@@ -104,8 +105,14 @@ public class AggregationAnalyzer {
         }
 
         @Override
+        public Boolean visitFieldReference(FieldReference node, Void context) {
+            String colInfo = node.getTblName() == null ? "column" : "column of " + node.getTblName().toString();
+            throw new SemanticException(colInfo + " must appear in the GROUP BY clause or be used in an aggregate function");
+        }
+
+        @Override
         public Boolean visitExpression(Expr node, Void context) {
-            throw new SemanticException("%s is not support in GROUP BY clause", node.toSql());
+            throw new SemanticException(node.toSql() + " must appear in the GROUP BY clause or be used in an aggregate function");
         }
 
         private boolean isGroupingKey(Expr node) {
@@ -281,11 +288,29 @@ public class AggregationAnalyzer {
         @Override
         public Boolean visitSubquery(Subquery node, Void context) {
             QueryStatement queryStatement = node.getQueryStatement();
-            List<FieldId> fieldIds = queryStatement.getQueryRelation().getColumnReferences().values().stream()
-                    .filter(fieldId -> fieldId.getRelationId().equals(sourceScope.getRelationId()))
-                    .collect(Collectors.toList());
+            for (Map.Entry<Expr, FieldId> entry : queryStatement.getQueryRelation().getColumnReferences().entrySet()) {
+                Expr expr = entry.getKey();
+                FieldId id = entry.getValue();
 
-            return groupingFields.containsAll(fieldIds);
+                if (!id.getRelationId().equals(sourceScope.getRelationId())) {
+                    continue;
+                }
+
+                if (!groupingFields.contains(id)) {
+                    if (!SqlModeHelper.check(session.getSessionVariable().getSqlMode(),
+                            SqlModeHelper.MODE_ONLY_FULL_GROUP_BY)) {
+                        if (!analyzeState.getColumnNotInGroupBy().contains(expr)) {
+                            throw new SemanticException(
+                                    "subquery correlated column %s in %s must be an aggregate " + 
+                                    "expression or appear in GROUP BY clause",
+                                    expr.toSql(), node.toSql());
+                        }
+                    } else {
+                        return false;
+                    }
+                }
+            }
+            return true;
         }
 
         @Override

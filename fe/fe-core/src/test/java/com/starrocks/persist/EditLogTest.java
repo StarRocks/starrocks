@@ -15,6 +15,7 @@ import com.starrocks.system.Frontend;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.lang.reflect.Field;
@@ -28,6 +29,11 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class EditLogTest {
     public static final Logger LOG = LogManager.getLogger(EditLogTest.class);
+
+    @Before
+    public void setUp() {
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+    }
 
     @Test
     public void testtNormal() throws Exception {

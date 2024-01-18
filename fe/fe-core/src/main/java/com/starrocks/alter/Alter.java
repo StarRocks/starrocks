@@ -24,13 +24,19 @@ package com.starrocks.alter;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
+import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.AuthenticationManager;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
@@ -42,6 +48,7 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.TableProperty;
+import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.catalog.View;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
@@ -51,6 +58,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
@@ -65,6 +73,12 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.MaterializedViewAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
@@ -80,14 +94,19 @@ import com.starrocks.sql.ast.IntervalLiteral;
 import com.starrocks.sql.ast.ModifyPartitionClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.PartitionRenameClause;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SwapTableClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import org.apache.logging.log4j.LogManager;
@@ -96,6 +115,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 import static com.starrocks.catalog.TableProperty.INVALID;
 
@@ -229,6 +249,7 @@ public class Alter {
         final String oldMvName = mvName.getTbl();
         final String newMvName = stmt.getNewMvName();
         final RefreshSchemeDesc refreshSchemeDesc = stmt.getRefreshSchemeDesc();
+        final String status = stmt.getStatus();
         ModifyTablePropertiesClause modifyTablePropertiesClause = stmt.getModifyTablePropertiesClause();
         String dbName = mvName.getDb();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
@@ -243,6 +264,7 @@ public class Alter {
             final Table table = db.getTable(oldMvName);
             if (table instanceof MaterializedView) {
                 materializedView = (MaterializedView) table;
+
             }
 
             if (materializedView == null) {
@@ -259,13 +281,15 @@ public class Alter {
                 processRenameMaterializedView(oldMvName, newMvName, db, materializedView);
             } else if (refreshSchemeDesc != null) {
                 // change refresh scheme
-                processChangeRefreshScheme(refreshSchemeDesc, materializedView, dbName);
+                processChangeRefreshScheme(refreshSchemeDesc, materializedView, dbName, db);
             } else if (modifyTablePropertiesClause != null) {
                 try {
-                    processModifyTableProperties(modifyTablePropertiesClause, materializedView);
+                    processModifyTableProperties(modifyTablePropertiesClause, db, materializedView);
                 } catch (AnalysisException ae) {
                     throw new DdlException(ae.getMessage());
                 }
+            } else if (status != null) {
+                processChangeMaterializedViewStatus(status, dbName, materializedView, db);
             } else {
                 throw new DdlException("Unsupported modification for materialized view");
             }
@@ -274,7 +298,74 @@ public class Alter {
         }
     }
 
+    private void processChangeMaterializedViewStatus(String status, String dbName,
+                                                        MaterializedView materializedView, Database db)
+            throws DdlException, MetaNotFoundException {
+
+        if (!db.writeLockAndCheckExist()) {
+            throw new DdlException("update meta failed. database:" + db.getFullName() + " not exist");
+        }
+        try {
+            if (AlterMaterializedViewStmt.ACTIVE.equalsIgnoreCase(status)) {
+                if (materializedView.isActive()) {
+                    return;
+                }
+                processChangeMaterializedViewStatus(materializedView, status, false);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .refreshMaterializedView(dbName, materializedView.getName(), true, null,
+                                Constants.TaskRunPriority.NORMAL.value(), true, false);
+            } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
+                if (!materializedView.isActive()) {
+                    return;
+                }
+                LOG.warn("Setting the materialized view {}({}) to inactive because " +
+                                "user alter materialized view status to inactive",
+                        materializedView.getName(), materializedView.getId());
+                processChangeMaterializedViewStatus(materializedView, status, false);
+            } else {
+                throw new DdlException("Unsupported modification materialized view status:" + status);
+            }
+            AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(materializedView.getDbId(),
+                    materializedView.getId(), status);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
+        } finally {
+            db.writeUnlock();
+        }
+    }
+
+    private void processChangeMaterializedViewStatus(MaterializedView materializedView, String status, boolean isReplay) {
+
+        if (AlterMaterializedViewStmt.ACTIVE.equalsIgnoreCase(status)) {
+            String viewDefineSql = materializedView.getViewDefineSql();
+            ConnectContext context = new ConnectContext();
+            context.setQualifiedUser(AuthenticationManager.ROOT_USER);
+            context.setCurrentUserIdentity(UserIdentity.ROOT);
+            context.setCurrentRoleIds(Sets.newHashSet(-1L));
+
+            List<StatementBase> statementBaseList = SqlParser.parse(viewDefineSql, context.getSessionVariable());
+            QueryStatement queryStatement = (QueryStatement) statementBaseList.get(0);
+            try {
+                Analyzer.analyze(queryStatement, context);
+            } catch (SemanticException e) {
+                throw new SemanticException("Can not active materialized view [%s]" +
+                        " because analyze materialized view define sql: \n\n%s" +
+                        "\n\nCause an error: %s", materializedView.getName(), viewDefineSql, e.getMessage());
+            }
+
+            Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllConnectorTableAndView(queryStatement);
+            List<BaseTableInfo> baseTableInfos = MaterializedViewAnalyzer.getBaseTableInfos(tableNameTableMap, !isReplay);
+            materializedView.setBaseTableInfos(baseTableInfos);
+            materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
+            GlobalStateMgr.getCurrentState().updateBaseTableRelatedMv(materializedView.getDbId(),
+                    materializedView, baseTableInfos);
+            materializedView.setActive(true);
+        } else if (AlterMaterializedViewStmt.INACTIVE.equalsIgnoreCase(status)) {
+            materializedView.setActive(false);
+        }
+    }
+
     private void processModifyTableProperties(ModifyTablePropertiesClause modifyTablePropertiesClause,
+                                              Database db,
                                               MaterializedView materializedView) throws AnalysisException {
         Map<String, String> properties = modifyTablePropertiesClause.getProperties();
         Map<String, String> propClone = Maps.newHashMap();
@@ -282,22 +373,52 @@ public class Alter {
         int partitionTTL = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
             partitionTTL = PropertyAnalyzer.analyzePartitionTimeToLive(properties);
+            properties.remove(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER);
         }
         int partitionRefreshNumber = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
             partitionRefreshNumber = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
+            properties.remove(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER);
         }
         int autoRefreshPartitionsLimit = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT)) {
             autoRefreshPartitionsLimit = PropertyAnalyzer.analyzeAutoRefreshPartitionsLimit(properties, materializedView);
+            properties.remove(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT);
         }
         List<TableName> excludedTriggerTables = Lists.newArrayList();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
             excludedTriggerTables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
+            properties.remove(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES);
+        }
+        int maxMVRewriteStaleness = INVALID;
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+            maxMVRewriteStaleness = PropertyAnalyzer.analyzeMVRewriteStaleness(properties);
+        }
+        List<UniqueConstraint> uniqueConstraints = Lists.newArrayList();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+            uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db, materializedView);
+            properties.remove(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT);
+        }
+        List<ForeignKeyConstraint> foreignKeyConstraints = Lists.newArrayList();
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+            foreignKeyConstraints = PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, materializedView);
+            properties.remove(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT);
         }
 
         if (!properties.isEmpty()) {
-            throw new AnalysisException("Modify failed because unknown properties: " + properties);
+            // analyze properties
+            List<SetVar> setListItems = Lists.newArrayList();
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                if (!entry.getKey().startsWith(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX)) {
+                    throw new AnalysisException("Modify failed because unknown properties: " + properties +
+                            ", please add `session.` prefix if you want add session variables for mv(" +
+                            "eg, \"session.query_timeout\"=\"30000000\").");
+                }
+                String varKey = entry.getKey().substring(PropertyAnalyzer.PROPERTIES_MATERIALIZED_VIEW_SESSION_PREFIX.length());
+                SetVar variable = new SetVar(varKey, new StringLiteral(entry.getValue()));
+                setListItems.add(variable);
+            }
+            SetStmtAnalyzer.analyze(new SetStmt(setListItems), null);
         }
 
         boolean isChanged = false;
@@ -324,59 +445,92 @@ public class Alter {
             materializedView.getTableProperty().setExcludedTriggerTables(excludedTriggerTables);
             isChanged = true;
         }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+            materializedView.setUniqueConstraints(uniqueConstraints);
+            isChanged = true;
+        }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+            materializedView.setForeignKeyConstraints(foreignKeyConstraints);
+            isChanged = true;
+        }
+        if (propClone.containsKey(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND)) {
+            curProp.put(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND,
+                    propClone.get(PropertyAnalyzer.PROPERTIES_MV_REWRITE_STALENESS_SECOND));
+            materializedView.setMaxMVRewriteStaleness(maxMVRewriteStaleness);
+            isChanged = true;
+        }
         DynamicPartitionUtil.registerOrRemovePartitionTTLTable(materializedView.getDbId(), materializedView);
+        if (!properties.isEmpty()) {
+            // set properties if there are no exceptions
+            for (Map.Entry<String, String> entry : properties.entrySet()) {
+                materializedView.getTableProperty().modifyTableProperties(entry.getKey(), entry.getValue());
+            }
+            isChanged = true;
+        }
+
         if (isChanged) {
             ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(materializedView.getDbId(),
                     materializedView.getId(), propClone);
             GlobalStateMgr.getCurrentState().getEditLog().logAlterMaterializedViewProperties(log);
         }
-        LOG.info("alter materialized view properties {}, id: {}", properties, materializedView.getId());
+        LOG.info("alter materialized view properties {}, id: {}", propClone, materializedView.getId());
     }
 
     private void processChangeRefreshScheme(RefreshSchemeDesc refreshSchemeDesc, MaterializedView materializedView,
-                                            String dbName) throws DdlException {
+                                            String dbName, Database db) throws DdlException {
         MaterializedView.RefreshType newRefreshType = refreshSchemeDesc.getType();
         MaterializedView.RefreshType oldRefreshType = materializedView.getRefreshScheme().getType();
 
-        // TODO: The exact same refresh type does not need to drop and rebuild the task
-        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
-        // drop task
-        Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
-        Task task;
-        if (refreshTask != null) {
-            taskManager.dropTasks(Lists.newArrayList(refreshTask.getId()), false);
-            task = TaskBuilder.rebuildMvTask(materializedView, dbName, refreshTask.getProperties());
-        } else {
-            task = TaskBuilder.buildMvTask(materializedView, dbName);
+        if (!db.writeLockAndCheckExist()) {
+            throw new DdlException("update meta failed. database:" + db.getFullName() + " not exist");
         }
 
-        TaskBuilder.updateTaskInfo(task, refreshSchemeDesc, materializedView);
-
-
-        taskManager.createTask(task, false);
-        // for event triggered type, run task
-        if (task.getType() == Constants.TaskType.EVENT_TRIGGERED) {
-            taskManager.executeTask(task.getName());
-        }
-
-        final MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
-        refreshScheme.setType(newRefreshType);
-        if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
-            AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
-            IntervalLiteral intervalLiteral = asyncRefreshSchemeDesc.getIntervalLiteral();
-            if (intervalLiteral != null) {
-                final IntLiteral step = (IntLiteral) intervalLiteral.getValue();
-                final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
-                if (asyncRefreshSchemeDesc.isDefineStartTime()) {
-                    asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
-                }
-                asyncRefreshContext.setStep(step.getLongValue());
-                asyncRefreshContext.setTimeUnit(intervalLiteral.getUnitIdentifier().getDescription());
+        try {
+            // check
+            Table mv = db.getTable(materializedView.getId());
+            if (mv == null) {
+                throw new DdlException(
+                        "update meta failed. materialized view:" + materializedView.getName() + " not exist");
             }
-        }
+            TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+            Task currentTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
+            Task task;
+            if (currentTask == null) {
+                task = TaskBuilder.buildMvTask(materializedView, dbName);
+                TaskBuilder.updateTaskInfo(task, refreshSchemeDesc, materializedView);
+                taskManager.createTask(task, false);
+            } else {
+                Task changedTask = TaskBuilder.rebuildMvTask(materializedView, dbName, currentTask.getProperties());
+                TaskBuilder.updateTaskInfo(changedTask, refreshSchemeDesc, materializedView);
+                taskManager.alterTask(currentTask, changedTask, false);
+                task = currentTask;
+            }
 
-        final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
-        GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);
+            // for event triggered type, run task
+            if (task.getType() == Constants.TaskType.EVENT_TRIGGERED) {
+                taskManager.executeTask(task.getName());
+            }
+
+            final MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
+            refreshScheme.setType(newRefreshType);
+            if (refreshSchemeDesc instanceof AsyncRefreshSchemeDesc) {
+                AsyncRefreshSchemeDesc asyncRefreshSchemeDesc = (AsyncRefreshSchemeDesc) refreshSchemeDesc;
+                IntervalLiteral intervalLiteral = asyncRefreshSchemeDesc.getIntervalLiteral();
+                if (intervalLiteral != null) {
+                    final IntLiteral step = (IntLiteral) intervalLiteral.getValue();
+                    final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
+                    asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
+                    asyncRefreshContext.setDefineStartTime(asyncRefreshSchemeDesc.isDefineStartTime());
+                    asyncRefreshContext.setStep(step.getLongValue());
+                    asyncRefreshContext.setTimeUnit(intervalLiteral.getUnitIdentifier().getDescription());
+                }
+            }
+
+            final ChangeMaterializedViewRefreshSchemeLog log = new ChangeMaterializedViewRefreshSchemeLog(materializedView);
+            GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(log);
+        } finally {
+            db.writeUnlock();
+        }
         LOG.info("change materialized view refresh type {} to {}, id: {}", oldRefreshType,
                 newRefreshType, materializedView.getId());
     }
@@ -401,13 +555,25 @@ public class Alter {
         long materializedViewId = log.getId();
         String newMaterializedViewName = log.getNewMaterializedViewName();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        MaterializedView oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
-        db.dropTable(oldMaterializedView.getName());
-        oldMaterializedView.setName(newMaterializedViewName);
-        db.createTable(oldMaterializedView);
-        updateTaskDefinition(oldMaterializedView);
-        LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
-                newMaterializedViewName, oldMaterializedView.getId());
+
+        db.writeLock();
+        MaterializedView oldMaterializedView = null;
+        try {
+            oldMaterializedView = (MaterializedView) db.getTable(materializedViewId);
+            db.dropTable(oldMaterializedView.getName());
+            oldMaterializedView.setName(newMaterializedViewName);
+            db.createTable(oldMaterializedView);
+            updateTaskDefinition(oldMaterializedView);
+            LOG.info("Replay rename materialized view [{}] to {}, id: {}", oldMaterializedView.getName(),
+                    newMaterializedViewName, oldMaterializedView.getId());
+        } catch (Throwable e) {
+            if (oldMaterializedView != null) {
+                oldMaterializedView.setActive(false);
+                LOG.warn("replay rename materialized-view failed: {}", oldMaterializedView.getName(), e);
+            }
+        } finally {
+            db.writeUnlock();
+        }
     }
 
     private void updateTaskDefinition(MaterializedView materializedView) {
@@ -423,9 +589,12 @@ public class Alter {
         long dbId = log.getDbId();
         long id = log.getId();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            return;
+        }
         db.writeLock();
+        MaterializedView oldMaterializedView = null;
         try {
-            MaterializedView oldMaterializedView;
             final MaterializedView.MvRefreshScheme newMvRefreshScheme = new MaterializedView.MvRefreshScheme();
 
             oldMaterializedView = (MaterializedView) db.getTable(id);
@@ -440,6 +609,14 @@ public class Alter {
             final MaterializedView.AsyncRefreshContext asyncRefreshContext = log.getAsyncRefreshContext();
             newMvRefreshScheme.setType(refreshType);
             newMvRefreshScheme.setAsyncRefreshContext(asyncRefreshContext);
+
+            long maxChangedTableRefreshTime = log.getAsyncRefreshContext().getBaseTableVisibleVersionMap().values().stream()
+                    .map(x -> x.values().stream().map(
+                            MaterializedView.BasePartitionInfo::getLastRefreshTime).max(Long::compareTo))
+                    .map(x -> x.orElse(null)).filter(Objects::nonNull)
+                    .max(Long::compareTo)
+                    .orElse(System.currentTimeMillis());
+            newMvRefreshScheme.setLastRefreshTime(maxChangedTableRefreshTime);
             oldMaterializedView.setRefreshScheme(newMvRefreshScheme);
             LOG.info(
                     "Replay materialized view [{}]'s refresh type to {}, start time to {}, " +
@@ -447,6 +624,12 @@ public class Alter {
                     oldMaterializedView.getName(), refreshType.name(), asyncRefreshContext.getStartTime(),
                     asyncRefreshContext.getStep(),
                     asyncRefreshContext.getTimeUnit(), oldMaterializedView.getId());
+        } catch (Throwable e) {
+            if (oldMaterializedView != null) {
+                oldMaterializedView.setActive(false);
+                LOG.warn("replay change materialized-view refresh scheme failed: {}",
+                        oldMaterializedView.getName(), e);
+            }
         } finally {
             db.writeUnlock();
         }
@@ -459,8 +642,9 @@ public class Alter {
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         db.writeLock();
+        MaterializedView mv = null;
         try {
-            MaterializedView mv = (MaterializedView) db.getTable(tableId);
+            mv = (MaterializedView) db.getTable(tableId);
             TableProperty tableProperty = mv.getTableProperty();
             if  (tableProperty == null) {
                 tableProperty = new TableProperty(properties);
@@ -468,6 +652,30 @@ public class Alter {
             } else {
                 tableProperty.modifyTableProperties(properties);
                 tableProperty.buildProperty(opCode);
+            }
+        } catch (Throwable e) {
+            if (mv != null) {
+                mv.setActive(false);
+                LOG.warn("replay alter materialized-view properties failed: {}", mv.getName(), e);
+            }
+        } finally {
+            db.writeUnlock();
+        }
+    }
+
+    public void replayAlterMaterializedViewStatus(AlterMaterializedViewStatusLog log) {
+        long dbId = log.getDbId();
+        long tableId = log.getTableId();
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        db.writeLock();
+        MaterializedView mv = null;
+        try {
+            mv = (MaterializedView) db.getTable(tableId);
+            processChangeMaterializedViewStatus(mv, log.getStatus(), true);
+        } catch (Exception e) {
+            if (mv != null) {
+                mv.setActive(false);
+                LOG.warn("replay alter materialized-view status failed: {}", mv.getName(), e);
             }
         } finally {
             db.writeUnlock();
@@ -498,7 +706,9 @@ public class Alter {
         boolean needProcessOutsideDatabaseLock = false;
         String tableName = dbTableName.getTbl();
 
+        boolean isSynchronous = true;
         db.writeLock();
+        OlapTable olapTable;
         try {
             Table table = db.getTable(tableName);
             if (table == null) {
@@ -508,18 +718,20 @@ public class Alter {
             if (!table.isOlapOrLakeTable()) {
                 throw new DdlException("Do not support alter non-OLAP or non-LAKE table[" + tableName + "]");
             }
-            OlapTable olapTable = (OlapTable) table;
+            olapTable = (OlapTable) table;
 
             if (olapTable.getState() != OlapTableState.NORMAL) {
-                throw new DdlException(
-                        "Table[" + table.getName() + "]'s state is not NORMAL. Do not allow doing ALTER ops");
+                throw new DdlException("The state of \"" + table.getName() + "\" is " + olapTable.getState().name()
+                                       + ". Alter operation is only permitted if NORMAL");
             }
 
             if (currentAlterOps.hasSchemaChangeOp()) {
                 // if modify storage type to v2, do schema change to convert all related tablets to segment v2 format
                 schemaChangeHandler.process(alterClauses, db, olapTable);
+                isSynchronous = false;
             } else if (currentAlterOps.hasRollupOp()) {
                 materializedViewHandler.process(alterClauses, db, olapTable);
+                isSynchronous = false;
             } else if (currentAlterOps.hasPartitionOp()) {
                 Preconditions.checkState(alterClauses.size() == 1);
                 AlterClause alterClause = alterClauses.get(0);
@@ -578,7 +790,7 @@ public class Alter {
                 }
                 GlobalStateMgr.getCurrentState().addPartitions(db, tableName, (AddPartitionClause) alterClause);
             } else if (alterClause instanceof TruncatePartitionClause) {
-                // This logic is use to adapt mysql syntax.
+                // This logic is used to adapt mysql syntax.
                 // ALTER TABLE test TRUNCATE PARTITION p1;
                 TruncatePartitionClause clause = (TruncatePartitionClause) alterClause;
                 TableRef tableRef = new TableRef(stmt.getTbl(), null, clause.getPartitionNames());
@@ -590,7 +802,7 @@ public class Alter {
                 List<String> partitionNames = clause.getPartitionNames();
                 // currently, only in memory property could reach here
                 Preconditions.checkState(properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY));
-                OlapTable olapTable = (OlapTable) db.getTable(tableName);
+                olapTable = (OlapTable) db.getTable(tableName);
                 if (olapTable.isLakeTable()) {
                     throw new DdlException("Lake table not support alter in_memory");
                 }
@@ -613,7 +825,7 @@ public class Alter {
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT));
 
-                OlapTable olapTable = (OlapTable) db.getTable(tableName);
+                olapTable = (OlapTable) db.getTable(tableName);
                 if (olapTable.isLakeTable()) {
                     throw new DdlException("Lake table not support alter in_memory or enable_persistent_index or write_quorum");
                 }
@@ -640,6 +852,10 @@ public class Alter {
                 throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());
             }
         }
+
+        if (isSynchronous) {
+            olapTable.lastSchemaUpdateTime.set(System.nanoTime());
+        }
     }
 
     // entry of processing swap table
@@ -664,6 +880,9 @@ public class Alter {
         olapNewTbl.checkAndSetName(origTblName, true);
         origTable.checkAndSetName(newTblName, true);
 
+        // inactive the related MVs
+        LocalMetastore.inactiveRelatedMaterializedView(db, origTable);
+        LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl);
         swapTableInternal(db, origTable, olapNewTbl);
 
         // write edit log
@@ -714,8 +933,8 @@ public class Alter {
         db.createTable(origTable);
     }
 
-    public void processAlterView(AlterViewStmt stmt, ConnectContext ctx) throws UserException {
-        TableName dbTableName = stmt.getTbl();
+    public void processAlterView(AlterViewStmt stmt, ConnectContext ctx) throws DdlException {
+        TableName dbTableName = stmt.getTableName();
         String dbName = dbTableName.getDb();
 
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
@@ -753,6 +972,7 @@ public class Alter {
             throw new DdlException("failed to init view stmt", e);
         }
         view.setNewFullSchema(newFullSchema);
+        LocalMetastore.inactiveRelatedMaterializedView(db, view);
 
         db.dropTable(viewName);
         db.createTable(view);
@@ -781,6 +1001,7 @@ public class Alter {
                 throw new DdlException("failed to init view stmt", e);
             }
             view.setNewFullSchema(newFullSchema);
+            LocalMetastore.inactiveRelatedMaterializedView(db, view);
 
             db.dropTable(viewName);
             db.createTable(view);
@@ -847,7 +1068,7 @@ public class Alter {
         // get value from properties here
         // 1. data property
         DataProperty newDataProperty =
-                PropertyAnalyzer.analyzeDataProperty(properties, null);
+                PropertyAnalyzer.analyzeDataProperty(properties, null, false);
         // 2. replication num
         short newReplicationNum =
                 PropertyAnalyzer.analyzeReplicationNum(properties, (short) -1);

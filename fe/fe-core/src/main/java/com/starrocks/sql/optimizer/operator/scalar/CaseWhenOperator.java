@@ -147,7 +147,7 @@ public class CaseWhenOperator extends CallOperator {
             }
         }
         this.arguments = newArguments;
-        this.whenEnd = this.arguments.size();
+        this.whenEnd = hasElse ? this.arguments.size() - 1 : this.arguments.size();
     }
 
     @Override

@@ -21,6 +21,8 @@ import com.starrocks.common.UserException;
 import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TReportAuditStatisticsParams;
+import com.starrocks.thrift.TReportAuditStatisticsResult;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TUniqueId;
@@ -31,6 +33,8 @@ import java.util.Map;
 public interface QeProcessor {
 
     TReportExecStatusResult reportExecStatus(TReportExecStatusParams params, TNetworkAddress beAddr);
+
+    TReportAuditStatisticsResult reportAuditStatistics(TReportAuditStatisticsParams params, TNetworkAddress beAddr);
 
     TBatchReportExecStatusResult batchReportExecStatus(TBatchReportExecStatusParams params, TNetworkAddress beAddr);
 
@@ -45,4 +49,6 @@ public interface QeProcessor {
     Coordinator getCoordinator(TUniqueId queryId);
 
     List<Coordinator> getCoordinators();
+
+    long getCoordinatorCount();
 }
