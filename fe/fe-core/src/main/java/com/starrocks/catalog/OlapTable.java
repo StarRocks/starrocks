@@ -484,7 +484,7 @@ public class OlapTable extends Table {
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
             Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
-            expressionRangePartitionInfo.renameTableName(newName);
+            expressionRangePartitionInfo.renameTableName("", newName);
         }
     }
 
@@ -837,9 +837,7 @@ public class OlapTable extends Table {
                 continue;
             }
             MaterializedView mv = (MaterializedView) mvTable;
-            if (mv.isActive()) {
-                continue;
-            }
+            // Do this no matter whether mv is active or not to restore version map for mv rewrite.
             mv.doAfterRestore(db, mvRestoreContext);
         }
         return Status.OK;
