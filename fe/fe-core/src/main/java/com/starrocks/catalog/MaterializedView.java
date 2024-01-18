@@ -1791,7 +1791,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             return new Status(Status.ErrCode.NOT_FOUND,
-                    String.format("Materialized view %s's db {} is not found", this.name, this.dbId));
+                    String.format("Materialized view %s's db %s is not found", this.name, this.dbId));
         }
         List<BaseTableInfo> newBaseTableInfos = Lists.newArrayList();
 
