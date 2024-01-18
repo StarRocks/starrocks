@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake.compaction;
 
+import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import org.junit.Assert;
 import org.junit.Test;
@@ -22,7 +22,7 @@ import org.junit.Test;
 import java.util.Collections;
 import java.util.List;
 
-public class CompactionManagerTest {
+public class CompactionMgrTest {
 
     @Test
     public void testChoosePartitionsToCompact() {
@@ -69,5 +69,29 @@ public class CompactionManagerTest {
         compactionList = compactionManager.choosePartitionsToCompact();
         Assert.assertEquals(1, compactionList.size());
         Assert.assertSame(partition2, compactionList.get(0));
+    }
+
+    @Test
+    public void testGetMaxCompactionScore() {
+        double delta = 0.001;
+
+        CompactionMgr compactionMgr = new CompactionMgr();
+        PartitionIdentifier partition1 = new PartitionIdentifier(1, 2, 3);
+        PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
+        Assert.assertEquals(0, compactionMgr.getMaxCompactionScore(), delta);
+
+        compactionMgr.handleLoadingFinished(partition1, 2, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(1d)));
+        Assert.assertEquals(1, compactionMgr.getMaxCompactionScore(), delta);
+        compactionMgr.handleCompactionFinished(partition1, 3, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(2d)));
+        Assert.assertEquals(2, compactionMgr.getMaxCompactionScore(), delta);
+
+        compactionMgr.handleLoadingFinished(partition2, 2, System.currentTimeMillis(),
+                Quantiles.compute(Lists.newArrayList(3d)));
+        Assert.assertEquals(3, compactionMgr.getMaxCompactionScore(), delta);
+
+        compactionMgr.removePartition(partition2);
+        Assert.assertEquals(2, compactionMgr.getMaxCompactionScore(), delta);
     }
 }

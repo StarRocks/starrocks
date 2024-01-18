@@ -38,6 +38,7 @@ import com.starrocks.common.Config;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -94,14 +95,19 @@ public class MetricCalculator extends TimerTask {
         lastTs = currentTs;
 
         // max tablet compaction score of all backends
-        long maxCompactionScore = 0;
-        List<Metric> compactionScoreMetrics = MetricRepo.getMetricsByName(MetricRepo.TABLET_MAX_COMPACTION_SCORE);
-        for (Metric metric : compactionScoreMetrics) {
-            if (((GaugeMetric<Long>) metric).getValue() > maxCompactionScore) {
-                maxCompactionScore = ((GaugeMetric<Long>) metric).getValue();
+        if (RunMode.isSharedDataMode()) {
+            MetricRepo.GAUGE_MAX_TABLET_COMPACTION_SCORE.setValue(
+                    (long) GlobalStateMgr.getCurrentState().getCompactionMgr().getMaxCompactionScore());
+        } else {
+            long maxCompactionScore = 0;
+            List<Metric> compactionScoreMetrics = MetricRepo.getMetricsByName(MetricRepo.TABLET_MAX_COMPACTION_SCORE);
+            for (Metric metric : compactionScoreMetrics) {
+                if (((GaugeMetric<Long>) metric).getValue() > maxCompactionScore) {
+                    maxCompactionScore = ((GaugeMetric<Long>) metric).getValue();
+                }
             }
+            MetricRepo.GAUGE_MAX_TABLET_COMPACTION_SCORE.setValue(maxCompactionScore);
         }
-        MetricRepo.GAUGE_MAX_TABLET_COMPACTION_SCORE.setValue(maxCompactionScore);
 
         // query latency
         List<QueryDetail> queryList = QueryDetailQueue.getQueryDetailsAfterTime(lastQueryEventTime);
