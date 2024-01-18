@@ -298,6 +298,7 @@ public class FunctionSet {
     // Array functions:
     public static final String ARRAY_AGG = "array_agg";
     public static final String ARRAY_AGG_DISTINCT = "array_agg_distinct";
+    public static final String ARRAY_UNIQUE_AGG = "array_unique_agg";
     public static final String ARRAY_CONCAT = "array_concat";
     public static final String ARRAY_DIFFERENCE = "array_difference";
     public static final String ARRAY_INTERSECT = "array_intersect";
@@ -995,6 +996,8 @@ public class FunctionSet {
         // array_agg(distinct)
         registerBuiltinArrayAggDistinctFunction();
 
+        registerBuiltinArrayUniqueAggFunction();
+
         // Avg
         registerBuiltinAvgAggFunction();
 
@@ -1210,6 +1213,32 @@ public class FunctionSet {
                 Lists.newArrayList(Type.TIME), Type.ARRAY_DATETIME, Type.ARRAY_DATETIME,
                 false, false, false));
     }
+
+    private void registerBuiltinArrayUniqueAggFunction() {
+        // array_unique_agg mapping array_agg_distinct while array as input.
+        for (ScalarType type : Type.getNumericTypes()) {
+            Type arrayType = new ArrayType(type);
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_UNIQUE_AGG,
+                    Lists.newArrayList(arrayType), arrayType, arrayType,
+                    false, false, false));
+        }
+
+        for (ScalarType type : Type.STRING_TYPES) {
+            Type arrayType = new ArrayType(type);
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_UNIQUE_AGG,
+                    Lists.newArrayList(arrayType), arrayType, arrayType,
+                    false, false, false));
+        }
+
+        for (ScalarType type : Type.DATE_TYPES) {
+            Type arrayType = new ArrayType(type);
+            addBuiltin(AggregateFunction.createBuiltin(FunctionSet.ARRAY_UNIQUE_AGG,
+                    Lists.newArrayList(arrayType), arrayType, arrayType,
+                    false, false, false));
+        }
+    }
+
+
     private void registerBuiltinAvgAggFunction() {
         // TODO: switch to CHAR(sizeof(AvgIntermediateType) when that becomes available
         for (ScalarType type : Type.FLOAT_TYPES) {
