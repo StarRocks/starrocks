@@ -276,24 +276,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     brpc_server->Stop(0);
     thrift_server->stop();
 
-    http_server->join();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": http server exit successfully";
-
-    // Should stop the query rpc pool first, otherwise brpc_server->join() will block
-    // becuase of the done->Run() will not execuete.
-    exec_env->query_rpc_pool()->shutdown();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": query_rpc_pool shutdown successfully";
-
-    brpc_server->Join();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": brpc server exit successfully";
-
-    thrift_server->join();
-    LOG(INFO) << process_name << " exit step " << exit_step++ << ": thrift server exit successfully";
-
-    http_server.reset();
-    brpc_server.reset();
-    thrift_server.reset();
-
     daemon->stop();
     daemon.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": daemon threads exit successfully";
@@ -316,7 +298,22 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     }
 #endif
 
+    http_server->join();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": http server exit successfully";
+
+    brpc_server->Join();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": brpc server exit successfully";
+
+    thrift_server->join();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": thrift server exit successfully";
+
+    http_server.reset();
+    brpc_server.reset();
+    thrift_server.reset();
+
     exec_env->destroy();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
+
     delete storage_engine;
 
     // Unbind with MemTracker
