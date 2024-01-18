@@ -438,6 +438,21 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：存算分离集群下主键模型表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
 - 默认值：0.5
 
+#### create_tablet_worker_count
+
+- 含义：创建 Tablet 的线程数。自 v3.1.7 起变为动态参数。
+- 默认值：3
+
+#### number_tablet_writer_threads
+
+- 含义：用于 Stream Load 的线程数。自 v3.1.7 起变为动态参数。
+- 默认值：16
+
+#### pipeline_connector_scan_thread_num_per_cpu
+
+- 含义：BE 节点中每个 CPU 核心分配给 Pipeline Connector 的扫描线程数量。自 v3.1.7 起变为动态参数。
+- 默认值：8
+
 #### max_garbage_sweep_interval
 
 - 含义：磁盘进行垃圾清理的最大间隔。自 3.0 版本起，该参数由静态变为动态。
@@ -507,11 +522,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：心跳线程数。
 - 默认值：1
-
-#### create_tablet_worker_count
-
-- 含义：创建 tablet 的线程数。
-- 默认值：3
 
 #### drop_tablet_worker_count
 
@@ -692,11 +702,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：小批量导入生成的文件保留的时。
 - 默认值：4
-
-#### number_tablet_writer_threads
-
-- 含义：流式导入的线程数。
-- 默认值：16
 
 #### streaming_load_rpc_max_alive_time_sec
 
