@@ -1,5 +1,7 @@
 # 从 AutoMQ Kafka 持续导入
 
+import Replicanum from '../assets/commonMarkdown/replicanum.md'
+
 [AutoMQ for Kafka](https://docs.automq.com/zh/docs/automq-s3kafka/YUzOwI7AgiNIgDk1GJAcu6Uanog)(简称 AutoMQ Kafka ) 是一款基于云重新设计的云原生 Kafka。
 AutoMQ Kafka [内核开源](https://github.com/AutoMQ/automq-for-kafka)并且100% 兼容 Kafka 协议，可以充分兑现云的红利。
 相比自建 Apache Kafka，AutoMQ Kafka 在其云原生架构基础上实现的自动弹性、流量自平衡、秒级分区移动等特性可以为用户带来更低的总体拥有成本（TCO）。
@@ -25,7 +27,6 @@ PROPERTIES (
   "enable_persistent_index" = "true"
 );
 ```
-import Replicanum from '../assets/commonMarkdown/replicanum.md'
 <Replicanum />
 
 ### 准备 AutoMQ Kafka 环境和测试数据
