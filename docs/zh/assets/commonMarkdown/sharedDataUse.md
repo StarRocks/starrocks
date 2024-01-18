@@ -5,7 +5,7 @@
 
 创建默认存储卷后，您可以使用该存储卷创建数据库和云原生表。
 
-StarRocks 存算分离集群支持所有[数据模型](../../table_design/table_types/table_types.md)。
+StarRocks 存算分离集群支持所有[表类型](../../table_design/table_types/table_types.md)。
 
 以下示例创建数据库 `cloud_db`，并基于明细模型创建表 `detail_demo`，启用本地磁盘缓存，将热数据有效期设置为一个月，并禁用异步数据导入：
 

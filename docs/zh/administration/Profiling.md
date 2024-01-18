@@ -10,9 +10,9 @@ displayed_sidebar: "Chinese"
 
 您可以在建表阶段通过以下方式优化 StarRocks 性能。
 
-### 选择数据模型
+### 选择表类型
 
-StarRocks 支持四种数据模型：主键模型 (PRIMARY KEY)，聚合模型 (AGGREGATE KEY)，更新模型 (UNIQUE KEY)，以及明细模型 (DUPLICATE KEY)。四种模型中数据都是依据 KEY 进行排序。
+StarRocks 支持四种表类型：主键模型 (PRIMARY KEY)，聚合模型 (AGGREGATE KEY)，更新模型 (UNIQUE KEY)，以及明细模型 (DUPLICATE KEY)。四种模型中数据都是依据 KEY 进行排序。
 
 * **AGGREGATE KEY 模型**
 
@@ -152,7 +152,7 @@ StarRocks 支持对数据进行有序存储，在数据有序的基础上为其�
 
 ### 使用倒排索引
 
-StarRocks 支持倒排索引，采用位图技术构建索引（Bitmap Index）。您可以将索引应用在 DUPLICATE KEY 数据模型的所有列和 AGGREGATE KEY 和 UNIQUE KEY 模型的 Key 列上。位图索引适合取值空间较小的列，例如性别、城市、省份等信息列上。随着取值空间的增加，位图索引会同步膨胀。
+StarRocks 支持倒排索引，采用位图技术构建索引（Bitmap Index）。您可以将索引应用在明细表的所有列，聚合表和更新表的 Key 列上。位图索引适合取值空间较小的列，例如性别、城市、省份等信息列上。随着取值空间的增加，位图索引会同步膨胀。
 
 ### 使用物化视图
 
