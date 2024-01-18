@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
@@ -213,7 +212,8 @@ public class StarOSAgent2ndTest {
         Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
 
         Assert.assertEquals(2, starosAgent.getPrimaryComputeNodeIdByShard(shardId));
-        UserException exception = Assert.assertThrows(UserException.class, () -> starosAgent.getPrimaryComputeNodeIdByShard(shardId));
+        UserException exception =
+                Assert.assertThrows(UserException.class, () -> starosAgent.getPrimaryComputeNodeIdByShard(shardId));
         Assert.assertEquals(InternalErrorCode.REPLICA_FEW_ERR, exception.getErrorCode());
     }
 }
