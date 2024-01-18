@@ -38,7 +38,10 @@ public:
 
     Status append(const std::vector<Slice>& data) override {
         std::for_each(data.begin(), data.end(), [&](const Slice& slice) {
-            _buffer.emplace_back(std::string(slice.data, slice.size));
+            AlignedBuffer buffer;
+            buffer.resize(slice.size);
+            memcpy(buffer.data(), slice.data, slice.size);
+            _buffer.emplace_back(std::move(buffer));
             _size += slice.get_size();
         });
         return Status::OK();
@@ -74,7 +77,8 @@ public:
     }
 
 private:
-    std::vector<std::string> _buffer;
+    // use aligned buffer to make direct io happy
+    std::vector<AlignedBuffer> _buffer;
     size_t _next_idx = 0;
 };
 
