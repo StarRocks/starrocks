@@ -35,17 +35,17 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | 函数                |                 功能      |
 |  :-:                |                :-:       |
 | [add_months](./date-time-functions/add_months.md)  |   在给定的日期（DATE、DATETIME）上增加一个整数月。     |
-| [adddate，days_add](./date-time-functions/adddate.md)          |  向日期添加指定的时间间隔。        |
+| [adddate](./date-time-functions/adddate.md)          |  向日期添加指定的时间间隔。        |
 | [convert_tz](./date-time-functions/convert_tz.md)          |   将给定的时间转化为另一个时区的时间。  |
 | [current_date，curdate](./date-time-functions/curdate.md)          |   获取当前的日期，以 DATE 类型返回。  |
 | [current_time，curtime](./date-time-functions/curtime.md)      |  获取当前的时间，以 TIME 类型返回。  |
 | [current_timestamp](./date-time-functions/current_timestamp.md)      |  获取当前时间，以 DATETIME 类型返回。   |
 | [date](./date-time-functions/date.md)      |  从日期或时间日期表达式中截取日期部分。  |
-| [date_add](./date-time-functions/date_add.md)      |  向日期添加指定的时间间隔。    |
-|[date_diff](./date-time-functions/date_diff.md)| 根据指定的时间单位返回两个日期的差值。 |
+| [date_add，adddate](./date-time-functions/date_add.md)      |  向日期添加指定的时间间隔。    |
+| [date_diff](./date-time-functions/date_diff.md)| 根据指定的时间单位返回两个日期的差值。 |
 | [date_format](./date-time-functions/date_format.md)      |  按照 format 指定的格式来显示日期/时间数据。   |
 | [date_slice](./date-time-functions/date_slice.md)      |  根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻。  |
-| [date_sub, subdate](./date-time-functions/date_sub.md)    |    从日期中减去指定的时间间隔。   |
+| [date_sub，subdate](./date-time-functions/date_sub.md)    |    从日期中减去指定的时间间隔。   |
 | [date_trunc](./date-time-functions/date_trunc.md)     |    根据指定的精度级别，将一个日期时间截断。  |
 | [datediff](./date-time-functions/datediff.md)   |  计算两个日期的差值，结果精确到天。        |
 | [day](./date-time-functions/day.md) | 返回指定日期中的天信息。|
@@ -54,7 +54,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 | [dayofweek](./date-time-functions/dayofweek.md)| 返回指定日期的工作日索引值。  |
 | [dayofweek_iso](./date-time-functions/day_of_week_iso.md)| 根据 ISO 标准，计算某一个日期对应的是一周内的星期几。  |
 | [dayofyear](./date-time-functions/dayofyear.md)|  计算指定日期为对应年中的哪一天。   |
-| [days_add](./date-time-functions/adddate.md)| 向日期添加指定的时间间隔。  |
+| [days_add](./date-time-functions/days_add.md)| 向日期添加指定的天数。  |
 | [days_diff](./date-time-functions/days_diff.md)|  计算开始时间和结束时间相差几天。 |
 | [days_sub](./date-time-functions/days_sub.md)| 从给定日期或者日期时间中减去指定的天数，获得新的 DATETIME 结果。  |
 | [from_days](./date-time-functions/from_days.md)|  通过计算当前时间距离 0000-01-01 的天数，计算出当前是时间哪一天。 |
