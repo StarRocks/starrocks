@@ -147,8 +147,8 @@ public class MetricsAction extends RestBaseAction {
             UserIdentity currentUser = null;
             try {
                 ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
+                // Only check password and no need admin root, otherwise the request privilege is too big.
                 currentUser = checkPassword(authInfo);
-                checkUserOwnsAdminRole(currentUser);
             } catch (AccessDeniedException e) {
                 // disable Table related metrics collection due to AccessDenied
                 collectTableMetrics = false;
@@ -158,8 +158,16 @@ public class MetricsAction extends RestBaseAction {
             }
         }
 
-        boolean minifyMVMetrics = !collectMVMetrics;
-        boolean minifyTableMetrics = !collectTableMetrics;
+        /*
+         * Collect tableMetrics and MVMetrics in minified way by default.
+         * Full metrics collection is only enabled when the following conditions are all satisfied
+         * - explicitly has `?with_table_metrics=all` or `?with_materialized_view_metrics=all`
+         * - the user must have sufficient privileges by checking the request auth info
+         */
+        boolean collectAllTableMetrics = COLLECT_MODE_METRICS_ALL.equalsIgnoreCase(withTableMetrics);
+        boolean collectAllMVMetrics = COLLECT_MODE_METRICS_ALL.equalsIgnoreCase(withMaterializedViewsMetrics);
+        boolean minifyTableMetrics = !collectAllTableMetrics;
+        boolean minifyMVMetrics = !collectAllMVMetrics;
         return new RequestParams(collectTableMetrics, minifyTableMetrics, collectMVMetrics, minifyMVMetrics);
     }
 }
