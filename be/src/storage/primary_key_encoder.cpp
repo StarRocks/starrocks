@@ -217,25 +217,43 @@ inline void encode_slice(const Slice& s, std::string* dst, bool is_last) {
     }
 }
 
-inline Status decode_slice(Slice* src, std::string* dest, bool is_last) {
+inline Status decode_slice(Slice* src, std::string* dest, Slice* dest_fast, bool is_last, bool fast_decode) {
     if (is_last) {
-        dest->append(src->data, src->size);
+        if (!fast_decode) {
+            dest->append(src->data, src->size);
+        } else {
+            dest_fast->data = src->data;
+            dest_fast->size = src->size;
+        }
     } else {
-        auto* separator = static_cast<uint8_t*>(memmem(src->data, src->size, "\0\0", 2));
-        DCHECK(separator) << "bad encoded primary key, separator not found";
-        if (PREDICT_FALSE(separator == nullptr)) {
-            LOG(WARNING) << "bad encoded primary key, separator not found";
-            return Status::InvalidArgument("bad encoded primary key, separator not found");
-        }
-        auto* data = (uint8_t*)src->data;
-        int len = separator - data;
-        for (int i = 0; i < len; i++) {
-            if (i >= 1 && data[i - 1] == '\0' && data[i] == '\1') {
-                continue;
+        if (!fast_decode) {
+            auto* separator = static_cast<uint8_t*>(memmem(src->data, src->size, "\0\0", 2));
+            DCHECK(separator) << "bad encoded primary key, separator not found";
+            if (PREDICT_FALSE(separator == nullptr)) {
+                LOG(WARNING) << "bad encoded primary key, separator not found";
+                return Status::InvalidArgument("bad encoded primary key, separator not found");
             }
-            dest->push_back((char)data[i]);
+            auto* data = (uint8_t*)src->data;
+            int len = separator - data;
+            for (int i = 0; i < len; i++) {
+                if (i >= 1 && data[i - 1] == '\0' && data[i] == '\1') {
+                    continue;
+                }
+                dest->push_back((char)data[i]);
+            }
+            src->remove_prefix(len + 2);
+        } else {
+            void* separator = std::memchr(src->data, '\0', src->size);
+            DCHECK(separator) << "bad encoded primary key, separator not found";
+            if (PREDICT_FALSE(separator == nullptr)) {
+                LOG(WARNING) << "bad encoded primary key, separator not found";
+                return Status::InvalidArgument("bad encoded primary key, separator not found");
+            }
+
+            dest_fast->data = src->data;
+            dest_fast->size = (uint8_t*)separator - (uint8_t*)src->data;
+            src->remove_prefix(dest_fast->size + 2);
         }
-        src->remove_prefix(len + 2);
     }
     return Status::OK();
 }
@@ -651,7 +669,8 @@ bool PrimaryKeyEncoder::encode_exceed_limit(const Schema& schema, const Chunk& c
 }
 
 template <class T>
-Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size_t len, Chunk* dest) {
+Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size_t len, Chunk* dest,
+                       std::vector<uint8_t>* value_encode_flags) {
     const int ncol = schema.num_key_fields();
     for (int i = 0; i < len; i++) {
         Slice s = bkeys.get_slice(offset + i);
@@ -696,9 +715,16 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
             } break;
             case TYPE_VARCHAR: {
                 auto& tc = down_cast<BinaryColumn&>(column);
-                std::string v;
-                RETURN_IF_ERROR(decode_slice(&s, &v, j + 1 == ncol));
-                tc.append(v);
+                bool fast_decode = value_encode_flags != nullptr ? (bool)((*value_encode_flags)[i]) : false;
+                if (!fast_decode) {
+                    std::string v;
+                    RETURN_IF_ERROR(decode_slice(&s, &v, nullptr, j + 1 == ncol, false));
+                    tc.append(v);
+                } else {
+                    Slice v;
+                    RETURN_IF_ERROR(decode_slice(&s, nullptr, &v, j + 1 == ncol, true));
+                    tc.append(v);
+                }
             } break;
             case TYPE_DATE: {
                 auto& tc = down_cast<DateColumn&>(column);
@@ -706,7 +732,7 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
                 decode_integral(&s, &v._julian);
                 tc.append(v);
             } break;
-            case TYPE_DATETIME_V1: {
+            case TYPE_DATETIME: {
                 auto& tc = down_cast<TimestampColumn&>(column);
                 TimestampValue v;
                 decode_integral(&s, &v._timestamp);
@@ -720,7 +746,8 @@ Status decode_internal(const Schema& schema, const T& bkeys, size_t offset, size
     return Status::OK();
 }
 
-Status PrimaryKeyEncoder::decode(const Schema& schema, const Column& keys, size_t offset, size_t len, Chunk* dest) {
+Status PrimaryKeyEncoder::decode(const Schema& schema, const Column& keys, size_t offset, size_t len, Chunk* dest,
+                                 std::vector<uint8_t>* value_encode_flags) {
     if (schema.num_key_fields() == 1) {
         // simple decoding, src & dest should have same type
         dest->get_column_by_index(0)->append(keys, offset, len);
@@ -728,10 +755,10 @@ Status PrimaryKeyEncoder::decode(const Schema& schema, const Column& keys, size_
         CHECK(keys.is_binary() || keys.is_large_binary()) << "keys column should be binary";
         if (keys.is_binary()) {
             auto& bkeys = down_cast<const BinaryColumn&>(keys);
-            return decode_internal(schema, bkeys, offset, len, dest);
+            return decode_internal(schema, bkeys, offset, len, dest, value_encode_flags);
         } else {
             auto& bkeys = down_cast<const LargeBinaryColumn&>(keys);
-            return decode_internal(schema, bkeys, offset, len, dest);
+            return decode_internal(schema, bkeys, offset, len, dest, value_encode_flags);
         }
     }
     return Status::OK();

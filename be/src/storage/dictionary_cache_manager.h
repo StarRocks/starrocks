@@ -21,32 +21,49 @@
 #include "column/chunk.h"
 #include "column/column.h"
 #include "column/datum.h"
+#include "common/compiler_util.h"
 #include "common/status.h"
 #include "exec/dictionary_cache_writer.h"
 #include "fmt/format.h"
 #include "service/internal_service.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_encoder.h"
-#include "storage/row_store_encoder_factory.h"
-#include "storage/row_store_encoder_simple.h"
-#include "util/faststring.h"
+#include "storage/primary_key_encoder.h"
+#include "storage/type_traits.h"
 #include "util/phmap/phmap.h"
 #include "util/xxh3.h"
 
 namespace starrocks {
 
+#if defined(_MSC_VER) && (defined(_M_X64) || defined(_M_IX86))
+#include <mmintrin.h>
+#define PREFETCH_ADDR(addr) _mm_prefetch((const char*)(addr), _MM_HINT_T0)
+#elif defined(__GNUC__)
+#define PREFETCH_ADDR(addr) __builtin_prefetch(static_cast<const void*>(addr), 0 /* rw==read */, 3 /* locality */)
+#endif // __GNUC__
+
 enum DictionaryCacheEncoderType {
-    ROW_STORE_SIMPLE = 0,
+    PK_ENCODE = 0,
 };
 
 template <LogicalType logical_type>
 struct DictionaryCacheTypeTraits {
-    using CppType = typename RunTimeTypeTraits<logical_type>::CppType;
+    using CppType = typename CppTypeTraits<logical_type>::CppType;
 };
 
 template <>
 struct DictionaryCacheTypeTraits<TYPE_VARCHAR> {
-    using CppType = std::string;
+    using CppType = Slice;
+};
+
+template <>
+struct DictionaryCacheTypeTraits<TYPE_DATE> {
+    using CppType = int32_t;
+};
+
+template <>
+struct DictionaryCacheTypeTraits<TYPE_DATETIME> {
+    using CppType = int64_t;
 };
 
 template <LogicalType logical_type>
@@ -57,7 +74,7 @@ struct DictionaryCacheHashTraits {
 
 template <>
 struct DictionaryCacheHashTraits<TYPE_VARCHAR> {
-    inline size_t operator()(const std::string& v) const { return XXH3_64bits(v.data(), v.length()); }
+    inline size_t operator()(const Slice& v) const { return XXH3_64bits(v.data, v.size); }
 };
 
 class DictionaryCache {
@@ -65,70 +82,157 @@ public:
     DictionaryCache(DictionaryCacheEncoderType type) : _type(type) {}
     virtual ~DictionaryCache() = default;
 
-    virtual inline Status insert(const Datum& k, const Datum& v) = 0;
+    virtual inline Status insert(const Datum& k, const Datum& v, const uint8_t& flag) = 0;
 
-    virtual inline Status lookup(const Datum& k, Column* dest) = 0;
+    virtual inline Status lookup(Column* src, Column* dest, std::vector<uint8_t>& value_encode_flags) = 0;
 
     virtual inline size_t memory_usage() = 0;
+
+    virtual std::mutex& lock() = 0;
 
 protected:
     DictionaryCacheEncoderType _type;
 };
 
+class DictionaryCacheUtil;
 template <LogicalType KeyLogicalType, LogicalType ValueLogicalType>
 class DictionaryCacheImpl final : public DictionaryCache {
 public:
+    static constexpr uint8_t PREFETCHN = 8;
+
     DictionaryCacheImpl(DictionaryCacheEncoderType type) : DictionaryCache(type), _total_memory_useage(0) {}
     virtual ~DictionaryCacheImpl() override = default;
 
     using KeyCppType = typename DictionaryCacheTypeTraits<KeyLogicalType>::CppType;
     using ValueCppType = typename DictionaryCacheTypeTraits<ValueLogicalType>::CppType;
+ 
+    virtual inline Status insert(const Datum& k, const Datum& v, const uint8_t& flag) override {
+        switch (_type) {
+        case DictionaryCacheEncoderType::PK_ENCODE: {
+            KeyCppType key;
+            ValueCppType value;
 
-    virtual inline Status insert(const Datum& k, const Datum& v) override {
-        KeyCppType key;
-        ValueCppType value;
-        _get<KeyCppType>(k, key);
-        _get<ValueCppType>(v, value);
-        auto r = _dictionary.insert({key, value});
-        if (!r.second) {
-            return Status::InternalError("duplicate key found when refreshing dictionary");
+            if constexpr (std::is_same_v<KeyCppType, Slice>) {
+                const Slice& input = k.get<KeyCppType>();
+                auto *buffer = reinterpret_cast<char*>(_pool.allocate(input.size));
+                RETURN_IF_UNLIKELY_NULL(buffer, Status::MemoryAllocFailed("alloc mem for dictionary failed"));
+                memcpy(buffer, input.data, input.size);
+                key.data = buffer;
+                key.size = input.size;
+            } else {
+                key = k.get<KeyCppType>();
+            }
+
+            if constexpr (std::is_same_v<ValueCppType, Slice>) {
+                const Slice& input = v.get<ValueCppType>();
+                size_t allocate_size = input.size + sizeof(uint8_t);
+                auto *buffer = reinterpret_cast<char*>(_pool.allocate(allocate_size));
+                RETURN_IF_UNLIKELY_NULL(buffer, Status::MemoryAllocFailed("alloc mem for dictionary failed"));
+                memcpy(buffer, &flag, sizeof(uint8_t));
+                buffer += sizeof(uint8_t);
+                memcpy(buffer, input.data, input.size);
+                value.data = buffer;
+                value.size = input.size;
+            } else {
+                value = v.get<ValueCppType>();
+            }
+
+            auto r = _dictionary.insert({key, value});
+            if (!r.second) {
+                return Status::InternalError("duplicate key found when refreshing dictionary");
+            }
+            _total_memory_useage.fetch_add(_get_element_memory_usage<KeyCppType, ValueCppType>(key, value));
+            return Status::OK();
         }
-        _total_memory_useage.fetch_add(_get_element_memory_usage<KeyCppType, ValueCppType>(key, value));
+        default:
+            return Status::InternalError("Unknow encoder for dictionary cache");
+        }
         return Status::OK();
     }
 
-    virtual inline Status lookup(const Datum& k, Column* dest) override {
-        KeyCppType key;
-        _get<KeyCppType>(k, key);
-        auto iter = _dictionary.find(key);
-        if (iter == _dictionary.end()) {
-            return Status::NotFound("key not found in dictionary cache");
+    virtual inline Status lookup(Column* src, Column* dest, std::vector<uint8_t>& value_encode_flags) override {
+        switch (_type) {
+        case DictionaryCacheEncoderType::PK_ENCODE: {
+            size_t size = src->size();
+            const auto* raw_data = reinterpret_cast<const KeyCppType*>(src->raw_data());
+
+            if (LIKELY(size >= 2 * PREFETCHN)) {
+                size_t beg_index = 0;
+                size_t loop = size / PREFETCHN;
+
+                size_t prefetch_hashes[PREFETCHN];
+                for (size_t i = 0; i < loop; i++) {
+                    beg_index = i * PREFETCHN;
+
+                    if constexpr (std::is_same_v<KeyCppType, Slice>) {
+                        for (size_t j = 0; j < PREFETCHN; j++) {
+                            PREFETCH_ADDR(&raw_data[beg_index + j]);
+                            PREFETCH_ADDR(raw_data[beg_index + j].data);
+                        }
+                    } else {
+                        if (LIKELY(i != loop - 1)) PREFETCH_ADDR(&raw_data[beg_index + PREFETCHN]);
+                        (void)raw_data[beg_index];
+                    }
+
+                    for (size_t j = 0; j < PREFETCHN; j++) {
+                        prefetch_hashes[j] = DictionaryCacheHashTraits<KeyLogicalType>()(raw_data[beg_index + j]);
+                        _dictionary.prefetch_hash(prefetch_hashes[j]);
+                    }
+
+                    for (size_t j = 0; j < PREFETCHN; j++) {
+                        auto iter = _dictionary.find(raw_data[beg_index + j], prefetch_hashes[j]);
+                        if (iter == _dictionary.end()) {
+                            return Status::NotFound("key not found in dictionary cache");
+                        }
+                        dest->append_datum(*_get_datum(iter->second));
+                        if constexpr (std::is_same_v<ValueCppType, Slice>) {
+                            value_encode_flags[i] = *(reinterpret_cast<uint8_t*>(iter->second.data) - 1);   
+                        }
+                    }
+                }
+
+                beg_index = loop * PREFETCHN;
+                for (size_t i = beg_index; i < size; i++) {
+                    auto iter = _dictionary.find(raw_data[i]);
+                    if (iter == _dictionary.end()) {
+                        return Status::NotFound("key not found in dictionary cache");
+                    }
+                    dest->append_datum(*_get_datum(iter->second));
+                    if constexpr (std::is_same_v<ValueCppType, Slice>) {
+                        value_encode_flags[i] = *(reinterpret_cast<uint8_t*>(iter->second.data) - 1);   
+                    }
+                }
+            } else {
+                for (size_t i = 0; i < size; i++) {
+                    auto iter = _dictionary.find(raw_data[i]);
+                    if (iter == _dictionary.end()) {
+                        return Status::NotFound("key not found in dictionary cache");
+                    }
+                    dest->append_datum(*_get_datum(iter->second));
+                    if constexpr (std::is_same_v<ValueCppType, Slice>) {
+                        value_encode_flags[i] = *(reinterpret_cast<uint8_t*>(iter->second.data) - 1);
+                    }
+                }
+            }
+            break;
         }
-        dest->append_datum(*_get_datum(iter->second));
+        default:
+            return Status::InternalError("Unknow encoder for dictionary cache");
+        }
+
         return Status::OK();
     }
 
     virtual inline size_t memory_usage() override { return _total_memory_useage.load(); }
 
+    virtual std::mutex& lock() override { return _lock; }
+
 private:
-    template <class CppType>
-    inline void _get(const Datum& d, CppType& v) {
-        switch (_type) {
-        case DictionaryCacheEncoderType::ROW_STORE_SIMPLE: {
-            v = d.get<Slice>().to_string();
-            break;
-        }
-        default:
-            break;
-        }
-        return;
-    }
 
     inline std::shared_ptr<Datum> _get_datum(const ValueCppType& v) {
         switch (_type) {
-        case DictionaryCacheEncoderType::ROW_STORE_SIMPLE: {
-            static_assert(std::is_same_v<ValueCppType, std::string>);
-            return std::make_shared<Datum>(Slice(v));
+        case DictionaryCacheEncoderType::PK_ENCODE: {
+            return std::make_shared<Datum>(v);
         }
         default:
             break;
@@ -139,10 +243,20 @@ private:
     template <class KeyCppType, class ValueCppType>
     inline size_t _get_element_memory_usage(const KeyCppType& k, const ValueCppType& v) {
         switch (_type) {
-        case DictionaryCacheEncoderType::ROW_STORE_SIMPLE: {
-            static_assert(std::is_same_v<KeyCppType, std::string>);
-            static_assert(std::is_same_v<ValueCppType, std::string>);
-            return k.size() + v.size();
+        case DictionaryCacheEncoderType::PK_ENCODE: {
+            size_t size = 0;
+            if constexpr (std::is_same_v<KeyCppType, Slice>) {
+                size = k.size;
+            } else {
+                size = sizeof(KeyCppType);
+            }
+
+            if constexpr (std::is_same_v<ValueCppType, Slice>) {
+                size += v.size;
+            } else {
+                size += sizeof(ValueCppType);
+            }
+            return size;
         }
         default:
             break;
@@ -153,9 +267,11 @@ private:
     phmap::parallel_flat_hash_map<KeyCppType, ValueCppType, DictionaryCacheHashTraits<KeyLogicalType>,
                                   phmap::priv::hash_default_eq<KeyCppType>,
                                   phmap::priv::Allocator<phmap::priv::Pair<const KeyCppType, ValueCppType>>, 4,
-                                  std::shared_mutex, true>
+                                  phmap::NullMutex, true>
             _dictionary;
     std::atomic<size_t> _total_memory_useage;
+    std::mutex _lock;
+    MemPool _pool;
 };
 
 using DictionaryCachePtr = std::shared_ptr<DictionaryCache>;
@@ -167,16 +283,20 @@ public:
 
     // using primary key encoding function
     static std::unique_ptr<Column> encode_columns(const Schema& schema, const Chunk* chunk,
-                                                  const DictionaryCacheEncoderType& encoder_type = ROW_STORE_SIMPLE) {
+                                                  const DictionaryCacheEncoderType& encoder_type = PK_ENCODE) {
         switch (encoder_type) {
-        case ROW_STORE_SIMPLE: {
-            auto encoded_column = std::make_unique<BinaryColumn>();
-            auto encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(RowStoreEncoderType::SIMPLE);
-            auto st = encoder->encode_columns_to_full_row_column(schema, chunk->columns(), *encoded_column.get());
-            if (!st.ok()) {
-                break;
+        case PK_ENCODE: {
+            std::unique_ptr<Column> encoded_columns;
+            if (!PrimaryKeyEncoder::create_column(schema, &encoded_columns).ok()) {
+                std::stringstream ss;
+                ss << "create column for primary key encoder failed";
+                LOG(WARNING) << ss.str();
+                return nullptr;
             }
-            return encoded_column;
+            if (chunk->num_rows() > 0) {
+                PrimaryKeyEncoder::encode(schema, *chunk, 0, chunk->num_rows(), encoded_columns.get());
+            }
+            return encoded_columns;
         }
         default:
             break;
@@ -185,27 +305,12 @@ public:
     }
 
     static Status decode_columns(const Schema& schema, Column* column, Chunk* decoded_chunk,
-                                 const DictionaryCacheEncoderType& encoder_type = ROW_STORE_SIMPLE) {
+                                 std::vector<uint8_t>* value_encode_flags,
+                                 const DictionaryCacheEncoderType& encoder_type = PK_ENCODE) {
         switch (encoder_type) {
-        case ROW_STORE_SIMPLE: {
-            auto encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(RowStoreEncoderType::SIMPLE);
-            const auto binary_column = down_cast<BinaryColumn*>(column);
-            std::vector<uint32_t> column_ids(schema.fields().size());
-            std::iota(column_ids.begin(), column_ids.end(), 0);
-            std::vector<std::unique_ptr<Column>> columns;
-            for (size_t i = 0; i < schema.fields().size(); ++i) {
-                auto clone_column = decoded_chunk->get_column_by_index(i)->clone_empty();
-                columns.emplace_back(std::move(clone_column));
-            }
-
-            RETURN_IF_ERROR(encoder->decode_columns_from_full_row_column(schema, *binary_column, column_ids, &columns));
-
-            DCHECK(column->size() == columns[0]->size());
-            for (size_t i = 0; i < decoded_chunk->columns().size(); ++i) {
-                decoded_chunk->get_column_by_index(i).reset(columns[i].release());
-            }
-            DCHECK(decoded_chunk->num_rows() == column->size());
-            return Status::OK();
+        case PK_ENCODE: {
+            return PrimaryKeyEncoder::decode(schema, *column, 0, column->size(), decoded_chunk,
+                                             value_encode_flags);
         }
         default:
             break;
@@ -213,15 +318,51 @@ public:
         return Status::InternalError("decode failed for dictionary");
     }
 
-    static LogicalType get_encoded_type(const Schema& schema,
-                                        const DictionaryCacheEncoderType& encoder_type = ROW_STORE_SIMPLE) {
-        switch (encoder_type) {
-        case ROW_STORE_SIMPLE: {
-            auto encoder = RowStoreEncoderFactory::instance()->get_or_create_encoder(RowStoreEncoderType::SIMPLE);
-            if (!encoder->is_supported(schema).ok()) {
+    static void precheck_value_encode(const Chunk* chunk, std::vector<uint8_t>& value_encode_flags) {
+        bool has_varchar = false;
+        for (const auto& f : chunk->schema()->fields()) {
+            if (f->type()->type() == TYPE_VARCHAR) {
+                has_varchar = true;
                 break;
             }
-            return TYPE_VARCHAR;
+        }
+
+        if (!has_varchar) {
+            return;
+        }
+
+        size_t size = chunk->num_rows();
+        for (int idx = 0; idx < chunk->num_columns(); idx++) {
+            if (chunk->schema()->fields()[idx]->type()->type() != TYPE_VARCHAR) {
+                continue;
+            }
+            
+            const auto& src = chunk->get_column_by_index(idx);
+            const auto* raw_data = reinterpret_cast<const Slice*>(src->raw_data());
+            for (int i = 0; i < size; i++) {
+                bool contains_zero = false;
+                for (int j = 0; j < raw_data[i].size; j++) {
+                    if (raw_data[i][j] == '\0') {
+                        contains_zero = true;
+                        break;
+                    }
+                }
+                if (value_encode_flags[i] && contains_zero) {
+                    value_encode_flags[i] = 0;
+                }
+            }
+        }
+    }
+
+    static LogicalType get_encoded_type(const Schema& schema,
+                                        const DictionaryCacheEncoderType& encoder_type = PK_ENCODE) {
+        switch (encoder_type) {
+        case PK_ENCODE: {
+            std::vector<uint32_t> idxes;
+            for (size_t i = 0; i < schema.fields().size(); i++) {
+                idxes.push_back((uint32_t)i);
+            }
+            return PrimaryKeyEncoder::encoded_primary_key_type(schema, idxes);
         }
         default:
             break;
@@ -231,10 +372,105 @@ public:
 
     static DictionaryCachePtr create_dictionary_cache(
             const std::pair<LogicalType, LogicalType>& type,
-            const DictionaryCacheEncoderType& encoder_type = ROW_STORE_SIMPLE) {
+            const DictionaryCacheEncoderType& encoder_type = PK_ENCODE) {
         switch (encoder_type) {
-        case ROW_STORE_SIMPLE: {
-            return std::make_shared<DictionaryCacheImpl<TYPE_VARCHAR, TYPE_VARCHAR>>(encoder_type);
+        case PK_ENCODE: {
+#define IF_TYPE(key_type, value_type) \
+    if (type == std::make_pair(key_type, value_type))                        \
+        return std::make_shared<DictionaryCacheImpl<key_type, value_type>>(encoder_type)
+
+            IF_TYPE(TYPE_BOOLEAN, TYPE_BOOLEAN);
+            IF_TYPE(TYPE_BOOLEAN, TYPE_TINYINT);
+            IF_TYPE(TYPE_BOOLEAN, TYPE_SMALLINT);
+            IF_TYPE(TYPE_BOOLEAN, TYPE_INT);
+            IF_TYPE(TYPE_BOOLEAN, TYPE_BIGINT);
+            IF_TYPE(TYPE_BOOLEAN, TYPE_LARGEINT);
+            IF_TYPE(TYPE_BOOLEAN, TYPE_VARCHAR);
+            IF_TYPE(TYPE_BOOLEAN, TYPE_DATE);
+            IF_TYPE(TYPE_BOOLEAN, TYPE_DATETIME);
+
+            IF_TYPE(TYPE_TINYINT, TYPE_BOOLEAN);
+            IF_TYPE(TYPE_TINYINT, TYPE_TINYINT);
+            IF_TYPE(TYPE_TINYINT, TYPE_SMALLINT);
+            IF_TYPE(TYPE_TINYINT, TYPE_INT);
+            IF_TYPE(TYPE_TINYINT, TYPE_BIGINT);
+            IF_TYPE(TYPE_TINYINT, TYPE_LARGEINT);
+            IF_TYPE(TYPE_TINYINT, TYPE_VARCHAR);
+            IF_TYPE(TYPE_TINYINT, TYPE_DATE);
+            IF_TYPE(TYPE_TINYINT, TYPE_DATETIME);
+
+            IF_TYPE(TYPE_SMALLINT, TYPE_BOOLEAN);
+            IF_TYPE(TYPE_SMALLINT, TYPE_TINYINT);
+            IF_TYPE(TYPE_SMALLINT, TYPE_SMALLINT);
+            IF_TYPE(TYPE_SMALLINT, TYPE_INT);
+            IF_TYPE(TYPE_SMALLINT, TYPE_BIGINT);
+            IF_TYPE(TYPE_SMALLINT, TYPE_LARGEINT);
+            IF_TYPE(TYPE_SMALLINT, TYPE_VARCHAR);
+            IF_TYPE(TYPE_SMALLINT, TYPE_DATE);
+            IF_TYPE(TYPE_SMALLINT, TYPE_DATETIME);
+
+            IF_TYPE(TYPE_INT, TYPE_BOOLEAN);
+            IF_TYPE(TYPE_INT, TYPE_TINYINT);
+            IF_TYPE(TYPE_INT, TYPE_SMALLINT);
+            IF_TYPE(TYPE_INT, TYPE_INT);
+            IF_TYPE(TYPE_INT, TYPE_BIGINT);
+            IF_TYPE(TYPE_INT, TYPE_LARGEINT);
+            IF_TYPE(TYPE_INT, TYPE_VARCHAR);
+            IF_TYPE(TYPE_INT, TYPE_DATE);
+            IF_TYPE(TYPE_INT, TYPE_DATETIME);
+
+            IF_TYPE(TYPE_BIGINT, TYPE_BOOLEAN);
+            IF_TYPE(TYPE_BIGINT, TYPE_TINYINT);
+            IF_TYPE(TYPE_BIGINT, TYPE_SMALLINT);
+            IF_TYPE(TYPE_BIGINT, TYPE_INT);
+            IF_TYPE(TYPE_BIGINT, TYPE_BIGINT);
+            IF_TYPE(TYPE_BIGINT, TYPE_LARGEINT);
+            IF_TYPE(TYPE_BIGINT, TYPE_VARCHAR);
+            IF_TYPE(TYPE_BIGINT, TYPE_DATE);
+            IF_TYPE(TYPE_BIGINT, TYPE_DATETIME);
+
+            IF_TYPE(TYPE_LARGEINT, TYPE_BOOLEAN);
+            IF_TYPE(TYPE_LARGEINT, TYPE_TINYINT);
+            IF_TYPE(TYPE_LARGEINT, TYPE_SMALLINT);
+            IF_TYPE(TYPE_LARGEINT, TYPE_INT);
+            IF_TYPE(TYPE_LARGEINT, TYPE_BIGINT);
+            IF_TYPE(TYPE_LARGEINT, TYPE_LARGEINT);
+            IF_TYPE(TYPE_LARGEINT, TYPE_VARCHAR);
+            IF_TYPE(TYPE_LARGEINT, TYPE_DATE);
+            IF_TYPE(TYPE_LARGEINT, TYPE_DATETIME);
+
+            IF_TYPE(TYPE_VARCHAR, TYPE_BOOLEAN);
+            IF_TYPE(TYPE_VARCHAR, TYPE_TINYINT);
+            IF_TYPE(TYPE_VARCHAR, TYPE_SMALLINT);
+            IF_TYPE(TYPE_VARCHAR, TYPE_INT);
+            IF_TYPE(TYPE_VARCHAR, TYPE_BIGINT);
+            IF_TYPE(TYPE_VARCHAR, TYPE_LARGEINT);
+            IF_TYPE(TYPE_VARCHAR, TYPE_VARCHAR);
+            IF_TYPE(TYPE_VARCHAR, TYPE_DATE);
+            IF_TYPE(TYPE_VARCHAR, TYPE_DATETIME);
+
+            IF_TYPE(TYPE_DATE, TYPE_BOOLEAN);
+            IF_TYPE(TYPE_DATE, TYPE_TINYINT);
+            IF_TYPE(TYPE_DATE, TYPE_SMALLINT);
+            IF_TYPE(TYPE_DATE, TYPE_INT);
+            IF_TYPE(TYPE_DATE, TYPE_BIGINT);
+            IF_TYPE(TYPE_DATE, TYPE_LARGEINT);
+            IF_TYPE(TYPE_DATE, TYPE_VARCHAR);
+            IF_TYPE(TYPE_DATE, TYPE_DATE);
+            IF_TYPE(TYPE_DATE, TYPE_DATETIME);
+
+            IF_TYPE(TYPE_DATETIME, TYPE_BOOLEAN);
+            IF_TYPE(TYPE_DATETIME, TYPE_TINYINT);
+            IF_TYPE(TYPE_DATETIME, TYPE_SMALLINT);
+            IF_TYPE(TYPE_DATETIME, TYPE_INT);
+            IF_TYPE(TYPE_DATETIME, TYPE_BIGINT);
+            IF_TYPE(TYPE_DATETIME, TYPE_LARGEINT);
+            IF_TYPE(TYPE_DATETIME, TYPE_VARCHAR);
+            IF_TYPE(TYPE_DATETIME, TYPE_DATE);
+            IF_TYPE(TYPE_DATETIME, TYPE_DATETIME);
+
+#undef IF_TYPE
+            break;
         }
         default:
             break;
@@ -249,7 +485,7 @@ public:
     1. WRITE is atomic for a REFRESH request, no partial write at all
     2. Read is consistent between all BEs(with the cache) in a single transaction
 */
-class DictionaryCacheManager {
+ class DictionaryCacheManager {
 public:
     using DictionaryId = int64_t;
     // DictionaryCacheTxnId is the monotonically increasing id allocated by FE.
@@ -286,27 +522,25 @@ public:
         size_t size = key_chunk->num_rows();
 
         auto encoded_key_column = DictionaryCacheUtil::encode_columns(key_schema, key_chunk.get());
-
-        ChunkUniquePtr clone_value_chunk = value_chunk->clone_empty();
-        auto encoded_value_column = DictionaryCacheUtil::encode_columns(value_schema, clone_value_chunk.get());
+        auto encoded_value_column = DictionaryCacheUtil::encode_columns(value_schema, value_chunk.get());
 
         if (encoded_key_column == nullptr || encoded_value_column == nullptr) {
             return Status::InternalError("encode dictionary cache column failed when probing the dictionary cache");
         }
 
-        for (size_t i = 0; i < size; ++i) {
-            auto key = encoded_key_column->get(i);
-            RETURN_IF_ERROR(dictionary->lookup(key, encoded_value_column.get()));
-        }
+        std::vector<uint8_t> value_encode_flags(size, 1);
+        RETURN_IF_ERROR(dictionary->lookup(encoded_key_column.get(), encoded_value_column.get(), value_encode_flags));
         DCHECK(encoded_value_column->size() == size);
 
-        return DictionaryCacheUtil::decode_columns(value_schema, encoded_value_column.get(), value_chunk.get());
+        return DictionaryCacheUtil::decode_columns(value_schema, encoded_value_column.get(), value_chunk.get(),
+                                                   &value_encode_flags);
     }
 
 private:
     Status _refresh_encoded_chunk(DictionaryId dict_id, DictionaryCacheTxnId txn_id, const Column* encoded_key_column,
                                   const Column* encoded_value_column, const SchemaPtr& schema,
-                                  LogicalType key_encoded_type, LogicalType value_encoded_type, long memory_limit);
+                                  LogicalType key_encoded_type, LogicalType value_encoded_type, long memory_limit,
+                                  const std::vector<uint8_t>& value_encode_flags);
 
     // dictionary id -> DictionaryCache
     std::unordered_map<DictionaryId, DictionaryCachePtr> _dict_cache;
