@@ -12,7 +12,7 @@ import Curl from '../assets/quick-start/_curl.mdx'
 
 本教程涵盖了以下内容：
 
-- 使用 Docker Compose 部署部署 StarRocks 存算一体集群。
+- 使用 Docker Compose 部署 StarRocks 存算一体集群。
 - 导入数据集，并在导入过程中进行基本的数据转换。
 - 查询分析数据。
 
@@ -42,11 +42,11 @@ import Curl from '../assets/quick-start/_curl.mdx'
 
 ### FE
 
-FE 节点负责元数据管理、客户端连接管理、查询计划和查询调度。每个 FE 在其内存中存储和维护完整的元数据副本，这确保了每个 FE 都能提供无差别的服务。
+FE 节点负责元数据管理、客户端连接管理、查询计划和查询调度。每个 FE 在其内存中存储和维护完整的元数据副本，确保每个 FE 都能提供无差别的服务。
 
 ### CN
 
-CN 节点负责在**存算分离**或**存算一体**集群中负责执行查询。
+CN 节点在**存算分离**或**存算一体**集群中负责执行查询。
 
 ### BE
 
@@ -95,7 +95,7 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 
 ### 使用 SQL 客户端连接到 StarRocks
 
-客户端配置完成后，并连接至 StarRocks。
+客户端配置完成后，连接至 StarRocks。
 
 ---
 
@@ -107,9 +107,9 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 
 ## 导入数据集
 
-StarRocks 有多种数据导入方法。本教程使用 curl 命令发起 Stream Load 任务导入数据。
+StarRocks 提供多种数据导入方法。本教程使用 curl 命令发起 Stream Load 任务导入数据。
 
-Stream Load 使用的 curl 命令虽然看起来复杂，但本教程在最后部分提供了详细解释。当前，建议您先运行该命令并导入数据，然后在教程结束后了解有关数据导入的详细内容。
+Stream Load 使用的 curl 命令虽然看起来复杂，但本教程在最后部分提供了详细解释。建议您先运行该命令导入数据，然后在教程结束后了解有关数据导入的详细内容。
 
 ### 导入纽约市交通事故数据
 
@@ -157,7 +157,7 @@ Enter host password for user 'root':
 }%
 ```
 
-当 Stream Load 发生错误时，StarRocks 会返回一个包含错误信息的 URL您可以通过 curl 命令查看。
+当 Stream Load 发生错误时，StarRocks 会返回一个包含错误信息的 URL，您可以通过 curl 命令查看。
 
 
 ```bash
@@ -208,7 +208,7 @@ curl --location-trusted -u root             \
 - 向 StarRocks 导入了纽约市的交通事故数据和天气数据
 - 使用 JOIN 查询分析数据
 
-除以上内容外，本教程有意地略过了在 Stream Load 过程中进行的数据转换。关于此内容的详细信息在下一小节中提供。
+除以上内容外，本教程有意略过了在 Stream Load 命令中数据转换相关的参数说明。关于此内容的详细信息在下一小节中提供。
 
 ---
 
