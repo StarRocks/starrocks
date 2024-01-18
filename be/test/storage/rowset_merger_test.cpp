@@ -77,15 +77,10 @@ public:
         return Status::OK();
     }
 
-    const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const override {
-        return _global_dict_columns_valid_info;
-    }
-
     std::unique_ptr<Column> all_pks;
     vector<uint32_t> all_rssids;
 
     vector<std::unique_ptr<Column>> non_key_columns;
-    vectorized::DictColumnsValidMap _global_dict_columns_valid_info;
 };
 
 class RowsetMergerTest : public testing::Test {
@@ -131,7 +126,7 @@ public:
         request.__set_version(1);
         request.__set_version_hash(0);
         request.tablet_schema.schema_hash = schema_hash;
-        request.tablet_schema.short_key_column_count = 6;
+        request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
         request.tablet_schema.storage_type = TStorageType::COLUMN;
 

@@ -176,7 +176,7 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::vectorized::ChunkPt
 
         // The column builder in ctx->evaluate may build column as non-nullable.
         // See be/src/column/column_builder.h#L79.
-        if (!col->is_nullable() && slot->is_nullable()) {
+        if (!col->is_nullable()) {
             col = ColumnHelper::cast_to_nullable_column(col);
         }
 
@@ -263,7 +263,9 @@ Status FileScanner::create_sequential_file(const TBrokerRangeDesc& range_desc, c
             src_file = std::shared_ptr<SequentialFile>(std::move(file));
             break;
         } else {
-            BrokerFileSystem fs_broker(address, params.properties);
+            int64_t timeout_ms = _state->query_options().query_timeout * 1000 / 4;
+            timeout_ms = std::max(timeout_ms, static_cast<int64_t>(DEFAULT_TIMEOUT_MS));
+            BrokerFileSystem fs_broker(address, params.properties, timeout_ms);
             ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_sequential_file(range_desc.path));
             src_file = std::shared_ptr<SequentialFile>(std::move(broker_file));
             break;
@@ -299,7 +301,9 @@ Status FileScanner::create_random_access_file(const TBrokerRangeDesc& range_desc
             src_file = std::shared_ptr<RandomAccessFile>(std::move(file));
             break;
         } else {
-            BrokerFileSystem fs_broker(address, params.properties);
+            int64_t timeout_ms = _state->query_options().query_timeout * 1000 / 4;
+            timeout_ms = std::max(timeout_ms, static_cast<int64_t>(DEFAULT_TIMEOUT_MS));
+            BrokerFileSystem fs_broker(address, params.properties, timeout_ms);
             ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_random_access_file(range_desc.path));
             src_file = std::shared_ptr<RandomAccessFile>(std::move(broker_file));
             break;

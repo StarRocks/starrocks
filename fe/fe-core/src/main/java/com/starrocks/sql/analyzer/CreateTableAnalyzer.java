@@ -2,6 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -26,6 +27,7 @@ import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.common.MetaUtils;
@@ -63,7 +65,18 @@ public class CreateTableAnalyzer {
         HUDI,
         JDBC,
         STARROCKS,
-        FILE
+        FILE;
+
+        public static Set<EngineType> SUPPORT_NOT_NULL_SET = ImmutableSet.of(
+                OLAP,
+                MYSQL,
+                BROKER,
+                STARROCKS
+        );
+
+        public static boolean supportNotNullColumn(String engineName) {
+            return SUPPORT_NOT_NULL_SET.contains(EngineType.valueOf(engineName.toUpperCase()));
+        }
     }
 
     public enum CharsetType {
@@ -119,9 +132,21 @@ public class CreateTableAnalyzer {
         statement.setCharsetName(analyzeCharsetName(statement.getCharsetName()).toLowerCase());
 
         KeysDesc keysDesc = statement.getKeysDesc();
+        List<Integer> sortKeyIdxes = Lists.newArrayList();
         if (statement.getSortKeys() != null) {
             if (keysDesc == null || keysDesc.getKeysType() != KeysType.PRIMARY_KEYS) {
                 throw new IllegalArgumentException("only primary key support sort key");
+            } else {
+                List<String> columnNames = 
+                            statement.getColumnDefs().stream().map(ColumnDef::getName).collect(Collectors.toList());
+                
+                for (String column : statement.getSortKeys()) {
+                    int idx = columnNames.indexOf(column);
+                    if (idx == -1) {
+                        throw new SemanticException("Invalid column '%s' not exists in all columns. '%s', '%s'", column);
+                    }
+                    sortKeyIdxes.add(idx);
+                }
             }
         }
         List<ColumnDef> columnDefs = statement.getColumnDefs();
@@ -157,7 +182,7 @@ public class CreateTableAnalyzer {
                             }
                             break;
                         }
-                        if (!columnDef.getType().isKeyType()) {
+                        if (!columnDef.getType().canDistributedBy()) {
                             break;
                         }
                         if (columnDef.getType().getPrimitiveType() == PrimitiveType.VARCHAR) {
@@ -180,7 +205,7 @@ public class CreateTableAnalyzer {
             }
 
             keysDesc.analyze(columnDefs);
-            keysDesc.checkColumnDefs(columnDefs);
+            keysDesc.checkColumnDefs(columnDefs, sortKeyIdxes);
             for (int i = 0; i < keysDesc.keysColumnSize(); ++i) {
                 columnDefs.get(i).setIsKey(true);
             }
@@ -227,7 +252,7 @@ public class CreateTableAnalyzer {
         Set<String> columnSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         for (ColumnDef columnDef : columnDefs) {
             try {
-                columnDef.analyze(statement.isOlapOrLakeEngine());
+                columnDef.analyze(statement.isOlapOrLakeEngine(), EngineType.supportNotNullColumn(engineName));
             } catch (AnalysisException e) {
                 LOGGER.error("Column definition analyze failed.", e);
                 throw new SemanticException(e.getMessage());
@@ -268,6 +293,13 @@ public class CreateTableAnalyzer {
                         partitionDesc.analyze(columnDefs, properties);
                     } catch (AnalysisException e) {
 
+                        throw new SemanticException(e.getMessage());
+                    }
+                } else if (partitionDesc instanceof ExpressionPartitionDesc) {
+                    ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
+                    try {
+                        expressionPartitionDesc.analyze(columnDefs, properties);
+                    } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }
                 } else {

@@ -75,19 +75,19 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
                 TRY_CATCH_ALLOC_SCOPE_END()
             }
             if (_aggregator->is_none_group_by_exprs()) {
-                _aggregator->compute_single_agg_state(chunk_size);
+                RETURN_IF_ERROR(_aggregator->compute_single_agg_state(chunk_size));
             } else {
                 if (agg_group_by_with_limit) {
                     // use `_aggregator->streaming_selection()` here to mark whether needs to filter key when compute agg states,
                     // it's generated in `build_hash_map`
                     size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection().data(), chunk_size);
                     if (zero_count == chunk_size) {
-                        _aggregator->compute_batch_agg_states(chunk_size);
+                        RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk_size));
                     } else {
-                        _aggregator->compute_batch_agg_states_with_selection(chunk_size);
+                        RETURN_IF_ERROR(_aggregator->compute_batch_agg_states_with_selection(chunk_size));
                     }
                 } else {
-                    _aggregator->compute_batch_agg_states(chunk_size);
+                    RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk_size));
                 }
             }
 
@@ -254,15 +254,16 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
         ops_with_source = try_interpolate_local_shuffle(ops_with_source);
     }
 
+    if (limit() != -1) {
+        ops_with_source.emplace_back(
+                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
+
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
         ops_with_source.emplace_back(
                 std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), id()));
     }
 
-    if (limit() != -1) {
-        ops_with_source.emplace_back(
-                std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
-    }
     return ops_with_source;
 }
 

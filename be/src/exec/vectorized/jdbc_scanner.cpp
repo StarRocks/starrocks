@@ -264,8 +264,13 @@ StatusOr<PrimitiveType> JDBCScanner::_precheck_data_type(const std::string& java
         }
         return TYPE_VARCHAR;
     } else {
-        return Status::NotSupported(fmt::format("Type is not supported on column[{}], JDBC result type is [{}]",
-                                                slot_desc->col_name(), java_class));
+        if (type != TYPE_VARCHAR) {
+            return Status::NotSupported(
+                    fmt::format("JDBC result type of column[{}] is [{}], StarRocks does not recognize it, please set "
+                                "the type of this column to varchar to avoid information loss.",
+                                slot_desc->col_name(), java_class));
+        }
+        return TYPE_VARCHAR;
     }
     __builtin_unreachable();
 }
@@ -412,8 +417,14 @@ Status JDBCScanner::_fill_chunk(jobject jchunk, size_t num_rows, ChunkPtr* chunk
         // use reference, then we check the column's nullable and set the final result to the referred column.
         ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
         ASSIGN_OR_RETURN(auto result, _cast_exprs[col_idx]->evaluate(_result_chunk.get()));
+<<<<<<< HEAD
         // unpack const_nullable_column to avoid error down_cast
         result = ColumnHelper::unpack_and_duplicate_const_column(num_rows, result);
+=======
+        // unfold const_nullable_column to avoid error down_cast.
+        // unpack_and_duplicate_const_column is not suitable, we need set correct type.
+        result = ColumnHelper::unfold_const_column(slot_desc->type(), num_rows, result);
+>>>>>>> 2.5.18
         if (column->is_nullable() == result->is_nullable()) {
             column = result;
         } else if (column->is_nullable() && !result->is_nullable()) {

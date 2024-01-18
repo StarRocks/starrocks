@@ -92,7 +92,17 @@ public class LoadStmtTest {
 
     @Test
     public void testToString() {
-        LoadStmt stmt = (LoadStmt) analyzeSuccess("LOAD        LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER hdfs_broker (\"username\"=\"sr\", \"password\"=\"PASSWORDDDD\") PROPERTIES (\"strict_mode\"=\"true\")");
-        Assert.assertEquals("LOAD LABEL `test`.`testLabel`(DATA INFILE ('hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file') INTO TABLE t0)WITH BROKER hdfs_broker (\"password\"  =  \"***\", \"username\"  =  \"sr\")PROPERTIES (\"strict_mode\" = \"true\")", AstToStringBuilder.toString(stmt));
+        LoadStmt stmt = (LoadStmt) analyzeSuccess("LOAD  LABEL test.testLabel (DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`) WITH BROKER hdfs_broker (\"username\"=\"sr\", \"password\"=\"PASSWORDDDD\") PROPERTIES (\"strict_mode\"=\"true\")");
+        Assert.assertEquals("LOAD LABEL `test`.`testLabel` (DATA INFILE ('hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file') INTO TABLE t0) WITH BROKER hdfs_broker (\"password\"  =  \"***\", \"username\"  =  \"sr\") PROPERTIES (\"strict_mode\" = \"true\")", AstToStringBuilder.toString(stmt));
+
+        stmt = (LoadStmt) analyzeSuccess("LOAD  LABEL test.testLabel " +
+                "(DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`(v1,v2,v3))" +
+                " WITH BROKER hdfs_broker (\"username\"=\"sr\", \"password\"=\"PASSWORDDDD\")" +
+                " PROPERTIES (\"strict_mode\"=\"true\")");
+        Assert.assertEquals("LOAD LABEL `test`.`testLabel` " +
+                "(DATA INFILE ('hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file') " +
+                "INTO TABLE t0 (`v1`, `v2`, `v3`)) WITH BROKER hdfs_broker " +
+                "(\"password\"  =  \"***\", \"username\"  =  \"sr\") PROPERTIES (\"strict_mode\" = \"true\")",
+                AstToStringBuilder.toString(stmt));
     }
 }

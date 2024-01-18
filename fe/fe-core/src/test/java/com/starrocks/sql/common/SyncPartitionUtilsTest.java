@@ -586,8 +586,8 @@ public class SyncPartitionUtilsTest {
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> versionMap =
                 mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
         Map<String, MaterializedView.BasePartitionInfo> tableMap = Maps.newHashMap();
-        tableMap.put("p1", new MaterializedView.BasePartitionInfo(1, 2));
-        tableMap.put("p2", new MaterializedView.BasePartitionInfo(3, 4));
+        tableMap.put("p1", new MaterializedView.BasePartitionInfo(1, 2, -1));
+        tableMap.put("p2", new MaterializedView.BasePartitionInfo(3, 4, -1));
         versionMap.put(tbl1.getId(), tableMap);
         SyncPartitionUtils.dropBaseVersionMeta(mv, "p1");
 

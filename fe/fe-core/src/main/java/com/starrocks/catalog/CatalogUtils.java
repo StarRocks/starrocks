@@ -8,10 +8,12 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -147,6 +149,69 @@ public class CatalogUtils {
             bucketNum = Math.min(backendNum, 48);
         }
         return bucketNum;
+<<<<<<< HEAD
 
     }
+=======
+    }
+
+    public static int calAvgBucketNumOfRecentPartitions(OlapTable olapTable, int recentPartitionNum,
+                                                        boolean enableAutoTabletDistribution) {
+        // 1. If the partition is less than recentPartitionNum, use backendNum to speculate the bucketNum
+        //    Or the Config.enable_auto_tablet_distribution is disabled
+        int bucketNum = 0;
+        if (olapTable.getPartitions().size() < recentPartitionNum || !enableAutoTabletDistribution) {
+            bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+            return bucketNum;
+        }
+
+        // 2. If the partition is not imported anydata, use backendNum to speculate the bucketNum
+        List<Partition> partitions = (List<Partition>) olapTable.getRecentPartitions(recentPartitionNum);
+        boolean dataImported = true;
+        for (Partition partition : partitions) {
+            if (partition.getVisibleVersion() == 1) {
+                dataImported = false;
+                break;
+            }
+        }
+
+        bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+        if (!dataImported) {
+            return bucketNum;
+        }
+
+        // 3. Use the totalSize of recentPartitions to speculate the bucketNum
+        long maxDataSize = 0;
+        for (Partition partition : partitions) {
+            maxDataSize = Math.max(maxDataSize, partition.getDataSize());
+        }
+        // A tablet will be regarded using the 1GB size
+        // And also the number will not be larger than the calBucketNumAccordingToBackends()
+        long speculateTabletNum = (maxDataSize + FeConstants.AUTO_DISTRIBUTION_UNIT - 1) / FeConstants.AUTO_DISTRIBUTION_UNIT;
+        bucketNum = (int) Math.min(bucketNum, speculateTabletNum);
+        if (bucketNum == 0) {
+            bucketNum = 1;
+        }
+        return bucketNum;
+    }
+
+    public static String addEscapeCharacter(String comment) {
+        if (StringUtils.isEmpty(comment)) {
+            return comment;
+        }
+        StringBuilder output = new StringBuilder();
+        for (int i = 0; i < comment.length(); i++) {
+            char c = comment.charAt(i);
+
+            if (c == '\\' || c == '"') {
+                output.append('\\');
+                output.append(c);
+            } else {
+                output.append(c);
+            }
+        }
+        return output.toString();
+    }
+
+>>>>>>> 2.5.18
 }

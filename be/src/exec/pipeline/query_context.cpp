@@ -87,12 +87,20 @@ int64_t QueryContext::compute_query_mem_limit(int64_t parent_mem_limit, int64_t 
     return parent_mem_limit == -1 ? mem_limit : std::min(parent_mem_limit, mem_limit);
 }
 
-void QueryContext::init_mem_tracker(int64_t bytes_limit, MemTracker* parent) {
+void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent, int64_t big_query_mem_limit,
+                                    workgroup::WorkGroup* wg) {
     std::call_once(_init_mem_tracker_once, [=]() {
         _profile = std::make_shared<RuntimeProfile>("Query" + print_id(_query_id));
         auto* mem_tracker_counter = ADD_COUNTER_SKIP_MERGE(_profile.get(), "MemoryLimit", TUnit::BYTES);
-        mem_tracker_counter->set(bytes_limit);
-        _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, _profile->name(), parent);
+        mem_tracker_counter->set(query_mem_limit);
+        _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, query_mem_limit, _profile->name(), parent);
+        if (wg != nullptr && big_query_mem_limit > 0 && big_query_mem_limit < query_mem_limit) {
+            std::string label = "Group=" + wg->name() + ", " + _profile->name();
+            _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP_BIG_QUERY, big_query_mem_limit,
+                                                        std::move(label), parent);
+        } else {
+            _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, query_mem_limit, _profile->name(), parent);
+        }
     });
 }
 
@@ -131,26 +139,63 @@ std::shared_ptr<QueryStatisticsRecvr> QueryContext::maintained_query_recv() {
 
 std::shared_ptr<QueryStatistics> QueryContext::intermediate_query_statistic() {
     auto query_statistic = std::make_shared<QueryStatistics>();
-    // Not transmit delta if it's the result sink node
-    if (_is_result_sink) {
-        return query_statistic;
+    // Not transmit delta if it's the final sink
+    if (_is_final_sink) {
+        return nullptr;
     }
-    query_statistic->add_scan_stats(_delta_scan_rows_num.exchange(0), _delta_scan_bytes.exchange(0));
+
     query_statistic->add_cpu_costs(_delta_cpu_cost_ns.exchange(0));
     query_statistic->add_mem_costs(mem_cost_bytes());
+    {
+        std::lock_guard l(_scan_stats_lock);
+        for (const auto& [table_id, scan_stats] : _scan_stats) {
+            QueryStatisticsItemPB stats_item;
+            stats_item.set_table_id(table_id);
+            stats_item.set_scan_rows(scan_stats->delta_scan_rows_num.exchange(0));
+            stats_item.set_scan_bytes(scan_stats->delta_scan_bytes.exchange(0));
+            query_statistic->add_stats_item(stats_item);
+        }
+    }
     _sub_plan_query_statistics_recvr->aggregate(query_statistic.get());
     return query_statistic;
 }
 
 std::shared_ptr<QueryStatistics> QueryContext::final_query_statistic() {
-    DCHECK(_is_result_sink) << "must be the result sink";
+    DCHECK(_is_final_sink) << "must be final sink";
     auto res = std::make_shared<QueryStatistics>();
-    res->add_scan_stats(_total_scan_rows_num, _total_scan_bytes);
-    res->add_cpu_costs(_total_cpu_cost_ns);
+    res->add_cpu_costs(cpu_cost());
     res->add_mem_costs(mem_cost_bytes());
 
+    {
+        std::lock_guard l(_scan_stats_lock);
+        for (const auto& [table_id, scan_stats] : _scan_stats) {
+            QueryStatisticsItemPB stats_item;
+            stats_item.set_table_id(table_id);
+            stats_item.set_scan_rows(scan_stats->total_scan_rows_num);
+            stats_item.set_scan_bytes(scan_stats->total_scan_bytes);
+            res->add_stats_item(stats_item);
+        }
+    }
     _sub_plan_query_statistics_recvr->aggregate(res.get());
     return res;
+}
+
+void QueryContext::update_scan_stats(int64_t table_id, int64_t scan_rows_num, int64_t scan_bytes) {
+    ScanStats* stats = nullptr;
+    {
+        std::lock_guard l(_scan_stats_lock);
+        auto iter = _scan_stats.find(table_id);
+        if (iter == _scan_stats.end()) {
+            _scan_stats.insert({table_id, std::make_shared<ScanStats>()});
+            iter = _scan_stats.find(table_id);
+        }
+        stats = iter->second.get();
+    }
+
+    stats->total_scan_rows_num += scan_rows_num;
+    stats->delta_scan_rows_num += scan_rows_num;
+    stats->total_scan_bytes += scan_bytes;
+    stats->delta_scan_bytes += scan_bytes;
 }
 
 QueryContextManager::QueryContextManager(size_t log2_num_slots)
@@ -359,6 +404,8 @@ void QueryContextManager::report_fragments_with_same_host(
             Status fragment_ctx_status = fragment_ctx->final_status();
             if (!fragment_ctx_status.ok()) {
                 reported[i] = true;
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
+                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
                 continue;
             }
 
@@ -433,6 +480,8 @@ void QueryContextManager::report_fragments(
 
             Status fragment_ctx_status = fragment_ctx->final_status();
             if (!fragment_ctx_status.ok()) {
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
+                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
                 continue;
             }
 
@@ -448,6 +497,8 @@ void QueryContextManager::report_fragments(
                 std::stringstream ss;
                 ss << "couldn't get a client for " << fe_addr;
                 LOG(WARNING) << ss.str();
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(
+                        fragment_ctx->query_id(), fragment_ctx->fragment_instance_id());
                 exec_env->frontend_client_cache()->close_connections(fe_addr);
                 continue;
             }

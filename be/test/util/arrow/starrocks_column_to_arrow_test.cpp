@@ -56,6 +56,8 @@ void compare_arrow_value(const RunTimeCppType<PT>& datum, const ArrowTypeIdToArr
         size_t n = datum->serialize((uint8_t*)&s.front());
         s.resize(n);
         ASSERT_EQ(data_array->GetString(i), s);
+    } else if constexpr (pt_is_json<PT>) {
+        ASSERT_EQ(data_array->GetString(i), datum->to_string_uncheck());
     }
 }
 
@@ -366,6 +368,23 @@ TEST_F(StarRocksColumnToArrowTest, testHllColumn) {
     std::vector<HyperLogLog*> data{&hll_data[0], &hll_data[1], &hll_data[2]};
     auto type_desc = TypeDescriptor::create_hll_type();
     NotNullableColumnTester<TYPE_HLL, ArrowTypeId::STRING>::apply(997, data, type_desc);
+}
+
+TEST_F(StarRocksColumnToArrowTest, testJsonColumn) {
+    std::vector<JsonValue> json_data(3);
+    json_data[0] = JsonValue::from_string("{}");
+    json_data[1] = JsonValue::from_string(
+            "{\"array\":[1,2,3],\"boolean\":true,"
+            "\"color\":\"gold\",\"null\":null,"
+            "\"number\":123,\"object\":{\"a\":\"b\",\"c\":\"d\"},\"string\":\"Hello World\"}");
+    json_data[2] = JsonValue::from_string(
+            "{\"name\":\"alice\",\"age\":25,\"gender\":\"women\","
+            "\"dept\":\"R&D\",\"lang\":[\"CPP\",\"JAVA\",\"PHP\"],"
+            "\"projects\":[{\"name\":\"feature1\",\"deadline\":\"2023-01-02\"},"
+            "{\"name\":\"feature2\",\"deadline\":\"2023-01-03\"}]}");
+    std::vector<JsonValue*> data{&json_data[0], &json_data[1], &json_data[2]};
+    auto type_desc = TypeDescriptor::create_json_type();
+    NotNullableColumnTester<TYPE_JSON, ArrowTypeId::STRING>::apply(997, data, type_desc);
 }
 
 TEST_F(StarRocksColumnToArrowTest, testNullableDecimalColumn) {

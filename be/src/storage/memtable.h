@@ -54,6 +54,10 @@ public:
 
     void set_write_buffer_row(size_t max_buffer_row) { _max_buffer_row = max_buffer_row; }
 
+    void set_partial_schema_with_sort_key(bool partial_schema_with_sort_key) {
+        _partial_schema_with_sort_key = partial_schema_with_sort_key;
+    }
+
     static Schema convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs);
 
 private:
@@ -108,6 +112,7 @@ private:
     size_t _chunk_bytes_usage = 0;
     size_t _aggregator_memory_usage = 0;
     size_t _aggregator_bytes_usage = 0;
+    bool _partial_schema_with_sort_key = false;
 };
 
 } // namespace vectorized

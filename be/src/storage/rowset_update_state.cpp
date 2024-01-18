@@ -190,7 +190,7 @@ Status RowsetUpdateState::load_upserts(Rowset* rowset, uint32_t upsert_id) {
     }
     vectorized::Schema pkey_schema = ChunkHelper::convert_schema_to_format_v2(schema, pk_columns);
     std::unique_ptr<vectorized::Column> pk_column;
-    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
+    if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
     return _load_upserts(rowset, upsert_id, pk_column.get());
@@ -331,13 +331,13 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
 
     int64_t t_read_index = MonotonicMillis();
     if (need_lock) {
-        RETURN_IF_ERROR(tablet->updates()->prepare_partial_update_states(
-                tablet, _upserts[idx], &(_partial_update_states[idx].read_version),
-                &(_partial_update_states[idx].src_rss_rowids)));
+        RETURN_IF_ERROR(tablet->updates()->get_rss_rowids_by_pk(tablet, *_upserts[idx],
+                                                                &(_partial_update_states[idx].read_version),
+                                                                &(_partial_update_states[idx].src_rss_rowids)));
     } else {
-        RETURN_IF_ERROR(tablet->updates()->prepare_partial_update_states_unlock(
-                tablet, _upserts[idx], &(_partial_update_states[idx].read_version),
-                &(_partial_update_states[idx].src_rss_rowids)));
+        RETURN_IF_ERROR(tablet->updates()->get_rss_rowids_by_pk_unlock(tablet, *_upserts[idx],
+                                                                       &(_partial_update_states[idx].read_version),
+                                                                       &(_partial_update_states[idx].src_rss_rowids)));
     }
 
     int64_t t_read_values = MonotonicMillis();
@@ -356,6 +356,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
         _memory_usage += _partial_update_states[idx].write_columns[col_idx]->memory_usage();
     }
     int64_t t_end = MonotonicMillis();
+    _partial_update_states[idx].update_byte_size();
     _partial_update_states[idx].inited = true;
 
     LOG(INFO) << strings::Substitute(
@@ -452,7 +453,8 @@ Status RowsetUpdateState::_check_and_resolve_conflict(Tablet* tablet, Rowset* ro
 }
 
 Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_id, uint32_t segment_id,
-                                EditVersion latest_applied_version, const PrimaryIndex& index) {
+                                EditVersion latest_applied_version, const PrimaryIndex& index,
+                                int64_t* append_column_size) {
     const auto& rowset_meta_pb = rowset->rowset_meta()->get_meta_pb();
     if (!rowset_meta_pb.has_txn_meta() || rowset->num_segments() == 0 ||
         rowset_meta_pb.txn_meta().has_merge_condition()) {
@@ -506,6 +508,7 @@ Status RowsetUpdateState::apply(Tablet* tablet, Rowset* rowset, uint32_t rowset_
             _memory_usage -= _partial_update_states[segment_id].write_columns[col_idx]->memory_usage();
         }
     }
+    *append_column_size += _partial_update_states[segment_id].byte_size;
     _partial_update_states[segment_id].release();
     return Status::OK();
 }

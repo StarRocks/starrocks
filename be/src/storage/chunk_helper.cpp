@@ -101,6 +101,11 @@ vectorized::Schema ChunkHelper::convert_schema(const starrocks::TabletSchema& sc
     return starrocks::vectorized::Schema(std::move(fields), schema.keys_type(), schema.sort_key_idxes());
 }
 
+vectorized::Schema ChunkHelper::convert_schema(const starrocks::TabletSchema& schema,
+                                               const std::vector<ColumnId>& cids) {
+    return vectorized::Schema(schema.schema(), cids);
+}
+
 starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id, const TabletColumn& c) {
     FieldType type = TypeUtils::to_storage_format_v2(c.type());
 
@@ -257,8 +262,7 @@ vectorized::Chunk* ChunkHelper::new_chunk_pooled(const vectorized::Schema& schem
     columns.reserve(schema.num_fields());
     for (size_t i = 0; i < schema.num_fields(); i++) {
         const vectorized::FieldPtr& f = schema.field(i);
-        auto column = (force && !config::disable_column_pool) ? column_from_pool<true>(*f, chunk_size)
-                                                              : column_from_pool<false>(*f, chunk_size);
+        auto column = force ? column_from_pool<true>(*f, chunk_size) : column_from_pool<false>(*f, chunk_size);
         column->reserve(chunk_size);
         columns.emplace_back(std::move(column));
     }

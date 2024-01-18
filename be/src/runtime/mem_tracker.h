@@ -78,7 +78,22 @@ public:
         int64_t peak_consumption = 0;
     };
 
+<<<<<<< HEAD
     enum Type { NO_SET, PROCESS, QUERY_POOL, QUERY, LOAD, CONSISTENCY, COMPACTION, SCHEMA_CHANGE_TASK, RESOURCE_GROUP };
+=======
+    enum Type {
+        NO_SET,
+        PROCESS,
+        QUERY_POOL,
+        QUERY,
+        LOAD,
+        CONSISTENCY,
+        COMPACTION,
+        SCHEMA_CHANGE_TASK,
+        RESOURCE_GROUP,
+        RESOURCE_GROUP_BIG_QUERY
+    };
+>>>>>>> 2.5.18
 
     /// 'byte_limit' < 0 means no limit
     /// 'label' is the label used in the usage string (LogUsage())
@@ -225,6 +240,8 @@ public:
     }
 
     bool limit_exceeded() const { return _limit >= 0 && _limit < consumption(); }
+
+    bool limit_exceeded_by_ratio(int64_t ratio) const { return _limit >= 0 && (_limit * ratio / 100) < consumption(); }
 
     void set_limit(int64_t limit) { _limit = limit; }
 

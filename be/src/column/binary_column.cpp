@@ -272,6 +272,10 @@ void BinaryColumnBase<T>::append_value_multiple_times(const void* value, size_t 
 
 template <typename T>
 void BinaryColumnBase<T>::_build_slices() const {
+    if constexpr (std::is_same_v<T, uint32_t>) {
+        CHECK_LT(_bytes.size(), (size_t)UINT32_MAX) << "BinaryColumn size overflow";
+    }
+
     DCHECK(_offsets.size() > 0);
     _slices_cache = false;
     _slices.clear();
@@ -659,6 +663,10 @@ StatusOr<ColumnPtr> BinaryColumnBase<T>::upgrade_if_overflow() {
                 base += Column::MAX_CAPACITY_LIMIT;
                 start = mid;
             }
+
+            // NOTE(yanz): in BinaryColumnBase, we have an invariant that `_offsets.back == _bytes.size()`;  
+            // and since _bytes has been moved to new_column, we have to clear _offset to keep the invariant.
+            _offsets.clear();
             return new_column;
         } else {
             return nullptr;

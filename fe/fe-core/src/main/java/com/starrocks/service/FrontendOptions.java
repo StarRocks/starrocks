@@ -161,7 +161,7 @@ public class FrontendOptions {
         try {
             uncheckedInetAddress = InetAddress.getByName(fqdnString);
         } catch (UnknownHostException e) {
-            LOG.error("Got a UnknownHostException when try to parse FQDN, " 
+            LOG.error("Got a UnknownHostException when try to parse FQDN, "
                     + "FQDN: {}, message: {}", fqdnString, e.getMessage());
             System.exit(-1);
         }

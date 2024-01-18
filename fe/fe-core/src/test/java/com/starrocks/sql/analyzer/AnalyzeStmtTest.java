@@ -304,12 +304,12 @@ public class AnalyzeStmtTest {
         Assert.assertEquals("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
                         "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), " +
                         " cast(max(cast(max as int(11))) as string), cast(min(cast(min as int(11))) as string) " +
-                        "FROM column_statistics WHERE table_id = 10167 and column_name = \"kk1\" " +
+                        "FROM column_statistics WHERE table_id = 10176 and column_name = \"kk1\" " +
                         "GROUP BY db_id, table_id, column_name " +
                         "UNION ALL SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
                         "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
                         "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string) " +
-                        "FROM column_statistics WHERE table_id = 10167 and column_name = \"kk2\" " +
+                        "FROM column_statistics WHERE table_id = 10176 and column_name = \"kk2\" " +
                         "GROUP BY db_id, table_id, column_name",
                 StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(), Lists.newArrayList(kk1, kk2)));
     }
@@ -322,10 +322,32 @@ public class AnalyzeStmtTest {
         String tblName = "insert";
         String sql = "select cast(" + 1 + " as Int), " +
                 "cast(" + 2 + " as bigint), " +
+<<<<<<< HEAD
                 "dict_merge(" +  StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
+=======
+                "dict_merge(" + StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
+>>>>>>> 2.5.18
                 " from " + StatisticUtils.quoting(catalogName, dbName, tblName) + " [_META_]";
         QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, getConnectContext());
         Assert.assertEquals("select.insert",
                 ((SelectRelation) stmt.getQueryRelation()).getRelation().getResolveTableName().toString());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testTypeKeys() throws Exception {
+        analyzeSuccess("select count(*) from tarray group by v4");
+        analyzeSuccess("select distinct v4 from tarray");
+        analyzeSuccess("select * from tarray order by v4");
+        analyzeSuccess("select DENSE_RANK() OVER(partition by v3 order by v4) from tarray");
+        analyzeFail("select avg(v4) from tarray");
+        analyzeFail("select count(*) from tarray group by v5");
+        analyzeFail("select distinct v5 from tarray");
+        analyzeFail("select * from tarray join tarray y using(v4)");
+        analyzeFail("select * from tarray join tarray y using(v5)");
+        analyzeFail("select * from tarray order by v5");
+        analyzeFail("select DENSE_RANK() OVER(partition by v5 order by v4) from tarray");
+    }
+>>>>>>> 2.5.18
 }

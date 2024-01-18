@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
 #include "common/status.h"
@@ -73,10 +75,8 @@ class SortExecExprs;
 // recvr instance from the tracking structure of its DataStreamMgr in all cases.
 class DataStreamRecvr {
 public:
-    const static int32_t INVALID_DOP_FOR_NON_PIPELINE_LEVEL_SHUFFLE = 0;
-
-public:
     ~DataStreamRecvr();
+    void bind_profile(int32_t driver_sequence, const std::shared_ptr<RuntimeProfile>& profile);
 
     Status get_chunk(std::unique_ptr<vectorized::Chunk>* chunk);
     Status get_chunk_for_pipeline(std::unique_ptr<vectorized::Chunk>* chunk, const int32_t driver_sequence);
@@ -87,8 +87,8 @@ public:
     // Create a SortedRunMerger instance to merge rows from multiple sender according to the
     // specified row comparator. Fetches the first batches from the individual sender
     // queues. The exprs used in less_than must have already been prepared and opened.
-    Status create_merger(RuntimeState* state, const SortExecExprs* exprs, const std::vector<bool>* is_asc,
-                         const std::vector<bool>* is_null_first);
+    Status create_merger(RuntimeState* state, RuntimeProfile* profile, const SortExecExprs* exprs,
+                         const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first);
     Status create_merger_for_pipeline(RuntimeState* state, const SortExecExprs* exprs, const std::vector<bool>* is_asc,
                                       const std::vector<bool>* is_null_first);
 
@@ -122,12 +122,13 @@ private:
     class SenderQueue;
     class NonPipelineSenderQueue;
     class PipelineSenderQueue;
+    struct Metrics;
 
     DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtime_state, const RowDescriptor& row_desc,
                     const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders, bool is_merging,
-                    int total_buffer_limit, std::shared_ptr<RuntimeProfile> profile,
-                    std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr, bool is_pipeline,
-                    int32_t degree_of_parallelism, bool keep_order, PassThroughChunkBuffer* pass_through_chunk_buffer);
+                    int total_buffer_limit, std::shared_ptr<QueryStatisticsRecvr> sub_plan_query_statistics_recvr,
+                    bool is_pipeline, int32_t degree_of_parallelism, bool keep_order,
+                    PassThroughChunkBuffer* pass_through_chunk_buffer);
 
     // If receive queue is full, done is enqueue pending, and return with *done is nullptr
     Status add_chunks(const PTransmitChunkParams& request, ::google::protobuf::Closure** done);
@@ -142,6 +143,9 @@ private:
     // Return true if the addition of a new batch of size 'chunk_size' would exceed the
     // total buffer limit.
     bool exceeds_limit(int chunk_size) { return _num_buffered_bytes + chunk_size > _total_buffer_limit; }
+
+    // Return a metrics for current rpc in round-robin manner.
+    Metrics& get_metrics_round_robin() { return _metrics[_rpc_round_roubin_index++ % _metrics.size()]; }
 
     // DataStreamMgr instance used to create this recvr. (Not owned)
     DataStreamMgr* _mgr;
@@ -178,43 +182,47 @@ private:
     // Pool of sender queues.
     ObjectPool _sender_queue_pool;
 
-    // Runtime profile storing the counters below.
-    std::shared_ptr<RuntimeProfile> _profile;
-
     // instance profile and mem_tracker
     std::shared_ptr<RuntimeProfile> _instance_profile;
     std::shared_ptr<MemTracker> _query_mem_tracker;
     std::shared_ptr<MemTracker> _instance_mem_tracker;
 
-    // Number of bytes received
-    RuntimeProfile::Counter* _bytes_received_counter;
-    RuntimeProfile::Counter* _bytes_pass_through_counter;
+    struct Metrics {
+        std::shared_ptr<RuntimeProfile> runtime_profile;
+        // Number of bytes received
+        RuntimeProfile::Counter* bytes_received_counter = nullptr;
+        RuntimeProfile::Counter* bytes_pass_through_counter = nullptr;
 
-    // Time series of number of bytes received, samples _bytes_received_counter
-    // RuntimeProfile::TimeSeriesCounter* _bytes_received_time_series_counter;
-    RuntimeProfile::Counter* _deserialize_chunk_timer;
-    RuntimeProfile::Counter* _decompress_chunk_timer;
-    RuntimeProfile::Counter* _request_received_counter;
+        // Time series of number of bytes received, samples _bytes_received_counter
+        // RuntimeProfile::TimeSeriesCounter* _bytes_received_time_series_counter;
+        RuntimeProfile::Counter* deserialize_chunk_timer = nullptr;
+        RuntimeProfile::Counter* decompress_chunk_timer = nullptr;
+        RuntimeProfile::Counter* request_received_counter = nullptr;
 
-    // Average time of closure stayed in the buffer
-    // Formula is: cumulative_time / _degree_of_parallelism, so the estimation may
-    // not be that accurate, but enough to expose problems in profile analysis
-    RuntimeProfile::Counter* _closure_block_timer;
-    RuntimeProfile::Counter* _closure_block_counter;
-    RuntimeProfile::Counter* _process_total_timer = nullptr;
+        // Average time of closure stayed in the buffer
+        RuntimeProfile::Counter* closure_block_timer = nullptr;
+        RuntimeProfile::Counter* closure_block_counter = nullptr;
+        RuntimeProfile::Counter* process_total_timer = nullptr;
 
-    // Total spent for senders putting data in the queue
-    // TODO(hcf) remove these two metrics after non-pipeline offlined
-    RuntimeProfile::Counter* _sender_total_timer = nullptr;
-    RuntimeProfile::Counter* _sender_wait_lock_timer = nullptr;
+        // Total spent for senders putting data in the queue
+        RuntimeProfile::Counter* wait_lock_timer = nullptr;
 
-    RuntimeProfile::Counter* _buffer_unplug_counter = nullptr;
+        RuntimeProfile::Counter* buffer_unplug_counter = nullptr;
+    };
+
+    // One DataStreamRecvr will be shared by a group of ExchangeSourceOperator
+    // And the whole process at the receiver side can be split into to parts:
+    //     Part one: Put chunk to queue, which is performed at the brpc thread
+    //     Part two: Get chunk from queue, which is performed at the pipeline's working thread
+    // We know excatly about the parallelism of the pipeline's working threads, but we cannot know the
+    // concurrency of the brpc threads, so we let the size of _metrics to be the same as the pipeline's dop,
+    // and use round-robin to choose the metrics for each brpc thread.
+    std::vector<Metrics> _metrics;
+    std::atomic<size_t> _rpc_round_roubin_index = 0;
 
     // Sub plan query statistics receiver.
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr;
     bool _is_pipeline;
-    // Invalid if _is_pipeline is false
-    int32_t _degree_of_parallelism;
 
     // Invalid if _is_pipeline is false
     // Pipeline will send packets out-of-order
@@ -223,6 +231,7 @@ private:
     PassThroughContext _pass_through_context;
 
     int _encode_level;
+    bool _close = false;
 };
 
 } // end namespace starrocks

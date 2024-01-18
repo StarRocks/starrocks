@@ -93,21 +93,21 @@ struct FilterIniter {
 
         if (column->is_nullable()) {
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
-            auto& data_array = ColumnHelper::as_raw_column<ColumnType>(nullable_column->data_column())->get_data();
+            const auto& data_array = GetContainer<ptype>().get_data(nullable_column->data_column());
             for (size_t j = column_offset; j < data_array.size(); j++) {
                 if (!nullable_column->is_null(j)) {
-                    filter->insert(&data_array[j]);
+                    filter->insert(data_array[j]);
                 } else {
                     if (eq_null) {
-                        filter->insert(nullptr);
+                        filter->insert_null();
                     }
                 }
             }
 
         } else {
-            auto& data_ptr = ColumnHelper::as_raw_column<ColumnType>(column)->get_data();
+            const auto& data_ptr = GetContainer<ptype>().get_data(column);
             for (size_t j = column_offset; j < data_ptr.size(); j++) {
-                filter->insert(&data_ptr[j]);
+                filter->insert(data_ptr[j]);
             }
         }
         return nullptr;
@@ -116,6 +116,9 @@ struct FilterIniter {
 
 Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, PrimitiveType type,
                                                       JoinRuntimeFilter* filter, size_t column_offset, bool eq_null) {
+    if (column->has_large_column()) {
+        return Status::NotSupported("unsupported build runtime filter for large binary column");
+    }
     type_dispatch_filter(type, nullptr, FilterIniter(), column, column_offset, filter, eq_null);
     return Status::OK();
 }
@@ -429,13 +432,17 @@ void RuntimeFilterProbeCollector::compute_hash_values(vectorized::Chunk* chunk, 
     if (filter->num_hash_partitions() == 0) {
         return;
     }
+
     if (rf_desc->partition_by_expr_contexts()->empty()) {
         filter->compute_hash({column}, &eval_context.running_context);
     } else {
+        // Used to hold generated columns
+        std::vector<ColumnPtr> column_holders;
         std::vector<Column*> partition_by_columns;
         for (auto& partition_ctx : *(rf_desc->partition_by_expr_contexts())) {
             ColumnPtr partition_column = EVALUATE_NULL_IF_ERROR(partition_ctx, partition_ctx->root(), chunk);
             partition_by_columns.push_back(partition_column.get());
+            column_holders.emplace_back(std::move(partition_column));
         }
         filter->compute_hash(partition_by_columns, &eval_context.running_context);
     }
@@ -637,7 +644,7 @@ public:
     bool is_constant() const override { return false; }
     bool is_bound(const std::vector<TupleId>& tuple_ids) const override { return false; }
 
-    ColumnPtr evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) override {
+    StatusOr<ColumnPtr> evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) override {
         const vectorized::ColumnPtr col = ptr->get_column_by_slot_id(_slot_id);
         size_t size = col->size();
 
@@ -689,7 +696,7 @@ public:
         return result;
     }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
         return evaluate_with_filter(context, ptr, nullptr);
     }
 

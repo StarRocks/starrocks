@@ -2,6 +2,7 @@
 
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 
+#include "exec/pipeline/pipeline_driver_executor.h"
 #include "util/arrow/row_batch.h"
 #include "util/arrow/starrocks_column_to_arrow.h"
 
@@ -33,10 +34,20 @@ bool MemoryScratchSinkOperator::is_finished() const {
 
 Status MemoryScratchSinkOperator::set_finishing(RuntimeState* state) {
     _is_finished = true;
+    if (_num_sinkers.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        _is_audit_report_done = false;
+        auto* executor = state->fragment_ctx()->enable_resource_group() ? state->exec_env()->wg_driver_executor()
+                                                                        : state->exec_env()->driver_executor();
+        executor->report_audit_statistics(state->query_ctx(), state->fragment_ctx(), &_is_audit_report_done);
+    }
     return Status::OK();
 }
 
 bool MemoryScratchSinkOperator::pending_finish() const {
+    // audit report not finish, we need check until finish
+    if (!_is_audit_report_done) {
+        return true;
+    }
     // After set_finishing, there may be data that has not been sent.
     // We need to ensure that all remaining data are put into the queue.
     const_cast<MemoryScratchSinkOperator*>(this)->try_to_put_sentinel();
@@ -57,6 +68,9 @@ StatusOr<vectorized::ChunkPtr> MemoryScratchSinkOperator::pull_chunk(RuntimeStat
 }
 
 Status MemoryScratchSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
+    // Same as ResultSinkOperator, The memory of the output result set should not be counted in the query memory,
+    // otherwise it will cause memory statistics errors.
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
     if (nullptr == chunk || 0 == chunk->num_rows()) {
         return Status::OK();
     }

@@ -22,12 +22,17 @@ COPY ${LOCAL_REPO_PATH}/output/be /release/be_artifacts/be
 
 
 FROM artifacts-from-${ARTIFACT_SOURCE} as artifacts
+<<<<<<< HEAD
+=======
+RUN rm -f /release/be_artifacts/be/lib/starrocks_be.debuginfo
+>>>>>>> 2.5.18
 
 
 FROM registry.access.redhat.com/ubi8/ubi:8.7
 ARG STARROCKS_ROOT=/opt/starrocks
 
 RUN yum install -y java-1.8.0-openjdk-devel tzdata openssl curl vim ca-certificates fontconfig gzip tar less hostname procps-ng lsof && \
+<<<<<<< HEAD
     rpm -ivh https://repo.mysql.com/mysql57-community-release-el7.rpm && \
     yum -y install mysql-community-client --nogpgcheck && \
     yum remove -y mysql57-community-release-el7
@@ -43,3 +48,33 @@ COPY docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
 
 # Create directory for BE storage, create cn symbolic link to be
 RUN touch /.dockerenv && mkdir -p $STARROCKS_ROOT/be/storage && ln -sfT be $STARROCKS_ROOT/cn
+=======
+    rpm -ivh https://repo.mysql.com/mysql80-community-release-el8-7.noarch.rpm && \
+    yum -y install mysql-community-client --nogpgcheck && \
+    yum remove -y mysql80-community-release
+ENV JAVA_HOME=/usr/lib/jvm/java-openjdk
+
+RUN touch /.dockerenv
+
+WORKDIR $STARROCKS_ROOT
+
+# Run as starrocks user
+ARG USER=starrocks
+ARG GROUP=starrocks
+RUN groupadd --gid 1000 $GROUP && useradd --no-create-home --uid 1000 --gid 1000 \
+             --shell /usr/sbin/nologin $USER && \
+    chown -R $USER:$GROUP $STARROCKS_ROOT
+USER $USER
+
+# Copy all artifacts to the runtime container image
+COPY --from=artifacts --chown=starrocks:starrocks /release/be_artifacts/ $STARROCKS_ROOT/
+
+# Copy be k8s scripts to the runtime container image
+COPY --chown=starrocks:starrocks docker/dockerfiles/be/*.sh $STARROCKS_ROOT/
+
+# Create directory for BE storage, create cn symbolic link to be
+RUN mkdir -p $STARROCKS_ROOT/be/storage && ln -sfT be $STARROCKS_ROOT/cn
+
+# run as root by default
+USER root
+>>>>>>> 2.5.18

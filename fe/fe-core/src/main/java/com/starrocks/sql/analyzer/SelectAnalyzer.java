@@ -72,10 +72,11 @@ public class SelectAnalyzer {
         analyzeHaving(havingClause, analyzeState, sourceScope, outputScope, outputExpressions);
 
         // Construct sourceAndOutputScope with sourceScope and outputScope
-        Scope sourceAndOutputScope = computeAndAssignOrderScope(analyzeState, sourceScope, outputScope);
+        Scope sourceAndOutputScope = computeAndAssignOrderScope(analyzeState, sourceScope, outputScope,
+                selectList.isDistinct());
 
         List<OrderByElement> orderByElements =
-                analyzeOrderBy(sortClause, analyzeState, sourceAndOutputScope, outputExpressions);
+                analyzeOrderBy(sortClause, analyzeState, sourceAndOutputScope, outputExpressions, selectList.isDistinct());
         List<Expr> orderByExpressions =
                 orderByElements.stream().map(OrderByElement::getExpr).collect(Collectors.toList());
 
@@ -165,9 +166,7 @@ public class SelectAnalyzer {
                     .collect(Collectors.toList());
 
             Scope sourceScopeForOrder = new Scope(RelationId.anonymous(), new RelationFields(sourceForOrderFields));
-            sourceAndOutputScope = new Scope(outputScope.getRelationId(), outputScope.getRelationFields());
-            sourceAndOutputScope.setParent(sourceScopeForOrder);
-            analyzeState.setOrderScope(sourceAndOutputScope);
+            computeAndAssignOrderScope(analyzeState, sourceScopeForOrder, outputScope, selectList.isDistinct());
             analyzeState.setOrderSourceExpressions(orderSourceExpressions);
         }
 
@@ -302,7 +301,8 @@ public class SelectAnalyzer {
 
     private List<OrderByElement> analyzeOrderBy(List<OrderByElement> orderByElements, AnalyzeState analyzeState,
                                                 Scope orderByScope,
-                                                List<Expr> outputExpressions) {
+                                                List<Expr> outputExpressions,
+                                                boolean isDistinct) {
         if (orderByElements == null) {
             analyzeState.setOrderBy(Collections.emptyList());
             return Collections.emptyList();
@@ -318,15 +318,30 @@ public class SelectAnalyzer {
                 if (ordinal < 1 || ordinal > outputExpressions.size()) {
                     throw new SemanticException("ORDER BY position %s is not in select list", ordinal);
                 }
+                // index can ensure no ambiguous, we don't need to re-analyze this output expression
                 expression = outputExpressions.get((int) ordinal - 1);
-            }
-
-            if (expression instanceof FieldReference) {
-                // If the expression of order by is a FieldReference, it means that the type of sql is
+            } else if (expression instanceof FieldReference) {
+                // If the expression of order by is a FieldReference, and it's not a distinct select,
+                // it means that the type of sql is
                 // "select * from t order by 1", then this FieldReference cannot be parsed in OrderByScope,
                 // but should be parsed in sourceScope
-                analyzeExpression(expression, analyzeState, orderByScope.getParent());
+                if (isDistinct) {
+                    analyzeExpression(expression, analyzeState, orderByScope);
+                } else {
+                    analyzeExpression(expression, analyzeState, orderByScope.getParent());
+                }
             } else {
+                ExpressionAnalyzer expressionAnalyzer = new ExpressionAnalyzer(session);
+                expressionAnalyzer.analyzeWithoutUpdateState(expression, analyzeState, orderByScope);
+                List<Expr> aggregations = Lists.newArrayList();
+                expression.collectAll(e -> e.isAggregate(), aggregations);
+                if (isDistinct && !aggregations.isEmpty()) {
+                    throw new SemanticException("for SELECT DISTINCT, ORDER BY expressions must appear in select list");
+                }
+
+                if (!aggregations.isEmpty()) {
+                    aggregations.forEach(e -> analyzeExpression(e, analyzeState, orderByScope.getParent()));
+                }
                 analyzeExpression(expression, analyzeState, orderByScope);
             }
 
@@ -640,23 +655,24 @@ public class SelectAnalyzer {
         }
     }
 
-    private Scope computeAndAssignOrderScope(AnalyzeState analyzeState, Scope sourceScope, Scope outputScope) {
-        // The Scope used by order by allows parsing of the same column,
-        // such as 'select v1 as v, v1 as v from t0 order by v'
-        // but normal parsing does not allow it. So add a de-duplication operation here.
+    private Scope computeAndAssignOrderScope(AnalyzeState analyzeState, Scope sourceScope, Scope outputScope,
+                                             boolean isDistinct) {
 
-        List<Field> allFields = new ArrayList<>();
+        List<Field> allFields = Lists.newArrayList();
+        if (isDistinct) {
+            allFields = removeDuplicateField(outputScope.getRelationFields().getAllFields());
+            Scope orderScope = new Scope(outputScope.getRelationId(), new RelationFields(allFields));
+            orderScope.setParent(sourceScope);
+            analyzeState.setOrderScope(orderScope);
+            return orderScope;
+        }
+
         for (int i = 0; i < analyzeState.getOutputExprInOrderByScope().size(); ++i) {
             Field field = outputScope.getRelationFields()
                     .getFieldByIndex(analyzeState.getOutputExprInOrderByScope().get(i));
-            if (field.getName() != null && field.getOriginExpression() != null &&
-                    allFields.stream().anyMatch(f -> f.getOriginExpression() != null
-                            && f.getName() != null && field.getName().equals(f.getName())
-                            && field.getOriginExpression().equals(f.getOriginExpression()))) {
-                continue;
-            }
             allFields.add(field);
         }
+        allFields = removeDuplicateField(allFields);
 
         Scope orderScope = new Scope(outputScope.getRelationId(), new RelationFields(allFields));
 
@@ -672,5 +688,29 @@ public class SelectAnalyzer {
 
     private void analyzeExpression(Expr expr, AnalyzeState analyzeState, Scope scope) {
         ExpressionAnalyzer.analyzeExpression(expr, analyzeState, scope, session);
+    }
+
+    // The Scope used by order by allows parsing of the same column,
+    // such as 'select v1 as v, v1 as v from t0 order by v'
+    // but normal parsing does not allow it. So add a de-duplication operation here.
+    private List<Field> removeDuplicateField(List<Field> originalFields) {
+        List<Field> allFields = Lists.newArrayList();
+        for (Field field : originalFields) {
+            if (session.getSessionVariable().isEnableStrictOrderBy()) {
+                if (field.getName() != null && field.getOriginExpression() != null &&
+                        allFields.stream().anyMatch(f -> f.getOriginExpression() != null
+                                && f.getName() != null && field.getName().equals(f.getName())
+                                && field.getOriginExpression().equals(f.getOriginExpression()))) {
+                    continue;
+                }
+            } else {
+                if (field.getName() != null &&
+                        allFields.stream().anyMatch(f -> f.getName() != null && field.getName().equals(f.getName()))) {
+                    continue;
+                }
+            }
+            allFields.add(field);
+        }
+        return allFields;
     }
 }

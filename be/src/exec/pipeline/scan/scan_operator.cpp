@@ -65,7 +65,6 @@ Status ScanOperator::prepare(RuntimeState* state) {
 }
 
 void ScanOperator::close(RuntimeState* state) {
-    set_buffer_finished();
     // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
         std::lock_guard guard(_task_mutex);
@@ -95,6 +94,10 @@ size_t ScanOperator::_buffer_unplug_threshold() const {
     return threshold;
 }
 
+bool ScanOperator::is_running_all_io_tasks() const {
+    return _num_running_io_tasks >= _io_tasks_per_scan_operator;
+}
+
 bool ScanOperator::has_output() const {
     if (_is_finished) {
         return false;
@@ -103,32 +106,35 @@ bool ScanOperator::has_output() const {
     if (!_get_scan_status().ok()) {
         return true;
     }
-
     // Try to buffer enough chunks for exec thread, to reduce scheduling overhead.
     // It's like the Linux Block-Scheduler's Unplug algorithm, so we just name it unplug.
     // The default threshould of unpluging is BufferCapacity/DOP/4, and its range is [1, 16]
     // The overall strategy:
     // 1. If enough buffered chunks: pull_chunk, so return true
-    // 2. If not enough buffered chunks
-    //   2.1 Enough running io-tasks and buffer not full: wait some time for more chunks, so return false
-    //   2.1 Enough running io-tasks but buffer is full: pull_chunks, so return true
-    //   2.2 Not enough running io-tasks: submit io tasks, so return true
-    //   2.3 No more tasks: pull_chunk, so return true
+    // 2. If not enough buffered chunks (plug mode):
+    //   2.1 Buffer full: return true if has any chunk, else false
+    //   2.2 Enough running io-tasks: wait some time for more chunks, so return false
+    //   2.3 Not enough running io-tasks: submit io tasks, so return true
+    //   2.4 No more tasks: pull_chunk, so return true
+    size_t chunk_number = num_buffered_chunks();
     if (_unpluging) {
-        if (num_buffered_chunks() > 0) {
+        if (chunk_number > 0) {
             return true;
         }
         _unpluging = false;
     }
-    if (num_buffered_chunks() >= _buffer_unplug_threshold()) {
+    if (chunk_number >= _buffer_unplug_threshold()) {
         COUNTER_UPDATE(_buffer_unplug_counter, 1);
         _unpluging = true;
         return true;
     }
-    if (is_buffer_full() && num_buffered_chunks() > 0) {
-        return true;
+    DCHECK(!_unpluging);
+    bool buffer_full = is_buffer_full();
+    if (buffer_full) {
+        return chunk_number > 0;
     }
-    if (_num_running_io_tasks >= _io_tasks_per_scan_operator || is_buffer_full()) {
+
+    if (is_running_all_io_tasks()) {
         return false;
     }
 
@@ -142,7 +148,6 @@ bool ScanOperator::has_output() const {
             return true;
         }
     }
-
     return num_buffered_chunks() > 0;
 }
 
@@ -187,8 +192,19 @@ void ScanOperator::_detach_chunk_sources() {
 }
 
 Status ScanOperator::set_finishing(RuntimeState* state) {
+    // check when expired, are there running io tasks or submitted tasks
+    if (UNLIKELY(state != nullptr && state->query_ctx() != nullptr && state->query_ctx()->is_query_expired() &&
+                 (_num_running_io_tasks > 0 || _submit_task_counter->value() == 0))) {
+        LOG(WARNING) << "set_finishing scan fragment " << print_id(state->fragment_instance_id()) << " driver_id  "
+                     << get_driver_sequence() << " _num_running_io_tasks= " << _num_running_io_tasks
+                     << " _submit_task_counter= " << _submit_task_counter->value()
+                     << " _morsels_counter= " << _morsels_counter->value()
+                     << (is_buffer_full() && (num_buffered_chunks() == 0) ? ", buff is full but without local chunks"
+                                                                          : "");
+    }
     std::lock_guard guard(_task_mutex);
     _detach_chunk_sources();
+    set_buffer_finished();
     _is_finished = true;
     return Status::OK();
 }
@@ -201,14 +217,13 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     RETURN_IF_ERROR(_try_to_trigger_next_scan(state));
 
     vectorized::ChunkPtr res = get_chunk_from_buffer();
-    if (res == nullptr) {
-        return nullptr;
+    if (res != nullptr) {
+        begin_pull_chunk(res);
+        // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
+        auto [tablet_id, is_eos] = _should_emit_eos(res);
+        eval_runtime_bloom_filters(res.get());
+        res->owner_info().set_owner_id(tablet_id, is_eos);
     }
-
-    // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
-    auto [tablet_id, is_eos] = _should_emit_eos(res);
-    eval_runtime_bloom_filters(res.get());
-    res->owner_info().set_owner_id(tablet_id, is_eos);
     return res;
 }
 
@@ -231,6 +246,9 @@ int64_t ScanOperator::global_rf_wait_timeout_ns() const {
 }
 
 Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
+    // to sure to put it here for updating state.
+    // because we want to update state based on raw data.
+    int total_cnt = available_pickup_morsel_count();
     if (_num_running_io_tasks >= _io_tasks_per_scan_operator) {
         return Status::OK();
     }
@@ -240,19 +258,35 @@ Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {
 
     // Avoid uneven distribution when io tasks execute very fast, so we start
     // traverse the chunk_source array from last visit idx
+
     int cnt = _io_tasks_per_scan_operator;
+    int to_sched[_io_tasks_per_scan_operator];
+    int size = 0;
+
+    // pick up already started chunk source.
     while (--cnt >= 0) {
         _chunk_source_idx = (_chunk_source_idx + 1) % _io_tasks_per_scan_operator;
         int i = _chunk_source_idx;
         if (_is_io_task_running[i]) {
+            total_cnt -= 1;
             continue;
         }
-
+        if (_chunk_sources[i] != nullptr && _chunk_sources[i]->reach_limit()) {
+            return Status::OK();
+        }
         if (_chunk_sources[i] != nullptr && _chunk_sources[i]->has_next_chunk()) {
             RETURN_IF_ERROR(_trigger_next_scan(state, i));
+            total_cnt -= 1;
         } else {
-            RETURN_IF_ERROR(_pickup_morsel(state, i));
+            to_sched[size++] = i;
         }
+    }
+
+    size = std::min(size, total_cnt);
+    // pick up new chunk source.
+    for (int i = 0; i < size; i++) {
+        int idx = to_sched[i];
+        RETURN_IF_ERROR(_pickup_morsel(state, idx));
     }
 
     return Status::OK();
@@ -349,6 +383,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 
             auto status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
             if (!status.ok() && !status.is_end_of_file()) {
+                LOG(ERROR) << "scan fragment " << print_id(state->fragment_instance_id()) << " driver "
+                           << get_driver_sequence() << " Scan tasks error: " << status.to_string();
                 _set_scan_status(status);
             }
 
@@ -512,15 +548,15 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
 
     ops.emplace_back(std::move(scan_operator));
 
-    if (!scan_node->conjunct_ctxs().empty() || ops.back()->has_runtime_filters()) {
-        ops.emplace_back(
-                std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), scan_node->id()));
-    }
-
     size_t limit = scan_node->limit();
     if (limit != -1) {
         ops.emplace_back(
                 std::make_shared<pipeline::LimitOperatorFactory>(context->next_operator_id(), scan_node->id(), limit));
+    }
+
+    if (!scan_node->conjunct_ctxs().empty() || ops.back()->has_runtime_filters()) {
+        ops.emplace_back(
+                std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), scan_node->id()));
     }
 
     return ops;

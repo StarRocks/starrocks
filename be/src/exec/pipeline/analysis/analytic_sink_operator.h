@@ -18,7 +18,7 @@ public:
     ~AnalyticSinkOperator() override = default;
 
     bool has_output() const override { return false; }
-    bool need_input() const override { return !is_finished(); }
+    bool need_input() const override { return !is_finished() && !_analytor->is_chunk_buffer_full(); }
     bool is_finished() const override { return _is_finished || _analytor->reached_limit() || _analytor->is_finished(); }
     Status set_finishing(RuntimeState* state) override;
 

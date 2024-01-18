@@ -301,6 +301,10 @@ if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-0.9.7" ]; then
 fi
 if [ ! -f $PATCHED_MARK ] && [ $BRPC_SOURCE == "brpc-1.3.0" ]; then
     patch -p1 < $TP_PATCH_DIR/brpc-1.3.0.patch
+<<<<<<< HEAD
+=======
+    patch -p1 < $TP_PATCH_DIR/brpc-1.3.0-CVE-2023-31039.patch
+>>>>>>> 2.5.18
     touch $PATCHED_MARK
 fi
 cd -
@@ -362,6 +366,15 @@ fi
 cd -
 echo "Finished patching $LIBRDKAFKA_SOURCE"
 
+# patch roaring-bitmap
+cd $TP_SOURCE_DIR/$CROARINGBITMAP_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $CROARINGBITMAP_SOURCE = "CRoaring-0.2.60" ]; then
+    patch -p1 < $TP_PATCH_DIR/roaring-bitmap-patch-v0.2.60.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $CROARINGBITMAP_SOURCE"
+
 # patch pulsar
 cd $TP_SOURCE_DIR/$PULSAR_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $PULSAR_SOURCE = "pulsar-2.10.1" ]; then
@@ -390,6 +403,18 @@ if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.9.179" ]; th
     patch -p0 < $TP_PATCH_DIR/aws-sdk-cpp-1.9.179.patch    
     # Fix crt BB, refer to https://github.com/aws/s2n-tls/issues/3166
     patch -p1 -f -i $TP_PATCH_DIR/aws-sdk-cpp-patch-1.9.179-s2n-compile-error.patch
+    touch $PATCHED_MARK
+    echo "Finished patching $AWS_SDK_CPP_SOURCE"
+else
+    echo "$AWS_SDK_CPP_SOURCE not patched"
+fi
+
+cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.10.36" ]; then
+    if [ ! -f prefetch_crt_dep_ok ]; then
+        bash ./prefetch_crt_dependency.sh
+        touch prefetch_crt_dep_ok
+    fi
     touch $PATCHED_MARK
     echo "Finished patching $AWS_SDK_CPP_SOURCE"
 else

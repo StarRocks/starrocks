@@ -69,6 +69,7 @@ import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 
@@ -89,6 +90,10 @@ public class ExpressionAnalyzer {
     private final ConnectContext session;
 
     public ExpressionAnalyzer(ConnectContext session) {
+        if (session == null) {
+            // For some load requests, the ConnectContext will be null
+            session = new ConnectContext();
+        }
         this.session = session;
     }
 
@@ -99,6 +104,16 @@ public class ExpressionAnalyzer {
 
     public void analyzeIgnoreSlot(Expr expression, AnalyzeState analyzeState, Scope scope) {
         IgnoreSlotVisitor visitor = new IgnoreSlotVisitor(analyzeState, session);
+        bottomUpAnalyze(visitor, expression, scope);
+    }
+
+    public void analyzeWithoutUpdateState(Expr expression, AnalyzeState analyzeState, Scope scope) {
+        Visitor visitor = new Visitor(analyzeState, session) {
+            @Override
+            protected void handleResolvedField(SlotRef slot, ResolvedField resolvedField) {
+                // do not put the slotRef in analyzeState
+            }
+        };
         bottomUpAnalyze(visitor, expression, scope);
     }
 
@@ -216,7 +231,7 @@ public class ExpressionAnalyzer {
             throw unsupportedException("not yet implemented: expression analyzer for " + node.getClass().getName());
         }
 
-        private void handleResolvedField(SlotRef slot, ResolvedField resolvedField) {
+        protected void handleResolvedField(SlotRef slot, ResolvedField resolvedField) {
             analyzeState.addColumnReference(slot, FieldId.from(resolvedField));
         }
 
@@ -461,22 +476,21 @@ public class ExpressionAnalyzer {
                 Type t1 = node.getChild(0).getType().getNumResultType();
                 Type t2 = node.getChild(1).getType().getNumResultType();
                 if (t1.isDecimalV3() || t2.isDecimalV3()) {
+                    ArithmeticExpr.TypeTriple typeTriple = null;
                     try {
-                        node.rewriteDecimalOperation();
+                        typeTriple = node.rewriteDecimalOperation();
                     } catch (AnalysisException ex) {
                         throw new SemanticException(ex.getMessage());
                     }
-                    Type lhsType = node.getChild(0).getType();
-                    Type rhsType = node.getChild(1).getType();
-                    Type resultType = node.getType();
-                    Type[] args = {lhsType, rhsType};
+                    Preconditions.checkArgument(typeTriple != null);
+                    Type[] args = {typeTriple.lhsTargetType, typeTriple.rhsTargetType};
                     Function fn = Expr.getBuiltinFunction(op.getName(), args, Function.CompareMode.IS_IDENTICAL);
                     // In resolved function instance, it's argTypes and resultType are wildcard decimal type
                     // (both precision and and scale are -1, only used in function instance resolution), it's
                     // illegal for a function and expression to has a wildcard decimal type as its type in BE,
                     // so here substitute wildcard decimal types with real decimal types.
-                    Function newFn = new ScalarFunction(fn.getFunctionName(), args, resultType, fn.hasVarArgs());
-                    node.setType(resultType);
+                    Function newFn = new ScalarFunction(fn.getFunctionName(), args, typeTriple.returnType, fn.hasVarArgs());
+                    node.setType(typeTriple.returnType);
                     node.setFn(newFn);
                     return null;
                 }
@@ -837,6 +851,9 @@ public class ExpressionAnalyzer {
             if (fn == null) {
                 fn = AnalyzerUtils.getUdfFunction(session, node.getFnName(), argumentTypes);
             }
+            if (fn == null) {
+                fn = ScalarOperatorEvaluator.INSTANCE.getMetaFunction(node.getFnName(), argumentTypes);
+            }
 
             if (fn == null) {
                 throw new SemanticException("No matching function with signature: %s(%s).",
@@ -1128,7 +1145,7 @@ public class ExpressionAnalyzer {
         @Override
         public Void visitVariableExpr(VariableExpr node, Scope context) {
             try {
-                if (node.getSetType().equals(SetType.USER)) {
+                if (node.getSetType() != null && node.getSetType().equals(SetType.USER)) {
                     UserVariable userVariable = session.getUserVariables(node.getName());
                     //If referring to an uninitialized variable, its value is NULL and a string type.
                     if (userVariable == null) {

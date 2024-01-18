@@ -111,7 +111,8 @@ static bool is_format_support_streaming(TFileFormatType::type format) {
     }
 }
 
-StreamLoadAction::StreamLoadAction(ExecEnv* exec_env) : _exec_env(exec_env) {
+StreamLoadAction::StreamLoadAction(ExecEnv* exec_env, ConcurrentLimiter* limiter)
+        : _exec_env(exec_env), _http_concurrent_limiter(limiter) {
     StarRocksMetrics::instance()->metrics()->register_metric("streaming_load_requests_total",
                                                              &streaming_load_requests_total);
     StarRocksMetrics::instance()->metrics()->register_metric("streaming_load_bytes", &streaming_load_bytes);
@@ -121,6 +122,13 @@ StreamLoadAction::StreamLoadAction(ExecEnv* exec_env) : _exec_env(exec_env) {
 }
 
 StreamLoadAction::~StreamLoadAction() = default;
+
+static void _send_reply(HttpRequest* req, const std::string& str) {
+    if (config::enable_stream_load_verbose_log) {
+        LOG(INFO) << "streaming load response: " << str;
+    }
+    HttpChannel::send_reply(req, str);
+}
 
 void StreamLoadAction::handle(HttpRequest* req) {
     auto* ctx = (StreamLoadContext*)req->handler_ctx();
@@ -149,7 +157,7 @@ void StreamLoadAction::handle(HttpRequest* req) {
     }
 
     auto str = ctx->to_json();
-    HttpChannel::send_reply(req, str);
+    _send_reply(req, str);
 
     // update statstics
     streaming_load_requests_total.increment(1);
@@ -186,7 +194,6 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
     int64_t commit_and_publish_start_time = MonotonicNanos();
     RETURN_IF_ERROR(_exec_env->stream_load_executor()->commit_txn(ctx));
     ctx->commit_and_publish_txn_cost_nanos = MonotonicNanos() - commit_and_publish_start_time;
-
     return Status::OK();
 }
 
@@ -207,9 +214,23 @@ int StreamLoadAction::on_header(HttpRequest* req) {
         ctx->label = generate_uuid_string();
     }
 
-    LOG(INFO) << "new income streaming load request." << ctx->brief() << ", db=" << ctx->db << ", tbl=" << ctx->table;
+    if (config::enable_http_stream_load_limit && !ctx->check_and_set_http_limiter(_http_concurrent_limiter)) {
+        LOG(WARNING) << "income streaming load request hit limit." << ctx->brief() << ", db=" << ctx->db
+                     << ", tbl=" << ctx->table;
+        ctx->status =
+                Status::ResourceBusy(fmt::format("Stream Load exceed http cuncurrent limit {}, please try again later",
+                                                 config::webserver_num_workers - 1));
+        auto str = ctx->to_json();
+        _send_reply(req, str);
+        return -1;
+    } else {
+        LOG(INFO) << "new income streaming load request." << ctx->brief() << ", db=" << ctx->db
+                  << ", tbl=" << ctx->table;
+    }
 
-    VLOG(1) << "streaming load request: " << req->debug_string();
+    if (config::enable_stream_load_verbose_log) {
+        LOG(INFO) << "streaming load request: " << req->debug_string();
+    }
 
     auto st = _on_header(req, ctx);
     if (!st.ok()) {
@@ -222,7 +243,7 @@ int StreamLoadAction::on_header(HttpRequest* req) {
             ctx->body_sink->cancel(st);
         }
         auto str = ctx->to_json();
-        HttpChannel::send_reply(req, str);
+        _send_reply(req, str);
         streaming_load_current_processing.increment(-1);
         return -1;
     }
@@ -298,7 +319,6 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
     int64_t begin_txn_start_time = MonotonicNanos();
     RETURN_IF_ERROR(_exec_env->stream_load_executor()->begin_txn(ctx));
     ctx->begin_txn_cost_nanos = MonotonicNanos() - begin_txn_start_time;
-
     // process put file
     return _process_put(http_req, ctx);
 }
@@ -355,6 +375,7 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
         }
         ctx->buffer->pos += remove_bytes;
         ctx->receive_bytes += remove_bytes;
+        ctx->total_receive_bytes += remove_bytes;
     }
     ctx->total_received_data_cost_nanos += (MonotonicNanos() - start_read_data_time);
 }
@@ -533,7 +554,6 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         }
         ctx->put_result.params.query_options.mem_limit = exec_mem_limit;
     }
-
     return _exec_env->stream_load_executor()->execute_plan_fragment(ctx);
 }
 

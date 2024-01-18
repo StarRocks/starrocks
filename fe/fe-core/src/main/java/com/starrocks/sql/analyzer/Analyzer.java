@@ -1,11 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.LimitElement;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -70,7 +68,6 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
-import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
@@ -234,9 +231,16 @@ public class Analyzer {
 
         @Override
         public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
-            CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
-            QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
-            Analyzer.analyze(queryStatement, context);
+            if (statement.getCreateTableAsSelectStmt() != null) {
+                CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
+                QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
+                Analyzer.analyze(queryStatement, context);
+            } else if (statement.getInsertStmt() != null) {
+                InsertStmt insertStmt = statement.getInsertStmt();
+                InsertAnalyzer.analyze(insertStmt, context);
+            } else {
+                throw new SemanticException("Submit task statement is not supported");
+            }
             OriginStatement origStmt = statement.getOrigStmt();
             String sqlText = origStmt.originStmt.substring(statement.getSqlBeginIndex());
             statement.setSqlText(sqlText);
@@ -325,12 +329,6 @@ public class Analyzer {
         @Override
         public Void visitQueryStatement(QueryStatement stmt, ConnectContext session) {
             new QueryAnalyzer(session).analyze(stmt);
-
-            QueryRelation queryRelation = stmt.getQueryRelation();
-            long selectLimit = session.getSessionVariable().getSqlSelectLimit();
-            if (!queryRelation.hasLimit() && selectLimit != SessionVariable.DEFAULT_SELECT_LIMIT) {
-                queryRelation.setLimit(new LimitElement(selectLimit));
-            }
             return null;
         }
 

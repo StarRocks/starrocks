@@ -24,7 +24,7 @@ private:
 TEST_F(HyperLogLogFunctionsTest, hllEmptyTest) {
     {
         Columns c;
-        auto column = HyperloglogFunction::hll_empty(ctx, c);
+        auto column = HyperloglogFunctions::hll_empty(ctx, c).value();
 
         ASSERT_TRUE(column->is_constant());
 
@@ -46,7 +46,7 @@ TEST_F(HyperLogLogFunctionsTest, hllHashTest) {
 
         columns.push_back(col1);
 
-        auto v = HyperloglogFunction::hll_hash(ctx, columns);
+        auto v = HyperloglogFunctions::hll_hash(ctx, columns).value();
 
         ASSERT_TRUE(v->is_object());
 
@@ -92,7 +92,7 @@ TEST_F(HyperLogLogFunctionsTest, hllCardinalityTest) {
 
         columns.push_back(col1);
 
-        auto v = HyperloglogFunction::hll_cardinality(ctx, columns);
+        auto v = HyperloglogFunctions::hll_cardinality(ctx, columns).value();
 
         ASSERT_TRUE(v->is_numeric());
 
@@ -146,7 +146,7 @@ TEST_F(HyperLogLogFunctionsTest, hllCardinalityFromStringTest) {
 
         columns.push_back(col1);
 
-        auto v = HyperloglogFunction::hll_cardinality_from_string(ctx, columns);
+        auto v = HyperloglogFunctions::hll_cardinality_from_string(ctx, columns).value();
 
         ASSERT_TRUE(v->is_numeric());
 
@@ -197,6 +197,7 @@ TEST_F(HyperLogLogFunctionsTest, hllSerializeTest) {
         col1->append(std::move(h6));
 
         ColumnPtr v = nullptr;
+<<<<<<< HEAD
         v = HyperloglogFunction::hll_cardinality(ctx, {col1});
         ASSERT_TRUE(v->is_numeric());
         auto expect = ColumnHelper::cast_to<TYPE_BIGINT>(v);
@@ -207,6 +208,17 @@ TEST_F(HyperLogLogFunctionsTest, hllSerializeTest) {
         v = HyperloglogFunction::hll_deserialize(ctx, {v});
         ASSERT_TRUE(v->is_object());
         v = HyperloglogFunction::hll_cardinality(ctx, {v});
+=======
+        v = HyperloglogFunctions::hll_cardinality(ctx, {col1}).value();
+        ASSERT_TRUE(v->is_numeric());
+        auto expect = ColumnHelper::cast_to<TYPE_BIGINT>(v);
+
+        v = HyperloglogFunctions::hll_serialize(ctx, {col1}).value();
+        ASSERT_TRUE(v->is_binary());
+        v = HyperloglogFunctions::hll_deserialize(ctx, {v}).value();
+        ASSERT_TRUE(v->is_object());
+        v = HyperloglogFunctions::hll_cardinality(ctx, {v}).value();
+>>>>>>> 2.5.18
         ASSERT_TRUE(v->is_numeric());
 
         auto autcal = ColumnHelper::cast_to<TYPE_BIGINT>(v);

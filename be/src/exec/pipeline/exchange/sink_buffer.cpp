@@ -16,10 +16,16 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
                        bool is_dest_merge, size_t num_sinkers)
         : _fragment_ctx(fragment_ctx),
           _mem_tracker(fragment_ctx->runtime_state()->instance_mem_tracker()),
-          _brpc_timeout_ms(std::min(3600, fragment_ctx->runtime_state()->query_options().query_timeout) * 1000),
+          _brpc_timeout_ms(fragment_ctx->runtime_state()->query_options().query_timeout * 1000),
           _is_dest_merge(is_dest_merge),
           _num_uncancelled_sinkers(num_sinkers),
+<<<<<<< HEAD
           _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()) {
+=======
+          _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()),
+          _sent_audit_stats_frequency_upper_limit(
+                  std::max((int64_t)64, BitUtil::RoundUpToPowerOfTwo(fragment_ctx->num_drivers() * 4))) {
+>>>>>>> 2.5.18
     for (const auto& dest : destinations) {
         const auto& instance_id = dest.fragment_instance_id;
         // instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
@@ -70,6 +76,19 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
         _request_enqueued++;
     }
     {
+        // set stats every _sent_audit_stats_frequency, so FE can get approximate stats even missing eos chunks.
+        // _sent_audit_stats_frequency grows exponentially to reduce the costs of collecting stats but
+        // let the first (limited) chunks' stats approach truth。
+        auto request_sequence = _request_sequence++;
+        if (!request.params->eos() && (request_sequence & (_sent_audit_stats_frequency - 1)) == 0) {
+            if (_sent_audit_stats_frequency < _sent_audit_stats_frequency_upper_limit) {
+                _sent_audit_stats_frequency = _sent_audit_stats_frequency << 1;
+            }
+            if (auto part_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic()) {
+                part_stats->to_pb(request.params->mutable_query_statistics());
+            }
+        }
+
         auto& instance_id = request.fragment_instance_id;
         RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() { _buffers[instance_id.lo].push(request); }));
     }
@@ -145,12 +164,10 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     COUNTER_SET(bytes_sent_counter, _bytes_sent);
     COUNTER_SET(request_sent_counter, _request_sent);
 
-    if (_bytes_enqueued - _bytes_sent > 0) {
-        auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
-        auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
-        COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
-        COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
-    }
+    auto* bytes_unsent_counter = ADD_COUNTER(profile, "BytesUnsent", TUnit::BYTES);
+    auto* request_unsent_counter = ADD_COUNTER(profile, "RequestUnsent", TUnit::UNIT);
+    COUNTER_SET(bytes_unsent_counter, _bytes_enqueued - _bytes_sent);
+    COUNTER_SET(request_unsent_counter, _request_enqueued - _request_sent);
 
     profile->add_derived_counter(
             "NetworkBandwidth", TUnit::BYTES_PER_SECOND,
@@ -193,10 +210,11 @@ void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
 }
 
 void SinkBuffer::_update_network_time(const TUniqueId& instance_id, const int64_t send_timestamp,
-                                      const int64_t receive_timestamp) {
-    _last_receive_time = MonotonicNanos();
+                                      const int64_t receiver_post_process_time) {
+    const int64_t get_response_timestamp = MonotonicNanos();
+    _last_receive_time = get_response_timestamp;
     int32_t concurrency = _num_in_flight_rpcs[instance_id.lo];
-    int64_t time_usage = receive_timestamp - send_timestamp;
+    int64_t time_usage = get_response_timestamp - send_timestamp - receiver_post_process_time;
     _network_times[instance_id.lo].update(time_usage, concurrency);
     _rpc_cumulative_time += time_usage;
     _rpc_count++;
@@ -295,6 +313,10 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     need_wait = true;
                     return Status::OK();
                 }
+                // this is the last eos query, set query stats
+                if (auto final_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic()) {
+                    final_stats->to_pb(request.params->mutable_query_statistics());
+                }
             }
         }
 
@@ -307,7 +329,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
         }
 
         auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(
-                {instance_id, request.params->sequence(), GetCurrentTimeNanos()});
+                {instance_id, request.params->sequence(), MonotonicNanos()});
         if (_first_send_time == -1) {
             _first_send_time = MonotonicNanos();
         }
@@ -338,8 +360,8 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                                             status.message());
             } else {
                 _try_to_send_rpc(ctx.instance_id, [&]() {
+                    _update_network_time(ctx.instance_id, ctx.send_timestamp, result.receiver_post_process_time());
                     _process_send_window(ctx.instance_id, ctx.sequence);
-                    _update_network_time(ctx.instance_id, ctx.send_timestamp, result.receive_timestamp());
                 });
             }
             --_total_in_flight_rpc;
@@ -370,6 +392,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
     }
     return Status::OK();
 }
+<<<<<<< HEAD
 
 Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure,
                              const TransmitChunkInfo& request) {
@@ -389,6 +412,27 @@ Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureCont
         VLOG_ROW << "issue a http rpc, attachment's size = " << attachment_size
                  << " , total size = " << closure->cntl.request_attachment().size();
 
+=======
+
+Status SinkBuffer::_send_rpc(DisposableClosure<PTransmitChunkResult, ClosureContext>* closure,
+                             const TransmitChunkInfo& request) {
+    auto expected_iobuf_size = request.attachment.size() + request.params->ByteSizeLong() + sizeof(size_t) * 2;
+    if (UNLIKELY(expected_iobuf_size > _rpc_http_min_size)) {
+        butil::IOBuf iobuf;
+        butil::IOBufAsZeroCopyOutputStream wrapper(&iobuf);
+        request.params->SerializeToZeroCopyStream(&wrapper);
+        // append params to iobuf
+        size_t params_size = iobuf.size();
+        closure->cntl.request_attachment().append(&params_size, sizeof(params_size));
+        closure->cntl.request_attachment().append(iobuf);
+        // append attachment
+        size_t attachment_size = request.attachment.size();
+        closure->cntl.request_attachment().append(&attachment_size, sizeof(attachment_size));
+        closure->cntl.request_attachment().append(request.attachment);
+        VLOG_ROW << "issue a http rpc, attachment's size = " << attachment_size
+                 << " , total size = " << closure->cntl.request_attachment().size();
+
+>>>>>>> 2.5.18
         if (UNLIKELY(expected_iobuf_size != closure->cntl.request_attachment().size())) {
             LOG(WARNING) << "http rpc expected iobuf size " << expected_iobuf_size << " != "
                          << " real iobuf size " << closure->cntl.request_attachment().size();

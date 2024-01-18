@@ -245,32 +245,36 @@ public class LoadPlanner {
         // 3. Exchange node for primary table
         PlanFragment sinkFragment = null;
         boolean needShufflePlan = false;
+        boolean forceReplicatedStorage = false;
         if (Config.enable_shuffle_load && needShufflePlan()) {
+            if (!Config.eliminate_shuffle_load_by_replicated_storage) {
+                // scan fragment
+                PlanFragment scanFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
+                scanFragment.setParallelExecNum(parallelInstanceNum);
 
-            // scan fragment
-            PlanFragment scanFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
-            scanFragment.setParallelExecNum(parallelInstanceNum);
+                fragments.add(scanFragment);
 
-            fragments.add(scanFragment);
+                // Exchange node
+                List<Column> keyColumns = olapDestTable.getKeyColumnsByIndexId(olapDestTable.getBaseIndexId());
+                List<Expr> partitionExprs = Lists.newArrayList();
+                keyColumns.forEach(column -> {
+                    partitionExprs.add(new SlotRef(tupleDesc.getColumnSlot(column.getName())));
+                });
 
-            // Exchange node
-            List<Column> keyColumns = olapDestTable.getKeyColumnsByIndexId(olapDestTable.getBaseIndexId());
-            List<Expr> partitionExprs = Lists.newArrayList();
-            keyColumns.forEach(column -> {
-                partitionExprs.add(new SlotRef(tupleDesc.getColumnSlot(column.getName())));
-            });
+                DataPartition dataPartition = new DataPartition(TPartitionType.HASH_PARTITIONED, partitionExprs);
+                ExchangeNode exchangeNode = new ExchangeNode(new PlanNodeId(planNodeGenerator.getNextId().asInt()),
+                        scanFragment.getPlanRoot(), dataPartition);
 
-            DataPartition dataPartition = new DataPartition(TPartitionType.HASH_PARTITIONED, partitionExprs);
-            ExchangeNode exchangeNode = new ExchangeNode(new PlanNodeId(planNodeGenerator.getNextId().asInt()),
-                    scanFragment.getPlanRoot(), dataPartition);
+                // add exchange node to scan fragment and sink fragment
+                sinkFragment = new PlanFragment(new PlanFragmentId(1), exchangeNode, dataPartition);
+                exchangeNode.setFragment(sinkFragment);
+                scanFragment.setDestination(exchangeNode);
+                scanFragment.setOutputPartition(dataPartition);
 
-            // add exchange node to scan fragment and sink fragment
-            sinkFragment = new PlanFragment(new PlanFragmentId(1), exchangeNode, dataPartition);
-            exchangeNode.setFragment(sinkFragment);
-            scanFragment.setDestination(exchangeNode);
-            scanFragment.setOutputPartition(dataPartition);
-
-            needShufflePlan = true;
+                needShufflePlan = true;
+            } else {
+                forceReplicatedStorage = true;
+            }
         }
 
         // 4. Prepare sink fragment
@@ -278,7 +282,7 @@ public class LoadPlanner {
         if (!needShufflePlan) {
             sinkFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
         }
-        prepareSinkFragment(sinkFragment, partitionIds, true, true);
+        prepareSinkFragment(sinkFragment, partitionIds, true, true, forceReplicatedStorage);
         if (this.context != null) {
             if (this.context.getSessionVariable().isEnablePipelineEngine() && Config.enable_pipeline_load) {
                 if (needShufflePlan) {
@@ -364,12 +368,13 @@ public class LoadPlanner {
     }
 
     private void prepareSinkFragment(PlanFragment sinkFragment, List<Long> partitionIds, boolean canUsePipeLine,
-                                     boolean completeTabletSink) throws UserException {
+                                     boolean completeTabletSink, boolean forceReplicatedStorage) throws UserException {
         DataSink dataSink = null;
         if (destTable instanceof OlapTable) {
             // 4. Olap table sink
             dataSink = new OlapTableSink((OlapTable) destTable, tupleDesc, partitionIds, canUsePipeLine,
-                    ((OlapTable) destTable).writeQuorum(), ((OlapTable) destTable).enableReplicatedStorage());
+                    ((OlapTable) destTable).writeQuorum(),
+                    forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage());
             if (completeTabletSink) {
                 ((OlapTableSink) dataSink).init(loadId, txnId, dbId, timeoutS);
                 ((OlapTableSink) dataSink).complete();

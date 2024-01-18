@@ -109,8 +109,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
-import static java.lang.Math.min;
-
 public class SchemaChangeHandler extends AlterHandler {
     private static final Logger LOG = LogManager.getLogger(SchemaChangeHandler.class);
 
@@ -264,7 +262,7 @@ public class SchemaChangeHandler extends AlterHandler {
                                      Map<Long, LinkedList<Column>> indexSchemaMap) throws DdlException {
         Column modColumn = alterClause.getColumn();
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
-            if (olapTable.getBaseColumn(modColumn.getName()).isKey()) {
+            if (olapTable.getBaseColumn(modColumn.getName()) != null && olapTable.getBaseColumn(modColumn.getName()).isKey()) {
                 throw new DdlException("Can not modify key column: " + modColumn.getName() + " for primary key table");
             }
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
@@ -275,7 +273,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     }
                 }
             }
-            if (modColumn.getAggregationType() != null) {
+            if (modColumn.getAggregationType() != null && modColumn.getAggregationType() != AggregateType.REPLACE) {
                 throw new DdlException("Can not assign aggregation method on column in Primary data model table: " +
                         modColumn.getName());
             }
@@ -409,13 +407,30 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
 
+            String originalModColumnName = modColumn.getName();
+            if (typeChanged) {
+                /*
+                 * In new alter table process (AlterJobV2), any modified columns are treated as new columns.
+                 * But the modified columns' name does not changed. So in order to distinguish this, we will add
+                 * a prefix in the name of these modified columns.
+                 * This prefix only exist during the schema change process. Once the schema change is finished,
+                 * it will be removed.
+                 *
+                 * After adding this prefix, modify a column is just same as 'add' a column.
+                 *
+                 * And if the column type is not changed, the same column name is still to the same column type,
+                 * so no need to add prefix.
+                 */
+                modColumn.setName(SHADOW_NAME_PRFIX + originalModColumnName);
+            }
+
             if (KeysType.AGG_KEYS == olapTable.getKeysType() || KeysType.UNIQUE_KEYS == olapTable.getKeysType() ||
                     KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
                 for (Long otherIndexId : otherIndexIds) {
                     List<Column> otherIndexSchema = indexSchemaMap.get(otherIndexId);
                     modColIndex = -1;
                     for (int i = 0; i < otherIndexSchema.size(); i++) {
-                        if (otherIndexSchema.get(i).getName().equalsIgnoreCase(modColumn.getName())) {
+                        if (otherIndexSchema.get(i).getName().equalsIgnoreCase(originalModColumnName)) {
                             modColIndex = i;
                             break;
                         }
@@ -430,7 +445,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     List<Column> otherIndexSchema = indexSchemaMap.get(otherIndexId);
                     modColIndex = -1;
                     for (int i = 0; i < otherIndexSchema.size(); i++) {
-                        if (otherIndexSchema.get(i).getName().equalsIgnoreCase(modColumn.getName())) {
+                        if (otherIndexSchema.get(i).getName().equalsIgnoreCase(originalModColumnName)) {
                             modColIndex = i;
                             break;
                         }
@@ -450,22 +465,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 }
             }
         } // end for handling other indices
-
-        if (typeChanged) {
-            /*
-             * In new alter table process (AlterJobV2), any modified columns are treated as new columns.
-             * But the modified columns' name does not changed. So in order to distinguish this, we will add
-             * a prefix in the name of these modified columns.
-             * This prefix only exist during the schema change process. Once the schema change is finished,
-             * it will be removed.
-             *
-             * After adding this prefix, modify a column is just same as 'add' a column.
-             *
-             * And if the column type is not changed, the same column name is still to the same column type,
-             * so no need to add prefix.
-             */
-            modColumn.setName(SHADOW_NAME_PRFIX + modColumn.getName());
-        }
     }
 
     private void processReorderColumn(ReorderColumnsClause alterClause, OlapTable olapTable,
@@ -506,11 +505,12 @@ public class SchemaChangeHandler extends AlterHandler {
     }
 
     private void processReorderColumnOfPrimaryKey(ReorderColumnsClause alterClause, OlapTable olapTable,
-                            Map<Long, LinkedList<Column>> indexSchemaMap, List<Integer> sortKeyIdxes) throws DdlException {
+                                                  Map<Long, LinkedList<Column>> indexSchemaMap, List<Integer> sortKeyIdxes)
+            throws DdlException {
         LinkedList<Column> targetIndexSchema = indexSchemaMap.get(olapTable.getIndexIdByName(olapTable.getName()));
         // check sort key column list
         Set<String> colNameSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-        
+
         for (String colName : alterClause.getColumnsByPos()) {
             Optional<Column> oneCol = targetIndexSchema.stream().filter(c -> c.getName().equalsIgnoreCase(colName)).findFirst();
             if (!oneCol.isPresent()) {
@@ -521,6 +521,11 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             int sortKeyIdx = targetIndexSchema.indexOf(oneCol.get());
             sortKeyIdxes.add(sortKeyIdx);
+            Type t = oneCol.get().getType();
+            if (!(t.isBoolean() || t.isIntegerType() || t.isLargeint() || t.isVarchar() || t.isDate() ||
+                    t.isDatetime())) {
+                throw new DdlException("Sort key column[" + colName + "] type not supported: " + t);
+            }
         }
     }
 
@@ -544,7 +549,7 @@ public class SchemaChangeHandler extends AlterHandler {
             if (newColumn.isKey()) {
                 throw new DdlException("Can not add key column: " + newColName + " for primary key table");
             }
-            if (newColumn.getAggregationType() != null) {
+            if (newColumn.getAggregationType() != null && newColumn.getAggregationType() != AggregateType.REPLACE) {
                 throw new DdlException(
                         "Can not assign aggregation method on column in Primary data model table: " + newColName);
             }
@@ -554,7 +559,7 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("Can not assign aggregation method on key column: " + newColName);
             } else if (null == newColumn.getAggregationType()) {
                 Type type = newColumn.getType();
-                if (!type.isKeyType()) {
+                if (!type.canDistributedBy()) {
                     throw new DdlException(
                             "column without agg function will be treated as key column for aggregate table, " + type +
                                     " type can not be key column");
@@ -1016,19 +1021,49 @@ public class SchemaChangeHandler extends AlterHandler {
             }
 
             // 5. calc short key
-            short newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(alterSchema, indexIdToProperties.get(alterIndexId));
-            LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyCount);
-
-            jobBuilder.withNewIndexShortKeyCount(alterIndexId, newShortKeyCount).withNewIndexSchema(alterIndexId, alterSchema);
-
-            LOG.debug("schema change[{}-{}-{}] check pass.", dbId, tableId, alterIndexId);
+            List<Integer> sortKeyIdxes = new ArrayList<>();
+            if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
+                MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(alterIndexId);
+                if (index.getSortKeyIdxes() != null) {
+                    List<Integer> originSortKeyIdxes = index.getSortKeyIdxes();
+                    for (Integer colIdx : originSortKeyIdxes) {
+                        String columnName = index.getSchema().get(colIdx).getName();
+                        Optional<Column> oneCol =
+                                alterSchema.stream().filter(c -> c.getName().equalsIgnoreCase(columnName)).findFirst();
+                        if (!oneCol.isPresent()) {
+                            LOG.warn("Sort Key Column[" + columnName + "] not exists in new schema");
+                            throw new DdlException("Sort Key Column[" + columnName + "] not exists in new schema");
+                        }
+                        int sortKeyIdx = alterSchema.indexOf(oneCol.get());
+                        sortKeyIdxes.add(sortKeyIdx);
+                    }
+                }
+            }
+            if (!sortKeyIdxes.isEmpty()) {
+                short newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(alterSchema,
+                        indexIdToProperties.get(alterIndexId),
+                        sortKeyIdxes);
+                LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyCount);
+                jobBuilder.withNewIndexShortKeyCount(alterIndexId,
+                        newShortKeyCount).withNewIndexSchema(alterIndexId, alterSchema);
+                jobBuilder.withSortKeyIdxes(sortKeyIdxes);
+                LOG.debug("schema change[{}-{}-{}] check pass.", dbId, tableId, alterIndexId);
+            } else {
+                short newShortKeyCount = GlobalStateMgr.calcShortKeyColumnCount(alterSchema,
+                        indexIdToProperties.get(alterIndexId));
+                LOG.debug("alter index[{}] short key column count: {}", alterIndexId, newShortKeyCount);
+                jobBuilder.withNewIndexShortKeyCount(alterIndexId,
+                        newShortKeyCount).withNewIndexSchema(alterIndexId, alterSchema);
+                LOG.debug("schema change[{}-{}-{}] check pass.", dbId, tableId, alterIndexId);
+            }
         } // end for indices
 
         return jobBuilder.build();
     }
 
     private AlterJobV2 createJobForProcessReorderColumnOfPrimaryKey(long dbId, OlapTable olapTable,
-                Map<Long, LinkedList<Column>> indexSchemaMap, List<Integer> sortKeyIdxes) throws UserException {
+                                                                    Map<Long, LinkedList<Column>> indexSchemaMap,
+                                                                    List<Integer> sortKeyIdxes) throws UserException {
         if (olapTable.getState() == OlapTableState.ROLLUP) {
             throw new DdlException("Table[" + olapTable.getName() + "]'s is doing ROLLUP job");
         }
@@ -1111,20 +1146,17 @@ public class SchemaChangeHandler extends AlterHandler {
         getAlterJobV2Infos(db, ImmutableList.copyOf(alterJobsV2.values()), schemaChangeJobInfos);
     }
 
-    @Nullable
-    public Long getMinActiveTxnId() {
-        long result = Long.MAX_VALUE;
+    public Optional<Long> getMinActiveTxnId() {
+        long minId = Long.MAX_VALUE;
         Map<Long, AlterJobV2> alterJobV2Map = getAlterJobsV2();
         for (AlterJobV2 job : alterJobV2Map.values()) {
             AlterJobV2.JobState jobState = job.getJobState();
             if (jobState == AlterJobV2.JobState.FINISHED || jobState == AlterJobV2.JobState.CANCELLED) {
                 continue;
             }
-            if (job instanceof LakeTableSchemaChangeJob) {
-                result = min(result, ((LakeTableSchemaChangeJob) job).getWatershedTxnId());
-            }
+            minId = Math.min(minId, job.getTransactionId().orElse(Long.MAX_VALUE));
         }
-        return result == Long.MAX_VALUE ? null : result;
+        return minId == Long.MAX_VALUE ? Optional.empty() : Optional.of(minId);
     }
 
     @VisibleForTesting
@@ -1164,7 +1196,14 @@ public class SchemaChangeHandler extends AlterHandler {
                     return null;
                 } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
                     if (!olapTable.dynamicPartitionExists()) {
-                        DynamicPartitionUtil.checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
+                        try {
+                            DynamicPartitionUtil
+                                    .checkInputDynamicPartitionProperties(properties, olapTable.getPartitionInfo());
+                        } catch (DdlException e) {
+                            // This table is not a dynamic partition table and didn't supply all dynamic partition properties
+                            throw new DdlException("Table " + db.getOriginName() + "." +
+                                    olapTable.getName() + " is not a dynamic partition table.");
+                        }
                     }
                     if (properties.containsKey(DynamicPartitionProperty.BUCKETS)) {
                         String colocateGroup = olapTable.getColocateGroup();
@@ -1185,6 +1224,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
+                    return null;
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                    GlobalStateMgr.getCurrentState().alterTableProperties(db, olapTable, properties);
                     return null;
                 }
             }
@@ -1479,7 +1521,12 @@ public class SchemaChangeHandler extends AlterHandler {
         if (tableProperty != null) {
             if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
                 try {
+<<<<<<< HEAD
                     List<UniqueConstraint> newUniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, olapTable);
+=======
+                    List<UniqueConstraint> newUniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db,
+                            olapTable);
+>>>>>>> 2.5.18
                     List<UniqueConstraint> originalUniqueConstraints = tableProperty.getUniqueConstraints();
                     if (originalUniqueConstraints == null
                             || !newUniqueConstraints.toString().equals(originalUniqueConstraints.toString())) {

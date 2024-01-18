@@ -18,7 +18,8 @@ struct StConstructState {
     std::string encoded_buf;
 };
 
-ColumnPtr GeoFunctions::st_from_wkt_common(FunctionContext* ctx, const Columns& columns, GeoShapeType shape_type) {
+StatusOr<ColumnPtr> GeoFunctions::st_from_wkt_common(FunctionContext* ctx, const Columns& columns,
+                                                     GeoShapeType shape_type) {
     ColumnViewer<TYPE_VARCHAR> wkt_viewer(columns[0]);
 
     auto size = columns[0]->size();
@@ -55,15 +56,15 @@ ColumnPtr GeoFunctions::st_from_wkt_common(FunctionContext* ctx, const Columns& 
     }
 }
 
-ColumnPtr GeoFunctions::st_from_wkt(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_from_wkt(FunctionContext* context, const Columns& columns) {
     return st_from_wkt_common(context, columns, GEO_SHAPE_ANY);
 }
 
-ColumnPtr GeoFunctions::st_line(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_line(FunctionContext* context, const Columns& columns) {
     return st_from_wkt_common(context, columns, GEO_SHAPE_LINE_STRING);
 }
 
-ColumnPtr GeoFunctions::st_polygon(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_polygon(FunctionContext* context, const Columns& columns) {
     return st_from_wkt_common(context, columns, GEO_SHAPE_POLYGON);
 }
 
@@ -109,7 +110,7 @@ Status GeoFunctions::st_circle_prepare(FunctionContext* ctx, FunctionContext::Fu
     return Status::OK();
 }
 
-ColumnPtr GeoFunctions::st_circle(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_circle(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_DOUBLE> lng_viewer(columns[0]);
     ColumnViewer<TYPE_DOUBLE> lat_viewer(columns[1]);
     ColumnViewer<TYPE_DOUBLE> radius_viewer(columns[2]);
@@ -151,7 +152,7 @@ ColumnPtr GeoFunctions::st_circle(FunctionContext* context, const Columns& colum
     }
 }
 
-ColumnPtr GeoFunctions::st_point(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_point(FunctionContext* context, const Columns& columns) {
     auto x_column = ColumnViewer<TYPE_DOUBLE>(columns[0]);
     auto y_column = ColumnViewer<TYPE_DOUBLE>(columns[1]);
 
@@ -180,7 +181,7 @@ ColumnPtr GeoFunctions::st_point(FunctionContext* context, const Columns& column
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr GeoFunctions::st_x(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_x(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> encode(columns[0]);
 
     auto size = columns[0]->size();
@@ -205,7 +206,7 @@ ColumnPtr GeoFunctions::st_x(FunctionContext* context, const Columns& columns) {
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr GeoFunctions::st_y(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_y(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> encode(columns[0]);
 
     auto size = columns[0]->size();
@@ -230,7 +231,7 @@ ColumnPtr GeoFunctions::st_y(FunctionContext* context, const Columns& columns) {
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr GeoFunctions::st_distance_sphere(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_distance_sphere(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_DOUBLE> x_lng(columns[0]);
     ColumnViewer<TYPE_DOUBLE> x_lat(columns[1]);
     ColumnViewer<TYPE_DOUBLE> y_lng(columns[2]);
@@ -261,7 +262,7 @@ ColumnPtr GeoFunctions::st_distance_sphere(FunctionContext* context, const Colum
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr GeoFunctions::st_as_wkt(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_as_wkt(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> shape_viewer(columns[0]);
 
     auto size = columns[0]->size();
@@ -334,7 +335,7 @@ Status GeoFunctions::st_contains_prepare(FunctionContext* ctx, FunctionContext::
     return Status::OK();
 }
 
-ColumnPtr GeoFunctions::st_contains(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> GeoFunctions::st_contains(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> lhs_viewer(columns[0]);
     ColumnViewer<TYPE_VARCHAR> rhs_viewer(columns[1]);
 

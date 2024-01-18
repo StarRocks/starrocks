@@ -24,7 +24,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static com.starrocks.connector.hive.MockedRemoteFileSystem.TEST_FILES;
+import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_HIVE_TABLE;
 
 public class HiveConnectorTest {
     private HiveMetaClient client;
@@ -47,7 +47,7 @@ public class HiveConnectorTest {
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
                 metastore, executorForHmsRefresh, 100, 10, 1000, false);
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
-        FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
         hiveRemoteFileIO.setFileSystem(fs);
         cachingRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
                 hiveRemoteFileIO, executorForRemoteFileRefresh, 100, 10, 10);
@@ -100,5 +100,37 @@ public class HiveConnectorTest {
         Assert.assertEquals(ScalarType.INT, hiveTable.getPartitionColumns().get(0).getType());
         Assert.assertEquals(ScalarType.INT, hiveTable.getBaseSchema().get(0).getType());
         Assert.assertEquals("hive_catalog", hiveTable.getCatalogName());
+    }
+
+    @Test
+    public void testCreateHiveConnectorWithMetaStoreType(@Mocked HiveConnectorInternalMgr internalMgr) {
+        FeConstants.runningUnitTest = true;
+        Map<String, String> properties = ImmutableMap.of("hive.metastore.uris", "thrift://127.0.0.1:9083",
+                "type", "hive", "hive.metastore.type", "hive");
+        new Expectations() {
+            {
+                internalMgr.createHiveMetastore();
+                result = cachingHiveMetastore;
+
+                internalMgr.createRemoteFileIO();
+                result = cachingRemoteFileIO;
+
+                internalMgr.getHiveMetastoreConf();
+                result = new CachingHiveMetastoreConf(properties, "hive");
+
+                internalMgr.getRemoteFileConf();
+                result = new CachingRemoteFileConf(properties);
+
+                internalMgr.getPullRemoteFileExecutor();
+                result = executorForPullFiles;
+
+                internalMgr.isSearchRecursive();
+                result = false;
+            }
+        };
+
+        HiveConnector hiveConnector = new HiveConnector(new ConnectorContext("hive_catalog", "hive", properties));
+        ConnectorMetadata metadata = hiveConnector.getMetadata();
+        Assert.assertTrue(metadata instanceof HiveMetadata);
     }
 }

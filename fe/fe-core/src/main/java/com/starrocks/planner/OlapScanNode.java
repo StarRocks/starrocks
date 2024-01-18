@@ -55,6 +55,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.LakeTablet;
@@ -141,6 +142,8 @@ public class OlapScanNode extends ScanNode {
     // record the selected partition with the selected tablets belong to it
     private Map<Long, List<Long>> partitionToScanTabletMap;
 
+    private boolean usePkIndex = false;
+
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -194,6 +197,7 @@ public class OlapScanNode extends ScanNode {
         return bucketColumns;
     }
 
+    // TODO: Determine local shuffle keys by FE to make local shuffle use bucket columns of OlapScanNode.
     public void setBucketColumns(List<ColumnRefOperator> bucketColumns) {
         this.bucketColumns = bucketColumns;
     }
@@ -324,6 +328,8 @@ public class OlapScanNode extends ScanNode {
                                       MaterializedIndex index,
                                       List<Tablet> tablets,
                                       long localBeId) throws UserException {
+        boolean enableQueryTabletAffinity =
+                ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableQueryTabletAffinity();
         int logNum = 0;
         int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
         String schemaHashStr = String.valueOf(schemaHash);
@@ -377,8 +383,10 @@ public class OlapScanNode extends ScanNode {
             } else {
                 replicas = allQueryableReplicas;
             }
-
-            Collections.shuffle(replicas);
+            // TODO: Implement a more robust strategy for tablet affinity.
+            if (!enableQueryTabletAffinity) {
+                Collections.shuffle(replicas);
+            }
             boolean tabletIsNull = true;
             boolean collectedStat = false;
             for (Replica replica : replicas) {
@@ -614,7 +622,15 @@ public class OlapScanNode extends ScanNode {
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
                 if (type.isComplexType()) {
-                    output.append(prefix).append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
+                    output.append(prefix)
+                            .append(String.format("Pruned type: %d <-> [%s]\n", slotDescriptor.getId().asInt(), type));
+                }
+            }
+
+            if (!bucketColumns.isEmpty() && FeConstants.showLocalShuffleColumnsInExplain) {
+                output.append(prefix).append("LocalShuffleColumns:\n");
+                for (ColumnRefOperator col : bucketColumns) {
+                    output.append(prefix).append("- ").append(col.toString()).append("\n");
                 }
             }
         }
@@ -633,6 +649,7 @@ public class OlapScanNode extends ScanNode {
         List<TPrimitiveType> keyColumnTypes = new ArrayList<TPrimitiveType>();
         if (selectedIndexId != -1) {
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(selectedIndexId);
+<<<<<<< HEAD
             if (KeysType.PRIMARY_KEYS == olapTable.getKeysType() && indexMeta.getSortKeyIdxes() != null) {
                 for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
                     Column col = indexMeta.getSchema().get(sortKeyIdx);
@@ -646,6 +663,23 @@ public class OlapScanNode extends ScanNode {
                     }
                     keyColumnNames.add(col.getName());
                     keyColumnTypes.add(col.getPrimitiveType().toThrift());
+=======
+            if (indexMeta != null) {
+                if (KeysType.PRIMARY_KEYS == olapTable.getKeysType() && indexMeta.getSortKeyIdxes() != null) {
+                    for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
+                        Column col = indexMeta.getSchema().get(sortKeyIdx);
+                        keyColumnNames.add(col.getName());
+                        keyColumnTypes.add(col.getPrimitiveType().toThrift());
+                    }
+                } else {
+                    for (Column col : olapTable.getSchemaByIndexId(selectedIndexId)) {
+                        if (!col.isKey()) {
+                            break;
+                        }
+                        keyColumnNames.add(col.getName());
+                        keyColumnTypes.add(col.getPrimitiveType().toThrift());
+                    }
+>>>>>>> 2.5.18
                 }
             }
         }
@@ -699,6 +733,7 @@ public class OlapScanNode extends ScanNode {
             if (!bucketExprs.isEmpty()) {
                 msg.olap_scan_node.setBucket_exprs(Expr.treesToThrift(bucketExprs));
             }
+            msg.olap_scan_node.setUse_pk_index(usePkIndex);
         }
     }
 
@@ -750,6 +785,10 @@ public class OlapScanNode extends ScanNode {
 
     public void setTotalTabletsNum(long totalTabletsNum) {
         this.totalTabletsNum = totalTabletsNum;
+    }
+
+    public void setUsePkIndex(boolean usePkIndex) {
+        this.usePkIndex = usePkIndex;
     }
 
     @Override

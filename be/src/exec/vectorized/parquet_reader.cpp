@@ -7,6 +7,7 @@
 
 #include <utility>
 
+#include "common/config.h"
 #include "common/logging.h"
 #include "fmt/format.h"
 #include "runtime/descriptors.h"
@@ -60,9 +61,20 @@ Status ParquetReaderWrap::next_selected_row_group() {
 Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>& tuple_slot_descs,
                                               const std::string& timezone) {
     try {
+        parquet::ArrowReaderProperties arrow_reader_properties;
+        /*
+        * timestamp unit to use for INT96-encoded timestamps in parquet.
+        * SECOND, MICRO, MILLI, NANO
+        * We use MICRO second as the unit to parse int96 timestamp, which is the precision of DATETIME/TIMESTAMP in MySQL.
+        * https://dev.mysql.com/doc/refman/8.0/en/datetime.html
+        * A DATETIME or TIMESTAMP value can include a trailing fractional seconds part in up to microseconds (6 digits) precision
+        */
+        arrow_reader_properties.set_coerce_int96_timestamp_unit(arrow::TimeUnit::MICRO);
+
         // new file reader for parquet file
         auto st = parquet::arrow::FileReader::Make(arrow::default_memory_pool(),
-                                                   parquet::ParquetFileReader::Open(_parquet, _properties), &_reader);
+                                                   parquet::ParquetFileReader::Open(_parquet, _properties),
+                                                   arrow_reader_properties, &_reader);
         if (!st.ok()) {
             LOG(WARNING) << "Failed to create parquet file reader. error: " << st.ToString()
                          << ", filename: " << _filename;

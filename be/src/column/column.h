@@ -209,7 +209,11 @@ public:
 
     // This function will get row through 'from' index from src, and copy size elements to this column.
     // Currently only `ObjectColumn<BitmapValue>` support shallow copy
+<<<<<<< HEAD
     virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size, bool deep_copy) = 0;
+=======
+    virtual void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) = 0;
+>>>>>>> 2.5.18
 
     // Append multiple `null` values into this column.
     // Return false if this is a non-nullable column, i.e, if `is_nullable` return false.

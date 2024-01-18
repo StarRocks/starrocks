@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.rule.transformation;
 
+import com.google.common.collect.Lists;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -11,7 +12,6 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import jersey.repackaged.com.google.common.collect.Lists;
 
 import java.util.HashMap;
 import java.util.List;

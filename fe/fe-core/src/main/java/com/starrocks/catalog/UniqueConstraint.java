@@ -17,7 +17,15 @@ package com.starrocks.catalog;
 
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Joiner;
+<<<<<<< HEAD
 import org.spark_project.guava.base.Strings;
+=======
+import com.google.common.base.Strings;
+import com.starrocks.common.AnalysisException;
+import com.starrocks.server.GlobalStateMgr;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+>>>>>>> 2.5.18
 
 import java.util.Arrays;
 import java.util.List;
@@ -30,11 +38,26 @@ import java.util.stream.Collectors;
 //
 // a table may have multi unique constraints.
 public class UniqueConstraint {
+<<<<<<< HEAD
+=======
+    private static final Logger LOG = LogManager.getLogger(UniqueConstraint.class);
+>>>>>>> 2.5.18
     // here id is preferred, but meta of column does not have id.
     // have to use name here, so column rename is not supported
     private final List<String> uniqueColumns;
 
+<<<<<<< HEAD
     public UniqueConstraint(List<String> uniqueColumns) {
+=======
+    private final String catalogName;
+    private final String dbName;
+    private final String tableName;
+
+    public UniqueConstraint(String catalogName, String dbName, String tableName, List<String> uniqueColumns) {
+        this.catalogName = catalogName;
+        this.dbName = dbName;
+        this.tableName = tableName;
+>>>>>>> 2.5.18
         this.uniqueColumns = uniqueColumns;
     }
 
@@ -42,17 +65,62 @@ public class UniqueConstraint {
         return uniqueColumns;
     }
 
+<<<<<<< HEAD
     // foreignKeys must be in lower case for case insensitive
     public boolean isMatch(Set<String> foreignKeys) {
+=======
+    // foreignKeys must be in lower case for case-insensitive
+    public boolean isMatch(Table parentTable, Set<String> foreignKeys) {
+        if (catalogName != null && dbName != null && tableName != null) {
+            Table uniqueTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(catalogName, dbName, tableName);
+            if (uniqueTable == null) {
+                LOG.warn("can not find unique constraint table: {}.{}.{}", catalogName, dbName, tableName);
+                return false;
+            }
+            if (!uniqueTable.equals(parentTable)) {
+                return false;
+            }
+        }
+>>>>>>> 2.5.18
         Set<String> uniqueColumnSet = uniqueColumns.stream().map(String::toLowerCase).collect(Collectors.toSet());
         return uniqueColumnSet.equals(foreignKeys);
     }
 
     public String toString() {
+<<<<<<< HEAD
         return Joiner.on(",").join(uniqueColumns);
     }
 
     public static List<UniqueConstraint> parse(String constraintDescs) {
+=======
+        StringBuilder sb = new StringBuilder();
+        if (catalogName != null) {
+            sb.append(catalogName).append(".");
+        }
+        if (dbName != null) {
+            sb.append(dbName).append(".");
+        }
+        if (tableName != null) {
+            sb.append(tableName).append(".");
+        }
+        sb.append(Joiner.on(",").join(uniqueColumns));
+        return sb.toString();
+    }
+
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public String getDbName() {
+        return dbName;
+    }
+
+    public String getTableName() {
+        return tableName;
+    }
+
+    public static List<UniqueConstraint> parse(String constraintDescs) throws AnalysisException {
+>>>>>>> 2.5.18
         if (Strings.isNullOrEmpty(constraintDescs)) {
             return null;
         }
@@ -64,9 +132,70 @@ public class UniqueConstraint {
             }
             String[] uniqueColumns = constraintDesc.split(",");
             List<String> columnNames =
+<<<<<<< HEAD
                     Arrays.asList(uniqueColumns).stream().map(String::trim).collect(Collectors.toList());
             uniqueConstraints.add(new UniqueConstraint(columnNames));
         }
         return uniqueConstraints;
     }
+=======
+                    Arrays.stream(uniqueColumns).map(String::trim).collect(Collectors.toList());
+            try {
+                parseUniqueConstraintColumns(columnNames, uniqueConstraints);
+            } catch (AnalysisException e) {
+                LOG.warn("parse unique constraint failed, unique constraint: {}", constraintDesc, e);
+                throw e;
+            }
+        }
+        return uniqueConstraints;
+    }
+
+    private static void parseUniqueConstraintColumns(List<String> columnNames, List<UniqueConstraint> uniqueConstraints)
+            throws AnalysisException {
+        String catalogName = null;
+        String dbName = null;
+        String tableName = null;
+        List<String> uniqueConstraintColumns = Lists.newArrayList();
+        for (String columnName : columnNames) {
+            String[] parts = columnName.split("\\.");
+            if (parts.length == 1) {
+                uniqueConstraintColumns.add(parts[0]);
+            } else if (parts.length == 2) {
+                if (tableName != null && !tableName.equals(parts[0])) {
+                    throw new AnalysisException("unique constraint column should be in same table");
+                }
+                tableName = parts[0];
+                uniqueConstraintColumns.add(parts[1]);
+            } else if (parts.length == 3) {
+                if (dbName != null && !dbName.equals(parts[0])) {
+                    throw new AnalysisException("unique constraint column should be in same table");
+                }
+                if (tableName != null && !tableName.equals(parts[1])) {
+                    throw new AnalysisException("unique constraint column should be in same table");
+                }
+                dbName = parts[0];
+                tableName = parts[1];
+                uniqueConstraintColumns.add(parts[2]);
+            } else if (parts.length == 4) {
+                if (catalogName != null && !catalogName.equals(parts[0])) {
+                    throw new AnalysisException("unique constraint column should be in same table");
+                }
+                if (dbName != null && !dbName.equals(parts[1])) {
+                    throw new AnalysisException("unique constraint column should be in same table");
+                }
+                if (tableName != null && !tableName.equals(parts[2])) {
+                    throw new AnalysisException("unique constraint column should be in same table");
+                }
+                catalogName = parts[0];
+                dbName = parts[1];
+                tableName = parts[2];
+                uniqueConstraintColumns.add(parts[3]);
+            } else {
+                throw new AnalysisException("invalid unique constraint" + columnName);
+            }
+        }
+
+        uniqueConstraints.add(new UniqueConstraint(catalogName, dbName, tableName, uniqueConstraintColumns));
+    }
+>>>>>>> 2.5.18
 }

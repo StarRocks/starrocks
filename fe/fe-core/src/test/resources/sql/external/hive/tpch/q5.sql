@@ -30,10 +30,10 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 29:MERGING-EXCHANGE
-cardinality: 5
+cardinality: 25
 column statistics:
-* n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-* sum-->[810.9, 104949.5, 0.0, 16.0, 5.0] ESTIMATE
+* n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+* sum-->[810.9, 104949.5, 0.0, 16.0, 25.0] ESTIMATE
 
 PLAN FRAGMENT 1(F15)
 
@@ -44,21 +44,21 @@ OutPut Exchange Id: 29
 28:SORT
 |  order by: [49, DECIMAL128(38,4), true] DESC
 |  offset: 0
-|  cardinality: 5
+|  cardinality: 25
 |  column statistics:
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 16.0, 5.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 16.0, 25.0] ESTIMATE
 |
 27:AGGREGATE (merge finalize)
 |  aggregate: sum[([49: sum, DECIMAL128(38,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [42: n_name, VARCHAR, true]
-|  cardinality: 5
+|  cardinality: 25
 |  column statistics:
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 16.0, 5.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 16.0, 25.0] ESTIMATE
 |
 26:EXCHANGE
-cardinality: 5
+cardinality: 25
 
 PLAN FRAGMENT 2(F14)
 
@@ -70,18 +70,18 @@ OutPut Exchange Id: 26
 |  STREAMING
 |  aggregate: sum[([48: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [42: n_name, VARCHAR, true]
-|  cardinality: 5
+|  cardinality: 25
 |  column statistics:
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * sum-->[810.9, 104949.5, 0.0, 16.0, 5.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
+|  * sum-->[810.9, 104949.5, 0.0, 16.0, 25.0] ESTIMATE
 |
 24:Project
 |  output columns:
 |  42 <-> [42: n_name, VARCHAR, true]
 |  48 <-> cast([23: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [24: l_discount, DECIMAL64(15,2), true] as DECIMAL128(18,2))
-|  cardinality: 20488565
+|  cardinality: 16391888
 |  column statistics:
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 23:HASH JOIN
@@ -91,15 +91,15 @@ OutPut Exchange Id: 26
 |  build runtime filters:
 |  - filter_id = 5, build_expr = (9: o_orderkey), remote = true
 |  output columns: 23, 24, 42
-|  cardinality: 20488565
+|  cardinality: 16391888
 |  column statistics:
+|  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |  * c_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
-|  * o_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 2.276507276507276E7] ESTIMATE
-|  * l_orderkey-->[1.0, 6.0E8, 0.0, 8.0, 2.276507276507276E7] ESTIMATE
+|  * o_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |  * l_extendedprice-->[901.0, 104949.5, 0.0, 8.0, 3736520.0] ESTIMATE
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
-|  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
+|  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 |----22:EXCHANGE

@@ -8,6 +8,7 @@
 #include "column/type_traits.h"
 #include "exprs/table_function/json_each.h"
 #include "exprs/table_function/multi_unnest.h"
+#include "exprs/table_function/subdivide_bitmap.h"
 #include "exprs/table_function/table_function.h"
 #include "exprs/table_function/unnest.h"
 #include "udf/java/java_function_fwd.h"
@@ -86,6 +87,12 @@ TableFunctionResolver::TableFunctionResolver() {
 
     TableFunctionPtr func_json_each = std::make_shared<JsonEach>();
     add_function_mapping("json_each", {TYPE_JSON}, {TYPE_VARCHAR, TYPE_JSON}, func_json_each);
+
+#define M(TYPE)                                                                  \
+    add_function_mapping("subdivide_bitmap", {TYPE_OBJECT, TYPE}, {TYPE_OBJECT}, \
+                         std::make_shared<SubdivideBitmap<TYPE>>());
+    APPLY_FOR_ALL_INT_TYPE(M)
+#undef M
 }
 
 TableFunctionResolver::~TableFunctionResolver() = default;

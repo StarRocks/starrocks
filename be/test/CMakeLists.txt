@@ -22,7 +22,7 @@ set(EXEC_FILES
         ./common/config_test.cpp
         ./common/status_test.cpp
         ./common/tracer_test.cpp
-        ./common/s3_uri_test.cpp
+        ./common/uri_test.cpp
         ./fs/fs_broker_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
@@ -153,6 +153,7 @@ set(EXEC_FILES
         ./io/s3_input_stream_test.cpp
         ./io/fd_input_stream_test.cpp
         ./io/seekable_input_stream_test.cpp
+        ./io/shared_buffered_input_stream_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/disjunctive_predicates_test.cpp
         ./storage/utils_test.cpp
@@ -239,6 +240,8 @@ set(EXEC_FILES
         ./storage/rowset_merger_test.cpp
         ./storage/schema_change_test.cpp
         ./storage/publish_version_task_test.cpp
+        ./storage/publish_version_manager_test.cpp
+        ./storage/get_use_pk_index_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/datetime_value_test.cpp
         ./runtime/decimalv2_value_test.cpp
@@ -315,7 +318,6 @@ set(EXEC_FILES
         ./util/trace_test.cpp
         ./util/uid_util_test.cpp
         ./util/utf8_check_test.cpp
-        ./util/buffered_stream_test.cpp
         ./util/int96_test.cpp
         ./util/bit_packing_test.cpp
         ./util/gc_helper_test.cpp
@@ -325,13 +327,11 @@ set(EXEC_FILES
         ./util/system_metrics_test.cpp
         ./util/ratelimit_test.cpp
         ./util/cpu_usage_info_test.cpp
+        ./util/concurrent_limiter_test.cpp
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         )
 
-if ("${USE_STAROS}" STREQUAL "ON")
-    list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
-endif ()
 if ("${WITH_BLOCK_CACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
     list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
@@ -358,6 +358,7 @@ add_executable(starrocks_test ${EXEC_FILES})
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 SET_TARGET_PROPERTIES(starrocks_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
+<<<<<<< HEAD
 # =================================================
 # bytes_test requires tcmalloc which conflicts with sanitizer.
 # Thus we need a standalone binary without sanitizer to test it.
@@ -380,6 +381,8 @@ TARGET_LINK_LIBRARIES(bytes_test
         tcmalloc
         )
 
+=======
+>>>>>>> 2.5.18
 # =================================================
 # test cases must be compiled as a standalone binary
 ADD_BE_TEST(storage/task/engine_storage_migration_task_test)

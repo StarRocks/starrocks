@@ -1,7 +1,11 @@
 name: CI PIPELINE - BRANCH
 
 on:
+<<<<<<< HEAD
   pull_request_target:
+=======
+  pull_request:
+>>>>>>> 2.5.18
     types:
       - opened
       - synchronize
@@ -13,6 +17,7 @@ concurrency:
   group: ${{ github.event.number }}
   cancel-in-progress: true
 
+<<<<<<< HEAD
 permissions:
   checks: write
   actions: write
@@ -76,6 +81,65 @@ jobs:
   be-checker:
     runs-on: ubuntu-latest
     name: BE FILTER
+=======
+
+jobs:
+
+  sync-checker:
+    runs-on: [ self-hosted, normal ]
+    name: RUN CHECKER
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    outputs:
+      PASS: ${{ steps.check.outputs.pass }}
+      THIRDPARTY: ${{ steps.thirdparty-checker.outputs.thirdparty }}
+    steps:
+      - name: upload info
+        env:
+          PR_NUMBER: ${{ github.event.number }}
+        run: |
+          echo $PR_NUMBER > pr_num.txt
+          GITHUB_SHA=$(cat $GITHUB_EVENT_PATH | jq -r .pull_request.head.sha)
+          echo ${GITHUB_SHA} > head_sha.txt
+
+      - name: Upload the PR number
+        uses: actions/upload-artifact@v2
+        with:
+          name: pr_num
+          path: ./pr_num.txt
+          retention-days: 3
+
+      - name: Upload the PR HEAD REF
+        uses: actions/upload-artifact@v2
+        with:
+          name: head_sha
+          path: ./head_sha.txt
+          retention-days: 3
+
+      - name: Check
+        id: check
+        if: >
+          !contains(github.event.pull_request.title, '(sync #') &&
+          !contains(github.event.pull_request.labels.*.name, 'sync') &&
+          (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))
+        run: |
+          echo "pass=true" >> $GITHUB_OUTPUT
+
+      - uses: dorny/paths-filter@v2
+        id: thirdparty-checker
+        if: always()
+        with:
+          filters: |
+            thirdparty:
+            - 'thirdparty/**'
+            - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+
+  be-checker:
+    runs-on: ubuntu-latest
+    needs: sync-checker
+    name: BE FILTER
+    if: needs.sync-checker.outputs.PASS == 'true' || needs.sync-checker.outputs.THIRDPARTY == 'true'
+>>>>>>> 2.5.18
     outputs:
       output1: ${{ steps.be-changes-info.outputs.be }}
       output2: ${{ steps.be-changes-info.outputs.thirdparty }}
@@ -102,15 +166,26 @@ jobs:
           echo "thirdparty=${{ steps.changes.outputs.thirdparty }}" >> $GITHUB_OUTPUT
 
   clang-format:
+<<<<<<< HEAD
     runs-on: self-hosted
+=======
+    runs-on: [self-hosted, light]
+>>>>>>> 2.5.18
     needs: be-checker
     name: Clang-Format
     env:
       PR_NUMBER: ${{ github.event.number }}
     if: ${{ needs.be-checker.outputs.output1 == 'true' }}
     steps:
+<<<<<<< HEAD
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
+=======
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+>>>>>>> 2.5.18
 
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -126,6 +201,11 @@ jobs:
       - name: Checkout PR
         run: |
           BRANCH=${{steps.branch.outputs.branch}}
+<<<<<<< HEAD
+=======
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
+>>>>>>> 2.5.18
           git checkout $BRANCH;
           git pull;
           BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
@@ -133,26 +213,51 @@ jobs:
           git checkout $BRANCH_NAME;
           git checkout -b merge_pr;
           git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
+<<<<<<< HEAD
           
+=======
+
+>>>>>>> 2.5.18
       - name: Run Clang-Format
         run: |
           export PATH=/var/lib/llvm/bin:$PATH
           bash build-support/check-format.sh
 
+<<<<<<< HEAD
   thirdparty-update:
     runs-on: self-hosted
+=======
+      - name: Clean ENV
+        if: always()
+        run: |
+          rm -rf ${{ github.workspace }}/*
+
+  thirdparty-update:
+    runs-on: [self-hosted, normal]
+>>>>>>> 2.5.18
     needs: [ be-checker, clang-format ]
     name: Thirdparty Update
     env:
       PR_NUMBER: ${{ github.event.number }}
       BRANCH: ${{ github.base_ref }}
+<<<<<<< HEAD
+=======
+      REPO: ${{ github.repository }}
+>>>>>>> 2.5.18
     outputs:
       ip: ${{ steps.update-image.outputs.ip }}
       instance_id: ${{ steps.update-image.outputs.instance_id }}
       image_cache_id: ${{ steps.update-image.outputs.image_cache_id }}
     steps:
+<<<<<<< HEAD
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
+=======
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+>>>>>>> 2.5.18
 
       - name: Checkout Code
         uses: actions/checkout@v3
@@ -162,6 +267,7 @@ jobs:
       - name: Update Image
         id: update-image
         run: |
+<<<<<<< HEAD
           set -ex
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
             rm -rf ./elastic-service
@@ -178,12 +284,18 @@ jobs:
             sshpass -p ${{ secrets.PASSWORD }} ssh -o StrictHostKeyChecking=no root@$ip "cd /home/disk1; ./elastic-build-thirdparty.sh $BRANCH $PR_NUMBER"
             image_cache_id=$(python3 lib/eci_imagecache.py create $BRANCH-$PR_NUMBER)
             echo "image_cache_id=${image_cache_id}" >> $GITHUB_OUTPUT
+=======
+          if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
+              rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+              ./bin/run-pr-update-image.sh
+>>>>>>> 2.5.18
           fi
 
       - name: Clean ENV
         if: always()
         run: |
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
+<<<<<<< HEAD
               cd elastic-service
               python3 lib/ecs_lib.py delete_instances conf/starrocks_deploy.conf
           fi
@@ -191,6 +303,16 @@ jobs:
   be-ut:
     runs-on: self-hosted
     needs: [ be-checker, clang-format, thirdparty-update ]
+=======
+              cd ci-tool && source lib/init.sh
+              ./bin/elastic-cluster.sh --delete
+          fi
+          rm -rf ${{ github.workspace }}/*
+
+  be-ut:
+    runs-on: [self-hosted, normal]
+    needs: [ be-checker, thirdparty-update ]
+>>>>>>> 2.5.18
     timeout-minutes: 90
     name: BE UT
     env:
@@ -208,15 +330,23 @@ jobs:
         shell: bash
         timeout-minutes: 90
         run: |
+<<<<<<< HEAD
           set -ex
           rm -rf ./elastic-service
           ln -s /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
+=======
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+>>>>>>> 2.5.18
           if [[ "${{ needs.be-checker.outputs.output2 }}" == 'true' ]]; then
               export image_cache_id=${{ needs.thirdparty-update.outputs.image_cache_id }}
               export image_tag=$BRANCH-$PR_NUMBER
           fi
+<<<<<<< HEAD
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{steps.branch.outputs.branch}}
+=======
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module be --branch ${{ steps.branch.outputs.branch }} --repository ${{ github.repository }}
+>>>>>>> 2.5.18
 
       - name: clean ECI
         if: always()
@@ -237,10 +367,20 @@ jobs:
         run: |
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
+<<<<<<< HEAD
 
   fe-checker:
     runs-on: ubuntu-latest
     name: FE FILTER
+=======
+          rm -rf ${{ github.workspace }}/*
+
+  fe-checker:
+    runs-on: ubuntu-latest
+    needs: sync-checker
+    name: FE FILTER
+    if: needs.sync-checker.outputs.PASS == 'true' || needs.sync-checker.outputs.THIRDPARTY == 'true'
+>>>>>>> 2.5.18
     outputs:
       output1: ${{ steps.fe-changes-info.outputs.fe }}
     steps:
@@ -267,7 +407,18 @@ jobs:
     needs: fe-checker
     if: needs.fe-checker.outputs.output1 == 'true'
     name: FE Code Style Check
+<<<<<<< HEAD
     steps:
+=======
+    env:
+      PR_NUMBER: ${{ github.event.number }}
+    steps:
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+
+>>>>>>> 2.5.18
       - uses: dorny/paths-filter@v2
         id: java-file
         name: JAVA FILE
@@ -278,6 +429,7 @@ jobs:
 
       - run: echo ${{ steps.java-file.outputs.java }}
 
+<<<<<<< HEAD
       - name: "Checkout ${{ github.ref }} ( ${{ github.sha }} )"
         id: checkout
         if: ${{ steps.java-file.outputs.java == 'true' }}
@@ -285,16 +437,47 @@ jobs:
         with:
           persist-credentials: false
           submodules: recursive
+=======
+      - name: BRANCH INFO
+        id: branch
+        run: |
+          echo ${{github.base_ref}}
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Checkout PR
+        run: |
+          BRANCH=${{steps.branch.outputs.branch}}
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
+          git checkout $BRANCH;
+          git pull;
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
+          git checkout $BRANCH_NAME;
+          git checkout -b merge_pr;
+          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
+>>>>>>> 2.5.18
 
       - name: Copy checkstyle files
         if: ${{ steps.java-file.outputs.java == 'true' }}
         run: |
+<<<<<<< HEAD
           pwd
+=======
+>>>>>>> 2.5.18
           cp fe/checkstyle* .
 
       - name: Run java checkstyle
         if: ${{ steps.java-file.outputs.java == 'true' }}
+<<<<<<< HEAD
         uses: dbelyaev/action-checkstyle@v0.6.1
+=======
+        uses: dbelyaev/action-checkstyle@v0.7.5
+>>>>>>> 2.5.18
         with:
           workdir: "./fe"
           checkstyle_config: checkstyle.xml
@@ -302,37 +485,80 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           fail_on_error: true
           level: error
+<<<<<<< HEAD
   fe-ut:
     runs-on: [self-hosted]
+=======
+
+  fe-ut:
+    runs-on: [self-hosted, normal]
+>>>>>>> 2.5.18
     needs: fe-codestyle-check
     name: FE UT
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
+<<<<<<< HEAD
       - name: Clean Workspace
         uses: AutoModality/action-clean@v1.1.0
+=======
+      - name: clean
+        run: |
+          rm -rf ${{ github.workspace }}
+          mkdir -p ${{ github.workspace }}
+>>>>>>> 2.5.18
 
       - name: BRANCH INFO
         id: branch
         run: |
+<<<<<<< HEAD
           echo ${{github.base_ref}}
           echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+=======
+          echo "branch=${{github.base_ref}}" >> $GITHUB_OUTPUT
+          repo="${{ github.repository }}"
+          bucket_prefix=`echo ${repo%/*} | tr '[:upper:]' '[:lower:]'` 
+          echo "bucket_prefix=${bucket_prefix}" >> $GITHUB_OUTPUT
+
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Checkout PR
+        run: |
+          BRANCH=${{steps.branch.outputs.branch}}
+          git config --global user.name "wanpengfei-git";
+          git config --global user.email "wanpengfei91@163.com";
+          git checkout $BRANCH;
+          git pull;
+          BRANCH_NAME="${BRANCH}-${PR_NUMBER}";
+          git fetch origin pull/${PR_NUMBER}/head:${BRANCH_NAME};
+          git checkout $BRANCH_NAME;
+          git checkout -b merge_pr;
+          git merge --squash --no-edit ${BRANCH} || (echo "Merge conflict, please check." && exit -1);
+>>>>>>> 2.5.18
 
       - name: UPDATE ECI & RUN UT
         id: run_ut
         shell: bash
         timeout-minutes: 60
         run: |
+<<<<<<< HEAD
           set -ex
           rm -rf ./elastic-service
           ln -s /var/lib/elastic-service ./elastic-service
           cd elastic-service && git pull
           ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}}
+=======
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
+          ./bin/elastic-ut.sh --pr ${PR_NUMBER} --module fe --branch ${{steps.branch.outputs.branch}} --build Release --repository ${{ github.repository }}
+>>>>>>> 2.5.18
 
       - name: Clean ECI
         if: always()
         run: |
           echo ${{ steps.run_ut.outputs.ECI_ID }}
+<<<<<<< HEAD
           eci rm ${{ steps.run_ut.outputs.ECI_ID }}
 
       - name: UT Report
@@ -347,6 +573,15 @@ jobs:
       - name: Upload log
         uses: actions/upload-artifact@v3
         if: always()
+=======
+          echo ">>> Dmesg info:"
+          eci exec ${{ steps.run_ut.outputs.ECI_ID }} bash -c "dmesg -T"
+          eci rm ${{ steps.run_ut.outputs.ECI_ID }}
+
+      - name: Upload log
+        if: always()
+        uses: actions/upload-artifact@v3
+>>>>>>> 2.5.18
         with:
           name: FE UT LOG
           path: ${{ steps.run_ut.outputs.RES_LOG }}
@@ -359,3 +594,7 @@ jobs:
           rm -f ${{ steps.run_ut.outputs.RES_FILE }}
           rm -f ${{ steps.run_ut.outputs.RES_LOG }}
           rm -rf ${{ steps.run_ut.outputs.COV_DIR }}
+<<<<<<< HEAD
+=======
+          rm -rf ${{ github.workspace }}/*
+>>>>>>> 2.5.18

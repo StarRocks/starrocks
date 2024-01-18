@@ -23,6 +23,8 @@ public:
 
     static vectorized::Schema convert_schema(const TabletSchema& schema);
 
+    static vectorized::Schema convert_schema(const starrocks::TabletSchema& schema, const std::vector<ColumnId>& cids);
+
     // Convert TabletColumn to vectorized::Field. This function will generate format
     // V2 type: DATE_V2, TIMESTAMP, DECIMAL_V2
     static vectorized::Field convert_field_to_format_v2(ColumnId id, const TabletColumn& c);
@@ -55,7 +57,7 @@ public:
     // Create an empty chunk according to the |slots| and reserve it of size |n|.
     static std::shared_ptr<vectorized::Chunk> new_chunk(const std::vector<SlotDescriptor*>& slots, size_t n);
 
-    static vectorized::Chunk* new_chunk_pooled(const vectorized::Schema& schema, size_t n, bool force = true);
+    static vectorized::Chunk* new_chunk_pooled(const vectorized::Schema& schema, size_t n, bool force);
 
     // Create a vectorized column from field .
     // REQUIRE: |type| must be scalar type.

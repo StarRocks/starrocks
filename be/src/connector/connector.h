@@ -30,6 +30,7 @@ public:
     virtual Status open(RuntimeState* state) { return Status::OK(); }
     virtual void close(RuntimeState* state) {}
     virtual Status get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) { return Status::OK(); }
+    virtual bool has_any_predicate() const { return _has_any_predicate; }
 
     // how many rows read from storage
     virtual int64_t raw_rows_read() const = 0;
@@ -39,6 +40,9 @@ public:
     virtual int64_t num_bytes_read() const = 0;
     // CPU time of this data source
     virtual int64_t cpu_time_spent() const = 0;
+    // IO time of this data source
+    virtual int64_t io_time_spent() const { return 0; }
+    virtual int64_t estimated_mem_usage() const { return 0; }
 
     // following fields are set by framework
     // 1. runtime profile: any metrics you want to record
@@ -52,9 +56,11 @@ public:
     }
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
     Status parse_runtime_filters(RuntimeState* state);
+    void update_has_any_predicate();
 
 protected:
     int64_t _read_limit = -1; // no limit
+    bool _has_any_predicate = false;
     std::vector<ExprContext*> _conjunct_ctxs;
     const vectorized::RuntimeFilterProbeCollector* _runtime_filters;
     RuntimeProfile* _runtime_profile;
@@ -87,6 +93,8 @@ public:
     // such as MySQL/JDBC, so `accept_empty_scan_ranges` is false, and most in most cases, these data source(MySQL/JDBC)
     // the method `insert_local_exchange_operator` is true also.
     virtual bool accept_empty_scan_ranges() const { return true; }
+
+    virtual const TupleDescriptor* tuple_descriptor(RuntimeState* state) const = 0;
 };
 using DataSourceProviderPtr = std::unique_ptr<DataSourceProvider>;
 

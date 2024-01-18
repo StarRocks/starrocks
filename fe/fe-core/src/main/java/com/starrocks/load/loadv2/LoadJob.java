@@ -696,6 +696,15 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         unprotectReadEndOperation((LoadJobFinalOperation) txnState.getTxnCommitAttachment(), false);
     }
 
+    /**
+     * This method will update job failMsg without edit log and lock
+     *
+     * @param failMsg
+     */
+    public void unprotectUpdateFailMsg(FailMsg failMsg) {
+        this.failMsg = failMsg;
+    }
+
     public List<Comparable> getShowInfo() throws DdlException {
         readLock();
         try {
@@ -1056,6 +1065,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         state = info.getState();
         transactionId = info.getTransactionId();
         loadStartTimestamp = info.getLoadStartTimestamp();
+    }
+    
+    public boolean hasTxn() {
+        return true;
     }
 
     public static class LoadJobStateUpdateInfo implements Writable {

@@ -39,10 +39,15 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+<<<<<<< HEAD
+=======
+import java.util.ArrayList;
+>>>>>>> 2.5.18
 import java.util.List;
 
 public class CreateTableTest {
     private static ConnectContext connectContext;
+    private static StarRocksAssert starRocksAssert;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -55,6 +60,7 @@ public class CreateTableTest {
         Config.enable_auto_tablet_distribution = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
         // create database
         String createDbStmtStr = "create database test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
@@ -143,24 +149,71 @@ public class CreateTableTest {
                         "distributed by hash(key1) buckets 1 properties('replication_num' = '1', 'storage_medium' = 'ssd');"));
 
         ExceptionChecker
-                 .expectThrowsNoException(() -> createTable("create table test.tb8(key1 int, key2 varchar(10)) \n"
+                .expectThrowsNoException(() -> createTable("create table test.tb8(key1 int, key2 varchar(10)) \n"
                         + "distributed by hash(key1) buckets 1 \n"
                         + "properties('replication_num' = '1', 'compression' = 'lz4_frame');"));
 
         ExceptionChecker
-                 .expectThrowsNoException(() -> createTable("create table test.tb9(key1 int, key2 varchar(10)) \n"
+                .expectThrowsNoException(() -> createTable("create table test.tb9(key1 int, key2 varchar(10)) \n"
                         + "distributed by hash(key1) buckets 1 \n"
                         + "properties('replication_num' = '1', 'compression' = 'lz4');"));
 
         ExceptionChecker
-                 .expectThrowsNoException(() -> createTable("create table test.tb10(key1 int, key2 varchar(10)) \n"
+                .expectThrowsNoException(() -> createTable("create table test.tb10(key1 int, key2 varchar(10)) \n"
                         + "distributed by hash(key1) buckets 1 \n"
                         + "properties('replication_num' = '1', 'compression' = 'zstd');"));
 
         ExceptionChecker
-                 .expectThrowsNoException(() -> createTable("create table test.tb11(key1 int, key2 varchar(10)) \n"
+                .expectThrowsNoException(() -> createTable("create table test.tb11(key1 int, key2 varchar(10)) \n"
                         + "distributed by hash(key1) buckets 1 \n"
                         + "properties('replication_num' = '1', 'compression' = 'zlib');"));
+
+        ExceptionChecker
+                .expectThrowsNoException(() -> createTable("CREATE TABLE test.full_width_space (\n" +
+                        "    datekey DATE,\n" +
+                        "    site_id INT,\n" +
+                        "    city_code SMALLINT,\n" +
+                        "    user_name VARCHAR(32),\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "ENGINE=olap\n" +
+                        "DUPLICATE KEY(datekey, site_id, city_code, user_name)\n" +
+                        "PARTITION BY RANGE (datekey) (\n" +
+                        "　START (\"2019-01-01\") END (\"2021-01-01\") EVERY (INTERVAL 1 YEAR)\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(site_id) BUCKETS 10\n" +
+                        "PROPERTIES (\n" +
+                        "    \"replication_num\" = \"1\"\n" +
+                        ");"));
+
+        ExceptionChecker
+                .expectThrowsNoException(() -> createTable("CREATE TABLE test.dynamic_partition_without_prefix (\n" +
+                        "event_day DATE,\n" +
+                        "site_id INT DEFAULT '10',\n" +
+                        "city_code VARCHAR(\n" +
+                        "100\n" +
+                        "),\n" +
+                        "user_name VARCHAR(\n" +
+                        "32\n" +
+                        ") DEFAULT '',\n" +
+                        "pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY RANGE(event_day)(\n" +
+                        "PARTITION p20200321 VALUES LESS THAN (\"2020-03-22\"),\n" +
+                        "PARTITION p20200322 VALUES LESS THAN (\"2020-03-23\"),\n" +
+                        "PARTITION p20200323 VALUES LESS THAN (\"2020-03-24\"),\n" +
+                        "PARTITION p20200324 VALUES LESS THAN (\"2020-03-25\")\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id)\n" +
+                        "PROPERTIES(\n" +
+                        "\t\"replication_num\" = \"1\",\n" +
+                        "    \"dynamic_partition.enable\" = \"true\",\n" +
+                        "    \"dynamic_partition.time_unit\" = \"DAY\",\n" +
+                        "    \"dynamic_partition.start\" = \"-3\",\n" +
+                        "    \"dynamic_partition.end\" = \"3\",\n" +
+                        "    \"dynamic_partition.history_partition_num\" = \"0\"\n" +
+                        ");"));
 
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable tbl6 = (OlapTable) db.getTable("tbl6");
@@ -229,6 +282,36 @@ public class CreateTableTest {
                         () -> createTable("create table test.atbl8\n" + "(key1 int, key2 varchar(10))\n"
                                 + "distributed by hash(key1) buckets 1\n"
                                 + "properties('replication_num' = '1', 'compression' = 'xxx');"));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Unknown properties: {asd=true, enable_storage_cache=true, storage_cache_ttl=86400}",
+                () -> createTable("CREATE TABLE test.demo (k0 tinyint NOT NULL, k1 date NOT NULL, k2 int NOT NULL," +
+                        " k3 datetime not NULL, k4 bigint not NULL, k5 largeint not NULL) \n" +
+                        "ENGINE = OLAP \n" +
+                        "PRIMARY KEY( k0, k1, k2) \n" +
+                        "PARTITION BY RANGE (k1) (START (\"1970-01-01\") END (\"2022-09-30\") " +
+                        "EVERY (INTERVAL 60 day)) DISTRIBUTED BY HASH(k0) BUCKETS 1 " +
+                        "PROPERTIES (\"replication_num\"=\"1\",\"enable_persistent_index\" = \"false\"," +
+                        "\"enable_storage_cache\" = \"true\",\"storage_cache_ttl\" = \"86400\",\"asd\" = \"true\");"));
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "Unknown properties: {abc=def}",
+                () -> createTable("CREATE TABLE test.lake_table\n" +
+                        "(\n" +
+                        "    k1 DATE,\n" +
+                        "    k2 INT,\n" +
+                        "    k3 SMALLINT,\n" +
+                        "    v1 VARCHAR(2048),\n" +
+                        "    v2 DATETIME DEFAULT \"2014-02-04 15:36:00\"\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(k1, k2, k3)\n" +
+                        "PARTITION BY RANGE (k1, k2, k3)\n" +
+                        "(\n" +
+                        "    PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),\n" +
+                        "    PARTITION p2 VALUES [(\"2014-06-01\", \"100\", \"200\"), (\"2014-07-01\", \"100\", \"300\"))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 32\n" +
+                        "PROPERTIES ( \"replication_num\" = \"1\", \"abc\" = \"def\");"));
     }
 
     @Test
@@ -700,5 +783,108 @@ public class CreateTableTest {
                                 "\"foreign_key_constraints\" = \"(k3,k4) REFERENCES parent_table2(k1)\"\n" +
                                 ");"
                 ));
+<<<<<<< HEAD
+=======
+
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Not support MAXVALUE in multi partition range values.",
+                () -> createTable(
+                        "create table test_multi_partition_max_value (\n" +
+                                "f1 bigint, f2 date, f3 string, f4 bigint\n" +
+                                ")\n" +
+                                "partition by range(f1, f2, f4) (\n" +
+                                "        partition p1 values less than('10', '2020-01-01', '100'),\n" +
+                                "        partition p2 values less than('20', '2020-01-01', '200'),\n" +
+                                "        partition p3 values less than(MAXVALUE)\n" +
+                                ");"
+                ));
+    }
+
+    @Test
+    public void testCreateCrossDatabaseColocateTable() throws Exception {
+        starRocksAssert.withDatabase("dwd");
+        String sql1 = "CREATE TABLE dwd.dwd_site_scan_dtl_test (\n" +
+                "ship_id int(11) NOT NULL COMMENT \" \",\n" +
+                "sub_ship_id bigint(20) NOT NULL COMMENT \" \"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(ship_id, sub_ship_id) COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(ship_id) BUCKETS 48\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"colocate_with\" = \"ship_id_public\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");";
+        starRocksAssert.withTable(sql1);
+
+        starRocksAssert.withDatabase("ods");
+        String sql2 = "CREATE TABLE ods.reg_bill_info_test (\n" +
+                "unit_tm datetime NOT NULL COMMENT \" \",\n" +
+                "ship_id int(11) NOT NULL COMMENT \" \",\n" +
+                "ins_db_tm datetime NULL COMMENT \" \"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(unit_tm, ship_id)\n" +
+                "DISTRIBUTED BY HASH(ship_id) BUCKETS 48\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"colocate_with\" = \"ship_id_public\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");";
+        starRocksAssert.withTable(sql2);
+
+        List<List<String>> result = GlobalStateMgr.getCurrentState().getColocateTableIndex().getInfos();
+        System.out.println(result);
+        List<String> groupIds = new ArrayList<>();
+        for (List<String> e : result) {
+            if (e.get(1).contains("ship_id_public")) {
+                groupIds.add(e.get(0));
+            }
+        }
+        Assert.assertEquals(2, groupIds.size());
+        System.out.println(groupIds);
+        // colocate groups in different db should have same `GroupId.grpId`
+        Assert.assertEquals(groupIds.get(0).split("\\.")[1], groupIds.get(1).split("\\.")[1]);
+    }
+
+    @Test
+    public void testCreatePartitionByExprTable() {
+        ExceptionChecker.expectThrowsNoException(
+                () -> createTable(
+                        "CREATE TABLE test.`bill_detail` (\n" +
+                                "  `bill_code` varchar(200) NOT NULL DEFAULT \"\" COMMENT \"\"\n" +
+                                ") ENGINE=OLAP \n" +
+                                "PRIMARY KEY(`bill_code`)\n" +
+                                "PARTITION BY RANGE(cast(substring(bill_code, 3) as bigint))\n" +
+                                "(PARTITION p1 VALUES [('0'), ('5000000')),\n" +
+                                "PARTITION p2 VALUES [('5000000'), ('10000000')),\n" +
+                                "PARTITION p3 VALUES [('10000000'), ('15000000')),\n" +
+                                "PARTITION p4 VALUES [('15000000'), ('20000000'))\n" +
+                                ")\n" +
+                                "DISTRIBUTED BY HASH(`bill_code`) BUCKETS 10 \n" +
+                                "PROPERTIES (\n" +
+                                "\"replication_num\" = \"1\",\n" +
+                                "\"in_memory\" = \"false\",\n" +
+                                "\"storage_format\" = \"DEFAULT\"\n" +
+                                ");"
+                ));
+    }
+
+    @Test
+    public void testReservedColumnName() {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "create table tbl_simple_pk(key0 string, __op boolean) primary key(key0)" +
+                " distributed by hash(key0) properties(\"replication_num\"=\"1\");";
+        ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
+                "Column name [__op] is a system reserved name." +
+                " If you are sure you want to use it, please set FE configuration allow_system_reserved_names",
+                () -> starRocksAssert.withTable(sql1));
+>>>>>>> 2.5.18
     }
 }

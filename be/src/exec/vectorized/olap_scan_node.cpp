@@ -39,7 +39,7 @@ OlapScanNode::OlapScanNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
 }
 
 Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
-    RETURN_IF_ERROR(ExecNode::init(tnode, state));
+    RETURN_IF_ERROR(ScanNode::init(tnode, state));
     DCHECK(!tnode.olap_scan_node.__isset.sort_column) << "sorted result not supported any more";
 
     // init filtered_output_columns
@@ -60,9 +60,15 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
 
     if (_olap_scan_node.__isset.max_parallel_scan_instance_num && _olap_scan_node.max_parallel_scan_instance_num >= 1) {
+<<<<<<< HEAD
         // The parallel scan num will be restricted by the config::io_tasks_per_scan_operator.
         _io_tasks_per_scan_operator =
                 std::min(_olap_scan_node.max_parallel_scan_instance_num, config::io_tasks_per_scan_operator);
+=======
+        // The parallel scan num will be restricted by the io_tasks_per_scan_operator.
+        _io_tasks_per_scan_operator =
+                std::min(_olap_scan_node.max_parallel_scan_instance_num, _io_tasks_per_scan_operator);
+>>>>>>> 2.5.18
     }
 
     _estimate_scan_and_output_row_bytes();
@@ -165,7 +171,7 @@ Status OlapScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
         // is the first time of calling `get_next`, pass the second argument of `_fill_chunk_pool` as
         // true to ensure that the newly allocated column objects will be returned back into the column
         // pool.
-        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1, first_call));
+        TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(1, first_call && state->use_column_pool()));
         eval_join_runtime_filters(chunk);
         _num_rows_returned += (*chunk)->num_rows();
         COUNTER_SET(_rows_returned_counter, _num_rows_returned);
@@ -403,6 +409,9 @@ StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(
         const std::vector<TScanRangeParams>& scan_ranges, int32_t pipeline_dop, size_t num_total_scan_ranges,
         TTabletInternalParallelMode::type tablet_internal_parallel_mode, int64_t* scan_dop,
         int64_t* splitted_scan_rows) const {
+    if (_olap_scan_node.use_pk_index) {
+        return false;
+    }
     bool force_split = tablet_internal_parallel_mode == TTabletInternalParallelMode::type::FORCE_SPLIT;
     // The enough number of tablets shouldn't use tablet internal parallel.
     if (!force_split && num_total_scan_ranges >= pipeline_dop) {
@@ -647,7 +656,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
     COUNTER_SET(_task_concurrency, (int64_t)concurrency);
     int chunks = _chunks_per_scanner * concurrency;
     _chunk_pool.reserve(chunks);
-    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, true));
+    TRY_CATCH_BAD_ALLOC(_fill_chunk_pool(chunks, state->use_column_pool()));
     std::lock_guard<std::mutex> l(_mtx);
     for (int i = 0; i < concurrency; i++) {
         CHECK(_submit_scanner(_pending_scanners.pop(), true));
@@ -705,27 +714,6 @@ Status OlapScanNode::_capture_tablet_rowsets() {
     return Status::OK();
 }
 
-size_t _estimate_type_bytes(PrimitiveType ptype) {
-    switch (ptype) {
-    case TYPE_VARCHAR:
-    case TYPE_CHAR:
-    case TYPE_ARRAY:
-        return 128;
-    case TYPE_JSON:
-        // 1KB.
-        return 1024;
-    case TYPE_HLL:
-        // 16KB.
-        return 16 * 1024;
-    case TYPE_OBJECT:
-    case TYPE_PERCENTILE:
-        // 1MB.
-        return 1024 * 1024;
-    default:
-        return 0;
-    }
-}
-
 void OlapScanNode::_estimate_scan_and_output_row_bytes() {
     const TOlapScanNode& thrift_scan_node = thrift_olap_scan_node();
     const TupleDescriptor* tuple_desc = runtime_state()->desc_tbl().get_tuple_descriptor(thrift_scan_node.tuple_id);
@@ -738,7 +726,7 @@ void OlapScanNode::_estimate_scan_and_output_row_bytes() {
 
     for (const auto& slot : slots) {
         size_t field_bytes = std::max<size_t>(slot->slot_size(), 0);
-        field_bytes += _estimate_type_bytes(slot->type().type);
+        field_bytes += type_estimated_overhead_bytes(slot->type().type);
 
         _estimated_scan_row_bytes += field_bytes;
         if (unused_output_column_set.find(slot->col_name()) == unused_output_column_set.end()) {
@@ -748,7 +736,11 @@ void OlapScanNode::_estimate_scan_and_output_row_bytes() {
 }
 
 size_t OlapScanNode::_scanner_concurrency() const {
+<<<<<<< HEAD
     // The max scan parallel num for pipeline engine is config::io_tasks_per_scan_operator,
+=======
+    // The max scan parallel num for pipeline engine is io_tasks_per_scan_operator(),
+>>>>>>> 2.5.18
     // But the max scan parallel num of non-pipeline engine is kMaxConcurrency.
     // This functions is only used for non-pipeline engine,
     // so use the min value of concurrency which is calculated and max_parallel_scan_instance_num.
@@ -806,9 +798,8 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
 
     size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
     size_t default_buffer_capacity = std::min<size_t>(max_buffer_capacity, estimated_max_concurrent_chunks());
-    int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
-            max_buffer_capacity, default_buffer_capacity, mem_limit, runtime_state()->chunk_size());
+            max_buffer_capacity, default_buffer_capacity, _mem_limit, runtime_state()->chunk_size());
 
     auto scan_ctx_factory = std::make_shared<pipeline::OlapScanContextFactory>(
             this, dop, shared_morsel_queue, _enable_shared_scan, std::move(buffer_limiter));

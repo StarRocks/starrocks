@@ -4,6 +4,8 @@ package com.starrocks.sql.optimizer.cost;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Lists;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -21,6 +23,7 @@ import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -44,8 +47,11 @@ import com.starrocks.statistic.StatisticUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.EXECUTE_COST_PENALTY;
 
 public class CostModel {
 
@@ -113,11 +119,61 @@ public class CostModel {
             return CostEstimate.zero();
         }
 
+        private CostEstimate adjustCostForMV(ExpressionContext context) {
+            Statistics mvStatistics = context.getStatistics();
+            Group group = context.getGroupExpression().getGroup();
+            List<Double> costs = Lists.newArrayList();
+            // get the costs of all expression in this group
+            for (Pair<Double, GroupExpression> pair : group.getAllBestExpressionWithCost()) {
+                if (!(pair.second.getOp() instanceof PhysicalOlapScanOperator)) {
+                    costs.add(pair.first);
+                }
+            }
+            double groupMinCost = Double.MAX_VALUE;
+            if (costs.size() > 0) {
+                groupMinCost = Collections.min(costs);
+            }
+            // use row count as the adjust cost
+            double adjustCost = mvStatistics.getOutputRowCount();
+            return CostEstimate.of(Math.min(Math.max(groupMinCost - 1, 0), adjustCost), 0, 0);
+        }
+
         @Override
         public CostEstimate visitPhysicalOlapScan(PhysicalOlapScanOperator node, ExpressionContext context) {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
+            if (node.getTable().isMaterializedView()) {
+                // If materialized view force rewrite is enabled, hack the materialized view
+                // as zero so can be chosen by the optimizer.
+                ConnectContext ctx = ConnectContext.get();
+                SessionVariable sessionVariable = ctx.getSessionVariable();
+                if (sessionVariable.isEnableMaterializedViewForceRewrite()) {
+                    return CostEstimate.zero();
+                }
 
+                Statistics groupStatistics = context.getGroupStatistics();
+                Statistics mvStatistics = context.getStatistics();
+                // only adjust cost for mv scan operator when group statistics is unknown and mv group expression
+                // statistics is not unknown
+                if (groupStatistics != null && groupStatistics.getColumnStatistics().values().stream().
+                        anyMatch(ColumnStatistic::isUnknown) && mvStatistics.getColumnStatistics().values().stream().
+                        noneMatch(ColumnStatistic::isUnknown)) {
+                    return adjustCostForMV(context);
+                } else {
+                    ColumnRefSet usedColumns = statistics.getUsedColumns();
+                    Projection projection = node.getProjection();
+                    if (projection != null) {
+                        // we will add a projection on top of rewritten mv plan to keep the output columns the same as
+                        // original query.
+                        // excludes this projection keys when costing mv,
+                        // or the cost of mv may be larger than original query,
+                        // which will lead to mismatch of mv
+                        usedColumns.except(projection.getColumnRefMap().keySet());
+                    }
+                    // use the used columns to calculate the cost of mv
+                    return CostEstimate.of(statistics.getOutputSize(usedColumns), 0, 0);
+                }
+            }
             return CostEstimate.of(statistics.getComputeSize(), 0, 0);
         }
 
@@ -356,7 +412,7 @@ public class CostModel {
 
             Preconditions.checkState(!(join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()),
                     "should be handled by nestloopjoin");
-            HashJoinCostModel joinCostModel = new HashJoinCostModel(context, inputProperties, eqOnPredicates);
+            HashJoinCostModel joinCostModel = new HashJoinCostModel(context, inputProperties, eqOnPredicates, statistics);
             return CostEstimate.of(joinCostModel.getCpuCost(), joinCostModel.getMemCost(), 0);
         }
 
@@ -377,7 +433,7 @@ public class CostModel {
                 return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
                                 + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
                         rightStatistics.getOutputSize(context.getChildOutputColumns(1))
-                                * StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY * 2, 0);
+                                * EXECUTE_COST_PENALTY * 100D, 0);
             } else {
                 return CostEstimate.of((leftStatistics.getOutputSize(context.getChildOutputColumns(0))
                                 + rightStatistics.getOutputSize(context.getChildOutputColumns(1)) / 2),
@@ -393,14 +449,25 @@ public class CostModel {
 
             double leftSize = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
             double rightSize = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
-            double cpuCost = StatisticUtils.multiplyOutputSize(leftSize, StatisticUtils.multiplyOutputSize(rightSize,
-                    StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY));
-            double memCost = StatisticUtils.multiplyOutputSize(rightSize,
-                    StatisticsEstimateCoefficient.CROSS_JOIN_COST_PENALTY * 100D);
 
+            long crossJoinCostPenalty = ConnectContext.get().getSessionVariable().getCrossJoinCostPenalty();
+
+            double cpuCost = StatisticUtils.multiplyOutputSize(StatisticUtils.multiplyOutputSize(leftSize, rightSize),
+                    EXECUTE_COST_PENALTY);
+            double memCost = StatisticUtils.multiplyOutputSize(rightSize, EXECUTE_COST_PENALTY * 100D);
+
+
+            if (join.getJoinType().isCrossJoin()) {
+                cpuCost = StatisticUtils.multiplyOutputSize(cpuCost, crossJoinCostPenalty);
+            }
             // Right cross join could not be parallelized, so apply more punishment
             if (join.getJoinType().isRightJoin()) {
-                cpuCost += StatisticsEstimateCoefficient.CROSS_JOIN_RIGHT_COST_PENALTY;
+                // Add more punishment when right size is 10x greater than left size.
+                if (rightSize > 10 * leftSize) {
+                    cpuCost *= EXECUTE_COST_PENALTY;
+                } else {
+                    cpuCost += EXECUTE_COST_PENALTY;
+                }
                 memCost += rightSize;
             }
             if (join.getJoinType().isOuterJoin() || join.getJoinType().isSemiJoin() ||

@@ -7,17 +7,21 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.util.ParseUtil;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static java.util.stream.Collectors.toList;
 
@@ -35,7 +39,7 @@ public class AstToSQLBuilder {
         return new AST2SQLBuilderVisitor(sameCatalogDb).visit(statement);
     }
 
-    public static String toSQL(StatementBase statement) {
+    public static String toSQL(ParseNode statement) {
         return new AST2SQLBuilderVisitor(false).visit(statement);
     }
 
@@ -186,6 +190,12 @@ public class AstToSQLBuilder {
         }
 
         @Override
+        public String visitSubquery(SubqueryRelation subquery, Void context) {
+            return "(" + visit(subquery.getQueryStatement()) + ")"
+                    + " " + (subquery.getAlias() == null ? "" : ParseUtil.backquote(subquery.getAlias().getTbl()));
+        }
+
+        @Override
         public String visitView(ViewRelation node, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
             sqlBuilder.append(node.getName().toSql());
@@ -217,6 +227,32 @@ public class AstToSQLBuilder {
                 sqlBuilder.append(" AS ");
                 sqlBuilder.append("`").append(node.getAlias().getTbl()).append("`");
             }
+            return sqlBuilder.toString();
+        }
+
+        @Override
+        public String visitTableFunction(TableFunctionRelation node, Void scope) {
+            StringBuilder sqlBuilder = new StringBuilder();
+
+            sqlBuilder.append(node.getFunctionName());
+            sqlBuilder.append("(");
+
+            List<String> childSql = node.getChildExpressions().stream().map(this::visit).collect(toList());
+            sqlBuilder.append(Joiner.on(",").join(childSql));
+
+            sqlBuilder.append(")");
+            if (node.getAlias() != null) {
+                sqlBuilder.append(" ").append(node.getAlias().getTbl());
+
+                if (node.getColumnNames() != null) {
+                    sqlBuilder.append("(");
+                    String names = node.getColumnNames().stream().map(c -> "`" + c + "`")
+                            .collect(Collectors.joining(","));
+                    sqlBuilder.append(names);
+                    sqlBuilder.append(")");
+                }
+            }
+
             return sqlBuilder.toString();
         }
 

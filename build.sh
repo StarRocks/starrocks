@@ -58,7 +58,6 @@ Usage: $0 <options>
      --fe               build Frontend and Spark Dpp application
      --spark-dpp        build Spark DPP application
      --clean            clean and build target
-     --use-staros       build Backend with staros
      --with-gcov        build Backend with gcov, has an impact on performance
      --without-gcov     build Backend without gcov(default)
      --with-bench       build Backend with bench(default without bench)
@@ -86,7 +85,6 @@ OPTS=$(getopt \
   -l 'with-gcov' \
   -l 'with-bench' \
   -l 'without-gcov' \
-  -l 'use-staros' \
   -o 'j:' \
   -l 'help' \
   -- "$@")
@@ -104,7 +102,6 @@ CLEAN=
 RUN_UT=
 WITH_GCOV=OFF
 WITH_BENCH=OFF
-USE_STAROS=OFF
 if [[ -z ${USE_AVX2} ]]; then
     USE_AVX2=ON
 fi
@@ -171,7 +168,6 @@ else
             --ut) RUN_UT=1   ; shift ;;
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
-            --use-staros) USE_STAROS=ON; shift ;;
             --with-bench) WITH_BENCH=ON; shift ;;
             -h) HELP=1; shift ;;
             --help) HELP=1; shift ;;
@@ -201,7 +197,6 @@ echo "Get params:
     RUN_UT              -- $RUN_UT
     WITH_GCOV           -- $WITH_GCOV
     WITH_BENCH          -- $WITH_BENCH
-    USE_STAROS          -- $USE_STAROS
     USE_AVX2            -- $USE_AVX2
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
@@ -241,43 +236,18 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     fi
     mkdir -p ${CMAKE_BUILD_DIR}
     cd ${CMAKE_BUILD_DIR}
-    if [ "${USE_STAROS}" == "ON"  ]; then
-      if [ -z "$STARLET_INSTALL_DIR" ] ; then
-        # assume starlet_thirdparty is installed to ${STARROCKS_THIRDPARTY}/installed/starlet/
-        STARLET_INSTALL_DIR=${STARROCKS_THIRDPARTY}/installed/starlet
-      fi
-      ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
-                    -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} \
-                    -DSTARROCKS_HOME=${STARROCKS_HOME} \
-                    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-                    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-                    -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}\
-                    -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
-                    -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE \
-                    -DUSE_JEMALLOC=$USE_JEMALLOC \
-                    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-                    -DUSE_STAROS=${USE_STAROS} \
-                    -DWITH_BENCH=${WITH_BENCH} \
-                    -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
-                    -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
-                    -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
-                    -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
-                    -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \
-                    -Dstarlet_DIR=${STARLET_INSTALL_DIR}/starlet_install/lib64/cmake ..
-    else
-      ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
-                    -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} \
-                    -DSTARROCKS_HOME=${STARROCKS_HOME} \
-                    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-                    -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-                    -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}\
-                    -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
-                    -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE \
-                    -DUSE_JEMALLOC=$USE_JEMALLOC \
-                    -DWITH_BENCH=${WITH_BENCH} \
-                    -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
-                    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
-    fi
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+                  -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY} \
+                  -DSTARROCKS_HOME=${STARROCKS_HOME} \
+                  -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+                  -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+                  -DMAKE_TEST=OFF -DWITH_GCOV=${WITH_GCOV}\
+                  -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
+                  -DENABLE_QUERY_DEBUG_TRACE=$ENABLE_QUERY_DEBUG_TRACE \
+                  -DUSE_JEMALLOC=$USE_JEMALLOC \
+                  -DWITH_BENCH=${WITH_BENCH} \
+                  -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
+                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  ..
     time ${BUILD_SYSTEM} -j${PARALLEL}
     ${BUILD_SYSTEM} install
 
@@ -339,6 +309,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/fe/lib/
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler/* ${STARROCKS_OUTPUT}/fe/bin/
 
     elif [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         install -d ${STARROCKS_OUTPUT}/fe/spark-dpp/
@@ -366,6 +337,20 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/be/output/conf/asan_suppressions.conf ${STARROCKS_OUTPUT}/be/conf/
     fi
     cp -r -p ${STARROCKS_HOME}/be/output/lib/* ${STARROCKS_OUTPUT}/be/lib/
+    # format $BUILD_TYPE to lower case
+    ibuildtype=`echo ${BUILD_TYPE} | tr 'A-Z' 'a-z'`
+    if [ "${ibuildtype}" == "release" ] ; then
+        pushd ${STARROCKS_OUTPUT}/be/lib/ &>/dev/null
+        BE_BIN=starrocks_be
+        BE_BIN_DEBUGINFO=starrocks_be.debuginfo
+        echo "Split $BE_BIN debug symbol to $BE_BIN_DEBUGINFO ..."
+        # strip be binary
+        # if eu-strip is available, can replace following three lines into `eu-strip -g -f starrocks_be.debuginfo starrocks_be`
+        objcopy --only-keep-debug $BE_BIN $BE_BIN_DEBUGINFO
+        strip --strip-debug $BE_BIN
+        objcopy --add-gnu-debuglink=$BE_BIN_DEBUGINFO $BE_BIN
+        popd &>/dev/null
+    fi
     cp -r -p ${STARROCKS_HOME}/be/output/www/* ${STARROCKS_OUTPUT}/be/www/
     cp -r -p ${STARROCKS_HOME}/java-extensions/jdbc-bridge/target/starrocks-jdbc-bridge-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
     cp -r -p ${STARROCKS_HOME}/java-extensions/udf-extensions/target/udf-extensions-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages

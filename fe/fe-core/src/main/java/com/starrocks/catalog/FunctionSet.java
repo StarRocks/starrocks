@@ -51,6 +51,7 @@ public class FunctionSet {
     // Date functions:
     public static final String CONVERT_TZ = "convert_tz";
     public static final String CURDATE = "curdate";
+    public static final String CURRENT_DATE = "current_date";
     public static final String CURRENT_TIMESTAMP = "current_timestamp";
     public static final String CURTIME = "curtime";
     public static final String CURRENT_TIME = "current_time";
@@ -80,6 +81,9 @@ public class FunctionSet {
     public static final String TO_DAYS = "to_days";
     public static final String UNIX_TIMESTAMP = "unix_timestamp";
     public static final String UTC_TIMESTAMP = "utc_timestamp";
+    public static final String UTC_TIME = "utc_time";
+    public static final String LOCALTIME = "localtime";
+    public static final String LOCALTIMESTAMP = "localtimestamp";
     public static final String WEEKOFYEAR = "weekofyear";
     public static final String YEAR = "year";
     public static final String MINUTES_DIFF = "minutes_diff";
@@ -224,6 +228,9 @@ public class FunctionSet {
     public static final String VARIANCE_POP = "variance_pop";
     public static final String VAR_SAMP = "var_samp";
     public static final String VARIANCE_SAMP = "variance_samp";
+    public static final String COVAR_POP = "covar_pop";
+    public static final String COVAR_SAMP = "covar_samp";
+    public static final String CORR = "corr";
     public static final String ANY_VALUE = "any_value";
     public static final String SUM_DISTINCT = "sum_distinct";
     public static final String STD = "std";
@@ -258,6 +265,7 @@ public class FunctionSet {
     public static final String BITMAP_TO_STRING = "bitmap_to_string";
     public static final String BITMAP_TO_ARRAY = "bitmap_to_array";
     public static final String BITMAP_UNION = "bitmap_union";
+    public static final String BITMAP_AGG = "bitmap_agg";
     public static final String BITMAP_XOR = "bitmap_xor";
     public static final String TO_BITMAP = "to_bitmap";
     public static final String BITMAP_COUNT = "bitmap_count";
@@ -265,6 +273,7 @@ public class FunctionSet {
     public static final String BITMAP_UNION_INT = "bitmap_union_int";
     public static final String INTERSECT_COUNT = "intersect_count";
     public static final String BITMAP_DICT = "bitmap_dict";
+    public static final String BITMAP_FROM_BINARY = "bitmap_from_binary";
     public static final String EXCHANGE_BYTES = "exchange_bytes";
     public static final String EXCHANGE_SPEED = "exchange_speed";
     // Array functions:
@@ -390,7 +399,7 @@ public class FunctionSet {
 
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
-            new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
+            new FunctionName(JSON_QUERY), new Type[]{Type.JSON, Type.VARCHAR}, Type.JSON, false);
 
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
@@ -418,6 +427,15 @@ public class FunctionSet {
                     .add(Type.DECIMAL32)
                     .add(Type.DECIMAL64)
                     .add(Type.DECIMAL128)
+                    .add(Type.BIGINT)
+                    .add(Type.FLOAT)
+                    .add(Type.DOUBLE)
+                    .build();
+    private static final Set<Type> COVAR_ARG_TYPE =
+            ImmutableSet.<Type>builder()
+                    .add(Type.TINYINT)
+                    .add(Type.SMALLINT)
+                    .add(Type.INT)
                     .add(Type.BIGINT)
                     .add(Type.FLOAT)
                     .add(Type.DOUBLE)
@@ -525,6 +543,25 @@ public class FunctionSet {
                     .add(SLEEP)
                     .build();
 
+    // Only use query cache if these time function can be reduced into a constant
+    // date/datetime value after applying FoldConstantRule, otherwise BE would yield
+    // non-deterministic result when these function is delivered to BE.
+    public static final Set<String> nonDeterministicTimeFunctions =
+            ImmutableSet.<String>builder()
+                    .add(CURTIME)
+                    .add(CURDATE)
+                    .add(CURRENT_DATE)
+                    .add(CURRENT_TIMESTAMP)
+                    .add(CURRENT_TIME)
+                    .add(NOW)
+                    .add(UNIX_TIMESTAMP)
+                    .add(UTC_TIMESTAMP)
+                    .add(UTC_TIME)
+                    .add(LOCALTIME)
+                    .add(LOCALTIMESTAMP)
+                    .add()
+                    .build();
+
     public static final Set<String> onlyAnalyticUsedFunctions = ImmutableSet.<String>builder()
             .add(FunctionSet.DENSE_RANK)
             .add(FunctionSet.RANK)
@@ -546,6 +583,22 @@ public class FunctionSet {
             .add(FunctionSet.STDDEV_POP)
             .add(FunctionSet.STDDEV_SAMP)
             .add(FunctionSet.STDDEV_VAL).build();
+
+    public static final Set<String> STATISTIC_FUNCTIONS = ImmutableSet.<String>builder()
+            .addAll(varianceFunctions)
+            .add(FunctionSet.COVAR_POP)
+            .add(FunctionSet.COVAR_SAMP)
+            .add(FunctionSet.CORR)
+            .build();
+
+
+    public static final Set<String> IGNORE_NULL_WINDOW_FUNCTION =
+            ImmutableSet.<String>builder().add(FunctionSet.FIRST_VALUE)
+                    .add(FunctionSet.LAST_VALUE)
+                    .add(FunctionSet.FIRST_VALUE_REWRITE)
+                    .add(FunctionSet.LEAD)
+                    .add(FunctionSet.LAG)
+                    .build();
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
@@ -583,10 +636,12 @@ public class FunctionSet {
 
         // ifnull, nullif(DATE, DATETIME) should return datetime, not bigint
         // if(boolean, DATE, DATETIME) should return datetime
+        // coalesce(DATE, DATETIME) should return datetime
         int arg_index = 0;
         if (functionName.equalsIgnoreCase(IFNULL) ||
                 functionName.equalsIgnoreCase(NULLIF) ||
-                functionName.equalsIgnoreCase(IF)) {
+                functionName.equalsIgnoreCase(IF) ||
+                functionName.equalsIgnoreCase(COALESCE)) {
             if (functionName.equalsIgnoreCase(IF)) {
                 arg_index = 1;
             }
@@ -871,6 +926,18 @@ public class FunctionSet {
                         Lists.newArrayList(t), Type.DOUBLE, Type.VARCHAR,
                         false, true, false));
             }
+
+            if(COVAR_ARG_TYPE.contains(t)){
+                addBuiltin(AggregateFunction.createBuiltin(COVAR_POP,
+                        Lists.newArrayList(t, t), Type.DOUBLE, Type.VARCHAR,
+                        false, true, false));
+                addBuiltin(AggregateFunction.createBuiltin(COVAR_SAMP,
+                        Lists.newArrayList(t, t), Type.DOUBLE, Type.VARCHAR,
+                        false, true, false));
+                addBuiltin(AggregateFunction.createBuiltin(CORR,
+                        Lists.newArrayList(t, t), Type.DOUBLE, Type.VARCHAR,
+                        false, true, false));
+            }
         }
 
         // Sum
@@ -922,6 +989,20 @@ public class FunctionSet {
                 Type.BITMAP,
                 Type.BITMAP,
                 true, false, true));
+
+        // Type.VARCHAR must before all other type, so bitmap_agg(varchar) can convert to bitmap_agg(bigint)
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.BIGINT),
+                Type.BITMAP, Type.BITMAP, true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.LARGEINT),
+                Type.BITMAP, Type.BITMAP, true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.INT),
+                Type.BITMAP, Type.BITMAP, true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.SMALLINT),
+                Type.BITMAP, Type.BITMAP, true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.TINYINT),
+                Type.BITMAP, Type.BITMAP, true, false, true));
+        addBuiltin(AggregateFunction.createBuiltin(BITMAP_AGG, Lists.newArrayList(Type.BOOLEAN),
+                Type.BITMAP, Type.BITMAP, true, false, true));
 
         addBuiltin(AggregateFunction.createBuiltin(BITMAP_UNION_COUNT, Lists.newArrayList(Type.BITMAP),
                 Type.BIGINT,
@@ -1134,7 +1215,7 @@ public class FunctionSet {
                     false, false, false));
         }
     }
-
+    
     public List<Function> getBuiltinFunctions() {
         List<Function> builtinFunctions = Lists.newArrayList();
         for (Map.Entry<String, List<Function>> entry : vectorizedFunctions.entrySet()) {

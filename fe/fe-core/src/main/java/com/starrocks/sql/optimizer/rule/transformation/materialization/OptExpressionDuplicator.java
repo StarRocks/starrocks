@@ -14,6 +14,10 @@ import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
+import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -57,6 +61,10 @@ public class OptExpressionDuplicator {
     public OptExpression duplicate(OptExpression source) {
         OptExpressionDuplicatorVisitor visitor = new OptExpressionDuplicatorVisitor();
         return source.getOp().accept(visitor, source, null);
+    }
+
+    public Map<ColumnRefOperator, ScalarOperator> getColumnMapping() {
+        return columnMapping;
     }
 
     public List<ColumnRefOperator> getMappedColumns(List<ColumnRefOperator> originColumns) {
@@ -106,12 +114,22 @@ public class OptExpressionDuplicator {
             ImmutableMap<Column, ColumnRefOperator> newColumnMetaToColRefMap = columnMetaToColRefMapBuilder.build();
             scanBuilder.setColumnMetaToColRefMap(newColumnMetaToColRefMap);
 
+            // process HashDistributionSpec
+            if (optExpression.getOp() instanceof LogicalOlapScanOperator) {
+                LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
+                HashDistributionSpec newHashDistributionSpec =
+                        processHashDistributionSpec(olapScan.getDistributionSpec(), columnRefFactory, columnMapping);
+                LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
+                olapScanBuilder.setHashDistributionSpec(newHashDistributionSpec);
+            }
+
             processCommon(opBuilder);
 
             if (partialPartitionRewrite
                     && optExpression.getOp() instanceof LogicalOlapScanOperator
                     && partitionByTable != null) {
                 // maybe partition column is not in the output columns, should add it
+
                 LogicalOlapScanOperator olapScan = (LogicalOlapScanOperator) optExpression.getOp();
                 OlapTable table = (OlapTable) olapScan.getTable();
                 if (table.getId() == partitionByTable.getId()) {
@@ -228,6 +246,57 @@ public class OptExpressionDuplicator {
         @Override
         public OptExpression visit(OptExpression optExpression, Void context) {
             return null;
+        }
+
+        // rewrite shuffle columns and joinEquivalentColumns in HashDistributionSpec
+        // because the columns ids have changed
+        private HashDistributionSpec processHashDistributionSpec(
+                HashDistributionSpec originSpec,
+                ColumnRefFactory columnRefFactory,
+                Map<ColumnRefOperator, ScalarOperator> columnMapping) {
+
+            // HashDistributionDesc
+            List<Integer> newColumnIds = Lists.newArrayList();
+            for (Integer columnId : originSpec.getShuffleColumns()) {
+                ColumnRefOperator oldRefOperator = columnRefFactory.getColumnRef(columnId);
+                ColumnRefOperator newRefOperator = columnMapping.get(oldRefOperator).cast();
+                Preconditions.checkNotNull(newRefOperator);
+                newColumnIds.add(newRefOperator.getId());
+            }
+            Preconditions.checkState(newColumnIds.size() == originSpec.getShuffleColumns().size());
+            HashDistributionDesc hashDistributionDesc =
+                    new HashDistributionDesc(newColumnIds, originSpec.getHashDistributionDesc().getSourceType());
+
+            // PropertyInfo
+            DistributionSpec.PropertyInfo propertyInfo = originSpec.getPropertyInfo();
+            ColumnRefSet newNullableColumns = rewriteColumnRefSet(propertyInfo.nullableColumns, columnRefFactory, columnMapping);
+
+            DistributionSpec.PropertyInfo newPropertyInfo = new DistributionSpec.PropertyInfo();
+            newPropertyInfo.tableId = propertyInfo.tableId;
+            newPropertyInfo.partitionIds = propertyInfo.partitionIds;
+            newPropertyInfo.nullableColumns = newNullableColumns;
+            for (Map.Entry<Integer, ColumnRefSet> entry : propertyInfo.joinEquivalentColumns.entrySet()) {
+                ColumnRefOperator keyColumn = columnRefFactory.getColumnRef(entry.getKey());
+                ColumnRefOperator newRefOperator = columnMapping.get(keyColumn).cast();
+                Preconditions.checkNotNull(newRefOperator);
+                ColumnRefSet newColumnSet = rewriteColumnRefSet(entry.getValue(), columnRefFactory, columnMapping);
+                newPropertyInfo.joinEquivalentColumns.put(newRefOperator.getId(), newColumnSet);
+            }
+            return new HashDistributionSpec(hashDistributionDesc, newPropertyInfo);
+        }
+
+        private ColumnRefSet rewriteColumnRefSet(
+                ColumnRefSet oldRefSet,
+                ColumnRefFactory columnRefFactory,
+                Map<ColumnRefOperator, ScalarOperator> columnMapping) {
+            ColumnRefSet newColumnSet = new ColumnRefSet();
+            for (Integer columnId : oldRefSet.getColumnIds()) {
+                ColumnRefOperator oldRefOperator = columnRefFactory.getColumnRef(columnId);
+                ColumnRefOperator newRefOperator = columnMapping.get(oldRefOperator).cast();
+                Preconditions.checkNotNull(newRefOperator);
+                newColumnSet.union(newRefOperator.getId());
+            }
+            return newColumnSet;
         }
 
         private void processCommon(Operator.Builder opBuilder) {

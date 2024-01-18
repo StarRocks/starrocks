@@ -26,6 +26,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotId;
 import com.starrocks.common.Pair;
 import com.starrocks.common.TreeNode;
 import com.starrocks.qe.ConnectContext;
@@ -43,8 +44,10 @@ import org.apache.commons.collections.CollectionUtils;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -127,6 +130,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     // Whether to assign scan ranges to each driver sequence of pipeline,
     // for the normal backend assignment (not colocate, bucket, and replicated join).
     protected boolean assignScanRangesPerDriverSeq = false;
+    protected boolean withLocalShuffle = false;
 
     protected final Map<Integer, RuntimeFilterDescription> buildRuntimeFilters = Maps.newTreeMap();
     protected final Map<Integer, RuntimeFilterDescription> probeRuntimeFilters = Maps.newTreeMap();
@@ -234,6 +238,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void setForceSetTableSinkDop() {
         this.forceSetTableSinkDop = true;
+    }
+
+    public boolean isWithLocalShuffle() {
+        return withLocalShuffle;
+    }
+
+    public void setWithLocalShuffleIfTrue(boolean withLocalShuffle) {
+        this.withLocalShuffle |= withLocalShuffle;
     }
 
     public boolean isAssignScanRangesPerDriverSeq() {
@@ -365,7 +377,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         return result;
     }
 
-    private List<TGlobalDict> dictToThrift(List<Pair<Integer, ColumnDict>> dicts) {
+    public List<TGlobalDict> dictToThrift(List<Pair<Integer, ColumnDict>> dicts) {
         List<TGlobalDict> result = Lists.newArrayList();
         for (Pair<Integer, ColumnDict> dictPair : dicts) {
             TGlobalDict globalDict = new TGlobalDict();
@@ -376,8 +388,28 @@ public class PlanFragment extends TreeNode<PlanFragment> {
                 strings.add(kv.getKey());
                 integers.add(kv.getValue());
             }
+            globalDict.setVersion(dictPair.second.getCollectedVersionTime());
             globalDict.setStrings(strings);
             globalDict.setIds(integers);
+            result.add(globalDict);
+        }
+        return result;
+    }
+
+    // normalize dicts of the fragment, it is different from dictToThrift in three points:
+    // 1. SlotIds must be replaced by remapped SlotIds;
+    // 2. dict should be sorted according to its corresponding remapped SlotIds;
+    public List<TGlobalDict> normalizeDicts(List<Pair<Integer, ColumnDict>> dicts, FragmentNormalizer normalizer) {
+        List<TGlobalDict> result = Lists.newArrayList();
+        // replace slot id with the remapped slot id, sort dicts according to remapped slot ids.
+        List<Pair<Integer, ColumnDict>> sortedDicts =
+                dicts.stream().map(p -> Pair.create(normalizer.remapSlotId(new SlotId(p.first)).asInt(), p.second))
+                        .sorted(Comparator.comparingInt(p -> p.first)).collect(Collectors.toList());
+
+        for (Pair<Integer, ColumnDict> dictPair : sortedDicts) {
+            TGlobalDict globalDict = new TGlobalDict();
+            globalDict.setColumnId(dictPair.first);
+            globalDict.setVersion(dictPair.second.getCollectedVersionTime());
             result.add(globalDict);
         }
         return result;
@@ -470,12 +502,20 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         dest.addChild(this);
     }
 
+    public void clearDestination() {
+        this.destNode = null;
+    }
+
     public DataPartition getDataPartition() {
         return dataPartition;
     }
 
     public void setOutputPartition(DataPartition outputPartition) {
         this.outputPartition = outputPartition;
+    }
+
+    public void clearOutputPartition() {
+        this.outputPartition = DataPartition.UNPARTITIONED;
     }
 
     public PlanNode getPlanRoot() {
@@ -623,14 +663,23 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.cacheParam = cacheParam;
     }
 
-    public PlanNode getLeftMostLeafNode() {
-        PlanNode node = planRoot;
-        while (!node.getChildren().isEmpty()) {
+    public List<OlapScanNode> collectOlapScanNodes() {
+        List<OlapScanNode> olapScanNodes = Lists.newArrayList();
+        Queue<PlanNode> queue = Lists.newLinkedList();
+        queue.add(planRoot);
+        while (!queue.isEmpty()) {
+            PlanNode node = queue.poll();
+
             if (node instanceof ExchangeNode) {
-                break;
+                continue;
             }
-            node = node.getChild(0);
+            if (node instanceof OlapScanNode) {
+                olapScanNodes.add((OlapScanNode) node);
+            }
+
+            queue.addAll(node.getChildren());
         }
-        return node;
+
+        return olapScanNodes;
     }
 }

@@ -292,6 +292,20 @@ public class FunctionAnalyzer {
             return;
         }
 
+        if (fnName.getFunction().equals(FunctionSet.BITMAP_AGG)) {
+            if (functionCallExpr.getChildren().size() != 1) {
+                throw new SemanticException(fnName + " function could only have one child");
+            }
+            Type inputType = functionCallExpr.getChild(0).getType();
+            if (!inputType.isIntegerType() && !inputType.isBoolean() && !inputType.isLargeIntType()
+                    && !inputType.isStringType()) {
+                throw new SemanticException(
+                        fnName + " function's argument should be of int type or bool type or string type, but was "
+                                + inputType);
+            }
+            return;
+        }
+
         if (fnName.getFunction().equals(FunctionSet.BITMAP_COUNT)
                 || fnName.getFunction().equals(FunctionSet.BITMAP_UNION)
                 || fnName.getFunction().equals(FunctionSet.BITMAP_UNION_COUNT)
@@ -361,5 +375,18 @@ public class FunctionAnalyzer {
                         fnName + " second parameter'value should be between 0 and 1");
             }
         }
+<<<<<<< HEAD
+=======
+
+        if (fnName.getFunction().equals(FunctionSet.COVAR_POP) || fnName.getFunction().equals(FunctionSet.COVAR_SAMP) ||
+                fnName.getFunction().equals(FunctionSet.CORR)) {
+            if (functionCallExpr.getChildren().size() != 2) {
+                throw new SemanticException(fnName + " function should have two args");
+            }
+            if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
+                throw new SemanticException(fnName + " function 's args must be column");
+            }
+        }
+>>>>>>> 2.5.18
     }
 }

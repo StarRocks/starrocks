@@ -3,6 +3,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.Range;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.sql.plan.ExecPlan;
 
 import java.util.Map;
@@ -17,6 +18,8 @@ public class MvTaskRunContext extends TaskRunContext {
     String nextPartitionStart = null;
     String nextPartitionEnd = null;
     ExecPlan execPlan = null;
+
+    int partitionTTLNumber = TableProperty.INVALID;
 
     public MvTaskRunContext(TaskRunContext context) {
         this.ctx = context.ctx;
@@ -81,4 +84,15 @@ public class MvTaskRunContext extends TaskRunContext {
     public Constants.TaskType getTaskType() {
         return this.type;
     }
+<<<<<<< HEAD
+=======
+
+    public int getPartitionTTLNumber() {
+        return partitionTTLNumber;
+    }
+
+    public void setPartitionTTLNumber(int partitionTTLNumber) {
+        this.partitionTTLNumber = partitionTTLNumber;
+    }
+>>>>>>> 2.5.18
 }

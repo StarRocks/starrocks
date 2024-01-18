@@ -488,7 +488,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t0_stats_partition")));
         Assert.assertTrue(allJobs.stream().noneMatch(j -> j.getTable().getName().contains("t1_stats")));
     }
+<<<<<<< HEAD
     
+=======
+
+>>>>>>> 2.5.18
     @Test
     public void testCount() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getDb("stats");
@@ -615,6 +619,69 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testAnalyzeInIntervalSmallTable() {
+        LocalDateTime now = LocalDateTime.now();
+        new MockUp<StatisticUtils>() {
+            @Mock
+            public LocalDateTime getTableLastUpdateTime(Table table) {
+                return now;
+            }
+
+            @Mock
+            public LocalDateTime getPartitionLastUpdateTime(Partition partition) {
+                return now;
+            }
+        };
+        new MockUp<Partition>() {
+            @Mock
+            public long getDataSize() {
+                return Config.statistic_auto_collect_small_table_size - 10;
+            }
+        };
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        BasicStatsMeta execMeta1 = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
+                StatsConstants.AnalyzeType.FULL,
+                now.minusSeconds(Config.statistic_auto_collect_large_table_interval).minusHours(1),
+                Maps.newHashMap());
+        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta1);
+
+        new Expectations(execMeta1) {
+            {
+                execMeta1.getHealthy();
+                result = 0.7;
+            }
+        };
+
+        AnalyzeJob job = new AnalyzeJob(db.getId(), t0StatsTableId, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+
+        List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
+        Assert.assertEquals(1, jobs.size());
+        Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
+        FullStatisticsCollectJob fjb = (FullStatisticsCollectJob) jobs.get(0);
+        Assert.assertEquals("[v1, v2, v3, v4, v5]", fjb.getColumns().toString());
+
+        Config.statistic_auto_collect_small_table_interval = 100;
+        BasicStatsMeta execMeta2 = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
+                StatsConstants.AnalyzeType.FULL,
+                now.minusSeconds(50),
+                Maps.newHashMap());
+        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta2);
+
+        Config.statistic_auto_collect_small_table_interval = 100;
+        jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
+        Config.statistic_auto_collect_small_table_interval = 0;
+        Assert.assertEquals(0, jobs.size());
+    }
+
+    @Test
+>>>>>>> 2.5.18
     public void testAnalyzeHealth() {
         LocalDateTime now = LocalDateTime.now();
         new MockUp<StatisticUtils>() {

@@ -32,6 +32,13 @@ public class AnalyzeTruncateTableTest {
     }
 
     @Test
+    public void testSingle() {
+        analyzeSuccess("truncate table t0");
+        analyzeSuccess("truncate table t0 partition t0");
+        analyzeSuccess("truncate table t0 partition \"t0\"");
+    }
+
+    @Test
     public void failureTest() {
         analyzeFail("TRUNCATE TABLE tbl PARTITION();");
     }

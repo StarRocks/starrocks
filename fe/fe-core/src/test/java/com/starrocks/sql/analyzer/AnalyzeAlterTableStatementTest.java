@@ -46,7 +46,7 @@ public class AnalyzeAlterTableStatementTest {
     @Test(expected = SemanticException.class)
     public void testEmptyNewTableName() {
         TableRenameClause clause = new TableRenameClause("");
-        clauseAnalyzerVisitor.analyze(clause, connectContext);
+        clauseAnalyzerVisitor.analyze(null, clause, connectContext);
     }
 
     @Test(expected = SemanticException.class)
@@ -124,5 +124,11 @@ public class AnalyzeAlterTableStatementTest {
     public void testRollup() {
         analyzeSuccess("alter table t0 drop rollup test1");
         analyzeSuccess("alter table t0 drop rollup test1, test2");
+    }
+
+    @Test
+    public void testAlterWithTimeType() {
+        analyzeFail("alter table t0 add column testcol TIME");
+        analyzeFail("alter table t0 modify column v0 TIME");
     }
 }

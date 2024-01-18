@@ -271,4 +271,13 @@ public class AnalyzeFunctionTest {
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
                 "DROP FUNCTION db.f(int, char(2))", getConnectContext());
     }
+
+    @Test
+    public void testStatistics() throws Exception {
+        analyzeFail("select corr(v1,3) from t0");
+        analyzeFail("select covar_samp(v1,3) from t0");
+        analyzeFail("select covar_samp(3,v1) from t0");
+        analyzeFail("select covar_pop(v1,3) from t0");
+        analyzeFail("select corr(v1) from t0");
+    }
 }

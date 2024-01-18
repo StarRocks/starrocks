@@ -107,6 +107,11 @@ enum TTabletInternalParallelMode {
   FORCE_SPLIT
 }
 
+enum TOverflowMode {
+  OUTPUT_NULL = 0;
+  REPORT_ERROR = 1;
+}
+
 // Query options with their respective defaults
 struct TQueryOptions {
   1: optional bool abort_on_error = 0
@@ -222,6 +227,27 @@ struct TQueryOptions {
   86: optional i32 io_tasks_per_scan_operator = 4;
   87: optional i32 connector_io_tasks_per_scan_operator = 16;
   88: optional double runtime_filter_early_return_selectivity = 0.05;
+<<<<<<< HEAD
+=======
+
+  90: optional i64 log_rejected_record_num = 0;
+
+  91: optional bool use_page_cache;
+
+  92: optional bool enable_connector_adaptive_io_tasks = true;
+  93: optional i32 connector_io_tasks_slow_io_latency_ms = 50;
+  94: optional double scan_use_query_mem_ratio = 0.25;
+  95: optional double connector_scan_use_query_mem_ratio = 0.3;
+
+  102: optional bool enable_collect_table_level_scan_stats;
+
+  104: optional TOverflowMode overflow_mode = TOverflowMode.OUTPUT_NULL;
+  105: optional bool use_column_pool = true;
+
+  107: optional i64 global_runtime_filter_build_max_size;
+
+  109: optional i64 big_query_profile_second_threshold;
+>>>>>>> 2.5.18
 }
 
 

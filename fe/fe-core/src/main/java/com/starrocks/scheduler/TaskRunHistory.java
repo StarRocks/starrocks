@@ -33,4 +33,11 @@ public class TaskRunHistory {
             }
         }
     }
+<<<<<<< HEAD
+=======
+
+    public long getTaskRunCount() {
+        return historyDeque.size();
+    }
+>>>>>>> 2.5.18
 }

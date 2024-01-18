@@ -177,18 +177,18 @@ int main(int argc, char** argv) {
         starrocks::BlockCache* cache = starrocks::BlockCache::instance();
         starrocks::CacheOptions cache_options;
         cache_options.mem_space_size = starrocks::config::block_cache_mem_size;
+
+        std::vector<std::string> paths;
         if (starrocks::config::block_cache_disk_size > 0) {
-            std::vector<starrocks::StorePath> paths;
-            auto parse_res = starrocks::parse_conf_store_paths(starrocks::config::block_cache_disk_path, &paths);
+            auto parse_res = starrocks::parse_conf_block_cache_paths(starrocks::config::block_cache_disk_path, &paths);
             if (!parse_res.ok()) {
                 LOG(FATAL) << "parse config block cache disk path failed, path="
                            << starrocks::config::block_cache_disk_path;
                 exit(-1);
             }
-
             for (auto& p : paths) {
                 cache_options.disk_spaces.push_back(
-                        {.path = p.path, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
+                        {.path = p, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
             }
         }
         cache_options.meta_path = starrocks::config::block_cache_meta_path;
@@ -196,13 +196,21 @@ int main(int argc, char** argv) {
         cache_options.checksum = starrocks::config::block_cache_checksum_enable;
         cache_options.max_parcel_memory_mb = starrocks::config::block_cache_max_parcel_memory_mb;
         cache_options.max_concurrent_inserts = starrocks::config::block_cache_max_concurrent_inserts;
+<<<<<<< HEAD
         cache->init(cache_options);
+=======
+        cache_options.lru_insertion_point = starrocks::config::block_cache_lru_insertion_point;
+        EXIT_IF_ERROR(cache->init(cache_options));
+>>>>>>> 2.5.18
     }
 #endif
 
     Aws::SDKOptions aws_sdk_options;
     if (starrocks::config::aws_sdk_logging_trace_enabled) {
         aws_sdk_options.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Trace;
+    }
+    if (starrocks::config::aws_sdk_enable_compliant_rfc3986_encoding) {
+        aws_sdk_options.httpOptions.compliantRfc3986Encoding = true;
     }
     Aws::InitAPI(aws_sdk_options);
 
@@ -313,7 +321,9 @@ int main(int argc, char** argv) {
     }
 
 #ifdef WITH_BLOCK_CACHE
-    starrocks::BlockCache::instance()->shutdown();
+    if (starrocks::config::block_cache_enable) {
+        starrocks::BlockCache::instance()->shutdown();
+    }
 #endif
 
     daemon->stop();

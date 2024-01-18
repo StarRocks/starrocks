@@ -227,6 +227,9 @@ public abstract class BulkLoadJob extends LoadJob {
                 logFinalOperation();
                 return;
             } else {
+                failMsg.setMsg("Still retrying, error: " + failMsg.getMsg());
+                unprotectUpdateFailMsg(failMsg);
+
                 // retry task
                 idToTasks.remove(loadTask.getSignature());
                 if (loadTask instanceof LoadLoadingTask) {

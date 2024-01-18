@@ -125,6 +125,8 @@ public:
     // dynamic update max threads num
     Status update_max_threads(int max_threads);
 
+    ThreadPool* get_thread_pool() { return _flush_pool.get(); }
+
     // NOTE: we use SERIAL mode here to ensure all mem-tables from one tablet are flushed in order.
     std::unique_ptr<FlushToken> create_flush_token(
             ThreadPool::ExecutionMode execution_mode = ThreadPool::ExecutionMode::SERIAL);

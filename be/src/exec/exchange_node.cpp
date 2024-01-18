@@ -70,8 +70,8 @@ Status ExchangeNode::prepare(RuntimeState* state) {
     _sub_plan_query_statistics_recvr.reset(new QueryStatisticsRecvr());
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _input_row_desc, state->fragment_instance_id(), _id, _num_senders,
-            config::exchg_node_buffer_size_bytes, _runtime_profile, _is_merging, _sub_plan_query_statistics_recvr,
-            false, DataStreamRecvr::INVALID_DOP_FOR_NON_PIPELINE_LEVEL_SHUFFLE, false);
+            config::exchg_node_buffer_size_bytes, _is_merging, _sub_plan_query_statistics_recvr, false, 1, false);
+    _stream_recvr->bind_profile(0, _runtime_profile);
     if (_is_merging) {
         RETURN_IF_ERROR(_sort_exec_exprs.prepare(state, _row_descriptor, _row_descriptor));
     }
@@ -84,7 +84,8 @@ Status ExchangeNode::open(RuntimeState* state) {
     if (_use_vectorized) {
         if (_is_merging) {
             RETURN_IF_ERROR(_sort_exec_exprs.open(state));
-            RETURN_IF_ERROR(_stream_recvr->create_merger(state, &_sort_exec_exprs, &_is_asc_order, &_nulls_first));
+            RETURN_IF_ERROR(_stream_recvr->create_merger(state, _runtime_profile.get(), &_sort_exec_exprs,
+                                                         &_is_asc_order, &_nulls_first));
         }
         return Status::OK();
     }
@@ -254,13 +255,14 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(operators.back().get(), context, rc_rf_probe_collector);
 
+    if (limit() != -1) {
+        operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+    }
+
     if (operators.back()->has_runtime_filters()) {
         operators.emplace_back(std::make_shared<ChunkAccumulateOperatorFactory>(context->next_operator_id(), id()));
     }
 
-    if (limit() != -1) {
-        operators.emplace_back(std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
-    }
     return operators;
 }
 

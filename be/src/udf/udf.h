@@ -172,6 +172,8 @@ public:
 
     ~FunctionContext();
 
+    bool error_if_overflow() const;
+
 private:
     friend class starrocks::FunctionContextImpl;
     FunctionContext();

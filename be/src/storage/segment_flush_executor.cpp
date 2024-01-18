@@ -10,6 +10,7 @@
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "service/brpc.h"
 #include "storage/delta_writer.h"
@@ -28,6 +29,7 @@ Status SegmentFlushToken::submit(brpc::Controller* cntl, const PTabletWriterAddS
         auto& writer = this->_writer;
         auto st = Status::OK();
         if (request->has_segment() && cntl->request_attachment().size() > 0) {
+            auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _writer->tablet()->tablet_id());
             auto& segment_pb = request->segment();
             st = writer->write_segment(segment_pb, cntl->request_attachment());
         } else if (!request->eos()) {
@@ -46,9 +48,12 @@ Status SegmentFlushToken::submit(brpc::Controller* cntl, const PTabletWriterAddS
                     tablet_info->set_node_id(writer->node_id());
                     const auto& rowset_global_dict_columns_valid_info =
                             writer->committed_rowset_writer()->global_dict_columns_valid_info();
+                    const auto* rowset_global_dicts = writer->committed_rowset_writer()->rowset_global_dicts();
                     for (const auto& item : rowset_global_dict_columns_valid_info) {
-                        if (item.second) {
+                        if (item.second && rowset_global_dicts != nullptr &&
+                            rowset_global_dicts->find(item.first) != rowset_global_dicts->end()) {
                             tablet_info->add_valid_dict_cache_columns(item.first);
+                            tablet_info->add_valid_dict_collected_version(rowset_global_dicts->at(item.first).version);
                         } else {
                             tablet_info->add_invalid_dict_cache_columns(item.first);
                         }

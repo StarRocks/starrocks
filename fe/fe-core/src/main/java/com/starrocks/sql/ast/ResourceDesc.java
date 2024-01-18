@@ -60,7 +60,7 @@ public class ResourceDesc {
 
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("WITH RESOURCE '").append(name).append("'");
+        sb.append(" WITH RESOURCE '").append(name).append("'");
         if (properties != null && !properties.isEmpty()) {
             PrintableMap<String, String> printableMap = new PrintableMap<>(properties, " = ", true, false, true);
             sb.append(" (").append(printableMap.toString()).append(")");

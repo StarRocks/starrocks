@@ -27,7 +27,12 @@ public enum PartitionType {
     UNPARTITIONED("UNPARTITIONED"),
     RANGE("RANGE"),
     LIST("LIST"),
+<<<<<<< HEAD
     EXPR_RANGE("EXPR_RANGE");
+=======
+    EXPR_RANGE("EXPR_RANGE"),
+    EXPR_RANGE_V2("EXPR_RANGE_V2");
+>>>>>>> 2.5.18
 
     public String typeString;
 
@@ -51,6 +56,7 @@ public enum PartitionType {
             case UNPARTITIONED:
                 return TPartitionType.UNPARTITIONED;
             case RANGE:
+            case EXPR_RANGE:
                 return TPartitionType.RANGE_PARTITIONED;
             default:
                 return TPartitionType.UNPARTITIONED;

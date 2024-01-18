@@ -7,11 +7,14 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.external.starrocks.TableMetaSyncer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.InsertStmt;
@@ -39,6 +42,10 @@ public class InsertAnalyzer {
         MetaUtils.normalizationTableName(session, insertStmt.getTableName());
         Database database = MetaUtils.getDatabase(session, insertStmt.getTableName());
         Table table = MetaUtils.getTable(session, insertStmt.getTableName());
+
+        if (table instanceof ExternalOlapTable) {
+            table = getOLAPExternalTableMeta(database, (ExternalOlapTable) table);
+        }
 
         if (table instanceof MaterializedView && !insertStmt.isSystem()) {
             throw new SemanticException(
@@ -71,7 +78,13 @@ public class InsertAnalyzer {
                     throw new SemanticException("No partition specified in partition lists");
                 }
 
-                for (String partitionName : targetPartitionNames.getPartitionNames()) {
+                List<String> deduplicatePartitionNames =
+                        targetPartitionNames.getPartitionNames().stream().distinct().collect(Collectors.toList());
+                if (deduplicatePartitionNames.size() != targetPartitionNames.getPartitionNames().size()) {
+                    insertStmt.setTargetPartitionNames(new PartitionNames(targetPartitionNames.isTemp(),
+                            deduplicatePartitionNames));
+                }
+                for (String partitionName : deduplicatePartitionNames) {
                     if (Strings.isNullOrEmpty(partitionName)) {
                         throw new SemanticException("there are empty partition name");
                     }
@@ -149,6 +162,29 @@ public class InsertAnalyzer {
         insertStmt.setTargetTable(table);
         insertStmt.setTargetPartitionIds(targetPartitionIds);
         insertStmt.setTargetColumns(targetColumns);
-        session.getDumpInfo().addTable(database.getFullName(), table);
+        if (session.getDumpInfo() != null) {
+            session.getDumpInfo().addTable(database.getFullName(), table);
+        }
+    }
+
+    private static ExternalOlapTable getOLAPExternalTableMeta(Database database, ExternalOlapTable externalOlapTable) {
+        // copy the table, and release database lock when synchronize table meta
+        ExternalOlapTable copiedTable = new ExternalOlapTable();
+        externalOlapTable.copyOnlyForQuery(copiedTable);
+        int lockTimes = 0;
+        while (database.isReadLockHeldByCurrentThread()) {
+            database.readUnlock();
+            lockTimes++;
+        }
+        try {
+            new TableMetaSyncer().syncTable(copiedTable);
+        }  catch (MetaNotFoundException e) {
+            throw new SemanticException(e.getMessage());
+        } finally {
+            while (lockTimes-- > 0) {
+                database.readLock();
+            }
+        }
+        return copiedTable;
     }
 }

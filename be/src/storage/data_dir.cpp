@@ -234,36 +234,10 @@ std::string DataDir::get_root_path_from_schema_hash_path_in_trash(const std::str
 
 // TODO(ygl): deal with rowsets and tablets when load failed
 Status DataDir::load() {
-    LOG(INFO) << "start to load tablets from " << _path;
-    // load rowset meta from meta env and create rowset
-    // COMMITTED: add to txn manager
-    // VISIBLE: add to tablet
-    // if one rowset load failed, then the total data dir will not be loaded
-    std::vector<RowsetMetaSharedPtr> dir_rowset_metas;
-    LOG(INFO) << "begin loading rowset from meta";
-    auto load_rowset_func = [&dir_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
-                                                std::string_view meta_str) -> bool {
-        bool parsed = false;
-        auto rowset_meta = std::make_shared<RowsetMeta>(meta_str, &parsed);
-        if (!parsed) {
-            LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
-            // return false will break meta iterator, return true to skip this error
-            return true;
-        }
-        dir_rowset_metas.push_back(rowset_meta);
-        return true;
-    };
-    Status load_rowset_status = RowsetMetaManager::traverse_rowset_metas(_kv_store, load_rowset_func);
-
-    if (!load_rowset_status.ok()) {
-        LOG(WARNING) << "errors when load rowset meta from meta env, skip this data dir:" << _path;
-    } else {
-        LOG(INFO) << "load rowset from meta finished, data dir: " << _path;
-    }
-
     // load tablet
     // create tablet from tablet meta and add it to tablet mgr
-    LOG(INFO) << "begin loading tablet from meta";
+    int64_t load_tablet_start = MonotonicMillis();
+    LOG(INFO) << "begin loading tablet from meta " << _path;
     std::set<int64_t> tablet_ids;
     std::set<int64_t> failed_tablet_ids;
     auto load_tablet_func = [this, &tablet_ids, &failed_tablet_ids](int64_t tablet_id, int32_t schema_hash,
@@ -288,14 +262,25 @@ Status DataDir::load() {
     Status load_tablet_status =
             TabletMetaManager::walk_until_timeout(_kv_store, load_tablet_func, config::load_tablet_timeout_seconds);
     if (load_tablet_status.is_time_out()) {
+<<<<<<< HEAD
         Status s = _kv_store->compact();
         if (!s.ok()) {
             LOG(ERROR) << "data dir " << _path << " compact meta befor load failed";
+=======
+        LOG(WARNING) << "load tablets from rocksdb timeout, try to compact meta and retry. path: " << _path;
+        Status s = _kv_store->compact();
+        if (!s.ok()) {
+            LOG(ERROR) << "data dir " << _path << " compact meta before load failed";
+>>>>>>> 2.5.18
             return s;
         }
         for (auto tablet_id : tablet_ids) {
             _tablet_manager->drop_tablet(tablet_id, kKeepMetaAndFiles);
         }
+<<<<<<< HEAD
+=======
+        LOG(WARNING) << "compact meta finished, retry load tablets from rocksdb. path: " << _path;
+>>>>>>> 2.5.18
         tablet_ids.clear();
         failed_tablet_ids.clear();
         load_tablet_status = TabletMetaManager::walk(_kv_store, load_tablet_func);
@@ -310,27 +295,42 @@ Status DataDir::load() {
         }
     }
     if (!load_tablet_status.ok()) {
-        LOG(FATAL) << "there is failure when loading tablet headers, quit process"
+        LOG(FATAL) << "there is failure when scan rockdb tablet metas, quit process"
                    << ". loaded tablet: " << tablet_ids.size() << " error tablet: " << failed_tablet_ids.size()
-                   << ", path: " << _path;
+                   << ", path: " << _path << " error: " << load_tablet_status.get_error_msg()
+                   << " duration: " << (MonotonicMillis() - load_tablet_start) << "ms";
     } else {
         LOG(INFO) << "load tablet from meta finished"
                   << ", loaded tablet: " << tablet_ids.size() << ", error tablet: " << failed_tablet_ids.size()
-                  << ", path: " << _path;
+                  << ", path: " << _path << " duration: " << (MonotonicMillis() - load_tablet_start) << "ms";
     }
 
-    // traverse rowset
-    // 1. add committed rowset to txn map
-    // 2. add visible rowset to tablet
-    // ignore any errors when load tablet or rowset, because fe will repair them after report
-    for (const auto& rowset_meta : dir_rowset_metas) {
+    // load rowset meta from meta env and create rowset
+    // COMMITTED: add to txn manager
+    // VISIBLE: add to tablet
+    // if one rowset load failed, then the total data dir will not be loaded
+    int64_t load_rowset_start = MonotonicMillis();
+    size_t error_rowset_count = 0;
+    size_t total_rowset_count = 0;
+    LOG(INFO) << "begin loading rowset from meta " << _path;
+    auto load_rowset_func = [&](const TabletUid& tablet_uid, RowsetId rowset_id, std::string_view meta_str) -> bool {
+        total_rowset_count++;
+        bool parsed = false;
+        auto rowset_meta = std::make_shared<RowsetMeta>(meta_str, &parsed);
+        if (!parsed) {
+            LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
+            // return false will break meta iterator, return true to skip this error
+            error_rowset_count++;
+            return true;
+        }
         TabletSharedPtr tablet = _tablet_manager->get_tablet(rowset_meta->tablet_id(), false);
         // tablet maybe dropped, but not drop related rowset meta
         if (tablet == nullptr) {
-            // LOG(WARNING) << "could not find tablet id: " << rowset_meta->tablet_id()
-            //              << ", schema hash: " << rowset_meta->tablet_schema_hash()
-            //              << ", for rowset: " << rowset_meta->rowset_id() << ", skip this rowset";
-            continue;
+            // maybe too many due to historical bug, limit logging
+            LOG_EVERY_SECOND(WARNING) << "could not find tablet id: " << rowset_meta->tablet_id()
+                                      << " for rowset: " << rowset_meta->rowset_id() << ", skip loading this rowset";
+            error_rowset_count++;
+            return true;
         }
         RowsetSharedPtr rowset;
         Status create_status = RowsetFactory::create_rowset(&tablet->tablet_schema(), tablet->schema_hash_path(),
@@ -338,7 +338,8 @@ Status DataDir::load() {
         if (!create_status.ok()) {
             LOG(WARNING) << "Fail to create rowset from rowsetmeta,"
                          << " rowset=" << rowset_meta->rowset_id() << " state=" << rowset_meta->rowset_state();
-            continue;
+            error_rowset_count++;
+            return true;
         }
         if (rowset_meta->rowset_state() == RowsetStatePB::COMMITTED &&
             rowset_meta->tablet_uid() == tablet->tablet_uid()) {
@@ -348,11 +349,10 @@ Status DataDir::load() {
             if (!commit_txn_status.ok() && !commit_txn_status.is_already_exist()) {
                 LOG(WARNING) << "Fail to add committed rowset=" << rowset_meta->rowset_id()
                              << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();
+                error_rowset_count++;
             } else {
                 LOG(INFO) << "Added committed rowset=" << rowset_meta->rowset_id()
-                          << " tablet=" << rowset_meta->tablet_id()
-                          << " schema hash=" << rowset_meta->tablet_schema_hash()
-                          << " txn_id: " << rowset_meta->txn_id();
+                          << " tablet=" << rowset_meta->tablet_id() << " txn_id: " << rowset_meta->txn_id();
             }
         } else if (rowset_meta->rowset_state() == RowsetStatePB::VISIBLE &&
                    rowset_meta->tablet_uid() == tablet->tablet_uid()) {
@@ -362,13 +362,26 @@ Status DataDir::load() {
                              << " to tablet=" << rowset_meta->tablet_id() << " txn id=" << rowset_meta->txn_id()
                              << " start version=" << rowset_meta->version().first
                              << " end version=" << rowset_meta->version().second;
+                error_rowset_count++;
             }
         } else {
             LOG(WARNING) << "Found invalid rowset=" << rowset_meta->rowset_id()
                          << " tablet id=" << rowset_meta->tablet_id() << " tablet uid=" << rowset_meta->tablet_uid()
-                         << " schema hash=" << rowset_meta->tablet_schema_hash() << " txn_id: " << rowset_meta->txn_id()
+                         << " txn_id: " << rowset_meta->txn_id()
                          << " current valid tablet uid=" << tablet->tablet_uid();
+            error_rowset_count++;
         }
+        return true;
+    };
+    Status load_rowset_status = RowsetMetaManager::traverse_rowset_metas(_kv_store, load_rowset_func);
+
+    if (!load_rowset_status.ok()) {
+        LOG(WARNING) << "load rowset from meta finished, data dir: " << _path << " error/total: " << error_rowset_count
+                     << "/" << total_rowset_count << " error: " << load_rowset_status.get_error_msg()
+                     << " duration: " << (MonotonicMillis() - load_rowset_start) << "ms";
+    } else {
+        LOG(INFO) << "load rowset from meta finished, data dir: " << _path << " error/total: " << error_rowset_count
+                  << "/" << total_rowset_count << " duration: " << (MonotonicMillis() - load_rowset_start) << "ms";
     }
     return Status::OK();
 }
@@ -537,8 +550,8 @@ Status DataDir::update_capacity() {
 }
 
 bool DataDir::capacity_limit_reached(int64_t incoming_data_size) {
-    double used_pct = (_disk_capacity_bytes - _available_bytes + incoming_data_size) / (double)_disk_capacity_bytes;
-    int64_t left_bytes = _disk_capacity_bytes - _available_bytes - incoming_data_size;
+    double used_pct = disk_usage(incoming_data_size);
+    int64_t left_bytes = _available_bytes - incoming_data_size;
 
     if (used_pct >= config::storage_flood_stage_usage_percent / 100.0 &&
         left_bytes <= config::storage_flood_stage_left_capacity_bytes) {

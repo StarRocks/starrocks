@@ -170,6 +170,13 @@ public class ColumnRefSet implements Cloneable {
 
     public boolean containsAny(ColumnRefSet rhs) {
         return isIntersect(rhs);
+<<<<<<< HEAD
+=======
+    }
+
+    public boolean containsAny(Collection<ColumnRefOperator> rhs) {
+        return rhs.stream().anyMatch(this::contains);
+>>>>>>> 2.5.18
     }
 
     public boolean containsAll(List<Integer> rhs) {

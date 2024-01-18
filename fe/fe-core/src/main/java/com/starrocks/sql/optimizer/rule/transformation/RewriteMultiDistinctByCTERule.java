@@ -18,6 +18,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
@@ -133,12 +134,21 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
 
         if (agg.hasSkew() && distinctAggOperatorList.size() > 1 && !agg.getGroupingKeys().isEmpty()) {
             return true;
+<<<<<<< HEAD
         }
 
         if (agg.getLimit() >= 0) {
             return false;
         }
 
+=======
+        }
+
+        if (agg.hasLimit()) {
+            return false;
+        }
+
+>>>>>>> 2.5.18
         if (!hasMultiColumns && agg.getGroupingKeys().size() > 1) {
             return false;
         }
@@ -169,10 +179,6 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
         LinkedList<OptExpression> allCteConsumes = buildDistinctAggCTEConsume(aggregate, distinctAggList, cteProduce,
                 columnRefFactory, columnRefMap);
-        // For inner join(with group by), distinct aggregate cannot have limitation
-        if (hasGroupBy) {
-            allCteConsumes.forEach(opt -> opt.getOp().setLimit(Operator.DEFAULT_LIMIT));
-        }
 
         if (otherAggregate.size() > 0) {
             allCteConsumes.offer(
@@ -203,6 +209,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
             }
             allCteConsumes.offerFirst(join);
         }
+
         // Add project node
         LogicalProjectOperator.Builder builder = new LogicalProjectOperator.Builder();
         builder.setColumnRefMap(columnRefMap);
@@ -212,6 +219,12 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
         // Add filter node
         if (aggregate.getPredicate() != null) {
             rightTree = OptExpression.create(new LogicalFilterOperator(aggregate.getPredicate()), rightTree);
+        }
+
+        if (aggregate.hasLimit()) {
+            Operator.Builder opBuilder = OperatorBuilderFactory.build(rightTree.getOp());
+            opBuilder.withOperator(rightTree.getOp()).setLimit(aggregate.getLimit());
+            rightTree = OptExpression.create(opBuilder.build(), rightTree.getInputs());
         }
 
         context.getCteContext().addForceCTE(cteId);
@@ -361,7 +374,8 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
 
         LogicalAggregationOperator newAggregate = new LogicalAggregationOperator.Builder().withOperator(aggregate).
                 setAggregations(aggregateFn).setGroupingKeys(rewriteGroupingKeys).
-                setPartitionByColumns(rewriteGroupingKeys).setPredicate(null).build();
+                setPartitionByColumns(rewriteGroupingKeys).setPredicate(null).
+                setLimit(Operator.DEFAULT_LIMIT).build();
         return OptExpression.create(newAggregate, OptExpression.create(cteConsume));
     }
 
@@ -397,7 +411,8 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
 
         LogicalAggregationOperator newAggregate = new LogicalAggregationOperator.Builder().withOperator(aggregate).
                 setAggregations(aggregateFn).setGroupingKeys(rewriteGroupingKeys).
-                setPartitionByColumns(rewriteGroupingKeys).setPredicate(null).build();
+                setPartitionByColumns(rewriteGroupingKeys).
+                setLimit(Operator.DEFAULT_LIMIT).setPredicate(null).build();
 
         return OptExpression.create(newAggregate, OptExpression.create(cteConsume));
     }

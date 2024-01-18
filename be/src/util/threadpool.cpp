@@ -260,6 +260,11 @@ Status ThreadPool::init() {
     return Status::OK();
 }
 
+bool ThreadPool::is_pool_status_ok() {
+    std::unique_lock l(_lock);
+    return _pool_status.ok();
+}
+
 void ThreadPool::shutdown() {
     std::unique_lock l(_lock);
     check_not_pool_thread_unlocked();

@@ -54,6 +54,22 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select t1a, t1b from test_all_type where id_datetime > 2000";
         plan = getFragmentPlan(sql);
         assertContains(plan, "PREDICATES: 8: id_datetime > CAST(2000 AS DATETIME)");
+
+        sql = "select t1a, t1b from test_all_type where id_date > (datetime '2000-01-01 12:00:00')";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 9: id_date >= '2000-01-02'");
+
+        sql = "select t1a, t1b from test_all_type where (datetime '2000-01-01 12:00:00') > id_date";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "9: id_date <= '2000-01-01'");
+
+        sql = "select t1a, t1b from test_all_type where (date '2000-01-01') > id_datetime";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 8: id_datetime < '2000-01-01 00:00:00'");
+
+        sql = "select t1a, t1b from test_all_type where id_datetime > (date '2000-01-01')";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 8: id_datetime > '2000-01-01 00:00:00'");
     }
 
     @Test
@@ -382,8 +398,8 @@ public class ExpressionTest extends PlanTestBase {
                         "count(case when SUBSTR(DATE_FORMAT('2020-09-02 23:59:59', '%Y-%m'), 6) > 0 then v3 else v2 "
                         + "end) from t0";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("<slot 10> : substr('2020-09', 6)"));
-        Assert.assertTrue(planFragment.contains("  |  <slot 4> : if(12: expr, 1: v1, 2: v2)"));
+        assertContains(planFragment, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: max(1: v1), min(2: v2), count(3: v3)");
     }
 
     @Test
@@ -817,55 +833,55 @@ public class ExpressionTest extends PlanTestBase {
 
         sql = "select v1 from t0 where  v1 / 2 <=> 3";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: CAST(1: v1 AS DOUBLE) <=> 6.0"));
+        assertContains(planFragment, "PREDICATES: 1: v1 <=> 6");
 
         sql = "select v1 from t0 where  v1 / -2 > 3";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: CAST(1: v1 AS DOUBLE) < -6.0"));
+        assertContains(planFragment, "PREDICATES: 1: v1 < -6");
 
         sql = "select v1 from t0 where  v1 / abs(-2) > 3";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: CAST(1: v1 AS DOUBLE) / CAST(abs(-2) AS DOUBLE) > 3.0"));
+        assertContains(planFragment, "PREDICATES: CAST(1: v1 AS DOUBLE) / CAST(abs(-2) AS DOUBLE) > 3.0");
 
         sql = "select v1 from t0 where  v1 / -2 != 3";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: CAST(1: v1 AS DOUBLE) != -6.0"));
+        assertContains(planFragment, "PREDICATES: 1: v1 != -6");
 
         sql = "select v1 from t0 where  v1 / abs(-2) = 3";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: CAST(1: v1 AS DOUBLE) = 3.0 * CAST(abs(-2) AS DOUBLE)"));
+        assertContains(planFragment, "PREDICATES: CAST(1: v1 AS DOUBLE) = 3.0 * CAST(abs(-2) AS DOUBLE)");
 
         sql = "select v1 from t0 where 2 + v1 <= 3";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 <= 1"));
+        assertContains(planFragment, "PREDICATES: 1: v1 <= 1");
 
         sql = "select v1 from t0 where 2 - v1 <= 3";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: 1: v1 >= -1"));
+        assertContains(planFragment, "PREDICATES: 1: v1 >= -1");
 
         sql = "select k5 from bigtable where k5 * 2 <= 3";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: 5: k5 * 2 <= 3"));
+        assertContains(planFragment, "PREDICATES: 5: k5 * 2 <= 3");
 
         sql = "select k5 from bigtable where 2 / k5 <= 3";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: 2 / CAST(5: k5 AS DECIMAL128(38,3)) <= 3"));
+        assertContains(planFragment, "PREDICATES: 2 / CAST(5: k5 AS DECIMAL128(38,3)) <= 3");
 
         sql = "select t1a from test_all_type where date_add(id_datetime, 2) = '2020-12-21'";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: 8: id_datetime = '2020-12-19 00:00:00'"));
+        assertContains(planFragment, "PREDICATES: 8: id_datetime = '2020-12-19 00:00:00'");
 
         sql = "select t1a from test_all_type where date_sub(id_datetime, 2) = '2020-12-21'";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: 8: id_datetime = '2020-12-23 00:00:00'"));
+        assertContains(planFragment, "PREDICATES: 8: id_datetime = '2020-12-23 00:00:00'");
 
         sql = "select t1a from test_all_type where years_sub(id_datetime, 2) = '2020-12-21'";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: 8: id_datetime = '2022-12-21 00:00:00'"));
+        assertContains(planFragment, "PREDICATES: 8: id_datetime = '2022-12-21 00:00:00'");
 
         sql = "select t1a from test_all_type where years_add(id_datetime, 2) = '2020-12-21'";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("PREDICATES: 8: id_datetime = '2018-12-21 00:00:00'"));
+        assertContains(planFragment, "PREDICATES: 8: id_datetime = '2018-12-21 00:00:00'");
     }
 
     @Test
@@ -1137,8 +1153,8 @@ public class ExpressionTest extends PlanTestBase {
     public void testProjectUsingConstantArgs() throws Exception {
         String sql = "select months_diff(\"2074-03-04T17:43:24\", \"2074-03-04T17:43:24\") from test_all_type";
         String planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment.contains("1:Project\n"
-                + "  |  <slot 11> : months_diff(12: cast, 12: cast)"));
+        Assert.assertTrue(planFragment, planFragment.contains("1:Project\n"
+                + "  |  <slot 11> : months_diff('2074-03-04 17:43:24', '2074-03-04 17:43:24')\n"));
     }
 
     @Test
@@ -1372,5 +1388,19 @@ public class ExpressionTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertContains(plan, "<slot 2> : 8190");
         }
+    }
+
+    @Test
+    public void testDecimalV2Cast1() throws Exception {
+        String sql = "select length(cast('12.3567' as decimalV2(9,1)) * 200)";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "2 <-> length[('2471.34'); args: VARCHAR; result: INT;");
+        sql = "select length(col) from (select cast('12.3567' as decimalV2(9,1)) * 200 as col) t";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "3 <-> length[(cast(2471.34 as VARCHAR)); args: VARCHAR; result: INT;");
+
+        sql = "select length(col) from (select cast('12.3567' as decimal(9,1)) * 200 as col) t";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "3 <-> length[(cast(2480.0 as VARCHAR)); args: VARCHAR; result: INT;");
     }
 }

@@ -21,6 +21,8 @@
 
 package com.starrocks.persist;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.analysis.UserIdentity;
@@ -84,7 +86,6 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
-import jersey.repackaged.com.google.common.collect.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -286,6 +287,12 @@ public class EditLog {
                     ModifyTablePropertyOperationLog log =
                             (ModifyTablePropertyOperationLog) journal.getData();
                     globalStateMgr.replayAlterMaterializedViewProperties(opCode, log);
+                    break;
+                }
+                case OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS: {
+                    AlterMaterializedViewStatusLog log =
+                            (AlterMaterializedViewStatusLog) journal.getData();
+                    globalStateMgr.replayAlterMaterializedViewStatus(log);
                     break;
                 }
                 case OperationType.OP_RENAME_MATERIALIZED_VIEW: {
@@ -652,6 +659,11 @@ public class EditLog {
                     globalStateMgr.getTaskManager().replayDropTasks(dropTasksLog.getTaskIdList());
                     break;
                 }
+                case OperationType.OP_ALTER_TASK: {
+                    final Task task = (Task) journal.getData();
+                    globalStateMgr.getTaskManager().replayAlterTask(task);
+                    break;
+                }
                 case OperationType.OP_CREATE_TASK_RUN: {
                     final TaskRunStatus status = (TaskRunStatus) journal.getData();
                     globalStateMgr.getTaskManager().replayCreateTaskRun(status);
@@ -716,7 +728,12 @@ public class EditLog {
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
+<<<<<<< HEAD
                 case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY: {
+=======
+                case OperationType.OP_MODIFY_TABLE_CONSTRAINT_PROPERTY:
+                case OperationType.OP_ALTER_TABLE_PROPERTIES: {
+>>>>>>> 2.5.18
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
                     globalStateMgr.replayModifyTableProperty(opCode, modifyTablePropertyOperationLog);
@@ -802,8 +819,11 @@ public class EditLog {
                     globalStateMgr.getAnalyzeManager().replayAddBasicStatsMeta(basicStatsMeta);
                     // The follower replays the stats meta log, indicating that the master has re-completed
                     // statistic, and the follower's should refresh cache here.
-                    globalStateMgr.getAnalyzeManager().refreshBasicStatisticsCache(basicStatsMeta.getDbId(),
-                            basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), true);
+                    // We don't need to refresh statistics when checkpointing
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeManager().refreshBasicStatisticsCache(basicStatsMeta.getDbId(),
+                                basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), true);
+                    }
                     break;
                 }
                 case OperationType.OP_REMOVE_BASIC_STATS_META: {
@@ -816,9 +836,12 @@ public class EditLog {
                     globalStateMgr.getAnalyzeManager().replayAddHistogramStatsMeta(histogramStatsMeta);
                     // The follower replays the stats meta log, indicating that the master has re-completed
                     // statistic, and the follower's should expire cache here.
-                    globalStateMgr.getAnalyzeManager().refreshHistogramStatisticsCache(
-                            histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
-                            Lists.newArrayList(histogramStatsMeta.getColumn()), true);
+                    // We don't need to refresh statistics when checkpointing
+                    if (!GlobalStateMgr.isCheckpointThread()) {
+                        globalStateMgr.getAnalyzeManager().refreshHistogramStatisticsCache(
+                                histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
+                                Lists.newArrayList(histogramStatsMeta.getColumn()), true);
+                    }
                     break;
                 }
                 case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {
@@ -964,6 +987,8 @@ public class EditLog {
      * submit log in queue and return immediately
      */
     private Future<Boolean> submitLog(short op, Writable writable, long maxWaitIntervalMs) {
+        Preconditions.checkState(GlobalStateMgr.getCurrentState().isLeader(),
+                "Current node is not leader, submit log is not allowed");
         DataOutputBuffer buffer = new DataOutputBuffer(OUTPUT_BUFFER_INIT_SIZE);
 
         // 1. serialized
@@ -1569,6 +1594,10 @@ public class EditLog {
         logEdit(OperationType.OP_INSERT_OVERWRITE_STATE_CHANGE, info);
     }
 
+    public void logAlterMvStatus(AlterMaterializedViewStatusLog log) {
+        logEdit(OperationType.OP_ALTER_MATERIALIZED_VIEW_STATUS, log);
+    }
+
     public void logMvRename(RenameMaterializedViewLog log) {
         logEdit(OperationType.OP_RENAME_MATERIALIZED_VIEW, log);
     }
@@ -1648,7 +1677,16 @@ public class EditLog {
         logEdit(OperationType.OP_DROP_ROLE_V2, info);
     }
 
+    public void logAlterTableProperties(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_ALTER_TABLE_PROPERTIES, info);
+    }
+
     public void logAuthUpgrade(Map<String, Long> roleNameToId) {
         logEdit(OperationType.OP_AUTH_UPGRDE_V2, new AuthUpgradeInfo(roleNameToId));
     }
+
+    public void logAlterTask(Task changedTask) {
+        logEdit(OperationType.OP_ALTER_TASK, changedTask);
+    }
+
 }

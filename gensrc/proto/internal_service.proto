@@ -88,7 +88,8 @@ message PTransmitDataResult {
 
 message PTransmitChunkResult {
     optional StatusPB status = 1;
-    optional int64 receive_timestamp = 2;
+    optional int64 receive_timestamp = 2; // Deprecated
+    optional int64 receiver_post_process_time = 3;
 };
 
 message PTransmitRuntimeFilterForwardTarget {
@@ -133,6 +134,7 @@ message PTabletInfo {
     repeated string invalid_dict_cache_columns = 3;
     repeated string valid_dict_cache_columns = 4;
     optional int64 node_id = 5;
+    repeated int64 valid_dict_collected_version = 6;
 }
 
 // Open a tablet writer.
@@ -239,6 +241,7 @@ message PTabletWriterCancelRequest {
     optional int64 txn_id = 4;
     optional int64 tablet_id = 5;
     repeated int64 tablet_ids = 6;
+    optional string reason = 7;
 };
 
 message PTabletWriterCancelResult {

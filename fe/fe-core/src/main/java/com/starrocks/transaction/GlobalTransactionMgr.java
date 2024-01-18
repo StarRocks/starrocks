@@ -45,6 +45,7 @@ import com.starrocks.thrift.TCommitRemoteTxnResponse;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
+import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
@@ -63,10 +64,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
-import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
-import static java.lang.Math.min;
 
 /**
  * Transaction Manager
@@ -185,10 +184,12 @@ public class GlobalTransactionMgr implements Writable {
         request.setDb_id(dbId);
         request.setTxn_id(transactionId);
         request.setCommit_infos(tabletCommitInfos);
+        request.setCommit_timeout_ms(Config.external_table_commit_timeout_ms);
         TCommitRemoteTxnResponse response;
         try {
             response = FrontendServiceProxy.call(addr,
-                    Config.thrift_rpc_timeout_ms,
+                    // commit txn might take a while, so add transaction timeout
+                    Config.thrift_rpc_timeout_ms + Config.external_table_commit_timeout_ms,
                     Config.thrift_rpc_retry_times,
                     client -> client.commitRemoteTxn(request));
         } catch (Exception e) {
@@ -204,7 +205,11 @@ public class GlobalTransactionMgr implements Writable {
             }
             LOG.warn("call fe {} commitRemoteTransaction rpc method failed, txn_id: {}, error: {}", addr, transactionId,
                     errStr);
-            throw new TransactionCommitFailedException(errStr);
+            if (response.status.getStatus_code() == TStatusCode.TIMEOUT) {
+                return false;
+            } else {
+                throw new TransactionCommitFailedException(errStr);
+            }
         } else {
             LOG.info("commit remote, txn_id: {}", transactionId);
             return true;
@@ -299,7 +304,7 @@ public class GlobalTransactionMgr implements Writable {
         }
     }
 
-    public TransactionStatus getLabelState(long dbId, String label) {
+    public TransactionStatus getLabelStatus(long dbId, String label) {
         try {
             DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
             return dbTransactionMgr.getLabelState(label);
@@ -307,7 +312,6 @@ public class GlobalTransactionMgr implements Writable {
             LOG.warn("Get transaction status by label " + label + " failed", e);
             return TransactionStatus.UNKNOWN;
         }
-
     }
 
     public Long getLabelTxnID(long dbId, String label) {
@@ -317,6 +321,16 @@ public class GlobalTransactionMgr implements Writable {
         } catch (AnalysisException e) {
             LOG.warn("Get transaction status by label " + label + " failed", e);
             return (long) -1;
+        }
+    }
+
+    public TransactionState getLabelTransactionState(long dbId, String label) {
+        try {
+            DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
+            return dbTransactionMgr.getLabelTransactionState(label);
+        } catch (AnalysisException e) {
+            LOG.warn("Get transaction state by label " + label + " failed", e);
+            return null;
         }
     }
 
@@ -477,6 +491,11 @@ public class GlobalTransactionMgr implements Writable {
         dbTransactionMgr.abortTransaction(label, reason);
     }
 
+    public TTransactionStatus getTxnStatus(Database db, long transactionId) throws UserException {
+        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(db.getId());
+        return dbTransactionMgr.getTxnStatus(transactionId);
+    }
+
     /**
      * get all txns which is ready to publish
      * a ready-to-publish txn's partition's visible version should be ONE less than txn's commit version.
@@ -581,16 +600,17 @@ public class GlobalTransactionMgr implements Writable {
     /**
      * Get the min txn id of running transactions.
      *
-     * @return the min txn id of running transactions, null if no running transaction.
+     * @return the min txn id of running transactions. If there are no running transactions, return the next transaction id
+     * that will be assigned.
+     *
      */
-    @Nullable
-    public Long getMinActiveTxnId() {
-        long result = Long.MAX_VALUE;
+    public long getMinActiveTxnId() {
+        long minId = idGenerator.peekNextTransactionId();
         for (Map.Entry<Long, DatabaseTransactionMgr> entry : dbIdToDatabaseTransactionMgrs.entrySet()) {
             DatabaseTransactionMgr dbTransactionMgr = entry.getValue();
-            result = min(result, dbTransactionMgr.getMinActiveTxnId());
+            minId = Math.min(minId, dbTransactionMgr.getMinActiveTxnId().orElse(Long.MAX_VALUE));
         }
-        return result == Long.MAX_VALUE ? null : result;
+        return minId;
     }
 
     public TransactionState getTransactionState(long dbId, long transactionId) {
@@ -675,13 +695,18 @@ public class GlobalTransactionMgr implements Writable {
         return dbTransactionMgr.getPartitionTransInfo(tid, tableId);
     }
 
-    /**
-     * It is a non thread safe method, only invoked by checkpoint thread without any lock or image dump thread with db lock
-     */
     public int getTransactionNum() {
         int txnNum = 0;
         for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             txnNum += dbTransactionMgr.getTransactionNum();
+        }
+        return txnNum;
+    }
+
+    public int getFinishedTransactionNum() {
+        int txnNum = 0;
+        for (DatabaseTransactionMgr dbTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
+            txnNum += dbTransactionMgr.getFinishedTxnNums();
         }
         return txnNum;
     }

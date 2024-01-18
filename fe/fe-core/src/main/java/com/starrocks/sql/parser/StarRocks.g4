@@ -65,6 +65,7 @@ statement
 
     // Task Statement
     | submitTaskStatement
+    | dropTaskStatement
 
     // Materialized View Statement
     | createMaterializedViewStatement
@@ -466,7 +467,7 @@ recoverPartitionStatement
 // ------------------------------------------- View Statement ----------------------------------------------------------
 
 createViewStatement
-    : CREATE VIEW (IF NOT EXISTS)? qualifiedName
+    : CREATE (OR REPLACE)? VIEW (IF NOT EXISTS)? qualifiedName
         ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
         comment? AS queryStatement
     ;
@@ -485,13 +486,18 @@ dropViewStatement
 
 submitTaskStatement
     : SUBMIT setVarHint* TASK qualifiedName?
-    AS createTableAsSelectStatement
+    AS (createTableAsSelectStatement | insertStatement )
+    ;
+
+dropTaskStatement
+    : DROP TASK qualifiedName
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------
 
 createMaterializedViewStatement
     : CREATE MATERIALIZED VIEW (IF NOT EXISTS)? mvName=qualifiedName
+    ('(' columnNameWithComment (',' columnNameWithComment)* ')')?
     comment?
     materializedViewDesc*
     AS queryStatement
@@ -500,6 +506,7 @@ createMaterializedViewStatement
 materializedViewDesc
     : (PARTITION BY primaryExpression)
     | distributionDesc
+    | orderByDesc
     | refreshSchemeDesc
     | properties
     ;
@@ -514,10 +521,11 @@ dropMaterializedViewStatement
 
 alterMaterializedViewStatement
     : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause | modifyTablePropertiesClause)
+    | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
     ;
 
 refreshMaterializedViewStatement
-    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION partitionRangeDesc)? FORCE?
+    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION partitionRangeDesc)? FORCE? (WITH (SYNC | ASYNC) MODE)?
     ;
 
 cancelRefreshMaterializedViewStatement
@@ -613,6 +621,7 @@ alterClause
     | modifyBrokerClause
     | alterLoadErrorUrlClause
     | createImageClause
+    | cleanTabletSchedQClause
 
     //Alter table clause
     | createIndexClause
@@ -688,6 +697,10 @@ alterLoadErrorUrlClause
 
 createImageClause
     : CREATE IMAGE
+    ;
+
+cleanTabletSchedQClause
+    : CLEAN TABLET SCHEDULER QUEUE
     ;
 
 // ---------Alter table clause---------
@@ -776,11 +789,11 @@ insertStatement
     ;
 
 updateStatement
-    : explainDesc? UPDATE qualifiedName SET assignmentList (WHERE where=expression)?
+    : explainDesc? withClause? UPDATE qualifiedName SET assignmentList fromClause (WHERE where=expression)?
     ;
 
 deleteStatement
-    : explainDesc? DELETE FROM qualifiedName partitionNames? (WHERE where=expression)?
+    : explainDesc? withClause? DELETE FROM qualifiedName partitionNames? (USING using=relations)? (WHERE where=expression)?
     ;
 
 // ------------------------------------------- Routine Statement -----------------------------------------------------------
@@ -1333,10 +1346,10 @@ showSnapshotStatement
     ;
 
 createRepositoryStatement
-    : CREATE (READ ONLY)? REPOSITORY identifier
-    WITH BROKER identifier?
-    ON LOCATION string
-    PROPERTIES propertyList
+    : CREATE (READ ONLY)? REPOSITORY repoName=identifier
+    WITH BROKER brokerName=identifierOrString?
+    ON LOCATION location=string
+    (PROPERTIES propertyList)?
     ;
 
 dropRepositoryStatement
@@ -1634,9 +1647,10 @@ columnAliases
     : '(' identifier (',' identifier)* ')'
     ;
 
+// partitionNames should not support string, it should be identifier here only for compatibility with historical bugs
 partitionNames
-    : TEMPORARY? (PARTITION | PARTITIONS) '(' identifier (',' identifier)* ')'
-    | TEMPORARY? (PARTITION | PARTITIONS) identifier
+    : TEMPORARY? (PARTITION | PARTITIONS) '(' identifierOrString (',' identifierOrString)* ')'
+    | TEMPORARY? (PARTITION | PARTITIONS) identifierOrString
     ;
 
 tabletList
@@ -1732,7 +1746,7 @@ primaryExpression
     | primaryExpression COLLATE (identifier | string)                                     #collate
     | literalExpression                                                                   #literal
     | columnReference                                                                     #columnRef
-    | base = primaryExpression '.' fieldName = identifier                                 #dereference
+    | base = primaryExpression (DOT_IDENTIFIER | '.' fieldName = identifier )             #dereference
     | left = primaryExpression CONCAT right = primaryExpression                           #concat
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
@@ -1852,7 +1866,7 @@ whenClause
 
 over
     : OVER '('
-        (PARTITION BY partition+=expression (',' partition+=expression)*)?
+        (bracketHint? PARTITION BY partition+=expression (',' partition+=expression)*)?
         (ORDER BY sortItem (',' sortItem)*)?
         windowFrame?
       ')'
@@ -1891,11 +1905,12 @@ explainDesc
     ;
 
 optimizerTrace
-    : TRACE OPTIMIZER
+    : TRACE (OPTIMIZER | REWRITE)
     ;
 
 partitionDesc
     : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
+    | PARTITION BY RANGE primaryExpression '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY LIST identifierList '(' (listPartitionDesc (',' listPartitionDesc)*)? ')'
     ;
 
@@ -1962,6 +1977,11 @@ refreshSchemeDesc
     | ASYNC (START '(' string ')')? EVERY '(' interval ')'
     | INCREMENTAL
     | MANUAL)
+    ;
+
+statusDesc
+    : ACTIVE
+    | INACTIVE
     ;
 
 properties
@@ -2094,7 +2114,7 @@ decimalType
     ;
 
 qualifiedName
-    : identifier ('.' identifier)*
+    : identifier (DOT_IDENTIFIER | '.' identifier)*
     ;
 
 identifier
@@ -2139,27 +2159,27 @@ authOption
     ;
 
 nonReserved
-    : AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
+    : ACTIVE | AFTER | AGGREGATE | ASYNC | AUTHORS | AVG | ADMIN
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BOOLEAN | BROKER | BUCKETS | BUILTIN
-    | CAST | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
+    | CAST | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CURRENT | COLLATION | COLUMNS | COMMENT | COMMIT | COMMITTED
     | COMPUTE | CONNECTION | CONNECTION_ID | CONSISTENT | COSTS | COUNT | CONFIG
     | DATA | DATE | DATETIME | DAY | DECOMMISSION | DISTRIBUTION | DUPLICATE | DYNAMIC
     | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY
     | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE | FUNCTIONS
     | GLOBAL | GRANTS
     | HASH | HISTOGRAM | HELP | HLL_UNION | HOUR | HUB
-    | IDENTIFIED | IMAGE | IMPERSONATE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
+    | IDENTIFIED | IMAGE | IMPERSONATE | INACTIVE | INDEXES | INSTALL | INTERMEDIATE | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGICAL | LOW_PRIORITY | LOCK
     | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
     | OBSERVER | OF | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
-    | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
+    | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY
-    | QUARTER | QUERY | QUOTA
+    | QUARTER | QUERY | QUEUE | QUOTA
     | RANDOM | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY | REPOSITORIES
-    | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
-    | SAMPLE | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | SUM | STATUS | STOP
+    | RESOURCE | RESOURCES | RESTORE | RESUME | RETURNS | REVERT | REWRITE | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE
+    | SAMPLE | SCHEDULER | SECOND | SERIALIZABLE | SESSION | SETS | SIGNED | SNAPSHOT | SQLBLACKLIST | START | SUM | STATUS | STOP
     | STORAGE| STRING | STATS | SUBMIT | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TRANSACTION
     | TRIGGERS | TRUNCATE | TYPE | TYPES

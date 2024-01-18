@@ -124,4 +124,8 @@ public class ColumnRefFactory {
     public Map<ColumnRefOperator, Table> getColumnRefToTable() {
         return columnRefToTable;
     }
+
+    public Table getTableForColumn(int columnId) {
+        return columnRefToTable.get(getColumnRef(columnId));
+    }
 }

@@ -3,11 +3,15 @@ package com.starrocks.common.util;
 
 import com.starrocks.common.AnalysisException;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeFormatterBuilder;
+import java.time.format.ResolverStyle;
 import java.time.format.SignStyle;
 import java.time.temporal.ChronoField;
 import java.time.temporal.TemporalAccessor;
@@ -24,23 +28,88 @@ public class DateUtils {
 
     public static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
 
-    public static final DateTimeFormatter DATE_FORMATTER_UNIX =
-            DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d").toFormatter();
-    public static final DateTimeFormatter DATE_TIME_FORMATTER_UNIX =
-            DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s").toFormatter();
-    public static final DateTimeFormatter DATE_TIME_MS_FORMATTER_UNIX =
-            DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.%f").toFormatter();
+    public static final DateTimeFormatter DATE_FORMATTER_UNIX = unixDatetimeFormatter("%Y-%m-%d");
+    public static final DateTimeFormatter DATEKEY_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d");
+    public static final DateTimeFormatter DATE_TIME_FORMATTER_UNIX = unixDatetimeFormatter("%Y-%m-%d %H:%i:%s");
+    public static final DateTimeFormatter DATE_TIME_MS_FORMATTER_UNIX = unixDatetimeFormatter("%Y-%m-%d %H:%i:%s.%f");
+    public static final DateTimeFormatter MINUTE_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d%H%i");
+    public static final DateTimeFormatter HOUR_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d%H");
+    public static final DateTimeFormatter YEAR_FORMATTER_UNIX = unixDatetimeFormatter("%Y");
+    public static final DateTimeFormatter MONTH_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m");
+
+    /*
+     * Dates containing two-digit year values are ambiguous because the century is unknown.
+     * MySQL interprets two-digit year values using these rules:
+     * Year values in the range 70-99 are converted to 1970-1999.
+     * Year values in the range 00-69 are converted to 2000-2069.
+     * */
+    private static final DateTimeFormatter STRICT_DATE_FORMATTER =
+            unixDatetimeStrictFormatter("%Y-%m-%e", false);
+    private static final DateTimeFormatter STRICT_DATE_FORMATTER_TWO_DIGIT =
+            unixDatetimeStrictFormatter("%y-%m-%e", false);
+    private static final DateTimeFormatter STRICT_DATE_NO_SPLIT_FORMATTER =
+            unixDatetimeStrictFormatter("%Y%m%e", true);
+
+    // isTwoDigit, withMs, withSplitT -> formatter
+    private static final DateTimeFormatter[][][] DATETIME_FORMATTERS = new DateTimeFormatter[2][2][2];
+
+    static {
+        // isTwoDigit, withMs, withSplitT -> formatter
+        DATETIME_FORMATTERS[0][0][0] = unixDatetimeStrictFormatter("%Y-%m-%e %H:%i:%s", false);
+        DATETIME_FORMATTERS[0][0][1] = unixDatetimeStrictFormatter("%Y-%m-%eT%H:%i:%s", false);
+        DATETIME_FORMATTERS[0][1][0] = unixDatetimeStrictFormatter("%Y-%m-%e %H:%i:%s.%f", false);
+        DATETIME_FORMATTERS[0][1][1] = unixDatetimeStrictFormatter("%Y-%m-%eT%H:%i:%s.%f", false);
+        DATETIME_FORMATTERS[1][0][0] = unixDatetimeStrictFormatter("%y-%m-%e %H:%i:%s", false);
+        DATETIME_FORMATTERS[1][0][1] = unixDatetimeStrictFormatter("%y-%m-%eT%H:%i:%s", false);
+        DATETIME_FORMATTERS[1][1][0] = unixDatetimeStrictFormatter("%y-%m-%e %H:%i:%s.%f", false);
+        DATETIME_FORMATTERS[1][1][1] = unixDatetimeStrictFormatter("%y-%m-%eT%H:%i:%s.%f", false);
+    }
+
+    public static LocalDateTime parseStrictDateTime(String str) {
+        if (str == null || str.length() < 5) {
+            throw new IllegalArgumentException("Invalid datetime string: " + str);
+        }
+        if (str.contains(":")) {
+            // datetime
+            int isTwoDigit = str.split("-")[0].length() == 2 ? 1 : 0;
+            int withMs = str.contains(".") ? 1 : 0;
+            int withSplitT = str.contains("T") ? 1 : 0;
+            DateTimeFormatter formatter = DATETIME_FORMATTERS[isTwoDigit][withMs][withSplitT];
+            return parseStringWithDefaultHSM(str, formatter);
+        } else {
+            // date
+            DateTimeFormatter formatter;
+            if (str.split("-")[0].length() == 2) {
+                formatter = STRICT_DATE_FORMATTER_TWO_DIGIT;
+            } else if (str.split("-").length == 3) {
+                formatter = STRICT_DATE_FORMATTER;
+            } else if (str.length() == 8) {
+                // 20200202
+                formatter = STRICT_DATE_NO_SPLIT_FORMATTER;
+            } else {
+                formatter = STRICT_DATE_FORMATTER;
+            }
+            return parseStringWithDefaultHSM(str, formatter);
+        }
+    }
 
     public static DateTimeFormatter probeFormat(String dateTimeStr) throws AnalysisException {
         if (dateTimeStr.length() == 8) {
-            return DateUtils.DATEKEY_FORMATTER;
+            return DATEKEY_FORMATTER;
         } else if (dateTimeStr.length() == 10) {
-            return DateUtils.DATE_FORMATTER;
+            return DATE_FORMATTER_UNIX;
         } else if (dateTimeStr.length() == 19) {
-            return DateUtils.DATE_TIME_FORMATTER;
+            return DATE_TIME_FORMATTER_UNIX;
+        } else if (dateTimeStr.length() == 26) {
+            return DATE_TIME_MS_FORMATTER_UNIX;
         } else {
             throw new AnalysisException("can not probe datetime format:" + dateTimeStr);
         }
+    }
+
+    public static String formatTimeStampInSeconds(long timestampInSeconds, ZoneId timeZoneId) {
+        ZonedDateTime createTime = Instant.ofEpochMilli(timestampInSeconds * 1000).atZone(timeZoneId);
+        return DATE_TIME_FORMATTER_UNIX.format(createTime);
     }
 
     /*
@@ -56,8 +125,21 @@ public class DateUtils {
         }
     }
 
-    public static DateTimeFormatterBuilder unixDatetimeFormatBuilder(String pattern) {
-        return unixDatetimeFormatBuilder(pattern, true);
+    public static LocalDateTime parseDatTimeString(String datetime) throws AnalysisException {
+        DateTimeFormatter dateTimeFormatter = probeFormat(datetime);
+        return parseStringWithDefaultHSM(datetime, dateTimeFormatter);
+    }
+
+    public static DateTimeFormatter unixDatetimeFormatter(String pattern) {
+        return unixDatetimeFormatBuilder(pattern, true).toFormatter();
+    }
+
+    public static DateTimeFormatter unixDatetimeFormatter(String pattern, boolean isOutputFormat) {
+        return unixDatetimeFormatBuilder(pattern, isOutputFormat).toFormatter();
+    }
+
+    private static DateTimeFormatter unixDatetimeStrictFormatter(String pattern, boolean isOutputFormat) {
+        return unixDatetimeFormatBuilder(pattern, isOutputFormat).toFormatter().withResolverStyle(ResolverStyle.STRICT);
     }
 
     public static DateTimeFormatterBuilder unixDatetimeFormatBuilder(String pattern, boolean isOutputFormat) {
@@ -111,10 +193,8 @@ public class DateUtils {
                         builder.appendValue(ChronoField.SECOND_OF_MINUTE, 2);
                         break;
                     case 'T': // %T Time, 24-hour (hh:mm:ss)
-                        builder.appendValue(ChronoField.HOUR_OF_DAY, 2)
-                                .appendLiteral(':')
-                                .appendValue(ChronoField.MINUTE_OF_HOUR, 2)
-                                .appendLiteral(':')
+                        builder.appendValue(ChronoField.HOUR_OF_DAY, 2).appendLiteral(':')
+                                .appendValue(ChronoField.MINUTE_OF_HOUR, 2).appendLiteral(':')
                                 .appendValue(ChronoField.SECOND_OF_MINUTE, 2);
                         break;
                     case 'v': // %v Week (01..53), where Monday is the first day of the week; used with %x

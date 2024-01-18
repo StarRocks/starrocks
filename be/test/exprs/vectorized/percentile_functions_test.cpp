@@ -22,7 +22,7 @@ private:
 
 TEST_F(PercentileFunctionsTest, percentileEmptyTest) {
     Columns c;
-    auto column = PercentileFunctions::percentile_empty(ctx, c);
+    auto column = PercentileFunctions::percentile_empty(ctx, c).value();
 
     ASSERT_TRUE(column->is_constant());
 
@@ -39,7 +39,7 @@ TEST_F(PercentileFunctionsTest, percentileHashTest) {
     s->append(3);
     columns.push_back(s);
 
-    auto column = PercentileFunctions::percentile_hash(ctx, columns);
+    auto column = PercentileFunctions::percentile_hash(ctx, columns).value();
     ASSERT_TRUE(column->is_object());
 
     auto percentile = ColumnHelper::cast_to<TYPE_PERCENTILE>(column);
@@ -60,7 +60,7 @@ TEST_F(PercentileFunctionsTest, percentileNullTest) {
     c2_null->append_nulls(1);
     columns.push_back(c2_null);
 
-    ColumnPtr column = PercentileFunctions::percentile_approx_raw(ctx, columns);
+    ColumnPtr column = PercentileFunctions::percentile_approx_raw(ctx, columns).value();
     ASSERT_TRUE(column->is_nullable());
     auto result = ColumnHelper::as_column<NullableColumn>(column);
     ASSERT_TRUE(result->is_null(0));

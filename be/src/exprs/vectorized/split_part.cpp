@@ -16,7 +16,8 @@ namespace starrocks::vectorized {
  * @paramType: [BinaryColumn, BinaryColumn, IntColumn]
  * @return: BinaryColumn
  */
-ColumnPtr StringFunctions::split_part(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+StatusOr<ColumnPtr> StringFunctions::split_part(FunctionContext* context,
+                                                const starrocks::vectorized::Columns& columns) {
     DCHECK_EQ(columns.size(), 3);
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 

@@ -532,9 +532,12 @@ CTEAnchor(cteid=1)
 [end]
 
 /* test QuantifiedApply2OuterJoinRule */
+<<<<<<< HEAD
 /* test QuantifiedApply2OuterJoinRule */
 /* test QuantifiedApply2OuterJoinRule */
 /* test QuantifiedApply2OuterJoinRule */
+=======
+>>>>>>> 2.5.18
 
 [sql]
 select v1, v2 in (select v5 + v4 from t1 where v1 = 1 and v1 = v4 and v2 + v5 = v6) from t0;
@@ -613,10 +616,11 @@ CTEAnchor(cteid=1)
         SCAN (columns[7: t1a, 9: t1c, 10: t1d] predicate[7: t1a = a])
     LEFT OUTER JOIN (join-predicate [29: add = 25: cast AND add(26: add, 1: v1) = 5: v5] post-join-predicate [null])
         LEFT OUTER JOIN (join-predicate [30: cast = 21: cast AND 31: add = 22: cast AND add(23: add, 1: v1) = 5: v5] post-join-predicate [null])
-            LEFT OUTER JOIN (join-predicate [null] post-join-predicate [null])
-                SCAN (columns[1: v1] predicate[null])
-                EXCHANGE BROADCAST
+            RIGHT OUTER JOIN (join-predicate [null] post-join-predicate [null])
+                EXCHANGE GATHER
                     SCAN (columns[4: v4, 5: v5] predicate[null])
+                EXCHANGE GATHER
+                    SCAN (columns[1: v1] predicate[null])
             EXCHANGE BROADCAST
                 AGGREGATE ([GLOBAL] aggregate [{}] group by [[21: cast, 22: cast, 23: add]] having [null]
                     EXCHANGE SHUFFLE[21, 22, 23]
@@ -731,10 +735,11 @@ CTEAnchor(cteid=1)
         SCAN (columns[7: t1a, 9: t1c, 10: t1d] predicate[7: t1a = a])
     LEFT OUTER JOIN (join-predicate [29: add = 25: cast AND add(26: add, 1: v1) = 5: v5] post-join-predicate [null])
         LEFT OUTER JOIN (join-predicate [30: cast = 21: cast AND 31: add = 22: cast AND add(23: add, 1: v1) = 5: v5] post-join-predicate [null])
-            LEFT OUTER JOIN (join-predicate [null] post-join-predicate [null])
-                SCAN (columns[1: v1] predicate[null])
-                EXCHANGE BROADCAST
+            RIGHT OUTER JOIN (join-predicate [null] post-join-predicate [null])
+                EXCHANGE GATHER
                     SCAN (columns[4: v4, 5: v5] predicate[null])
+                EXCHANGE GATHER
+                    SCAN (columns[1: v1] predicate[null])
             EXCHANGE BROADCAST
                 AGGREGATE ([GLOBAL] aggregate [{}] group by [[21: cast, 22: cast, 23: add]] having [null]
                     EXCHANGE SHUFFLE[21, 22, 23]
@@ -773,9 +778,12 @@ CTEAnchor(cteid=1)
 [end]
 
 /* test QuantifiedApply2JoinRule */
+<<<<<<< HEAD
 /* test QuantifiedApply2JoinRule */
 /* test QuantifiedApply2JoinRule */
 /* test QuantifiedApply2JoinRule */
+=======
+>>>>>>> 2.5.18
 
 [sql]
 select v1 from t0 where v2 in (select v5 + v4 from t1 where v1 = 1 and v1 = v4 and v2 + v5 = v6);
@@ -812,10 +820,11 @@ LEFT SEMI JOIN (join-predicate [18: cast = 19: cast AND add(19: cast, cast(1: v1
 select t0.v1 from t0 left join t1 on true where t0.v1 + t1.v4 in (select t1a from test_all_type where t1c = t0.v1 + t1.v5 and t1a = 'a' and t1c + t1d + t0.v1 = t1.v5);
 [result]
 LEFT SEMI JOIN (join-predicate [18: cast = 19: cast AND 21: add = 20: cast AND add(add(20: cast, 10: t1d), 1: v1) = 5: v5] post-join-predicate [null])
-    LEFT OUTER JOIN (join-predicate [null] post-join-predicate [null])
-        SCAN (columns[1: v1] predicate[null])
-        EXCHANGE BROADCAST
+    RIGHT OUTER JOIN (join-predicate [null] post-join-predicate [null])
+        EXCHANGE GATHER
             SCAN (columns[4: v4, 5: v5] predicate[null])
+        EXCHANGE GATHER
+            SCAN (columns[1: v1] predicate[null])
     EXCHANGE BROADCAST
         SCAN (columns[7: t1a, 9: t1c, 10: t1d] predicate[7: t1a = a])
 [end]
@@ -867,10 +876,11 @@ NULL AWARE LEFT ANTI JOIN (join-predicate [18: cast = 19: cast AND add(19: cast,
 select t0.v1 from t0 left join t1 on true where t0.v1 + t1.v4 not in (select t1a from test_all_type where t1c = t0.v1 + t1.v5 and t1a = 'a' and t1c + t1d + t0.v1 = t1.v5);
 [result]
 NULL AWARE LEFT ANTI JOIN (join-predicate [18: cast = 19: cast AND 21: add = 20: cast AND add(add(20: cast, 10: t1d), 1: v1) = 5: v5] post-join-predicate [null])
-    LEFT OUTER JOIN (join-predicate [null] post-join-predicate [null])
-        SCAN (columns[1: v1] predicate[null])
-        EXCHANGE BROADCAST
+    RIGHT OUTER JOIN (join-predicate [null] post-join-predicate [null])
+        EXCHANGE GATHER
             SCAN (columns[4: v4, 5: v5] predicate[null])
+        EXCHANGE GATHER
+            SCAN (columns[1: v1] predicate[null])
     EXCHANGE BROADCAST
         SCAN (columns[7: t1a, 9: t1c, 10: t1d] predicate[7: t1a = a])
 [end]

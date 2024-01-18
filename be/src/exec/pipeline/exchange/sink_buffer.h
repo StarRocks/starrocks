@@ -16,6 +16,7 @@
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
 #include "runtime/current_thread.h"
+#include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 #include "util/brpc_stub_cache.h"
 #include "util/defer_op.h"
@@ -87,7 +88,7 @@ private:
     using Mutex = bthread::Mutex;
 
     void _update_network_time(const TUniqueId& instance_id, const int64_t send_timestamp,
-                              const int64_t receive_timestamp);
+                              const int64_t receiver_post_process_time);
     // Update the discontinuous acked window, here are the invariants:
     // all acks received with sequence from [0, _max_continuous_acked_seqs[x]]
     // not all the acks received with sequence from [_max_continuous_acked_seqs[x]+1, _request_seqs[x]]
@@ -174,6 +175,13 @@ private:
     int64_t _first_send_time = -1;
     int64_t _last_receive_time = -1;
     int64_t _rpc_http_min_size = 0;
+<<<<<<< HEAD
+=======
+
+    std::atomic<int64_t> _request_sequence = 0;
+    int64_t _sent_audit_stats_frequency = 1;
+    int64_t _sent_audit_stats_frequency_upper_limit = 64;
+>>>>>>> 2.5.18
 };
 
 } // namespace starrocks::pipeline

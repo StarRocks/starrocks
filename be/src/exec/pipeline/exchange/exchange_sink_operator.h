@@ -160,6 +160,8 @@ private:
 
     RuntimeProfile::Counter* _serialize_chunk_timer = nullptr;
     RuntimeProfile::Counter* _shuffle_hash_timer = nullptr;
+    RuntimeProfile::Counter* _shuffle_chunk_append_counter = nullptr;
+    RuntimeProfile::Counter* _shuffle_chunk_append_timer = nullptr;
     RuntimeProfile::Counter* _compress_timer = nullptr;
     RuntimeProfile::Counter* _bytes_pass_through_counter = nullptr;
     RuntimeProfile::Counter* _uncompressed_bytes_counter = nullptr;

@@ -18,10 +18,10 @@ public:
     SubfieldExpr(const SubfieldExpr&) = default;
     SubfieldExpr(SubfieldExpr&&) = default;
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* chunk) override {
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* chunk) override {
         DCHECK_EQ(1, _children.size());
 
-        ColumnPtr col = _children.at(0)->evaluate(context, chunk);
+        ASSIGN_OR_RETURN(ColumnPtr col, _children.at(0)->evaluate_checked(context, chunk));
 
         // Enter multiple subfield for struct type, remain last subfield
         for (size_t i = 0; i < _used_subfield_names.size() - 1; i++) {
@@ -52,7 +52,7 @@ public:
 
         Column* tmp_col = ColumnHelper::get_data_column(col.get());
         DCHECK(tmp_col->is_struct());
-        StructColumn* struct_column = down_cast<StructColumn*>(tmp_col);
+        auto* struct_column = down_cast<StructColumn*>(tmp_col);
 
         std::string fieldname = _used_subfield_names.back();
         ColumnPtr subfield_column = struct_column->field_column(fieldname);

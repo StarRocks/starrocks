@@ -96,13 +96,14 @@ public:
     }
 
     Status get_dict_values(vectorized::Column* column) override { return _reader->get_dict_values(column); }
-
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, vectorized::Column* column) override {
-        return _reader->get_dict_values(dict_codes, column);
+    Status get_dict_values(const std::vector<int32_t>& dict_codes, const vectorized::NullableColumn& nulls,
+                           vectorized::Column* column) override {
+        return _reader->get_dict_values(dict_codes, nulls, column);
     }
 
-    Status get_dict_codes(const std::vector<Slice>& dict_values, std::vector<int32_t>* dict_codes) override {
-        return _reader->get_dict_codes(dict_values, dict_codes);
+    Status get_dict_codes(const std::vector<Slice>& dict_values, const vectorized::NullableColumn& nulls,
+                          std::vector<int32_t>* dict_codes) override {
+        return _reader->get_dict_codes(dict_values, nulls, dict_codes);
     }
 
     void set_need_parse_levels(bool need_parse_levels) override { _reader->set_need_parse_levels(need_parse_levels); }
@@ -182,7 +183,7 @@ private:
 
 class MapColumnReader : public ColumnReader {
 public:
-    explicit MapColumnReader(const ColumnReaderOptions& opts) {}
+    explicit MapColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
     ~MapColumnReader() override = default;
 
     Status init(const ParquetField* field, std::unique_ptr<ColumnReader> key_reader,
@@ -214,6 +215,12 @@ public:
         auto* key_column = map_column->keys_column().get();
         auto* value_column = map_column->values_column().get();
         Status st;
+
+        // TODO(SmithCruise) Ugly code, it's a temporary solution,
+        //  to reset late materialization's rows_to_skip before read each subfield column
+        size_t origin_next_row = _opts.context->next_row;
+        size_t origin_rows_to_skip = _opts.context->rows_to_skip;
+
         if (_key_reader != nullptr) {
             st = _key_reader->prepare_batch(num_records, content_type, key_column);
             if (!st.ok() && !st.is_end_of_file()) {
@@ -222,6 +229,10 @@ public:
         }
 
         if (_value_reader != nullptr) {
+            // do reset
+            _opts.context->next_row = origin_next_row;
+            _opts.context->rows_to_skip = origin_rows_to_skip;
+
             st = _value_reader->prepare_batch(num_records, content_type, value_column);
             if (!st.ok() && !st.is_end_of_file()) {
                 return st;
@@ -300,11 +311,12 @@ private:
     const ParquetField* _field = nullptr;
     std::unique_ptr<ColumnReader> _key_reader;
     std::unique_ptr<ColumnReader> _value_reader;
+    const ColumnReaderOptions& _opts;
 };
 
 class StructColumnReader : public ColumnReader {
 public:
-    explicit StructColumnReader(const ColumnReaderOptions& opts) {}
+    explicit StructColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
     ~StructColumnReader() override = default;
 
     Status init(const ParquetField* field, std::vector<std::unique_ptr<ColumnReader>>&& child_readers) {
@@ -342,10 +354,17 @@ public:
 
         DCHECK_EQ(fields_column.size(), _child_readers.size());
 
+        // TODO(SmithCruise) Ugly code, it's a temporary solution,
+        //  to reset late materialization's rows_to_skip before read each subfield column
+        size_t origin_next_row = _opts.context->next_row;
+        size_t origin_rows_to_skip = _opts.context->rows_to_skip;
+
         // Fill data for non-nullptr subfield column reader
         for (size_t i = 0; i < fields_column.size(); i++) {
             vectorized::Column* child_column = fields_column[i].get();
             if (_child_readers[i] != nullptr) {
+                _opts.context->next_row = origin_next_row;
+                _opts.context->rows_to_skip = origin_rows_to_skip;
                 RETURN_IF_ERROR(_child_readers[i]->prepare_batch(num_records, content_type, child_column));
             }
         }
@@ -403,9 +422,14 @@ private:
         size_t num_levels = 0;
         (*_def_rep_level_child_reader)->get_levels(&def_levels, &rep_levels, &num_levels);
 
+<<<<<<< HEAD
         // OptionalStoredColumnReader & RepeatedStoredColumnReader must have def_levels
         DCHECK(def_levels != nullptr);
         if (def_levels == nullptr) {
+=======
+        if (def_levels == nullptr) {
+            // If subfields are required, def_levels is nullptr
+>>>>>>> 2.5.18
             *has_null = false;
             return;
         }
@@ -451,7 +475,37 @@ private:
     std::vector<std::unique_ptr<ColumnReader>> _child_readers;
     // First non-nullptr child ColumnReader, used to get def & rep levels
     const std::unique_ptr<ColumnReader>* _def_rep_level_child_reader = nullptr;
+<<<<<<< HEAD
+=======
+    const ColumnReaderOptions& _opts;
+>>>>>>> 2.5.18
 };
+
+void ColumnReader::get_subfield_pos_with_pruned_type(const ParquetField& field, const TypeDescriptor& col_type,
+                                                     bool case_sensitive, std::vector<int32_t>& pos) {
+    DCHECK(field.type.type == PrimitiveType::TYPE_STRUCT);
+
+    // build tmp mapping for ParquetField
+    std::unordered_map<std::string, size_t> field_name_2_pos;
+    for (size_t i = 0; i < field.children.size(); i++) {
+        const std::string format_field_name =
+                case_sensitive ? field.children[i].name : boost::algorithm::to_lower_copy(field.children[i].name);
+        field_name_2_pos.emplace(format_field_name, i);
+    }
+
+    for (size_t i = 0; i < col_type.children.size(); i++) {
+        const std::string formatted_subfield_name =
+                case_sensitive ? col_type.field_names[i] : boost::algorithm::to_lower_copy(col_type.field_names[i]);
+
+        auto it = field_name_2_pos.find(formatted_subfield_name);
+        if (it == field_name_2_pos.end()) {
+            LOG(WARNING) << "Struct subfield name: " + formatted_subfield_name + " not found.";
+            pos[i] = -1;
+            continue;
+        }
+        pos[i] = it->second;
+    }
+}
 
 Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField* field, const TypeDescriptor& col_type,
                             std::unique_ptr<ColumnReader>* output) {
@@ -491,35 +545,19 @@ Status ColumnReader::do_create(const ColumnReaderOptions& opts, const ParquetFie
         RETURN_IF_ERROR(reader->init(field, std::move(key_reader), std::move(value_reader)));
         *output = std::move(reader);
     } else if (field->type.type == PrimitiveType::TYPE_STRUCT) {
-        // build tmp mapping for ParquetField
-        std::unordered_map<std::string, size_t> field_name_2_pos;
-        for (size_t i = 0; i < field->children.size(); i++) {
-            if (opts.case_sensitive) {
-                field_name_2_pos.emplace(field->children[i].name, i);
-            } else {
-                field_name_2_pos.emplace(boost::algorithm::to_lower_copy(field->children[i].name), i);
-            }
-        }
+        std::vector<int32_t> subfield_pos(col_type.children.size());
+        get_subfield_pos_with_pruned_type(*field, col_type, opts.case_sensitive, subfield_pos);
 
         std::vector<std::unique_ptr<ColumnReader>> children_readers;
         for (size_t i = 0; i < col_type.children.size(); i++) {
-            const std::string& subfield_name = col_type.field_names[i];
-
-            std::string required_subfield_name =
-                    opts.case_sensitive ? subfield_name : boost::algorithm::to_lower_copy(subfield_name);
-
-            auto it = field_name_2_pos.find(required_subfield_name);
-            if (it == field_name_2_pos.end()) {
-                LOG(WARNING) << "Struct subfield name: " + required_subfield_name + " not found.";
+            if (subfield_pos[i] == -1) {
+                // -1 means subfield not existed, we need to emplace_back nullptr
                 children_readers.emplace_back(nullptr);
                 continue;
             }
-
-            size_t parquet_pos = it->second;
-
             std::unique_ptr<ColumnReader> child_reader;
             RETURN_IF_ERROR(
-                    ColumnReader::create(opts, &field->children[parquet_pos], col_type.children[i], &child_reader));
+                    ColumnReader::create(opts, &field->children[subfield_pos[i]], col_type.children[i], &child_reader));
             children_readers.emplace_back(std::move(child_reader));
         }
 

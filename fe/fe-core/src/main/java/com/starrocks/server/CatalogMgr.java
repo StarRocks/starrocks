@@ -14,6 +14,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Resource;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.common.proc.DbsProcDir;
@@ -35,7 +36,6 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -51,7 +51,7 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceM
 
 public class CatalogMgr {
     private static final Logger LOG = LogManager.getLogger(CatalogMgr.class);
-    private final Map<String, Catalog> catalogs = new HashMap<>();
+    private final Map<String, Catalog> catalogs = Maps.newConcurrentMap();
     private final ConnectorMgr connectorMgr;
     private final ReadWriteLock catalogLock = new ReentrantReadWriteLock();
 
@@ -131,7 +131,17 @@ public class CatalogMgr {
 
         readLock();
         try {
-            return catalogs.containsKey(catalogName);
+            if (catalogs.containsKey(catalogName)) {
+                return true;
+            }
+
+            // TODO: Used for replay query dump which only supports `hive` catalog for now.
+            if (FeConstants.isReplayFromQueryDump &&
+                    catalogs.containsKey(getResourceMappingCatalogName(catalogName, "hive"))) {
+                return true;
+            }
+
+            return false;
         } finally {
             readUnlock();
         }
@@ -278,6 +288,10 @@ public class CatalogMgr {
 
     private void writeUnLock() {
         this.catalogLock.writeLock().unlock();
+    }
+
+    public long getCatalogCount() {
+        return catalogs.size();
     }
 
     public class CatalogProcNode implements ProcDirInterface {

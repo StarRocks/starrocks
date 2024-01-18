@@ -37,9 +37,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.clone.TabletSchedCtx.Priority;
-import com.starrocks.clone.TabletScheduler.AddResult;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.Pair;
+>>>>>>> 2.5.18
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.server.GlobalStateMgr;
@@ -49,7 +52,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+<<<<<<< HEAD
 import java.util.Collections;
+=======
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Comparator;
+>>>>>>> 2.5.18
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -196,7 +205,10 @@ public class ColocateTableBalancer extends LeaderDaemon {
      * ColocateRelocationInfo per group.
      */
     private final Map<GroupId, ColocateRelocationInfo> group2ColocateRelocationInfo = Maps.newConcurrentMap();
+<<<<<<< HEAD
 
+=======
+>>>>>>> 2.5.18
 
     /*
      * Each round, we do 2 steps:
@@ -231,6 +243,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
     @Override
     protected void runAfterCatalogReady() {
         if (!Config.tablet_sched_disable_colocate_balance) {
+<<<<<<< HEAD
             boolean isAnyGroupChanged = relocateAndBalancePerGroup();
             if (!isAnyGroupChanged) {
                 // Only do overall balance after all groups are balanced from per group view.
@@ -239,6 +252,12 @@ public class ColocateTableBalancer extends LeaderDaemon {
             }
         }
         matchGroup();
+=======
+            relocateAndBalancePerGroup();
+            relocateAndBalanceAllGroups();
+        }
+        matchGroups();
+>>>>>>> 2.5.18
     }
 
     /*
@@ -288,7 +307,10 @@ public class ColocateTableBalancer extends LeaderDaemon {
         Set<GroupId> groupIds = colocateIndex.getAllGroupIds();
         TabletScheduler tabletScheduler = globalStateMgr.getTabletScheduler();
         TabletSchedulerStat stat = tabletScheduler.getStat();
+<<<<<<< HEAD
         Map<GroupId, Long> group2InScheduleTabletNum = tabletScheduler.getTabletsNumInScheduleForEachCG();
+=======
+>>>>>>> 2.5.18
         Set<GroupId> toIgnoreGroupIds = new HashSet<>();
         boolean isAnyGroupChanged = false;
         for (GroupId groupId : groupIds) {
@@ -306,6 +328,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
             }
 
             if (toIgnoreGroupIds.contains(groupId)) {
+<<<<<<< HEAD
                 continue;
             }
 
@@ -322,9 +345,12 @@ public class ColocateTableBalancer extends LeaderDaemon {
                     LOG.info("number of finished scheduling tablets per bucket: {} for colocate group {}",
                             info.getScheduledTabletNumPerBucket(), groupId);
                 }
+=======
+>>>>>>> 2.5.18
                 continue;
             }
 
+            Set<Long> unavailableBeIdsInGroup = getUnavailableBeIdsInGroup(infoService, colocateIndex, groupId);
             stat.counterColocateBalanceRound.incrementAndGet();
             List<Long> availableBeIds = getAvailableBeIds(infoService);
             List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
@@ -359,6 +385,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
         cleanRelocationInfoMap(groupIds);
 
         return isAnyGroupChanged;
+<<<<<<< HEAD
     }
 
     private Map<GroupId, List<GroupId>> initGroupToCoGroupsInOtherDbMap(ColocateTableIndex colocateIndex,
@@ -679,51 +706,391 @@ public class ColocateTableBalancer extends LeaderDaemon {
         }
 
         return hasBad && st == TabletStatus.COLOCATE_REDUNDANT;
+=======
+>>>>>>> 2.5.18
     }
 
-    /*
-     * Check every tablet of a group, if replica's location does not match backends in group, relocating those
-     * replicas, and mark that group as unstable.
-     * If every replicas match the backends in group, mark that group as stable.
+    private Map<GroupId, List<GroupId>> initGroupToCoGroupsInOtherDbMap(ColocateTableIndex colocateIndex,
+                                                                        Set<GroupId> allGroups) {
+        Map<GroupId, List<GroupId>> groupToCoGroupsInOtherDb = new HashMap<>();
+        Set<GroupId> toIgnoreGroups = new HashSet<>();
+        for (GroupId groupId : allGroups) {
+            if (!toIgnoreGroups.contains(groupId)) {
+                List<GroupId> colocateWithGroupsInOtherDb =
+                        colocateIndex.getColocateWithGroupsInOtherDb(groupId);
+                toIgnoreGroups.addAll(colocateWithGroupsInOtherDb);
+                Preconditions.checkState(!groupToCoGroupsInOtherDb.containsKey(groupId));
+                groupToCoGroupsInOtherDb.put(groupId, colocateWithGroupsInOtherDb);
+            }
+        }
+
+        return groupToCoGroupsInOtherDb;
+    }
+
+    private Map<Long, AllGroupsReplicaDistInfoPerBe> initDistInfoPerBackendMap(ColocateTableIndex colocateIndex,
+                                                                               SystemInfoService systemInfoService,
+                                                                               Map<GroupId, List<GroupId>>
+                                                                                       groupToCoGroupsInOtherDb) {
+        Map<Long, AllGroupsReplicaDistInfoPerBe> distInfoPerBackendMap = new HashMap<>();
+        for (Map.Entry<GroupId, List<GroupId>> entry : groupToCoGroupsInOtherDb.entrySet()) {
+            GroupId groupId = entry.getKey();
+            List<GroupId> coGroupsInOtherDb = entry.getValue();
+            List<List<Long>> backendsPerBucketSeq = colocateIndex.getBackendsPerBucketSeq(groupId);
+            if (backendsPerBucketSeq.isEmpty()) {
+                continue;
+            }
+
+            for (int i = 0; i < backendsPerBucketSeq.size(); i++) {
+                for (long backendId : backendsPerBucketSeq.get(i)) {
+                    distInfoPerBackendMap.putIfAbsent(backendId,
+                            AllGroupsReplicaDistInfoPerBe.createNewDistInfoObj(backendId));
+                    AllGroupsReplicaDistInfoPerBe distInfoPerBe = distInfoPerBackendMap.get(backendId);
+                    distInfoPerBe.totalNumOfBucketsAssigned++;
+                    int numOfTabletsPerBucket = colocateIndex.getNumOfTabletsPerBucket(groupId);
+                    // if this group has groups colocated with in other databases, we should add them up
+                    for (GroupId otherGroupId : coGroupsInOtherDb) {
+                        numOfTabletsPerBucket += colocateIndex.getNumOfTabletsPerBucket(otherGroupId);
+                    }
+                    distInfoPerBe.totalNumOfReplicasAssigned += numOfTabletsPerBucket;
+                    distInfoPerBe.replicaNumToGroupsMap
+                            .computeIfAbsent(numOfTabletsPerBucket, k -> Sets.newHashSet())
+                            .add(groupId);
+                    distInfoPerBe.groupToAssignedBucketIdx
+                            .computeIfAbsent(groupId, k -> Lists.newArrayList())
+                            .add(i);
+                }
+            }
+        }
+
+        // for backends that haven't assigned any bucket of any colocate group, we should
+        // also initialize its `AllGroupsReplicaDistInfoPerBe`, in order to migrate some buckets to them
+        // in the following balancing process
+        List<Long> availableBackends = systemInfoService.getAvailableBackendIds();
+        availableBackends.forEach(backendId ->
+                distInfoPerBackendMap.putIfAbsent(backendId,
+                        AllGroupsReplicaDistInfoPerBe.createNewDistInfoObj(backendId)));
+
+        return distInfoPerBackendMap;
+    }
+
+    // Sort `distInfoPerBeList` in desc order based on the following rules,
+    // First we compare them using `totalNumOfBucketsAssigned`,
+    // if two `AllGroupsReplicaDistInfoPerBe` object has the same number of assigned buckets,
+    // then comparing them using `totalNumOfReplicasAssigned`
+    private List<AllGroupsReplicaDistInfoPerBe> sortDistInfoPerBackendList(
+            List<AllGroupsReplicaDistInfoPerBe> distInfoPerBackendList) {
+        distInfoPerBackendList.sort((info1, info2) -> {
+            if (info2.totalNumOfBucketsAssigned == info1.totalNumOfBucketsAssigned) {
+                return (int) (info2.totalNumOfReplicasAssigned - info1.totalNumOfReplicasAssigned);
+            } else {
+                return (int) (info2.totalNumOfBucketsAssigned - info1.totalNumOfBucketsAssigned);
+            }
+        });
+
+        return distInfoPerBackendList;
+    }
+
+    private Set<String> getHostSetOfBucket(Set<Long> backendIds, SystemInfoService systemInfoService) {
+        Set<String> hostSet = new HashSet<>();
+        for (long backendId : backendIds) {
+            Backend backend = systemInfoService.getBackend(backendId);
+            if (backend != null) {
+                hostSet.add(backend.getHost());
+            }
+        }
+
+        return hostSet;
+    }
+
+    private List<List<Long>> convertToListOfLists(List<Set<Long>> listOfSets) {
+        List<List<Long>> listOfLists = new ArrayList<>();
+        for (Set<Long> set : listOfSets) {
+            List<Long> list = new ArrayList<>(set);
+            listOfLists.add(list);
+        }
+        return listOfLists;
+    }
+
+    private void updateDistInfoAfterBalanceMove(AllGroupsReplicaDistInfoPerBe srcInfo,
+                                                AllGroupsReplicaDistInfoPerBe destInfo,
+                                                int numOfReplicas,
+                                                GroupId groupId,
+                                                int bucketIdx) {
+        srcInfo.totalNumOfBucketsAssigned--;
+        destInfo.totalNumOfBucketsAssigned++;
+
+        srcInfo.totalNumOfReplicasAssigned -= numOfReplicas;
+        destInfo.totalNumOfReplicasAssigned += numOfReplicas;
+
+        List<Integer> srcAssignedBucketIdxList = srcInfo.groupToAssignedBucketIdx.get(groupId);
+        Preconditions.checkState(srcAssignedBucketIdxList.remove(Integer.valueOf(bucketIdx)));
+        if (srcAssignedBucketIdxList.isEmpty()) {
+            srcInfo.groupToAssignedBucketIdx.remove(groupId);
+            Set<GroupId> srcGroupIdSet = srcInfo.replicaNumToGroupsMap.get(numOfReplicas);
+            srcGroupIdSet.remove(groupId);
+            if (srcGroupIdSet.isEmpty()) {
+                srcInfo.replicaNumToGroupsMap.remove(numOfReplicas);
+            }
+        }
+
+        destInfo.groupToAssignedBucketIdx.computeIfAbsent(groupId, k -> new ArrayList<>()).add(bucketIdx);
+        destInfo.replicaNumToGroupsMap.computeIfAbsent(numOfReplicas, k -> new HashSet<>()).add(groupId);
+    }
+
+    /**
+     * Balance replica distribution from overall view.
+     * First we collect the replica distribution info of all colocate groups for each backend, and put them into
+     * a list `distInfoPerBackendList`. To be noticed, for groups that have colocated groups in other databases,
+     * we should treat them as a whole, and only record one `AllGroupsReplicaDistInfoPerBe` object for them,
+     * because the backend list per bucket sequence of them should be kept the same.
+     * Then we sort `distInfoPerBackendList` based on the number of buckets and replicas assigned to each backend,
+     * see `sortDistInfoPerBackendList()` for more details. After the sort, we try to move a bucket from backend which
+     * has the most number of buckets to backend that has the lowest in each balance round.
+     * If the src is not fitted to move bucket to dest, we try the next one. For all the groups which have
+     * been assigned to the src backend, we choose the group which will make the replica distribution better after move
+     * as the source.
      */
-    private void matchGroup() {
+    private void relocateAndBalanceAllGroups() {
+        if (Config.tablet_sched_disable_colocate_overall_balance) {
+            return;
+        }
+
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         ColocateTableIndex colocateIndex = globalStateMgr.getColocateTableIndex();
-        TabletScheduler tabletScheduler = globalStateMgr.getTabletScheduler();
+        Set<GroupId> allGroups = colocateIndex.getAllGroupIds();
+        if (allGroups.isEmpty()) {
+            return;
+        }
+
+        // group -> list of groups colocated with in other database
+        // For those groups, we should treat them as a single group, we use one of the group to represent them all,
+        // and change backend sequence of buckets for all of them when that representing one's has changed.
+        // Besides, the `totalNumOfReplicasAssigned` in `AllGroupsReplicaDistInfoPerBe` for that "single group"
+        // should be the totaling of all the colocated with groups.
+        Map<GroupId, List<GroupId>> groupToCoGroupsInOtherDb =
+                initGroupToCoGroupsInOtherDbMap(colocateIndex, allGroups);
+        Map<GroupId, List<GroupId>> filteredMap = groupToCoGroupsInOtherDb.entrySet().stream()
+                .filter(e -> !e.getValue().isEmpty())
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+        if (!filteredMap.isEmpty()) {
+            LOG.info("groups that have colocate groups in other databases: {}", filteredMap);
+        }
+
+        // backendId -> replica dist info for all groups,
+        // see `AllGroupsReplicaDistInfoPerBe` for more details
+        Map<Long, AllGroupsReplicaDistInfoPerBe> distInfoPerBackendMap =
+                initDistInfoPerBackendMap(colocateIndex, systemInfoService, groupToCoGroupsInOtherDb);
+
+        // Compute the average number of replicas every backend should have
+        long totalReplicas = 0;
+        for (AllGroupsReplicaDistInfoPerBe info : distInfoPerBackendMap.values()) {
+            totalReplicas += info.totalNumOfReplicasAssigned;
+        }
+        long avgNumOfReplicasPerBackend = totalReplicas / distInfoPerBackendMap.size();
+
+        // keep the balanced result of backend list per bucket sequence for each changed group
+        //               bucket 0   bucket 1  ...
+        // group id -> [[A, B, C], [C, D, E], ...]
+        Map<GroupId, List<Set<Long>>> result = new HashMap<>();
+        List<AllGroupsReplicaDistInfoPerBe> distInfoPerBackendList = new ArrayList<>(distInfoPerBackendMap.values());
+        LOG.info("no backend list per bucket changed in per-group balance round, " +
+                        "start overall colocate balance, avg replica num: {}, current state: {}",
+                avgNumOfReplicasPerBackend, sortDistInfoPerBackendList(distInfoPerBackendList));
+        OUTER:
+        while (true) {
+            boolean hasChangeInBalanceRound = false;
+            sortDistInfoPerBackendList(distInfoPerBackendList);
+
+            // try to move replica into dest
+            AllGroupsReplicaDistInfoPerBe destInfo = distInfoPerBackendList.get(distInfoPerBackendList.size() - 1);
+            if (distInfoPerBackendList.get(0).totalNumOfBucketsAssigned
+                    - destInfo.totalNumOfBucketsAssigned <= 1) {
+                // now in balanced state.
+                break;
+            }
+
+            // try to move replica out from src
+            for (int srcIdx = 0; srcIdx < distInfoPerBackendList.size() - 1; srcIdx++) {
+                AllGroupsReplicaDistInfoPerBe srcInfo = distInfoPerBackendList.get(srcIdx);
+                String srcBackendHost = systemInfoService.getBackendHostById(srcInfo.backendId);
+                String destBackendHost = systemInfoService.getBackendHostById(destInfo.backendId);
+                if (srcBackendHost == null || destBackendHost == null) {
+                    continue;
+                }
+
+                List<Integer> srcNumOfReplicasList = new ArrayList<>(srcInfo.replicaNumToGroupsMap.keySet());
+                long destCurrentTotalReplicaNum = destInfo.totalNumOfReplicasAssigned;
+                // sort the classified number of replicas list on src in the order that will make the
+                // `totalNumOfReplicasAssigned` of dest backend closer to `avgNumOfReplicasPerBackend`
+                srcNumOfReplicasList.sort((replicaNum1, replicaNum2) -> Math.toIntExact(
+                        Math.abs(replicaNum1 + destCurrentTotalReplicaNum - avgNumOfReplicasPerBackend) -
+                                Math.abs(replicaNum2 + destCurrentTotalReplicaNum - avgNumOfReplicasPerBackend)));
+                for (int numOfReplicas : srcNumOfReplicasList) {
+                    List<GroupId> candidateGroupList =
+                            new ArrayList<>(srcInfo.replicaNumToGroupsMap.get(numOfReplicas));
+                    Collections.shuffle(candidateGroupList);
+                    for (GroupId groupId : candidateGroupList) {
+                        // we use `result` map to temporarily keep the balance result, so here we need
+                        // to get the updated backend list if it has already changed because of the ongoing
+                        // balance process, if not, get it from the metadata manager, i.e. ColocateIndex
+                        List<Set<Long>> backendsPerBucketSeq =
+                                result.getOrDefault(groupId, colocateIndex.getBackendsPerBucketSeqSet(groupId));
+                        List<Integer> srcAssignedBucketIdxList = srcInfo.groupToAssignedBucketIdx.get(groupId);
+                        for (int bucketIdx : srcAssignedBucketIdxList) {
+                            List<Integer> destAssignedBucketIdxList =
+                                    destInfo.groupToAssignedBucketIdx.getOrDefault(groupId, new ArrayList<>());
+                            Set<Long> backendSetForBucket = backendsPerBucketSeq.get(bucketIdx);
+                            Set<String> hostSetOfBucket =
+                                    getHostSetOfBucket(backendSetForBucket, systemInfoService);
+                            // we cannot move replica of a bucket to a backend which already has a replica assigned
+                            // for that bucket or is on the same host with other replica
+                            if (!destAssignedBucketIdxList.contains(bucketIdx) &&
+                                    (srcBackendHost.equals(destBackendHost) ||
+                                            !hostSetOfBucket.contains(destBackendHost))) {
+                                Set<Long> oldBackendSetForBucket = new HashSet<>(backendSetForBucket);
+                                // change the assigning for bucket with index `bucketIdx`
+                                // from backend `srcInfo.backendId` to backend `destInfo.backendId`
+                                backendSetForBucket.remove(srcInfo.backendId);
+                                backendSetForBucket.add(destInfo.backendId);
+                                // Here we check whether this move will break the per group balanced state,
+                                // if it will, we won't make this move
+                                if (!checkKeepingPerGroupBalanced(backendsPerBucketSeq)) {
+                                    // restore backend set
+                                    backendsPerBucketSeq.set(bucketIdx, oldBackendSetForBucket);
+                                    continue;
+                                }
+                                result.putIfAbsent(groupId, backendsPerBucketSeq);
+                                // also need to update the distribution info statistics for following balance round
+                                updateDistInfoAfterBalanceMove(srcInfo, destInfo, numOfReplicas, groupId, bucketIdx);
+                                LOG.info("overall colocate balance for group {}, replace backend {} for " +
+                                                "bucket index {} with backend {}, original backend list: {}",
+                                        groupId, srcInfo.backendId, bucketIdx, destInfo.backendId,
+                                        oldBackendSetForBucket);
+                                // balance one bucket each round, need to sort `distInfoPerBackendList` and make new
+                                // balance decision based on updated replica distribution info
+                                continue OUTER;
+                            }
+                        } // bucket idx traverse
+                    } // group list traverse
+                } // numOfReplicas list traverse
+            } // for src traverse
+
+            // to avoid deadliness loop
+            if (!hasChangeInBalanceRound) {
+                LOG.info("we hava unbalanced replica distribution from overall view, " +
+                        "but we cannot find find any available src from which to move " +
+                        "replica to dest backend {}, going to abort overall balance", destInfo.backendId);
+                break;
+            }
+        } // while(true)
+
+        // update backends per bucket sequence for each group according to the result
+        for (Map.Entry<GroupId, List<Set<Long>>> entry : result.entrySet()) {
+            List<List<Long>> balancedBackendsPerBucketSeq = convertToListOfLists(entry.getValue());
+            // if the group colocate with groups in other db,
+            // those groups should also be changed based on new backend list
+            List<GroupId> toChangeGroups = groupToCoGroupsInOtherDb.get(entry.getKey());
+            // add self
+            toChangeGroups.add(entry.getKey());
+            List<List<Long>> oldBackendsPerBucketSeq = colocateIndex.getBackendsPerBucketSeq(entry.getKey());
+            for (GroupId groupId : toChangeGroups) {
+                colocateIndex.addBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
+                ColocatePersistInfo info =
+                        ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
+                globalStateMgr.getEditLog().logColocateBackendsPerBucketSeq(info);
+                LOG.info("overall colocate balance for group {}, now backends per bucket sequence is: {}, " +
+                                "bucket sequence before balance: {}",
+                        groupId, balancedBackendsPerBucketSeq, oldBackendsPerBucketSeq);
+
+            }
+        }
+
+        if (result.size() > 0) {
+            LOG.info("{} group(s) changed in overall colocate balance round, updated state: {}",
+                    result.size(), sortDistInfoPerBackendList(distInfoPerBackendList));
+        }
+    }
+
+    private boolean checkKeepingPerGroupBalanced(List<Set<Long>> backendsPerBucketSeq) {
+        // backend id -> replica num, and sorted by replica num, descending.
+        Map<Long, Long> backendToReplicaNum = backendsPerBucketSeq.stream().flatMap(Collection::stream)
+                .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
+        List<Map.Entry<Long, Long>> entries =
+                backendToReplicaNum.entrySet().stream().sorted(Comparator.comparingLong(Map.Entry::getValue))
+                        .collect(Collectors.toList());
+        int lastIdx = entries.size() - 1;
+        return entries.get(lastIdx).getValue() - entries.get(0).getValue() <= 1;
+    }
+
+    public static boolean needToForceRepair(TabletStatus st, LocalTablet tablet, Set<Long> backendsSet) {
+        boolean hasBad = false;
+        for (Replica replica : tablet.getImmutableReplicas()) {
+            if (!backendsSet.contains(replica.getBackendId())) {
+                continue;
+            }
+            if (replica.isBad()) {
+                hasBad = true;
+                break;
+            }
+        }
+
+        return hasBad && st == TabletStatus.COLOCATE_REDUNDANT;
+    }
+
+    private void logDebugInfoForColocateMismatch(Set<Long> bucketSeq, LocalTablet tablet) {
+        LOG.debug("Added tablet {} to scheduler queue, tablet replicas: {}, current bucket seq:{}",
+                tablet.getId(), tablet.getReplicaInfos(), bucketSeq);
+    }
+
+    private long doMatchOneGroup(GroupId groupId,
+                                 boolean isUrgent,
+                                 GlobalStateMgr globalStateMgr,
+                                 ColocateTableIndex colocateIndex,
+                                 TabletScheduler tabletScheduler) {
         long checkStartTime = System.currentTimeMillis();
-
-        long start = System.nanoTime();
         long lockTotalTime = 0;
-        long lockStart;
-        // check each group
-        Set<GroupId> groupIds = colocateIndex.getAllGroupIds();
-        GROUP:
-        for (GroupId groupId : groupIds) {
-            List<Long> tableIds = colocateIndex.getAllTableIds(groupId);
-            Database db = globalStateMgr.getDbIncludeRecycleBin(groupId.dbId);
-            if (db == null) {
-                continue;
-            }
+        long waitTotalTimeMs = 0;
+        List<Long> tableIds = colocateIndex.getAllTableIds(groupId);
+        Database db = globalStateMgr.getDbIncludeRecycleBin(groupId.dbId);
+        if (db == null) {
+            return lockTotalTime;
+        }
 
-            List<Set<Long>> backendBucketsSeq = colocateIndex.getBackendsPerBucketSeqSet(groupId);
-            if (backendBucketsSeq.isEmpty()) {
-                continue;
-            }
+        List<Set<Long>> backendBucketsSeq = colocateIndex.getBackendsPerBucketSeqSet(groupId);
+        if (backendBucketsSeq.isEmpty()) {
+            return lockTotalTime;
+        }
 
-            boolean isGroupStable = true;
-            // set the config to a local variable to avoid config params changed.
-            int partitionBatchNum = Config.tablet_checker_partition_batch_num;
-            int partitionChecked = 0;
-            db.readLock();
-            lockStart = System.nanoTime();
-            try {
-                TABLE:
-                for (Long tableId : tableIds) {
-                    OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
-                    if (olapTable == null || !colocateIndex.isColocateTable(olapTable.getId())) {
+        boolean isGroupStable = true;
+        // set the config to a local variable to avoid config params changed.
+        int partitionBatchNum = Config.tablet_checker_partition_batch_num;
+        int partitionChecked = 0;
+        db.readLock();
+        long lockStart = System.nanoTime();
+        try {
+            TABLE:
+            for (Long tableId : tableIds) {
+                OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
+                if (olapTable == null || !colocateIndex.isColocateTable(olapTable.getId())) {
+                    continue;
+                }
+
+                if ((isUrgent && !globalStateMgr.getTabletChecker().isUrgentTable(db.getId(), tableId))) {
+                    continue;
+                }
+
+                for (Partition partition : globalStateMgr.getPartitionsIncludeRecycleBin(olapTable)) {
+                    partitionChecked++;
+
+                    boolean isPartitionUrgent =
+                            globalStateMgr.getTabletChecker().isPartitionUrgent(db.getId(), tableId, partition.getId());
+                    boolean isUrgentPartitionHealthy = true;
+                    if ((isUrgent && !isPartitionUrgent) || (!isUrgent && isPartitionUrgent)) {
                         continue;
                     }
 
+<<<<<<< HEAD
                     for (Partition partition : globalStateMgr.getPartitionsIncludeRecycleBin(olapTable)) {
                         partitionChecked++;
                         if (partitionChecked % partitionBatchNum == 0) {
@@ -741,13 +1108,24 @@ public class ColocateTableBalancer extends LeaderDaemon {
                             if (globalStateMgr.getPartitionIncludeRecycleBin(olapTable, partition.getId()) == null) {
                                 continue;
                             }
+=======
+                    if (partitionChecked % partitionBatchNum == 0) {
+                        lockTotalTime += System.nanoTime() - lockStart;
+                        // release lock, so that lock can be acquired by other threads.
+                        db.readUnlock();
+                        db.readLock();
+                        lockStart = System.nanoTime();
+                        if (globalStateMgr.getDbIncludeRecycleBin(groupId.dbId) == null) {
+                            return lockTotalTime;
                         }
-                        short replicationNum =
-                                globalStateMgr.getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
-                                        partition.getId());
-                        if (replicationNum == (short) -1) {
+                        if (globalStateMgr.getTableIncludeRecycleBin(db, olapTable.getId()) == null) {
+                            continue TABLE;
+>>>>>>> 2.5.18
+                        }
+                        if (globalStateMgr.getPartitionIncludeRecycleBin(olapTable, partition.getId()) == null) {
                             continue;
                         }
+<<<<<<< HEAD
                         long visibleVersion = partition.getVisibleVersion();
                         // Here we only get VISIBLE indexes. All other indexes are not queryable.
                         // So it does not matter if tablets of other indexes are not matched.
@@ -808,34 +1186,152 @@ public class ColocateTableBalancer extends LeaderDaemon {
                                                                 Lists.newArrayList(),
                                                         bucketsSeq);
                                             }
+=======
+                    }
+                    short replicationNum =
+                            globalStateMgr.getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
+                                    partition.getId());
+                    if (replicationNum == (short) -1) {
+                        continue;
+                    }
+
+                    long visibleVersion = partition.getVisibleVersion();
+                    // Here we only get VISIBLE indexes. All other indexes are not queryable.
+                    // So it does not matter if tablets of other indexes are not matched.
+                    for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                        Preconditions.checkState(backendBucketsSeq.size() == index.getTablets().size(),
+                                backendBucketsSeq.size() + " v.s. " + index.getTablets().size());
+                        int idx = 0;
+                        for (Long tabletId : index.getTabletIdsInOrder()) {
+                            LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
+                            Set<Long> bucketsSeq = backendBucketsSeq.get(idx);
+                            // Tablet has already been scheduled, no need to schedule again
+                            if (!tabletScheduler.containsTablet(tablet.getId())) {
+                                Preconditions.checkState(bucketsSeq.size() == replicationNum,
+                                        bucketsSeq.size() + " vs. " + replicationNum);
+                                TabletStatus st = tablet.getColocateHealthStatus(visibleVersion,
+                                        replicationNum, bucketsSeq);
+                                if (st != TabletStatus.HEALTHY) {
+                                    isGroupStable = false;
+                                    Priority colocateUnhealthyPrio = Priority.HIGH;
+                                    if (isPartitionUrgent) {
+                                        colocateUnhealthyPrio = Priority.VERY_HIGH;
+                                        isUrgentPartitionHealthy = false;
+                                    }
+
+                                    // We should also check if the tablet is ready to be repaired like
+                                    // `TabletChecker` did. Slightly delay the repair action can avoid unnecessary
+                                    // clone in situation like temporarily restart BE Nodes.
+                                    if (tablet.readyToBeRepaired(st, colocateUnhealthyPrio)) {
+                                        LOG.debug("get unhealthy tablet {} in colocate table. status: {}",
+                                                tablet.getId(), st);
+                                        TabletSchedCtx tabletCtx = new TabletSchedCtx(
+                                                TabletSchedCtx.Type.REPAIR,
+                                                db.getId(), tableId, partition.getId(), index.getId(),
+                                                tablet.getId(),
+                                                System.currentTimeMillis());
+                                        // the tablet status will be checked and set again when being scheduled
+                                        tabletCtx.setTabletStatus(st);
+                                        // using HIGH priority, because we want to stabilize the colocate group
+                                        // as soon as possible
+                                        tabletCtx.setOrigPriority(colocateUnhealthyPrio);
+                                        tabletCtx.setTabletOrderIdx(idx);
+                                        tabletCtx.setColocateGroupId(groupId);
+                                        tabletCtx.setTablet(tablet);
+                                        ColocateRelocationInfo info = group2ColocateRelocationInfo.get(groupId);
+                                        tabletCtx.setRelocationForRepair(info != null
+                                                && info.getRelocationForRepair()
+                                                && st == TabletStatus.COLOCATE_MISMATCH);
+
+                                        // For bad replica, we ignore the size limit of scheduler queue
+                                        Pair<Boolean, Long> result =
+                                                tabletScheduler.blockingAddTabletCtxToScheduler(db, tabletCtx,
+                                                        needToForceRepair(st, tablet,
+                                                        bucketsSeq) || isPartitionUrgent /* forcefully add or not */);
+                                        if (LOG.isDebugEnabled() && result.first &&
+                                                st == TabletStatus.COLOCATE_MISMATCH) {
+                                            logDebugInfoForColocateMismatch(bucketsSeq, tablet);
                                         }
-                                    } else {
-                                        tablet.setLastStatusCheckTime(checkStartTime);
+
+                                        waitTotalTimeMs += result.second;
+                                        if (result.first && tabletCtx.getRelocationForRepair()) {
+                                            LOG.info("add tablet relocation task to scheduler, tablet id: {}, " +
+                                                            "bucket sequence before: {}, bucket sequence now: {}",
+                                                    tableId,
+                                                    info != null ? info.getLastBackendsPerBucketSeq().get(idx) :
+                                                            Lists.newArrayList(),
+                                                    bucketsSeq);
+>>>>>>> 2.5.18
+                                        }
                                     }
                                 } else {
-                                    // tablet maybe added to scheduler because of balance between local disks,
-                                    // in this case we shouldn't mark the group unstable
-                                    if (tablet.getColocateHealthStatus(visibleVersion, replicationNum, bucketsSeq)
-                                            != TabletStatus.HEALTHY) {
-                                        isGroupStable = false;
-                                    }
+                                    tablet.setLastStatusCheckTime(checkStartTime);
                                 }
-                                idx++;
+                            } else {
+                                // tablet maybe added to scheduler because of balance between local disks,
+                                // in this case we shouldn't mark the group unstable
+                                if (tablet.getColocateHealthStatus(visibleVersion, replicationNum, bucketsSeq)
+                                        != TabletStatus.HEALTHY) {
+                                    isGroupStable = false;
+                                }
                             }
-                        }
-                    }
-                } // end for tables
+                            idx++;
+                        } // end for tablets
+                    } // end for materialize indexes
 
-                // mark group as stable or unstable
-                if (isGroupStable) {
-                    colocateIndex.markGroupStable(groupId, true);
-                } else {
-                    colocateIndex.markGroupUnstable(groupId, true);
-                }
-            } finally {
-                lockTotalTime += System.nanoTime() - lockStart;
-                db.readUnlock();
+                    if (isUrgentPartitionHealthy && isPartitionUrgent) {
+                        globalStateMgr.getTabletChecker().removeFromUrgentTable(
+                                new TabletChecker.RepairTabletInfo(db.getId(), tableId,
+                                        Lists.newArrayList(partition.getId())));
+                    }
+                } // end for partitions
+            } // end for tables
+
+            // mark group as stable or unstable
+            if (isGroupStable) {
+                colocateIndex.markGroupStable(groupId, true);
+            } else {
+                colocateIndex.markGroupUnstable(groupId, true);
             }
+        } finally {
+            lockTotalTime += System.nanoTime() - lockStart;
+            db.readUnlock();
+        }
+
+        return lockTotalTime - waitTotalTimeMs * 1000000;
+    }
+
+    private long matchOneGroupUrgent(GroupId groupId,
+                                     GlobalStateMgr globalStateMgr,
+                                     ColocateTableIndex colocateIndex,
+                                     TabletScheduler tabletScheduler) {
+        return doMatchOneGroup(groupId, true, globalStateMgr, colocateIndex, tabletScheduler);
+    }
+
+    private long matchOneGroupNonUrgent(GroupId groupId,
+                                        GlobalStateMgr globalStateMgr,
+                                        ColocateTableIndex colocateIndex,
+                                        TabletScheduler tabletScheduler) {
+        return doMatchOneGroup(groupId, false, globalStateMgr, colocateIndex, tabletScheduler);
+    }
+
+    /*
+     * Check every tablet of a group, if replica's location does not match backends in group, relocating those
+     * replicas, and mark that group as unstable.
+     * If every replicas match the backends in group, mark that group as stable.
+     */
+    private void matchGroups() {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        ColocateTableIndex colocateIndex = globalStateMgr.getColocateTableIndex();
+        TabletScheduler tabletScheduler = globalStateMgr.getTabletScheduler();
+
+        long start = System.nanoTime();
+        long lockTotalTime = 0;
+        // check each group
+        Set<GroupId> groupIds = colocateIndex.getAllGroupIds();
+        for (GroupId groupId : groupIds) {
+            lockTotalTime += matchOneGroupUrgent(groupId, globalStateMgr, colocateIndex, tabletScheduler);
+            lockTotalTime += matchOneGroupNonUrgent(groupId, globalStateMgr, colocateIndex, tabletScheduler);
         } // end for groups
 
         long cost = (System.nanoTime() - start) / 1000000;
@@ -890,7 +1386,12 @@ public class ColocateTableBalancer extends LeaderDaemon {
      */
     private boolean doRelocateAndBalance(GroupId groupId, Set<Long> unavailableBeIds, List<Long> availableBeIds,
                                          ColocateTableIndex colocateIndex, SystemInfoService infoService,
+<<<<<<< HEAD
                                          ClusterLoadStatistic statistic, List<List<Long>> balancedBackendsPerBucketSeq) {
+=======
+                                         ClusterLoadStatistic statistic,
+                                         List<List<Long>> balancedBackendsPerBucketSeq) {
+>>>>>>> 2.5.18
         ColocateGroupSchema groupSchema = colocateIndex.getGroupSchema(groupId);
         int replicationNum = groupSchema.getReplicationNum();
         List<List<Long>> backendsPerBucketSeq = Lists.newArrayList(colocateIndex.getBackendsPerBucketSeq(groupId));

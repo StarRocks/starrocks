@@ -40,6 +40,7 @@ add_library(Storage STATIC
     segment_replicate_executor.cpp
     metadata_util.cpp
     kv_store.cpp
+    publish_version_manager.cpp
     olap_common.cpp
     olap_server.cpp
     options.cpp
@@ -173,4 +174,4 @@ add_library(Storage STATIC
     lake/tablet_reader.cpp
     lake/metadata_iterator.cpp
     lake/spark_load.cpp
-)
+    persistent_index_compaction_manager.cpp)

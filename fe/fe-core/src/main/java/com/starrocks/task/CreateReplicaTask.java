@@ -49,6 +49,11 @@ import java.util.Set;
 public class CreateReplicaTask extends AgentTask {
     private static final Logger LOG = LogManager.getLogger(CreateReplicaTask.class);
 
+    public enum RecoverySource {
+        SCHEDULER,
+        REPORT
+    }
+
     private short shortKeyColumnCount;
     private int schemaHash;
 
@@ -85,9 +90,7 @@ public class CreateReplicaTask extends AgentTask {
     private int baseSchemaHash = -1;
 
     private TStorageFormat storageFormat = null;
-
-    // true if this task is created by recover request(See comment of Config.recover_with_empty_tablet)
-    private boolean isRecoverTask = false;
+    private RecoverySource recoverySource;
 
     public CreateReplicaTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
                              short shortKeyColumnCount, int schemaHash, long version,
@@ -139,12 +142,12 @@ public class CreateReplicaTask extends AgentTask {
         this.compressionType = compressionType;
     }
 
-    public void setIsRecoverTask(boolean isRecoverTask) {
-        this.isRecoverTask = isRecoverTask;
+    public void setRecoverySource(RecoverySource source) {
+        this.recoverySource = source;
     }
 
-    public boolean isRecoverTask() {
-        return isRecoverTask;
+    public RecoverySource getRecoverySource() {
+        return this.recoverySource;
     }
 
     public void countDownLatch(long backendId, long tabletId) {

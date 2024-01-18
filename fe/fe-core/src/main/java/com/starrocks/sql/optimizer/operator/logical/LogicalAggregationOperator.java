@@ -18,6 +18,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorUtil;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -134,11 +135,21 @@ public class LogicalAggregationOperator extends LogicalOperator {
         if (groupingKeys.isEmpty() || aggregations.size() != 1) {
             return false;
         }
+<<<<<<< HEAD
+=======
+
+>>>>>>> 2.5.18
         CallOperator call = aggregations.values().stream().iterator().next();
         if (call.isDistinct() && call.getFnName().equalsIgnoreCase(FunctionSet.COUNT) &&
                 call.getChildren().size() == 1 && call.getChild(0).isColumnRef() &&
                 groupingKeys.stream().noneMatch(groupCol -> call.getChild(0).equals(groupCol))) {
+<<<<<<< HEAD
             return true;
+=======
+            // GroupByCountDistinctDataSkewEliminateRule will return with empty logical plan
+            // in case below, so that we should not skip SplitAggregateRule in this case
+            return ScalarOperatorUtil.buildMultiCountDistinct(call) != null;
+>>>>>>> 2.5.18
         }
         return false;
     }

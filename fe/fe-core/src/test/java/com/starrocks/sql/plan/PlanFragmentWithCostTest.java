@@ -687,7 +687,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                 "  2:EXCHANGE\n"));
         Assert.assertTrue(planFragment.contains("  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 02\n" +
-                "    HASH_PARTITIONED: <slot 4>\n" +
+                "    HASH_PARTITIONED: 4: v7\n" +
                 "\n" +
                 "  1:OlapScanNode\n" +
                 "     TABLE: t2"));
@@ -843,8 +843,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             String unionPlan = plans.get(0);
             assertContains(unionPlan, "  0:UNION\n" +
                     "  |  child exprs:\n" +
-                    "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n" +
+                    "  |      [4: expr, BIGINT, true] | [2: v2, BIGINT, true] | [3: v3, BIGINT, true]\n" +
+                    "  |      [8: expr, BIGINT, true] | [6: v5, BIGINT, true] | [7: v6, BIGINT, true]\n" +
                     "  |  pass-through-operands: all\n");
             assertContains(unionPlan, "  4:OlapScanNode\n" +
                     "     table: t1, rollup: t1\n" +
@@ -872,8 +872,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             String exceptPlan = plans.get(1);
             Assert.assertTrue(exceptPlan.contains("  0:EXCEPT\n" +
                     "  |  child exprs:\n" +
-                    "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n"));
+                    "  |      [4: expr, BIGINT, true] | [2: v2, BIGINT, true] | [3: v3, BIGINT, true]\n" +
+                    "  |      [8: expr, BIGINT, true] | [6: v5, BIGINT, true] | [7: v6, BIGINT, true]\n"));
             Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(exceptPlan.contains("     probe runtime filters:\n" +
@@ -884,8 +884,8 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
             String intersectPlan = plans.get(2);
             Assert.assertTrue(intersectPlan.contains("  0:INTERSECT\n" +
                     "  |  child exprs:\n" +
-                    "  |      [4, BIGINT, true] | [2, BIGINT, true] | [3, BIGINT, true]\n" +
-                    "  |      [8, BIGINT, true] | [6, BIGINT, true] | [7, BIGINT, true]\n"));
+                    "  |      [4: expr, BIGINT, true] | [2: v2, BIGINT, true] | [3: v3, BIGINT, true]\n" +
+                    "  |      [8: expr, BIGINT, true] | [6: v5, BIGINT, true] | [7: v6, BIGINT, true]\n"));
             Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)"));
             Assert.assertTrue(intersectPlan.contains("     probe runtime filters:\n" +
@@ -1555,13 +1555,56 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  0:OlapScanNode");
 
-            // case 2: use one-phase local aggregation without local shuffle for high-cardinality agg and single BE.
+            // case 2: use multiple one-phase local aggregation with local shuffle for high-cardinality agg and single BE.
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgHighCardinality);
+            sql = "with w1 as (select v2, count(v2) as cnt from colocate_t0 group by v2) " +
+                    "select v2, sum(cnt) from w1 group by v2, cnt";
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            Assert.assertFalse(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
+            Assert.assertFalse(execPlan.getFragments().get(1).isAssignScanRangesPerDriverSeq());
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            assertContains(plan, "  3:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(8: count)\n" +
+                    "  |  group by: 6: v2, 8: count\n" +
+                    "  |  withLocalShuffle: true\n" +
+                    "  |  \n" +
+                    "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: count(6: v2)\n" +
+                    "  |  group by: 6: v2\n" +
+                    "  |  withLocalShuffle: true\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            // case 3: use one-phase local aggregation without local shuffle for high-cardinality agg and single BE.
+            isSingleBackendAndComputeNode.setRef(true);
+            cardinality.setRef(avgHighCardinality);
+            sql = "with w1 as (select v1, count(v1) as cnt from colocate_t0 group by v1) " +
+                    "select sum(cnt) from w1 group by cnt";
+            execPlan = getExecPlan(sql);
+            olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
+            Assert.assertTrue(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
+            Assert.assertTrue(execPlan.getFragments().get(2).isAssignScanRangesPerDriverSeq());
+            plan = execPlan.getExplainString(TExplainLevel.NORMAL);
+            assertContains(plan, "  2:Project\n" +
+                    "  |  <slot 8> : 8: count\n" +
+                    "  |  \n" +
+                    "  1:AGGREGATE (update finalize)\n" +
+                    "  |  output: count(5: v1)\n" +
+                    "  |  group by: 5: v1\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
+
+            // case 4: use one-phase local aggregation without local shuffle when grouping key contains all the bucket keys.
             isSingleBackendAndComputeNode.setRef(true);
             cardinality.setRef(avgHighCardinality);
             sql = "select sum(v1) from colocate_t0 group by v1";
             execPlan = getExecPlan(sql);
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-            Assert.assertEquals(1, olapScanNode.getBucketExprs().size());
+            Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
             Assert.assertTrue(containAnyColocateNode(execPlan.getFragments().get(1).getPlanRoot()));
             plan = execPlan.getExplainString(TExplainLevel.NORMAL);
             assertContains(plan, "1:AGGREGATE (update finalize)\n" +
@@ -1570,7 +1613,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  0:OlapScanNode");
 
-            // case 3: use two-phase aggregation for non-grouping agg.
+            // case 5: use two-phase aggregation for non-grouping agg.
             isSingleBackendAndComputeNode.setRef(true);
             cardinality.setRef(avgHighCardinality);
             sql = "select sum(v2) from t0";
@@ -1589,11 +1632,15 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  2:EXCHANGE");
 
-            // case 4: use two-phase aggregation for multiple BEs.
+            // case 6: use two-phase aggregation for multiple BEs.
             isSingleBackendAndComputeNode.setRef(false);
             cardinality.setRef(avgHighCardinality);
             sql = "select sum(v2) from t0 group by v2";
             plan = getFragmentPlan(sql);
+            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+                    "  |  output: sum(2: v2)\n" +
+                    "  |  group by: 2: v2");
+
             execPlan = getExecPlan(sql);
             olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
             Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
@@ -1604,7 +1651,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  1:EXCHANGE");
 
-            // case 5: use two-phase aggregation for low-cardinality agg.
+            // case 7: use two-phase aggregation for low-cardinality agg.
             isSingleBackendAndComputeNode.setRef(true);
             cardinality.setRef(avgLowCardinality);
             sql = "select sum(v2) from t0 group by v2";
@@ -1624,7 +1671,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  2:EXCHANGE");
 
-            // case 6: insert into cannot use one-phase local aggregation with local shuffle.
+            // case 8: insert into cannot use one-phase local aggregation with local shuffle.
             isSingleBackendAndComputeNode.setRef(true);
             cardinality.setRef(avgHighCardinality);
             sql = "insert into colocate_t0 select v2, v2, sum(v2) from t0 group by v2";
@@ -1639,7 +1686,7 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
                     "  |  \n" +
                     "  1:EXCHANGE");
 
-            // case 7: Plan with join cannot use one-phase local aggregation with local shuffle.
+            // case 9: Plan with join cannot use one-phase local aggregation with local shuffle.
             isSingleBackendAndComputeNode.setRef(true);
             cardinality.setRef(avgHighCardinality);
             sql = "select count(1) from " +
@@ -2116,6 +2163,32 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
         AuditEvent event = connectContext.getAuditEventBuilder().build();
         Assert.assertTrue("planMemCosts should be > 1, but: " + event.planMemCosts, event.planMemCosts > 1);
         Assert.assertTrue("planCpuCosts should be > 1, but: " + event.planCpuCosts, event.planCpuCosts > 1);
+<<<<<<< HEAD
 
     }
+=======
+    }
+
+    @Test
+    public void testSemiJoinConstantProjection() throws Exception {
+        String sql = "select t.t1a, t.xx from (select t0.*, 1920 as xx from test_all_type t0 " +
+                "where not exists (select v10 from t3 where t3.v11 =t0.t1c)) t " +
+                "where not exists(select v7 from t2 where v9  = 10 and t2.v8 = t.t1d);";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "9:HASH JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 4: t1d = 17: v8\n" +
+                "  |  \n" +
+                "  |----8:EXCHANGE\n" +
+                "  |    \n" +
+                "  5:Project\n" +
+                "  |  <slot 1> : 1: t1a\n" +
+                "  |  <slot 4> : 4: t1d\n" +
+                "  |  <slot 15> : 1920\n" +
+                "  |  \n" +
+                "  4:HASH JOIN");
+    }
+
+>>>>>>> 2.5.18
 }

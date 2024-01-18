@@ -45,14 +45,14 @@ import static com.starrocks.load.InsertOverwriteJobState.OVERWRITE_FAILED;
 public class InsertOverwriteJobRunner {
     private static final Logger LOG = LogManager.getLogger(InsertOverwriteJobRunner.class);
 
-    private InsertOverwriteJob job;
+    private final InsertOverwriteJob job;
 
     private InsertStmt insertStmt;
     private StmtExecutor stmtExecutor;
     private ConnectContext context;
-    private long dbId;
-    private long tableId;
-    private String postfix;
+    private final long dbId;
+    private final long tableId;
+    private final String postfix;
 
     private long createPartitionElapse;
     private long insertElapse;
@@ -87,7 +87,8 @@ public class InsertOverwriteJobRunner {
     // there is no concurrent problem here
     public void cancel() {
         if (isFinished()) {
-            LOG.warn("cancel failed. insert overwrite job:{} already finished. state:{}", job.getJobState());
+            LOG.warn("cancel failed. insert overwrite job:{} already finished. state:{}", job.getJobId(),
+                    job.getJobState());
             return;
         }
         try {
@@ -200,8 +201,19 @@ public class InsertOverwriteJobRunner {
     private void executeInsert() throws Exception {
         long insertStartTimestamp = System.currentTimeMillis();
         // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt
-        ExecPlan newPlan = new StatementPlanner().plan(insertStmt, context);
-        stmtExecutor.handleDMLStmt(newPlan, insertStmt);
+        try (ConnectContext.ScopeGuard guard = context.bindScope()) {
+            ExecPlan newPlan = StatementPlanner.plan(insertStmt, context);
+            // Use `handleDMLStmt` instead of `handleDMLStmtWithProfile` because cannot call `writeProfile` in
+            // InsertOverwriteJobRunner.
+            // InsertOverWriteJob is executed as below:
+            // - StmtExecutor#handleDMLStmtWithProfile
+            //    - StmtExecutor#executeInsert
+            //  - StmtExecutor#handleInsertOverwrite#InsertOverwriteJobMgr#run
+            //  - InsertOverwriteJobRunner#executeInsert
+            //  - StmtExecutor#handleDMLStmt <- no call `handleDMLStmt` again.
+            // `writeProfile` is called in `handleDMLStmt`, and no need call it again later.
+            stmtExecutor.handleDMLStmt(newPlan, insertStmt);
+        }
         insertElapse = System.currentTimeMillis() - insertStartTimestamp;
         if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
             LOG.warn("insert overwrite failed. error message:{}", context.getState().getErrorMessage());
@@ -229,7 +241,7 @@ public class InsertOverwriteJobRunner {
         try {
             Table table = db.getTable(tableId);
             if (table == null) {
-                throw new DmlException("table:% does not exist in database:%s", tableId, db.getFullName());
+                throw new DmlException("table:%d does not exist in database:%s", tableId, db.getFullName());
             }
             Preconditions.checkState(table instanceof OlapTable);
             OlapTable targetTable = (OlapTable) table;
@@ -310,6 +322,8 @@ public class InsertOverwriteJobRunner {
                 InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
                         InsertOverwriteJobState.OVERWRITE_SUCCESS, job.getSourcePartitionIds(), job.getTmpPartitionIds());
                 GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
+
+                targetTable.lastSchemaUpdateTime.set(System.nanoTime());
             }
         } catch (Exception e) {
             LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}",

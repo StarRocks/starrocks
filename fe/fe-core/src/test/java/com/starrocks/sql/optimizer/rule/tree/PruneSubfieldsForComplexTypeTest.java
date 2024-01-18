@@ -137,6 +137,7 @@ public class PruneSubfieldsForComplexTypeTest {
     @Test
     public void testSetUsedSubfieldPosGroupMapWrongField() {
         // if the last one is a leaf
+<<<<<<< HEAD
         ComplexTypeAccessGroup group = new ComplexTypeAccessGroup();
         List<ComplexTypeAccessPath> usedSubfieldPos = new ArrayList<>();
         usedSubfieldPos.add(new ComplexTypeAccessPath(ComplexTypeAccessPathType.MAP_KEY));
@@ -145,6 +146,20 @@ public class PruneSubfieldsForComplexTypeTest {
         group.addAccessPaths(new ComplexTypeAccessPaths(ImmutableList.copyOf(usedSubfieldPos)));
         Assert.assertThrows(IllegalStateException.class,
                 () -> PruneComplexTypeUtil.setAccessGroup(typeMapArrayMap, group));
+=======
+        try {
+            ComplexTypeAccessGroup group = new ComplexTypeAccessGroup();
+            List<ComplexTypeAccessPath> usedSubfieldPos = new ArrayList<>();
+            usedSubfieldPos.add(new ComplexTypeAccessPath(ComplexTypeAccessPathType.MAP_KEY));
+            usedSubfieldPos.add(new ComplexTypeAccessPath(ComplexTypeAccessPathType.MAP_KEY));
+            usedSubfieldPos.add(new ComplexTypeAccessPath(ComplexTypeAccessPathType.MAP_KEY));
+            group.addAccessPaths(new ComplexTypeAccessPaths(ImmutableList.copyOf(usedSubfieldPos)));
+            PruneComplexTypeUtil.setAccessGroup(typeMapArrayMap, group);
+
+        } catch (Exception e) {
+            Assert.fail("Should not throw an exception");
+        }
+>>>>>>> 2.5.18
     }
 
     @Test

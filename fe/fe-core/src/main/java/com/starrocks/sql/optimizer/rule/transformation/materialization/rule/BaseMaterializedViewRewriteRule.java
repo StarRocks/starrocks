@@ -24,6 +24,9 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 
 import java.util.List;
+import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 
 public abstract class BaseMaterializedViewRewriteRule extends TransformationRule {
 
@@ -57,6 +60,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             for (MaterializationContext mvContext : context.getCandidateMvs()) {
                 if (!mvContext.isMatchedGroup(currentRootGroupId)) {
                     mvCandidateContexts.add(mvContext);
+<<<<<<< HEAD
                 }
             }
         } else {
@@ -92,9 +96,54 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
                 if (queryExpression.getGroupExpression() != null) {
                     int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
                     mvContext.addMatchedGroup(currentRootGroupId);
+=======
+>>>>>>> 2.5.18
                 }
                 results.add(candidate);
             }
+        } else {
+            mvCandidateContexts = context.getCandidateMvs();
+        }
+
+        List<OptExpression> results = Lists.newArrayList();
+
+        // Construct queryPredicateSplit to avoid creating multi times for multi MVs.
+        // Compute Query queryPredicateSplit
+        final ColumnRefFactory queryColumnRefFactory = context.getColumnRefFactory();
+        final ReplaceColumnRefRewriter queryColumnRefRewriter =
+                MvUtils.getReplaceColumnRefWriter(queryExpression, queryColumnRefFactory);
+        // Compensate partition predicates and add them into query predicate.
+        final ScalarOperator queryPartitionPredicate =
+                MvUtils.compensatePartitionPredicate(queryExpression, queryColumnRefFactory);
+        if (queryPartitionPredicate == null) {
+            logMVRewrite(context, this, "Query partition compensate from partition prune failed.");
+            return Lists.newArrayList();
+        }
+        ScalarOperator queryPredicate = MvUtils.rewriteOptExprCompoundPredicate(queryExpression, queryColumnRefRewriter);
+        if (!ConstantOperator.TRUE.equals(queryPartitionPredicate)) {
+            queryPredicate = MvUtils.canonizePredicate(Utils.compoundAnd(queryPredicate, queryPartitionPredicate));
+        }
+        final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
+        List<ScalarOperator> onPredicates = MvUtils.collectOnPredicate(queryExpression);
+        onPredicates = onPredicates.stream().map(MvUtils::canonizePredicateForRewrite).collect(Collectors.toList());
+        List<Table> queryTables = MvUtils.getAllTables(queryExpression);
+        for (MaterializationContext mvContext : mvCandidateContexts) {
+            MvRewriteContext mvRewriteContext = new MvRewriteContext(mvContext, queryTables, queryExpression,
+                    queryColumnRefRewriter, queryPredicateSplit, onPredicates, this);
+            MaterializedViewRewriter mvRewriter = getMaterializedViewRewrite(mvRewriteContext);
+            OptExpression candidate = mvRewriter.rewrite();
+            if (candidate == null) {
+                continue;
+            }
+
+            candidate = postRewriteMV(context, mvRewriteContext, candidate);
+            if (queryExpression.getGroupExpression() != null) {
+                int currentRootGroupId = queryExpression.getGroupExpression().getGroup().getId();
+                mvContext.addMatchedGroup(currentRootGroupId);
+            }
+
+            results.add(candidate);
+            mvContext.updateMVUsedCount();
         }
 
         return results;

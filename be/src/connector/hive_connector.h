@@ -29,6 +29,7 @@ public:
     friend class HiveDataSource;
     HiveDataSourceProvider(vectorized::ConnectorScanNode* scan_node, const TPlanNode& plan_node);
     DataSourcePtr create_data_source(const TScanRange& scan_range) override;
+    const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
 protected:
     vectorized::ConnectorScanNode* _scan_node;
@@ -48,6 +49,8 @@ public:
     int64_t num_rows_read() const override;
     int64_t num_bytes_read() const override;
     int64_t cpu_time_spent() const override;
+    int64_t io_time_spent() const override;
+    int64_t estimated_mem_usage() const override;
 
 private:
     const HiveDataSourceProvider* _provider;
@@ -55,12 +58,14 @@ private:
 
     // ============= init func =============
     Status _init_conjunct_ctxs(RuntimeState* state);
+    void _update_has_any_predicate();
     Status _decompose_conjunct_ctxs(RuntimeState* state);
     void _init_tuples_and_slots(RuntimeState* state);
     void _init_counter(RuntimeState* state);
 
     Status _init_partition_values();
     Status _init_scanner(RuntimeState* state);
+    Status _check_all_slots_nullable();
 
     // =====================================
     ObjectPool _pool;

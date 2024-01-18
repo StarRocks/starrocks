@@ -38,7 +38,7 @@ column statistics:
 * avg-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
 * avg-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
 * avg-->[0.0, 0.1, 0.0, 8.0, 3.375] ESTIMATE
-* count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
+* count-->[0.0, 6.0E8, 0.0, 8.0, 3.375] ESTIMATE
 
 PLAN FRAGMENT 1(F01)
 
@@ -60,7 +60,7 @@ OutPut Exchange Id: 06
 |  * avg-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
 |  * avg-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
 |  * avg-->[0.0, 0.1, 0.0, 8.0, 3.375] ESTIMATE
-|  * count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
+|  * count-->[0.0, 6.0E8, 0.0, 8.0, 3.375] ESTIMATE
 |
 4:AGGREGATE (merge finalize)
 |  aggregate: sum[([20: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([21: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([22: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], sum[([23: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], avg[([24: avg, VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], avg[([25: avg, VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], avg[([26: avg, VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true], count[([27: count, BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false]
@@ -76,7 +76,7 @@ OutPut Exchange Id: 06
 |  * avg-->[1.0, 50.0, 0.0, 8.0, 3.375] ESTIMATE
 |  * avg-->[901.0, 104949.5, 0.0, 8.0, 3.375] ESTIMATE
 |  * avg-->[0.0, 0.1, 0.0, 8.0, 3.375] ESTIMATE
-|  * count-->[0.0, 3.375, 0.0, 8.0, 3.375] ESTIMATE
+|  * count-->[0.0, 6.0E8, 0.0, 8.0, 3.375] ESTIMATE
 |
 3:EXCHANGE
 cardinality: 3
@@ -145,7 +145,7 @@ column statistics:
 * expr-->[810.9, 113345.46, 0.0, 8.0, 932377.0] ESTIMATE
 [dump]
 {
-  "statement": "select\n    l_returnflag,\n    l_linestatus,\n    sum(l_quantity) as sum_qty,\n    sum(l_extendedprice) as sum_base_price,\n    sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,\n    sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,\n    avg(l_quantity) as avg_qty,\n    avg(l_extendedprice) as avg_price,\n    avg(l_discount) as avg_disc,\n    count(*) as count_order\nfrom\n    lineitem\nwhere\n    l_shipdate \u003c\u003d date \u00271998-12-01\u0027\ngroup by\n    l_returnflag,\n    l_linestatus\norder by\n    l_returnflag,\n    l_linestatus ;\n",
+  "statement": "select l_returnflag, l_linestatus, sum(l_quantity) as sum_qty, sum(l_extendedprice) as sum_base_price, sum(l_extendedprice * (1 - l_discount)) as sum_disc_price, sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge, avg(l_quantity) as avg_qty, avg(l_extendedprice) as avg_price, avg(l_discount) as avg_disc, count(*) as count_order from lineitem where l_shipdate \u003c\u003d date \u00271998-12-01\u0027 group by l_returnflag, l_linestatus order by l_returnflag, l_linestatus ; ",
   "table_meta": {
     "test.lineitem": "CREATE TABLE `lineitem` (\n  `L_ORDERKEY` int(11) NOT NULL COMMENT \"\",\n  `L_PARTKEY` int(11) NOT NULL COMMENT \"\",\n  `L_SUPPKEY` int(11) NOT NULL COMMENT \"\",\n  `L_LINENUMBER` int(11) NOT NULL COMMENT \"\",\n  `L_QUANTITY` double NOT NULL COMMENT \"\",\n  `L_EXTENDEDPRICE` double NOT NULL COMMENT \"\",\n  `L_DISCOUNT` double NOT NULL COMMENT \"\",\n  `L_TAX` double NOT NULL COMMENT \"\",\n  `L_RETURNFLAG` char(1) NOT NULL COMMENT \"\",\n  `L_LINESTATUS` char(1) NOT NULL COMMENT \"\",\n  `L_SHIPDATE` date NOT NULL COMMENT \"\",\n  `L_COMMITDATE` date NOT NULL COMMENT \"\",\n  `L_RECEIPTDATE` date NOT NULL COMMENT \"\",\n  `L_SHIPINSTRUCT` char(25) NOT NULL COMMENT \"\",\n  `L_SHIPMODE` char(10) NOT NULL COMMENT \"\",\n  `L_COMMENT` varchar(44) NOT NULL COMMENT \"\",\n  `PAD` char(1) NOT NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`L_ORDERKEY`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`L_ORDERKEY`) BUCKETS 20 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\",\n\"enable_persistent_index\" \u003d \"false\",\n\"compression\" \u003d \"LZ4\"\n);"
   },

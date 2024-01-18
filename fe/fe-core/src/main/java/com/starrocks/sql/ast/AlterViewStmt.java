@@ -16,6 +16,13 @@ public class AlterViewStmt extends BaseViewStmt {
         return tableName;
     }
 
+    public static AlterViewStmt fromReplaceStmt(CreateViewStmt stmt) {
+        AlterViewStmt res = new AlterViewStmt(stmt.getTableName(), stmt.getCols(), stmt.getQueryStatement());
+        res.setInlineViewDef(stmt.getInlineViewDef());
+        res.setFinalCols(stmt.getColumns());
+        return res;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitAlterViewStatement(this, context);

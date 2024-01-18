@@ -22,9 +22,11 @@
 package com.starrocks.utframe;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -39,6 +41,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.scheduler.MvTaskRunContext;
+import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
+import com.starrocks.scheduler.TaskRun;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -61,7 +66,11 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
 import org.apache.commons.lang.StringUtils;
+import org.apache.hadoop.util.ThreadUtil;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
+import org.junit.jupiter.params.provider.Arguments;
 
 import java.io.IOException;
 import java.util.List;
@@ -69,6 +78,7 @@ import java.util.Map;
 import java.util.stream.Stream;
 
 public class StarRocksAssert {
+    private static final Logger LOG = LogManager.getLogger(StarRocksAssert.class);
 
     private ConnectContext ctx;
 
@@ -158,9 +168,28 @@ public class StarRocksAssert {
         return this;
     }
 
+<<<<<<< HEAD
     public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         if (statementBase instanceof  CreateTableStmt) {
+=======
+    public Table getTable(String dbName, String tableName) {
+        return ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName)).orElse(null);
+    }
+
+    public MaterializedView getMv(String dbName, String tableName) {
+        return (MaterializedView) ctx.getGlobalStateMgr().mayGetDb(dbName).map(db -> db.getTable(tableName))
+                .orElse(null);
+    }
+
+    public void ddl(String sql) throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
+    }
+
+    public StarRocksAssert withSingleReplicaTable(String sql) throws Exception {
+        StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        if (statementBase instanceof CreateTableStmt) {
+>>>>>>> 2.5.18
             CreateTableStmt createTableStmt = (CreateTableStmt) statementBase;
             createTableStmt.getProperties().put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, "1");
             return this.withTable(sql);
@@ -230,6 +259,22 @@ public class StarRocksAssert {
         checkAlterJob();
         return this;
     }
+<<<<<<< HEAD
+=======
+
+    private void waitingTaskFinish(TaskRun taskRun) {
+        MvTaskRunContext mvContext = ((PartitionBasedMvRefreshProcessor) taskRun.getProcessor()).getMvContext();
+        int retryCount = 0;
+        int maxRetry = 5;
+        while (retryCount < maxRetry) {
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+            if (mvContext.getNextPartitionStart() == null && mvContext.getNextPartitionEnd() == null) {
+                break;
+            }
+            retryCount++;
+        }
+    }
+>>>>>>> 2.5.18
     
     // Add rollup
     public StarRocksAssert withRollup(String sql) throws Exception {
@@ -290,6 +335,48 @@ public class StarRocksAssert {
 
     public QueryAssert query(String sql) {
         return new QueryAssert(ctx, sql);
+    }
+
+    /**
+     * Enumerate all test cases from combinations
+     */
+    public static class TestCaseEnumerator {
+
+        private List<List<Integer>> testCases;
+
+        public TestCaseEnumerator(List<Integer> space) {
+            this.testCases = Lists.newArrayList();
+            List<Integer> testCase = Lists.newArrayList();
+            search(space, testCase, 0);
+        }
+
+        private void search(List<Integer> space, List<Integer> testCase, int k) {
+            if (k >= space.size()) {
+                testCases.add(Lists.newArrayList(testCase));
+                return;
+            }
+
+            int n = space.get(k);
+            for (int i = 0; i < n; i++) {
+                testCase.add(i);
+                search(space, testCase, k + 1);
+                testCase.remove(testCase.size() - 1);
+            }
+        }
+
+        public Stream<List<Integer>> enumerate() {
+            return testCases.stream();
+        }
+
+        @SafeVarargs
+        public static <T> Arguments ofArguments(List<Integer> permutation, List<T>... args) {
+            Object[] objects = new Object[args.length];
+            for (int i = 0; i < args.length; i++) {
+                int index = permutation.get(i);
+                objects[i] = args[i].get(index);
+            }
+            return Arguments.of(objects);
+        }
     }
 
     public class QueryAssert {

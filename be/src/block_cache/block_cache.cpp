@@ -4,6 +4,11 @@
 
 #include <fmt/format.h>
 
+#include <filesystem>
+
+#ifdef WITH_CACHELIB
+#include "block_cache/cachelib_wrapper.h"
+#endif
 #include "block_cache/fb_cachelib.h"
 #include "common/config.h"
 #include "common/logging.h"
@@ -12,9 +17,7 @@
 
 namespace starrocks {
 
-BlockCache::BlockCache() {
-    _kv_cache = std::make_unique<FbCacheLib>();
-}
+namespace fs = std::filesystem;
 
 BlockCache* BlockCache::instance() {
     static BlockCache cache;
@@ -22,8 +25,26 @@ BlockCache* BlockCache::instance() {
 }
 
 Status BlockCache::init(const CacheOptions& options) {
-    // TODO: check block size limit
+    for (auto& dir : options.disk_spaces) {
+        if (dir.size == 0) {
+            continue;
+        }
+        fs::path dir_path(dir.path);
+        if (fs::exists(dir_path)) {
+            if (!fs::is_directory(dir_path)) {
+                LOG(ERROR) << "the block cache disk path already exists but not a directory, path: " << dir.path;
+                return Status::InvalidArgument("invalid block cache disk path");
+            }
+        } else {
+            std::error_code ec;
+            if (!fs::create_directory(dir_path, ec)) {
+                LOG(ERROR) << "create block cache disk path failed, path: " << dir.path << ", reason: " << ec.message();
+                return Status::InvalidArgument("invalid block cache disk path");
+            }
+        }
+    }
     _block_size = options.block_size;
+    _kv_cache = std::make_unique<FbCacheLib>();
     return _kv_cache->init(options);
 }
 
@@ -40,24 +61,13 @@ Status BlockCache::write_cache(const CacheKey& cache_key, off_t offset, size_t s
         return Status::OK();
     }
 
-    size_t start_block_index = offset / _block_size;
-    size_t end_block_index = (offset + size - 1) / _block_size + 1;
-    off_t off_in_buf = 0;
-    for (size_t index = start_block_index; index < end_block_index; ++index) {
-        std::string block_key = fmt::format("{}/{}", cache_key, index);
-        const char* block_buf = buffer + off_in_buf;
-        const size_t block_size = std::min(size - off_in_buf, _block_size);
-        RETURN_IF_ERROR(_kv_cache->write_cache(block_key, block_buf, block_size, ttl_seconds));
-        off_in_buf += block_size;
-    }
-
-    return Status::OK();
+    size_t index = offset / _block_size;
+    std::string block_key = fmt::format("{}/{}", cache_key, index);
+    return _kv_cache->write_cache(block_key, buffer, size, ttl_seconds);
 }
 
 StatusOr<size_t> BlockCache::read_cache(const CacheKey& cache_key, off_t offset, size_t size, char* buffer) {
-    if (!buffer) {
-        return Status::InvalidArgument("invalid data buffer");
-    }
+    // when buffer == nullptr, it can check if cached.
     if (size == 0) {
         return 0;
     }
@@ -77,13 +87,9 @@ Status BlockCache::remove_cache(const CacheKey& cache_key, off_t offset, size_t 
         return Status::OK();
     }
 
-    size_t start_block_index = offset / _block_size;
-    size_t end_block_index = (offset + size - 1) / _block_size + 1;
-    for (size_t index = start_block_index; index < end_block_index; ++index) {
-        std::string block_key = fmt::format("{}/{}", cache_key, index);
-        RETURN_IF_ERROR(_kv_cache->remove_cache(block_key));
-    }
-    return Status::OK();
+    size_t index = offset / _block_size;
+    std::string block_key = fmt::format("{}/{}", cache_key, index);
+    return _kv_cache->remove_cache(block_key);
 }
 
 Status BlockCache::shutdown() {

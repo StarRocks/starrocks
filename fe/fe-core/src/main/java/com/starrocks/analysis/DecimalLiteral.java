@@ -354,7 +354,12 @@ public class DecimalLiteral extends LiteralExpr {
         // use BigDecimal.toPlainString() instead of BigDecimal.toString()
         // to avoid outputting scientific representation which cannot be
         // parsed in BE that uses regex to validation decimals in string format.
-        return value.toPlainString();
+        // Different print styles help us distinguish decimalV2 and decimalV3 in plan.
+        if (type.isDecimalV2()) {
+            return value.stripTrailingZeros().toPlainString();
+        } else {
+            return value.toPlainString();
+        }
     }
 
     @Override

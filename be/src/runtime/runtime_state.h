@@ -41,6 +41,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "util/logging.h"
+#include "util/phmap/phmap.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks {
@@ -102,10 +103,13 @@ public:
     ObjectPool* global_obj_pool() const;
     void set_query_ctx(pipeline::QueryContext* ctx) { _query_ctx = ctx; }
     pipeline::QueryContext* query_ctx() { return _query_ctx; }
+    pipeline::FragmentContext* fragment_ctx() { return _fragment_ctx; }
+    void set_fragment_ctx(pipeline::FragmentContext* fragment_ctx) { _fragment_ctx = fragment_ctx; }
     const DescriptorTbl& desc_tbl() const { return *_desc_tbl; }
     void set_desc_tbl(DescriptorTbl* desc_tbl) { _desc_tbl = desc_tbl; }
     int chunk_size() const { return _query_options.batch_size; }
     void set_chunk_size(int chunk_size) { _query_options.batch_size = chunk_size; }
+    bool use_column_pool() const;
     bool abort_on_default_limit_exceeded() const { return _query_options.abort_on_default_limit_exceeded; }
     int64_t timestamp_ms() const { return _timestamp_ms; }
     const std::string& timezone() const { return _timezone; }
@@ -278,6 +282,10 @@ public:
 
     bool enable_spill() const { return _query_options.enable_spilling; }
 
+    bool error_if_overflow() const {
+        return _query_options.__isset.overflow_mode && _query_options.overflow_mode == TOverflowMode::REPORT_ERROR;
+    }
+
     const std::vector<TTabletCommitInfo>& tablet_commit_infos() const { return _tablet_commit_infos; }
 
     std::vector<TTabletCommitInfo>& tablet_commit_infos() { return _tablet_commit_infos; }
@@ -307,6 +315,8 @@ public:
 
     const vectorized::GlobalDictMaps& get_load_global_dict_map() const;
 
+    const phmap::flat_hash_map<uint32_t, int64_t>& load_dict_versions() { return _load_dict_versions; }
+
     using GlobalDictLists = std::vector<TGlobalDict>;
     Status init_query_global_dict(const GlobalDictLists& global_dict_list);
     Status init_load_global_dict(const GlobalDictLists& global_dict_list);
@@ -318,13 +328,23 @@ public:
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
     bool enable_query_statistic() const;
-    std::shared_ptr<QueryStatistics> intermediate_query_statistic();
+
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
     int64_t get_rpc_http_min_size() {
         return _query_options.__isset.rpc_http_min_size ? _query_options.rpc_http_min_size : kRpcHttpMinSize;
     }
 
+<<<<<<< HEAD
+=======
+    bool enable_collect_table_level_scan_stats() const {
+        return _query_options.__isset.enable_collect_table_level_scan_stats &&
+               _query_options.enable_collect_table_level_scan_stats;
+    }
+
+    bool use_page_cache();
+
+>>>>>>> 2.5.18
 private:
     // Set per-query state.
     void _init(const TUniqueId& fragment_instance_id, const TQueryOptions& query_options,
@@ -332,7 +352,8 @@ private:
 
     Status create_error_log_file();
 
-    Status _build_global_dict(const GlobalDictLists& global_dict_list, vectorized::GlobalDictMaps* result);
+    Status _build_global_dict(const GlobalDictLists& global_dict_list, vectorized::GlobalDictMaps* result,
+                              phmap::flat_hash_map<uint32_t, int64_t>* version);
 
     // put runtime state before _obj_pool, so that it will be deconstructed after
     // _obj_pool. Because some object in _obj_pool will use profile when deconstructing.
@@ -437,8 +458,10 @@ private:
 
     vectorized::GlobalDictMaps _query_global_dicts;
     vectorized::GlobalDictMaps _load_global_dicts;
+    phmap::flat_hash_map<uint32_t, int64_t> _load_dict_versions;
 
     pipeline::QueryContext* _query_ctx = nullptr;
+    pipeline::FragmentContext* _fragment_ctx = nullptr;
 
     bool _enable_pipeline_engine = false;
 };
@@ -477,9 +500,19 @@ private:
                 str << "Mem usage has exceed the limit of query pool";                                              \
             } else {                                                                                                \
                 str << "Mem usage has exceed the limit of the resource group [" << tracker->label() << "]. "        \
+<<<<<<< HEAD
                     << "You can change the limit by modify [mem_limit] of this group";                              \
             }                                                                                                       \
             break;                                                                                                  \
+=======
+                    << "You can change the limit by modifying [mem_limit] of this group";                           \
+            }                                                                                                       \
+            break;                                                                                                  \
+        case MemTracker::RESOURCE_GROUP_BIG_QUERY:                                                                  \
+            str << "Mem usage has exceed the big query limit of the resource group [" << tracker->label() << "]. "  \
+                << "You can change the limit by modifying [big_query_mem_limit] of this group";                     \
+            break;                                                                                                  \
+>>>>>>> 2.5.18
         default:                                                                                                    \
             break;                                                                                                  \
         }                                                                                                           \

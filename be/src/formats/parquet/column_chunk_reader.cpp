@@ -33,14 +33,9 @@ Status ColumnChunkReader::init(int chunk_size) {
     } else {
         start_offset = metadata().data_page_offset;
     }
-    size_t size = metadata().total_compressed_size;
-    IBufferedInputStream* stream = _opts.sb_stream;
-    if (stream == nullptr) {
-        _default_stream = std::make_unique<DefaultBufferedInputStream>(_opts.file, start_offset, size);
-        _default_stream->reserve(config::parquet_buffer_stream_reserve_size);
-        stream = _default_stream.get();
-    }
-    _page_reader = std::make_unique<PageReader>(stream, start_offset, size);
+    int64_t size = metadata().total_compressed_size;
+    int64_t num_values = metadata().num_values;
+    _page_reader = std::make_unique<PageReader>(_opts.file->stream().get(), start_offset, size, num_values);
 
     // seek to the first page
     _page_reader->seek_to_offset(start_offset);
@@ -119,32 +114,36 @@ Status ColumnChunkReader::_parse_page_data() {
     return Status::OK();
 }
 
-void ColumnChunkReader::_reserve_uncompress_buf(size_t size) {
-    if (size <= _uncompressed_buf_capacity) {
-        return;
-    }
-    auto new_capacity = BitUtil::next_power_of_two(size);
-    _uncompressed_buf.reset(new uint8_t[new_capacity]);
-    _uncompressed_buf_capacity = new_capacity;
-}
-
 Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_size, uint32_t uncompressed_size,
                                                          bool is_compressed) {
     RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit("read and decompress page"));
-    if (is_compressed && _compress_codec != nullptr) {
-        _opts.stats->request_bytes_read += compressed_size;
-        Slice com_slice("", compressed_size);
-        RETURN_IF_ERROR(_page_reader->read_bytes((const uint8_t**)&com_slice.data, com_slice.size));
+    is_compressed = is_compressed && (_compress_codec != nullptr);
+    size_t read_size = is_compressed ? compressed_size : uncompressed_size;
+    std::vector<uint8_t>& read_buffer = is_compressed ? _compressed_buf : _uncompressed_buf;
+    _opts.stats->request_bytes_read += read_size;
 
-        _reserve_uncompress_buf(uncompressed_size);
-        _data = Slice(_uncompressed_buf.get(), uncompressed_size);
-        RETURN_IF_ERROR(_compress_codec->decompress(com_slice, &_data));
+    // check if we can zero copy read.
+    Slice read_data;
+    auto ret = _page_reader->peek(read_size);
+    if (ret.ok() && ret.value().size() == read_size) {
+        // peek dos not advance offset.
+        _page_reader->skip_bytes(read_size);
+        read_data = Slice(ret.value().data(), read_size);
     } else {
-        _opts.stats->request_bytes_read += uncompressed_size;
-        _data.size = uncompressed_size;
-        RETURN_IF_ERROR(_page_reader->read_bytes((const uint8_t**)&_data.data, _data.size));
+        read_buffer.reserve(read_size);
+        read_data = Slice(read_buffer.data(), read_size);
+        RETURN_IF_ERROR(_page_reader->read_bytes(read_data.data, read_data.size));
     }
 
+    // if it's compressed, we have to uncompress page
+    // otherwise we just assign slice.
+    if (is_compressed) {
+        _uncompressed_buf.reserve(uncompressed_size);
+        _data = Slice(_uncompressed_buf.data(), uncompressed_size);
+        RETURN_IF_ERROR(_compress_codec->decompress(read_data, &_data));
+    } else {
+        _data = read_data;
+    }
     return Status::OK();
 }
 
@@ -258,5 +257,4 @@ bool ColumnChunkReader::current_page_is_dict() {
     const auto header = _page_reader->current_header();
     return header->type == tparquet::PageType::DICTIONARY_PAGE;
 }
-
 } // namespace starrocks::parquet

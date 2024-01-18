@@ -22,9 +22,19 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectRelation;
+=======
+import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> 2.5.18
 import org.antlr.v4.runtime.BaseErrorListener;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -40,6 +50,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
 
 import static com.starrocks.sql.plan.PlanTestBase.assertContains;
+<<<<<<< HEAD
+=======
+import static org.junit.Assert.assertEquals;
+>>>>>>> 2.5.18
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.fail;
 
@@ -175,6 +189,18 @@ class ParserTest {
                 exprs[1] instanceof FunctionCallExpr);
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    void testModOperator() {
+        String sql = "select 100 MOD 2";
+        List<StatementBase> stmts = SqlParser.parse(sql, new SessionVariable());
+        Analyzer.analyze(stmts.get(0), UtFrameUtils.createDefaultCtx());
+        String newSql = AstToSQLBuilder.toSQL(stmts.get(0));
+        assertEquals("SELECT 100 % 2 AS `100 % 2`", newSql);
+    }
+
+>>>>>>> 2.5.18
     private static Stream<Arguments> multipleStatements() {
         List<Pair<String, Boolean>> sqls = Lists.newArrayList();
         sqls.add(Pair.create("select 1;;;;;;select 2", true));

@@ -26,6 +26,10 @@ DataSourcePtr FileDataSourceProvider::create_data_source(const TScanRange& scan_
     return std::make_unique<FileDataSource>(this, scan_range);
 }
 
+const TupleDescriptor* FileDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
+    return state->desc_tbl().get_tuple_descriptor(_file_scan_node.tuple_id);
+}
+
 // ================================
 FileDataSource::FileDataSource(const FileDataSourceProvider* provider, const TScanRange& scan_range)
         : _provider(provider), _scan_range(scan_range.broker_scan_range) {
@@ -81,7 +85,6 @@ void FileDataSource::close(RuntimeState* state) {
     if (_scanner != nullptr) {
         _scanner->close();
     }
-    Expr::close(_conjunct_ctxs, state);
 }
 
 Status FileDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) {
@@ -146,13 +149,17 @@ int64_t FileDataSource::cpu_time_spent() const {
 void FileDataSource::_init_counter() {
     // Profile
     _scanner_total_timer = ADD_TIMER(_runtime_profile, "ScannerTotalTime");
-    RuntimeProfile* p = _runtime_profile->create_child("FileScanner", true, true);
-    _scanner_fill_timer = ADD_TIMER(p, "FillTime");
-    _scanner_read_timer = ADD_TIMER(p, "ReadTime");
-    _scanner_cast_chunk_timer = ADD_TIMER(p, "CastChunkTime");
-    _scanner_materialize_timer = ADD_TIMER(p, "MaterializeTime");
-    _scanner_init_chunk_timer = ADD_TIMER(p, "CreateChunkTime");
-    _scanner_file_reader_timer = ADD_TIMER(p->create_child("FilePRead", true, true), "FileReadTime");
+    {
+        static const char* prefix = "FileScanner";
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        RuntimeProfile* p = _runtime_profile;
+        _scanner_fill_timer = ADD_CHILD_TIMER(p, "FillTime", prefix);
+        _scanner_read_timer = ADD_CHILD_TIMER(p, "ReadTime", prefix);
+        _scanner_cast_chunk_timer = ADD_CHILD_TIMER(p, "CastChunkTime", prefix);
+        _scanner_materialize_timer = ADD_CHILD_TIMER(p, "MaterializeTime", prefix);
+        _scanner_init_chunk_timer = ADD_CHILD_TIMER(p, "CreateChunkTime", prefix);
+        _scanner_file_reader_timer = ADD_CHILD_TIMER(p, "FileReadTime", prefix);
+    }
 }
 
 void FileDataSource::_update_counter() {

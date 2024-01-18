@@ -21,11 +21,14 @@
 
 package com.starrocks.catalog;
 
-import com.clearspring.analytics.util.Lists;
+import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.google.common.base.Splitter;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -39,6 +42,9 @@ import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.commons.lang3.EnumUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -46,6 +52,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * TableProperty contains additional information about OlapTable
@@ -54,13 +61,37 @@ import java.util.Map;
  * If there is different type properties is added.Write a method such as buildDynamicProperty to build it.
  */
 public class TableProperty implements Writable, GsonPostProcessable {
+    private static final Logger LOG = LogManager.getLogger(TableProperty.class);
     public static final String DYNAMIC_PARTITION_PROPERTY_PREFIX = "dynamic_partition";
     public static final int INVALID = -1;
+
+    public enum QueryRewriteConsistencyMode {
+        DISABLE,    // 0: disable query rewrite
+        LOOSE,      // 1: enable query rewrite, and skip the partition version check
+        CHECKED;    // 2: enable query rewrite, and rewrite only if mv partition version is consistent with table meta
+
+        public static QueryRewriteConsistencyMode defaultForOlapTable() {
+            return CHECKED;
+        }
+
+        public static QueryRewriteConsistencyMode defaultForExternalTable() {
+            return DISABLE;
+        }
+
+        public static QueryRewriteConsistencyMode parse(String str) {
+            return EnumUtils.getEnumIgnoreCase(QueryRewriteConsistencyMode.class, str);
+        }
+
+        public static String valueList() {
+            return Joiner.on("/").join(QueryRewriteConsistencyMode.values());
+        }
+    }
 
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
-    private transient DynamicPartitionProperty dynamicPartitionProperty = new DynamicPartitionProperty(Maps.newHashMap());
+    private transient DynamicPartitionProperty dynamicPartitionProperty =
+            new DynamicPartitionProperty(Maps.newHashMap());
     // table's default replication num
     private Short replicationNum = FeConstants.default_replication_num;
 
@@ -81,9 +112,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private List<TableName> excludedTriggerTables;
 
     // This property only applies to materialized views,
-    // The mv which base table is external table would be query rewrite even the mv data is not up to date
-    // when this property is set to true.
-    private boolean forceExternalTableQueryRewrite = false;
+    // Specify the query rewrite behaviour for external table
+    private QueryRewriteConsistencyMode forceExternalTableQueryRewrite =
+            QueryRewriteConsistencyMode.defaultForExternalTable();
+
+    // This property only applies to materialized views,
+    // Specify the query rewrite behaviour for external table
+    private QueryRewriteConsistencyMode olapTableQueryRewrite = QueryRewriteConsistencyMode.defaultForOlapTable();
 
     private boolean isInMemory = false;
 
@@ -128,6 +163,18 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private List<ForeignKeyConstraint> foreignKeyConstraints;
     public TableProperty(Map<String, String> properties) {
         this.properties = properties;
+    }
+
+    public TableProperty copy() {
+        TableProperty newTableProperty = new TableProperty(Maps.newHashMap(this.properties));
+        try {
+            newTableProperty.gsonPostProcess();
+        } catch (IOException e) {
+            Preconditions.checkState(false, "gsonPostProcess shouldn't fail");
+        }
+        newTableProperty.hasDelete = this.hasDelete;
+        newTableProperty.hasForbitGlobalDict = this.hasForbitGlobalDict;
+        return newTableProperty;
     }
 
     public static boolean isSamePrefixProperties(Map<String, String> properties, String prefix) {
@@ -176,6 +223,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildPartitionRefreshNumber();
         buildAutoRefreshPartitionsLimit();
         buildExcludedTriggerTables();
+        buildConstraint();
         return this;
     }
 
@@ -205,13 +253,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildAutoRefreshPartitionsLimit() {
         autoRefreshPartitionsLimit =
                 Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT,
-                String.valueOf(INVALID)));
+                        String.valueOf(INVALID)));
         return this;
     }
 
     public TableProperty buildPartitionRefreshNumber() {
-        partitionRefreshNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,
-                String.valueOf(INVALID)));
+        partitionRefreshNumber =
+                Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,
+                        String.valueOf(INVALID)));
         return this;
     }
 
@@ -232,10 +281,45 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public TableProperty buildForceExternalTableQueryRewrite() {
-        forceExternalTableQueryRewrite =
-                Boolean.parseBoolean(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE,
-                        "false"));
+    public static QueryRewriteConsistencyMode analyzeQueryRewriteMode(String value) throws AnalysisException {
+        if ("true".equalsIgnoreCase(value) || "false".equalsIgnoreCase(value)) {
+            // old version use the boolean value
+            boolean boolValue = Boolean.parseBoolean(value);
+            return boolValue ? QueryRewriteConsistencyMode.CHECKED : QueryRewriteConsistencyMode.DISABLE;
+        } else {
+            QueryRewriteConsistencyMode res = EnumUtils.getEnumIgnoreCase(QueryRewriteConsistencyMode.class, value);
+            if (res == null) {
+                String allValues = EnumUtils.getEnumList(QueryRewriteConsistencyMode.class)
+                        .stream().map(Enum::name).collect(Collectors.joining(","));
+                throw new AnalysisException(
+                        "force_external_table_query_rewrite could only be " + allValues + " but got " + value);
+            }
+            return res;
+        }
+    }
+
+    public TableProperty buildQueryRewrite() {
+        // NOTE: keep compatible with previous version
+        String value = properties.get(PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE);
+        forceExternalTableQueryRewrite = QueryRewriteConsistencyMode.defaultForExternalTable();
+        if (value != null) {
+            try {
+                forceExternalTableQueryRewrite = analyzeQueryRewriteMode(value);
+            } catch (AnalysisException e) {
+                LOG.error("analyze {} failed", PropertyAnalyzer.PROPERTIES_FORCE_EXTERNAL_TABLE_QUERY_REWRITE, e);
+            }
+        }
+
+        olapTableQueryRewrite = QueryRewriteConsistencyMode.defaultForOlapTable();
+        value = properties.get(PropertyAnalyzer.PROPERTIES_OLAP_TABLE_QUERY_REWRITE);
+        if (value != null) {
+            try {
+                olapTableQueryRewrite = analyzeQueryRewriteMode(value);
+            } catch (AnalysisException e) {
+                LOG.error("analyze {} failed", PropertyAnalyzer.PROPERTIES_OLAP_TABLE_QUERY_REWRITE, e);
+            }
+        }
+
         return this;
     }
 
@@ -276,11 +360,31 @@ public class TableProperty implements Writable, GsonPostProcessable {
     }
 
     public TableProperty buildConstraint() {
+<<<<<<< HEAD
         uniqueConstraints = UniqueConstraint.parse(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
 
         foreignKeyConstraints = ForeignKeyConstraint.parse(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, ""));
+=======
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT)) {
+            try {
+                uniqueConstraints = UniqueConstraint.parse(
+                        properties.getOrDefault(PropertyAnalyzer.PROPERTIES_UNIQUE_CONSTRAINT, ""));
+            } catch (Exception e) {
+                LOG.warn("Failed to parse unique constraints, ignore this unique constraint", e);
+            }
+        }
+
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT)) {
+            try {
+                foreignKeyConstraints = ForeignKeyConstraint.parse(
+                        properties.getOrDefault(PropertyAnalyzer.PROPERTIES_FOREIGN_KEY_CONSTRAINT, ""));
+            } catch (Exception e) {
+                LOG.warn("Failed to parse foreign key constraints, ignore this foreign key constraints", e);
+            }
+        }
+>>>>>>> 2.5.18
         return this;
     }
 
@@ -336,12 +440,20 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.excludedTriggerTables = excludedTriggerTables;
     }
 
-    public boolean getForceExternalTableQueryRewrite() {
+    public QueryRewriteConsistencyMode getForceExternalTableQueryRewrite() {
         return this.forceExternalTableQueryRewrite;
     }
 
-    public void setForceExternalTableQueryRewrite(boolean forceExternalTableQueryRewrite) {
-        this.forceExternalTableQueryRewrite = forceExternalTableQueryRewrite;
+    public void setForceExternalTableQueryRewrite(QueryRewriteConsistencyMode externalTableQueryRewrite) {
+        this.forceExternalTableQueryRewrite = externalTableQueryRewrite;
+    }
+
+    public void setOlapTableQueryRewrite(QueryRewriteConsistencyMode mode) {
+        this.olapTableQueryRewrite = mode;
+    }
+
+    public QueryRewriteConsistencyMode getOlapTableQueryRewrite() {
+        return this.olapTableQueryRewrite;
     }
 
     public boolean isInMemory() {
@@ -419,7 +531,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     @Override
     public void gsonPostProcess() throws IOException {
-        buildDynamicProperty();
+        try {
+            buildDynamicProperty();
+        } catch (Exception ex) {
+            LOG.warn("build dynamic property failed", ex);
+        }
         buildReplicationNum();
         buildInMemory();
         buildStorageFormat();
@@ -431,7 +547,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildPartitionRefreshNumber();
         buildExcludedTriggerTables();
         buildReplicatedStorage();
+<<<<<<< HEAD
         buildForceExternalTableQueryRewrite();
+=======
+        buildQueryRewrite();
+>>>>>>> 2.5.18
         buildConstraint();
     }
 }

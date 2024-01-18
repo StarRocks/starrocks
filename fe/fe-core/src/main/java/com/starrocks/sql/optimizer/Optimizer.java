@@ -35,8 +35,13 @@ import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEPr
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rule.transformation.SplitScanORToUnionRule;
+>>>>>>> 2.5.18
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
+import com.starrocks.sql.optimizer.rule.tree.CloneDuplicateColRefRule;
 import com.starrocks.sql.optimizer.rule.tree.ExchangeSortToMergeRule;
 import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
@@ -49,6 +54,7 @@ import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.sql.optimizer.validate.MVRewriteValidator;
 import com.starrocks.sql.optimizer.validate.OptExpressionValidator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -152,12 +158,12 @@ public class Optimizer {
         }
 
         OptExpression result;
-        if (!connectContext.getSessionVariable().isSetUseNthExecPlan()) {
-            result = extractBestPlan(requiredProperty, memo.getRootGroup());
-        } else {
+        if (connectContext.getSessionVariable().isSetUseNthExecPlan()) {
             // extract the nth execution plan
             int nthExecPlan = connectContext.getSessionVariable().getUseNthExecPlan();
             result = EnumeratePlan.extractNthPlan(requiredProperty, memo.getRootGroup(), nthExecPlan);
+        } else {
+            result = extractBestPlan(requiredProperty, memo.getRootGroup());
         }
         OptimizerTraceUtil.logOptExpression(connectContext, "after extract best plan:\n%s", result);
 
@@ -167,11 +173,16 @@ public class Optimizer {
         final CostEstimate costs = Explain.buildCost(result);
         connectContext.getAuditEventBuilder().setPlanCpuCosts(costs.getCpuCost())
                 .setPlanMemCosts(costs.getMemoryCost());
+        OptExpression finalPlan;
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.PhysicalRewrite")) {
-            OptExpression finalPlan = physicalRuleRewrite(rootTaskContext, result);
+            finalPlan = physicalRuleRewrite(rootTaskContext, result);
             OptimizerTraceUtil.logOptExpression(connectContext, "final plan after physical rewrite:\n%s", finalPlan);
             OptimizerTraceUtil.log(connectContext, context.getTraceInfo());
+        }
 
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.PlanValidate")) {
+            // validate mv and log tracer if needed
+            MVRewriteValidator.getInstance().validateMV(finalPlan);
             return finalPlan;
         }
     }
@@ -183,7 +194,7 @@ public class Optimizer {
             memo = new Memo();
         }
 
-        context = new OptimizerContext(memo, columnRefFactory, connectContext);
+        context = new OptimizerContext(memo, columnRefFactory, connectContext, optimizerConfig);
         OptimizerTraceInfo traceInfo;
         if (connectContext.getExecutor() == null) {
             traceInfo = new OptimizerTraceInfo(connectContext.getQueryId(), null);
@@ -306,6 +317,11 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 
+<<<<<<< HEAD
+=======
+        ruleRewriteOnlyOnce(tree, rootTaskContext, SplitScanORToUnionRule.getInstance());
+
+>>>>>>> 2.5.18
         if (isEnableSingleTableMVRewrite(rootTaskContext, sessionVariable, tree)) {
             // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
@@ -322,6 +338,12 @@ public class Optimizer {
     private boolean isEnableSingleTableMVRewrite(TaskContext rootTaskContext,
                                                  SessionVariable sessionVariable,
                                                  OptExpression queryPlan) {
+<<<<<<< HEAD
+=======
+        if (sessionVariable.isDisableMaterializedViewRewrite()) {
+            return false;
+        }
+>>>>>>> 2.5.18
         // if disable single mv rewrite, return false.
         if (optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)) {
             return false;
@@ -435,6 +457,13 @@ public class Optimizer {
     }
 
     private boolean isEnableMultiTableRewrite(ConnectContext connectContext, OptExpression queryPlan) {
+<<<<<<< HEAD
+=======
+        if (connectContext.getSessionVariable().isDisableMaterializedViewRewrite()) {
+            return false;
+        }
+
+>>>>>>> 2.5.18
         if (context.getCandidateMvs().isEmpty()) {
             return false;
         }
@@ -472,6 +501,11 @@ public class Optimizer {
         result = new PredicateReorderRule(rootTaskContext.getOptimizerContext().getSessionVariable()).rewrite(result,
                 rootTaskContext);
         result = new PruneSubfieldsForComplexType().rewrite(result, rootTaskContext);
+
+        // This must be put at last of the optimization. Because wrapping reused ColumnRefOperator with CloneOperator
+        // too early will prevent it from certain optimizations that depend on the equivalence of the ColumnRefOperator.
+        result = new CloneDuplicateColRefRule().rewrite(result, rootTaskContext);
+
         result.setPlanCount(planCount);
         return result;
     }
@@ -499,9 +533,7 @@ public class Optimizer {
                 childPlans);
         // record inputProperties at optExpression, used for planFragment builder to determine join type
         expression.setRequiredProperties(inputProperties);
-        expression.setStatistics(groupExpression.getGroup().hasConfidenceStatistic(requiredProperty) ?
-                groupExpression.getGroup().getConfidenceStatistic(requiredProperty) :
-                groupExpression.getGroup().getStatistics());
+        expression.setStatistics(groupExpression.getGroup().getStatistics());
         expression.setCost(groupExpression.getCost(requiredProperty));
 
         // When build plan fragment, we need the output column of logical property

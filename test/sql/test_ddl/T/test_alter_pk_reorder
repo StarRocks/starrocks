@@ -24,3 +24,28 @@ alter table tab1 order by (k2,k1);
 function: wait_alter_table_finish()
 insert into tab1 values (700,700,700,700,700);
 select * from tab1;
+<<<<<<< HEAD
+=======
+
+
+-- name: test_alter_pk_reorder_column_type
+CREATE TABLE `test_alter_pk_reorder_column_type` (
+  `k1` date NOT NULL COMMENT "",
+  `v1` datetime NOT NULL COMMENT "",
+  `v2` varchar(20) NOT NULL COMMENT "",
+  `v3` varchar(20) NOT NULL COMMENT "",
+  `v4` double NOT NULL COMMENT "",
+  `v5` float NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+ORDER BY(`v2`)
+PROPERTIES (
+"replication_num" = "1"
+);
+
+ALTER TABLE test_alter_pk_reorder_column_type ORDER BY(v3, v4);
+ALTER TABLE test_alter_pk_reorder_column_type ORDER BY(v3, v5);
+ALTER TABLE test_alter_pk_reorder_column_type ORDER BY(v3);
+>>>>>>> 2.5.18

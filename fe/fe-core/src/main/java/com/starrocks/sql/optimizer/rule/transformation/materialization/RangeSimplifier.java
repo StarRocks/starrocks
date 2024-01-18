@@ -2,16 +2,8 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.BoundType;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Range;
-import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+<<<<<<< HEAD
 
 import java.util.List;
 import java.util.Map;
@@ -19,16 +11,26 @@ import java.util.stream.Collectors;
 
 public class RangeSimplifier {
     private final List<ScalarOperator> srcPredicates;
+=======
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
-    public RangeSimplifier(List<ScalarOperator> srcPredicates) {
-        this.srcPredicates = srcPredicates;
+public class RangeSimplifier {
+    protected static final Logger LOG = LogManager.getLogger(RangeSimplifier.class);
+
+    private final ScalarOperator srcPredicate;
+>>>>>>> 2.5.18
+
+    public RangeSimplifier(ScalarOperator srcPredicate) {
+        this.srcPredicate = srcPredicate;
     }
 
     // check whether target range predicates are contained in srcPredicates
     // all ScalarOperator should be BinaryPredicateOperator,
     // left is ColumnRefOperator and right is ConstantOperator
-    public ScalarOperator simplify(List<ScalarOperator> targets) {
+    public ScalarOperator simplify(ScalarOperator target) {
         try {
+<<<<<<< HEAD
             Map<Integer, Range<ConstantOperator>> srcColumnIdToRange = extractColumnIdRangeMapping(srcPredicates);
             if (srcColumnIdToRange == null) {
                 return null;
@@ -89,11 +91,18 @@ public class RangeSimplifier {
                 }
                 return Utils.compoundAnd(rewrittenRangePredicates);
             }
+=======
+            RangePredicate srcRangePredicate = extractRangePredicate(srcPredicate);
+            RangePredicate targetRangePredicate = extractRangePredicate(target);
+            return srcRangePredicate.simplify(targetRangePredicate);
+>>>>>>> 2.5.18
         } catch (Exception e) {
+            LOG.debug("Simplify scalar operator {} failed:", target, e);
             return null;
         }
     }
 
+<<<<<<< HEAD
     private Map<Integer, Range<ConstantOperator>> extractColumnIdRangeMapping(List<ScalarOperator> predicates) {
         Map<Integer, Range<ConstantOperator>> columnIdToRange = Maps.newHashMap();
         for (ScalarOperator rangePredicate : predicates) {
@@ -185,5 +194,10 @@ public class RangeSimplifier {
             default:
                 throw new UnsupportedOperationException("unsupported type:" + type);
         }
+=======
+    private RangePredicate extractRangePredicate(ScalarOperator scalarOperator) {
+        PredicateExtractor extractor = new PredicateExtractor();
+        return scalarOperator.accept(extractor, new PredicateExtractor.PredicateExtractorContext());
+>>>>>>> 2.5.18
     }
 }

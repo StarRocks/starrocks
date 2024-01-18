@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
+<<<<<<< HEAD
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.catalog.Function;
@@ -43,4 +44,79 @@ public class PartitionExprAnalyzer {
             functionCallExpr.setFn(builtinFunction);
         }
     }
+=======
+import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
+
+import java.util.ArrayList;
+
+public class PartitionExprAnalyzer {
+
+    public static void analyzePartitionExpr(Expr expr, SlotRef partitionSlotRef) {
+        if (expr instanceof FunctionCallExpr) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
+            Function builtinFunction = null;
+            Type targetColType = partitionSlotRef.getType();
+            String functionName = functionCallExpr.getFnName().getFunction();
+            if (functionName.equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+                Type[] dateTruncType = {Type.VARCHAR, targetColType};
+                builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                        dateTruncType, Function.CompareMode.IS_IDENTICAL);
+            } else if (functionName.equalsIgnoreCase(FunctionSet.TIME_SLICE)) {
+                Type[] timeSliceType = {targetColType, Type.INT, Type.VARCHAR, Type.VARCHAR};
+                builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                        timeSliceType, Function.CompareMode.IS_IDENTICAL);
+            } else if (functionName.equalsIgnoreCase(FunctionSet.SUBSTR) ||
+                    functionName.equalsIgnoreCase(FunctionSet.SUBSTRING)) {
+                int paramSize = functionCallExpr.getParams().exprs().size();
+                if (paramSize == 2) {
+                    Type[] subStrType = {Type.VARCHAR, Type.INT};
+                    builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                            subStrType, Function.CompareMode.IS_IDENTICAL);
+                    targetColType = Type.VARCHAR;
+                } else if (paramSize == 3) {
+                    Type[] subStrType = {Type.VARCHAR, Type.INT, Type.INT};
+                    builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                            subStrType, Function.CompareMode.IS_IDENTICAL);
+                    targetColType = Type.VARCHAR;
+                }
+            } else if (functionName.equalsIgnoreCase(FunctionSet.STR2DATE)) {
+                Type[] str2DateType = {Type.VARCHAR, Type.VARCHAR};
+                builtinFunction = Expr.getBuiltinFunction(functionCallExpr.getFnName().getFunction(),
+                        str2DateType, Function.CompareMode.IS_IDENTICAL);
+                targetColType = Type.DATE;
+            }
+            if (builtinFunction == null) {
+                String msg = String.format("Unsupported partition type %s for function %s", targetColType,
+                        functionCallExpr.toSql());
+                throw new SemanticException(msg);
+            }
+
+            functionCallExpr.setFn(builtinFunction);
+            functionCallExpr.setType(targetColType);
+        } else if (expr instanceof CastExpr) {
+            CastExpr castExpr = (CastExpr) expr;
+            castExpr.setType(castExpr.getTargetTypeDef().getType());
+            try {
+                castExpr.analyze();
+            } catch (AnalysisException e) {
+                throw new SemanticException("Failed to analyze cast expr:" + castExpr.toSql());
+            }
+            ArrayList<Expr> children = castExpr.getChildren();
+            for (Expr child : children) {
+                if (child instanceof FunctionCallExpr) {
+                    SlotRef functionCallSlotRef = AnalyzerUtils.getSlotRefFromFunctionCall(child);
+                    PartitionExprAnalyzer.analyzePartitionExpr(child, functionCallSlotRef);
+                }
+            }
+        }
+    }
+
+>>>>>>> 2.5.18
 }

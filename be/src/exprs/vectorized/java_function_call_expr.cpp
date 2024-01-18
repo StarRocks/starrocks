@@ -85,11 +85,11 @@ struct UDFFunctionCallHelper {
 
 JavaFunctionCallExpr::JavaFunctionCallExpr(const TExprNode& node) : Expr(node) {}
 
-ColumnPtr JavaFunctionCallExpr::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
+StatusOr<ColumnPtr> JavaFunctionCallExpr::evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) {
     Columns columns(children().size());
 
     for (int i = 0; i < _children.size(); ++i) {
-        columns[i] = _children[i]->evaluate(context, ptr);
+        ASSIGN_OR_RETURN(columns[i], _children[i]->evaluate_checked(context, ptr));
     }
     ColumnPtr res;
     auto call_udf = [&]() {

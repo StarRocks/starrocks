@@ -158,6 +158,13 @@ public class PruneComplexTypeUtil {
                 while (tmpType.isArrayType()) {
                     tmpType = ((ArrayType) tmpType).getItemType();
                 }
+<<<<<<< HEAD
+=======
+                /// If origin type is Array, the item type may not be complex type anymore
+                if (!tmpType.isComplexType()) {
+                    break;
+                }
+>>>>>>> 2.5.18
                 ComplexTypeAccessPath accessPath = accessPaths.get(i);
                 if (i == accessPaths.size() - 1) {
                     // last one, select children's all subfields

@@ -2,6 +2,10 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+<<<<<<< HEAD
+=======
+import com.starrocks.common.Pair;
+>>>>>>> 2.5.18
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -43,7 +47,11 @@ public class ColumnRewriter {
         return predicate.accept(visitor, null);
     }
 
+<<<<<<< HEAD
     public ColumnRefOperator rewriteViewToQuery(final ColumnRefOperator colRef) {
+=======
+    public ColumnRefOperator rewriteColumnViewToQuery(final ColumnRefOperator colRef) {
+>>>>>>> 2.5.18
         if (colRef == null) {
             return null;
         }
@@ -58,6 +66,26 @@ public class ColumnRewriter {
             return null;
         }
         return (ColumnRefOperator) target;
+<<<<<<< HEAD
+=======
+    }
+
+    public ScalarOperator rewriteViewToQuery(final ScalarOperator scalarOperator) {
+        if (scalarOperator == null) {
+            return null;
+        }
+        ColumnRewriteVisitor visitor =
+                new ColumnWriterBuilder()
+                        .withRewriteContext(rewriteContext)
+                        .withEnableRelationRewrite(true)
+                        .withViewToQuery(true)
+                        .build();
+        ScalarOperator target = scalarOperator.accept(visitor, null);
+        if (target == null || target == scalarOperator) {
+            return null;
+        }
+        return target;
+>>>>>>> 2.5.18
     }
 
     public ScalarOperator rewriteViewToQueryWithQueryEc(ScalarOperator predicate) {
@@ -100,6 +128,37 @@ public class ColumnRewriter {
         return predicate.accept(visitor, null);
     }
 
+<<<<<<< HEAD
+=======
+    public ScalarOperator rewriteByEc(ScalarOperator predicate, boolean isMVBased) {
+        if (isMVBased) {
+            return rewriteByViewEc(predicate);
+        } else {
+            return rewriteByQueryEc(predicate);
+        }
+    }
+
+    public ScalarOperator rewriteToTargetWithEc(ScalarOperator predicate, boolean isMVBased) {
+        if (isMVBased) {
+            return rewriteViewToQueryWithViewEc(predicate);
+        } else {
+            return rewriteViewToQueryWithQueryEc(predicate);
+        }
+    }
+
+    public Pair<ScalarOperator, ScalarOperator> rewriteSrcTargetWithEc(ScalarOperator src,
+                                                                       ScalarOperator target,
+                                                                       boolean isQueryToMV) {
+        if (isQueryToMV) {
+            // for view, swap column by relation mapping and query ec
+            return Pair.create(rewriteByQueryEc(src), rewriteViewToQueryWithQueryEc(target));
+        } else {
+            return Pair.create(rewriteViewToQueryWithViewEc(src), rewriteByViewEc(target));
+        }
+
+    }
+
+>>>>>>> 2.5.18
     public class ColumnWriterBuilder {
         private RewriteContext rewriteContext;
         private boolean enableRelationRewrite;
@@ -123,6 +182,7 @@ public class ColumnRewriter {
             this.enableRelationRewrite = enableRelationRewrite;
             return this;
         }
+<<<<<<< HEAD
 
         ColumnWriterBuilder withViewToQuery(boolean viewToQuery) {
             this.viewToQuery = viewToQuery;
@@ -147,6 +207,32 @@ public class ColumnRewriter {
         }
     }
 
+=======
+
+        ColumnWriterBuilder withViewToQuery(boolean viewToQuery) {
+            this.viewToQuery = viewToQuery;
+            return this;
+        }
+        ColumnWriterBuilder withEnableEquivalenceClassesRewrite(boolean enableEquivalenceClassesRewrite) {
+            this.enableEquivalenceClassesRewrite = enableEquivalenceClassesRewrite;
+            return this;
+        }
+
+        ColumnWriterBuilder withUseQueryEquivalenceClasses(boolean useQueryEquivalenceClasses) {
+            this.useQueryEquivalenceClasses = useQueryEquivalenceClasses;
+            return this;
+        }
+
+        ColumnRewriteVisitor build() {
+            return new ColumnRewriteVisitor(this.rewriteContext,
+                    this.enableRelationRewrite,
+                    this.viewToQuery,
+                    this.enableEquivalenceClassesRewrite,
+                    this.useQueryEquivalenceClasses);
+        }
+    }
+
+>>>>>>> 2.5.18
     private static class ColumnRewriteVisitor extends BaseScalarOperatorShuttle {
         private final boolean enableRelationRewrite;
         private final boolean enableEquivalenceClassesRewrite;

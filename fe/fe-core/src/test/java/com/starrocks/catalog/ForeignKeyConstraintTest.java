@@ -163,4 +163,78 @@ public class ForeignKeyConstraintTest {
         Assert.assertEquals(0, foreignKeyConstraints5.size());
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testParseMV() {
+        String constraintDescs = "catalog.db.table1(column1)  REFERENCES  catalog.db.table2(newColumn1)";
+        List<ForeignKeyConstraint> foreignKeyConstraints1 = ForeignKeyConstraint.parse(constraintDescs);
+        Assert.assertEquals(1, foreignKeyConstraints1.size());
+        Assert.assertEquals("catalog", foreignKeyConstraints1.get(0).getParentTableInfo().getCatalogName());
+        Assert.assertEquals("db", foreignKeyConstraints1.get(0).getParentTableInfo().getDbName());
+        Assert.assertEquals("table2", foreignKeyConstraints1.get(0).getParentTableInfo().getTableName());
+        Assert.assertEquals("catalog", foreignKeyConstraints1.get(0).getChildTableInfo().getCatalogName());
+        Assert.assertEquals("db", foreignKeyConstraints1.get(0).getChildTableInfo().getDbName());
+        Assert.assertEquals("table1", foreignKeyConstraints1.get(0).getChildTableInfo().getTableName());
+        Assert.assertEquals(1, foreignKeyConstraints1.get(0).getColumnRefPairs().size());
+        Assert.assertEquals("column1", foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).first);
+        Assert.assertEquals("newColumn1", foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).second);
+
+        String constraintDescs2 = "catalog.db.table1(column1, column2)  REFERENCES  catalog.db.table2(newColumn1, newColumn2)";
+        List<ForeignKeyConstraint> foreignKeyConstraints2 = ForeignKeyConstraint.parse(constraintDescs2);
+        Assert.assertEquals(1, foreignKeyConstraints2.size());
+        Assert.assertEquals("catalog", foreignKeyConstraints2.get(0).getParentTableInfo().getCatalogName());
+        Assert.assertEquals("db", foreignKeyConstraints2.get(0).getParentTableInfo().getDbName());
+        Assert.assertEquals("table2", foreignKeyConstraints2.get(0).getParentTableInfo().getTableName());
+        Assert.assertEquals("catalog", foreignKeyConstraints2.get(0).getChildTableInfo().getCatalogName());
+        Assert.assertEquals("db", foreignKeyConstraints2.get(0).getChildTableInfo().getDbName());
+        Assert.assertEquals("table1", foreignKeyConstraints2.get(0).getChildTableInfo().getTableName());
+        Assert.assertEquals(2, foreignKeyConstraints2.get(0).getColumnRefPairs().size());
+        Assert.assertEquals("column1", foreignKeyConstraints2.get(0).getColumnRefPairs().get(0).first);
+        Assert.assertEquals("newColumn1", foreignKeyConstraints2.get(0).getColumnRefPairs().get(0).second);
+        Assert.assertEquals("column2", foreignKeyConstraints2.get(0).getColumnRefPairs().get(1).first);
+        Assert.assertEquals("newColumn2", foreignKeyConstraints2.get(0).getColumnRefPairs().get(1).second);
+
+        String constraintDescs3 = "catalog.db.table1(column1)  REFERENCES catalog.db.table2(newColumn1);" +
+                " catalog.db.table3(column1, column2 )  REFERENCES catalog.db.table4(newColumn1, newColumn2);" +
+                " catalog.db.table5(column1, column2,column3)  REFERENCES catalog.db.table6(newColumn1, newColumn2, newColumn3)";
+        List<ForeignKeyConstraint> foreignKeyConstraints3 = ForeignKeyConstraint.parse(constraintDescs3);
+        Assert.assertEquals(3, foreignKeyConstraints3.size());
+        Assert.assertEquals("catalog", foreignKeyConstraints3.get(0).getParentTableInfo().getCatalogName());
+        Assert.assertEquals("db", foreignKeyConstraints3.get(0).getParentTableInfo().getDbName());
+        Assert.assertEquals("table2", foreignKeyConstraints3.get(0).getParentTableInfo().getTableName());
+        Assert.assertEquals("catalog", foreignKeyConstraints3.get(0).getChildTableInfo().getCatalogName());
+        Assert.assertEquals("db", foreignKeyConstraints3.get(0).getChildTableInfo().getDbName());
+        Assert.assertEquals("table1", foreignKeyConstraints3.get(0).getChildTableInfo().getTableName());
+
+        Assert.assertEquals("catalog", foreignKeyConstraints3.get(1).getParentTableInfo().getCatalogName());
+        Assert.assertEquals("db", foreignKeyConstraints3.get(1).getParentTableInfo().getDbName());
+        Assert.assertEquals("table4", foreignKeyConstraints3.get(1).getParentTableInfo().getTableName());
+        Assert.assertEquals("catalog", foreignKeyConstraints3.get(1).getChildTableInfo().getCatalogName());
+        Assert.assertEquals("db", foreignKeyConstraints3.get(1).getChildTableInfo().getDbName());
+        Assert.assertEquals("table3", foreignKeyConstraints3.get(1).getChildTableInfo().getTableName());
+
+        Assert.assertEquals("catalog", foreignKeyConstraints3.get(2).getParentTableInfo().getCatalogName());
+        Assert.assertEquals("db", foreignKeyConstraints3.get(2).getParentTableInfo().getDbName());
+        Assert.assertEquals("table6", foreignKeyConstraints3.get(2).getParentTableInfo().getTableName());
+        Assert.assertEquals("catalog", foreignKeyConstraints3.get(2).getChildTableInfo().getCatalogName());
+        Assert.assertEquals("db", foreignKeyConstraints3.get(2).getChildTableInfo().getDbName());
+        Assert.assertEquals("table5", foreignKeyConstraints3.get(2).getChildTableInfo().getTableName());
+
+        Assert.assertEquals(1, foreignKeyConstraints3.get(0).getColumnRefPairs().size());
+        Assert.assertEquals(2, foreignKeyConstraints3.get(1).getColumnRefPairs().size());
+        Assert.assertEquals(3, foreignKeyConstraints3.get(2).getColumnRefPairs().size());
+
+        String constraintDescs4 = "hive_catalog.hive_ssb_1g_csv.lineorder:1643182323(lo_custkey) " +
+                "REFERENCES hive_catalog.hive_ssb_1g_csv.customer:1643182415(c_custkey)";
+        List<ForeignKeyConstraint> foreignKeyConstraints4 = ForeignKeyConstraint.parse(constraintDescs4);
+        Assert.assertEquals(1, foreignKeyConstraints4.size());
+        Assert.assertEquals("hive_catalog", foreignKeyConstraints4.get(0).getParentTableInfo().getCatalogName());
+        Assert.assertEquals("hive_ssb_1g_csv", foreignKeyConstraints4.get(0).getParentTableInfo().getDbName());
+        Assert.assertEquals("customer", foreignKeyConstraints4.get(0).getParentTableInfo().getTableName());
+        Assert.assertEquals("hive_catalog", foreignKeyConstraints4.get(0).getChildTableInfo().getCatalogName());
+        Assert.assertEquals("hive_ssb_1g_csv", foreignKeyConstraints4.get(0).getChildTableInfo().getDbName());
+        Assert.assertEquals("lineorder", foreignKeyConstraints4.get(0).getChildTableInfo().getTableName());
+    }
+>>>>>>> 2.5.18
 }

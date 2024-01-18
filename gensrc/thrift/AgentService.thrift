@@ -262,6 +262,7 @@ struct TPublishVersionRequest {
     3: optional bool strict_mode = false // Deprecated
     4: optional i64 commit_timestamp
     5: optional string txn_trace_parent
+    6: optional bool enable_sync_publish = false
 }
 
 struct TClearAlterTaskRequest {

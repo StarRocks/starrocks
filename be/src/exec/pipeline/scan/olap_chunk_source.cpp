@@ -8,6 +8,7 @@
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/map_util.h"
+#include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -22,9 +23,9 @@
 namespace starrocks::pipeline {
 using namespace vectorized;
 
-OlapChunkSource::OlapChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+OlapChunkSource::OlapChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                                  vectorized::OlapScanNode* scan_node, OlapScanContext* scan_ctx)
-        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer()),
+        : ChunkSource(op, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer()),
           _scan_node(scan_node),
           _scan_ctx(scan_ctx),
           _limit(scan_node->limit()),
@@ -86,6 +87,7 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
 
     _get_rowsets_timer = ADD_TIMER(_runtime_profile, "GetRowsets");
     _get_delvec_timer = ADD_TIMER(_runtime_profile, "GetDelVec");
+    _read_pk_index_timer = ADD_TIMER(_runtime_profile, "ReadPKIndex");
 
     // SegmentInit
     _seg_init_timer = ADD_TIMER(_runtime_profile, "SegmentInit");
@@ -148,7 +150,8 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.skip_aggregation = skip_aggregation;
     _params.profile = _runtime_profile;
     _params.runtime_state = _runtime_state;
-    _params.use_page_cache = !config::disable_storage_page_cache;
+    _params.use_page_cache = _runtime_state->use_page_cache();
+    _params.use_pk_index = thrift_olap_scan_node.use_pk_index;
     if (thrift_olap_scan_node.__isset.sorted_by_keys_per_tablet) {
         _params.sorted_by_keys_per_tablet = thrift_olap_scan_node.sorted_by_keys_per_tablet;
     }
@@ -254,6 +257,9 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     std::vector<uint32_t> reader_columns;
 
     RETURN_IF_ERROR(_get_tablet(_scan_range));
+
+    auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _scan_range->tablet_id);
+
     RETURN_IF_ERROR(_init_global_dicts(&_params));
     RETURN_IF_ERROR(_init_unused_output_columns(thrift_olap_scan_node.unused_output_column_name));
     RETURN_IF_ERROR(_init_scanner_columns(scanner_columns));
@@ -287,7 +293,9 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
 }
 
 Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
-    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(), true));
+    chunk->reset(ChunkHelper::new_chunk_pooled(_prj_iter->output_schema(), _runtime_state->chunk_size(),
+                                               _runtime_state->use_column_pool()));
+    auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _tablet->tablet_id());
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
 }
 
@@ -397,6 +405,7 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_get_rowsets_timer, _reader->stats().get_rowsets_ns);
     COUNTER_UPDATE(_get_delvec_timer, _reader->stats().get_delvec_ns);
     COUNTER_UPDATE(_seg_init_timer, _reader->stats().segment_init_ns);
+    COUNTER_UPDATE(_read_pk_index_timer, _reader->stats().read_pk_index_ns);
 
     COUNTER_UPDATE(_raw_rows_counter, _reader->stats().raw_rows_read);
 

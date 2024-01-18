@@ -360,7 +360,7 @@ void RowsetTest::test_final_merge(bool has_merge_condition = false) {
 
     ASSERT_EQ(1, tablet->updates()->version_history_count());
     auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
-    auto st = tablet->rowset_commit(2, rowset);
+    auto st = tablet->rowset_commit(2, rowset, 0);
     ASSERT_TRUE(st.ok()) << st.to_string();
     ASSERT_LE(pool->num_threads(), 1);
     ASSERT_EQ(2, tablet->updates()->max_version());
@@ -520,7 +520,7 @@ TEST_F(RowsetTest, FinalMergeVerticalTest) {
 
     ASSERT_EQ(1, tablet->updates()->version_history_count());
     auto pool = StorageEngine::instance()->update_manager()->apply_thread_pool();
-    auto st = tablet->rowset_commit(2, rowset);
+    auto st = tablet->rowset_commit(2, rowset, 0);
     ASSERT_TRUE(st.ok()) << st.to_string();
     ASSERT_LE(pool->num_threads(), 1);
     ASSERT_EQ(2, tablet->updates()->max_version());
@@ -674,7 +674,7 @@ TEST_F(RowsetTest, FinalMergeVerticalPartialTest) {
     ASSERT_EQ(3, rowset->rowset_meta()->num_segments());
     ASSERT_EQ(rows_per_segment * 3, rowset->rowset_meta()->num_rows());
 
-    ASSERT_TRUE(tablet->rowset_commit(2, rowset).ok());
+    ASSERT_TRUE(tablet->rowset_commit(2, rowset, 0).ok());
     EXPECT_EQ(rows_per_segment * 2, read_tablet_and_compare(tablet, partial_schema, 2, rows_per_segment * 2));
     ASSERT_OK(starrocks::StorageEngine::instance()->update_manager()->on_rowset_finished(tablet.get(), rowset.get()));
 }
@@ -933,11 +933,19 @@ TEST_F(RowsetTest, SegmentDeleteWriteTest) {
     butil::IOBuf data;
     auto buf = new uint8[seg_info->data_size()];
     ASSERT_TRUE(rfile->read_fully(buf, seg_info->data_size()).ok());
+<<<<<<< HEAD
     data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[] (uint8*)buf; });
 
     auto del_buf = new uint8[seg_info->delete_data_size()];
     ASSERT_TRUE(dfile->read_fully(del_buf, seg_info->delete_data_size()).ok());
     data.append_user_data(del_buf, seg_info->delete_data_size(), [](void* buf) { delete[] (uint8*)buf; });
+=======
+    data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[](uint8*) buf; });
+
+    auto del_buf = new uint8[seg_info->delete_data_size()];
+    ASSERT_TRUE(dfile->read_fully(del_buf, seg_info->delete_data_size()).ok());
+    data.append_user_data(del_buf, seg_info->delete_data_size(), [](void* buf) { delete[](uint8*) buf; });
+>>>>>>> 2.5.18
 
     auto st = segment_rowset_writer->flush_segment(*seg_info, data);
     LOG(INFO) << st;

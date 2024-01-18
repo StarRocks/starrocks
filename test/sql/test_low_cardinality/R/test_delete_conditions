@@ -1,0 +1,139 @@
+-- name: test_delete_condition
+create table t0 (
+    c0 string,
+    c1 string,
+    c2 int,
+    c3 int
+) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 PROPERTIES('replication_num' = '1');
+-- result:
+-- !result
+insert into t0 SELECT generate_series%100, generate_series%100, generate_series%100, generate_series%100 FROM TABLE(generate_series(1, 65535));
+-- result:
+-- !result
+insert into t0 values (null, null, null, null);
+-- result:
+-- !result
+[UC] analyze full table t0;
+-- result:
+-- !result
+function: wait_global_dict_ready('c0', 't0')
+-- result:
+
+-- !result
+delete from t0 where c0 = "s_1";
+-- result:
+-- !result
+select count(*) from t0;
+-- result:
+65536
+-- !result
+select count(*) from t0 where c0 = "s_2";
+-- result:
+0
+-- !result
+select count(*) from t0 where c0 != "s_2";
+-- result:
+65535
+-- !result
+select count(*) from t0 where c0 is null;
+-- result:
+1
+-- !result
+select count(*) from t0 where c0 = "s_2" and c1 = "s_2";
+-- result:
+0
+-- !result
+select count(*) from t0 where c0 = "s_2" and c1 = "s_3";
+-- result:
+0
+-- !result
+select distinct c0, c1, c2, c3 from t0 where c0 = "s_2" and c1 = "s_2" order by 1,2,3,4 limit 5;
+-- result:
+-- !result
+select distinct c0, c1, c2, c3 from t0 where c1 = "s_2" order by 1,2,3,4 limit 5;
+-- result:
+-- !result
+delete from t0 where c0 is null;
+-- result:
+-- !result
+select count(*) from t0;
+-- result:
+65535
+-- !result
+select count(*), count(c0) from t0 where c0 is not null;
+-- result:
+65535	65535
+-- !result
+select count(*), count(c0) from t0 where c0 is not null;
+-- result:
+65535	65535
+-- !result
+select count(*), count(c0) from t0 where c1 is not null;
+-- result:
+65535	65535
+-- !result
+select count(*), count(c0) from t0 where c2 is not null;
+-- result:
+65535	65535
+-- !result
+select count(*), count(c0), count(distinct c0) from t0 where c2 is not null;
+-- result:
+65535	65535	100
+-- !result
+delete from t0 where c0 = "s_2";
+-- result:
+-- !result
+select count(*) from t0 where c0 = "s_2";
+-- result:
+0
+-- !result
+select count(*) from t0 where c0 != "s_2";
+-- result:
+65535
+-- !result
+select count(*) from t0 where c1 = "s_2";
+-- result:
+0
+-- !result
+select count(*) from t0 where c1 = "s_2" or c0 = "s_2";
+-- result:
+0
+-- !result
+delete from t0 where c2 = 1000;
+-- result:
+-- !result
+select count(*), count(c0), count(distinct c0), max(c0) from t0;
+-- result:
+65535	65535	100	99
+-- !result
+select count(*) from t0 where c0 = "s_3";
+-- result:
+0
+-- !result
+select count(*) from t0 where c1 = "s_1000";
+-- result:
+0
+-- !result
+select count(*) from t0 where c2 = 1000;
+-- result:
+0
+-- !result
+delete from t0 where c0 != "";
+-- result:
+-- !result
+select count(*) from t0;
+-- result:
+0
+-- !result
+select count(*) from t0 where c0 = "s_3";
+-- result:
+0
+-- !result
+select count(*) from t0 where c1 = "s_3";
+-- result:
+0
+-- !result
+select count(*) from t0 where c2 = 4;
+-- result:
+0
+-- !result

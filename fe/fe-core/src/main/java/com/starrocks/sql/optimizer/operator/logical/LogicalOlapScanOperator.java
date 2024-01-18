@@ -29,6 +29,13 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
     private final List<Long> selectedTabletId;
     private final List<Long> hintsTabletIds;
     private final List<ScalarOperator> prunedPartitionPredicates;
+<<<<<<< HEAD
+=======
+    private final boolean usePkIndex;
+
+    // record if this scan is derived from SplitScanORToUnionRule
+    private boolean fromSplitOR;
+>>>>>>> 2.5.18
 
     // Only for UT
     public LogicalOlapScanOperator(Table table) {
@@ -46,8 +53,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
                 ((OlapTable) table).getBaseIndexId(),
                 null,
                 null,
+                false,
                 Lists.newArrayList(),
-                Lists.newArrayList());
+                Lists.newArrayList(),
+                false);
     }
 
     public LogicalOlapScanOperator(
@@ -62,7 +71,8 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             PartitionNames partitionNames,
             boolean hasHintsPartitionNames,
             List<Long> selectedTabletId,
-            List<Long> hintsTabletIds) {
+            List<Long> hintsTabletIds,
+            boolean usePkIndex) {
         super(OperatorType.LOGICAL_OLAP_SCAN, table, colRefToColumnMetaMap, columnMetaToColRefMap, limit, predicate,
                 null);
 
@@ -75,6 +85,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.selectedTabletId = selectedTabletId;
         this.hintsTabletIds = hintsTabletIds;
         this.prunedPartitionPredicates = Lists.newArrayList();
+<<<<<<< HEAD
+=======
+        this.usePkIndex = usePkIndex;
+>>>>>>> 2.5.18
     }
 
     public LogicalOlapScanOperator(
@@ -90,7 +104,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             List<Long> selectedTabletId,
             List<Long> hintsTabletIds) {
         this(table, colRefToColumnMetaMap, columnMetaToColRefMap, hashDistributionSpec, limit, predicate,
+<<<<<<< HEAD
                 selectedIndexId, selectedPartitionId, partitionNames, false, selectedTabletId, hintsTabletIds);
+=======
+                selectedIndexId, selectedPartitionId, partitionNames, false, selectedTabletId, hintsTabletIds, false);
+>>>>>>> 2.5.18
     }
 
     private LogicalOlapScanOperator(Builder builder) {
@@ -107,6 +125,11 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         this.selectedTabletId = builder.selectedTabletId;
         this.hintsTabletIds = builder.hintsTabletIds;
         this.prunedPartitionPredicates = builder.prunedPartitionPredicates;
+<<<<<<< HEAD
+=======
+        this.usePkIndex = builder.usePkIndex;
+        this.fromSplitOR = builder.fromSplitOR;
+>>>>>>> 2.5.18
     }
 
     public HashDistributionSpec getDistributionSpec() {
@@ -137,10 +160,24 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         return (hintsTabletIds != null && !hintsTabletIds.isEmpty()) || hasHintsPartitionNames;
     }
 
+<<<<<<< HEAD
+=======
+    public boolean isUsePkIndex() {
+        return usePkIndex;
+    }
+
+>>>>>>> 2.5.18
     public List<ScalarOperator> getPrunedPartitionPredicates() {
         return prunedPartitionPredicates;
     }
 
+<<<<<<< HEAD
+=======
+
+    public boolean isFromSplitOR() {
+        return fromSplitOR;
+    }
+>>>>>>> 2.5.18
 
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
@@ -183,6 +220,13 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
         private List<Long> selectedTabletId;
         private List<Long> hintsTabletIds;
         private List<ScalarOperator> prunedPartitionPredicates;
+<<<<<<< HEAD
+=======
+
+        private boolean usePkIndex;
+
+        private boolean fromSplitOR;
+>>>>>>> 2.5.18
 
         @Override
         public LogicalOlapScanOperator build() {
@@ -201,6 +245,10 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             this.selectedTabletId = scanOperator.selectedTabletId;
             this.hintsTabletIds = scanOperator.hintsTabletIds;
             this.prunedPartitionPredicates = scanOperator.prunedPartitionPredicates;
+<<<<<<< HEAD
+=======
+            this.usePkIndex = scanOperator.usePkIndex;
+>>>>>>> 2.5.18
             return this;
         }
 
@@ -223,5 +271,23 @@ public final class LogicalOlapScanOperator extends LogicalScanOperator {
             this.prunedPartitionPredicates = prunedPartitionPredicates;
             return this;
         }
+<<<<<<< HEAD
+=======
+
+        public Builder setHashDistributionSpec(HashDistributionSpec hashDistributionSpec) {
+            this.hashDistributionSpec = hashDistributionSpec;
+            return this;
+        }
+
+        public Builder setUsePkIndex(boolean usePkIndex) {
+            this.usePkIndex = usePkIndex;
+            return this;
+        }
+
+        public Builder setFromSplitOR(boolean fromSplitOR) {
+            this.fromSplitOR = fromSplitOR;
+            return this;
+        }
+>>>>>>> 2.5.18
     }
 }

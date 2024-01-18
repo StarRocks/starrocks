@@ -448,7 +448,7 @@ public class MVRewriteTest {
         String query = "select deptno, sum(if(empid=0,0,1)) from " + EMPS_TABLE_NAME + " group by deptno";
         System.out.println(starRocksAssert.withMaterializedView(createEmpsMVSQL).query(query).explainQuery());
     }
-
+    
     @Test
     public void testAggregateMVCalcGroupByQuery1() throws Exception {
         String createEmpsMVSQL = "create materialized view " + EMPS_MV_NAME + " as select deptno, empid, sum(salary) "

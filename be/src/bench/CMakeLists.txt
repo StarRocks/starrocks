@@ -2,3 +2,5 @@
 
 ADD_BE_BENCH(${SRC_DIR}/bench/chunks_sorter_bench)
 ADD_BE_BENCH(${SRC_DIR}/bench/runtime_filter_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/parquet_dict_decode_bench)
+ADD_BE_BENCH(${SRC_DIR}/bench/persistent_index_bench)

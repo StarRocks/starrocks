@@ -163,7 +163,7 @@ public class PlanFragmentBuilder {
 
     private static final Logger LOG = LogManager.getLogger(PlanFragmentBuilder.class);
 
-    public ExecPlan createPhysicalPlan(OptExpression plan, ConnectContext connectContext,
+    public static ExecPlan createPhysicalPlan(OptExpression plan, ConnectContext connectContext,
                                        List<ColumnRefOperator> outputColumns, ColumnRefFactory columnRefFactory,
                                        List<String> colNames,
                                        TResultSinkType resultSinkType,
@@ -175,7 +175,7 @@ public class PlanFragmentBuilder {
         return finalizeFragments(execPlan, resultSinkType);
     }
 
-    private void createOutputFragment(PlanFragment inputFragment, ExecPlan execPlan,
+    private static void createOutputFragment(PlanFragment inputFragment, ExecPlan execPlan,
                                       List<ColumnRefOperator> outputColumns,
                                       boolean hasOutputFragment) {
         if (inputFragment.getPlanRoot() instanceof ExchangeNode || !inputFragment.isPartitioned() || !hasOutputFragment) {
@@ -216,7 +216,7 @@ public class PlanFragmentBuilder {
         execPlan.getFragments().add(exchangeFragment);
     }
 
-    boolean useQueryCache(ExecPlan execPlan) {
+    static boolean useQueryCache(ExecPlan execPlan) {
         if (ConnectContext.get() == null || !ConnectContext.get().getSessionVariable().isEnableQueryCache()) {
             return false;
         }
@@ -227,12 +227,13 @@ public class PlanFragmentBuilder {
         return true;
     }
 
-    private ExecPlan finalizeFragments(ExecPlan execPlan, TResultSinkType resultSinkType) {
+    private static ExecPlan finalizeFragments(ExecPlan execPlan, TResultSinkType resultSinkType) {
         List<PlanFragment> fragments = execPlan.getFragments();
         for (PlanFragment fragment : fragments) {
             fragment.createDataSink(resultSinkType);
         }
         Collections.reverse(fragments);
+
         // compute local_rf_waiting_set for each PlanNode.
         // when enable_pipeline_engine=true and enable_global_runtime_filter=false, we should clear
         // runtime filters from PlanNode.
@@ -252,6 +253,50 @@ public class PlanFragmentBuilder {
             }
         }
         return execPlan;
+    }
+
+    private static void maybeClearOlapScanNodePartitions(PlanFragment fragment) {
+        List<OlapScanNode> olapScanNodes = fragment.collectOlapScanNodes();
+        long numNodesWithBucketColumns = olapScanNodes.stream().filter(node -> !node.getBucketColumns().isEmpty()).count();
+        // Either all OlapScanNode use bucketColumns for local shuffle, or none of them do.
+        // Therefore, clear bucketColumns if only some of them contain bucketColumns.
+        boolean needClear = numNodesWithBucketColumns > 0 && numNodesWithBucketColumns < olapScanNodes.size();
+        if (needClear) {
+            clearOlapScanNodePartitions(fragment.getPlanRoot());
+        }
+    }
+
+    /**
+     * Clear partitionExprs of OlapScanNode (the bucket keys to pass to BE).
+     * <p>
+     * When partitionExprs of OlapScanNode are passed to BE, the post operators will use them as
+     * local shuffle partition exprs.
+     * Otherwise, the operators will use the original partition exprs (group by keys or join on keys).
+     * <p>
+     * The bucket keys can satisfy the required hash property of blocking aggregation except two scenarios:
+     * - OlapScanNode only has one tablet after pruned.
+     * - It is executed on the single BE.
+     * As for these two scenarios, which will generate ScanNode(k1)->LocalShuffle(c1)->BlockingAgg(c1),
+     * partitionExprs of OlapScanNode must be cleared to make BE use group by keys not bucket keys as
+     * local shuffle partition exprs.
+     *
+     * @param root The root node of the fragment which need to check whether to clear bucket keys of OlapScanNode.
+     */
+    private static void clearOlapScanNodePartitions(PlanNode root) {
+        if (root instanceof OlapScanNode) {
+            OlapScanNode scanNode = (OlapScanNode) root;
+            scanNode.setBucketExprs(Lists.newArrayList());
+            scanNode.setBucketColumns(Lists.newArrayList());
+            return;
+        }
+
+        if (root instanceof ExchangeNode) {
+            return;
+        }
+
+        for (PlanNode child : root.getChildren()) {
+            clearOlapScanNodePartitions(child);
+        }
     }
 
     private static class PhysicalPlanTranslator extends OptExpressionVisitor<PlanFragment, ExecPlan> {
@@ -621,17 +666,7 @@ public class PlanFragmentBuilder {
             scanNode.updateAppliedDictStringColumns(node.getGlobalDicts().stream().
                     map(entry -> entry.first).collect(Collectors.toSet()));
 
-            List<ColumnRefOperator> bucketColumns = getShuffleColumns(node.getDistributionSpec());
-            boolean useAllBucketColumns =
-                    bucketColumns.stream().allMatch(c -> node.getColRefToColumnMetaMap().containsKey(c));
-            if (useAllBucketColumns) {
-                List<Expr> bucketExprs = bucketColumns.stream()
-                        .map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                        .collect(Collectors.toList());
-                scanNode.setBucketExprs(bucketExprs);
-                scanNode.setBucketColumns(bucketColumns);
-            }
+            scanNode.setUsePkIndex(node.isUsePkIndex());
 
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
@@ -1122,7 +1157,6 @@ public class PlanFragmentBuilder {
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
             ScalarOperatorToExpr.FormatterContext formatterContext =
                     new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
-            formatterContext.setImplicitCast(true);
             for (ScalarOperator predicate : predicates) {
                 scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
             }
@@ -1206,7 +1240,6 @@ public class PlanFragmentBuilder {
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
             ScalarOperatorToExpr.FormatterContext formatterContext =
                     new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
-            formatterContext.setImplicitCast(true);
             for (ScalarOperator predicate : predicates) {
                 scanNode.getConjuncts().add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
             }
@@ -1373,8 +1406,8 @@ public class PlanFragmentBuilder {
                 }
             }
 
-            clearOlapScanNodePartitions(sourceFragment.getPlanRoot());
-
+            sourceFragment.clearDestination();
+            sourceFragment.clearOutputPartition();
             return sourceFragment;
         }
 
@@ -1384,7 +1417,7 @@ public class PlanFragmentBuilder {
             PlanFragment originalInputFragment = visit(optExpr.inputAt(0), context);
 
             PlanFragment inputFragment = removeExchangeNodeForLocalShuffleAgg(originalInputFragment, context);
-            boolean withLocalShuffle = inputFragment != originalInputFragment;
+            boolean withLocalShuffle = inputFragment != originalInputFragment || inputFragment.isWithLocalShuffle();
 
             /*
              * Create aggregate TupleDescriptor
@@ -1580,50 +1613,21 @@ public class PlanFragmentBuilder {
             aggregationNode.computeStatistics(optExpr.getStatistics());
 
             if (node.isOnePhaseAgg() || node.isMergedLocalAgg() || node.getType().isDistinctGlobal()) {
+<<<<<<< HEAD
                 if (optExpr.getLogicalProperty().oneTabletProperty().supportOneTabletOpt) {
                     clearOlapScanNodePartitions(aggregationNode);
                 }
+=======
+>>>>>>> 2.5.18
                 // For ScanNode->LocalShuffle->AggNode, we needn't assign scan ranges per driver sequence.
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
+                inputFragment.setWithLocalShuffleIfTrue(withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
             }
 
             aggregationNode.getAggInfo().setIntermediateAggrExprs(intermediateAggrExprs);
             inputFragment.setPlanRoot(aggregationNode);
             return inputFragment;
-        }
-
-        /**
-         * Clear partitionExprs of OlapScanNode (the bucket keys to pass to BE).
-         * <p>
-         * When partitionExprs of OlapScanNode are passed to BE, the post operators will use them as
-         * local shuffle partition exprs.
-         * Otherwise, the operators will use the original partition exprs (group by keys or join on keys).
-         * <p>
-         * The bucket keys can satisfy the required hash property of blocking aggregation except two scenarios:
-         * - OlapScanNode only has one tablet after pruned.
-         * - It is executed on the single BE.
-         * As for these two scenarios, which will generate ScanNode(k1)->LocalShuffle(c1)->BlockingAgg(c1),
-         * partitionExprs of OlapScanNode must be cleared to make BE use group by keys not bucket keys as
-         * local shuffle partition exprs.
-         *
-         * @param root The root node of the fragment which need to check whether to clear bucket keys of OlapScanNode.
-         */
-        private void clearOlapScanNodePartitions(PlanNode root) {
-            if (root instanceof OlapScanNode) {
-                OlapScanNode scanNode = (OlapScanNode) root;
-                scanNode.setBucketExprs(Lists.newArrayList());
-                scanNode.setBucketColumns(Lists.newArrayList());
-                return;
-            }
-
-            if (root instanceof ExchangeNode) {
-                return;
-            }
-
-            for (PlanNode child : root.getChildren()) {
-                clearOlapScanNodePartitions(child);
-            }
         }
 
         // Check whether colocate Table exists in the same Fragment
@@ -2396,6 +2400,7 @@ public class PlanFragmentBuilder {
                     partitionExprs,
                     orderByElements,
                     node.getAnalyticWindow(),
+                    node.isUseHashBasedPartition(),
                     null, outputTupleDesc, null, null,
                     context.getDescTbl().createTupleDescriptor());
             analyticEvalNode.setSubstitutedPartitionExprs(partitionExprs);
@@ -2479,6 +2484,8 @@ public class PlanFragmentBuilder {
                     new PlanFragment(context.getNextFragmentId(), setOperationNode, DataPartition.RANDOM);
             List<List<Expr>> materializedResultExprLists = Lists.newArrayList();
 
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
             for (int i = 0; i < optExpr.getInputs().size(); i++) {
                 List<ColumnRefOperator> childOutput = setOperation.getChildOutputColumns().get(i);
                 PlanFragment fragment = visit(optExpr.getInputs().get(i), context);
@@ -2487,8 +2494,7 @@ public class PlanFragmentBuilder {
 
                 // keep output column order
                 for (ColumnRefOperator ref : childOutput) {
-                    SlotDescriptor slotDescriptor = context.getDescTbl().getSlotDesc(new SlotId(ref.getId()));
-                    materializedExpressions.add(new SlotRef(slotDescriptor));
+                    materializedExpressions.add(ScalarOperatorToExpr.buildExecExpression(ref, formatterContext));
                 }
 
                 materializedResultExprLists.add(materializedExpressions);
@@ -2652,7 +2658,7 @@ public class PlanFragmentBuilder {
                     cteFragment.getPlanRoot(), DistributionSpec.DistributionType.SHUFFLE);
 
             exchangeNode.setReceiveColumns(consume.getCteOutputColumnRefMap().values().stream()
-                    .map(ColumnRefOperator::getId).collect(Collectors.toList()));
+                    .map(ColumnRefOperator::getId).distinct().collect(Collectors.toList()));
             exchangeNode.setDataPartition(cteFragment.getDataPartition());
 
             exchangeNode.setNumInstances(cteFragment.getPlanRoot().getNumInstances());

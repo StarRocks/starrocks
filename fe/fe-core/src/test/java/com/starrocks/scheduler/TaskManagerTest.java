@@ -3,8 +3,10 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Queues;
+import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -26,6 +28,9 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.PriorityBlockingQueue;
@@ -382,4 +387,20 @@ public class TaskManagerTest {
 
     }
 
+    private LocalDateTime parseLocalDateTime(String str) throws Exception {
+        Date date = TimeUtils.parseDate(str, PrimitiveType.DATETIME);
+        return LocalDateTime.ofInstant(date.toInstant(), ZoneId.systemDefault());
+    }
+
+    @Test
+    public void testGetInitialDelayTime() throws Exception {
+        Assert.assertEquals(50, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:50"),
+                parseLocalDateTime("2023-04-18 20:00:00")));
+        Assert.assertEquals(30, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:30"),
+                parseLocalDateTime("2023-04-18 20:00:00")));
+        Assert.assertEquals(20, TaskManager.getInitialDelayTime(60, parseLocalDateTime("2023-04-18 19:08:30"),
+                parseLocalDateTime("2023-04-18 20:00:10")));
+        Assert.assertEquals(0, TaskManager.getInitialDelayTime(20, parseLocalDateTime("2023-04-18 19:08:30"),
+                parseLocalDateTime("2023-04-18 21:00:10")));
+    }
 }

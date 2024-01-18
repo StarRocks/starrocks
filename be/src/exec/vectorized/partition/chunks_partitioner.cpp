@@ -22,26 +22,22 @@ ChunksPartitioner::ChunksPartitioner(const bool has_nullable_partition_column,
 Status ChunksPartitioner::prepare(RuntimeState* state) {
     _state = state;
     _mem_pool = std::make_unique<MemPool>();
-    _obj_pool = state->obj_pool();
+    _obj_pool = std::make_unique<ObjectPool>();
     _init_hash_map_variant();
     return Status::OK();
 }
 
-ChunkPtr ChunksPartitioner::consume_from_downgrade_buffer() {
+ChunkPtr ChunksPartitioner::consume_from_passthrough_buffer() {
     vectorized::ChunkPtr chunk = nullptr;
-    if (_downgrade_buffer.empty()) {
+    if (_passthrough_buffer.empty()) {
         return chunk;
     }
     {
         std::lock_guard<std::mutex> l(_buffer_lock);
-        chunk = _downgrade_buffer.front();
-        _downgrade_buffer.pop();
+        chunk = _passthrough_buffer.front();
+        _passthrough_buffer.pop();
     }
     return chunk;
-}
-
-int32_t ChunksPartitioner::num_partitions() {
-    return _hash_map_variant.size();
 }
 
 bool ChunksPartitioner::_is_partition_columns_fixed_size(const std::vector<ExprContext*>& partition_expr_ctxs,
@@ -157,14 +153,11 @@ void ChunksPartitioner::_init_hash_map_variant() {
     }
     _hash_map_variant.init(_state, type);
 
-#define SET_FIXED_SLICE_HASH_MAP_FIELD(TYPE)                       \
-    if (type == PartitionHashMapVariant::Type::TYPE) {             \
-        _hash_map_variant.TYPE->has_null_column = has_null_column; \
-        _hash_map_variant.TYPE->fixed_byte_size = fixed_byte_size; \
-    }
-    SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx4);
-    SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx8);
-    SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx16);
-#undef SET_FIXED_SLICE_HASH_MAP_FIELD
+    _hash_map_variant.visit([&](auto& hash_map_with_key) {
+        if constexpr (std::decay_t<decltype(*hash_map_with_key)>::is_fixed_length_slice) {
+            hash_map_with_key->has_null_column = has_null_column;
+            hash_map_with_key->fixed_byte_size = fixed_byte_size;
+        }
+    });
 }
 } // namespace starrocks::vectorized

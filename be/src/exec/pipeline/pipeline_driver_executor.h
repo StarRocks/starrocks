@@ -5,6 +5,7 @@
 #include <memory>
 #include <unordered_map>
 
+#include "exec/pipeline/audit_statistics_reporter.h"
 #include "exec/pipeline/exec_state_reporter.h"
 #include "exec/pipeline/pipeline_driver.h"
 #include "exec/pipeline/pipeline_driver_poller.h"
@@ -39,6 +40,8 @@ public:
     virtual void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
                                    bool done) = 0;
 
+    virtual void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool* done) = 0;
+
     virtual void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const = 0;
 
 protected:
@@ -55,6 +58,7 @@ public:
     void cancel(DriverRawPtr driver) override;
     void report_exec_state(QueryContext* query_ctx, FragmentContext* fragment_ctx, const Status& status,
                            bool done) override;
+    void report_audit_statistics(QueryContext* query_ctx, FragmentContext* fragment_ctx, bool* done) override;
 
     void iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const override;
 
@@ -72,8 +76,11 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool;
     PipelineDriverPollerPtr _blocked_driver_poller;
     std::unique_ptr<ExecStateReporter> _exec_state_reporter;
+    std::unique_ptr<AuditStatisticsReporter> _audit_statistics_reporter;
 
     std::atomic<int> _next_id = 0;
+    std::atomic_int64_t _schedule_count = 0;
+    std::atomic_int64_t _driver_execution_ns = 0;
 
     // metrics
     std::unique_ptr<UIntGauge> _driver_queue_len;

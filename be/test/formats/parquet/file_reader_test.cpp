@@ -16,6 +16,7 @@
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
 #include "fs/fs.h"
+#include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/mem_tracker.h"
 
@@ -1067,7 +1068,7 @@ TEST_F(FileReaderTest, TestReadArray2dColumn) {
     ASSERT_TRUE(status.ok());
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
-    std::vector<SharedBufferedInputStream::IORange> ranges;
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
 
@@ -1128,7 +1129,7 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     ASSERT_TRUE(status.ok());
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
-    std::vector<SharedBufferedInputStream::IORange> ranges;
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
 
@@ -1171,7 +1172,7 @@ TEST_F(FileReaderTest, TestReadMapColumn) {
     ASSERT_TRUE(status.ok());
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
-    std::vector<SharedBufferedInputStream::IORange> ranges;
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
 
@@ -1272,6 +1273,12 @@ TEST_F(FileReaderTest, TestReadStruct) {
     ASSERT_TRUE(status.ok());
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
+
+    // c1, c2.f1, c2.f2, c2.f3, c3, c4.e1, c4.e2, B1
+    EXPECT_EQ(ranges.size(), 8);
 
     auto chunk = std::make_shared<vectorized::Chunk>();
     chunk->append_column(vectorized::ColumnHelper::create_column(c1, true), chunk->num_columns());
@@ -1348,6 +1355,12 @@ TEST_F(FileReaderTest, TestReadStructSubField) {
     ASSERT_TRUE(status.ok());
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
+
+    // c1, c2.f1, c2.f3, c3, c4.e2, B1
+    EXPECT_EQ(ranges.size(), 6);
 
     auto chunk = std::make_shared<vectorized::Chunk>();
     chunk->append_column(vectorized::ColumnHelper::create_column(c1, true), chunk->num_columns());
@@ -1598,12 +1611,12 @@ TEST_F(FileReaderTest, TestReadMapColumnWithPartialMaterialize) {
 
     EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
 
-    std::vector<SharedBufferedInputStream::IORange> ranges;
+    std::vector<io::SharedBufferedInputStream::IORange> ranges;
     int64_t end_offset = 0;
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
 
-    // c1, c2.key, c2.value, c3.key, c3.value.key, c3.value.value, c4.key. c4.value
-    EXPECT_EQ(ranges.size(), 8);
+    // c1, c2.key, c3.value.key, c4.value
+    EXPECT_EQ(ranges.size(), 4);
 
     EXPECT_EQ(file_reader->_file_metadata->num_rows(), 8);
     TypeDescriptor type_map(PrimitiveType::TYPE_MAP);
@@ -2117,4 +2130,165 @@ TEST_F(FileReaderTest, TestComplexTypeNotNull) {
     EXPECT_EQ(262144, total_row_nums);
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(FileReaderTest, TestLateMaterializationAboutRequiredComplexType) {
+    // Schema:
+    //  message schema {
+    //    required int64 a (INTEGER(64,true));
+    //    required group b {
+    //      required int64 b1 (INTEGER(64,true));
+    //      required int64 b2 (INTEGER(64,true));
+    //  }
+    //    required group c (MAP) {
+    //      repeated group key_value {
+    //        required int64 key (INTEGER(64,true));
+    //        required int64 value (INTEGER(64,true));
+    //      }
+    //    }
+    //  }
+    const std::string filepath = "./be/test/formats/parquet/test_data/map_struct_subfield_required.parquet";
+    auto file = _create_file(filepath);
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor type_a = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
+
+    TypeDescriptor type_b = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
+    type_b.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_b.field_names.emplace_back("b1");
+    type_b.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_b.field_names.emplace_back("b2");
+
+    TypeDescriptor type_c = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_MAP);
+    type_c.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_c.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+
+    SlotDesc slot_descs[] = {
+            {"a", type_a},
+            {"b", type_b},
+            {"c", type_c},
+            {""},
+    };
+
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
+
+    _create_int_conjunct_ctxs(TExprOpcode::EQ, 0, 8000, &ctx->conjunct_ctxs_by_slot[0]);
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 3);
+
+    auto chunk = std::make_shared<vectorized::Chunk>();
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_a, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_b, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_c, true), chunk->num_columns());
+
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
+    const auto& conjunct_ctxs_by_slot = file_reader->_row_group_readers[0]->_param.conjunct_ctxs_by_slot;
+    ASSERT_NE(conjunct_ctxs_by_slot.find(0), conjunct_ctxs_by_slot.end());
+
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        if (!status.ok() && !status.is_end_of_file()) {
+            std::cout << status.get_error_msg() << std::endl;
+            break;
+        }
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        if (chunk->num_rows() == 1) {
+            EXPECT_EQ("[8000, {b1:8000,b2:8000}, {8000:8000}]", chunk->debug_row(0));
+        }
+    }
+
+    EXPECT_EQ(1, total_row_nums);
+}
+
+TEST_F(FileReaderTest, TestLateMaterializationAboutOptionalComplexType) {
+    // Schema:
+    // message schema {
+    //  optional int64 a (INTEGER(64,true));
+    //  optional group b {
+    //    optional int64 b1 (INTEGER(64,true));
+    //    optional int64 b2 (INTEGER(64,true));
+    //  }
+    //  optional group c (MAP) {
+    //    repeated group key_value {
+    //      required int64 key (INTEGER(64,true));
+    //      optional int64 value (INTEGER(64,true));
+    //    }
+    //  }
+    // }
+    const std::string filepath = "./be/test/formats/parquet/test_data/map_struct_subfield_optional.parquet";
+    auto file = _create_file(filepath);
+    auto file_reader =
+            std::make_shared<FileReader>(config::vector_chunk_size, file.get(), std::filesystem::file_size(filepath));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor type_a = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
+
+    TypeDescriptor type_b = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
+    type_b.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_b.field_names.emplace_back("b1");
+    type_b.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_b.field_names.emplace_back("b2");
+
+    TypeDescriptor type_c = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_MAP);
+    type_c.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_c.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+
+    SlotDesc slot_descs[] = {
+            {"a", type_a},
+            {"b", type_b},
+            {"c", type_c},
+            {""},
+    };
+
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(filepath));
+
+    _create_int_conjunct_ctxs(TExprOpcode::EQ, 0, 8000, &ctx->conjunct_ctxs_by_slot[0]);
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 3);
+
+    auto chunk = std::make_shared<vectorized::Chunk>();
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_a, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_b, true), chunk->num_columns());
+    chunk->append_column(vectorized::ColumnHelper::create_column(type_c, true), chunk->num_columns());
+
+    ASSERT_EQ(1, file_reader->_row_group_readers[0]->_left_conjunct_ctxs.size());
+    const auto& conjunct_ctxs_by_slot = file_reader->_row_group_readers[0]->_param.conjunct_ctxs_by_slot;
+    ASSERT_NE(conjunct_ctxs_by_slot.find(0), conjunct_ctxs_by_slot.end());
+
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        if (chunk->num_rows() == 1) {
+            EXPECT_EQ("[8000, {b1:8000,b2:8000}, {8000:8000}]", chunk->debug_row(0));
+        }
+    }
+
+    EXPECT_EQ(1, total_row_nums);
+}
+
+>>>>>>> 2.5.18
 } // namespace starrocks::parquet

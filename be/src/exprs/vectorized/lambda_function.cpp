@@ -8,7 +8,6 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
-#include "column/vectorized_fwd.h"
 #include "exprs/expr_context.h"
 
 namespace starrocks::vectorized {
@@ -17,6 +16,10 @@ LambdaFunction::LambdaFunction(const TExprNode& node) : Expr(node, false), _comm
 
 Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprContext* context) {
     RETURN_IF_ERROR(Expr::prepare(state, context));
+    if (_is_prepared) {
+        return Status::OK();
+    }
+    _is_prepared = true;
     // common sub expressions include 2 parts in a pair: (slot id, expression)
     const int child_num = get_num_children() - 2 * _common_sub_expr_num;
     // collect the slot ids of lambda arguments
@@ -81,19 +84,11 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
     return Status::OK();
 }
 
-ColumnPtr LambdaFunction::evaluate(ExprContext* context, Chunk* ptr) {
+StatusOr<ColumnPtr> LambdaFunction::evaluate_checked(ExprContext* context, Chunk* ptr) {
     for (auto i = 0; i < _common_sub_expr.size(); ++i) {
         auto sub_col = EVALUATE_NULL_IF_ERROR(context, _common_sub_expr[i], ptr);
         ptr->append_column(sub_col, _common_sub_expr_ids[i]);
     }
     return get_child(0)->evaluate(context, ptr);
 }
-
-void LambdaFunction::close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) {
-    _arguments_ids.clear();
-    _captured_slot_ids.clear();
-    _common_sub_expr_ids.clear();
-    _common_sub_expr.clear();
-}
-
 } // namespace starrocks::vectorized

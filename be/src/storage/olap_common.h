@@ -463,6 +463,8 @@ struct OlapReaderStatistics {
     int64_t total_columns_data_page_count = 0;
 
     int64_t runtime_stats_filtered = 0;
+
+    int64_t read_pk_index_ns = 0;
 };
 
 typedef uint32_t ColumnId;

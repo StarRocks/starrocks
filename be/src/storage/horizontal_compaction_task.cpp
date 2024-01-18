@@ -29,7 +29,7 @@ Status HorizontalCompactionTask::run_impl() {
     RETURN_IF_ERROR(_validate_compaction(statistics));
     TRACE("[Compaction] horizontal compaction validated");
 
-    _commit_compaction();
+    RETURN_IF_ERROR(_commit_compaction());
     TRACE("[Compaction] horizontal compaction committed");
 
     return Status::OK();
@@ -96,6 +96,10 @@ Status HorizontalCompactionTask::_horizontal_compact_data(Statistics* statistics
         statistics->output_rows = res.value();
         statistics->merged_rows = reader.merged_rows();
         statistics->filtered_rows = reader.stats().rows_del_filtered;
+    }
+
+    if (config::enable_rowset_verify) {
+        RETURN_IF_ERROR(_output_rowset->verify());
     }
 
     return Status::OK();

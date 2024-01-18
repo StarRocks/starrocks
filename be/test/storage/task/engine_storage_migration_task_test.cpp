@@ -39,10 +39,11 @@ class EngineStorageMigrationTaskTest : public testing::Test {
 public:
     static void SetUpTestCase() { init(); }
 
-    static void TearDownTestCase() {}
+    static void TearDownTestCase() { config::enable_event_based_compaction_framework = true; }
 
     static void init() {
-        // create tablet first
+        config::enable_event_based_compaction_framework = false;
+
         TCreateTabletReq request;
         set_default_create_tablet_request(&request);
         auto res = StorageEngine::instance()->create_tablet(request);
@@ -325,6 +326,7 @@ int main(int argc, char** argv) {
     starrocks::fs::create_directories(root_path_2);
 
     starrocks::config::storage_root_path = root_path_1 + ";" + root_path_2;
+    starrocks::config::storage_flood_stage_left_capacity_bytes = 10485600;
 
     starrocks::CpuInfo::init();
     starrocks::DiskInfo::init();

@@ -64,7 +64,15 @@ public class CacheUpdateProcessor {
         this.isRecursive = isRecursive;
         this.partitionUpdatedTimes = Maps.newHashMap();
         if (enableHmsEventsIncrementalSync) {
+            trySyncEventId();
+        }
+    }
+
+    private void trySyncEventId() {
+        try {
             setLastSyncedEventId(metastore.getCurrentEventId());
+        } catch (MetastoreNotificationFetchException e) {
+            LOG.error("Sync event id on init get exception when pulling events on catalog [{}]", catalogName);
         }
     }
 

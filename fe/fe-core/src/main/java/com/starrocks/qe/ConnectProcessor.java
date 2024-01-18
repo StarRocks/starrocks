@@ -32,7 +32,9 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.StarRocksIcebergException;
@@ -48,7 +50,7 @@ import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
-import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -59,6 +61,7 @@ import com.starrocks.thrift.TMasterOpResult;
 import com.starrocks.thrift.TQueryOptions;
 import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.codec.binary.Hex;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -145,16 +148,19 @@ public class ConnectProcessor {
         long endTime = System.currentTimeMillis();
         long elapseMs = endTime - ctx.getStartTime();
 
+        boolean isForwardToLeader = (executor != null) ? executor.getIsForwardToLeaderOrInit(false) : false;
         ctx.getAuditEventBuilder().setEventType(EventType.AFTER_QUERY)
                 .setState(ctx.getState().toString()).setErrorCode(ctx.getErrorCode()).setQueryTime(elapseMs)
                 .setReturnRows(ctx.getReturnRows())
                 .setStmtId(ctx.getStmtId())
+                .setIsForwardToLeader(isForwardToLeader)
                 .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString());
         if (statistics != null) {
             ctx.getAuditEventBuilder().setScanBytes(statistics.scanBytes);
             ctx.getAuditEventBuilder().setScanRows(statistics.scanRows);
             ctx.getAuditEventBuilder().setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
             ctx.getAuditEventBuilder().setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
+            ctx.getAuditEventBuilder().setReturnRows(statistics.returnedRows == null ? 0 : statistics.returnedRows);
         }
 
         if (ctx.getState().isQuery()) {
@@ -183,12 +189,12 @@ public class ConnectProcessor {
 
         if (!ctx.getState().isQuery() && (parsedStmt != null && parsedStmt.needAuditEncryption())) {
             // Some information like username, password in the stmt should not be printed.
-            ctx.getAuditEventBuilder().setStmt(AstToStringBuilder.toString(parsedStmt));
-        } else if (ctx.getState().isQuery() && containsComment(origStmt)) {
-            // avoid audit log can't replay
+            ctx.getAuditEventBuilder().setStmt(AstToSQLBuilder.toSQL(parsedStmt));
+        } else if (parsedStmt == null) {
+            // invalid sql, record the original statement to avoid audit log can't replay
             ctx.getAuditEventBuilder().setStmt(origStmt);
         } else {
-            ctx.getAuditEventBuilder().setStmt(origStmt.replace("\n", " "));
+            ctx.getAuditEventBuilder().setStmt(LogUtil.removeLineSeparator(origStmt));
         }
 
         GlobalStateMgr.getCurrentAuditEventProcessor().handleAuditEvent(ctx.getAuditEventBuilder().build());
@@ -235,16 +241,20 @@ public class ConnectProcessor {
         queryDetail.setEndTime(endTime);
         queryDetail.setLatency(elapseMs);
         queryDetail.setResourceGroupName(ctx.getResourceGroup() != null ? ctx.getResourceGroup().getName() : "");
-        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail);
+        QueryDetailQueue.addQueryDetail(queryDetail);
     }
 
-    private void addRunningQueryDetail(StatementBase parsedStmt) {
+    protected void addRunningQueryDetail(StatementBase parsedStmt) {
         if (!Config.enable_collect_query_detail_info) {
             return;
         }
         String sql;
         if (!ctx.getState().isQuery() && parsedStmt.needAuditEncryption()) {
+<<<<<<< HEAD
             sql = AstToStringBuilder.toString(parsedStmt);
+=======
+            sql = AstToSQLBuilder.toSQL(parsedStmt);
+>>>>>>> 2.5.18
         } else {
             sql = parsedStmt.getOrigStmt().originStmt;
         }
@@ -263,8 +273,8 @@ public class ConnectProcessor {
                 ctx.getQualifiedUser(),
                 Optional.ofNullable(ctx.getResourceGroup()).map(TWorkGroup::getName).orElse(""));
         ctx.setQueryDetail(queryDetail);
-        //copy queryDetail, cause some properties can be changed in future
-        QueryDetailQueue.addAndRemoveTimeoutQueryDetail(queryDetail.copy());
+        // copy queryDetail, cause some properties can be changed in future
+        QueryDetailQueue.addQueryDetail(queryDetail.copy());
     }
 
     // process COM_QUERY statement,
@@ -303,7 +313,7 @@ public class ConnectProcessor {
             for (int i = 0; i < stmts.size(); ++i) {
                 ctx.getState().reset();
                 if (i > 0) {
-                    ctx.resetRetureRows();
+                    ctx.resetReturnRows();
                     ctx.setQueryId(UUIDUtil.genUUID());
                 }
                 parsedStmt = stmts.get(i);
@@ -668,6 +678,15 @@ public class ConnectProcessor {
                 result.setResultSet(executor.getProxyResultSet().tothrift());
             } else if (executor.getProxyResultBuffer() != null) {  // query statement
                 result.setChannelBufferList(executor.getProxyResultBuffer());
+            }
+
+            String resourceGroupName = ctx.getAuditEventBuilder().build().resourceGroup;
+            if (StringUtils.isNotEmpty(resourceGroupName)) {
+                result.setResource_group_name(resourceGroupName);
+            }
+            PQueryStatistics audit = executor.getQueryStatisticsForAuditLog();
+            if (audit != null) {
+                result.setAudit_statistics(AuditStatisticsUtil.toThrift(audit));
             }
         }
         return result;

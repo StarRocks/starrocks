@@ -169,13 +169,13 @@ public class RuleSet {
 
     static {
         REWRITE_RULES.put(RuleSetType.MERGE_LIMIT, ImmutableList.of(
+                new EliminateLimitZeroRule(), // should before MergeLimitWithSortRule
                 new MergeLimitWithSortRule(),
                 new SplitLimitRule(),
                 new PushDownLimitJoinRule(),
                 new PushDownLimitCTEAnchor(),
                 new PushDownLimitUnionRule(),
                 new MergeLimitWithLimitRule(),
-                new EliminateLimitZeroRule(),
                 PushDownLimitDirectRule.PROJECT,
                 PushDownLimitDirectRule.ASSERT_ONE_ROW,
                 PushDownLimitDirectRule.CTE_CONSUME,
