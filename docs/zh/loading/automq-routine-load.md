@@ -22,10 +22,11 @@ create table users (
 ) PRIMARY KEY (id)
 DISTRIBUTED BY HASH(id)
 PROPERTIES (
-  "replication_num" = "1",
   "enable_persistent_index" = "true"
 );
 ```
+import Replicanum from '../assets/commonMarkdown/replicanum.md'
+<Replicanum />
 
 ### 准备 AutoMQ Kafka 环境和测试数据
 

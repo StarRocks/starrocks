@@ -30,10 +30,11 @@ create table users (
 ) PRIMARY KEY (id)
 DISTRIBUTED BY HASH(id)
 PROPERTIES (
-  "replication_num" = "1",
   "enable_persistent_index" = "true"
 );
 ```
+import Replicanum from '../assets/commonMarkdown/replicanum.md'
+<Replicanum />
 
 ## Prepare AutoMQ Kafka and test data
 
