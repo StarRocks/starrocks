@@ -164,7 +164,7 @@ Description: Cumulative deallocated memory for all FragmentInstances under this 
 
 ##### InstancePeakMemoryUsage
 
-Description: The peak of memory usage across all FragmentInstances under this Fragment.
+Description: The peak memory usage across all FragmentInstances under this Fragment.
 
 ### Pipeline Metrics
 
