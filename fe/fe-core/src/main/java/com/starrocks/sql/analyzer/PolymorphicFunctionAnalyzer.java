@@ -37,6 +37,9 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
+
+import static com.starrocks.sql.analyzer.AnalyzerUtils.replaceNullType2Boolean;
 
 public class PolymorphicFunctionAnalyzer {
     private static final Logger LOGGER = LogManager.getLogger(PolymorphicFunctionAnalyzer.class);
@@ -93,7 +96,7 @@ public class PolymorphicFunctionAnalyzer {
                 resolvedTypes[i] = inputType;
             }
 
-            resolvedTypes[i] = AnalyzerUtils.replaceNullType2Boolean(resolvedTypes[i]);
+            resolvedTypes[i] = replaceNullType2Boolean(resolvedTypes[i]);
         }
         return resolvedTypes;
     }
@@ -209,8 +212,14 @@ public class PolymorphicFunctionAnalyzer {
         if (deduce == null) {
             return null;
         }
-        Type[] resolvedArgTypes = resolveArgTypes(fn, inputArgTypes);
+        // Apply deduce logic first,then replace null to boolean
+        // because null type can have common super type with all types but boolean can't
+        Type[] resolvedArgTypes = Arrays.copyOf(inputArgTypes, inputArgTypes.length);
         Type newRetType = deduce.apply(resolvedArgTypes);
+        // then replace null to boolean
+        resolvedArgTypes =
+                Arrays.stream(resolvedArgTypes).map(arg -> replaceNullType2Boolean(arg)).toArray(Type[]::new);
+        newRetType = replaceNullType2Boolean(newRetType);
         if (fn instanceof ScalarFunction) {
             return newScalarFunction((ScalarFunction) fn, Arrays.asList(resolvedArgTypes), newRetType);
         }
@@ -315,7 +324,7 @@ public class PolymorphicFunctionAnalyzer {
                     return null;
                 }
             }
-            commonType = AnalyzerUtils.replaceNullType2Boolean(commonType);
+            commonType = replaceNullType2Boolean(commonType);
             typeArray = new ArrayType(commonType);
             typeElement = commonType;
         } else {

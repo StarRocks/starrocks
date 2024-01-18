@@ -431,6 +431,7 @@ public class AnalyzeExprTest {
         analyzeSuccess("select map_concat(NULL)");
         analyzeSuccess("select map_concat(NULL,NULL)");
         analyzeSuccess("select map_concat(NULL,map{})");
+        analyzeSuccess("select map_concat(NULL,map{to_date(\"2020-02-02 00:00:00\"):2})");
 
         analyzeFail("select cardinality();");
         analyzeFail("select cardinality(map{},map{})");
@@ -497,6 +498,12 @@ public class AnalyzeExprTest {
         analyzeFail("select array_sortby('[a,b]','[1,2]')");
         analyzeFail("select array_sum('[1,2]')");
         analyzeFail("select array_to_bitmap('[1,2]')");
+    }
+
+    @Test
+    public void testAnalyseNullToBoolean() {
+        analyzeSuccess("select coalesce(map{to_date(\"2020-02-02 00:00:00\"):1}, map{})");
+        analyzeSuccess("select ifnull(map{to_date(\"2020-02-02 00:00:00\"):1}, map{})");
     }
 
 }
