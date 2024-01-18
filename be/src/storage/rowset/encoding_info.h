@@ -56,6 +56,10 @@ inline bool enable_non_string_column_dict_encoding() {
     return std::abs(config::dictionary_encoding_ratio_for_non_string_column - 0) > epsilon;
 }
 
+// We dont make TYPE_TINYINT support dict encoding. The reason is that TYPE_TINYINT is only have
+// 256 different values, that is too small to make our speculation mechanism work. And according
+// test results, when TINY_INT column is encoded using dict, the space usage is not necessarily
+// better than bitshuffle.
 inline bool numeric_types_support_dict_encoding(LogicalType type) {
     switch (type) {
     case TYPE_SMALLINT:

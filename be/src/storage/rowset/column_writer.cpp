@@ -265,7 +265,7 @@ public:
 
     Status append(const Column& column) override;
 
-    // Speculate char/varchar encoding and reset encoding
+    // Speculate encoding and reset encoding
     Status speculate_column_and_set_encoding(const Column& column);
 
     // Speculate encoding
