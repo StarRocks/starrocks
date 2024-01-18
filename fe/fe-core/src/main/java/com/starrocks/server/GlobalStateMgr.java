@@ -177,6 +177,7 @@ import com.starrocks.replication.ReplicationMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.scheduler.MVActiveChecker;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.ast.RefreshTableStmt;
@@ -285,6 +286,7 @@ public class GlobalStateMgr {
     private FrontendDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
     private FrontendDaemon txnTimeoutChecker; // To abort timeout txns
     private FrontendDaemon taskCleaner;   // To clean expire Task/TaskRun
+    private FrontendDaemon tableKeeper; // Maintain internal tables
     private JournalWriter journalWriter; // leader only: write journal log
     private Daemon replayer;
     private Daemon timePrinter;
@@ -1581,6 +1583,13 @@ public class GlobalStateMgr {
                 doTaskBackgroundJob();
             }
         };
+    }
+
+    /**
+     * Table keeper daemon
+     */
+    public void createTableKeeper() {
+        tableKeeper = TableKeeper.startDaemon();
     }
 
     public void createTxnTimeoutChecker() {

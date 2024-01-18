@@ -41,6 +41,7 @@ import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.scheduler.history.MemBasedTaskRunHistory;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.scheduler.persist.TaskSchedule;
@@ -516,7 +517,7 @@ public class TaskManager implements MemoryTrackable {
         return taskRunManager;
     }
 
-    public TaskRunHistory getTaskRunHistory() {
+    public MemBasedTaskRunHistory getTaskRunHistory() {
         return taskRunManager.getTaskRunHistory();
     }
 
@@ -888,30 +889,15 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public void removeExpiredTaskRuns() {
-        long currentTimeMs = System.currentTimeMillis();
-
-        List<String> historyToDelete = Lists.newArrayList();
-
         if (!taskRunManager.tryTaskRunLock()) {
             return;
         }
         try {
-            // only SUCCESS and FAILED in taskRunHistory
-            List<TaskRunStatus> taskRunHistory = taskRunManager.getTaskRunHistory().getAllHistory();
-            Iterator<TaskRunStatus> iterator = taskRunHistory.iterator();
-            while (iterator.hasNext()) {
-                TaskRunStatus taskRunStatus = iterator.next();
-                long expireTime = taskRunStatus.getExpireTime();
-                if (currentTimeMs > expireTime) {
-                    historyToDelete.add(taskRunStatus.getQueryId());
-                    taskRunManager.getTaskRunHistory().removeTask(taskRunStatus.getQueryId());
-                    iterator.remove();
-                }
-            }
+            List<String> historyToDelete = taskRunManager.getTaskRunHistory().gc();
+            LOG.info("remove run history:{}", historyToDelete);
         } finally {
             taskRunManager.taskRunUnlock();
         }
-        LOG.info("remove run history:{}", historyToDelete);
     }
 
     @Override

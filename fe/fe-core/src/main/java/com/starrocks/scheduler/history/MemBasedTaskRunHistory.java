@@ -12,19 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.scheduler.history;
 
-package com.starrocks.scheduler;
-
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-public class TaskRunHistory {
+public class MemBasedTaskRunHistory implements ITaskRunHistory {
     // Thread-Safe history map: QueryId -> TaskRunStatus
     // The same task-id may contain multi history task run status, so use query_id instead.
     private final Map<String, TaskRunStatus> historyTaskRunMap =
@@ -32,15 +33,18 @@ public class TaskRunHistory {
     private final Map<String, TaskRunStatus> taskName2Status =
             Collections.synchronizedMap(Maps.newLinkedHashMap());
 
+    @Override
     public void addHistory(TaskRunStatus status) {
         historyTaskRunMap.put(status.getQueryId(), status);
         taskName2Status.put(status.getTaskName(), status);
     }
 
-    public TaskRunStatus getTaskByName(String taskName) {
-        return taskName2Status.get(taskName);
+    @Override
+    public List<TaskRunStatus> getTaskByName(String taskName) {
+        return Lists.newArrayList(taskName2Status.get(taskName));
     }
 
+    @Override
     public TaskRunStatus getTask(String queryId) {
         if (queryId == null) {
             return null;
@@ -48,7 +52,7 @@ public class TaskRunHistory {
         return historyTaskRunMap.get(queryId);
     }
 
-    public void removeTask(String queryId) {
+    private void removeTask(String queryId) {
         if (queryId == null) {
             return;
         }
@@ -57,6 +61,7 @@ public class TaskRunHistory {
     }
 
     // Reserve historyTaskRunMap values to keep the last insert at the first.
+    @Override
     public List<TaskRunStatus> getAllHistory() {
         List<TaskRunStatus> historyRunStatus =
                 new ArrayList<>(historyTaskRunMap.values());
@@ -71,6 +76,26 @@ public class TaskRunHistory {
                 .forEach(taskRunStatus -> removeTask(taskRunStatus.getQueryId()));
     }
 
+    @Override
+    public List<String> gc() {
+        // only SUCCESS and FAILED in taskRunHistory
+        long currentTimeMs = System.currentTimeMillis();
+        List<TaskRunStatus> taskRunHistory = getAllHistory();
+        Iterator<TaskRunStatus> iterator = taskRunHistory.iterator();
+        List<String> historyToDelete = Lists.newArrayList();
+        while (iterator.hasNext()) {
+            TaskRunStatus taskRunStatus = iterator.next();
+            long expireTime = taskRunStatus.getExpireTime();
+            if (currentTimeMs > expireTime) {
+                historyToDelete.add(taskRunStatus.getQueryId());
+                removeTask(taskRunStatus.getQueryId());
+                iterator.remove();
+            }
+        }
+        return historyToDelete;
+    }
+
+    @Override
     public long getTaskRunCount() {
         return historyTaskRunMap.size();
     }
