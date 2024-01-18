@@ -14,9 +14,9 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Sets;
+import com.starrocks.authz.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.InternalCatalog;
-import com.starrocks.common.ErrorReportException;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
+import com.starrocks.common.error.ErrorReportException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;

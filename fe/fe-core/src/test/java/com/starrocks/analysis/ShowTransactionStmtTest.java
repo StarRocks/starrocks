@@ -1,7 +1,7 @@
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.ShowTransactionStmt;

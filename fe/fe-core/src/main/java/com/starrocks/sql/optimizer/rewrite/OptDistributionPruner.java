@@ -24,7 +24,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.planner.DistributionPruner;
 import com.starrocks.planner.HashDistributionPruner;
 import com.starrocks.planner.PartitionColumnFilter;

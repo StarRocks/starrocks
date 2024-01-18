@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;

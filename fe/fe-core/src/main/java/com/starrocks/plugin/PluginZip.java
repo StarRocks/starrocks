@@ -37,8 +37,8 @@ package com.starrocks.plugin;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.common.UserException;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.exception.UserException;
+import com.starrocks.common.util.Utils;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.StringUtils;
@@ -213,6 +213,6 @@ class PluginZip {
     }
 
     InputStream getInputStreamFromUrl(String url) throws IOException {
-        return Util.getInputStreamFromUrl(url, null, HTTP_TIMEOUT_MS, HTTP_TIMEOUT_MS);
+        return Utils.getInputStreamFromUrl(url, null, HTTP_TIMEOUT_MS, HTTP_TIMEOUT_MS);
     }
 }

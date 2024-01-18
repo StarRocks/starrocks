@@ -35,8 +35,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.NotImplementedException;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.NotImplementedException;
 import com.starrocks.common.io.Text;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;

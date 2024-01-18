@@ -36,6 +36,7 @@ package com.starrocks.http.meta;
 
 import com.google.common.base.Strings;
 import com.google.gson.Gson;
+import com.starrocks.cloudnative.staros.StarMgrServer;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -47,7 +48,6 @@ import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;

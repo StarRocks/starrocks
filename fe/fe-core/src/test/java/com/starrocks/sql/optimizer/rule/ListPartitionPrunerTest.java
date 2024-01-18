@@ -26,7 +26,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;

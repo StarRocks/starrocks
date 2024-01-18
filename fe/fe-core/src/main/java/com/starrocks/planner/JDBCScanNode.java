@@ -27,7 +27,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TJDBCScanNode;

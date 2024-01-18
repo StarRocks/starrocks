@@ -55,18 +55,18 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.concurrent.locks.LockType;
+import com.starrocks.common.concurrent.locks.Locker;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.exception.MetaNotFoundException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.Util;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.Utils;
 import com.starrocks.persist.BatchDropInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.EditLog;
@@ -333,7 +333,7 @@ public class MaterializedViewHandler extends AlterHandler {
             mvKeysType = olapTable.getKeysType();
         }
         // get rollup schema hash
-        int mvSchemaHash = Util.schemaHash(0 /* init schema version */, mvColumns, olapTable.getCopiedBfColumns(),
+        int mvSchemaHash = Utils.schemaHash(0 /* init schema version */, mvColumns, olapTable.getCopiedBfColumns(),
                 olapTable.getBfFpp());
         // get short key column count
         short mvShortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(mvColumns, properties);

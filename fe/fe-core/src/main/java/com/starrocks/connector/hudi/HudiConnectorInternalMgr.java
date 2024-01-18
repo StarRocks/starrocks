@@ -16,8 +16,8 @@ package com.starrocks.connector.hudi;
 
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.starrocks.common.Config;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.util.Utils;
 import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.HdfsEnvironment;
@@ -85,7 +85,7 @@ public class HudiConnectorInternalMgr {
         if (hiveMetastoreType.equals("hive")) {
             String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
                     "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
-            Util.validateMetastoreUris(hiveMetastoreUris);
+            Utils.validateMetastoreUris(hiveMetastoreUris);
         }
         this.metastoreType = MetastoreType.get(hiveMetastoreType);
     }

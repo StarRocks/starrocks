@@ -34,6 +34,7 @@
 
 package com.starrocks.common;
 
+import com.starrocks.common.conf.CommandLineOptions;
 import com.starrocks.journal.bdbje.BDBToolOptions;
 import org.junit.Assert;
 import org.junit.Test;

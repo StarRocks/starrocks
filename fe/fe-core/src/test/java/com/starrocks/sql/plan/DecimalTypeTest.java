@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;

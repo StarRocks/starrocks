@@ -17,10 +17,10 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
-import com.starrocks.common.Config;
+import com.starrocks.common.concurrent.locks.QueryableReentrantLock;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.common.util.Util;
-import com.starrocks.common.util.concurrent.QueryableReentrantLock;
+import com.starrocks.common.util.Utils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
@@ -236,7 +236,7 @@ public class TaskRunManager {
             if (!taskRunLock.tryLock(5, TimeUnit.SECONDS)) {
                 Thread owner = taskRunLock.getOwner();
                 if (owner != null) {
-                    LOG.warn("task run lock is held by: {}", () -> Util.dumpThread(owner, 50));
+                    LOG.warn("task run lock is held by: {}", () -> Utils.dumpThread(owner, 50));
                 } else {
                     LOG.warn("task run lock owner is null");
                 }

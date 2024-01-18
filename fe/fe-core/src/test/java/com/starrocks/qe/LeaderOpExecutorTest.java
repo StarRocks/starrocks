@@ -15,9 +15,9 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.common.ClientPool;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.concurrent.ClientPool;
+import com.starrocks.common.conf.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendServiceImpl;

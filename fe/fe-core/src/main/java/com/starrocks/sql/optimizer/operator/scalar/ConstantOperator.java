@@ -18,7 +18,7 @@ import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;

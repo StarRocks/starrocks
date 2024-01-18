@@ -36,11 +36,11 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Preconditions;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.NotImplementedException;
+import com.starrocks.cloudnative.DataCacheInfo;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.exception.NotImplementedException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.thrift.TStorageMedium;

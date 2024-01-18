@@ -35,10 +35,10 @@
 package com.starrocks.mysql.privilege;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.sql.ast.UserIdentity;

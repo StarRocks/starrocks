@@ -34,7 +34,7 @@
 
 package com.starrocks.service;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.qe.ConnectScheduler;
 
 // Execute environment, used to save other module, need to singleton

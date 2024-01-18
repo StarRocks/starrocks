@@ -34,7 +34,7 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 
 import java.util.List;
 

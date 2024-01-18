@@ -14,7 +14,7 @@
 
 package com.starrocks.qe.scheduler.assignment;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 

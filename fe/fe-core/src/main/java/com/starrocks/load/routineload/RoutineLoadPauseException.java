@@ -15,7 +15,7 @@
 
 package com.starrocks.load.routineload;
 
-import com.starrocks.common.LoadException;
+import com.starrocks.common.exception.LoadException;
 
 /**
  * Routine load job should be paused when catch this exception

@@ -27,7 +27,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.base.LogicalProperty;

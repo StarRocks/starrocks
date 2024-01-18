@@ -34,15 +34,15 @@
 
 package com.starrocks.leader;
 
-import com.starrocks.common.Config;
+import com.starrocks.cloudnative.staros.StarMgrServer;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.journal.Journal;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.MetaCleaner;
 import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import org.apache.commons.io.output.NullOutputStream;
 import org.apache.logging.log4j.LogManager;

@@ -36,8 +36,8 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;

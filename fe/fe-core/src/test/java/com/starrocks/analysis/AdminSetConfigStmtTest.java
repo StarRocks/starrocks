@@ -34,7 +34,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;

@@ -17,7 +17,7 @@
 
 package com.starrocks.transaction;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 
 public class IllegalTransactionParameterException extends UserException {
 

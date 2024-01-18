@@ -35,8 +35,8 @@
 package com.starrocks.leader;
 
 import com.sleepycat.je.config.EnvironmentParams;
-import com.starrocks.common.Config;
-import com.starrocks.common.InvalidMetaDirException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.InvalidMetaDirException;
 import com.starrocks.common.io.IOUtils;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.monitor.unit.ByteSizeValue;

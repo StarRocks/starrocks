@@ -17,6 +17,8 @@
 
 package com.starrocks.common;
 
+import com.starrocks.common.structure.Id;
+
 /**
  * Generator of consecutively numbered integers to be used as ids by subclasses of Id.
  * Subclasses of Id should be able to create a generator for their Id type.

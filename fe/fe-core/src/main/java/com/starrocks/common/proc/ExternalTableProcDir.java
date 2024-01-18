@@ -20,7 +20,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 
 
 public class ExternalTableProcDir implements ProcDirInterface {

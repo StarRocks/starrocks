@@ -44,9 +44,9 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.concurrent.locks.LockType;
+import com.starrocks.common.concurrent.locks.Locker;
+import com.starrocks.common.exception.AnalysisException;
 
 import java.util.List;
 import java.util.Set;

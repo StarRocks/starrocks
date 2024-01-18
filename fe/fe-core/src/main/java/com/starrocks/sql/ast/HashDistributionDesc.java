@@ -22,7 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.DistributionInfo.DistributionInfoType;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;

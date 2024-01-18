@@ -14,8 +14,8 @@
 
 package com.starrocks.load.pipe;
 
-import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;

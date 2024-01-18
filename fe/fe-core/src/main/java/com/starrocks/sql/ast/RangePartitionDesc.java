@@ -25,8 +25,8 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.sql.ast.PartitionKeyDesc.PartitionRangeType;
 import com.starrocks.sql.parser.NodePosition;
 

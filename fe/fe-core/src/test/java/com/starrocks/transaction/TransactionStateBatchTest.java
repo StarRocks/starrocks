@@ -15,7 +15,7 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TUniqueId;
 import org.junit.After;

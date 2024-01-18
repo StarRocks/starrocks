@@ -14,9 +14,9 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.common.Config;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.InstallPluginStmt;

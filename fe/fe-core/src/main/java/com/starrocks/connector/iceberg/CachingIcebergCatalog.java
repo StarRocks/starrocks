@@ -18,7 +18,7 @@ import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.exception.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.PartitionSpec;

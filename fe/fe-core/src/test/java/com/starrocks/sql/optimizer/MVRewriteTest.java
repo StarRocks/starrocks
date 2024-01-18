@@ -35,8 +35,8 @@
 package com.starrocks.sql.optimizer;
 
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.conf.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;

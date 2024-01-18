@@ -38,7 +38,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;

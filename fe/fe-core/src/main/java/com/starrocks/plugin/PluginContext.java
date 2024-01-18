@@ -17,7 +17,7 @@
 
 package com.starrocks.plugin;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.service.FrontendOptions;
 
 public class PluginContext {

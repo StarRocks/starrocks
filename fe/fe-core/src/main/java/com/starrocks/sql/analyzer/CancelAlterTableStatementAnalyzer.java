@@ -15,8 +15,8 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.common.MetaUtils;

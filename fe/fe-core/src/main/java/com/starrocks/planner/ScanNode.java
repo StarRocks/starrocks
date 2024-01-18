@@ -39,7 +39,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
 import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;

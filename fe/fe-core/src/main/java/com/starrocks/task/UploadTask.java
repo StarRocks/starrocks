@@ -18,7 +18,7 @@
 package com.starrocks.task;
 
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceInfo;

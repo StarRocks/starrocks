@@ -38,9 +38,9 @@ import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.cloudnative.LakeTablet;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TIndexState;
@@ -150,7 +150,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
      * {@link com.starrocks.transaction.PublishVersionDaemon} will not send {@link com.starrocks.proto.PublishVersionRequest}
      * to tablets of this index.
      * <p>
-     * Only used for {@link com.starrocks.lake.LakeTable} now.
+     * Only used for {@link com.starrocks.cloudnative.LakeTable} now.
      *
      * @param txnId the id of a transaction created by {@link com.starrocks.transaction.DatabaseTransactionMgr}
      * @return true iff this index is visible to the transaction, false otherwise.

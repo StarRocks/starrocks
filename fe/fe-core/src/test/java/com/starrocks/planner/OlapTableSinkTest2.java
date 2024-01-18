@@ -17,7 +17,7 @@ package com.starrocks.planner;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;

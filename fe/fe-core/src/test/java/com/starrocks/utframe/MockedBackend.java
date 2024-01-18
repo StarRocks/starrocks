@@ -18,7 +18,7 @@
 package com.starrocks.utframe;
 
 import com.google.common.collect.Queues;
-import com.starrocks.common.ClientPool;
+import com.starrocks.common.concurrent.ClientPool;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.proto.ExecuteCommandRequestPB;
 import com.starrocks.proto.ExecuteCommandResultPB;

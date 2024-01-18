@@ -14,7 +14,7 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;

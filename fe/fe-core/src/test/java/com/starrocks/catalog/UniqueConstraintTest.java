@@ -15,7 +15,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.Rule;

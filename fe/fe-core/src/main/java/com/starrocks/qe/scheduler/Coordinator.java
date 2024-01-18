@@ -15,7 +15,7 @@
 package com.starrocks.qe.scheduler;
 
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.common.Status;
+import com.starrocks.common.structure.Status;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;

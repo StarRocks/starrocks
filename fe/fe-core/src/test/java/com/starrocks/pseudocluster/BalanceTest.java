@@ -15,7 +15,7 @@
 package com.starrocks.pseudocluster;
 
 import com.starrocks.clone.TabletScheduler;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TGetTabletScheduleRequest;
 import com.starrocks.thrift.TGetTabletScheduleResponse;

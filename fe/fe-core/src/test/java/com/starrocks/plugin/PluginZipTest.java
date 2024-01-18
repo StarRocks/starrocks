@@ -17,7 +17,7 @@
 
 package com.starrocks.plugin;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import mockit.Expectations;
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;

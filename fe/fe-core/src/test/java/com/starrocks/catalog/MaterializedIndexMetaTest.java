@@ -42,7 +42,7 @@ import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;

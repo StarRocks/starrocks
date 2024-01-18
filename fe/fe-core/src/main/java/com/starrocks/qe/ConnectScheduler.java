@@ -36,14 +36,14 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.common.Config;
-import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.authz.authorization.AccessDeniedException;
+import com.starrocks.authz.authorization.PrivilegeType;
+import com.starrocks.common.concurrent.ThreadPoolManager;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.nio.NConnectContext;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

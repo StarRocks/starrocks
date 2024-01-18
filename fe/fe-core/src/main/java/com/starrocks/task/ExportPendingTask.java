@@ -35,8 +35,8 @@
 package com.starrocks.task;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.common.Pair;
-import com.starrocks.common.Status;
+import com.starrocks.common.structure.Pair;
+import com.starrocks.common.structure.Status;
 import com.starrocks.load.ExportFailMsg;
 import com.starrocks.load.ExportJob;
 import com.starrocks.proto.LockTabletMetadataRequest;

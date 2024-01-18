@@ -38,7 +38,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.connector.elasticsearch.EsTablePartitions;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;

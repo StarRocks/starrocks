@@ -21,7 +21,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.UtFrameUtils;

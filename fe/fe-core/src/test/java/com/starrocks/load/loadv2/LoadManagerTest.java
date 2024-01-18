@@ -36,9 +36,9 @@ package com.starrocks.load.loadv2;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
+import com.starrocks.common.MetaContext;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.meta.MetaContext;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;

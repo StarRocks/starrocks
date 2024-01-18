@@ -16,7 +16,7 @@ package com.starrocks.persist;
 
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
-import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.cloudnative.DataCacheInfo;
 
 // UNPARTITIONED type
 public class SinglePartitionPersistInfo extends PartitionPersistInfoV2 {

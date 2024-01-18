@@ -15,7 +15,7 @@
 package com.starrocks.qe.scheduler;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.server.GlobalStateMgr;

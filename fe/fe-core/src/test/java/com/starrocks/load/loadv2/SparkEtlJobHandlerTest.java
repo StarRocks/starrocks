@@ -40,15 +40,15 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.SparkResource;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.GenericPool;
-import com.starrocks.common.LoadException;
-import com.starrocks.common.TimeoutException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.concurrent.GenericPool;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.LoadException;
+import com.starrocks.common.exception.TimeoutException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.CommandResult;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.util.Utils;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import com.starrocks.server.GlobalStateMgr;
@@ -226,7 +226,7 @@ public class SparkEtlJobHandlerTest {
     }
 
     @Test
-    public void testGetEtlJobStatus(@Mocked BrokerUtil brokerUtil, @Mocked Util util,
+    public void testGetEtlJobStatus(@Mocked BrokerUtil brokerUtil, @Mocked Utils utils,
                                     @Mocked CommandResult commandResult,
                                     @Mocked SparkYarnConfigFiles sparkYarnConfigFiles,
                                     @Mocked SparkLoadAppHandle handle)
@@ -250,7 +250,7 @@ public class SparkEtlJobHandlerTest {
 
         new Expectations() {
             {
-                Util.executeCommand(anyString, (String[]) any, anyLong);
+                Utils.executeCommand(anyString, (String[]) any, anyLong);
                 minTimes = 0;
                 result = commandResult;
 
@@ -296,7 +296,7 @@ public class SparkEtlJobHandlerTest {
     }
 
     @Test(expected = TimeoutException.class)
-    public void testGetEtlJobStatusTimeout(@Mocked BrokerUtil brokerUtil, @Mocked Util util,
+    public void testGetEtlJobStatusTimeout(@Mocked BrokerUtil brokerUtil, @Mocked Utils utils,
                                            @Mocked SparkYarnConfigFiles sparkYarnConfigFiles,
                                            @Mocked SparkLoadAppHandle handle)
             throws IOException, UserException {
@@ -307,7 +307,7 @@ public class SparkEtlJobHandlerTest {
                 sparkYarnConfigFiles.getConfigDir();
                 result = "./yarn_config";
 
-                Util.executeCommand(anyString, (String[]) any, anyLong);
+                Utils.executeCommand(anyString, (String[]) any, anyLong);
                 minTimes = 0;
                 result = new TimeoutException("get spark etl job status timeout");
             }
@@ -331,7 +331,7 @@ public class SparkEtlJobHandlerTest {
     }
 
     @Test(expected = LoadException.class)
-    public void testGetEtlJobStatusFailed(@Mocked Util util, @Mocked CommandResult commandResult,
+    public void testGetEtlJobStatusFailed(@Mocked Utils utils, @Mocked CommandResult commandResult,
                                           @Mocked SparkYarnConfigFiles sparkYarnConfigFiles,
                                           @Mocked SparkLoadAppHandle handle)
             throws IOException, UserException {
@@ -349,7 +349,7 @@ public class SparkEtlJobHandlerTest {
 
         new Expectations() {
             {
-                Util.executeCommand(anyString, (String[]) any, anyLong);
+                Utils.executeCommand(anyString, (String[]) any, anyLong);
                 minTimes = 0;
                 result = commandResult;
             }
@@ -375,7 +375,7 @@ public class SparkEtlJobHandlerTest {
     }
 
     @Test
-    public void testKillEtlJob(@Mocked Util util, @Mocked CommandResult commandResult,
+    public void testKillEtlJob(@Mocked Utils utils, @Mocked CommandResult commandResult,
                                @Mocked SparkYarnConfigFiles sparkYarnConfigFiles) throws IOException, UserException {
         new Expectations() {
             {
@@ -394,7 +394,7 @@ public class SparkEtlJobHandlerTest {
 
         new Expectations() {
             {
-                Util.executeCommand(anyString, (String[]) any, anyLong);
+                Utils.executeCommand(anyString, (String[]) any, anyLong);
                 minTimes = 0;
                 result = commandResult;
             }

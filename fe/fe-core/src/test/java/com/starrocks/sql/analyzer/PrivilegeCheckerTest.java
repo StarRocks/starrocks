@@ -22,7 +22,14 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TableName;
-import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authz.authentication.AuthenticationMgr;
+import com.starrocks.authz.authorization.AccessDeniedException;
+import com.starrocks.authz.authorization.AuthorizationMgr;
+import com.starrocks.authz.authorization.DbPEntryObject;
+import com.starrocks.authz.authorization.PipePEntryObject;
+import com.starrocks.authz.authorization.PrivObjNotFoundException;
+import com.starrocks.authz.authorization.PrivilegeException;
+import com.starrocks.authz.authorization.TablePEntryObject;
 import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.RemoteFile;
 import com.starrocks.backup.Repository;
@@ -35,22 +42,15 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.sys.GrantsTo;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.error.ErrorReportException;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.load.pipe.PipeManagerTest;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.mysql.MysqlChannel;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.DbPEntryObject;
-import com.starrocks.privilege.PipePEntryObject;
-import com.starrocks.privilege.PrivObjNotFoundException;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.TablePEntryObject;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -2747,7 +2747,7 @@ public class PrivilegeCheckerTest {
     }
 
     @Test
-    public void testShowAuthentication() throws com.starrocks.common.AnalysisException, DdlException, PrivilegeException {
+    public void testShowAuthentication() throws AnalysisException, DdlException, PrivilegeException {
         ctxToTestUser();
         ShowAuthenticationStmt stmt = new ShowAuthenticationStmt(testUser, false);
         ShowExecutor executor = new ShowExecutor(starRocksAssert.getCtx(), stmt);

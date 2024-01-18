@@ -34,14 +34,14 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.sql.ast.ColumnDef;
-import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.sql.ast.ColumnDef;
+import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;

@@ -14,7 +14,7 @@
 
 package com.starrocks.load.pipe;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;

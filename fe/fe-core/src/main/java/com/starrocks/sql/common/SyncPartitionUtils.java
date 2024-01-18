@@ -42,7 +42,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.server.GlobalStateMgr;

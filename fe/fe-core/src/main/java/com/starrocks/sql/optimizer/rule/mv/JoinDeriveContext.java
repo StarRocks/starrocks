@@ -15,7 +15,7 @@
 package com.starrocks.sql.optimizer.rule.mv;
 
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.List;

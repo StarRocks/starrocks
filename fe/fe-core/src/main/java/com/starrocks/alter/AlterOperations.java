@@ -36,7 +36,7 @@ package com.starrocks.alter;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Sets;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.sql.ast.AlterClause;
 
 import java.util.List;

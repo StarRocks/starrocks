@@ -19,8 +19,8 @@ package com.starrocks.mysql;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReportException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

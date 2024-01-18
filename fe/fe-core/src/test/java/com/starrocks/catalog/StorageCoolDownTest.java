@@ -14,10 +14,10 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;

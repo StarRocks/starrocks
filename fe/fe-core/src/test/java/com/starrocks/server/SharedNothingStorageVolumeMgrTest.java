@@ -14,15 +14,17 @@
 
 package com.starrocks.server;
 
-import com.starrocks.common.AlreadyExistsException;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.cloudnative.storagevolume.SharedNothingStorageVolumeMgr;
+import com.starrocks.cloudnative.storagevolume.StorageVolume;
+import com.starrocks.cloudnative.storagevolume.StorageVolumeMgr;
+import com.starrocks.common.exception.AlreadyExistsException;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.exception.MetaNotFoundException;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.aws.AWSCloudConfiguration;
 import com.starrocks.persist.DropStorageVolumeLog;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.SetDefaultStorageVolumeLog;
-import com.starrocks.storagevolume.StorageVolume;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;

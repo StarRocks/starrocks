@@ -22,12 +22,12 @@ import com.staros.proto.AwsSimpleCredentialInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.cloudnative.storagevolume.StorageVolume;
+import com.starrocks.cloudnative.storagevolume.StorageVolumeMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.SetDefaultStorageVolumeStmt;
-import com.starrocks.storagevolume.StorageVolume;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 

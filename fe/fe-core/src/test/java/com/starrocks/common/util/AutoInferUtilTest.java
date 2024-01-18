@@ -14,8 +14,8 @@
 
 package com.starrocks.common.util;
 
-import com.starrocks.common.NoAliveBackendException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.NoAliveBackendException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.server.RunMode;
 import mockit.Mock;
 import mockit.MockUp;

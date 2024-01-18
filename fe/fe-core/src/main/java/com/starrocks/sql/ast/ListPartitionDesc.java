@@ -23,8 +23,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.parser.NodePosition;
 

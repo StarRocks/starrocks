@@ -17,7 +17,7 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import org.junit.Assert;
 import org.junit.Test;
 

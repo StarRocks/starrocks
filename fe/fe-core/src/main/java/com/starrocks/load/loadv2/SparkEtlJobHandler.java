@@ -42,13 +42,13 @@ import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.SparkResource;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.LoadException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.LoadException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.CommandResult;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.util.Utils;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.SparkLoadAppHandle.State;
@@ -232,7 +232,7 @@ public class SparkEtlJobHandler {
         String yarnKillCmd = String.format(YARN_KILL_CMD, yarnClient, configDir, appId);
         LOG.info(yarnKillCmd);
         String[] envp = {"LC_ALL=" + Config.locale, "JAVA_HOME=" + System.getProperty("java.home")};
-        CommandResult result = Util.executeCommand(yarnKillCmd, envp, EXEC_CMD_TIMEOUT_MS);
+        CommandResult result = Utils.executeCommand(yarnKillCmd, envp, EXEC_CMD_TIMEOUT_MS);
         LOG.info("yarn application -kill {}, output: {}", appId, result.getStdout());
         if (result.getReturnCode() != 0) {
             String stderr = result.getStderr();
@@ -255,7 +255,7 @@ public class SparkEtlJobHandler {
             String yarnStatusCmd = String.format(YARN_STATUS_CMD, yarnClient, configDir, appId);
             LOG.info(yarnStatusCmd);
             String[] envp = {"LC_ALL=" + Config.locale, "JAVA_HOME=" + System.getProperty("java.home")};
-            CommandResult result = Util.executeCommand(yarnStatusCmd, envp, EXEC_CMD_TIMEOUT_MS);
+            CommandResult result = Utils.executeCommand(yarnStatusCmd, envp, EXEC_CMD_TIMEOUT_MS);
             if (result.getReturnCode() != 0) {
                 String stderr = result.getStderr();
                 // case application not exists

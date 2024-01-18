@@ -34,7 +34,7 @@
 
 package com.starrocks.mysql;
 
-import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.concurrent.ThreadPoolManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.server.GlobalStateMgr;

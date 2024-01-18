@@ -38,7 +38,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Replica.ReplicaStatus;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.SystemInfoService;

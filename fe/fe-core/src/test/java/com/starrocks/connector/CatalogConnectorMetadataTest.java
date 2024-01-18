@@ -18,7 +18,7 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.connector.informationschema.InformationSchemaMetadata;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;

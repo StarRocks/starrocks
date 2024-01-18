@@ -15,7 +15,7 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;

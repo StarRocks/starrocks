@@ -21,7 +21,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;

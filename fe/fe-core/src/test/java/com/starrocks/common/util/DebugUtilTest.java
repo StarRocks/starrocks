@@ -17,7 +17,7 @@
 
 package com.starrocks.common.util;
 
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import org.junit.Assert;
 import org.junit.Test;
 

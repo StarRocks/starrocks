@@ -17,7 +17,7 @@
 
 package com.starrocks.fs.hdfs;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

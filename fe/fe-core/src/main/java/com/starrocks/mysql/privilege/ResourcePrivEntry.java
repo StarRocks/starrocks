@@ -18,9 +18,9 @@
 package com.starrocks.mysql.privilege;
 
 import com.starrocks.analysis.ResourcePattern;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;

@@ -36,9 +36,9 @@ package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.cloudnative.compaction.Quantiles;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;

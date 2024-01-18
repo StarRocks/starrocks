@@ -35,7 +35,7 @@
 package com.starrocks.cluster;
 
 import com.google.common.base.Strings;
-import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authz.authentication.AuthenticationMgr;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.system.SystemInfoService;
 
@@ -45,7 +45,7 @@ import com.starrocks.system.SystemInfoService;
  * method to makeup full name or get real name, full name is made up generally
  * in stmt's analyze.
  */
-
+@Deprecated
 public class ClusterNamespace {
 
     public static final String CLUSTER_DELIMITER = ":";

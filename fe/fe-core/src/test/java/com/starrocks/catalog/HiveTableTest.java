@@ -36,15 +36,15 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.connector.hive.HiveStorageFormat;
+import com.starrocks.external.table.HiveTableFactory;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.HiveTableFactory;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -68,8 +68,8 @@ import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.connector.hive.HiveClassNames.MAPRED_PARQUET_INPUT_FORMAT_CLASS;
+import static com.starrocks.external.table.ExternalTableFactory.RESOURCE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
-import static com.starrocks.server.ExternalTableFactory.RESOURCE;
 
 public class HiveTableTest {
     private static ConnectContext connectContext;

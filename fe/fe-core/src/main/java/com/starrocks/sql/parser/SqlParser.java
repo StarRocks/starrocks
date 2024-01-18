@@ -16,7 +16,7 @@ package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.connector.parser.trino.TrinoParserUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;

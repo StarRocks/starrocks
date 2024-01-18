@@ -38,7 +38,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TMySQLTable;

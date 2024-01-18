@@ -15,7 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.UserDesc;
-import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.authz.authentication.UserAuthenticationInfo;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

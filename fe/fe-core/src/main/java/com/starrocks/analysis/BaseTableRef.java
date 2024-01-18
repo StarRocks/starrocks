@@ -18,7 +18,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 
 /**
  * An actual table, such as OLAP table or a MySQL table.

@@ -19,7 +19,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;

@@ -18,7 +18,7 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Strings;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.qe.QueryState.MysqlStateType;
 
 public class QueryStateException extends UserException {

@@ -24,7 +24,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.DeltaLakeTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.delta.DeltaUtils;

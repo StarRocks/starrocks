@@ -14,7 +14,7 @@
 
 package com.starrocks.transaction;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;

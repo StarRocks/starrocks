@@ -33,8 +33,8 @@
 // under the License.
 package com.starrocks.mysql.nio;
 
-import com.starrocks.common.Config;
-import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.concurrent.ThreadPoolManager;
+import com.starrocks.common.conf.Config;
 import com.starrocks.mysql.MysqlServer;
 import com.starrocks.qe.ConnectScheduler;
 import org.apache.logging.log4j.LogManager;

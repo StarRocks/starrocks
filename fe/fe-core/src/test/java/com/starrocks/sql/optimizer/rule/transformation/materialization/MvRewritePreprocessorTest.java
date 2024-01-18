@@ -18,7 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.MaterializationContext;

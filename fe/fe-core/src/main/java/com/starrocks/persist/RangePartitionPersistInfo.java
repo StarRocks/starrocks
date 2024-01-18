@@ -20,8 +20,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.cloudnative.DataCacheInfo;
 import com.starrocks.common.util.RangeUtils;
-import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonPreProcessable;
 

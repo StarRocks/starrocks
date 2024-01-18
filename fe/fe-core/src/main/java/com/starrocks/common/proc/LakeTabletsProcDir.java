@@ -23,11 +23,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.cloudnative.LakeTablet;
+import com.starrocks.common.concurrent.locks.LockType;
+import com.starrocks.common.concurrent.locks.Locker;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.ListComparator;
-import com.starrocks.lake.LakeTablet;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.monitor.unit.ByteSizeValue;
 
 import java.util.Arrays;

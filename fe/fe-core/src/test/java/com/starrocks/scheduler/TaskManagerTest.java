@@ -17,8 +17,8 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.Queues;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;

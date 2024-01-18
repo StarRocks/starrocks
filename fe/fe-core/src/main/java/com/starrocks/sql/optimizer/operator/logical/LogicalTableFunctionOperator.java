@@ -16,7 +16,7 @@ package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.TableFunction;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;

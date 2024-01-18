@@ -35,8 +35,8 @@
 package com.starrocks.load;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.server.GlobalStateMgr;

@@ -36,8 +36,8 @@ package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;

@@ -24,7 +24,7 @@ import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.connector.ConnectorTableColumnStats;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;

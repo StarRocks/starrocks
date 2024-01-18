@@ -36,10 +36,10 @@ package com.starrocks.mysql.privilege;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.Pair;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

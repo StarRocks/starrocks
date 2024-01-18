@@ -16,9 +16,9 @@ package com.starrocks.pseudocluster;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
-import com.starrocks.common.Config;
-import com.starrocks.common.Log4jConfig;
-import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.concurrent.ThreadPoolManager;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.logging.Log4jConfig;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecutor;

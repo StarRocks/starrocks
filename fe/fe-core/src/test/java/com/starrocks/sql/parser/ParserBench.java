@@ -16,7 +16,7 @@
 package com.starrocks.sql.parser;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.StatementBase;
 import org.antlr.v4.runtime.BaseErrorListener;

@@ -36,7 +36,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Multimap;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;

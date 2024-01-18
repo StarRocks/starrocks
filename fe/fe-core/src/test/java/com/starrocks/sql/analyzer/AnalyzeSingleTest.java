@@ -15,7 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;

@@ -17,7 +17,7 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.exception.MetaNotFoundException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;

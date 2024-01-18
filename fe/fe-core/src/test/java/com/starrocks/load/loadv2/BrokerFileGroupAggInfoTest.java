@@ -18,7 +18,7 @@
 package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo;

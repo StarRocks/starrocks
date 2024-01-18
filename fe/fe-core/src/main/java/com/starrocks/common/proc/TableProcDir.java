@@ -44,7 +44,7 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 
 /*
  * SHOW PROC /dbs/dbId/tableId/

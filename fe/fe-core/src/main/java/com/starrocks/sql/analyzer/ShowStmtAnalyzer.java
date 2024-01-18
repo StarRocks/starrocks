@@ -35,17 +35,17 @@ import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.common.concurrent.locks.LockType;
+import com.starrocks.common.concurrent.locks.Locker;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.proc.ExternalTableProcDir;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcService;
 import com.starrocks.common.proc.TableProcDir;
 import com.starrocks.common.util.OrderByPair;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -86,7 +86,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.starrocks.common.ErrorCode.ERR_UNSUPPORTED_SQL_PATTERN;
+import static com.starrocks.common.error.ErrorCode.ERR_UNSUPPORTED_SQL_PATTERN;
 
 public class ShowStmtAnalyzer {
 

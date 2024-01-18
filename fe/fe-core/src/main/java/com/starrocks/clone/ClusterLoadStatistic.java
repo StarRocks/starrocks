@@ -39,7 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.clone.BackendLoadStatistic.Classification;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;

@@ -20,7 +20,7 @@ import com.baidu.bjf.remoting.protobuf.utils.compiler.JdkCompiler;
 import com.baidu.jprotobuf.pbrpc.client.ProtobufRpcProxy;
 import com.baidu.jprotobuf.pbrpc.transport.RpcClient;
 import com.baidu.jprotobuf.pbrpc.transport.RpcClientOptions;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.thrift.TNetworkAddress;
 
 import java.util.concurrent.ConcurrentHashMap;

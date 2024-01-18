@@ -16,7 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TypeDef;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.thrift.TStorageMedium;

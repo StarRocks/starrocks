@@ -17,7 +17,7 @@
 
 package com.starrocks.plugin;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 
 import java.io.IOException;
 

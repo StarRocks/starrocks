@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.error.ErrorReportException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;

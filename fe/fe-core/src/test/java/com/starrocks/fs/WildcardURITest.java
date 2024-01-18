@@ -17,7 +17,7 @@
 
 package com.starrocks.fs;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.fs.hdfs.WildcardURI;
 import org.junit.Assert;
 import org.junit.Test;

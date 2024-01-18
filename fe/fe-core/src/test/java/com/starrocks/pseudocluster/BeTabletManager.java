@@ -16,8 +16,8 @@ package com.starrocks.pseudocluster;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.common.AlreadyExistsException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.AlreadyExistsException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.thrift.TCreateTabletReq;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletStat;

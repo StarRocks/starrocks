@@ -63,10 +63,10 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.util.Utils;
 import com.starrocks.load.Load;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
@@ -236,8 +236,8 @@ public class CatalogMocker {
         TEST_ROLLUP_SCHEMA.add(k2);
         TEST_ROLLUP_SCHEMA.add(v1);
 
-        SCHEMA_HASH = Util.schemaHash(0, TEST_TBL_BASE_SCHEMA, null, 0);
-        ROLLUP_SCHEMA_HASH = Util.schemaHash(0, TEST_ROLLUP_SCHEMA, null, 0);
+        SCHEMA_HASH = Utils.schemaHash(0, TEST_TBL_BASE_SCHEMA, null, 0);
+        ROLLUP_SCHEMA_HASH = Utils.schemaHash(0, TEST_ROLLUP_SCHEMA, null, 0);
     }
 
     private static Auth fetchAdminAccess() {

@@ -74,16 +74,16 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.concurrent.locks.LockType;
+import com.starrocks.common.concurrent.locks.Locker;
+import com.starrocks.common.concurrent.locks.MarkedCountDownLatch;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.fs.HdfsUtil;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
@@ -850,7 +850,7 @@ public class RestoreJob extends AbstractJob {
         }
 
         // check disk capacity
-        com.starrocks.common.Status st =
+        com.starrocks.common.structure.Status st =
                 GlobalStateMgr.getCurrentSystemInfo().checkExceedDiskCapacityLimit(bePathsMap, true);
         if (!st.ok()) {
             status = new Status(ErrCode.COMMON_ERROR, st.getErrorMsg());

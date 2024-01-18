@@ -18,6 +18,7 @@
 package com.starrocks.common;
 
 import com.google.common.collect.Lists;
+import com.starrocks.common.exception.UserException;
 import org.junit.Assert;
 import org.junit.Test;
 

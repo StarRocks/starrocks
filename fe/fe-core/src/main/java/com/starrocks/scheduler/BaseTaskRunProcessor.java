@@ -15,7 +15,7 @@
 
 package com.starrocks.scheduler;
 
-import com.starrocks.common.NotImplementedException;
+import com.starrocks.common.exception.NotImplementedException;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;

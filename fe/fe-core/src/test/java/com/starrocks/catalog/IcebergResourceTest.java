@@ -16,7 +16,7 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.gson.GsonUtils;

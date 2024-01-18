@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer;
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.rule.RuleSetType;

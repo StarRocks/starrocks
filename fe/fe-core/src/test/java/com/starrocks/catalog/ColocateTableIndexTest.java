@@ -15,8 +15,8 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.StarOSAgent;
+import com.starrocks.cloudnative.LakeTable;
+import com.starrocks.cloudnative.StarOSAgent;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;

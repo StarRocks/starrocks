@@ -16,9 +16,9 @@
 package com.starrocks.task;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.PriorityFutureTask;
-import com.starrocks.common.PriorityThreadPoolExecutor;
-import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.concurrent.PriorityFutureTask;
+import com.starrocks.common.concurrent.PriorityThreadPoolExecutor;
+import com.starrocks.common.concurrent.ThreadPoolManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

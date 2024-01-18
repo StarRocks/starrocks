@@ -13,13 +13,13 @@
 // limitations under the License.
 package com.starrocks.catalog.system.sys;
 
+import com.starrocks.authz.authorization.AuthorizationMgr;
+import com.starrocks.authz.authorization.RolePrivilegeCollectionV2;
+import com.starrocks.authz.authorization.UserPrivilegeCollectionV2;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.RolePrivilegeCollectionV2;
-import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TGetRoleEdgesItem;

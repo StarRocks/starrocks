@@ -39,12 +39,13 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.common.ClientPool;
-import com.starrocks.common.Config;
-import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.cloudnative.warehouse.Warehouse;
 import com.starrocks.common.Version;
+import com.starrocks.common.concurrent.ClientPool;
+import com.starrocks.common.concurrent.ThreadPoolManager;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.util.Utils;
 import com.starrocks.http.rest.BootstrapFinishAction;
 import com.starrocks.persist.HbPackage;
 import com.starrocks.server.GlobalStateMgr;
@@ -62,7 +63,6 @@ import com.starrocks.thrift.THeartbeatResult;
 import com.starrocks.thrift.TMasterInfo;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStatusCode;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.json.JSONObject;
@@ -369,7 +369,7 @@ public class HeartbeatMgr extends FrontendDaemon {
             String url = "http://" + fe.getHost() + ":" + Config.http_port
                     + "/api/bootstrap?cluster_id=" + clusterId + "&token=" + token;
             try {
-                String result = Util.getResultForUrl(url, null,
+                String result = Utils.getResultForUrl(url, null,
                         Config.heartbeat_timeout_second * 1000, Config.heartbeat_timeout_second * 1000);
                 /*
                  * return:

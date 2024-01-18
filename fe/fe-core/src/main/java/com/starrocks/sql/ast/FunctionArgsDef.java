@@ -17,7 +17,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 
 import java.util.List;
 

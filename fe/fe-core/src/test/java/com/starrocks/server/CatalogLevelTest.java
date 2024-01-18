@@ -17,6 +17,7 @@ package com.starrocks.server;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.authz.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
@@ -24,7 +25,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HiveMetastoreTest;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.Authorizer;

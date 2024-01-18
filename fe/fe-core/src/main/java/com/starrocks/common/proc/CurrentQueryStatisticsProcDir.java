@@ -37,7 +37,7 @@ package com.starrocks.common.proc;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.QueryStatisticsFormatter;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.QeProcessorImpl;

@@ -19,7 +19,7 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Multiset;
 import com.google.common.collect.TreeMultiset;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

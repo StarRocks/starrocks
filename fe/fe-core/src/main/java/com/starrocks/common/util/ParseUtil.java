@@ -19,7 +19,7 @@ package com.starrocks.common.util;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import org.apache.commons.lang3.StringUtils;
 
 import java.nio.charset.StandardCharsets;

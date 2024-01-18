@@ -41,14 +41,14 @@ import com.sleepycat.je.DatabaseEntry;
 import com.sleepycat.je.DatabaseException;
 import com.sleepycat.je.OperationStatus;
 import com.sleepycat.je.Transaction;
-import com.starrocks.common.Pair;
+import com.starrocks.cloudnative.staros.StarMgrServer;
 import com.starrocks.common.io.DataOutputBuffer;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.staros.StarMgrServer;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

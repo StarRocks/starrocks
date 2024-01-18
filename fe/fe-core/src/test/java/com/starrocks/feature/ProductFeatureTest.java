@@ -14,6 +14,7 @@
 
 package com.starrocks.feature;
 
+import com.starrocks.common.feature.ProductFeature;
 import org.junit.Assert;
 import org.junit.Test;
 

@@ -21,7 +21,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.sql.ast.PartitionValue;
 import org.openjdk.jmh.annotations.Benchmark;

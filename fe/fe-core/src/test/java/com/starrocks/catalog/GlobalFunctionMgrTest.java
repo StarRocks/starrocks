@@ -15,7 +15,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;

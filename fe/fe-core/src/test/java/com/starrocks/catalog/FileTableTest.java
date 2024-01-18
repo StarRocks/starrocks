@@ -15,7 +15,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.DescriptorTable;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.connector.hive.RemoteFileInputFormat;

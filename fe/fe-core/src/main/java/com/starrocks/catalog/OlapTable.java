@@ -66,23 +66,23 @@ import com.starrocks.catalog.Partition.PartitionState;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletScheduler;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.InvalidOlapTableStateException;
-import com.starrocks.common.MaterializedViewExceptions;
-import com.starrocks.common.Pair;
+import com.starrocks.cloudnative.DataCacheInfo;
+import com.starrocks.cloudnative.StorageInfo;
+import com.starrocks.common.concurrent.locks.MarkedCountDownLatch;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.exception.InvalidOlapTableStateException;
+import com.starrocks.common.exception.MaterializedViewExceptions;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.Util;
-import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
-import com.starrocks.lake.DataCacheInfo;
-import com.starrocks.lake.StorageInfo;
+import com.starrocks.common.util.Utils;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
@@ -1621,8 +1621,8 @@ public class OlapTable extends Table {
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-            adler32.update(Util.schemaHash(0, partitionColumns, null, 0));
-            LOG.debug("signature. partition col hash: {}", Util.schemaHash(0, partitionColumns, null, 0));
+            adler32.update(Utils.schemaHash(0, partitionColumns, null, 0));
+            LOG.debug("signature. partition col hash: {}", Utils.schemaHash(0, partitionColumns, null, 0));
         }
 
         // partition and distribution
@@ -1636,9 +1636,9 @@ public class OlapTable extends Table {
             adler32.update(distributionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
             if (distributionInfo.getType() == DistributionInfoType.HASH) {
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-                adler32.update(Util.schemaHash(0, hashDistributionInfo.getDistributionColumns(), null, 0));
+                adler32.update(Utils.schemaHash(0, hashDistributionInfo.getDistributionColumns(), null, 0));
                 LOG.debug("signature. distribution col hash: {}",
-                        Util.schemaHash(0, hashDistributionInfo.getDistributionColumns(), null, 0));
+                        Utils.schemaHash(0, hashDistributionInfo.getDistributionColumns(), null, 0));
                 adler32.update(hashDistributionInfo.getBucketNum());
                 LOG.debug("signature. bucket num: {}", hashDistributionInfo.getBucketNum());
             }
@@ -1695,7 +1695,7 @@ public class OlapTable extends Table {
         if (partitionInfo.isRangePartition()) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             List<Column> partitionColumns = rangePartitionInfo.getPartitionColumns();
-            adler32.update(Util.schemaHash(0, partitionColumns, null, 0));
+            adler32.update(Utils.schemaHash(0, partitionColumns, null, 0));
             checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "partition columns is inconsistent"));
         }
 
@@ -1710,7 +1710,7 @@ public class OlapTable extends Table {
             adler32.update(distributionInfo.getType().name().getBytes(StandardCharsets.UTF_8));
             if (distributionInfo.getType() == DistributionInfoType.HASH) {
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
-                adler32.update(Util.schemaHash(0, hashDistributionInfo.getDistributionColumns(), null, 0));
+                adler32.update(Utils.schemaHash(0, hashDistributionInfo.getDistributionColumns(), null, 0));
                 checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "partition distribution col hash is inconsistent"));
                 adler32.update(hashDistributionInfo.getBucketNum());
                 checkSumList.add(new Pair(Math.abs((int) adler32.getValue()), "bucket num is inconsistent"));

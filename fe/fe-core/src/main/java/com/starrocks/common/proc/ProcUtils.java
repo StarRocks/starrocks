@@ -15,7 +15,7 @@
 package com.starrocks.common.proc;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 
 public class ProcUtils {

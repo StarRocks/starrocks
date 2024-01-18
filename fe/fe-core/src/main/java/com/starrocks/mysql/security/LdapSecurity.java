@@ -15,7 +15,7 @@
 
 package com.starrocks.mysql.security;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

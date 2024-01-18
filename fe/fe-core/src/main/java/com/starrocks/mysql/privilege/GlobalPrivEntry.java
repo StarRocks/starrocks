@@ -35,8 +35,8 @@
 package com.starrocks.mysql.privilege;
 
 import com.starrocks.analysis.TablePattern;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.StarRocksFEMetaVersion;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;

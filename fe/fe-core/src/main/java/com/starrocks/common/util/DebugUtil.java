@@ -34,7 +34,7 @@
 
 package com.starrocks.common.util;
 
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.thrift.TUniqueId;
 

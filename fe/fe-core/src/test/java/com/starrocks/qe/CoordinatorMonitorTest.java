@@ -16,7 +16,7 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Expectations;

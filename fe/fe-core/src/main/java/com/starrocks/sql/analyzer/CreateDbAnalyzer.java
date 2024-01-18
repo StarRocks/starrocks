@@ -15,13 +15,13 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.cloudnative.storagevolume.StorageVolumeMgr;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.common.MetaUtils;
 

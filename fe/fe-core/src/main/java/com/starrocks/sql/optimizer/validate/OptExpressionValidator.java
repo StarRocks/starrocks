@@ -16,8 +16,8 @@
 package com.starrocks.sql.optimizer.validate;
 
 import com.starrocks.catalog.Type;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.common.ErrorType;

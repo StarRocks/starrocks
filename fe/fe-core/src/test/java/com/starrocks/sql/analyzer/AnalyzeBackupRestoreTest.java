@@ -20,7 +20,7 @@ import com.starrocks.alter.AlterTest;
 import com.starrocks.backup.BlobStorage;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.Status;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Mock;
 import mockit.MockUp;

@@ -15,9 +15,9 @@
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;

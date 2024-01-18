@@ -35,8 +35,8 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
 import com.starrocks.common.Version;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.system.BackendCoreStat;
 

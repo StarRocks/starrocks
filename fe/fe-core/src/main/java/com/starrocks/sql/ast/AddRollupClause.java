@@ -21,9 +21,9 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.parser.NodePosition;
 

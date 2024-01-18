@@ -1,6 +1,6 @@
 package com.starrocks.planner;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;

@@ -17,7 +17,7 @@
 
 package com.starrocks.common.util;
 
-import com.starrocks.meta.MetaContext;
+import com.starrocks.common.MetaContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

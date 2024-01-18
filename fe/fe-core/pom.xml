@@ -551,7 +551,7 @@ under the License.
                 </exclusion>
                 <exclusion>
                     <groupId>com.aliyun</groupId>
-                    <artifactId>tea-util</artifactId>
+                    <artifactId>tea-utils</artifactId>
                 </exclusion>
             </exclusions>
         </dependency>

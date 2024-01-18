@@ -34,7 +34,7 @@
 
 package com.starrocks.common.io;
 
-import com.starrocks.meta.LimitExceededException;
+import com.starrocks.common.exception.LimitExceededException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

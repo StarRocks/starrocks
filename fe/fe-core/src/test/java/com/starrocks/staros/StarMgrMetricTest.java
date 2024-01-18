@@ -14,6 +14,7 @@
 
 package com.starrocks.staros;
 
+import com.starrocks.cloudnative.staros.StarMgrServer;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.metric.PrometheusMetricVisitor;
 import mockit.Mocked;

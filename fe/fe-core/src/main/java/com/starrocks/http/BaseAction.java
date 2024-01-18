@@ -36,11 +36,11 @@ package com.starrocks.http;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.common.DdlException;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.authz.authorization.AccessDeniedException;
+import com.starrocks.authz.authorization.AuthorizationMgr;
+import com.starrocks.authz.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authz.authorization.PrivilegeException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;

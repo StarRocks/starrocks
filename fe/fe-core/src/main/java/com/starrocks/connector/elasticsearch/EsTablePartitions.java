@@ -42,7 +42,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

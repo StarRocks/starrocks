@@ -15,7 +15,7 @@
 package com.starrocks.load.pipe.filelist;
 
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

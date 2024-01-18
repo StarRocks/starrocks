@@ -34,7 +34,7 @@
 
 package com.starrocks.metric;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;

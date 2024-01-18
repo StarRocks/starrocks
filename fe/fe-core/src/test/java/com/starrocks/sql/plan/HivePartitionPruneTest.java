@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.server.GlobalStateMgr;

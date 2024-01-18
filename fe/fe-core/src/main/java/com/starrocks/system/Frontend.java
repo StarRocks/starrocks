@@ -36,11 +36,11 @@ package com.starrocks.system;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.ha.bdbje.BDBHA;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 

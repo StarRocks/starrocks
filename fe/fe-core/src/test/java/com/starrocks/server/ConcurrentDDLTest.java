@@ -17,8 +17,8 @@ package com.starrocks.server;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
-import com.starrocks.common.Log4jConfig;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.logging.Log4jConfig;
 import com.starrocks.common.util.StringUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;

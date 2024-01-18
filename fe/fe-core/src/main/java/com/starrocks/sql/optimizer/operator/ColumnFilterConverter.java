@@ -39,7 +39,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.analyzer.AnalyzerUtils;

@@ -35,8 +35,8 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Pair;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;

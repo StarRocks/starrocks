@@ -34,7 +34,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.Id;
+import com.starrocks.common.structure.Id;
 import com.starrocks.common.IdGenerator;
 
 /**

@@ -17,7 +17,7 @@
 
 package com.starrocks.alter;
 
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 
 /*
  * This exception will be thrown when the alter job(v2) being cancelled due to

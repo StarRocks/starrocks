@@ -35,7 +35,7 @@
 package com.starrocks.common.proc;
 
 import com.starrocks.catalog.TabletInvertedIndex;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;

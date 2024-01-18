@@ -16,7 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.carrotsearch.junitbenchmarks.BenchmarkOptions;
 import com.carrotsearch.junitbenchmarks.BenchmarkRule;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import org.junit.Before;

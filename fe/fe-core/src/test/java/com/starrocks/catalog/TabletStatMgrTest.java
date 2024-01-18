@@ -17,10 +17,10 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.cloudnative.LakeTable;
+import com.starrocks.cloudnative.LakeTablet;
+import com.starrocks.cloudnative.Utils;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.Utils;
 import com.starrocks.proto.TabletStatRequest;
 import com.starrocks.proto.TabletStatResponse;
 import com.starrocks.proto.TabletStatResponse.TabletStat;

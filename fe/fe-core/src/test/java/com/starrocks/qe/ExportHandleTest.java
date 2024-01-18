@@ -15,10 +15,10 @@
 package com.starrocks.qe;
 
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.LoadException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.LoadException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.ExportJob;

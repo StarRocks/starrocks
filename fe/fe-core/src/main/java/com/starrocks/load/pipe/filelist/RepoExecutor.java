@@ -15,8 +15,8 @@
 package com.starrocks.load.pipe.filelist;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.common.Pair;
-import com.starrocks.common.Status;
+import com.starrocks.common.structure.Pair;
+import com.starrocks.common.structure.Status;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;

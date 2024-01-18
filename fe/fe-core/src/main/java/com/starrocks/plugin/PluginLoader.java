@@ -18,7 +18,7 @@
 package com.starrocks.plugin;
 
 import com.google.common.base.Strings;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 
 import java.io.IOException;
 import java.nio.file.FileSystems;

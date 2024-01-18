@@ -16,9 +16,9 @@ package com.starrocks.load.pipe.filelist;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.common.Pair;
-import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
+import com.starrocks.common.structure.Pair;
+import com.starrocks.common.structure.Status;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.load.pipe.PipeId;

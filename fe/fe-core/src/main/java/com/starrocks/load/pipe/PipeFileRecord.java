@@ -18,7 +18,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.thrift.TResultBatch;

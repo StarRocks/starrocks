@@ -35,8 +35,8 @@
 package com.starrocks.mysql;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.authentication.UserAuthenticationInfo;
-import com.starrocks.common.Config;
+import com.starrocks.authz.authentication.UserAuthenticationInfo;
+import com.starrocks.common.conf.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;

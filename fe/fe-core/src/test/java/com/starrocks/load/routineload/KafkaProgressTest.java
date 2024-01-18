@@ -17,9 +17,9 @@ package com.starrocks.load.routineload;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.exception.UserException;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.common.util.KafkaUtil;
 import mockit.Mock;
 import mockit.MockUp;

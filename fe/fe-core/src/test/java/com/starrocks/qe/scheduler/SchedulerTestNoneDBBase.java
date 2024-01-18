@@ -15,8 +15,8 @@
 package com.starrocks.qe.scheduler;
 
 import com.starrocks.catalog.CatalogIdGenerator;
-import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.PBackendService;

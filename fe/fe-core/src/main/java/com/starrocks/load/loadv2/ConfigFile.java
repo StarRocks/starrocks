@@ -34,7 +34,7 @@
 
 package com.starrocks.load.loadv2;
 
-import com.starrocks.common.LoadException;
+import com.starrocks.common.exception.LoadException;
 
 // The config file required to run the yarn command.
 // Each time before running the yarn command, we need to check that the

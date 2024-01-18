@@ -15,7 +15,7 @@
 
 package com.starrocks.rpc;
 
-import com.starrocks.common.ClientPool;
+import com.starrocks.common.concurrent.ClientPool;
 import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;

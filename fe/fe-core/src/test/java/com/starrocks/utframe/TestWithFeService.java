@@ -22,7 +22,7 @@ import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;

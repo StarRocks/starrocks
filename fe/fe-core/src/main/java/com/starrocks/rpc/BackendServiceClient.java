@@ -35,7 +35,7 @@
 package com.starrocks.rpc;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.proto.ExecuteCommandRequestPB;

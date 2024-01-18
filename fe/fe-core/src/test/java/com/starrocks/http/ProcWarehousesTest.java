@@ -14,10 +14,10 @@
 
 package com.starrocks.http;
 
-import com.starrocks.lake.StarOSAgent;
+import com.starrocks.cloudnative.StarOSAgent;
+import com.starrocks.cloudnative.warehouse.WarehouseManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.server.WarehouseManager;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;

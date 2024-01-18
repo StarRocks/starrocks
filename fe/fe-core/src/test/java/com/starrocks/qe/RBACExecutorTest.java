@@ -15,12 +15,12 @@ package com.starrocks.qe;
 
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.InformationFunction;
+import com.starrocks.authz.authorization.AccessDeniedException;
+import com.starrocks.authz.authorization.PrivilegeType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.PrivilegeStmtAnalyzer;

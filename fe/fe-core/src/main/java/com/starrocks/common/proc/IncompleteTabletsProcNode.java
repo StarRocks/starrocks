@@ -19,7 +19,7 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 
 import java.util.ArrayList;
 import java.util.Arrays;

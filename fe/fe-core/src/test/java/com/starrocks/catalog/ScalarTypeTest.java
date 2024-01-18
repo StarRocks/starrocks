@@ -16,8 +16,8 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.persist.gson.GsonUtils;
 import org.junit.Assert;
 import org.junit.Test;

@@ -36,8 +36,8 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
-import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.thrift.TBatchReportExecStatusParams;

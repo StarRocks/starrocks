@@ -14,8 +14,8 @@
 
 package com.starrocks.connector;
 
-import com.starrocks.common.Id;
 import com.starrocks.common.IdGenerator;
+import com.starrocks.common.structure.Id;
 
 public class ConnectorTableId extends Id<ConnectorTableId> {
 

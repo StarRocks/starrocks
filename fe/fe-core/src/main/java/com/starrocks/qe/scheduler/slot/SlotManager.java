@@ -17,7 +17,7 @@ package com.starrocks.qe.scheduler.slot;
 import com.google.common.collect.Queues;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.ResourceGroup;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;

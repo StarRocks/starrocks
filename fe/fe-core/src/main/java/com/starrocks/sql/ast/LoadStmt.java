@@ -37,7 +37,7 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.LabelName;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.EtlJobType;

@@ -15,10 +15,10 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.common.DdlException;
+import com.starrocks.cloudnative.storagevolume.StorageVolumeMgr;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;

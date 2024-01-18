@@ -14,9 +14,9 @@
 
 package com.starrocks.qe.scheduler.slot;
 
-import com.starrocks.common.Config;
-import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.UserException;
+import com.starrocks.common.structure.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.qe.scheduler.RecoverableException;

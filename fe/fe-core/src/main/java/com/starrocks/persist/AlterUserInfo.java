@@ -16,8 +16,8 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.authentication.AuthenticationException;
-import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.authz.authentication.AuthenticationException;
+import com.starrocks.authz.authentication.UserAuthenticationInfo;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;

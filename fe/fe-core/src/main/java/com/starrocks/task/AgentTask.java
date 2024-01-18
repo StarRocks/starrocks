@@ -34,7 +34,7 @@
 
 package com.starrocks.task;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.thrift.TTaskType;
 

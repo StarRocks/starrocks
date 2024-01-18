@@ -15,7 +15,7 @@
 package com.starrocks.pseudocluster;
 
 import com.starrocks.clone.ColocateTableBalancer;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;

@@ -15,10 +15,10 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.cloudnative.storagevolume.StorageVolume;
+import com.starrocks.cloudnative.storagevolume.StorageVolumeMgr;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.StorageVolumeMgr;
-import com.starrocks.storagevolume.StorageVolume;
 
 public class StorageVolumeProcNode implements ProcNodeInterface {
     public static final ImmutableList<String> STORAGE_VOLUME_PROC_NODE_TITLE_NAMES = new ImmutableList.Builder<String>()

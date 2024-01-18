@@ -15,7 +15,7 @@
 package com.starrocks.planner;
 
 import com.google.common.io.CharStreams;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.utframe.StarRocksAssert;
@@ -23,17 +23,14 @@ import com.starrocks.utframe.UtFrameUtils;
 import joptsimple.internal.Strings;
 import kotlin.text.Charsets;
 import org.apache.commons.io.IOUtils;
-import org.apache.hadoop.io.Text;
 import org.junit.Assert;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;

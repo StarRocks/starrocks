@@ -17,8 +17,8 @@
 
 package com.starrocks.task;
 
-import com.starrocks.common.ClientPool;
-import com.starrocks.common.Status;
+import com.starrocks.common.concurrent.ClientPool;
+import com.starrocks.common.structure.Status;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.TAgentServiceVersion;

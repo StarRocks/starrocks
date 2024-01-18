@@ -26,7 +26,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.SinglePartitionInfo;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.thrift.TTabletType;
 import org.junit.After;

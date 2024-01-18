@@ -36,6 +36,7 @@ package com.starrocks.common;
 
 import com.google.common.collect.Maps;
 import com.google.re2j.Pattern;
+import com.starrocks.common.exception.UserException;
 
 import java.util.List;
 import java.util.Map;

@@ -34,7 +34,7 @@
 
 package com.starrocks.load.loadv2;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

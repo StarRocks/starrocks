@@ -41,7 +41,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.thrift.TDataPartition;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPartitionType;

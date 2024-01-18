@@ -15,7 +15,7 @@
 package com.starrocks.connector.parser.trino;
 
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.planner.TpchSQL;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.StatementPlanner;

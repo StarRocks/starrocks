@@ -17,7 +17,7 @@ package com.starrocks.connector.jdbc;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.util.Map;

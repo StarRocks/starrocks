@@ -40,7 +40,7 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.connector.PartitionUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

@@ -21,12 +21,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.UserException;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.util.Utils;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.LoadDataSourceType;
@@ -525,12 +525,12 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
 
         desiredConcurrentNum =
-                ((Long) Util.getLongPropertyOrDefault(jobProperties.get(DESIRED_CONCURRENT_NUMBER_PROPERTY),
+                ((Long) Utils.getLongPropertyOrDefault(jobProperties.get(DESIRED_CONCURRENT_NUMBER_PROPERTY),
                         Config.max_routine_load_task_concurrent_num,
                         DESIRED_CONCURRENT_NUMBER_PRED,
                         DESIRED_CONCURRENT_NUMBER_PROPERTY + " should > 0")).intValue();
 
-        maxErrorNum = Util.getLongPropertyOrDefault(jobProperties.get(MAX_ERROR_NUMBER_PROPERTY),
+        maxErrorNum = Utils.getLongPropertyOrDefault(jobProperties.get(MAX_ERROR_NUMBER_PROPERTY),
                 RoutineLoadJob.DEFAULT_MAX_ERROR_NUM, MAX_ERROR_NUMBER_PRED,
                 MAX_ERROR_NUMBER_PROPERTY + " should >= 0");
 
@@ -546,23 +546,23 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             }
         }
 
-        maxBatchIntervalS = Util.getLongPropertyOrDefault(jobProperties.get(MAX_BATCH_INTERVAL_SEC_PROPERTY),
+        maxBatchIntervalS = Utils.getLongPropertyOrDefault(jobProperties.get(MAX_BATCH_INTERVAL_SEC_PROPERTY),
                 RoutineLoadJob.DEFAULT_TASK_SCHED_INTERVAL_SECOND, MAX_BATCH_INTERVAL_PRED,
                 MAX_BATCH_INTERVAL_SEC_PROPERTY + " should >= 5");
 
-        maxBatchRows = Util.getLongPropertyOrDefault(jobProperties.get(MAX_BATCH_ROWS_PROPERTY),
+        maxBatchRows = Utils.getLongPropertyOrDefault(jobProperties.get(MAX_BATCH_ROWS_PROPERTY),
                 RoutineLoadJob.DEFAULT_MAX_BATCH_ROWS, MAX_BATCH_ROWS_PRED,
                 MAX_BATCH_ROWS_PROPERTY + " should >= 200000");
 
-        logRejectedRecordNum = Util.getLongPropertyOrDefault(jobProperties.get(LOG_REJECTED_RECORD_NUM_PROPERTY),
+        logRejectedRecordNum = Utils.getLongPropertyOrDefault(jobProperties.get(LOG_REJECTED_RECORD_NUM_PROPERTY),
                 0, LOG_REJECTED_RECORD_NUM_PRED,
                 LOG_REJECTED_RECORD_NUM_PROPERTY + " should >= -1");
 
-        strictMode = Util.getBooleanPropertyOrDefault(jobProperties.get(LoadStmt.STRICT_MODE),
+        strictMode = Utils.getBooleanPropertyOrDefault(jobProperties.get(LoadStmt.STRICT_MODE),
                 RoutineLoadJob.DEFAULT_STRICT_MODE,
                 LoadStmt.STRICT_MODE + " should be a boolean");
 
-        partialUpdate = Util.getBooleanPropertyOrDefault(jobProperties.get(LoadStmt.PARTIAL_UPDATE),
+        partialUpdate = Utils.getBooleanPropertyOrDefault(jobProperties.get(LoadStmt.PARTIAL_UPDATE),
                 false,
                 LoadStmt.PARTIAL_UPDATE + " should be a boolean");
 

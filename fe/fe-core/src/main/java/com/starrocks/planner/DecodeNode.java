@@ -21,7 +21,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.thrift.TDecodeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalDecodeNode;

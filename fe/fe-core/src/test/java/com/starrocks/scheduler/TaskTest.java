@@ -14,7 +14,7 @@
 
 package com.starrocks.scheduler;
 
-import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authz.authentication.AuthenticationMgr;
 import com.starrocks.persist.gson.GsonUtils;
 import org.junit.Assert;
 import org.junit.Test;

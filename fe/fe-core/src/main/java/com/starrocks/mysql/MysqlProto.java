@@ -35,12 +35,12 @@
 package com.starrocks.mysql;
 
 import com.google.common.base.Strings;
-import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.UserAuthenticationInfo;
-import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.authz.authentication.AuthenticationMgr;
+import com.starrocks.authz.authentication.UserAuthenticationInfo;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;

@@ -16,7 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.google.api.client.util.Lists;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;

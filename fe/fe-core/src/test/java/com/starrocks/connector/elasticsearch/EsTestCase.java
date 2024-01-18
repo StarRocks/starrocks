@@ -39,7 +39,7 @@ import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.FakeEditLog;
 import com.starrocks.catalog.FakeGlobalStateMgr;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.BeforeClass;
 

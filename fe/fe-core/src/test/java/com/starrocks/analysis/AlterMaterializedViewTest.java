@@ -19,7 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.MVActiveChecker;

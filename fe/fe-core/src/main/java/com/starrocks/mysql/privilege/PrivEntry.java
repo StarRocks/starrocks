@@ -36,9 +36,9 @@ package com.starrocks.mysql.privilege;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;

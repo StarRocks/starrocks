@@ -35,8 +35,8 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;

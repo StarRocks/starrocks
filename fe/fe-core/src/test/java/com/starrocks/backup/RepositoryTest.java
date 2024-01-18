@@ -38,7 +38,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.ShowRepositoriesStmt;

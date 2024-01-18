@@ -16,7 +16,7 @@ package com.starrocks.qe.scheduler.dag;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.common.Status;
+import com.starrocks.common.structure.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.planner.PlanFragmentId;

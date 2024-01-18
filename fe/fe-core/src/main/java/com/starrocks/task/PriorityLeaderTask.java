@@ -15,7 +15,7 @@
 
 package com.starrocks.task;
 
-import com.starrocks.common.PriorityRunnable;
+import com.starrocks.common.concurrent.PriorityRunnable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

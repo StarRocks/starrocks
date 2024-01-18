@@ -34,7 +34,7 @@
 
 package com.starrocks.common.proc;
 
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 
 public interface ProcDirInterface extends ProcNodeInterface {
     boolean register(String name, ProcNodeInterface node);

@@ -35,7 +35,8 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
-import com.starrocks.common.DdlException;
+import com.starrocks.authz.authorization.AccessDeniedException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
@@ -45,7 +46,6 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.metric.PrometheusMetricVisitor;
 import com.starrocks.metric.SimpleCoreMetricVisitor;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;

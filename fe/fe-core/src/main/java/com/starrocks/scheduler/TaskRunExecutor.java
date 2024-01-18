@@ -15,8 +15,8 @@
 
 package com.starrocks.scheduler;
 
-import com.starrocks.common.Config;
-import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.concurrent.ThreadPoolManager;
+import com.starrocks.common.conf.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import org.apache.logging.log4j.LogManager;

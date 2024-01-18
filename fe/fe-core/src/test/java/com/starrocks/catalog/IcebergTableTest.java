@@ -16,9 +16,9 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.connector.iceberg.TableTestBase;
-import com.starrocks.server.IcebergTableFactory;
+import com.starrocks.external.table.IcebergTableFactory;
 import mockit.Mocked;
 import org.apache.iceberg.Table;
 import org.junit.Assert;
@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.catalog.Type.INT;
-import static com.starrocks.server.ExternalTableFactory.RESOURCE;
+import static com.starrocks.external.table.ExternalTableFactory.RESOURCE;
 
 public class IcebergTableTest extends TableTestBase {
 

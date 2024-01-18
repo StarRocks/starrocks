@@ -36,7 +36,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.DataDescription;

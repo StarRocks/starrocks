@@ -18,7 +18,7 @@ package com.starrocks.ha;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Queues;
 import com.starrocks.common.util.Daemon;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.util.Utils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -60,7 +60,7 @@ public class StateChangeExecutor extends Daemon {
         try {
             String msg = "notify new FE type transfer: " + newType;
             LOG.warn(msg);
-            Util.stdoutWithTime(msg);
+            Utils.stdoutWithTime(msg);
             typeTransferQueue.put(newType);
         } catch (InterruptedException e) {
             LOG.error("failed to put new FE type: {}, {}.", newType, e);
@@ -77,7 +77,7 @@ public class StateChangeExecutor extends Daemon {
             } catch (InterruptedException e) {
                 LOG.error("got exception when take FE type from queue", e);
                 Thread.currentThread().interrupt();
-                Util.stdoutWithTime("got exception when take FE type from queue. " + e.getMessage());
+                Utils.stdoutWithTime("got exception when take FE type from queue. " + e.getMessage());
                 System.exit(-1);
             }
             Preconditions.checkNotNull(newType);
@@ -169,7 +169,7 @@ public class StateChangeExecutor extends Daemon {
                     // exit if leader changed to any other type
                     String msg = "transfer FE type from LEADER to " + newType.name() + ". exit";
                     LOG.error(msg);
-                    Util.stdoutWithTime(msg);
+                    Utils.stdoutWithTime(msg);
                     System.exit(-1);
                 }
                 default:

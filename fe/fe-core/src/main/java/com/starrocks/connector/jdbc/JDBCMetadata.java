@@ -24,7 +24,7 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;

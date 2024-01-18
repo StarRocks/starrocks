@@ -35,19 +35,19 @@
 package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
+import com.starrocks.authz.authorization.AccessDeniedException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.concurrent.locks.LockType;
+import com.starrocks.common.concurrent.locks.Locker;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TStorageType;

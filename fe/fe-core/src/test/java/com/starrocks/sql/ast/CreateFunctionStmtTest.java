@@ -15,7 +15,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import mockit.Expectations;

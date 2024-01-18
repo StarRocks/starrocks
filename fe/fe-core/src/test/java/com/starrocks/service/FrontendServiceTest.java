@@ -16,8 +16,8 @@
 package com.starrocks.service;
 
 import com.starrocks.catalog.AccessPrivilege;
-import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;

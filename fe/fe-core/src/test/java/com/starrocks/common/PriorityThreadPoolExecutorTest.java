@@ -15,6 +15,9 @@
 
 package com.starrocks.common;
 
+import com.starrocks.common.concurrent.PriorityFutureTask;
+import com.starrocks.common.concurrent.PriorityRunnable;
+import com.starrocks.common.concurrent.PriorityThreadPoolExecutor;
 import org.junit.Test;
 
 import java.util.concurrent.ExecutionException;

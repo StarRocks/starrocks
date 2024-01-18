@@ -34,8 +34,8 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
 import org.junit.Assert;

@@ -15,7 +15,7 @@
 
 package com.starrocks.task;
 
-import com.starrocks.common.PriorityThreadPoolExecutor;
+import com.starrocks.common.concurrent.PriorityThreadPoolExecutor;
 import com.starrocks.common.jmockit.Deencapsulation;
 import org.junit.After;
 import org.junit.Assert;

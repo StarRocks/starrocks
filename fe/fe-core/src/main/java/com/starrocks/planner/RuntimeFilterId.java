@@ -15,7 +15,7 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.common.Id;
+import com.starrocks.common.structure.Id;
 import com.starrocks.common.IdGenerator;
 
 // The unique id for join runtime filter

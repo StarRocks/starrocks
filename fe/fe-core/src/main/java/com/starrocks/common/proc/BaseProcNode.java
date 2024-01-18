@@ -18,7 +18,7 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 
 import java.util.List;
 

@@ -20,7 +20,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
-import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.concurrent.ThreadPoolManager;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;

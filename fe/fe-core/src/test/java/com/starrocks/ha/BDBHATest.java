@@ -15,14 +15,15 @@
 
 package com.starrocks.ha;
 
+import com.starrocks.ha.bdbje.BDBHA;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.FrontendHbResponse;
+import com.starrocks.system.NodeMgr;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;

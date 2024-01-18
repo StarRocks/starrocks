@@ -15,8 +15,8 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.common.DdlException;
-import com.starrocks.common.Pair;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.SessionVariable;

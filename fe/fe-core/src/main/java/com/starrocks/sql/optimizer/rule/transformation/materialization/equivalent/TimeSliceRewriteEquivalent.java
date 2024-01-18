@@ -16,7 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization.equivale
 
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;

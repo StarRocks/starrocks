@@ -14,8 +14,8 @@
 
 package com.starrocks.load.pipe;
 
-import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

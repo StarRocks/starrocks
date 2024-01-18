@@ -16,11 +16,11 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
-import com.starrocks.common.Config;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.mysql.privilege.Role;
 
 import java.util.HashSet;

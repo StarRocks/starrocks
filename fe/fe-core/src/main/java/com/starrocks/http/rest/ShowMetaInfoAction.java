@@ -43,7 +43,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;

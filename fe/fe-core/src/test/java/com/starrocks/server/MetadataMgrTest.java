@@ -16,9 +16,9 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.exception.MetaNotFoundException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;

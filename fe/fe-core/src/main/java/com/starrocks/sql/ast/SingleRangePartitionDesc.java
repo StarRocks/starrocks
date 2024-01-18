@@ -15,7 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.catalog.PartitionType;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.parser.NodePosition;

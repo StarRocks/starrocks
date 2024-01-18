@@ -15,8 +15,8 @@
 package com.starrocks.qe.scheduler.assignment;
 
 import com.google.common.collect.Sets;
-import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.util.ListUtil;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;

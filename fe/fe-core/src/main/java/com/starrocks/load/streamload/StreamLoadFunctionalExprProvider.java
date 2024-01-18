@@ -16,9 +16,9 @@ package com.starrocks.load.streamload;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.FunctionalExprProvider;
+import com.starrocks.authz.authorization.AccessDeniedException;
+import com.starrocks.authz.authorization.PrivilegeType;
 import com.starrocks.catalog.PrimitiveType;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import org.apache.logging.log4j.LogManager;

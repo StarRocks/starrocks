@@ -17,7 +17,9 @@ package com.starrocks.staros;
 
 import com.staros.exception.StarException;
 import com.staros.manager.StarManagerServer;
-import com.starrocks.common.Config;
+import com.starrocks.cloudnative.staros.BDBJEJournalSystem;
+import com.starrocks.cloudnative.staros.StarMgrServer;
+import com.starrocks.common.conf.Config;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import mockit.Mock;
 import mockit.MockUp;

@@ -36,7 +36,7 @@ package com.starrocks.load.routineload;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;

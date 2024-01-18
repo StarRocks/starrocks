@@ -18,7 +18,7 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 
 import java.util.Map;
 

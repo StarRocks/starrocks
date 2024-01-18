@@ -16,7 +16,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.amazonaws.services.s3.model.AmazonS3Exception;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import org.apache.commons.lang.exception.ExceptionUtils;
 
 /**

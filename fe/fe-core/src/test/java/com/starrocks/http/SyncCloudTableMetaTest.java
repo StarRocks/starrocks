@@ -14,8 +14,8 @@
 
 package com.starrocks.http;
 
-import com.starrocks.common.DdlException;
-import com.starrocks.lake.StarMgrMetaSyncer;
+import com.starrocks.cloudnative.StarMgrMetaSyncer;
+import com.starrocks.common.exception.DdlException;
 import mockit.Mock;
 import mockit.MockUp;
 import okhttp3.Request;

@@ -15,7 +15,7 @@
 package com.starrocks.http.rest;
 
 import com.starrocks.common.Version;
-import com.starrocks.feature.ProductFeature;
+import com.starrocks.common.feature.ProductFeature;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;

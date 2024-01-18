@@ -17,7 +17,7 @@ package com.starrocks.connector.delta;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.util.Utils;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.MetastoreType;
 import com.starrocks.connector.ReentrantExecutor;
@@ -61,7 +61,7 @@ public class DeltaLakeInternalMgr {
         if (hiveMetastoreType.equals("hive")) {
             String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
                     "%s must be set in properties when creating catalog of hive-metastore", HIVE_METASTORE_URIS);
-            Util.validateMetastoreUris(hiveMetastoreUris);
+            Utils.validateMetastoreUris(hiveMetastoreUris);
         }
         this.metastoreType = MetastoreType.get(hiveMetastoreType);
     }

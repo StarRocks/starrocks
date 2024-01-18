@@ -15,7 +15,7 @@
 
 package com.starrocks.load.loadv2;
 
-import com.starrocks.common.LoadException;
+import com.starrocks.common.exception.LoadException;
 import org.apache.hadoop.yarn.api.records.ApplicationReport;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.YarnApplicationState;

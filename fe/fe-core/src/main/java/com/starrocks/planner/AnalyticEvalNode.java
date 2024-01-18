@@ -47,7 +47,7 @@ import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.thrift.TAnalyticNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalAnalyticNode;

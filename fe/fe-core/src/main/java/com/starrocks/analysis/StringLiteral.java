@@ -35,9 +35,9 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TExprNode;

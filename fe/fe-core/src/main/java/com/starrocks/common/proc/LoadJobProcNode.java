@@ -18,7 +18,7 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 
 public class LoadJobProcNode implements ProcNodeInterface {
 

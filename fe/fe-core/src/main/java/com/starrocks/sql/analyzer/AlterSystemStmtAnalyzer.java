@@ -16,8 +16,8 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Pair;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AddBackendClause;

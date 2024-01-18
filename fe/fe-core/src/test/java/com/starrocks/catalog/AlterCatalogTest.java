@@ -13,7 +13,7 @@
 // limitations under the License.
 package com.starrocks.catalog;
 
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;

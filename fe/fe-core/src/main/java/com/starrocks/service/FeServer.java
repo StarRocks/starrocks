@@ -34,7 +34,7 @@
 
 package com.starrocks.service;
 
-import com.starrocks.common.ThriftServer;
+import com.starrocks.common.thrift.ThriftServer;
 import com.starrocks.thrift.FrontendService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

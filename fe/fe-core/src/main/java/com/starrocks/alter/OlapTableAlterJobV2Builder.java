@@ -27,9 +27,9 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.exception.UserException;
+import com.starrocks.common.util.Utils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
@@ -74,9 +74,9 @@ public class OlapTableAlterJobV2Builder extends AlterJobV2Builder {
             int newSchemaVersion = currentSchemaVersion + 1;
             // generate schema hash for new index has to generate a new schema hash not equal to current schema hash
             int currentSchemaHash = currentIndexMeta.getSchemaHash();
-            int newSchemaHash = Util.generateSchemaHash();
+            int newSchemaHash = Utils.generateSchemaHash();
             while (currentSchemaHash == newSchemaHash) {
-                newSchemaHash = Util.generateSchemaHash();
+                newSchemaHash = Utils.generateSchemaHash();
             }
             String newIndexName = SchemaChangeHandler.SHADOW_NAME_PRFIX + table.getIndexNameById(originIndexId);
             short newShortKeyColumnCount = newIndexShortKeyCount.get(originIndexId);

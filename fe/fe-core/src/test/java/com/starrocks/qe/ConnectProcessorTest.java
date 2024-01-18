@@ -37,7 +37,9 @@ package com.starrocks.qe;
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authz.authentication.AuthenticationMgr;
+import com.starrocks.authz.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCapability;
@@ -48,7 +50,6 @@ import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
@@ -571,7 +572,7 @@ public class ConnectProcessorTest extends DDLTestBase {
 
     @Test
     public void testAddRunningQueryDetail() throws Exception {
-        com.starrocks.common.Config.enable_collect_query_detail_info = true;
+        Config.enable_collect_query_detail_info = true;
         ConnectContext ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
         ctx.setQueryId(UUIDUtil.genUUID());
         ConnectProcessor processor = new ConnectProcessor(ctx);

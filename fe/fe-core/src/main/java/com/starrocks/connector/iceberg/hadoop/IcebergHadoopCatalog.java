@@ -18,7 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.exception.MetaNotFoundException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergAwsClientFactory;
 import com.starrocks.connector.iceberg.IcebergCatalog;

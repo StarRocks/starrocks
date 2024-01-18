@@ -14,8 +14,8 @@
 
 package com.starrocks.load.streamload;
 
-import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import io.netty.handler.codec.http.HttpHeaders;

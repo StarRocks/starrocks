@@ -17,7 +17,7 @@ package com.starrocks.mysql.privilege;
 
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.mysql.MysqlPassword;

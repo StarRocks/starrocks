@@ -15,8 +15,8 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.conf.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.utframe.StarRocksAssert;

@@ -17,7 +17,7 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.StatementPlanner;

@@ -18,7 +18,7 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import org.junit.Assert;

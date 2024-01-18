@@ -14,8 +14,8 @@
 
 package com.starrocks.transaction;
 
-import com.starrocks.common.Config;
-import com.starrocks.common.ConfigRefreshDaemon;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.conf.ConfigRefreshDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang3.reflect.FieldUtils;
 import org.apache.commons.lang3.reflect.MethodUtils;

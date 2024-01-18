@@ -35,7 +35,7 @@
 package com.starrocks.qe;
 
 import com.google.common.base.Strings;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.mysql.MysqlServer;
 import com.starrocks.mysql.nio.NMysqlServer;
 import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;

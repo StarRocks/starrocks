@@ -43,10 +43,10 @@ import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table.TableType;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.concurrent.locks.LockType;
+import com.starrocks.common.concurrent.locks.Locker;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 
 import java.util.ArrayList;
 import java.util.List;

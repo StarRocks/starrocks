@@ -35,7 +35,7 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 
 import java.util.List;
 import java.util.concurrent.ConcurrentLinkedDeque;

@@ -14,7 +14,7 @@
 
 package com.starrocks.pseudocluster;
 
-import com.starrocks.common.GenericPool;
+import com.starrocks.common.concurrent.GenericPool;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.pool2.impl.GenericKeyedObjectPoolConfig;
 

@@ -37,12 +37,12 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.DuplicatedRequestException;
-import com.starrocks.common.LabelAlreadyUsedException;
-import com.starrocks.common.LoadException;
-import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.exception.DuplicatedRequestException;
+import com.starrocks.common.exception.LabelAlreadyUsedException;
+import com.starrocks.common.exception.LoadException;
+import com.starrocks.common.exception.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;

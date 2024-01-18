@@ -16,9 +16,9 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.LabelName;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import org.apache.logging.log4j.LogManager;

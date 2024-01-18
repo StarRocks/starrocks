@@ -17,8 +17,8 @@ package com.starrocks.catalog;
 
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import com.starrocks.persist.gson.GsonUtils;
 import org.junit.Assert;

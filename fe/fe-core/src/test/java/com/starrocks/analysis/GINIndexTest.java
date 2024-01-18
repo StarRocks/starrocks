@@ -14,15 +14,6 @@
 
 package com.starrocks.analysis;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-
-import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
-
 import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
@@ -40,6 +31,15 @@ import com.starrocks.thrift.TOlapTableIndex;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import static com.starrocks.common.InvertedIndexParams.CommonIndexParamKey.IMP_LIB;
 
 public class GINIndexTest extends PlanTestBase {
 

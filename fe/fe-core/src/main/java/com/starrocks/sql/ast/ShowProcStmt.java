@@ -19,7 +19,7 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.qe.ConnectContext;

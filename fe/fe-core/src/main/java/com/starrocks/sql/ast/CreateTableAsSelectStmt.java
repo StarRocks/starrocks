@@ -16,8 +16,8 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.parser.NodePosition;
 

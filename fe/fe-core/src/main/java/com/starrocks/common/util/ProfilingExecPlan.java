@@ -24,7 +24,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SortInfo;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.planner.AggregationNode;
 import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.DataPartition;

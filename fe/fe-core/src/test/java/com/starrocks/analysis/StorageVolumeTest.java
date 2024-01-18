@@ -14,7 +14,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.server.SharedNothingStorageVolumeMgr;
+import com.starrocks.cloudnative.storagevolume.SharedNothingStorageVolumeMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;

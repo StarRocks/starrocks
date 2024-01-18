@@ -34,12 +34,12 @@
 
 package com.starrocks.http.rest;
 
-import com.starrocks.common.DdlException;
+import com.starrocks.authz.authorization.AccessDeniedException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;

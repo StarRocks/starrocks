@@ -17,6 +17,7 @@
 
 package com.starrocks.common.util.concurrent;
 
+import com.starrocks.common.concurrent.locks.CountingLatch;
 import org.junit.Assert;
 import org.junit.Test;
 

@@ -17,6 +17,8 @@
 
 package com.starrocks.common;
 
+import com.starrocks.common.concurrent.GenericPool;
+import com.starrocks.common.thrift.ThriftServer;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.InternalServiceVersion;
 import com.starrocks.thrift.TAgentPublishRequest;

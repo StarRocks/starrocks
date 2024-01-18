@@ -16,7 +16,7 @@
 package com.starrocks.system;
 
 import com.starrocks.cluster.Cluster;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;

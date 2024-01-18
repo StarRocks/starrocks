@@ -15,8 +15,8 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.PartitionDesc;

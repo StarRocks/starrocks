@@ -43,8 +43,8 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.AggregateType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.UserException;
 
 import java.util.List;
 import java.util.Map;

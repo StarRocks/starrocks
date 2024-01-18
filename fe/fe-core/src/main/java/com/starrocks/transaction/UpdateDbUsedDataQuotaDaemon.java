@@ -35,8 +35,8 @@
 package com.starrocks.transaction;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;

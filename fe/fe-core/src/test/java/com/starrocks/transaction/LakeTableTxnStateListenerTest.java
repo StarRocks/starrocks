@@ -15,11 +15,11 @@
 package com.starrocks.transaction;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
-import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.compaction.CompactionMgr;
-import com.starrocks.lake.compaction.PartitionIdentifier;
-import com.starrocks.lake.compaction.Quantiles;
+import com.starrocks.cloudnative.LakeTable;
+import com.starrocks.cloudnative.compaction.CompactionMgr;
+import com.starrocks.cloudnative.compaction.PartitionIdentifier;
+import com.starrocks.cloudnative.compaction.Quantiles;
+import com.starrocks.common.conf.Config;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;

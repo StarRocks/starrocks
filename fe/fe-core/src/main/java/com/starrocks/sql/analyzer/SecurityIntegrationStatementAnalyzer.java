@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.authentication.LDAPSecurityIntegration;
-import com.starrocks.authentication.SecurityIntegration;
+import com.starrocks.authz.authentication.LDAPSecurityIntegration;
+import com.starrocks.authz.authentication.SecurityIntegration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateSecurityIntegrationStatement;
@@ -27,7 +27,7 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import static com.starrocks.authentication.LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY;
+import static com.starrocks.authz.authentication.LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY;
 
 public class SecurityIntegrationStatementAnalyzer {
 

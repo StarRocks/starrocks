@@ -29,7 +29,7 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.common.io.Text;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.util.Utils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergCatalogType;
@@ -321,7 +321,7 @@ public class IcebergTable extends Table {
             try {
                 TSerializer serializer = new TSerializer(TBinaryProtocol::new);
                 byte[] bytes = serializer.serialize(tPartitionMap);
-                byte[] compressedBytes = Util.compress(bytes);
+                byte[] compressedBytes = Utils.compress(bytes);
                 TCompressedPartitionMap tCompressedPartitionMap = new TCompressedPartitionMap();
                 tCompressedPartitionMap.setOriginal_len(bytes.length);
                 tCompressedPartitionMap.setCompressed_len(compressedBytes.length);

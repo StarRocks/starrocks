@@ -17,10 +17,10 @@ package com.starrocks.consistency;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.Config;
+import com.starrocks.common.concurrent.locks.QueryableReentrantReadWriteLock;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.common.util.Util;
-import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
+import com.starrocks.common.util.Utils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -65,7 +65,7 @@ public class LockChecker extends FrontendDaemon {
                     hasSlowLock = true;
                     ownerInfo.addProperty("lockState", "writeLocked");
                     ownerInfo.addProperty("lockHoldTime", (System.currentTimeMillis() - lockStartTime) + " ms");
-                    ownerInfo.addProperty("dumpThread", Util.dumpThread(exclusiveLockThread, 50));
+                    ownerInfo.addProperty("dumpThread", Utils.dumpThread(exclusiveLockThread, 50));
                 }
             } else if (sharedLockThreadIds.size() > 0) {
                 StringBuilder infos = new StringBuilder();
@@ -76,7 +76,7 @@ public class LockChecker extends FrontendDaemon {
                         hasSlowLock = true;
                         ThreadInfo threadInfo = ManagementFactory.getThreadMXBean().getThreadInfo(threadId, 50);
                         infos.append("lockHoldTime: ").append(System.currentTimeMillis() - lockStartTime).append(" ms;");
-                        infos.append(Util.dumpThread(threadInfo, 50)).append(";");
+                        infos.append(Utils.dumpThread(threadInfo, 50)).append(";");
                         slowReadLockCnt++;
                     }
                 }
@@ -118,7 +118,7 @@ public class LockChecker extends FrontendDaemon {
             long[] ids = tmx.findDeadlockedThreads();
             if (ids != null) {
                 for (long id : ids) {
-                    LOG.info("deadlock thread: {}", Util.dumpThread(tmx.getThreadInfo(id, 50), 50));
+                    LOG.info("deadlock thread: {}", Utils.dumpThread(tmx.getThreadInfo(id, 50), 50));
                 }
             }
         }

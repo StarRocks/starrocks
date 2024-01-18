@@ -19,7 +19,7 @@ import com.sleepycat.je.DatabaseEntry;
 import com.sleepycat.je.LockMode;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.impl.RepGroupImpl;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.journal.JournalException;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;

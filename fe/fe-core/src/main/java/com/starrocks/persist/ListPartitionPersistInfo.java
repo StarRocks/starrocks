@@ -18,7 +18,7 @@ package com.starrocks.persist;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Partition;
-import com.starrocks.lake.DataCacheInfo;
+import com.starrocks.cloudnative.DataCacheInfo;
 
 import java.util.List;
 

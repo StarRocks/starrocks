@@ -17,7 +17,7 @@ package com.starrocks.planner;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.plan.TPCDSTestUtil;
 import com.starrocks.statistic.StatsConstants;

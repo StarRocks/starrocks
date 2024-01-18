@@ -17,7 +17,7 @@ package com.starrocks.server;
 
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.DropCatalogStmt;

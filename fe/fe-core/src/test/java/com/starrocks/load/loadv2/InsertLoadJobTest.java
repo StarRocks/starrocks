@@ -36,7 +36,7 @@ package com.starrocks.load.loadv2;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.exception.MetaNotFoundException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;

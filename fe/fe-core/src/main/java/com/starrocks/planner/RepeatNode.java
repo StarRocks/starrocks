@@ -41,8 +41,8 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
-import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.structure.Pair;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalRepeatNode;
@@ -52,7 +52,6 @@ import com.starrocks.thrift.TRepeatNode;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.util.Strings;
 
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;

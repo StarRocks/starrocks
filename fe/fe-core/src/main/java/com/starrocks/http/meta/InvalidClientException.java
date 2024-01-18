@@ -17,7 +17,7 @@
 
 package com.starrocks.http.meta;
 
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 
 public class InvalidClientException extends DdlException {
     public InvalidClientException(String msg) {

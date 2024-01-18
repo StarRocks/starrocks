@@ -36,7 +36,7 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.parser.NodePosition;

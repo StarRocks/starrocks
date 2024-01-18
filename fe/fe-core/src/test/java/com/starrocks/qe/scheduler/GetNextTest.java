@@ -14,8 +14,8 @@
 
 package com.starrocks.qe.scheduler;
 
-import com.starrocks.common.Reference;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
+import com.starrocks.common.structure.Reference;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PFetchDataResult;

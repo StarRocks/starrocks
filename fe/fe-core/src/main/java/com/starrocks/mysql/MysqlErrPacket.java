@@ -17,7 +17,7 @@
 
 package com.starrocks.mysql;
 
-import com.starrocks.common.ErrorCode;
+import com.starrocks.common.error.ErrorCode;
 import com.starrocks.qe.QueryState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

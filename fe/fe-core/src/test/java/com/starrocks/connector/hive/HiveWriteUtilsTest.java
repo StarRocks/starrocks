@@ -14,8 +14,8 @@
 
 package com.starrocks.connector.hive;
 
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import mockit.Mock;
 import mockit.MockUp;

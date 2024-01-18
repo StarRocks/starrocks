@@ -14,8 +14,8 @@
 
 package com.starrocks.qe.scheduler;
 
-import com.starrocks.common.Config;
-import com.starrocks.common.Log4jConfig;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.logging.Log4jConfig;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import org.junit.Assert;
 import org.junit.BeforeClass;

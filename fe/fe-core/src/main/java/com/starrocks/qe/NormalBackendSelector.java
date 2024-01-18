@@ -16,8 +16,8 @@ package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.thrift.TNetworkAddress;

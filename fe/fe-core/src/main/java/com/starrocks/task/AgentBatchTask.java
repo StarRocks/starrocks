@@ -35,7 +35,7 @@
 package com.starrocks.task;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.ClientPool;
+import com.starrocks.common.concurrent.ClientPool;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.system.ComputeNode;

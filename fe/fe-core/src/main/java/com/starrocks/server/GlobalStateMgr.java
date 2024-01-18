@@ -47,8 +47,13 @@ import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
-import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.UserPropertyInfo;
+import com.starrocks.authz.authentication.AuthenticationMgr;
+import com.starrocks.authz.authentication.UserPropertyInfo;
+import com.starrocks.authz.authorization.AccessDeniedException;
+import com.starrocks.authz.authorization.AuthorizationMgr;
+import com.starrocks.authz.authorization.ObjectType;
+import com.starrocks.authz.authorization.PrivilegeException;
+import com.starrocks.authz.authorization.PrivilegeType;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.binlog.BinlogManager;
@@ -106,30 +111,43 @@ import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.clone.TabletScheduler;
 import com.starrocks.clone.TabletSchedulerStat;
+import com.starrocks.cloudnative.ShardManager;
+import com.starrocks.cloudnative.StarMgrMetaSyncer;
+import com.starrocks.cloudnative.StarOSAgent;
+import com.starrocks.cloudnative.compaction.CompactionMgr;
+import com.starrocks.cloudnative.storagevolume.SharedDataStorageVolumeMgr;
+import com.starrocks.cloudnative.storagevolume.SharedNothingStorageVolumeMgr;
+import com.starrocks.cloudnative.storagevolume.StorageVolumeMgr;
+import com.starrocks.cloudnative.vacuum.AutovacuumDaemon;
+import com.starrocks.cloudnative.warehouse.Warehouse;
+import com.starrocks.cloudnative.warehouse.WarehouseManager;
 import com.starrocks.cluster.Cluster;
-import com.starrocks.common.AlreadyExistsException;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
-import com.starrocks.common.ConfigRefreshDaemon;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.InvalidConfException;
-import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.Pair;
-import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.UserException;
+import com.starrocks.common.MetaContext;
+import com.starrocks.common.concurrent.ThreadPoolManager;
+import com.starrocks.common.concurrent.locks.LockType;
+import com.starrocks.common.concurrent.locks.Locker;
+import com.starrocks.common.concurrent.locks.QueryableReentrantLock;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.conf.ConfigRefreshDaemon;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
+import com.starrocks.common.exception.AlreadyExistsException;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.exception.InvalidConfException;
+import com.starrocks.common.exception.MetaNotFoundException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.SmallFileMgr;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.util.Utils;
 import com.starrocks.common.util.WriteQuorum;
-import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
@@ -144,7 +162,8 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.HAProtocol;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.ha.StateChangeExecution;
-import com.starrocks.healthchecker.SafeModeChecker;
+import com.starrocks.ha.healthchecker.DiskUsageSafeModeChecker;
+import com.starrocks.ha.healthchecker.PortConnectivityChecker;
 import com.starrocks.journal.Journal;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
@@ -154,11 +173,6 @@ import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.Timestamp;
-import com.starrocks.lake.ShardManager;
-import com.starrocks.lake.StarMgrMetaSyncer;
-import com.starrocks.lake.StarOSAgent;
-import com.starrocks.lake.compaction.CompactionMgr;
-import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.leader.Checkpoint;
 import com.starrocks.leader.TaskRunStateSynchronizer;
 import com.starrocks.load.DeleteMgr;
@@ -178,9 +192,6 @@ import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
-import com.starrocks.meta.MetaContext;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
@@ -223,11 +234,6 @@ import com.starrocks.persist.metablock.SRMetaBlockLoader;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.plugin.PluginMgr;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.AuditEventProcessor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.JournalObservable;
@@ -296,7 +302,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
-import com.starrocks.system.PortConnectivityChecker;
+import com.starrocks.system.NodeMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -315,7 +321,6 @@ import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -503,7 +508,7 @@ public class GlobalStateMgr {
 
     private final StatisticAutoCollector statisticAutoCollector;
 
-    private final SafeModeChecker safeModeChecker;
+    private final DiskUsageSafeModeChecker diskUsageSafeModeChecker;
 
     private AnalyzeMgr analyzeMgr;
 
@@ -593,7 +598,7 @@ public class GlobalStateMgr {
         Warehouse warehouse = warehouseMgr.getDefaultWarehouse();
         // TODO: need to refactor after be split into cn + dn
         if (warehouse != null && RunMode.isSharedDataMode()) {
-            com.starrocks.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
+            com.starrocks.cloudnative.warehouse.Cluster cluster = warehouse.getAnyAvailableCluster();
             for (Long cnId : cluster.getComputeNodeIds()) {
                 ComputeNode cn = systemInfoService.getBackendOrComputeNode(cnId);
                 nodesInfo.addToNodes(new TNodeInfo(cnId, 0, cn.getIP(), cn.getBrpcPort()));
@@ -701,7 +706,7 @@ public class GlobalStateMgr {
         this.updateDbUsedDataQuotaDaemon = new UpdateDbUsedDataQuotaDaemon();
         this.statisticsMetaManager = new StatisticsMetaManager();
         this.statisticAutoCollector = new StatisticAutoCollector();
-        this.safeModeChecker = new SafeModeChecker();
+        this.diskUsageSafeModeChecker = new DiskUsageSafeModeChecker();
         this.statisticStorage = new CachedStatisticStorage();
 
         this.replayedJournalId = new AtomicLong(0L);
@@ -1080,7 +1085,7 @@ public class GlobalStateMgr {
                     // to see which thread held this lock for long time.
                     Thread owner = lock.getOwner();
                     if (owner != null) {
-                        LOG.warn("globalStateMgr lock is held by: {}", Util.dumpThread(owner, 50));
+                        LOG.warn("globalStateMgr lock is held by: {}", Utils.dumpThread(owner, 50));
                     }
 
                     if (mustLock) {
@@ -1347,7 +1352,7 @@ public class GlobalStateMgr {
             isReady.set(true);
 
             String msg = "leader finished to replay journal, can write now.";
-            Util.stdoutWithTime(msg);
+            Utils.stdoutWithTime(msg);
             LOG.info(msg);
 
             // for leader, there are some new thread pools need to register metric
@@ -1460,7 +1465,7 @@ public class GlobalStateMgr {
 
         if (Config.enable_safe_mode) {
             LOG.info("Start safe mode checker!");
-            safeModeChecker.start();
+            diskUsageSafeModeChecker.start();
         }
 
         replicationMgr.start();
@@ -1849,7 +1854,7 @@ public class GlobalStateMgr {
                     LOG.warn("got interrupt exception or inconsistent exception when replay journal {}, will exit, ",
                             replayedJournalId.get() + 1, e);
                     // TODO exit gracefully
-                    Util.stdoutWithTime(e.getMessage());
+                    Utils.stdoutWithTime(e.getMessage());
                     System.exit(-1);
                 } catch (Throwable e) {
                     LOG.error("replayer thread catch an exception when replay journal {}.",
@@ -1943,7 +1948,7 @@ public class GlobalStateMgr {
                     replayedJournalId.get() + 1,
                     e);
             // TODO exit gracefully
-            Util.stdoutWithTime(e.getMessage());
+            Utils.stdoutWithTime(e.getMessage());
             System.exit(-1);
 
         } finally {

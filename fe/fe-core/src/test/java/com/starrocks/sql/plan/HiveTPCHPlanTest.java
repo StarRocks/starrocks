@@ -16,7 +16,7 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.planner.TpchSQL;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;

@@ -13,8 +13,8 @@
 // limitations under the License.
 package com.starrocks.transaction;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;

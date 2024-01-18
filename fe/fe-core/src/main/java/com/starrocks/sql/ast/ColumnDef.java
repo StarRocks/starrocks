@@ -54,7 +54,7 @@ import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import com.starrocks.sql.common.EngineType;
 import com.starrocks.sql.parser.NodePosition;

@@ -14,10 +14,10 @@
 
 package com.starrocks.common.proc;
 
-import com.starrocks.common.AnalysisException;
+import com.starrocks.cloudnative.compaction.CompactionMgr;
+import com.starrocks.cloudnative.compaction.CompactionRecord;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.lake.compaction.CompactionMgr;
-import com.starrocks.lake.compaction.CompactionRecord;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.ArrayList;

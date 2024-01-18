@@ -15,7 +15,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.AfterClass;

@@ -16,8 +16,8 @@
 package com.starrocks.connector.hive.events;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
-import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.common.concurrent.ThreadPoolManager;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
 import com.starrocks.server.CatalogMgr;

@@ -19,8 +19,6 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCommand;
@@ -31,7 +29,6 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ShowDbStmt;
-import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import org.junit.Assert;

@@ -16,7 +16,7 @@ package com.starrocks.qe.scheduler.assignment;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.MultiCastPlanFragment;
 import com.starrocks.planner.PlanFragment;

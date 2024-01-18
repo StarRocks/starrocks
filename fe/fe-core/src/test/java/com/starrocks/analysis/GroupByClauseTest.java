@@ -19,7 +19,7 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;

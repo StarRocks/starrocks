@@ -4,9 +4,9 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.persist.ResourceGroupOpEntry;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -38,7 +38,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-import static com.starrocks.common.ErrorCode.ERROR_NO_RG_ERROR;
+import static com.starrocks.common.error.ErrorCode.ERROR_NO_RG_ERROR;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class ResourceGroupStmtTest {

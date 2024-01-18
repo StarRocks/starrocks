@@ -37,7 +37,7 @@ package com.starrocks.common.proc;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.load.ExportMgr;
 
 import java.util.List;

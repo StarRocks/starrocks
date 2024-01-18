@@ -14,8 +14,8 @@
 
 package com.starrocks.http;
 
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.conf.Config;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.ExecuteEnv;

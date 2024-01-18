@@ -16,7 +16,7 @@ package com.starrocks.pseudocluster;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletInfo;

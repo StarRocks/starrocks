@@ -14,7 +14,7 @@
 
 package com.starrocks.transaction;
 
-import com.starrocks.lake.LakeTable;
+import com.starrocks.cloudnative.LakeTable;
 import org.junit.Assert;
 import org.junit.Test;
 

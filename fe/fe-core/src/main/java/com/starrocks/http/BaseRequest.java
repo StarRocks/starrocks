@@ -36,7 +36,7 @@ package com.starrocks.http;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.HttpHeaderNames;

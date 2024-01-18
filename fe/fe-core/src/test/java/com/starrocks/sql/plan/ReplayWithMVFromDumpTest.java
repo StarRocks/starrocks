@@ -16,7 +16,7 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;

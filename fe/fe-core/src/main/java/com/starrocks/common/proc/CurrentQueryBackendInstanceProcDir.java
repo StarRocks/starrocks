@@ -20,7 +20,7 @@ package com.starrocks.common.proc;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryStatisticsItem;

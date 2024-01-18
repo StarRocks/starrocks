@@ -24,12 +24,12 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.concurrent.locks.QueryableReentrantLock;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.Util;
-import com.starrocks.common.util.concurrent.QueryableReentrantLock;
+import com.starrocks.common.util.Utils;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -45,7 +45,6 @@ import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.common.DmlException;
-import com.starrocks.sql.optimizer.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -437,7 +436,7 @@ public class TaskManager {
 
     private void registerScheduler(Task task, LocalDateTime scheduleTime) {
         TaskSchedule schedule = task.getSchedule();
-        LocalDateTime startTime = Utils.getDatetimeFromLong(schedule.getStartTime());
+        LocalDateTime startTime = com.starrocks.sql.optimizer.Utils.getDatetimeFromLong(schedule.getStartTime());
         long periodSeconds = TimeUtils.convertTimeUnitValueToSecond(schedule.getPeriod(), schedule.getTimeUnit());
         long initialDelay = getInitialDelayTime(periodSeconds, startTime, scheduleTime);
         ExecuteOption option = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), true, task.getProperties());
@@ -456,7 +455,7 @@ public class TaskManager {
             if (!taskLock.tryLock(5, TimeUnit.SECONDS)) {
                 Thread owner = taskLock.getOwner();
                 if (owner != null) {
-                    LOG.warn("task lock is held by: {}", Util.dumpThread(owner, 50));
+                    LOG.warn("task lock is held by: {}", Utils.dumpThread(owner, 50));
                 } else {
                     LOG.warn("task lock owner is null");
                 }

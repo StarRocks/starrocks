@@ -36,7 +36,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.DeleteStmt;

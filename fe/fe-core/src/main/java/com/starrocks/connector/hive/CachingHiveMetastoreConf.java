@@ -15,7 +15,7 @@
 
 package com.starrocks.connector.hive;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 
 import java.util.Map;
 

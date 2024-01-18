@@ -34,7 +34,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.ast.ShowEnginesStmt;

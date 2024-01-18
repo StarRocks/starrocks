@@ -16,6 +16,7 @@
 package com.starrocks.staros;
 
 
+import com.starrocks.cloudnative.staros.BDBJEJournalSystem;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;

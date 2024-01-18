@@ -18,7 +18,7 @@ import com.google.api.client.util.Sets;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.thrift.TScanRangeLocation;

@@ -14,7 +14,7 @@
 
 package com.starrocks.load;
 
-import com.starrocks.common.Status;
+import com.starrocks.common.structure.Status;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.ExportPendingTask;

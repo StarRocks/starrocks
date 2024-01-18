@@ -16,8 +16,8 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.TableName;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;

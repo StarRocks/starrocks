@@ -14,7 +14,7 @@
 
 package com.starrocks.common.util;
 
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import org.junit.Assert;
 import org.junit.Test;
 

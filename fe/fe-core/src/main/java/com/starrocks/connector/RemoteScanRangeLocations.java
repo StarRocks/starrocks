@@ -24,7 +24,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.datacache.DataCacheExprRewriter;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.datacache.DataCacheOptions;

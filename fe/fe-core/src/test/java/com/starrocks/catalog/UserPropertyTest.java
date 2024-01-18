@@ -35,8 +35,8 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.Pair;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.mysql.privilege.UserProperty;
 import org.junit.Assert;
 import org.junit.Test;

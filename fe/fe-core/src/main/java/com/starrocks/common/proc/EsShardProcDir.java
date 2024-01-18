@@ -21,12 +21,12 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.concurrent.locks.LockType;
+import com.starrocks.common.concurrent.locks.Locker;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.connector.elasticsearch.EsShardPartitions;
 import com.starrocks.connector.elasticsearch.EsShardRouting;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 
 import java.util.ArrayList;
 import java.util.Collections;

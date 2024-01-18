@@ -14,7 +14,7 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.DDLStmtExecutor;

@@ -17,7 +17,7 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.common.Id;
+import com.starrocks.common.structure.Id;
 import com.starrocks.common.IdGenerator;
 
 public class PlanFragmentId extends Id<PlanFragmentId> {

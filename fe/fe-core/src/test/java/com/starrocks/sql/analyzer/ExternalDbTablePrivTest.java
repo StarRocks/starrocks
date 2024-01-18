@@ -14,15 +14,15 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authz.authentication.AuthenticationMgr;
+import com.starrocks.authz.authorization.AccessDeniedException;
+import com.starrocks.authz.authorization.AuthorizationMgr;
+import com.starrocks.authz.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeType;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.MetadataMgr;

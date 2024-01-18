@@ -35,15 +35,15 @@
 package com.starrocks.http.rest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.Pair;
+import com.starrocks.authz.authorization.AccessDeniedException;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseAction;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.HttpConnectContext;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TNetworkAddress;

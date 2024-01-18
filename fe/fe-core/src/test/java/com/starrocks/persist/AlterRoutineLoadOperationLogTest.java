@@ -17,7 +17,7 @@ package com.starrocks.persist;
 
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import org.junit.Assert;
 import org.junit.Test;

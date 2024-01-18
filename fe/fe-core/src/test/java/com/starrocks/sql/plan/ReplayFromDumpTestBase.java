@@ -15,10 +15,10 @@
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;

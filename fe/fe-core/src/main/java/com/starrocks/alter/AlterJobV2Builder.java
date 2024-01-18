@@ -17,7 +17,7 @@ package com.starrocks.alter;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Index;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 
 import java.util.HashMap;
 import java.util.List;

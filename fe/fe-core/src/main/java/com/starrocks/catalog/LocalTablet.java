@@ -42,9 +42,9 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.clone.TabletSchedCtx;
 import com.starrocks.clone.TabletSchedCtx.Priority;
-import com.starrocks.common.CloseableLock;
-import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
+import com.starrocks.common.concurrent.locks.AutoCloseableLock;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -148,7 +148,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     private boolean deleteRedundantReplica(long backendId, long version) {
         boolean delete = false;
         boolean hasBackend = false;
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.writeLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.writeLock())) {
             Iterator<Replica> iterator = replicas.iterator();
             while (iterator.hasNext()) {
                 Replica replica = iterator.next();
@@ -165,7 +165,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     public void addReplica(Replica replica, boolean updateInvertedIndex) {
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.writeLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.writeLock())) {
             if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
                 replicas.add(replica);
                 if (updateInvertedIndex) {
@@ -181,7 +181,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     public int getErrorStateReplicaNum() {
         int num = 0;
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 if (replica.isErrorState()) {
                     num++;
@@ -205,7 +205,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     public Replica getSingleReplica() {
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             return replicas.get(0);
         }
     }
@@ -213,7 +213,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     @Override
     public Set<Long> getBackendIds() {
         Set<Long> beIds = Sets.newHashSet();
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 beIds.add(replica.getBackendId());
             }
@@ -224,7 +224,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     public List<String> getBackends() {
         List<String> backends = new ArrayList<String>();
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 Backend backend = infoService.getBackend(replica.getBackendId());
                 if (backend == null) {
@@ -240,7 +240,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     public List<Long> getNormalReplicaBackendIds() {
         List<Long> beIds = Lists.newArrayList();
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 if (replica.isBad()) {
                     continue;
@@ -258,7 +258,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     // return map of (BE id -> path hash) of normal replicas
     public Multimap<Replica, Long> getNormalReplicaBackendPathMap(int clusterId) {
         Multimap<Replica, Long> map = LinkedHashMultimap.create();
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             SystemInfoService infoService = GlobalStateMgr.getCurrentState().getOrCreateSystemInfo(clusterId);
             for (Replica replica : replicas) {
                 if (replica.isBad()) {
@@ -279,7 +279,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     @Override
     public void getQueryableReplicas(List<Replica> allQueryableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 if (replica.isBad()) {
                     continue;
@@ -308,7 +308,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     public int getQueryableReplicasSize(long visibleVersion, int schemaHash) {
         int size = 0;
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 if (replica.isBad()) {
                     continue;
@@ -334,7 +334,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     public Replica getReplicaById(long replicaId) {
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 if (replica.getId() == replicaId) {
                     return replica;
@@ -345,7 +345,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     public Replica getReplicaByBackendId(long backendId) {
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 if (replica.getBackendId() == backendId) {
                     return replica;
@@ -356,7 +356,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     public boolean deleteReplica(Replica replica) {
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.writeLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.writeLock())) {
             if (replicas.contains(replica)) {
                 replicas.remove(replica);
                 GlobalStateMgr.getCurrentInvertedIndex().deleteReplica(id, replica.getBackendId());
@@ -367,7 +367,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     public boolean deleteReplicaByBackendId(long backendId) {
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.writeLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.writeLock())) {
             Iterator<Replica> iterator = replicas.iterator();
             while (iterator.hasNext()) {
                 Replica replica = iterator.next();
@@ -384,7 +384,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     // for test,
     // and for some replay cases
     public void clearReplica() {
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.writeLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.writeLock())) {
             this.replicas.clear();
         }
     }
@@ -472,7 +472,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     @Override
     public long getDataSize(boolean singleReplica) {
         long dataSize = 0;
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 if (replica.getState() == ReplicaState.NORMAL || replica.getState() == ReplicaState.SCHEMA_CHANGE) {
                     if (singleReplica) {
@@ -493,7 +493,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     @Override
     public long getRowCount(long version) {
         long tabletRowCount = 0L;
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 if (replica.checkVersionCatchUp(version, false) && replica.getRowCount() > tabletRowCount) {
                     tabletRowCount = replica.getRowCount();
@@ -547,7 +547,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     private boolean needRecoverWithEmptyTablet(SystemInfoService systemInfoService) {
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             if (Config.recover_with_empty_tablet && replicas.size() > 1) {
                 int numReplicaLostForever = 0;
                 int numReplicaRecoverable = 0;
@@ -570,7 +570,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             SystemInfoService systemInfoService,
             long visibleVersion, int replicationNum,
             List<Long> aliveBeIdsInCluster) {
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             return getHealthStatusWithPriorityUnlocked(systemInfoService, visibleVersion,
                     replicationNum, aliveBeIdsInCluster);
         }
@@ -724,7 +724,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     public TabletStatus getColocateHealthStatus(long visibleVersion,
                                                 int replicationNum, Set<Long> backendsSet) {
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             return getColocateHealthStatusUnlocked(visibleVersion, replicationNum, backendsSet);
         }
     }
@@ -884,7 +884,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     public String getReplicaInfos() {
         StringBuilder sb = new StringBuilder();
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 sb.append(String.format("%d:%d/%d/%d/%d:%s:%s,", replica.getBackendId(), replica.getVersion(),
                         replica.getLastFailedVersion(), replica.getLastSuccessVersion(), replica.getMinReadableVersion(),
@@ -897,7 +897,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     // Note: this method does not require db lock to be held
     public boolean quorumReachVersion(long version, long quorum, TxnFinishState finishState) {
         long valid = 0;
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
                 long replicaId = replica.getId();
                 long replicaVersion = replica.getVersion();
@@ -922,7 +922,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     public void getAbnormalReplicaInfos(long version, long quorum, StringBuilder sb) {
-        try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
+        try (AutoCloseableLock ignored = AutoCloseableLock.lock(this.rwLock.readLock())) {
             boolean empty = true;
             for (Replica replica : replicas) {
                 long replicaVersion = replica.getVersion();

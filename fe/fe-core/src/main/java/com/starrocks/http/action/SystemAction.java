@@ -37,7 +37,7 @@ package com.starrocks.http.action;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.proc.ProcDirInterface;
 import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;

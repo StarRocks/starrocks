@@ -36,7 +36,7 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;

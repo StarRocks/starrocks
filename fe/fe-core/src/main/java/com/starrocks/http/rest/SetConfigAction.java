@@ -35,13 +35,13 @@
 package com.starrocks.http.rest;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.ConfigBase;
-import com.starrocks.common.DdlException;
+import com.starrocks.authz.authorization.AccessDeniedException;
+import com.starrocks.common.conf.ConfigBase;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;

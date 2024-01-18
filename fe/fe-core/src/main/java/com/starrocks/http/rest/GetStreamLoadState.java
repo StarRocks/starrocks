@@ -36,7 +36,7 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;

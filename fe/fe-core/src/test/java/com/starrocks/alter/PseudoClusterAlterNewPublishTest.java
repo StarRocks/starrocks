@@ -14,7 +14,7 @@
 
 package com.starrocks.alter;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.pseudocluster.PseudoCluster;
 import org.junit.BeforeClass;
 

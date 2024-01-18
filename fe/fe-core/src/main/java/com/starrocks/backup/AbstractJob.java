@@ -37,11 +37,11 @@ package com.starrocks.backup;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.Pair;
+import com.starrocks.cloudnative.backup.LakeBackupJob;
+import com.starrocks.cloudnative.backup.LakeRestoreJob;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.lake.backup.LakeBackupJob;
-import com.starrocks.lake.backup.LakeRestoreJob;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;

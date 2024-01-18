@@ -37,7 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authz.authentication.AuthenticationMgr;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.mysql.privilege.Auth;
 import org.apache.logging.log4j.LogManager;

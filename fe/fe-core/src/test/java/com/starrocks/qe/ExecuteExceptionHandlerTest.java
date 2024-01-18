@@ -14,7 +14,7 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.sql.ast.StatementBase;

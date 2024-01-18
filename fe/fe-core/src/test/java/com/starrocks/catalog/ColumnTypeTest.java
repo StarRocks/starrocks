@@ -35,8 +35,8 @@
 package com.starrocks.catalog;
 
 import com.starrocks.analysis.TypeDef;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.exception.AnalysisException;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;

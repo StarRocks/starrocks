@@ -15,7 +15,8 @@
 
 package com.starrocks.server;
 
-import com.starrocks.common.DdlException;
+import com.starrocks.cloudnative.warehouse.WarehouseManager;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;

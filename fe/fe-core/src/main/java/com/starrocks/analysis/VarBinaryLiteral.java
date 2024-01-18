@@ -18,7 +18,7 @@ package com.starrocks.analysis;
 import com.google.common.base.CharMatcher;
 import com.google.common.io.BaseEncoding;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.io.Text;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.sql.parser.ParsingException;

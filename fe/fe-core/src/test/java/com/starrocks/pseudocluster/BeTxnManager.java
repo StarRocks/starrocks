@@ -14,7 +14,7 @@
 
 package com.starrocks.pseudocluster;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TTabletVersionPair;

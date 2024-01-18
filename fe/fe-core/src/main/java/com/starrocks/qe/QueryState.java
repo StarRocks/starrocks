@@ -35,7 +35,7 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableMap;
-import com.starrocks.common.ErrorCode;
+import com.starrocks.common.error.ErrorCode;
 import com.starrocks.mysql.MysqlEofPacket;
 import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;

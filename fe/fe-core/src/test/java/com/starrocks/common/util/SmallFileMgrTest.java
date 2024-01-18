@@ -35,8 +35,8 @@
 package com.starrocks.common.util;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.persist.EditLog;

@@ -14,6 +14,13 @@
 
 package com.starrocks.server;
 
+import com.starrocks.external.table.ElasticSearchTableFactory;
+import com.starrocks.external.table.FileTableFactory;
+import com.starrocks.external.table.HiveTableFactory;
+import com.starrocks.external.table.HudiTableFactory;
+import com.starrocks.external.table.IcebergTableFactory;
+import com.starrocks.external.table.JDBCTableFactory;
+import com.starrocks.external.table.MysqlTableFactory;
 import com.starrocks.sql.common.EngineType;
 
 import javax.annotation.Nullable;

@@ -35,7 +35,7 @@
 package com.starrocks.common.proc;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.Load;
 

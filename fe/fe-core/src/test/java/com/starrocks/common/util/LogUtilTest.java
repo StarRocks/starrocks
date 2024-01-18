@@ -14,7 +14,7 @@
 
 package com.starrocks.common.util;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryDetailQueue;
 import org.junit.Assert;

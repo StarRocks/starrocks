@@ -17,8 +17,7 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.common.exception.AnalysisException;
 import org.junit.Assert;
 import org.junit.Test;
 

@@ -34,8 +34,8 @@
 
 package com.starrocks.plugin;
 
-import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.PluginInfo.PluginType;

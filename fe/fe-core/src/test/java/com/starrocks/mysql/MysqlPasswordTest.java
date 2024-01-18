@@ -17,7 +17,7 @@
 
 package com.starrocks.mysql;
 
-import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.error.ErrorReportException;
 import org.junit.Assert;
 import org.junit.Test;
 

@@ -19,7 +19,6 @@ package com.starrocks.connector.elasticsearch;
 
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.starrocks.connector.elasticsearch.QueryBuilders;
 import org.junit.Test;
 
 import java.io.IOException;

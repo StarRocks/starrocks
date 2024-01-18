@@ -36,7 +36,7 @@ package com.starrocks.planner;
 
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;

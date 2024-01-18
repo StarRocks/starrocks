@@ -24,10 +24,10 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
-import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.LakeTablet;
+import com.starrocks.cloudnative.LakeTable;
+import com.starrocks.cloudnative.LakeTablet;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 

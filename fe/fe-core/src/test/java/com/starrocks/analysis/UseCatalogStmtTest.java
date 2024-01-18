@@ -16,8 +16,8 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Sets;
+import com.starrocks.authz.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;

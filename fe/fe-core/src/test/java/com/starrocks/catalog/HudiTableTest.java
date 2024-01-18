@@ -17,7 +17,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.connector.CatalogConnector;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadata;
@@ -25,9 +25,9 @@ import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreTest;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.external.table.HudiTableFactory;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.HudiTableFactory;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TableFactoryProvider;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -49,7 +49,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.server.ExternalTableFactory.RESOURCE;
+import static com.starrocks.external.table.ExternalTableFactory.RESOURCE;
 
 public class HudiTableTest {
     private static ConnectContext connectContext;

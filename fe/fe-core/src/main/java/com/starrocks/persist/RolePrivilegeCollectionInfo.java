@@ -16,14 +16,14 @@
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authz.authorization.ObjectTypeDeprecate;
+import com.starrocks.authz.authorization.PrivilegeEntry;
+import com.starrocks.authz.authorization.PrivilegeException;
+import com.starrocks.authz.authorization.RolePrivilegeCollection;
+import com.starrocks.authz.authorization.RolePrivilegeCollectionV2;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.privilege.ObjectTypeDeprecate;
-import com.starrocks.privilege.PrivilegeEntry;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.RolePrivilegeCollection;
-import com.starrocks.privilege.RolePrivilegeCollectionV2;
 
 import java.io.DataInput;
 import java.io.DataOutput;

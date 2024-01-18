@@ -39,7 +39,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.clone.TabletScheduler;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;

@@ -19,8 +19,8 @@ package com.starrocks.http.action;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
-import com.starrocks.common.Log4jConfig;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.logging.Log4jConfig;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;

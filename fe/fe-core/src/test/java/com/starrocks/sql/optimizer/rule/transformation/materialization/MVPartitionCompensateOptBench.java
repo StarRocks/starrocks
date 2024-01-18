@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.carrotsearch.junitbenchmarks.BenchmarkOptions;
 import com.carrotsearch.junitbenchmarks.BenchmarkRule;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;

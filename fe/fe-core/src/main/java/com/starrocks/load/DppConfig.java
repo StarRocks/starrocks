@@ -37,7 +37,7 @@ package com.starrocks.load;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.LoadException;
+import com.starrocks.common.exception.LoadException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;

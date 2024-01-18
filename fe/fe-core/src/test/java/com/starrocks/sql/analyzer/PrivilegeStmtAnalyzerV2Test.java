@@ -14,9 +14,9 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorReportException;
-import com.starrocks.privilege.AuthorizationMgr;
+import com.starrocks.authz.authorization.AuthorizationMgr;
+import com.starrocks.common.error.ErrorReportException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.SetDefaultRoleExecutor;

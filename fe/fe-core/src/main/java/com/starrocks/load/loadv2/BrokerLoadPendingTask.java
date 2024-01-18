@@ -36,7 +36,7 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;

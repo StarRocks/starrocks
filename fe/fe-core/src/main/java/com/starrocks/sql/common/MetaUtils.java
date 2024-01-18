@@ -23,11 +23,11 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.external.starrocks.TableMetaSyncer;
+import com.starrocks.external.starrocks.StarrocksExternalTableMetaSyncer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SqlModeHelper;
@@ -231,7 +231,7 @@ public class MetaUtils {
     public static ExternalOlapTable syncOLAPExternalTableMeta(ExternalOlapTable externalOlapTable) {
         ExternalOlapTable copiedTable = new ExternalOlapTable();
         externalOlapTable.copyOnlyForQuery(copiedTable);
-        new TableMetaSyncer().syncTable(copiedTable);
+        new StarrocksExternalTableMetaSyncer().syncTable(copiedTable);
         return copiedTable;
     }
 }

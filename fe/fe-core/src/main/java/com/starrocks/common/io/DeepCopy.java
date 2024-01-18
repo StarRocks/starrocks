@@ -35,7 +35,7 @@
 package com.starrocks.common.io;
 
 import com.starrocks.common.FeConstants;
-import com.starrocks.meta.MetaContext;
+import com.starrocks.common.MetaContext;
 import com.starrocks.persist.gson.GsonUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

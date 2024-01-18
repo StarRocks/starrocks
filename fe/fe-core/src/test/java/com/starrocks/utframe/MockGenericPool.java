@@ -17,7 +17,7 @@ package com.starrocks.utframe;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.common.GenericPool;
+import com.starrocks.common.concurrent.GenericPool;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TNetworkAddress;

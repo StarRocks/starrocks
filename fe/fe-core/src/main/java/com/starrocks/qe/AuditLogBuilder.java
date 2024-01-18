@@ -34,8 +34,8 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.common.AuditLog;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.logging.AuditLog;
 import com.starrocks.common.util.DigitalVersion;
 import com.starrocks.plugin.AuditEvent;
 import com.starrocks.plugin.AuditEvent.AuditField;

@@ -15,12 +15,12 @@
 package com.starrocks.http.rest;
 
 import com.starrocks.StarRocksFE;
+import com.starrocks.authz.authorization.AccessDeniedException;
+import com.starrocks.authz.authorization.PrivilegeType;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;

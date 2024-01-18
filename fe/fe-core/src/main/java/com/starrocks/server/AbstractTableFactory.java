@@ -16,7 +16,7 @@ package com.starrocks.server;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.sql.ast.CreateTableStmt;
 
 import javax.validation.constraints.NotNull;

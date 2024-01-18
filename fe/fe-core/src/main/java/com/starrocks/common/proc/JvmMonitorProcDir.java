@@ -20,7 +20,7 @@ package com.starrocks.common.proc;
 import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.monitor.jvm.JvmInfo;
 import com.starrocks.monitor.jvm.JvmStatCollector;

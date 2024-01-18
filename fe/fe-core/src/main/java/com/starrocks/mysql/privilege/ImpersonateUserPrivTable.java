@@ -15,7 +15,7 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.sql.ast.UserIdentity;
 
 import java.io.DataOutput;

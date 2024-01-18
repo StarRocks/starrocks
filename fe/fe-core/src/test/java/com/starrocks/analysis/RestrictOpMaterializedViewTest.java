@@ -16,8 +16,6 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.DeleteMgr;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;

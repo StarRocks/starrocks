@@ -19,13 +19,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.common.proc.BaseProcResult;
 import org.apache.commons.lang.StringUtils;
 
 import java.util.Map;
 
-import static com.starrocks.common.util.Util.validateMetastoreUris;
+import static com.starrocks.common.util.Utils.validateMetastoreUris;
 
 /**
  * Hive resource for external hudi table

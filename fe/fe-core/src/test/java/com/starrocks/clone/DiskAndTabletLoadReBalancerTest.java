@@ -36,7 +36,7 @@ import com.starrocks.catalog.Replica.ReplicaState;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.clone.DiskAndTabletLoadReBalancer.BackendBalanceState;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;

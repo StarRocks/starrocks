@@ -19,7 +19,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
-import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.exception.MaterializedViewExceptions;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;

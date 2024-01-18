@@ -37,7 +37,7 @@ package com.starrocks.persist;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;

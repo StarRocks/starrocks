@@ -15,7 +15,7 @@
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.ConstantOperatorUtils;
 import com.starrocks.sql.optimizer.Utils;

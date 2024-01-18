@@ -16,11 +16,11 @@ package com.starrocks.load.pipe;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.CloseableLock;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.Pair;
+import com.starrocks.common.concurrent.locks.AutoCloseableLock;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
@@ -219,12 +219,12 @@ public class PipeManager {
         return repo;
     }
 
-    protected CloseableLock takeWriteLock() {
-        return CloseableLock.lock(this.lock.writeLock());
+    protected AutoCloseableLock takeWriteLock() {
+        return AutoCloseableLock.lock(this.lock.writeLock());
     }
 
-    protected CloseableLock takeReadLock() {
-        return CloseableLock.lock(this.lock.readLock());
+    protected AutoCloseableLock takeReadLock() {
+        return AutoCloseableLock.lock(this.lock.readLock());
     }
 
     //============================== RAW CRUD ===========================================

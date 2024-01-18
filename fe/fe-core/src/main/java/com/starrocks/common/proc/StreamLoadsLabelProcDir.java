@@ -15,7 +15,7 @@
 
 package com.starrocks.common.proc;
 
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;

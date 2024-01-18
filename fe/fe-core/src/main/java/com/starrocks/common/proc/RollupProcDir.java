@@ -24,7 +24,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 
 import java.util.ArrayList;
 import java.util.List;

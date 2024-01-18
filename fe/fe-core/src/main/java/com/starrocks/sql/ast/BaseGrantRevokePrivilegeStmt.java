@@ -18,11 +18,11 @@ package com.starrocks.sql.ast;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
-import com.starrocks.common.Pair;
+import com.starrocks.authz.authorization.ObjectType;
+import com.starrocks.authz.authorization.PEntryObject;
+import com.starrocks.authz.authorization.PrivilegeType;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.mysql.privilege.PrivBitSet;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PEntryObject;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;

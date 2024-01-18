@@ -34,7 +34,7 @@
 
 package com.starrocks.load.routineload;
 
-import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.error.InternalErrorCode;
 
 public class ErrorReason {
     private InternalErrorCode code;

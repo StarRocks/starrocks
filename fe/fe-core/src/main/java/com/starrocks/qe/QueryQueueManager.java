@@ -14,8 +14,8 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.qe.scheduler.RecoverableException;

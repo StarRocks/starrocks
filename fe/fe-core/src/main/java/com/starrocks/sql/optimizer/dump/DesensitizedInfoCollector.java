@@ -24,7 +24,7 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.IdGenerator;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.JoinRelation;

@@ -14,7 +14,7 @@
 
 package com.starrocks.qe.scheduler;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 
 public class SchedulerException extends UserException {
     public SchedulerException(String msg) {

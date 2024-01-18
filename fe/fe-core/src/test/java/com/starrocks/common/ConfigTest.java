@@ -17,6 +17,9 @@
 
 package com.starrocks.common;
 
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.conf.ConfigBase;
+import com.starrocks.common.exception.DdlException;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;

@@ -17,7 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation.pruner;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.ForeignKeyConstraint;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;

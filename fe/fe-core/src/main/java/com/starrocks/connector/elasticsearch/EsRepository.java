@@ -39,7 +39,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;

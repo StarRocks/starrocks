@@ -18,7 +18,7 @@ package com.starrocks.sql.ast;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.catalog.Resource;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.server.GlobalStateMgr;

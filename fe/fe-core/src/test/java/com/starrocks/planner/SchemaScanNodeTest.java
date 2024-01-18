@@ -19,12 +19,13 @@ import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Frontend;
-import java.util.ArrayList;
-import java.util.List;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class SchemaScanNodeTest {
     @Test

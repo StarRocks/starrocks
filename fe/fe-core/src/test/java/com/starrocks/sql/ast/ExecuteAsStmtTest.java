@@ -15,9 +15,9 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.authz.authentication.AuthenticationMgr;
+import com.starrocks.authz.authorization.AuthorizationMgr;
+import com.starrocks.authz.authorization.PrivilegeException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ExecuteAsExecutor;
 import com.starrocks.server.GlobalStateMgr;

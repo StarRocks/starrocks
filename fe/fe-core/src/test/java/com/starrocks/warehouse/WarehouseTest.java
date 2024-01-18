@@ -15,10 +15,10 @@
 
 package com.starrocks.warehouse;
 
-import com.starrocks.common.DdlException;
+import com.starrocks.cloudnative.warehouse.WarehouseManager;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;
 import org.junit.Assert;

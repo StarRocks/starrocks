@@ -16,7 +16,7 @@
 package com.starrocks.alter;
 
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.OptimizeClause;
 import org.apache.logging.log4j.LogManager;

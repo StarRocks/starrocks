@@ -17,7 +17,7 @@ package com.starrocks.connector;
 import com.starrocks.alter.AlterOperations;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterClause;

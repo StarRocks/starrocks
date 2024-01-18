@@ -17,7 +17,7 @@
 
 package com.starrocks.common.proc;
 
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;

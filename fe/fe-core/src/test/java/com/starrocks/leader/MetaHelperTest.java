@@ -15,8 +15,8 @@
 
 package com.starrocks.leader;
 
-import com.starrocks.common.Config;
-import com.starrocks.common.InvalidMetaDirException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.InvalidMetaDirException;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.After;

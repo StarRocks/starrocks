@@ -15,7 +15,7 @@
 
 package com.starrocks.service;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.util.NetUtils;
 import mockit.Mock;
 import mockit.MockUp;

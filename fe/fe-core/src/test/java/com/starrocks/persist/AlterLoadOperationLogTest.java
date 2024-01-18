@@ -35,7 +35,7 @@
 package com.starrocks.persist;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.sql.ast.LoadStmt;
 import org.junit.Assert;
 import org.junit.Test;

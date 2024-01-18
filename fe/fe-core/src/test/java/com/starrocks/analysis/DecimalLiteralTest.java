@@ -38,8 +38,8 @@ import com.google.common.base.Strings;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.AnalysisException;
 import org.junit.Assert;
 import org.junit.Test;
 

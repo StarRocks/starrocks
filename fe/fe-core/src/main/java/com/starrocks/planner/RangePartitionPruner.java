@@ -46,7 +46,7 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
 import org.apache.logging.log4j.LogManager;

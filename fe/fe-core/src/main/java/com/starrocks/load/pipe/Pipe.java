@@ -21,13 +21,13 @@ import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.CloseableLock;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.LabelAlreadyUsedException;
-import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.concurrent.locks.AutoCloseableLock;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.exception.LabelAlreadyUsedException;
+import com.starrocks.common.exception.UserException;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -310,7 +310,7 @@ public class Pipe implements GsonPostProcessable {
             return;
         }
 
-        try (CloseableLock l = takeWriteLock()) {
+        try (AutoCloseableLock l = takeWriteLock()) {
             long taskId = GlobalStateMgr.getCurrentState().getNextId();
             PipeId pipeId = getPipeId();
             String uniqueName = PipeTaskDesc.genUniqueTaskName(getName(), taskId, 0);
@@ -352,7 +352,7 @@ public class Pipe implements GsonPostProcessable {
      */
     private void finalizeTasks() {
         List<Long> removeTaskId = new ArrayList<>();
-        try (CloseableLock l = takeWriteLock()) {
+        try (AutoCloseableLock l = takeWriteLock()) {
             for (PipeTaskDesc task : runningTasks.values()) {
                 if (task.isFinished() || task.tooManyErrors()) {
                     removeTaskId.add(task.getId());
@@ -407,8 +407,8 @@ public class Pipe implements GsonPostProcessable {
 
     private void changeState(State state, boolean persist) {
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
-        try (CloseableLock l = pm.takeWriteLock();
-                CloseableLock r = this.takeWriteLock()) {
+        try (AutoCloseableLock l = pm.takeWriteLock();
+                AutoCloseableLock r = this.takeWriteLock()) {
             if (this.state.equals(state)) {
                 return;
             }
@@ -423,8 +423,8 @@ public class Pipe implements GsonPostProcessable {
 
     private void persistPipe() {
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
-        try (CloseableLock l = pm.takeWriteLock();
-                CloseableLock r = this.takeWriteLock()) {
+        try (AutoCloseableLock l = pm.takeWriteLock();
+                AutoCloseableLock r = this.takeWriteLock()) {
             pm.updatePipe(this);
         } catch (Throwable e) {
             LOG.error("persist pipe {} state failed: {}", this, e.getMessage(), e);
@@ -496,7 +496,7 @@ public class Pipe implements GsonPostProcessable {
     }
 
     public void suspend() {
-        try (CloseableLock l = takeWriteLock()) {
+        try (AutoCloseableLock l = takeWriteLock()) {
             if (this.state == State.RUNNING) {
                 this.state = State.SUSPEND;
 
@@ -513,7 +513,7 @@ public class Pipe implements GsonPostProcessable {
     }
 
     public void resume() {
-        try (CloseableLock l = takeWriteLock()) {
+        try (AutoCloseableLock l = takeWriteLock()) {
             if (this.state == State.SUSPEND || this.state == State.ERROR) {
                 this.state = State.RUNNING;
                 this.failedTaskExecutionCount = 0;
@@ -549,17 +549,17 @@ public class Pipe implements GsonPostProcessable {
     }
 
     public List<PipeTaskDesc> getRunningTasks() {
-        try (CloseableLock l = takeReadLock()) {
+        try (AutoCloseableLock l = takeReadLock()) {
             return new ArrayList<>(runningTasks.values());
         }
     }
 
-    public CloseableLock takeWriteLock() {
-        return CloseableLock.lock(lock.writeLock());
+    public AutoCloseableLock takeWriteLock() {
+        return AutoCloseableLock.lock(lock.writeLock());
     }
 
-    public CloseableLock takeReadLock() {
-        return CloseableLock.lock(lock.readLock());
+    public AutoCloseableLock takeReadLock() {
+        return AutoCloseableLock.lock(lock.readLock());
     }
 
     public int getFailedTaskExecutionCount() {
@@ -567,7 +567,7 @@ public class Pipe implements GsonPostProcessable {
     }
 
     public State getState() {
-        try (CloseableLock l = takeReadLock()) {
+        try (AutoCloseableLock l = takeReadLock()) {
             return state;
         }
     }

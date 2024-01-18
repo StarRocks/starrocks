@@ -35,7 +35,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.thrift.TBrokerScanRangeParams;
 import mockit.Expectations;

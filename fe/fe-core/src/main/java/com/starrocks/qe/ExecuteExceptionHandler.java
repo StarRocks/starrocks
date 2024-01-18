@@ -16,8 +16,8 @@ package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.ConnectorMetadata;

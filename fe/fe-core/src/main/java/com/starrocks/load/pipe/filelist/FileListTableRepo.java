@@ -15,7 +15,7 @@
 package com.starrocks.load.pipe.filelist;
 
 import com.starrocks.catalog.CatalogUtils;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.util.AutoInferUtil;
 import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.statistic.StatsConstants;

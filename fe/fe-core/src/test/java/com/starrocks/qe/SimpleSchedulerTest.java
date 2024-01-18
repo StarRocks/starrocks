@@ -36,8 +36,8 @@ package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
-import com.starrocks.common.Config;
-import com.starrocks.common.Reference;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.structure.Reference;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;

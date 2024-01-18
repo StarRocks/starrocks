@@ -34,7 +34,7 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.common.Status;
+import com.starrocks.common.structure.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.PFetchDataResult;

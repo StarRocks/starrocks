@@ -18,7 +18,7 @@
 package com.starrocks.analysis;
 
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.io.DataInput;

@@ -49,12 +49,12 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.clone.DynamicPartitionScheduler;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.FeNameFormat;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
@@ -652,9 +652,9 @@ public class DynamicPartitionUtil {
             if (isStartOfWeek()) {
                 return DayOfWeek.of(dayOfWeek).name();
             } else if (isStartOfMonth()) {
-                return Util.ordinal(day);
+                return Utils.ordinal(day);
             } else if (isStartOfYear()) {
-                return Month.of(month) + " " + Util.ordinal(day);
+                return Month.of(month) + " " + Utils.ordinal(day);
             } else {
                 return FeConstants.NULL_STRING;
             }

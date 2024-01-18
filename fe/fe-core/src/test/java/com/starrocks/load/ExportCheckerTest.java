@@ -14,7 +14,7 @@
 
 package com.starrocks.load;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;

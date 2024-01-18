@@ -24,7 +24,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.load.Load;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.OlapTableSink;

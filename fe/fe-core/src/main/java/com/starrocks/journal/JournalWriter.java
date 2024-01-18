@@ -15,9 +15,9 @@
 
 package com.starrocks.journal;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.util.Daemon;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.util.Utils;
 import com.starrocks.metric.MetricRepo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -91,7 +91,7 @@ public class JournalWriter {
                     String msg = "got interrupted exception when trying to write one batch, will exit now.";
                     LOG.error(msg, e);
                     // TODO we should exit gracefully on InterruptedException
-                    Util.stdoutWithTime(msg);
+                    Utils.stdoutWithTime(msg);
                     System.exit(-1);
                 }
             }
@@ -174,7 +174,7 @@ public class JournalWriter {
      */
     protected void abortJournalTask(JournalTask task, String msg) {
         LOG.error(msg);
-        Util.stdoutWithTime(msg);
+        Utils.stdoutWithTime(msg);
         System.exit(-1);
     }
 
@@ -266,7 +266,7 @@ public class JournalWriter {
             } catch (JournalException e) {
                 String msg = String.format("failed to roll journal %d, will exit", nextVisibleJournalId);
                 LOG.error(msg, e);
-                Util.stdoutWithTime(msg);
+                Utils.stdoutWithTime(msg);
                 // TODO exit gracefully
                 System.exit(-1);
             }

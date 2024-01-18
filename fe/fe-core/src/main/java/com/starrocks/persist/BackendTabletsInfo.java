@@ -36,8 +36,8 @@ package com.starrocks.persist;
 
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.structure.Pair;
 
 import java.io.DataInput;
 import java.io.DataOutput;

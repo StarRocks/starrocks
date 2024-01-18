@@ -15,8 +15,8 @@
 package com.starrocks.qe;
 
 import com.google.api.client.util.Lists;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Pair;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
 import com.starrocks.proto.PUpdateFailPointStatusResponse;
 import com.starrocks.rpc.BackendServiceClient;

@@ -15,7 +15,7 @@
 package com.starrocks.load;
 
 import com.starrocks.analysis.TableName;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;

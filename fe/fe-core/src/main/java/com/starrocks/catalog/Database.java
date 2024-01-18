@@ -42,19 +42,19 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
-import com.starrocks.common.UserException;
+import com.starrocks.common.concurrent.locks.QueryableReentrantReadWriteLock;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogUtil;
-import com.starrocks.common.util.Util;
-import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
+import com.starrocks.common.util.Utils;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
@@ -157,7 +157,7 @@ public class Database extends MetaObject implements Writable {
         }
         StringBuilder sb = new StringBuilder();
         sb.append("owner id: ").append(owner.getId()).append(", owner name: ")
-                .append(owner.getName()).append(", owner stack: ").append(Util.dumpThread(owner, 50));
+                .append(owner.getName()).append(", owner stack: ").append(Utils.dumpThread(owner, 50));
         return sb.toString();
     }
 

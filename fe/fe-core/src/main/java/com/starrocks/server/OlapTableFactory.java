@@ -38,17 +38,18 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableIndexes;
 import com.starrocks.catalog.UniqueConstraint;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
+import com.starrocks.cloudnative.DataCacheInfo;
+import com.starrocks.cloudnative.LakeTable;
+import com.starrocks.cloudnative.StorageInfo;
+import com.starrocks.cloudnative.storagevolume.StorageVolumeMgr;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.Pair;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.structure.Pair;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.common.util.Util;
-import com.starrocks.lake.DataCacheInfo;
-import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.StorageInfo;
+import com.starrocks.common.util.Utils;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -498,7 +499,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
-            int schemaHash = Util.schemaHash(schemaVersion, baseSchema, bfColumns, bfFpp);
+            int schemaHash = Utils.schemaHash(schemaVersion, baseSchema, bfColumns, bfFpp);
 
             if (stmt.getSortKeys() != null) {
                 table.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
@@ -527,7 +528,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                         table, baseRollupIndex);
                 short rollupShortKeyColumnCount =
                         GlobalStateMgr.calcShortKeyColumnCount(rollupColumns, alterClause.getProperties());
-                int rollupSchemaHash = Util.schemaHash(schemaVersion, rollupColumns, bfColumns, bfFpp);
+                int rollupSchemaHash = Utils.schemaHash(schemaVersion, rollupColumns, bfColumns, bfFpp);
                 long rollupIndexId = metastore.getNextId();
                 table.setIndexMeta(rollupIndexId, addRollupClause.getRollupName(), rollupColumns, schemaVersion,
                         rollupSchemaHash, rollupShortKeyColumnCount, rollupIndexStorageType, keysType);

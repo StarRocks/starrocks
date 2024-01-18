@@ -53,9 +53,9 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.concurrent.locks.MarkedCountDownLatch;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
@@ -196,7 +196,7 @@ public class RestoreJobTest {
 
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
                 minTimes = 0;
-                result = com.starrocks.common.Status.OK;
+                result = com.starrocks.common.structure.Status.OK;
             }
         };
 
@@ -366,7 +366,7 @@ public class RestoreJobTest {
 
                 systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
                 minTimes = 0;
-                result = com.starrocks.common.Status.OK;
+                result = com.starrocks.common.structure.Status.OK;
             }
         };
 

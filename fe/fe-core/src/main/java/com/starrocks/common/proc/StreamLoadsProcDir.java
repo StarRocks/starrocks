@@ -17,8 +17,8 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.MetaNotFoundException;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;

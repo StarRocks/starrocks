@@ -20,10 +20,10 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.util.Utils;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.sql.parser.NodePosition;
 
@@ -135,7 +135,7 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         }
 
         if (jobProperties.containsKey(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY)) {
-            long desiredConcurrentNum = ((Long) Util.getLongPropertyOrDefault(
+            long desiredConcurrentNum = ((Long) Utils.getLongPropertyOrDefault(
                     jobProperties.get(CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY),
                     -1, CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PRED,
                     CreateRoutineLoadStmt.DESIRED_CONCURRENT_NUMBER_PROPERTY + " should > 0")).intValue();
@@ -144,7 +144,7 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         }
 
         if (jobProperties.containsKey(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY)) {
-            long maxErrorNum = Util.getLongPropertyOrDefault(
+            long maxErrorNum = Utils.getLongPropertyOrDefault(
                     jobProperties.get(CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY),
                     -1, CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PRED,
                     CreateRoutineLoadStmt.MAX_ERROR_NUMBER_PROPERTY + " should >= 0");
@@ -236,7 +236,7 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         }
 
         if (jobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY)) {
-            long maxBatchIntervalS = Util.getLongPropertyOrDefault(
+            long maxBatchIntervalS = Utils.getLongPropertyOrDefault(
                     jobProperties.get(CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY),
                     -1, CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_PRED,
                     CreateRoutineLoadStmt.MAX_BATCH_INTERVAL_SEC_PROPERTY + " should >= 5");
@@ -245,7 +245,7 @@ public class AlterRoutineLoadStmt extends DdlStmt {
         }
 
         if (jobProperties.containsKey(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY)) {
-            long maxBatchRows = Util.getLongPropertyOrDefault(
+            long maxBatchRows = Utils.getLongPropertyOrDefault(
                     jobProperties.get(CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY),
                     -1, CreateRoutineLoadStmt.MAX_BATCH_ROWS_PRED,
                     CreateRoutineLoadStmt.MAX_BATCH_ROWS_PROPERTY + " should > 200000");

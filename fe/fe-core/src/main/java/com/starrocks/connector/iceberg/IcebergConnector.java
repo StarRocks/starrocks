@@ -15,7 +15,7 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.base.Strings;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;

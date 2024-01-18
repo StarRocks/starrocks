@@ -35,9 +35,9 @@
 package com.starrocks.system;
 
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.common.GenericPool;
-import com.starrocks.common.Pair;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.concurrent.GenericPool;
+import com.starrocks.common.structure.Pair;
+import com.starrocks.common.util.Utils;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -92,7 +92,7 @@ public class HeartbeatMgrTest {
 
     @Test
     public void testFrontendHbHandler() {
-        new MockUp<Util>() {
+        new MockUp<Utils>() {
             @Mock
             public String getResultForUrl(String urlStr, String encodedAuthInfo, int connectTimeoutMs,
                                           int readTimeoutMs) {

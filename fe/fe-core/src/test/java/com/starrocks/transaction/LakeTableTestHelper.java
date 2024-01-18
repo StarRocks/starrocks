@@ -22,9 +22,9 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.LakeTablet;
+import com.starrocks.cloudnative.LakeTable;
+import com.starrocks.cloudnative.LakeTablet;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 

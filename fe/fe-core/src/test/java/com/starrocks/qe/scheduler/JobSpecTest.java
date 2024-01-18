@@ -19,7 +19,7 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ResourceGroupMgr;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.load.loadv2.BulkLoadJob;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;

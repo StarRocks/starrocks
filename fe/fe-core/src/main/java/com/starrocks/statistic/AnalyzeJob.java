@@ -14,7 +14,7 @@
 
 package com.starrocks.statistic;
 
-import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.exception.MetaNotFoundException;
 import com.starrocks.qe.ConnectContext;
 
 import java.time.LocalDateTime;

@@ -35,7 +35,7 @@
 package com.starrocks.common.util;
 
 import com.google.common.base.Strings;
-import com.starrocks.common.Pair;
+import com.starrocks.common.structure.Pair;
 import org.apache.commons.validator.routines.InetAddressValidator;
 
 import java.io.IOException;

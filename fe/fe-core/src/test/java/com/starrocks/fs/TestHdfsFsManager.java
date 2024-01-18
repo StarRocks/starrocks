@@ -18,7 +18,7 @@
 package com.starrocks.fs;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.fs.hdfs.HdfsFs;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.thrift.THdfsProperties;

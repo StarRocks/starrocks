@@ -19,7 +19,7 @@ import com.google.common.collect.BoundType;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;

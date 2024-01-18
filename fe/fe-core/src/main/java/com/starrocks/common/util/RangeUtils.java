@@ -22,7 +22,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.RangeMap;
 import com.google.common.collect.TreeRangeMap;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 
 import java.io.DataInput;
 import java.io.DataOutput;

@@ -14,8 +14,11 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
+import com.starrocks.cloudnative.warehouse.LocalWarehouse;
+import com.starrocks.cloudnative.warehouse.Warehouse;
+import com.starrocks.cloudnative.warehouse.WarehouseManager;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
@@ -25,15 +28,12 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.TaskAnalyzer;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.LocalWarehouse;
-import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;

@@ -34,8 +34,8 @@
 
 package com.starrocks.load.loadv2;
 
-import com.starrocks.common.LoadException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.LoadException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.FailMsg;

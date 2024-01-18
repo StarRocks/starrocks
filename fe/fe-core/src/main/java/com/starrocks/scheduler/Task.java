@@ -16,7 +16,7 @@
 package com.starrocks.scheduler;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authz.authentication.AuthenticationMgr;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;

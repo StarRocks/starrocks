@@ -36,7 +36,7 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;

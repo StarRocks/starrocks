@@ -48,7 +48,7 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.IdGenerator;
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TExplainLevel;

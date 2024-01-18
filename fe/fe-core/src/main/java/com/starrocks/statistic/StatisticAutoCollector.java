@@ -15,8 +15,8 @@
 package com.starrocks.statistic;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;

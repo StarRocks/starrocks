@@ -32,7 +32,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.TreeNode;
+import com.starrocks.common.structure.TreeNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.FieldReference;

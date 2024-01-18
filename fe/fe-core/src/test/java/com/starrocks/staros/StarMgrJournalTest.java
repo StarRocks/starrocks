@@ -16,6 +16,7 @@
 package com.starrocks.staros;
 
 import com.staros.journal.Journal;
+import com.starrocks.cloudnative.staros.StarMgrJournal;
 import com.starrocks.persist.EditLog;
 import mockit.Mock;
 import mockit.MockUp;

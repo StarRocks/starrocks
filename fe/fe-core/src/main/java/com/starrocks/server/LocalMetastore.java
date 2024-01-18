@@ -56,6 +56,9 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.authz.authorization.AccessDeniedException;
+import com.starrocks.authz.authorization.ObjectType;
+import com.starrocks.authz.authorization.PrivilegeType;
 import com.starrocks.binlog.BinlogConfig;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.CatalogRecycleBin;
@@ -104,39 +107,41 @@ import com.starrocks.catalog.UniqueConstraint;
 import com.starrocks.catalog.View;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.sys.SysDb;
+import com.starrocks.cloudnative.DataCacheInfo;
+import com.starrocks.cloudnative.LakeMaterializedView;
+import com.starrocks.cloudnative.LakeTablet;
+import com.starrocks.cloudnative.StorageInfo;
+import com.starrocks.cloudnative.storagevolume.StorageVolumeMgr;
+import com.starrocks.cloudnative.warehouse.Warehouse;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AlreadyExistsException;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
-import com.starrocks.common.InvalidOlapTableStateException;
-import com.starrocks.common.MaterializedViewExceptions;
-import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.NotImplementedException;
-import com.starrocks.common.Pair;
-import com.starrocks.common.Status;
-import com.starrocks.common.TimeoutException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.concurrent.locks.CountingLatch;
+import com.starrocks.common.concurrent.locks.LockType;
+import com.starrocks.common.concurrent.locks.Locker;
+import com.starrocks.common.concurrent.locks.MarkedCountDownLatch;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.error.ErrorCode;
+import com.starrocks.common.error.ErrorReport;
+import com.starrocks.common.exception.AlreadyExistsException;
+import com.starrocks.common.exception.AnalysisException;
+import com.starrocks.common.exception.DdlException;
+import com.starrocks.common.exception.InvalidOlapTableStateException;
+import com.starrocks.common.exception.MaterializedViewExceptions;
+import com.starrocks.common.exception.MetaNotFoundException;
+import com.starrocks.common.exception.NotImplementedException;
+import com.starrocks.common.exception.TimeoutException;
+import com.starrocks.common.exception.UserException;
+import com.starrocks.common.structure.Pair;
+import com.starrocks.common.structure.Status;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.Util;
-import com.starrocks.common.util.concurrent.CountingLatch;
-import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.Utils;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.lake.DataCacheInfo;
-import com.starrocks.lake.LakeMaterializedView;
-import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StorageInfo;
 import com.starrocks.load.pipe.PipeManager;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.AddPartitionsInfoV2;
 import com.starrocks.persist.AddSubPartitionsInfoV2;
 import com.starrocks.persist.AutoIncrementInfo;
@@ -171,9 +176,6 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
@@ -237,7 +239,6 @@ import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
-import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -252,7 +253,6 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
-import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
@@ -317,7 +317,7 @@ public class LocalMetastore implements ConnectorMetadata {
         stateMgr.unlock();
     }
 
-    long getNextId() {
+    public long getNextId() {
         return stateMgr.getNextId();
     }
 
@@ -2199,7 +2199,7 @@ public class LocalMetastore implements ConnectorMetadata {
     /*
      * generate and check columns' order and key's existence
      */
-    void validateColumns(List<Column> columns) throws DdlException {
+    public void validateColumns(List<Column> columns) throws DdlException {
         if (columns.isEmpty()) {
             ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_MUST_HAVE_COLUMNS);
         }
@@ -3143,7 +3143,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 properties.remove(PropertyAnalyzer.PROPERTY_MV_RANDOMIZE_START);
             }
             if (asyncRefreshSchemeDesc.isDefineStartTime() || randomizeStart == -1) {
-                asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
+                asyncRefreshContext.setStartTime(
+                        com.starrocks.sql.optimizer.Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
             } else if (asyncRefreshSchemeDesc.getIntervalLiteral() != null) {
                 // randomize the start time if not specified manually, to avoid refresh conflicts
                 // default random interval is min(300s, INTERVAL/2)
@@ -3153,7 +3154,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 TimeUnit timeUnit =
                         TimeUtils.convertUnitIdentifierToTimeUnit(interval.getUnitIdentifier().getDescription());
                 long intervalSeconds = TimeUtils.convertTimeUnitValueToSecond(period, timeUnit);
-                long currentTimeSecond = Utils.getLongFromDateTime(LocalDateTime.now());
+                long currentTimeSecond = com.starrocks.sql.optimizer.Utils.getLongFromDateTime(LocalDateTime.now());
                 long randomInterval = randomizeStart == 0 ? Math.min(300, intervalSeconds / 2) : randomizeStart;
                 long random = ThreadLocalRandom.current().nextLong(randomInterval);
                 long randomizedStart = currentTimeSecond + random;
@@ -3254,7 +3255,7 @@ public class LocalMetastore implements ConnectorMetadata {
         materializedView.setQueryOutputIndices(stmt.getQueryOutputIndices());
         // set base index meta
         int schemaVersion = 0;
-        int schemaHash = Util.schemaHash(schemaVersion, baseSchema, null, 0d);
+        int schemaHash = Utils.schemaHash(schemaVersion, baseSchema, null, 0d);
         short shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(baseSchema, null);
         TStorageType baseIndexStorageType = TStorageType.COLUMN;
         materializedView.setIndexMeta(baseIndexId, mvName, baseSchema, schemaVersion, schemaHash,

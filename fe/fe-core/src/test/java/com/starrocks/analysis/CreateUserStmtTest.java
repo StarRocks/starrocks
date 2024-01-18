@@ -34,8 +34,8 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorReportException;
+import com.starrocks.common.error.ErrorReportException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;

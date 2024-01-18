@@ -14,8 +14,8 @@
 
 package com.starrocks.sql.optimizer.dump;
 
-import com.starrocks.common.Id;
 import com.starrocks.common.IdGenerator;
+import com.starrocks.common.structure.Id;
 
 public class DesensitizedId extends Id<DesensitizedId> {
 

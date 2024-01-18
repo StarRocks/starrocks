@@ -17,7 +17,6 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.common.util.UUIDUtil;
-
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.CatalogMgr;

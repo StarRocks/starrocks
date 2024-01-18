@@ -14,7 +14,7 @@
 
 package com.starrocks.qe.scheduler.plan;
 
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.qe.scheduler.SchedulerConnectorTestBase;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.Before;

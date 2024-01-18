@@ -16,7 +16,7 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.catalog.Column;
-import com.starrocks.common.DdlException;
+import com.starrocks.common.exception.DdlException;
 import com.starrocks.connector.ConnectorAlterTableExecutor;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.qe.ConnectContext;

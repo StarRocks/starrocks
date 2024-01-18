@@ -15,7 +15,7 @@
 package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.HdfsEnvironment;

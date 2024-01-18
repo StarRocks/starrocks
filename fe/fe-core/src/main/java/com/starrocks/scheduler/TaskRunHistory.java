@@ -16,7 +16,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 
 import java.util.ArrayList;

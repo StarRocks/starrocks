@@ -47,7 +47,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang.NotImplementedException;
@@ -379,7 +379,7 @@ public abstract class ConnectorPartitionTraits {
             // TODO: check partition type
             try {
                 return ((OlapTable) table).getPartitionInfo().getPartitionColumns();
-            } catch (com.starrocks.common.NotImplementedException e) {
+            } catch (com.starrocks.common.exception.NotImplementedException e) {
                 return null;
             }
         }

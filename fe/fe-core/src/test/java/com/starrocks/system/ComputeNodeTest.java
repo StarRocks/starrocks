@@ -15,7 +15,7 @@
 package com.starrocks.system;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 import mockit.Expectations;

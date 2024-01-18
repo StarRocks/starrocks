@@ -19,9 +19,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.Config;
-import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.common.util.Util;
+import com.starrocks.common.conf.Config;
+import com.starrocks.common.exception.MetaNotFoundException;
+import com.starrocks.common.util.Utils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergAwsClientFactory;
 import com.starrocks.connector.iceberg.IcebergCatalog;
@@ -78,7 +78,7 @@ public class IcebergHiveCatalog implements IcebergCatalog {
         if (metastoreURI == null) {
             metastoreURI = properties.get(ICEBERG_METASTORE_URIS);
         }
-        Util.validateMetastoreUris(metastoreURI);
+        Utils.validateMetastoreUris(metastoreURI);
 
         copiedProperties.put(CatalogProperties.URI, metastoreURI);
         copiedProperties.put(CatalogProperties.FILE_IO_IMPL, IcebergCachingFileIO.class.getName());

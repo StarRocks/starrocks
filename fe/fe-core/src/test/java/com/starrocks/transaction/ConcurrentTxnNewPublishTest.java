@@ -15,7 +15,7 @@
 
 package com.starrocks.transaction;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 
 import java.sql.SQLException;
 

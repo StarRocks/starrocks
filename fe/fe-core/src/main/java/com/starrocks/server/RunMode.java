@@ -14,7 +14,7 @@
 
 package com.starrocks.server;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.conf.Config;
 import com.starrocks.thrift.TRunMode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

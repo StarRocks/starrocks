@@ -36,9 +36,9 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.MaterializedIndex.IndexState;
+import com.starrocks.common.concurrent.locks.LockType;
+import com.starrocks.common.concurrent.locks.Locker;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;

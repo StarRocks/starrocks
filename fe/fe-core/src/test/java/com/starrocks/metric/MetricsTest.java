@@ -17,8 +17,8 @@
 
 package com.starrocks.metric;
 
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.exception.AnalysisException;
 import com.starrocks.common.proc.JvmMonitorProcDir;
 import com.starrocks.monitor.jvm.JvmStatCollector;
 import com.starrocks.monitor.jvm.JvmStats;

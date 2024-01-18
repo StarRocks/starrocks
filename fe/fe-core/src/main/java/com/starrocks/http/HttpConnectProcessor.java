@@ -33,7 +33,7 @@
 // under the License.
 package com.starrocks.http;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.exception.UserException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
