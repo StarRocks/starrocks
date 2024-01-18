@@ -56,12 +56,12 @@ public class ArrayType extends Type {
     @Override
     public String toSql(int depth) {
         if (depth >= MAX_NESTING_DEPTH) {
-            return "array<...>";
+            return "ARRAY<...>";
         }
         if (itemType.isDecimalOfAnyVersion()) {
-            return String.format("array<%s>", itemType);
+            return String.format("ARRAY<%s>", itemType);
         } else {
-            return String.format("array<%s>", itemType.toSql(depth + 1));
+            return String.format("ARRAY<%s>", itemType.toSql(depth + 1));
         }
     }
 
