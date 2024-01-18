@@ -1713,6 +1713,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_COMPACTION, _tablet.tablet_id());
     int64_t input_rowsets_size = 0;
     int64_t input_row_num = 0;
+    size_t num_segments = 0;
     auto info = (*pinfo).get();
     vector<RowsetSharedPtr> input_rowsets(info->inputs.size());
     {
@@ -1730,13 +1731,14 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
                 input_rowsets[i] = itr->second;
                 input_rowsets_size += input_rowsets[i]->data_disk_size();
                 input_row_num += input_rowsets[i]->num_rows();
+                num_segments += input_rowsets[i]->num_segments();
             }
         }
     }
 
     auto cur_tablet_schema = CompactionUtils::rowset_with_max_schema_version(input_rowsets)->schema();
     CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
-            cur_tablet_schema->num_columns(), config::vertical_compaction_max_columns_per_group, input_rowsets.size());
+            cur_tablet_schema->num_columns(), config::vertical_compaction_max_columns_per_group, num_segments);
 
     RowsetWriterContext context;
     context.rowset_id = StorageEngine::instance()->next_rowset_id();
@@ -1762,6 +1764,9 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
     }
     MergeConfig cfg;
     cfg.chunk_size = config::vector_chunk_size;
+    if (_tablet.is_column_with_row_store() && config::update_compaction_chunk_size_for_row_store > 0) {
+        cfg.chunk_size = config::update_compaction_chunk_size_for_row_store;
+    }
     cfg.algorithm = algorithm;
 
     // compaction task maybe failed if tablet is deleted
