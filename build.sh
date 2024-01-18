@@ -26,6 +26,7 @@
 #    sh build.sh  --fe --clean                        clean and build Frontend and Spark Dpp application
 #    sh build.sh  --fe --be --clean                   clean and build Frontend, Spark Dpp application and Backend
 #    sh build.sh  --spark-dpp                         build Spark DPP application alone
+#    sh build.sh  --hive-udf                          build Hive UDF alone
 #    BUILD_TYPE=build_type ./build.sh --be            build Backend is different mode (build_type could be Release, Debug, or Asan. Default value is Release. To build Backend in Debug mode, you can execute: BUILD_TYPE=Debug ./build.sh --be)
 #
 # You need to make sure all thirdparty libraries have been
@@ -81,6 +82,7 @@ Usage: $0 <options>
      --be               build Backend
      --fe               build Frontend and Spark Dpp application
      --spark-dpp        build Spark DPP application
+     --hive-udf         build Hive UDF
      --clean            clean and build target
      --use-staros       build Backend with staros
      --with-gcov        build Backend with gcov, has an impact on performance
@@ -94,6 +96,7 @@ Usage: $0 <options>
     $0 --fe --clean                              clean and build Frontend and Spark Dpp application
     $0 --fe --be --clean                         clean and build Frontend, Spark Dpp application and Backend
     $0 --spark-dpp                               build Spark DPP application alone
+    $0 --hive-udf                                build Hive UDF
     BUILD_TYPE=build_type ./build.sh --be        build Backend is different mode (build_type could be Release, Debug, or Asan. Default value is Release. To build Backend in Debug mode, you can execute: BUILD_TYPE=Debug ./build.sh --be)
   "
   exit 1
@@ -106,6 +109,7 @@ OPTS=$(getopt \
   -l 'be' \
   -l 'fe' \
   -l 'spark-dpp' \
+  -l 'hive-udf' \
   -l 'clean' \
   -l 'with-gcov' \
   -l 'with-bench' \
@@ -124,6 +128,7 @@ eval set -- "$OPTS"
 BUILD_BE=
 BUILD_FE=
 BUILD_SPARK_DPP=
+BUILD_HIVE_UDF=
 CLEAN=
 RUN_UT=
 WITH_GCOV=OFF
@@ -185,6 +190,7 @@ if [ $# == 1 ] ; then
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
+    BUILD_HIVE_UDF=1
     CLEAN=0
     RUN_UT=0
 elif [[ $OPTS =~ "-j" ]] && [ $# == 3 ]; then
@@ -192,6 +198,7 @@ elif [[ $OPTS =~ "-j" ]] && [ $# == 3 ]; then
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
+    BUILD_HIVE_UDF=1
     CLEAN=0
     RUN_UT=0
     PARALLEL=$2
@@ -199,6 +206,7 @@ else
     BUILD_BE=0
     BUILD_FE=0
     BUILD_SPARK_DPP=0
+    BUILD_HIVE_UDF=0
     CLEAN=0
     RUN_UT=0
     while true; do
@@ -206,6 +214,7 @@ else
             --be) BUILD_BE=1 ; shift ;;
             --fe) BUILD_FE=1 ; shift ;;
             --spark-dpp) BUILD_SPARK_DPP=1 ; shift ;;
+            --hive-udf) BUILD_HIVE_UDF=1 ; shift ;;
             --clean) CLEAN=1 ; shift ;;
             --ut) RUN_UT=1   ; shift ;;
             --with-gcov) WITH_GCOV=ON; shift ;;
@@ -226,8 +235,8 @@ if [[ ${HELP} -eq 1 ]]; then
     exit
 fi
 
-if [ ${CLEAN} -eq 1 -a ${BUILD_BE} -eq 0 -a ${BUILD_FE} -eq 0 -a ${BUILD_SPARK_DPP} -eq 0 ]; then
-    echo "--clean can not be specified without --fe or --be or --spark-dpp"
+if [ ${CLEAN} -eq 1 ] && [ ${BUILD_BE} -eq 0 ] && [ ${BUILD_FE} -eq 0 ] && [ ${BUILD_SPARK_DPP} -eq 0 ] && [ ${BUILD_HIVE_UDF} -eq 0 ]; then
+    echo "--clean can not be specified without --fe or --be or --spark-dpp or --hive-udf"
     exit 1
 fi
 
@@ -236,6 +245,7 @@ echo "Get params:
     BE_CMAKE_TYPE       -- $BUILD_TYPE
     BUILD_FE            -- $BUILD_FE
     BUILD_SPARK_DPP     -- $BUILD_SPARK_DPP
+    BUILD_HIVE_UDF      -- $BUILD_HIVE_UDF
     CLEAN               -- $CLEAN
     RUN_UT              -- $RUN_UT
     WITH_GCOV           -- $WITH_GCOV
@@ -356,12 +366,15 @@ cd ${STARROCKS_HOME}
 
 # Assesmble FE modules
 FE_MODULES=
-if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
+if [ ${BUILD_FE} -eq 1 ] || [ ${BUILD_SPARK_DPP} -eq 1 ] || [ ${BUILD_HIVE_UDF} -eq 1 ]; then
     if [ ${BUILD_SPARK_DPP} -eq 1 ]; then
         FE_MODULES="fe-common,spark-dpp"
     fi
+    if [ ${BUILD_HIVE_UDF} -eq 1 ]; then
+        FE_MODULES="fe-common,hive-udf"
+    fi
     if [ ${BUILD_FE} -eq 1 ]; then
-        FE_MODULES="fe-common,spark-dpp,fe-core"
+        FE_MODULES="hive-udf,fe-common,spark-dpp,fe-core"
     fi
 fi
 
@@ -386,7 +399,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
     if [ ${BUILD_FE} -eq 1 ]; then
         install -d ${STARROCKS_OUTPUT}/fe/bin ${STARROCKS_OUTPUT}/fe/conf/ \
                    ${STARROCKS_OUTPUT}/fe/webroot/ ${STARROCKS_OUTPUT}/fe/lib/ \
-                   ${STARROCKS_OUTPUT}/fe/spark-dpp/
+                   ${STARROCKS_OUTPUT}/fe/spark-dpp/ ${STARROCKS_OUTPUT}/fe/hive-udf
 
         cp -r -p ${STARROCKS_HOME}/bin/*_fe.sh ${STARROCKS_OUTPUT}/fe/bin/
         cp -r -p ${STARROCKS_HOME}/bin/show_fe_version.sh ${STARROCKS_OUTPUT}/fe/bin/
@@ -398,6 +411,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/fe/fe-core/target/starrocks-fe.jar ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_HOME}/webroot/* ${STARROCKS_OUTPUT}/fe/webroot/
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
+        cp -r -p ${STARROCKS_HOME}/fe/hive-udf/target/hive-udf-1.0.0.jar ${STARROCKS_OUTPUT}/fe/hive-udf/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/jindosdk/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/broker_thirdparty_jars/* ${STARROCKS_OUTPUT}/fe/lib/
         cp -r -p ${STARROCKS_THIRDPARTY}/installed/async-profiler/* ${STARROCKS_OUTPUT}/fe/bin/
@@ -406,6 +420,7 @@ if [ ${BUILD_FE} -eq 1 -o ${BUILD_SPARK_DPP} -eq 1 ]; then
         install -d ${STARROCKS_OUTPUT}/fe/spark-dpp/
         rm -rf ${STARROCKS_OUTPUT}/fe/spark-dpp/*
         cp -r -p ${STARROCKS_HOME}/fe/spark-dpp/target/spark-dpp-*-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/fe/spark-dpp/
+        cp -r -p ${STARROCKS_HOME}/fe/hive-udf/target/hive-udf-1.0.0.jar ${STARROCKS_HOME}/fe/hive-udf/
         MSG="${MSG} √ ${MSG_DPP}"
     fi
 fi
