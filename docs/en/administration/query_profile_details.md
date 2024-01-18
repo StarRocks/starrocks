@@ -162,6 +162,10 @@ Description: Cumulative allocated memory for all FragmentInstances under this Fr
 
 Description: Cumulative deallocated memory for all FragmentInstances under this Fragment.
 
+##### InstancePeakMemoryUsage
+
+Description: Maximum peak memory across all FragmentInstances under this Fragment.
+
 ### Pipeline Metrics
 
 The relationship between core metrics is illustrated in the following diagram:
@@ -423,11 +427,16 @@ To facilitate a better understanding of the various metrics within the Scan Oper
 
 - Description: Execution time of IO tasks.
 - Level: Primary metric
-- Sub-metrics: CreateSegmentIter, GetDelVec, GetDeltaColumnGroup, GetRowsets, IOTime, LateMaterialize, ReadPKIndex, SegmentInit, SegmentRead
+- Sub-metrics: CreateSegmentIter, DictDecode, GetDelVec, GetDeltaColumnGroup, GetRowsets, IOTime, LateMaterialize, ReadPKIndex, SegmentInit, SegmentRead
 
 ##### CreateSegmentIter
 
 - Description: Time spent creating the Segment Iterator.
+- Level: Secondary metric
+
+##### DictDecode
+
+- Description: Time spent decoding dictionary used for low cardinality optimization.
 - Level: Secondary metric
 
 ##### GetDelVec
