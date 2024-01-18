@@ -4,7 +4,7 @@ displayed_sidebar: "English"
 
 # Table overview
 
-import replicanum from '../assets/commonMarkdown/replicanum.md'
+import Replicanum from '../assets/commonMarkdown/replicanum.md'
 
 Tables are units of data storage. Understanding the table structure in StarRocks and how to design an efficient table structure helps optimize data organization and enhance query efficiency. Also, compared to traditional databases, StarRocks can store complex semi-structured data such as JSON, ARRAY, in a columnar manner to improve query performance.
 
@@ -35,7 +35,7 @@ DUPLICATE KEY(uid, name);
 
 The above CREATE TABLE example creates a Duplicate Key table. No constraint is added to columns in this type of table, so duplicate data rows can exist in the table. The first two columns of the Duplicate Key table are specified as sort columns to form the sort key. Data is stored after being sorted based on the sort key, which can accelerate indexing during queries.
 
-<replicanum />
+<Replicanum />
 
 Execute [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) to view the table schema.
 
