@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-删除 Pipe，并删除相关的作业和元数据。该操作不会删除已经导入的数据。
+删除 Pipe，并删除相关的作业和元数据。该操作不会删除已经导入的数据。该命令自 3.2 版本起支持。
 
 ## 语法
 
@@ -32,3 +32,11 @@ Pipe 的名称。
 USE mydatabase;
 DROP PIPE user_behavior_replica;
 ```
+
+## 相关文档
+
+- [CREATE PIPE](../data-manipulation/CREATE_PIPE.md)
+- [ALTER PIPE](../data-manipulation/CREATE_PIPE.md)
+- [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
+- [SUSPEND or RESUME PIPE](../data-manipulation/SUSPEND_or_RESUME_PIPE.md)
+- [RETRY FILE](../data-manipulation/RETRY_FILE.md)
