@@ -784,11 +784,13 @@ Status datafile_gc(std::string_view root_location, std::string_view audit_file_p
     LOG(INFO) << "Total orphan data files: " << orphan_data_files.size();
 
     std::vector<std::string> files_to_delete;
+    std::set<int64_t> transaction_ids;
     int64_t bytes_to_delete = 0;
     int64_t progress = 0;
     const auto segment_root_location = join_path(root_location, kSegmentDirectoryName);
     for (const auto& [name, entry] : orphan_data_files) {
         files_to_delete.push_back(join_path(segment_root_location, name));
+        transaction_ids.insert(extract_txn_id_prefix(name).value_or(0));
         bytes_to_delete += entry.size.value_or(0);
         auto time = entry.mtime.value_or(0);
         auto outtime = std::put_time(std::localtime(&time), "%Y-%m-%d %H:%M:%S");
@@ -802,6 +804,23 @@ Status datafile_gc(std::string_view root_location, std::string_view audit_file_p
     audit_ostream << "Total orphan data files: " << orphan_data_files.size() << ", total size: " << bytes_to_delete
                   << std::endl;
     LOG(INFO) << "Total orphan data files: " << orphan_data_files.size() << ", total size: " << bytes_to_delete;
+
+    audit_ostream << "Total transaction ids: " << transaction_ids.size() << std::endl;
+    LOG(INFO) << "Total transaction ids: " << transaction_ids.size();
+
+    progress = 0;
+    for (auto txn_id : transaction_ids) {
+        ++progress;
+        audit_ostream << '(' << progress << '/' << transaction_ids.size() << ") "
+                      << "transaction id: " << txn_id << std::endl;
+        LOG(INFO) << '(' << progress << '/' << transaction_ids.size() << ") "
+                  << "transaction id: " << txn_id;
+    }
+
+    audit_ostream << "Total orphan data files: " << orphan_data_files.size() << ", total size: " << bytes_to_delete
+                  << ", total transaction ids: " << transaction_ids.size() << std::endl;
+    LOG(INFO) << "Total orphan data files: " << orphan_data_files.size() << ", total size: " << bytes_to_delete
+              << ", total transaction ids: " << transaction_ids.size();
 
     audit_ostream.close();
 
