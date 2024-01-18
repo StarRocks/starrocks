@@ -43,6 +43,7 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "fs/fs_posix.h"
+#include "fs/fs_s3.h"
 #include "fs/fs_util.h"
 #include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -105,8 +106,9 @@ DEFINE_string(tablet_file, "", "file to save a set of tablets");
 DEFINE_string(file, "", "segment file path");
 DEFINE_int32(column_index, -1, "column index");
 DEFINE_int32(key_column_count, 0, "key column count");
-DEFINE_int64(expired_sec, 0, "expired seconds");
+DEFINE_int64(expired_sec, 86400, "expired seconds");
 DEFINE_string(conf_file, "", "conf file path");
+DEFINE_string(audit_file, "", "audit file path");
 
 std::string get_usage(const std::string& progname) {
     std::stringstream ss;
@@ -145,7 +147,8 @@ std::string get_usage(const std::string& progname) {
     ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool.sh --operation=print_lake_metadata\n";
     ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool.sh --operation=print_lake_txn_log\n";
     ss << "cat SCHEMA_000000000004204C | ./meta_tool.sh --operation=print_lake_schema\n";
-    ss << "./meta_tool.sh --operation=lake_datafile_gc --root_path=path --expired_sec=expiredsec --conf_file=path\n";
+    ss << "./meta_tool.sh --operation=lake_datafile_gc --root_path=path --expired_sec=expiredsec --conf_file=path "
+          "--audit_file=path\n";
     return ss.str();
 }
 
@@ -1124,10 +1127,12 @@ int meta_tool_main(int argc, char** argv) {
         }
         Aws::SDKOptions options;
         Aws::InitAPI(options);
-        auto status = starrocks::lake::datafile_gc(FLAGS_root_path, FLAGS_expired_sec);
+        auto status = starrocks::lake::datafile_gc(FLAGS_root_path, FLAGS_audit_file, FLAGS_expired_sec);
         if (!status.ok()) {
-            std::cout << status << '\n';
+            std::cout << status << std::endl;
         }
+        starrocks::close_s3_clients();
+        Aws::ShutdownAPI(options);
     } else {
         // operations that need root path should be written here
         std::set<std::string> valid_operations = {"get_meta",
