@@ -2,10 +2,11 @@
 displayed_sidebar: "Chinese"
 ---
 
-# 表概览 
+# 表概览
+
+import replicanum from '../assets/commonMarkdown/replicanum.md'
 
 表是数据存储单元。理解 StarRocks 中的表结构，以及如何设计合理的表结构，有利于优化数据组织，提高查询效率。相比于传统的数据库，StarRocks 会以列的方式存储 JSON、ARRAY 等复杂的半结构化数据，保证高效查询。
-
 本文由浅入深介绍表结构。
 
 ## 表结构入门
@@ -35,11 +36,7 @@ DUPLICATE KEY(uid, name);
 
 上述建表示例创建了明细表，该表中数据不具有任何约束，相同的数据行可能会重复存在。并且指定明细表中前两列为排序列，构成排序键。数据按排序键排序后存储，有助于查询时的快速索引。 
 
-:::note
-
-如果测试环境中集群仅包含一个 BE，可以在 `PROPERTIES` 中将副本数设置为 `1`，即 `PROPERTIES( "replicaton_num" = "1" )`。默认副本数为 `3`，也是生产集群推荐的副本数。如果您需要使用默认设置，也可以不配置 PROPERTIES。
-
-:::
+<replicanum />
 
 执行 [DESCRIBE](../sql-reference/sql-statements/Utility/DESCRIBE.md) 查看表结构。
 
