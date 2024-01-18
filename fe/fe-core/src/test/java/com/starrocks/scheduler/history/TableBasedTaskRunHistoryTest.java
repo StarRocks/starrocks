@@ -132,7 +132,14 @@ class TableBasedTaskRunHistoryTest {
         keeper.setDatabaseExisted(true);
         new Expectations() {{
             repo.executeDDL(
-                    "CREATE TABLE task_run_history (id BIGINT NOT NULL auto_increment, task_id bigint NOT NULL, task_run_id string NOT NULL, task_name string NOT NULL, create_time datetime NOT NULL, finish_time datetime NOT NULL, expire_time datetime NOT NULL, history_content_json JSON NOT NULL)PRIMARY KEY (task_id, task_run_id) PARTITION BY RANGE(create_time) DISTRIBUTED BY HASH(id) BUCKETS 8 PROPERTIES('replication_num' = '1','dynamic_partition.time_unit' = 'DAY', 'dynamic_partition.start' = '-7', 'dynamic_partition.end' = '3', 'dynamic_partition.prefix' = 'p' ) ");
+                    "CREATE TABLE IF NOT EXISTS _statistics_.task_run_history (task_id bigint NOT NULL, " +
+                            "task_run_id string NOT NULL, create_time datetime NOT NULL, task_name string NOT NULL, " +
+                            "finish_time datetime NOT NULL, expire_time datetime NOT NULL, " +
+                            "history_content_json JSON NOT NULL)PRIMARY KEY (task_id, task_run_id, create_time) " +
+                            "PARTITION BY RANGE(create_time)() DISTRIBUTED BY HASH(task_id) BUCKETS 8 " +
+                            "PROPERTIES('replication_num' = '1','dynamic_partition.time_unit' = 'DAY', " +
+                            "'dynamic_partition.start' = '-7', 'dynamic_partition.end' = '3', " +
+                            "'dynamic_partition.prefix' = 'p' ) ");
         }};
         keeper.run();
         assertTrue(keeper.isTableExisted());

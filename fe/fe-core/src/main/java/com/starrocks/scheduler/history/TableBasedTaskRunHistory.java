@@ -41,22 +41,19 @@ import java.util.List;
  */
 public class TableBasedTaskRunHistory implements TaskRunHistory {
 
-    private final static String DATABASE_NAME = StatsConstants.STATISTICS_DB_NAME;
-    public final static String TABLE_NAME = "task_run_history";
-    private final static String TABLE_FULL_NAME = DATABASE_NAME + "." + TABLE_NAME;
-    public final static int TABLE_REPLICAS = 3;
-    public final static String CREATE_TABLE =
-            String.format("CREATE TABLE %s (" +
-                    // auto-increment id
-                    "id BIGINT NOT NULL auto_increment, " +
-
+    public static final String DATABASE_NAME = StatsConstants.STATISTICS_DB_NAME;
+    public static final String TABLE_NAME = "task_run_history";
+    public static final String TABLE_FULL_NAME = DATABASE_NAME + "." + TABLE_NAME;
+    public static final int TABLE_REPLICAS = 3;
+    public static final String CREATE_TABLE =
+            String.format("CREATE TABLE IF NOT EXISTS %s (" +
                     // identifiers
                     "task_id bigint NOT NULL, " +
                     "task_run_id string NOT NULL, " +
+                    "create_time datetime NOT NULL, " +
                     "task_name string NOT NULL, " +
 
                     // times
-                    "create_time datetime NOT NULL, " +
                     "finish_time datetime NOT NULL, " +
                     "expire_time datetime NOT NULL, " +
 
@@ -65,31 +62,31 @@ public class TableBasedTaskRunHistory implements TaskRunHistory {
                     ")" +
 
                     // properties
-                    "PRIMARY KEY (task_id, task_run_id) " +
-                    "PARTITION BY RANGE(create_time) " +
-                    "DISTRIBUTED BY HASH(id) BUCKETS 8 " +
+                    "PRIMARY KEY (task_id, task_run_id, create_time) " +
+                    "PARTITION BY RANGE(create_time)() " +
+                    "DISTRIBUTED BY HASH(task_id) BUCKETS 8 " +
                     "PROPERTIES(" +
                     "'replication_num' = '1'," +
                     "'dynamic_partition.time_unit' = 'DAY', " +
                     "'dynamic_partition.start' = '-7', " +
                     "'dynamic_partition.end' = '3', " +
                     "'dynamic_partition.prefix' = 'p' " +
-                    ") ", TABLE_NAME);
+                    ") ", TABLE_FULL_NAME);
 
-    private final static String COLUMN_LIST = "task_id, task_run_id, task_name, " +
+    private static final String COLUMN_LIST = "task_id, task_run_id, task_name, " +
             "create_time, finish_time, expire_time, " +
             "history_content_json ";
-    private final static String INSERT_SQL_TEMPLATE = "INSERT INTO {0} " +
+    private static final String INSERT_SQL_TEMPLATE = "INSERT INTO {0} " +
             "(task_id, task_run_id, task_name, " +
             "create_time, finish_time, expire_time, " +
             "history_content_json) " +
             "VALUES({1}, {2}, {3}, {4}, {5}, {6}, {7})";
-    private final static String SELECT_BY_TASK_NAME = "SELECT " + COLUMN_LIST + " FROM " + TABLE_FULL_NAME +
+    private static final String SELECT_BY_TASK_NAME = "SELECT " + COLUMN_LIST + " FROM " + TABLE_FULL_NAME +
             " WHERE task_name = {0}";
-    private final static String SELECT_BY_TASK_RUN_ID = "SELECT " + COLUMN_LIST + " FROM " + TABLE_FULL_NAME +
+    private static final String SELECT_BY_TASK_RUN_ID = "SELECT " + COLUMN_LIST + " FROM " + TABLE_FULL_NAME +
             " WHERE task_run_id = {0}";
-    private final static String SELECT_ALL = "SELECT " + COLUMN_LIST + " FROM " + TABLE_FULL_NAME;
-    private final static String COUNT_TASK_RUNS = "SELECT count(*) as cnt FROM " + TABLE_FULL_NAME;
+    private static final String SELECT_ALL = "SELECT " + COLUMN_LIST + " FROM " + TABLE_FULL_NAME;
+    private static final String COUNT_TASK_RUNS = "SELECT count(*) as cnt FROM " + TABLE_FULL_NAME;
 
     public static TableKeeper createKeeper() {
         return new TableKeeper(DATABASE_NAME, TABLE_NAME, CREATE_TABLE, TABLE_REPLICAS);
@@ -110,7 +107,8 @@ public class TableBasedTaskRunHistory implements TaskRunHistory {
                 Strings.quote(DateUtils.formatTimeStampInMill(status.getExpireTime(), ZoneId.systemDefault()));
 
         final String sql = MessageFormat.format(INSERT_SQL_TEMPLATE, TABLE_FULL_NAME,
-                status.getTaskId(), Strings.quote(status.getStartTaskRunId()), Strings.quote(status.getTaskName()),
+                String.valueOf(status.getTaskId()), Strings.quote(status.getStartTaskRunId()),
+                Strings.quote(status.getTaskName()),
                 createTime, finishTime, expireTime, Strings.quote(status.toJSON()));
         RepoExecutor.getInstance().executeDML(sql);
     }

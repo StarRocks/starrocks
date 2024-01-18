@@ -1250,6 +1250,7 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
+        tableKeeper.start();
         mvMVJobExecutor.start();
         pipeListener.start();
         pipeScheduler.start();

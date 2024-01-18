@@ -33,7 +33,7 @@ import java.util.List;
  */
 public class TableKeeper {
 
-    private final static Logger LOG = LogManager.getLogger(TableKeeper.class);
+    private static final Logger LOG = LogManager.getLogger(TableKeeper.class);
 
     private final String databaseName;
     private final String tableName;
