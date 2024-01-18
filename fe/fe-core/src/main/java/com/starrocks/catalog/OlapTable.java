@@ -2920,6 +2920,8 @@ public class OlapTable extends Table {
                                     batchTaskMap.put(backendId, batchTask);
                                 }
                                 batchTask.addTask(dropTask);
+                                LOG.info("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
+                                        tabletId, backendId, table.getId(), table.getName());
                             } // end for replicas
                         } // end for tablets
                     }
