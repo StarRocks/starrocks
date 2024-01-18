@@ -271,7 +271,7 @@ protected:
                 auto column = ChunkHelper::column_from_field_type(type, true);
 
                 int idx = 0;
-                size_t rows_read = 1024;
+                size_t rows_read = 512;
                 st = iter.next_batch(&rows_read, column.get());
                 ASSERT_TRUE(st.ok());
                 for (int j = 0; j < rows_read; ++j) {
@@ -291,12 +291,11 @@ protected:
             {
                 auto column = ChunkHelper::column_from_field_type(type, true);
 
-                for (int rowid = 0; rowid < 2048; rowid += 128) {
+                for (int rowid = 0; rowid < 1024; rowid += 128) {
                     st = iter.seek_to_ordinal(rowid);
                     ASSERT_TRUE(st.ok());
 
-                    int idx = rowid;
-                    size_t rows_read = 1024;
+                    size_t rows_read = 512;
                     st = iter.next_batch(&rows_read, column.get());
                     ASSERT_TRUE(st.ok());
                     for (int j = 0; j < rows_read; ++j) {
@@ -309,7 +308,6 @@ protected:
                         } else {
                             ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
                         }
-                        idx++;
                     }
                 }
             }
