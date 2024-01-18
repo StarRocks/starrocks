@@ -109,6 +109,46 @@ public class TableKeeper {
                 databaseName, tableName, tableReplicas);
     }
 
+    public String getDatabaseName() {
+        return databaseName;
+    }
+
+    public String getTableName() {
+        return tableName;
+    }
+
+    public String getCreateTableSql() {
+        return createTableSql;
+    }
+
+    public int getTableReplicas() {
+        return tableReplicas;
+    }
+
+    public boolean isDatabaseExisted() {
+        return databaseExisted;
+    }
+
+    public boolean isTableExisted() {
+        return tableExisted;
+    }
+
+    public boolean isTableCorrected() {
+        return tableCorrected;
+    }
+
+    public void setDatabaseExisted(boolean databaseExisted) {
+        this.databaseExisted = databaseExisted;
+    }
+
+    public void setTableExisted(boolean tableExisted) {
+        this.tableExisted = tableExisted;
+    }
+
+    public void setTableCorrected(boolean tableCorrected) {
+        this.tableCorrected = tableCorrected;
+    }
+
     public static TableKeeperDaemon startDaemon() {
         return new TableKeeperDaemon();
     }

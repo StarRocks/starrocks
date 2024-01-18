@@ -15,8 +15,9 @@
 package com.starrocks.scheduler.history;
 
 import com.google.common.collect.Lists;
-import com.google.gson.JsonObject;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -41,10 +42,10 @@ import java.util.List;
 public class TableBasedTaskRunHistory implements TaskRunHistory {
 
     private final static String DATABASE_NAME = StatsConstants.STATISTICS_DB_NAME;
-    private final static String TABLE_NAME = "task_run_history";
+    public final static String TABLE_NAME = "task_run_history";
     private final static String TABLE_FULL_NAME = DATABASE_NAME + "." + TABLE_NAME;
-    private final static int TABLE_REPLICAS = 3;
-    private final static String CREATE_TABLE =
+    public final static int TABLE_REPLICAS = 3;
+    public final static String CREATE_TABLE =
             String.format("CREATE TABLE %s (" +
                     // auto-increment id
                     "id BIGINT NOT NULL auto_increment, " +
@@ -82,7 +83,7 @@ public class TableBasedTaskRunHistory implements TaskRunHistory {
             "(task_id, task_run_id, task_name, " +
             "create_time, finish_time, expire_time, " +
             "history_content_json) " +
-            "VALUES({1}, '{2}', '{3}', {4}, {5}, {6}, '{7}')";
+            "VALUES({1}, {2}, {3}, {4}, {5}, {6}, {7})";
     private final static String SELECT_BY_TASK_NAME = "SELECT " + COLUMN_LIST + " FROM " + TABLE_FULL_NAME +
             " WHERE task_name = {0}";
     private final static String SELECT_BY_TASK_RUN_ID = "SELECT " + COLUMN_LIST + " FROM " + TABLE_FULL_NAME +
@@ -97,7 +98,7 @@ public class TableBasedTaskRunHistory implements TaskRunHistory {
     @Override
     public void addHistory(TaskRunStatus status) {
         // Only leader node needs to persist the history
-        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+        if (!GlobalStateMgr.getCurrentState().isLeader() && !FeConstants.runningUnitTest) {
             return;
         }
 
@@ -109,8 +110,8 @@ public class TableBasedTaskRunHistory implements TaskRunHistory {
                 Strings.quote(DateUtils.formatTimeStampInMill(status.getExpireTime(), ZoneId.systemDefault()));
 
         final String sql = MessageFormat.format(INSERT_SQL_TEMPLATE, TABLE_FULL_NAME,
-                status.getTaskId(), status.getStartTaskRunId(), status.getTaskName(),
-                createTime, finishTime, expireTime, status.toJSON());
+                status.getTaskId(), Strings.quote(status.getStartTaskRunId()), Strings.quote(status.getTaskName()),
+                createTime, finishTime, expireTime, Strings.quote(status.toJSON()));
         RepoExecutor.getInstance().executeDML(sql);
     }
 
@@ -155,8 +156,8 @@ public class TableBasedTaskRunHistory implements TaskRunHistory {
                 ByteBuffer buffer = batches.get(0).getRows().get(0);
                 ByteBuf copied = Unpooled.copiedBuffer(buffer);
                 String jsonString = copied.toString(Charset.defaultCharset());
-                JsonObject obj = (JsonObject) JsonParser.parseString(jsonString);
-                return obj.get("cnt").getAsInt();
+                JsonArray obj = (JsonArray) JsonParser.parseString(jsonString);
+                return obj.get(0).getAsInt();
             } catch (Exception e) {
                 throw new IllegalStateException("failed to parse json result: " + batches);
             }
