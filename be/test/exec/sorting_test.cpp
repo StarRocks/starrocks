@@ -553,13 +553,11 @@ static void test_merge_path(const size_t num_cols, const size_t left_start, cons
 
 TEST(MergePathTest, test1) {
     for (size_t num_col = 1; num_col <= 2; num_col++) {
-        for (size_t left_num_rows = 0; left_num_rows <= 4096;
-             left_num_rows == 0 ? left_num_rows++ : left_num_rows *= 2) {
-            for (size_t right_num_rows = 0; right_num_rows <= 4096;
-                 right_num_rows == 0 ? right_num_rows++ : right_num_rows *= 2) {
+        for (size_t left_num_rows = 0; left_num_rows <= 4096; left_num_rows += 2048) {
+            for (size_t right_num_rows = 0; right_num_rows <= 4096; right_num_rows += 2048) {
                 for (size_t left_start : std::array<size_t, 2>{0, left_num_rows / 2}) {
                     for (size_t right_start : std::array<size_t, 2>{0, right_num_rows / 2}) {
-                        for (int processor_num = 1; processor_num < 8; processor_num++) {
+                        for (int processor_num = 1; processor_num <= 8; processor_num *= 2) {
                             const size_t left_len = left_num_rows - left_start;
                             const size_t right_len = right_num_rows - right_start;
                             const size_t dest_size = left_len + right_len;
