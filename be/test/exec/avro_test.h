@@ -14,11 +14,15 @@
 
 #pragma once
 
-#include "fs/fs.h"
+#include "avro.h"
 
 namespace starrocks {
 
-std::unique_ptr<FileSystem> new_fs_s3(const FSOptions& options);
-void close_s3_clients();
+struct AvroHelper {
+    avro_schema_t schema = NULL;
+    avro_value_iface_t* iface = NULL;
+    avro_value_t avro_val;
+    std::string schema_text;
+};
 
 } // namespace starrocks

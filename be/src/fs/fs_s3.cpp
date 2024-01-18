@@ -89,6 +89,8 @@ public:
     S3ClientPtr new_client(const TCloudConfiguration& cloud_configuration);
     S3ClientPtr new_client(const ClientConfiguration& config, const FSOptions& opts);
 
+    void close();
+
     static ClientConfiguration& getClientConfig() {
         // We cached config here and make a deep copy each time.Since aws sdk has changed the
         // Aws::Client::ClientConfiguration default constructor to search for the region
@@ -152,6 +154,13 @@ std::shared_ptr<Aws::Auth::AWSCredentialsProvider> S3ClientFactory::_get_aws_cre
                 Aws::Auth::DEFAULT_CREDS_LOAD_FREQ_SECONDS, sts);
     }
     return credential_provider;
+}
+
+void S3ClientFactory::close() {
+    std::lock_guard l(_lock);
+    for (auto& item : _clients) {
+        item.reset();
+    }
 }
 
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const TCloudConfiguration& t_cloud_configuration) {
@@ -519,7 +528,12 @@ Status S3FileSystem::iterate_dir(const std::string& dir, const std::function<boo
     Aws::S3::Model::ListObjectsV2Result result;
     request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithDelimiter("/");
 #ifdef BE_TEST
-    request.SetMaxKeys(1);
+    // NOTE: set max-keys to a small number in BE_TEST mode to force the following list/delete operations
+    // iterating more than one loop, and hence resulting a better code coverage.
+    //
+    // Don't set max-keys to 1, to avoid hitting minio so-called optimization/feature or whatever.
+    // Refer https://github.com/minio/minio/pull/13000 for details.
+    request.SetMaxKeys(2);
 #endif
     do {
         auto outcome = client->ListObjectsV2(request);
@@ -790,7 +804,12 @@ Status S3FileSystem::delete_dir_recursive(const std::string& dirname) {
     Aws::S3::Model::ListObjectsV2Result result;
     request.WithBucket(uri.bucket()).WithPrefix(uri.key());
 #ifdef BE_TEST
-    request.SetMaxKeys(1);
+    // NOTE: set max-keys to a small number in BE_TEST mode to force the following list/delete operations
+    // iterating more than one loop, and hence resulting a better code coverage.
+    //
+    // Don't set max-keys to 1, to avoid hitting minio so-called optimization/feature or whatever.
+    // Refer https://github.com/minio/minio/pull/13000 for details.
+    request.SetMaxKeys(2);
 #endif
 
     Aws::S3::Model::DeleteObjectsRequest delete_request;
@@ -827,6 +846,10 @@ Status S3FileSystem::delete_dir_recursive(const std::string& dirname) {
 
 std::unique_ptr<FileSystem> new_fs_s3(const FSOptions& options) {
     return std::make_unique<S3FileSystem>(options);
+}
+
+void close_s3_clients() {
+    S3ClientFactory::instance().close();
 }
 
 } // namespace starrocks
