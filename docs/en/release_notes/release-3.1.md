@@ -8,18 +8,35 @@ displayed_sidebar: "English"
 
 Release date: January 12, 2024
 
+### New Features
+
+- Added a new function, `unnest_bitmap`. [#38136](https://github.com/StarRocks/starrocks/pull/38136)
+- Supports conditional updates for [Broker Load](https://docs.starrocks.io/docs/3.1/sql-reference/sql-statements/data-manipulation/BROKER_LOAD/#opt_properties). [#37400](https://github.com/StarRocks/starrocks/pull/37400)
+
 ### Behavior Change
 
 - Added the session variable `enable_materialized_view_for_insert`, which controls whether materialized views rewrite the queries in INSERT INTO SELECT statements. The default value is `false`. [#37505](https://github.com/StarRocks/starrocks/pull/37505)
 - The FE dynamic parameter `enable_new_publish_mechanism` is changed to a static parameter. You must restart the FE after you modify the parameter settings. [#35338](https://github.com/StarRocks/starrocks/pull/35338)
 - Added the session variable `enable_strict_order_by`. When this variable is set to the default value `TRUE`, an error is reported for such a query pattern: Duplicate alias is used in different expressions of the query and this alias is also a sorting field in ORDER BY, for example, `select distinct t1.* from tbl1 t1 order by t1.k1;`. The logic is the same as that in v2.3 and earlier. When this variable is set to `FALSE`, a loose deduplication mechanism is used, which processes such queries as valid SQL queries. [#37910](https://github.com/StarRocks/starrocks/pull/37910)
 
-### FE parameters
+### Parameter Change
 
 - Added the FE configuration item `routine_load_unstable_threshold_second`. [#36222](https://github.com/StarRocks/starrocks/pull/36222)
+- Added the FE configuration item `http_worker_threads_num`, which specifies the number of threads for HTTP server to deal with HTTP requests. The default value is `0`. If the value for this parameter is set to a negative value or `0`, the actual thread number is twice the number of CPU cores. [#37530](https://github.com/StarRocks/starrocks/pull/37530)
+- Added the BE configuration item `pindex_major_compaction_limit_per_disk` to configure the maximum concurrency of compaction on a disk. This addresses the issue of uneven I/O across disks due to compaction. This issue can cause excessively high I/O for certain disks. The default value is `1`. [#36681](https://github.com/StarRocks/starrocks/pull/36681)
+- Added session variables `transaction_read_only` and `tx_read_only` to specify the transaction access mode, which are compatible with MySQL versions 5.7.20 and above. [#37249](https://github.com/StarRocks/starrocks/pull/37249)
+- Added the FE configuration item `default_mv_refresh_immediate`, which specifies whether to immediately refresh the materialized view after the materialized view is created. The default value is `true`. [#37093](https://github.com/StarRocks/starrocks/pull/37093)
+- Added a new BE configuration item `lake_enable_vertical_compaction_fill_data_cache`, which specifies whether to allow compaction tasks to cache data on local disks in a shared-data cluster. The default value is `false`. [#37296](https://github.com/StarRocks/starrocks/pull/37296)
 
 ### Improvements
 
+- INSERT INTO FILE() SELECT FROM supports reading BINARY-type data from tables and exporting the data to Parquet-formatted files in remote storage. [#36797](https://github.com/StarRocks/starrocks/pull/36797)
+- Asynchronous materialized views support dynamically setting the `datacache.partition_duration` property, which controls the validity period of the hot data in the data cache. [#35681](https://github.com/StarRocks/starrocks/pull/35681)
+- Wen using JDK, the default GC algorithm is G1. [#37386](https://github.com/StarRocks/starrocks/pull/37386)
+- The `date_trunc`, `adddate`, and `time_slice` functions support setting the `interval` parameter to values that are accurate to the millisecond and microsecond. [#36386](https://github.com/StarRocks/starrocks/pull/36386)
+- When the string on the right side of the LIKE operator within the WHERE clause does not include `%` or `_`, the LIKE operator is converted into the `=` operator. [#37515](https://github.com/StarRocks/starrocks/pull/37515)
+- A new field `LatestSourcePosition` is added to the return result of [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/3.1/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) to record the latest consumer position of messages in partitions of the topic, helping check the latencies of load tasks. [#38298](https://github.com/StarRocks/starrocks/pull/38298)
+- Added a new resource group property, `spill_mem_limit_threshold`, to control the memory usage threshold (percentage) at which a resource group triggers the spilling of intermediate results when the system variable `spill_mode` is set to `auto`. The valid range is (0, 1). The default value is `1`, indicating the threshold does not take effect. [#37707](https://github.com/StarRocks/starrocks/pull/37707)
 - The result returned by the [SHOW ROUTINE LOAD](https://docs.starrocks.io/docs/3.1/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) statement now includes the timestamps of consumption messages from each partition. [#36222](https://github.com/StarRocks/starrocks/pull/36222)
 - The scheduling policy for Routine Load is optimized, so that slow tasks do not block the execution of the other normal tasks. [#37638](https://github.com/StarRocks/starrocks/pull/37638)
 
