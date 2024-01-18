@@ -72,6 +72,7 @@ import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficie
 public class CostModel {
 
     private static final Logger LOG = LogManager.getLogger(CostModel.class);
+    public static final Double MAX_COST = Double.MAX_VALUE / 2;
 
     public static double calculateCost(GroupExpression expression) {
         ExpressionContext expressionContext = new ExpressionContext(expression);
@@ -79,8 +80,7 @@ public class CostModel {
     }
 
     private static double calculateCost(ExpressionContext expressionContext) {
-        CostEstimator costEstimator = new CostEstimator(ImmutableList.of());
-        CostEstimate costEstimate = expressionContext.getOp().accept(costEstimator, expressionContext);
+        CostEstimate costEstimate = getCostEstimate(ImmutableList.of(), expressionContext);
         double realCost = getRealCost(costEstimate);
         LOG.debug("operator: {}, outputRowCount: {}, outPutSize: {}, costEstimate: {}, realCost: {}",
                 expressionContext.getOp(),
@@ -91,15 +91,19 @@ public class CostModel {
     }
 
     public static CostEstimate calculateCostEstimate(ExpressionContext expressionContext) {
-        CostEstimator costEstimator = new CostEstimator(ImmutableList.of());
+        return getCostEstimate(ImmutableList.of(), expressionContext);
+    }
+
+    private static CostEstimate getCostEstimate(List<PhysicalPropertySet> childrenOutputProperties,
+                                                ExpressionContext expressionContext) {
+        CostEstimator costEstimator = new CostEstimator(childrenOutputProperties);
         return expressionContext.getOp().accept(costEstimator, expressionContext);
     }
 
     public static double calculateCostWithChildrenOutProperty(GroupExpression expression,
                                                               List<PhysicalPropertySet> childrenOutputProperties) {
         ExpressionContext expressionContext = new ExpressionContext(expression);
-        CostEstimator costEstimator = new CostEstimator(childrenOutputProperties);
-        CostEstimate costEstimate = expressionContext.getOp().accept(costEstimator, expressionContext);
+        CostEstimate costEstimate = getCostEstimate(childrenOutputProperties, expressionContext);
         double realCost = getRealCost(costEstimate);
 
         LOG.debug("operator: {}, group id: {}, child group id: {}, " +
@@ -159,14 +163,6 @@ public class CostModel {
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);
             if (node.getTable().isMaterializedView()) {
-                // If materialized view force rewrite is enabled, hack the materialized view
-                // as zero so can be chosen by the optimizer.
-                ConnectContext ctx = ConnectContext.get();
-                SessionVariable sessionVariable = ctx.getSessionVariable();
-                if (sessionVariable.isEnableMaterializedViewForceRewrite()) {
-                    return CostEstimate.zero();
-                }
-
                 Statistics groupStatistics = context.getGroupStatistics();
                 Statistics mvStatistics = context.getStatistics();
                 // only adjust cost for mv scan operator when group statistics is unknown and mv group expression
@@ -348,6 +344,9 @@ public class CostModel {
                 case GATHER:
                     result = CostEstimate.of(outputSize, 0,
                             Math.max(statistics.getOutputSize(outputColumns), 1));
+                    break;
+                case ROUND_ROBIN:
+                    result = CostEstimate.of(outputSize * factor, 0, outputSize * factor);
                     break;
                 default:
                     throw new StarRocksPlannerException(
@@ -534,6 +533,4 @@ public class CostModel {
             return Optional.empty();
         }
     }
-
-
 }

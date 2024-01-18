@@ -199,6 +199,8 @@ public:
     static Status scan_delta_column_group(KVStore* meta, TTabletId tablet_id, RowsetId rowsetid, uint32_t segment_id,
                                           int64_t begin_version, int64_t end_version, DeltaColumnGroupList* dcgs);
     static Status scan_tablet_delta_column_group(KVStore* meta, TTabletId tablet_id, DeltaColumnGroupList* dcgs);
+    static Status scan_tablet_delta_column_group_by_segment(KVStore* meta, TTabletId tablet_id,
+                                                            std::map<uint32_t, DeltaColumnGroupList>* dcgs);
 
     static Status delete_delta_column_group(KVStore* meta, TTabletId tablet_id, uint32_t rowset_id, uint32_t segments);
     static Status delete_delta_column_group(KVStore* meta, WriteBatch* batch, const TabletSegmentId& tsid,
@@ -257,6 +259,8 @@ public:
     static Status remove_table_meta(DataDir* store, TTableId table_id);
 
     static Status remove_table_persistent_index_meta(DataDir* store, TTableId table_id);
+
+    static Status remove_tablet_persistent_index_meta(DataDir* store, TTabletId table_id);
 };
 
 } // namespace starrocks

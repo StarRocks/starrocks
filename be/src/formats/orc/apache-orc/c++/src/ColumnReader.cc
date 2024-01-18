@@ -145,6 +145,69 @@ void expandBytesToLongs(int64_t* buffer, uint64_t numValues) {
     }
 }
 
+class LazyColumnReader final : public ColumnReader {
+public:
+    LazyColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe) : type(type), stripe(stripe) {
+        columnId = type.getColumnId();
+    }
+
+    ~LazyColumnReader() override = default;
+
+    uint64_t skip(uint64_t numValues) override {
+        tryInit();
+        return childColumnReader->skip(numValues);
+    }
+
+    void next(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override {
+        tryInit();
+        childColumnReader->next(rowBatch, numValues, notNull);
+    }
+
+    void nextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override {
+        tryInit();
+        childColumnReader->nextEncoded(rowBatch, numValues, notNull);
+    }
+
+    void seekToRowGroup(PositionProviderMap* providers) override {
+        tryInit();
+        childColumnReader->seekToRowGroup(providers);
+    }
+
+    void lazyLoadSkip(uint64_t numValues) override {
+        tryInit();
+        childColumnReader->lazyLoadSkip(numValues);
+    }
+
+    void lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override {
+        tryInit();
+        childColumnReader->lazyLoadNext(rowBatch, numValues, notNull);
+    }
+
+    void lazyLoadNextEncoded(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) override {
+        tryInit();
+        childColumnReader->lazyLoadNextEncoded(rowBatch, numValues, notNull);
+    }
+
+    void lazyLoadSeekToRowGroup(PositionProviderMap* providers) override {
+        tryInit();
+        childColumnReader->lazyLoadSeekToRowGroup(providers);
+    }
+
+private:
+    void tryInit() {
+        if (!isInit) {
+            childColumnReader = buildReader(type, stripe);
+            isInit = true;
+        }
+    }
+
+    bool isInit = false;
+    const Type& type;
+    // We need use shared_ptr to hold stripe, otherwise, when LazyColumnReader is created, the life cycle of stripe has ended.
+    std::shared_ptr<StripeStreams> stripe;
+    std::unique_ptr<ColumnReader> childColumnReader;
+};
+
 class BooleanColumnReader : public ColumnReader {
 private:
     std::unique_ptr<orc::ByteRleDecoder> rle;
@@ -995,7 +1058,7 @@ private:
     std::vector<uint64_t> lazyLoadFieldIndex;
 
 public:
-    StructColumnReader(const Type& type, StripeStreams& stipe);
+    StructColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe);
 
     uint64_t skip(uint64_t numValues) override;
 
@@ -1026,11 +1089,12 @@ private:
     bool isAllFieldsLazy();
 };
 
-StructColumnReader::StructColumnReader(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
+StructColumnReader::StructColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe)
+        : ColumnReader(type, *stripe.get()) {
     // count the number of selected sub-columns
-    const std::vector<bool> selectedColumns = stripe.getSelectedColumns();
-    const std::vector<bool> lazyLoadColumns = stripe.getLazyLoadColumns();
-    switch (static_cast<int64_t>(stripe.getEncoding(columnId).kind())) {
+    const std::vector<bool> selectedColumns = stripe->getSelectedColumns();
+    const std::vector<bool> lazyLoadColumns = stripe->getLazyLoadColumns();
+    switch (static_cast<int64_t>(stripe->getEncoding(columnId).kind())) {
     case proto::ColumnEncoding_Kind_DIRECT: {
         uint64_t fi = 0;
         for (unsigned int i = 0; i < type.getSubtypeCount(); ++i) {
@@ -1038,7 +1102,9 @@ StructColumnReader::StructColumnReader(const Type& type, StripeStreams& stripe) 
             auto columnId = static_cast<uint64_t>(child.getColumnId());
             if (selectedColumns[columnId]) {
                 if (lazyLoadColumns[columnId]) {
-                    lazyLoadChildren.push_back(buildReader(child, stripe));
+                    // Using LazyColumnReader, will initilize ColumnReader when need it
+                    lazyLoadChildren.push_back(std::make_unique<LazyColumnReader>(child, stripe));
+                    // lazyLoadChildren.push_back(buildReader(child, stripe));
                     lazyLoadFieldIndex.push_back(fi);
                 } else {
                     children.push_back(buildReader(child, stripe));
@@ -1153,7 +1219,7 @@ private:
     std::unique_ptr<RleDecoder> rle;
 
 public:
-    ListColumnReader(const Type& type, StripeStreams& stipe);
+    ListColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe);
     ~ListColumnReader() override;
 
     uint64_t skip(uint64_t numValues) override;
@@ -1175,13 +1241,14 @@ private:
     void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
 };
 
-ListColumnReader::ListColumnReader(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
+ListColumnReader::ListColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe)
+        : ColumnReader(type, *stripe.get()) {
     // count the number of selected sub-columns
-    const std::vector<bool> selectedColumns = stripe.getSelectedColumns();
-    RleVersion vers = convertRleVersion(stripe.getEncoding(columnId).kind());
-    std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_LENGTH, true);
+    const std::vector<bool> selectedColumns = stripe->getSelectedColumns();
+    RleVersion vers = convertRleVersion(stripe->getEncoding(columnId).kind());
+    std::unique_ptr<SeekableInputStream> stream = stripe->getStream(columnId, proto::Stream_Kind_LENGTH, true);
     if (stream == nullptr) throw ParseError("LENGTH stream not found in List column");
-    rle = createRleDecoder(std::move(stream), false, vers, memoryPool, metrics, stripe.getSharedBuffer());
+    rle = createRleDecoder(std::move(stream), false, vers, memoryPool, metrics, stripe->getSharedBuffer());
     const Type& childType = *type.getSubtype(0);
     if (selectedColumns[static_cast<uint64_t>(childType.getColumnId())]) {
         child = buildReader(childType, stripe);
@@ -1310,7 +1377,7 @@ private:
     std::unique_ptr<RleDecoder> rle;
 
 public:
-    MapColumnReader(const Type& type, StripeStreams& stipe);
+    MapColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe);
     ~MapColumnReader() override;
 
     uint64_t skip(uint64_t numValues) override;
@@ -1332,13 +1399,14 @@ private:
     void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
 };
 
-MapColumnReader::MapColumnReader(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
+MapColumnReader::MapColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe)
+        : ColumnReader(type, *stripe.get()) {
     // Determine if the key and/or value columns are selected
-    const std::vector<bool> selectedColumns = stripe.getSelectedColumns();
-    RleVersion vers = convertRleVersion(stripe.getEncoding(columnId).kind());
-    std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_LENGTH, true);
+    const std::vector<bool> selectedColumns = stripe->getSelectedColumns();
+    RleVersion vers = convertRleVersion(stripe->getEncoding(columnId).kind());
+    std::unique_ptr<SeekableInputStream> stream = stripe->getStream(columnId, proto::Stream_Kind_LENGTH, true);
     if (stream == nullptr) throw ParseError("LENGTH stream not found in Map column");
-    rle = createRleDecoder(std::move(stream), false, vers, memoryPool, metrics, stripe.getSharedBuffer());
+    rle = createRleDecoder(std::move(stream), false, vers, memoryPool, metrics, stripe->getSharedBuffer());
     const Type& keyType = *type.getSubtype(0);
     if (selectedColumns[static_cast<uint64_t>(keyType.getColumnId())]) {
         keyReader = buildReader(keyType, stripe);
@@ -1505,7 +1573,7 @@ private:
     uint64_t numChildren;
 
 public:
-    UnionColumnReader(const Type& type, StripeStreams& stipe);
+    UnionColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe);
 
     uint64_t skip(uint64_t numValues) override;
 
@@ -1520,16 +1588,17 @@ private:
     void nextInternal(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull);
 };
 
-UnionColumnReader::UnionColumnReader(const Type& type, StripeStreams& stripe) : ColumnReader(type, stripe) {
+UnionColumnReader::UnionColumnReader(const Type& type, std::shared_ptr<StripeStreams>& stripe)
+        : ColumnReader(type, *stripe.get()) {
     numChildren = type.getSubtypeCount();
     childrenReader.resize(numChildren);
     childrenCounts.resize(numChildren);
 
-    std::unique_ptr<SeekableInputStream> stream = stripe.getStream(columnId, proto::Stream_Kind_DATA, true);
+    std::unique_ptr<SeekableInputStream> stream = stripe->getStream(columnId, proto::Stream_Kind_DATA, true);
     if (stream == nullptr) throw ParseError("LENGTH stream not found in Union column");
     rle = createByteRleDecoder(std::move(stream), metrics);
     // figure out which types are selected
-    const std::vector<bool> selectedColumns = stripe.getSelectedColumns();
+    const std::vector<bool> selectedColumns = stripe->getSelectedColumns();
     for (unsigned int i = 0; i < numChildren; ++i) {
         const Type& child = *type.getSubtype(i);
         if (selectedColumns[static_cast<size_t>(child.getColumnId())]) {
@@ -2001,33 +2070,33 @@ void DecimalHive11ColumnReader::next(ColumnVectorBatch& rowBatch, uint64_t numVa
 /**
    * Create a reader for the given stripe.
    */
-std::unique_ptr<ColumnReader> buildReader(const Type& type, StripeStreams& stripe) {
+std::unique_ptr<ColumnReader> buildReader(const Type& type, std::shared_ptr<StripeStreams>& stripe) {
     switch (static_cast<int64_t>(type.getKind())) {
     case DATE:
     case INT:
     case LONG:
     case SHORT:
-        return std::unique_ptr<ColumnReader>(new IntegerColumnReader(type, stripe));
+        return std::unique_ptr<ColumnReader>(new IntegerColumnReader(type, *stripe.get()));
     case BINARY:
     case CHAR:
     case STRING:
     case VARCHAR:
-        switch (static_cast<int64_t>(stripe.getEncoding(type.getColumnId()).kind())) {
+        switch (static_cast<int64_t>(stripe->getEncoding(type.getColumnId()).kind())) {
         case proto::ColumnEncoding_Kind_DICTIONARY:
         case proto::ColumnEncoding_Kind_DICTIONARY_V2:
-            return std::unique_ptr<ColumnReader>(new StringDictionaryColumnReader(type, stripe));
+            return std::unique_ptr<ColumnReader>(new StringDictionaryColumnReader(type, *stripe.get()));
         case proto::ColumnEncoding_Kind_DIRECT:
         case proto::ColumnEncoding_Kind_DIRECT_V2:
-            return std::unique_ptr<ColumnReader>(new StringDirectColumnReader(type, stripe));
+            return std::unique_ptr<ColumnReader>(new StringDirectColumnReader(type, *stripe.get()));
         default:
             throw NotImplementedYet("buildReader unhandled string encoding");
         }
 
     case BOOLEAN:
-        return std::unique_ptr<ColumnReader>(new BooleanColumnReader(type, stripe));
+        return std::unique_ptr<ColumnReader>(new BooleanColumnReader(type, *stripe.get()));
 
     case BYTE:
-        return std::unique_ptr<ColumnReader>(new ByteColumnReader(type, stripe));
+        return std::unique_ptr<ColumnReader>(new ByteColumnReader(type, *stripe.get()));
 
     case LIST:
         return std::unique_ptr<ColumnReader>(new ListColumnReader(type, stripe));
@@ -2043,28 +2112,28 @@ std::unique_ptr<ColumnReader> buildReader(const Type& type, StripeStreams& strip
 
     case FLOAT:
     case DOUBLE:
-        return std::unique_ptr<ColumnReader>(new DoubleColumnReader(type, stripe));
+        return std::unique_ptr<ColumnReader>(new DoubleColumnReader(type, *stripe.get()));
 
     case TIMESTAMP:
-        return std::unique_ptr<ColumnReader>(new TimestampColumnReader(type, stripe, false));
+        return std::unique_ptr<ColumnReader>(new TimestampColumnReader(type, *stripe.get(), false));
 
     case TIMESTAMP_INSTANT:
-        return std::unique_ptr<ColumnReader>(new TimestampColumnReader(type, stripe, true));
+        return std::unique_ptr<ColumnReader>(new TimestampColumnReader(type, *stripe.get(), true));
 
     case DECIMAL:
         // is this a Hive 0.11 or 0.12 file?
         if (type.getPrecision() == 0) {
-            return std::unique_ptr<ColumnReader>(new DecimalHive11ColumnReader(type, stripe));
+            return std::unique_ptr<ColumnReader>(new DecimalHive11ColumnReader(type, *stripe.get()));
         }
         // can we represent the values using int64_t?
         if (type.getPrecision() <= Decimal64ColumnReader::MAX_PRECISION_64) {
-            if (stripe.isDecimalAsLong()) {
-                return std::unique_ptr<ColumnReader>(new Decimal64ColumnReaderV2(type, stripe));
+            if (stripe->isDecimalAsLong()) {
+                return std::unique_ptr<ColumnReader>(new Decimal64ColumnReaderV2(type, *stripe.get()));
             }
-            return std::unique_ptr<ColumnReader>(new Decimal64ColumnReader(type, stripe));
+            return std::unique_ptr<ColumnReader>(new Decimal64ColumnReader(type, *stripe.get()));
         }
         // otherwise we use the Int128 implementation
-        return std::unique_ptr<ColumnReader>(new Decimal128ColumnReader(type, stripe));
+        return std::unique_ptr<ColumnReader>(new Decimal128ColumnReader(type, *stripe.get()));
 
     default:
         throw NotImplementedYet("buildReader unhandled type");

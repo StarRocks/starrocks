@@ -37,6 +37,8 @@ import com.starrocks.load.ExportJob;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
@@ -1287,21 +1289,16 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         UserIdentity user = statement.getUserIdent();
         try {
             if (user != null && !user.equals(context.getCurrentUserIdentity())) {
-                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.GRANT);
+                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
             } else if (statement.getRole() != null) {
                 AuthorizationMgr authorizationManager = context.getGlobalStateMgr().getAuthorizationMgr();
-                try {
-                    List<String> roleNames = authorizationManager.getRoleNamesByUser(context.getCurrentUserIdentity());
-                    if (!roleNames.contains(statement.getRole())) {
-                        Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                                PrivilegeType.GRANT);
-                    }
-                } catch (PrivilegeException e) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+                List<String> roleNames = authorizationManager.getRoleNamesByUser(context.getCurrentUserIdentity());
+                if (!roleNames.contains(statement.getRole())) {
+                    Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.GRANT);
                 }
             }
-        } catch (AccessDeniedException e) {
+        } catch (AccessDeniedException | PrivilegeException e) {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -1561,15 +1558,16 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         if (statement.getAlterType() == ShowAlterStmt.AlterType.MATERIALIZED_VIEW) {
             Database db = GlobalStateMgr.getCurrentState().getDb(statement.getDbName());
             if (db != null) {
+                Locker locker = new Locker();
                 try {
-                    db.readLock();
+                    locker.lockDatabase(db, LockType.READ);
                     Table table = db.getTable(statement.getTableName());
                     if (table == null || !table.isMaterializedView()) {
                         // ignore privilege check for old mv
                         return null;
                     }
                 } finally {
-                    db.readUnlock();
+                    locker.unLockDatabase(db, LockType.READ);
                 }
             }
 
@@ -2133,9 +2131,10 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         } else {
             // going to restore some tables in database or some partitions in table
             Database db = globalStateMgr.getDb(statement.getDbName());
+            Locker locker = new Locker();
             if (db != null) {
                 try {
-                    db.readLock();
+                    locker.lockDatabase(db, LockType.READ);
                     // check create_table on specified database
                     try {
                         Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -2163,7 +2162,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                         }
                     }
                 } finally {
-                    db.readUnlock();
+                    locker.unLockDatabase(db, LockType.READ);
                 }
             }
         }
@@ -2317,8 +2316,9 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
         // db function.
         Database db = GlobalStateMgr.getCurrentState().getDb(functionName.getDb());
         if (db != null) {
+            Locker locker = new Locker();
             try {
-                db.readLock();
+                locker.lockDatabase(db, LockType.READ);
                 Function function = db.getFunction(statement.getFunctionSearchDesc());
                 if (null != function) {
                     try {
@@ -2332,7 +2332,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
                     }
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
         return null;
@@ -2416,7 +2416,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
             Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     statement.getPipeName().getDbName(), PrivilegeType.CREATE_PIPE);
-            visitQueryStatement(statement.getInsertStmt().getQueryStatement(), context);
+            visitInsertStatement(statement.getInsertStmt(), context);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,

@@ -47,6 +47,7 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Partition.PartitionState;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
@@ -54,7 +55,10 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AdminStmtAnalyzer;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -192,6 +196,9 @@ public class TabletChecker extends FrontendDaemon {
      */
     @Override
     protected void runAfterCatalogReady() {
+        if (RunMode.isSharedDataMode()) {
+            return;
+        }
         int pendingNum = tabletScheduler.getPendingNum();
         int runningNum = tabletScheduler.getRunningNum();
         if (pendingNum > Config.tablet_sched_max_scheduling_tablets
@@ -274,7 +281,8 @@ public class TabletChecker extends FrontendDaemon {
             // set the config to a local variable to avoid config params changed.
             int partitionBatchNum = Config.tablet_checker_partition_batch_num;
             int partitionChecked = 0;
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             lockStart = System.nanoTime();
             try {
                 List<Long> aliveBeIdsInCluster = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
@@ -306,8 +314,8 @@ public class TabletChecker extends FrontendDaemon {
                             LOG.debug("partition checked reached batch value, release lock");
                             lockTotalTime += System.nanoTime() - lockStart;
                             // release lock, so that lock can be acquired by other threads.
-                            db.readUnlock();
-                            db.readLock();
+                            locker.unLockDatabase(db, LockType.READ);
+                            locker.lockDatabase(db, LockType.READ);
                             LOG.debug("checker get lock again");
                             lockStart = System.nanoTime();
                             if (GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId) == null) {
@@ -337,60 +345,62 @@ public class TabletChecker extends FrontendDaemon {
                         /*
                          * Tablet in SHADOW index can not be repaired of balanced
                          */
-                        for (MaterializedIndex idx : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                            for (Tablet tablet : idx.getTablets()) {
-                                LocalTablet localTablet = (LocalTablet) tablet;
-                                totalTabletNum++;
+                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                            for (MaterializedIndex idx : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                                for (Tablet tablet : idx.getTablets()) {
+                                    LocalTablet localTablet = (LocalTablet) tablet;
+                                    totalTabletNum++;
 
-                                if (tabletScheduler.containsTablet(tablet.getId())) {
-                                    tabletInScheduler++;
-                                    continue;
+                                    if (tabletScheduler.containsTablet(tablet.getId())) {
+                                        tabletInScheduler++;
+                                        continue;
+                                    }
+
+                                    Pair<TabletStatus, TabletSchedCtx.Priority> statusWithPrio =
+                                            localTablet.getHealthStatusWithPriority(
+                                                    GlobalStateMgr.getCurrentSystemInfo(),
+                                                    physicalPartition.getVisibleVersion(),
+                                                    replicaNum,
+                                                    aliveBeIdsInCluster);
+
+                                    if (statusWithPrio.first == TabletStatus.HEALTHY) {
+                                        // Only set last status check time when status is healthy.
+                                        localTablet.setLastStatusCheckTime(System.currentTimeMillis());
+                                        continue;
+                                    } else if (isPartitionUrgent) {
+                                        statusWithPrio.second = TabletSchedCtx.Priority.VERY_HIGH;
+                                        isUrgentPartitionHealthy = false;
+                                    }
+
+                                    unhealthyTabletNum++;
+
+                                    if (!localTablet.readyToBeRepaired(statusWithPrio.first, statusWithPrio.second)) {
+                                        tabletNotReady++;
+                                        continue;
+                                    }
+
+                                    TabletSchedCtx tabletCtx = new TabletSchedCtx(
+                                            TabletSchedCtx.Type.REPAIR,
+                                            db.getId(), olapTbl.getId(), partition.getId(),
+                                            physicalPartition.getId(), idx.getId(), tablet.getId(),
+                                            System.currentTimeMillis());
+                                    // the tablet status will be set again when being scheduled
+                                    tabletCtx.setTabletStatus(statusWithPrio.first);
+                                    tabletCtx.setOrigPriority(statusWithPrio.second);
+                                    tabletCtx.setTablet(localTablet);
+                                    if (!tryChooseSrcBeforeSchedule(tabletCtx)) {
+                                        continue;
+                                    }
+
+                                    Pair<Boolean, Long> result =
+                                            tabletScheduler.blockingAddTabletCtxToScheduler(db, tabletCtx, isPartitionUrgent);
+                                    waitTotalTime += result.second;
+                                    if (result.first) {
+                                        addToSchedulerTabletNum++;
+                                    }
                                 }
-
-                                Pair<TabletStatus, TabletSchedCtx.Priority> statusWithPrio =
-                                        localTablet.getHealthStatusWithPriority(
-                                                GlobalStateMgr.getCurrentSystemInfo(),
-                                                partition.getVisibleVersion(),
-                                                replicaNum,
-                                                aliveBeIdsInCluster);
-
-                                if (statusWithPrio.first == TabletStatus.HEALTHY) {
-                                    // Only set last status check time when status is healthy.
-                                    localTablet.setLastStatusCheckTime(System.currentTimeMillis());
-                                    continue;
-                                } else if (isPartitionUrgent) {
-                                    statusWithPrio.second = TabletSchedCtx.Priority.VERY_HIGH;
-                                    isUrgentPartitionHealthy = false;
-                                }
-
-                                unhealthyTabletNum++;
-
-                                if (!localTablet.readyToBeRepaired(statusWithPrio.first, statusWithPrio.second)) {
-                                    tabletNotReady++;
-                                    continue;
-                                }
-
-                                TabletSchedCtx tabletCtx = new TabletSchedCtx(
-                                        TabletSchedCtx.Type.REPAIR,
-                                        db.getId(), olapTbl.getId(),
-                                        partition.getId(), idx.getId(), tablet.getId(),
-                                        System.currentTimeMillis());
-                                // the tablet status will be set again when being scheduled
-                                tabletCtx.setTabletStatus(statusWithPrio.first);
-                                tabletCtx.setOrigPriority(statusWithPrio.second);
-                                tabletCtx.setTablet(localTablet);
-                                if (!tryChooseSrcBeforeSchedule(tabletCtx)) {
-                                    continue;
-                                }
-
-                                Pair<Boolean, Long> result =
-                                        tabletScheduler.blockingAddTabletCtxToScheduler(db, tabletCtx, isPartitionUrgent);
-                                waitTotalTime += result.second;
-                                if (result.first) {
-                                    addToSchedulerTabletNum++;
-                                }
-                            }
-                        } // indices
+                            } // indices
+                        }
 
                         if (isUrgentPartitionHealthy && isPartitionUrgent) {
                             // if all replicas in this partition are healthy, remove this partition from
@@ -404,7 +414,7 @@ public class TabletChecker extends FrontendDaemon {
                 } // tables
             } finally {
                 lockTotalTime += System.nanoTime() - lockStart;
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         } // end for dbs
 
@@ -457,7 +467,8 @@ public class TabletChecker extends FrontendDaemon {
                 continue;
             }
 
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 for (Map.Entry<Long, Set<PrioPart>> tblEntry : dbEntry.getValue().entrySet()) {
                     long tblId = tblEntry.getKey();
@@ -479,7 +490,7 @@ public class TabletChecker extends FrontendDaemon {
                     iter.remove();
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
         for (Pair<Long, Long> prio : deletedUrgentTable) {
@@ -551,7 +562,8 @@ public class TabletChecker extends FrontendDaemon {
         long dbId = db.getId();
         long tblId;
         List<Long> partIds = Lists.newArrayList();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Table tbl = db.getTable(tblName);
             if (tbl == null || tbl.getType() != TableType.OLAP) {
@@ -573,7 +585,7 @@ public class TabletChecker extends FrontendDaemon {
                 }
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         Preconditions.checkState(tblId != -1);

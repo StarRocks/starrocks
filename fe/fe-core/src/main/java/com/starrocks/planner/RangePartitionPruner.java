@@ -34,6 +34,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.BoundType;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
@@ -48,7 +49,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -114,24 +114,24 @@ public class RangePartitionPruner implements PartitionPruner {
         }
 
         boolean isConvertToDate = PartitionUtil.isConvertToDate(keyColumn, filter);
-        if (null == inPredicateLiterals || inPredicateLiterals.size() * complex > inPredicateMaxLen) {
-            LiteralExpr lowerBound = filter.getLowerBound();
-            LiteralExpr upperBound = filter.getUpperBound();
+        LiteralExpr lowerBound = filter.getLowerBound();
+        LiteralExpr upperBound = filter.getUpperBound();
+        if (null == inPredicateLiterals || ((lowerBound != null || upperBound != null) &&
+                inPredicateLiterals.size() * complex > inPredicateMaxLen)) {
             if (filter.lowerBoundInclusive && filter.upperBoundInclusive
                     && lowerBound != null && upperBound != null
                     && 0 == lowerBound.compareLiteral(upperBound)) {
 
-                LiteralExpr lowerBoundExpr = filter.getLowerBound(isConvertToDate);
-                LiteralExpr upperBoundExpr = filter.getUpperBound(isConvertToDate);
-
                 // eg: [10, 10], [null, null]
-                if (lowerBoundExpr instanceof NullLiteral && upperBoundExpr instanceof NullLiteral) {
+                if (lowerBound instanceof NullLiteral && upperBound instanceof NullLiteral) {
                     // replace Null with min value
                     LiteralExpr minKeyValue = LiteralExpr.createInfinity(
                             Type.fromPrimitiveType(keyColumn.getPrimitiveType()), false);
                     minKey.pushColumn(minKeyValue, keyColumn.getPrimitiveType());
                     maxKey.pushColumn(minKeyValue, keyColumn.getPrimitiveType());
                 } else {
+                    LiteralExpr lowerBoundExpr = filter.getLowerBound(isConvertToDate);
+                    LiteralExpr upperBoundExpr = filter.getUpperBound(isConvertToDate);
                     minKey.pushColumn(lowerBoundExpr, keyColumn.getPrimitiveType());
                     maxKey.pushColumn(upperBoundExpr, keyColumn.getPrimitiveType());
                 }
@@ -197,8 +197,16 @@ public class RangePartitionPruner implements PartitionPruner {
         Set<Long> resultSet = Sets.newHashSet();
         int newComplex = inPredicateLiterals.size() * complex;
         for (LiteralExpr expr : inPredicateLiterals) {
-            minKey.pushColumn(expr, keyColumn.getPrimitiveType());
-            maxKey.pushColumn(expr, keyColumn.getPrimitiveType());
+            if (isConvertToDate) {
+                LiteralExpr convertExpr = PartitionUtil.convertToDateLiteral(expr);
+                Preconditions.checkState(convertExpr.getType().equals(keyColumn.getType()));
+                minKey.pushColumn(convertExpr, keyColumn.getPrimitiveType());
+                maxKey.pushColumn(convertExpr, keyColumn.getPrimitiveType());
+            } else {
+                Preconditions.checkState(expr.getType().equals(keyColumn.getType()));
+                minKey.pushColumn(expr, keyColumn.getPrimitiveType());
+                maxKey.pushColumn(expr, keyColumn.getPrimitiveType());
+            }
             Collection<Long> subList = prune(rangeMap, columnIdx + 1, minKey, maxKey, newComplex);
             resultSet.addAll(subList);
             minKey.popColumn();

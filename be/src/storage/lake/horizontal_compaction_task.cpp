@@ -21,6 +21,7 @@
 #include "storage/lake/tablet_reader.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/lake/txn_log.h"
+#include "storage/lake/update_manager.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_reader_params.h"
@@ -28,14 +29,14 @@
 
 namespace starrocks::lake {
 
-Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_func) {
+Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_func, ThreadPool* flush_pool) {
     if (progress == nullptr) {
         return Status::InvalidArgument("progress is null");
     }
 
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
 
-    ASSIGN_OR_RETURN(auto tablet_schema, _tablet.get_schema());
+    auto tablet_schema = _tablet.get_schema();
     int64_t total_num_rows = 0;
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
@@ -46,17 +47,17 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     VLOG(3) << "Start horizontal compaction. tablet: " << _tablet.id() << ", reader chunk size: " << chunk_size;
 
     Schema schema = ChunkHelper::convert_schema(tablet_schema);
-    TabletReader reader(_tablet, _version, schema, _input_rowsets);
+    TabletReader reader(_tablet.tablet_manager(), _tablet.metadata(), schema, _input_rowsets);
     RETURN_IF_ERROR(reader.prepare());
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CUMULATIVE_COMPACTION;
     reader_params.chunk_size = chunk_size;
     reader_params.profile = nullptr;
     reader_params.use_page_cache = false;
-    reader_params.fill_data_cache = false;
+    reader_params.lake_io_opts = {false, config::lake_compaction_stream_buffer_size_bytes};
     RETURN_IF_ERROR(reader.open(reader_params));
 
-    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kHorizontal, _txn_id))
+    ASSIGN_OR_RETURN(auto writer, _tablet.new_writer(kHorizontal, _txn_id, 0, flush_pool))
     RETURN_IF_ERROR(writer->open());
     DeferOp defer([&]() { writer->close(); });
 
@@ -98,14 +99,22 @@ Status HorizontalCompactionTask::execute(Progress* progress, CancelFunc cancel_f
     for (auto& rowset : _input_rowsets) {
         op_compaction->add_input_rowsets(rowset->id());
     }
+
     for (auto& file : writer->files()) {
-        op_compaction->mutable_output_rowset()->add_segments(file);
+        op_compaction->mutable_output_rowset()->add_segments(file.path);
+        op_compaction->mutable_output_rowset()->add_segment_size(file.size.value());
     }
+
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);
-    Status st = _tablet.put_txn_log(std::move(txn_log));
-    return st;
+    RETURN_IF_ERROR(_tablet.tablet_manager()->put_txn_log(txn_log));
+    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
+        // preload primary key table's compaction state
+        Tablet t(_tablet.tablet_manager(), _tablet.id());
+        _tablet.tablet_manager()->update_mgr()->preload_compaction_state(*txn_log, t, tablet_schema);
+    }
+    return Status::OK();
 }
 
 StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
@@ -115,7 +124,10 @@ StatusOr<int32_t> HorizontalCompactionTask::calculate_chunk_size() {
     for (auto& rowset : _input_rowsets) {
         total_num_rows += rowset->num_rows();
         total_input_segs += rowset->is_overlapped() ? rowset->num_segments() : 1;
-        ASSIGN_OR_RETURN(auto segments, rowset->segments(false));
+        LakeIOOptions lake_io_opts{.fill_data_cache = false,
+                                   .buffer_size = config::lake_compaction_stream_buffer_size_bytes};
+        auto fill_meta_cache = false;
+        ASSIGN_OR_RETURN(auto segments, rowset->segments(lake_io_opts, fill_meta_cache));
         for (auto& segment : segments) {
             for (size_t i = 0; i < segment->num_columns(); ++i) {
                 const auto* column_reader = segment->column(i);

@@ -39,6 +39,7 @@ import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.Snapshot;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -51,6 +52,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -68,7 +70,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     public static void beforeClass() throws Exception {
         PlanTestNoneDBBase.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        ConnectorPlanTestBase.mockCatalog(connectContext, temp.newFolder().toURI().toString());
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
 
         String dbName = "test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
@@ -190,6 +192,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
     @Before
     public void setUp() {
+        super.setUp();
         GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().clear();
     }
 
@@ -639,10 +642,9 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 return metaMap;
             }
         };
-        // the default row count is Config.statistic_auto_collect_small_table_rows, do not need to collect statistics
-        // until table update time + time interval(12h by default) > now
+        // the default row count is Config.statistic_auto_collect_small_table_rows -1 , need to collect statistics now
         statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
-        Assert.assertEquals(0, statsJobs.size());
+        Assert.assertEquals(1, statsJobs.size());
 
         // test collect statistics time before table update time, and row count is 100, need to collect statistics
         new MockUp<AnalyzeMgr>() {
@@ -737,10 +739,17 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 return metaMap;
             }
         };
-        // the default row count is Config.statistic_auto_collect_small_table_rows, do not need to collect statistics
-        // until table update time + time interval(12h by default) > now
+
+        new MockUp<IcebergPartitionUtils>() {
+            @Mock
+            public Set<String> getChangedPartitionNames(org.apache.iceberg.Table table, long fromTimestampMillis,
+                                                               Snapshot toSnapshot) {
+                return new HashSet<>();
+            }
+        };
+        // the default row count is Config.statistic_auto_collect_small_table_rows - 1, need to collect statistics now
         statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
-        Assert.assertEquals(0, statsJobs.size());
+        Assert.assertEquals(1, statsJobs.size());
 
         // test collect statistics time before table update time, and row count is 100, need to collect statistics
         new MockUp<AnalyzeMgr>() {
@@ -763,7 +772,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         };
         new MockUp<IcebergPartitionUtils>() {
             @Mock
-            public Set<String> getChangedPartitionNames(org.apache.iceberg.Table table, long fromTimestampMillis) {
+            public Set<String> getChangedPartitionNames(org.apache.iceberg.Table table, long fromTimestampMillis,
+                                                        Snapshot toSnapshot) {
                 return Sets.newHashSet("date=2020-01-01", "date=2020-01-02", "date=2020-01-03");
             }
         };

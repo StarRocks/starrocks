@@ -446,7 +446,7 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
         if (st = reader->do_get_next(base_chunk.get()); !st.ok()) {
             if (is_eos = st.is_end_of_file(); !is_eos) {
                 LOG(WARNING) << alter_msg_header()
-                             << "tablet reader failed to get next chunk, status: " << st.get_error_msg();
+                             << "tablet reader failed to get next chunk, status: " << st.message();
                 return st;
             }
         }
@@ -461,9 +461,13 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
             LOG(WARNING) << alter_msg_header() + err_msg;
             return Status::InternalError(alter_msg_header() + err_msg);
         }
+        // Since mv supports where expression, new_chunk may be empty after where expression evalutions.
+        if (new_chunk->num_rows() == 0) {
+            continue;
+        }
 
         if (auto st = _chunk_changer->fill_generated_columns(new_chunk); !st.ok()) {
-            LOG(WARNING) << alter_msg_header() << "fill generated columns failed: " << st.get_error_msg();
+            LOG(WARNING) << alter_msg_header() << "fill generated columns failed: " << st.message();
             return st;
         }
 
@@ -473,7 +477,7 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
             std::string err_msg = strings::Substitute(
                     "failed to execute schema change. base tablet:$0, new_tablet:$1. err msg: failed to add chunk to "
                     "rowset writer: $2",
-                    base_tablet->tablet_id(), new_tablet->tablet_id(), st.get_error_msg());
+                    base_tablet->tablet_id(), new_tablet->tablet_id(), st.message());
             LOG(WARNING) << alter_msg_header() << err_msg;
             return Status::InternalError(alter_msg_header() + err_msg);
         }
@@ -560,10 +564,21 @@ Status SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_
             LOG(WARNING) << alter_msg_header() << err_msg;
             return Status::InternalError(alter_msg_header() + err_msg);
         }
+        // Since mv supports where expression, new_chunk may be empty after where expression evalutions.
+        if (new_chunk->num_rows() == 0) {
+            continue;
+        }
 
         ChunkHelper::padding_char_columns(char_field_indexes, new_schema, new_tablet->tablet_schema(), new_chunk.get());
 
-        bool full = mem_table->insert(*new_chunk, selective->data(), 0, new_chunk->num_rows());
+        auto res = mem_table->insert(*new_chunk, selective->data(), 0, new_chunk->num_rows());
+        if (!res.ok()) {
+            std::string msg = strings::Substitute("$0 failed to insert mem table: $1", alter_msg_header(),
+                                                  res.status().to_string());
+            LOG(WARNING) << msg;
+            return res.status();
+        }
+        auto full = res.value();
         if (full) {
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), alter_msg_header() + "failed to finalize mem table");
             RETURN_IF_ERROR_WITH_WARN(mem_table->flush(), alter_msg_header() + "failed to flush mem table");
@@ -693,6 +708,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
         for (const auto& column : request.columns) {
             base_tablet_schema->append_column(TabletColumn(column));
         }
+        base_tablet_schema->generate_sort_key_idxes();
     }
     auto new_tablet_schema = new_tablet->tablet_schema();
 
@@ -739,7 +755,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
                                                      &sc_params.sc_directly, &generated_column_idxs);
 
     if (!status.ok()) {
-        LOG(WARNING) << _alter_msg_header << "failed to parse the request. res=" << status.get_error_msg();
+        LOG(WARNING) << _alter_msg_header << "failed to parse the request. res=" << status.message();
         return status;
     }
 
@@ -894,6 +910,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
 
     // open tablet readers out of lock for open is heavy because of io
     for (auto& tablet_reader : readers) {
+        tablet_reader->set_delete_predicates_version(delete_predicates_version);
         RETURN_IF_ERROR(tablet_reader->open(read_params));
     }
 
@@ -1034,11 +1051,6 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
             LOG(WARNING) << _alter_msg_header << "failed to build rowset: " << new_rowset.status()
                          << ". exit alter process";
             break;
-        }
-        if (sc_params.rowsets_to_change[i]->rowset_meta()->has_delete_predicate()) {
-            (*new_rowset)
-                    ->mutable_delete_predicate()
-                    ->CopyFrom(sc_params.rowsets_to_change[i]->rowset_meta()->delete_predicate());
         }
         status = sc_params.new_tablet->add_rowset(*new_rowset, false);
         if (status.is_already_exist()) {

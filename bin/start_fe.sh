@@ -55,6 +55,8 @@ export DORIS_HOME="$STARROCKS_HOME"
 
 source $STARROCKS_HOME/bin/common.sh
 
+check_and_update_max_processes
+
 # export env variables from fe.conf
 #
 # JAVA_OPTS
@@ -107,24 +109,24 @@ JAVA=$JAVA_HOME/bin/java
 # check java version and choose correct JAVA_OPTS
 JAVA_VERSION=$(jdk_version)
 final_java_opt=$JAVA_OPTS
-if [[ "$JAVA_VERSION" -gt 8 ]]; then
-    if [[ "$JAVA_VERSION" -lt 11 ]]; then
-        echo "JDK $JAVA_VERSION is not supported, please use JDK 11 or 17"
-        exit -1
+if [[ "$JAVA_VERSION" -lt 11 ]]; then
+    echo "JDK $JAVA_VERSION is not supported, please use JDK 11 or 17"
+    exit -1
+fi
+
+# for config compatibility
+if [ -n "$JAVA_OPTS_FOR_JDK_11" ]; then
+    final_java_opt=$JAVA_OPTS_FOR_JDK_11
+elif [ -n "$JAVA_OPTS_FOR_JDK_9" ]; then
+    final_java_opt=$JAVA_OPTS_FOR_JDK_9
+else
+    if [ -z "$DATE" ] ; then
+        DATE=`date +%Y%m%d-%H%M%S`
     fi
-        
-    if [ -n "$JAVA_OPTS_FOR_JDK_11" ]; then
-        final_java_opt=$JAVA_OPTS_FOR_JDK_11
-    # for config compatibility
-    elif [ -n "$JAVA_OPTS_FOR_JDK_9" ]; then 
-        final_java_opt=$JAVA_OPTS_FOR_JDK_9
-    else
-        if [ -z "$DATE" ] ; then
-            DATE=`date +%Y%m%d-%H%M%S`
-        fi
-        default_java_opts_for_jdk11="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time"
-        echo "JAVA_OPTS_FOR_JDK_11 is not set in fe.conf, use default java options for jdk11 to start fe process: $default_java_opts_for_jdk11"
-        final_java_opt=$default_java_opts_for_jdk11
+    if [ -z "$final_java_opt" ] ; then
+      default_java_opts="-Dlog4j2.formatMsgNoLookups=true -Xmx8192m -XX:+UseG1GC -Xlog:gc*:${LOG_DIR}/fe.gc.log.$DATE:time -Djava.security.policy=${STARROCKS_HOME}/conf/udf_security.policy"
+      echo "JAVA_OPTS is not set in fe.conf, use default java options to start fe process: $default_java_opts"
+      final_java_opt=default_java_opts
     fi
 fi
 

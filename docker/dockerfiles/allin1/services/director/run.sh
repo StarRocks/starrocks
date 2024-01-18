@@ -31,8 +31,8 @@ If FE/BE state needs to be persisted, please be sure the following directories a
 * BE service storage: $BE_HOME/storage
 "
 HOSTNAME_MISMATCH_MSG="
-Detect FE service hostname mismatch, FE service won't start.
-This is probably caused by persisted fe/meta from outside container, but the container's
+FE service hostname mismatch detected, FE service won't start.
+This is probably caused by persisted fe/meta from outside of container, but the container's
 hostname is not fixed. If running with docker engine, use '-h <hostname>' to assign a
 fixed hostname and restart.
 "
@@ -107,7 +107,7 @@ check_fe_fqdn_mismatch()
 check_fe_liveness()
 {
     fequeryport=`fe_mysql_port`
-    loginfo "checking if FE service query port:$fequeryport alive or not ..."
+    loginfo "checking if FE service query port:$fequeryport is alive or not ..."
     while true
     do
         if nc -z -4 -w 5 $MYHOST $fequeryport ; then
@@ -233,7 +233,7 @@ loginfo
 loginfo "FE mysql query port: `fe_mysql_port`"
 loginfo "FE http service port: 8080"
 loginfo
-loginfo "Enjoy the journal to StarRocks blazing-fast lake-house engine!"
+loginfo "Enjoy the journey to StarRocks blazing-fast lake-house engine!"
 
 while true
 do

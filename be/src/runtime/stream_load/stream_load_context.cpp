@@ -59,8 +59,9 @@ std::string StreamLoadContext::to_resp_json(const std::string& txn_op, const Sta
         break;
     }
     // msg
+    std::string_view msg = st.message();
     writer.Key("Message");
-    writer.String(st.get_error_msg().c_str());
+    writer.String(msg.data(), msg.size());
 
     if (st.ok()) {
         // label
@@ -160,7 +161,8 @@ std::string StreamLoadContext::to_json() const {
     if (status.ok()) {
         writer.String("OK");
     } else {
-        writer.String(status.get_error_msg().c_str());
+        std::string_view msg = status.message();
+        writer.String(msg.data(), msg.size());
     }
     // number_load_rows
     writer.Key("NumberTotalRows");

@@ -19,7 +19,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BinaryType;
-import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MapType;
@@ -91,17 +90,14 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                 Type type = fn.getArgs()[i];
                 ScalarOperator child = call.getChild(i);
 
-                //Cast from array(null), direct assignment type to avoid passing null_literal into be
-                if (type.isArrayType() && child.getType().isArrayType()
-                        && ((ArrayType) child.getType()).getItemType().isNull()) {
-                    child.setType(type);
+                // For compatibility, decimal ArithmeticExpr(+-*/%) use Type::equals instead of Type::matchesType to
+                // determine whether to cast child of the ArithmeticExpr
+                if (needAdjustScale && type.isDecimalOfAnyVersion() && !type.equals(child.getType())) {
+                    addCastChild(type, call, i);
                     continue;
                 }
 
-                // for compatibility, decimal ArithmeticExpr(+-*/%) use Type::equals instead of Type::matchesType to
-                // determine whether to cast child of the ArithmeticExpr
-                if ((needAdjustScale && type.isDecimalOfAnyVersion() && !type.equals(child.getType())) ||
-                        !type.matchesType(child.getType())) {
+                if (!type.matchesType(child.getType())) {
                     addCastChild(type, call, i);
                 }
             }
@@ -124,7 +120,7 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
     @Override
     public ScalarOperator visitBetweenPredicate(BetweenPredicateOperator predicate,
                                                 ScalarOperatorRewriteContext context) {
-        return castForBetweenAndIn(predicate);
+        return castForBetweenAndIn(predicate, true);
     }
 
     @Override
@@ -169,7 +165,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             if (op.isPresent()) {
                 predicate.getChildren().set(0, op.get());
                 return predicate;
-            } else if (rightChild.getType().isDateType() && Type.canCastTo(leftChild.getType(), rightChild.getType())) {
+            } else if (rightChild.getType().isDateType() && !leftChild.getType().isDateType() &&
+                    Type.canCastTo(leftChild.getType(), rightChild.getType())) {
                 // For like MySQL, convert to date type as much as possible
                 addCastChild(rightChild.getType(), predicate, 0);
                 return predicate;
@@ -179,7 +176,8 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             if (op.isPresent()) {
                 predicate.getChildren().set(1, op.get());
                 return predicate;
-            } else if (leftChild.getType().isDateType() && Type.canCastTo(rightChild.getType(), leftChild.getType())) {
+            } else if (leftChild.getType().isDateType() && !rightChild.getType().isDateType() &&
+                    Type.canCastTo(rightChild.getType(), leftChild.getType())) {
                 // For like MySQL, convert to date type as much as possible
                 addCastChild(leftChild.getType(), predicate, 1);
                 return predicate;
@@ -213,7 +211,7 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
 
     @Override
     public ScalarOperator visitInPredicate(InPredicateOperator predicate, ScalarOperatorRewriteContext context) {
-        return castForBetweenAndIn(predicate);
+        return castForBetweenAndIn(predicate, false);
     }
 
     @Override
@@ -275,7 +273,7 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
         return operator;
     }
 
-    private ScalarOperator castForBetweenAndIn(ScalarOperator predicate) {
+    private ScalarOperator castForBetweenAndIn(ScalarOperator predicate, boolean isBetween) {
         Type firstType = predicate.getChildren().get(0).getType();
         if (predicate.getChildren().stream().skip(1).allMatch(o -> firstType.matchesType(o.getType()))) {
             return predicate;
@@ -298,7 +296,7 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
             }
         }
 
-        Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(types);
+        Type compatibleType = TypeManager.getCompatibleTypeForBetweenAndIn(types, isBetween);
         for (int i = 0; i < predicate.getChildren().size(); i++) {
             Type childType = predicate.getChild(i).getType();
 

@@ -26,12 +26,14 @@ import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 import java.nio.charset.StandardCharsets;
 import java.sql.Date;
+import java.sql.Time;
 import java.sql.Timestamp;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
+import java.util.TimeZone;
 
 import static com.starrocks.utils.NativeMethodHelper.getAddrs;
 import static com.starrocks.utils.NativeMethodHelper.resizeStringData;
@@ -46,6 +48,7 @@ public class UDFHelper {
     public static final int TYPE_VARCHAR = 17;
     public static final int TYPE_ARRAY = 19;
     public static final int TYPE_BOOLEAN = 24;
+    public static final int TYPE_TIME = 44;
     public static final int TYPE_DATETIME = 51;
 
     private static final byte[] emptyBytes = new byte[0];
@@ -53,6 +56,7 @@ public class UDFHelper {
     private static final ThreadLocal<DateFormat> formatter =
             ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"));
     private static final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    private static final TimeZone timeZone = TimeZone.getDefault();
 
     private static void getBooleanBoxedResult(int numRows, Boolean[] boxedArr, long columnAddr) {
         byte[] nulls = new byte[numRows];
@@ -192,6 +196,25 @@ public class UDFHelper {
         Platform.copyMemory(dataArr, Platform.DOUBLE_ARRAY_OFFSET, null, addrs[1], numRows * 8L);
     }
 
+    private static void getDoubleTimeResult(int numRows, Time[] boxedArr, long columnAddr) {
+        byte[] nulls = new byte[numRows];
+        double[] dataArr = new double[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (boxedArr[i] == null) {
+                nulls[i] = 1;
+            } else {
+                // Note: add the timezone offset back because Time#getTime() returns the GMT timestamp
+                dataArr[i] = (boxedArr[i].getTime() + timeZone.getRawOffset()) / 1000;
+            }
+        }
+
+        final long[] addrs = getAddrs(columnAddr);
+        // memcpy to uint8_t array
+        Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
+        // memcpy to double array
+        Platform.copyMemory(dataArr, Platform.DOUBLE_ARRAY_OFFSET, null, addrs[1], numRows * 8L);
+    }
+
     private static void getStringDateResult(int numRows, Date[] column, long columnAddr) {
         // TODO: return timestamp
         String[] results = new String[numRows];
@@ -294,6 +317,10 @@ public class UDFHelper {
             }
             case TYPE_BIGINT: {
                 getBigIntBoxedResult(numRows, (Long[]) boxedResult, columnAddr);
+                break;
+            }
+            case TYPE_TIME: {
+                getDoubleTimeResult(numRows, (Time[]) boxedResult, columnAddr);
                 break;
             }
             case TYPE_VARCHAR: {

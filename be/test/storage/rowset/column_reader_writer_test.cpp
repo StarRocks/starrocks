@@ -99,7 +99,7 @@ protected:
     void TearDown() override {}
 
     std::shared_ptr<Segment> create_dummy_segment(const std::shared_ptr<FileSystem>& fs, const std::string& fname) {
-        return std::make_shared<Segment>(fs, fname, 1, _dummy_segment_schema, nullptr);
+        return std::make_shared<Segment>(fs, FileInfo{fname}, 1, _dummy_segment_schema, nullptr);
     }
 
     template <LogicalType type, EncodingTypePB encoding, uint32_t version>
@@ -160,9 +160,6 @@ protected:
         }
         // read and check
         {
-            // create page cache
-            std::unique_ptr<MemTracker> page_cache_mem_tracker = std::make_unique<MemTracker>();
-            StoragePageCache::create_global_cache(page_cache_mem_tracker.get(), 1000000000);
             // read and check
             auto res = ColumnReader::create(&meta, segment.get());
             ASSERT_TRUE(res.ok());
@@ -719,6 +716,89 @@ TEST_F(ColumnReaderWriterTest, test_scalar_column_total_mem_footprint) {
         auto reader = std::move(res).value();
         ASSERT_EQ(1024, meta.num_rows());
         ASSERT_EQ(1024 * 4 + 1024, reader->total_mem_footprint());
+    }
+}
+
+TEST_F(ColumnReaderWriterTest, test_large_varchar_column_writer) {
+    auto fs = std::make_shared<MemoryFileSystem>();
+    ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());
+    const std::string fname = strings::Substitute("$0/test_large_varchar_column_writer.data", TEST_DIR);
+    // write data
+    {
+        int32_t old_config = config::dictionary_speculate_min_chunk_size;
+        const int TEST_N = 100;
+        // Test 3 different dictionary_speculate_min_chunk_size.
+        int32_t dict_chunk_sizes[3] = {TEST_N - 1, TEST_N, TEST_N + 1};
+        for (int32_t dict_chunk_size : dict_chunk_sizes) {
+            fs->delete_file(fname);
+            ASSIGN_OR_ABORT(auto wfile, fs->new_writable_file(fname));
+            ColumnMetaPB meta;
+            ColumnWriterOptions writer_opts;
+            writer_opts.page_format = 2;
+            writer_opts.meta = &meta;
+            writer_opts.meta->set_column_id(0);
+            writer_opts.meta->set_unique_id(0);
+            writer_opts.meta->set_type(TYPE_VARCHAR);
+            writer_opts.meta->set_length(1024 * 1024);
+            writer_opts.meta->set_encoding(PLAIN_ENCODING);
+            writer_opts.meta->set_compression(starrocks::LZ4_FRAME);
+            writer_opts.meta->set_is_nullable(true);
+            writer_opts.need_zone_map = true;
+
+            TabletColumn column(STORAGE_AGGREGATE_NONE, TYPE_VARCHAR);
+            column = create_varchar_key(1, true, 1024 * 1024);
+            ASSIGN_OR_ABORT(auto writer, ColumnWriter::create(writer_opts, &column, wfile.get()));
+            ASSERT_OK(writer->init());
+            config::dictionary_speculate_min_chunk_size = dict_chunk_size;
+            auto col = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+            config::dictionary_speculate_min_chunk_size = 4096;
+            std::vector<Slice> col_slices;
+            std::vector<std::string> col_strs;
+            col_strs.resize(TEST_N);
+            for (int i = 0; i < TEST_N; i++) {
+                col_strs[i] = strings::Substitute("test_$0", i);
+                col_slices.push_back(Slice(col_strs[i]));
+            }
+            col->reserve(TEST_N);
+            col->append_strings(col_slices);
+            ASSERT_TRUE(writer->append(*col).ok());
+
+            ASSERT_TRUE(writer->finish().ok());
+            ASSERT_TRUE(writer->write_data().ok());
+            ASSERT_TRUE(writer->write_ordinal_index().ok());
+            ASSERT_TRUE(writer->write_zone_map().ok());
+
+            // close the file
+            ASSERT_TRUE(wfile->close().ok());
+            // read and check result
+            auto segment = create_dummy_segment(fs, fname);
+            auto res = ColumnReader::create(&meta, segment.get());
+            ASSERT_TRUE(res.ok());
+            auto reader = std::move(res).value();
+            ASSIGN_OR_ABORT(auto iter, reader->new_iterator());
+            ASSIGN_OR_ABORT(auto read_file, fs->new_random_access_file(fname));
+            ColumnIteratorOptions iter_opts;
+            OlapReaderStatistics stats;
+            iter_opts.stats = &stats;
+            iter_opts.read_file = read_file.get();
+            iter_opts.use_page_cache = true;
+            auto st = iter->init(iter_opts);
+            ASSERT_TRUE(st.ok());
+            ASSERT_TRUE(iter->seek_to_first().ok());
+            ColumnPtr dst = ChunkHelper::column_from_field_type(TYPE_VARCHAR, true);
+            dst->reserve(TEST_N);
+            size_t rows_read = TEST_N;
+            ASSERT_TRUE(iter->next_batch(&rows_read, dst.get()).ok());
+            ASSERT_EQ(dst->size(), TEST_N);
+
+            TypeInfoPtr type_info = get_type_info(TYPE_VARCHAR);
+            for (size_t i = 0; i < TEST_N; i++) {
+                ASSERT_EQ(0, type_info->cmp(col->get(i), dst->get(i)))
+                        << " row " << i << ": " << datum_to_string(type_info.get(), col->get(i)) << " vs "
+                        << datum_to_string(type_info.get(), dst->get(i));
+            }
+        }
+        config::dictionary_speculate_min_chunk_size = old_config;
     }
 }
 

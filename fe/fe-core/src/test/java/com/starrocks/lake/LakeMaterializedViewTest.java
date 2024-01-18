@@ -93,10 +93,13 @@ public class LakeMaterializedViewTest {
 
     @BeforeClass
     public static void setUp() throws Exception {
-        Config.enable_experimental_mv = true;
         PseudoCluster.getOrCreateWithRandomPort(true, 3);
         cluster = PseudoCluster.getInstance();
         connectContext = UtFrameUtils.createDefaultCtx();
+
+        // set default config for async mvs
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase(DB).useDatabase(DB);
 
@@ -311,7 +314,8 @@ public class LakeMaterializedViewTest {
                         "distributed by hash(k2) buckets 3\n" +
                         "PROPERTIES(\n" +
                         "   'datacache.enable' = 'true',\n" +
-                        "   'enable_async_write_back' = 'false'\n" +
+                        "   'enable_async_write_back' = 'false',\n" +
+                        "   'datacache.partition_duration' = '6 day'\n" +
                         ")\n" +
                         "refresh async\n" +
                         "as select k2, sum(k3) as total from base_table group by k2;");
@@ -340,6 +344,7 @@ public class LakeMaterializedViewTest {
         Assert.assertTrue(ddlStmt.contains("\"datacache.enable\" = \"true\""));
         Assert.assertTrue(ddlStmt.contains("\"enable_async_write_back\" = \"false\""));
         Assert.assertTrue(ddlStmt.contains("\"storage_volume\" = \"builtin_storage_volume\""));
+        Assert.assertTrue(ddlStmt.contains("\"datacache.partition_duration\" = \"6 days\""));
 
         // check task
         String mvTaskName = "mv-" + mv.getId();

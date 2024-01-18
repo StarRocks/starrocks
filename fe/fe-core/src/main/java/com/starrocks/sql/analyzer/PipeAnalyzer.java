@@ -26,6 +26,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.ParseUtil;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.load.pipe.FilePipeSource;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.VariableMgr;
@@ -62,6 +63,7 @@ public class PipeAnalyzer {
                     .add(PROPERTY_POLL_INTERVAL)
                     .add(PROPERTY_BATCH_SIZE)
                     .add(PROPERTY_BATCH_FILES)
+                    .add(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
                     .build();
 
     public static void analyzePipeName(PipeName pipeName, ConnectContext context) {
@@ -116,7 +118,7 @@ public class PipeAnalyzer {
                     }
                     if (value < 0) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER,
-                                PROPERTY_BATCH_SIZE + " should in [0, +oo)");
+                                PROPERTY_BATCH_SIZE + " should be greater than 0");
                     }
                     break;
                 }
@@ -136,11 +138,19 @@ public class PipeAnalyzer {
                     VariableMgr.parseBooleanVariable(valueStr);
                     break;
                 }
+                case PropertyAnalyzer.PROPERTIES_WAREHOUSE: {
+                    analyzeWarehouseProperty(valueStr);
+                    break;
+                }
                 default: {
                     break;
                 }
             }
         }
+    }
+
+    public static void analyzeWarehouseProperty(String warehouseName) {
+        ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, warehouseName);
     }
 
     public static void analyze(CreatePipeStmt stmt, ConnectContext context) {

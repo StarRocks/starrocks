@@ -57,6 +57,8 @@ import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPublishVersionRequest;
 import com.starrocks.thrift.TPushReq;
 import com.starrocks.thrift.TReleaseSnapshotRequest;
+import com.starrocks.thrift.TRemoteSnapshotRequest;
+import com.starrocks.thrift.TReplicateSnapshotRequest;
 import com.starrocks.thrift.TSnapshotRequest;
 import com.starrocks.thrift.TStorageMediumMigrateReq;
 import com.starrocks.thrift.TTaskType;
@@ -173,7 +175,7 @@ public class AgentBatchTask implements Runnable {
             boolean ok = false;
             try {
                 ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
-                if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA && computeNode == null) {
+                if (RunMode.isSharedDataMode() && computeNode == null) {
                     computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(backendId);
                 }
 
@@ -384,6 +386,18 @@ public class AgentBatchTask implements Runnable {
                 CompactionTask compactionTask = (CompactionTask) task;
                 TCompactionReq req = compactionTask.toThrift();
                 tAgentTaskRequest.setCompaction_req(req);
+                return tAgentTaskRequest;
+            }
+            case REMOTE_SNAPSHOT: {
+                RemoteSnapshotTask remoteSnapshotTask = (RemoteSnapshotTask) task;
+                TRemoteSnapshotRequest req = remoteSnapshotTask.toThrift();
+                tAgentTaskRequest.setRemote_snapshot_req(req);
+                return tAgentTaskRequest;
+            }
+            case REPLICATE_SNAPSHOT: {
+                ReplicateSnapshotTask replicateSnapshotTask = (ReplicateSnapshotTask) task;
+                TReplicateSnapshotRequest req = replicateSnapshotTask.toThrift();
+                tAgentTaskRequest.setReplicate_snapshot_req(req);
                 return tAgentTaskRequest;
             }
             default:

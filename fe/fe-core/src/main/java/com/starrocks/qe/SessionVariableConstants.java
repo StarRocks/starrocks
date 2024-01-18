@@ -32,6 +32,8 @@ public class SessionVariableConstants {
 
     public static final String DECIMAL = "decimal";
 
+    public static final String VARCHAR = "varchar";
+
     public enum AggregationStage {
         AUTO,
         ONE_STAGE,

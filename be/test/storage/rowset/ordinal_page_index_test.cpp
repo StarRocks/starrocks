@@ -53,16 +53,13 @@ public:
     const std::string kTestDir = "/ordinal_page_index_test";
 
     void SetUp() override {
-        _mem_tracker = std::make_unique<MemTracker>();
-        StoragePageCache::create_global_cache(_mem_tracker.get(), 1000000000);
         _fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(_fs->create_dir(kTestDir).ok());
     }
 
-    void TearDown() override { StoragePageCache::release_global_cache(); }
+    void TearDown() override { StoragePageCache::instance()->prune(); }
 
 protected:
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     std::shared_ptr<MemoryFileSystem> _fs = nullptr;
 };
 
@@ -92,7 +89,6 @@ TEST_F(OrdinalPageIndexTest, normal) {
     opts.read_file = rfile.get();
     opts.use_page_cache = true;
     opts.kept_in_memory = false;
-    opts.skip_fill_data_cache = false;
     OlapReaderStatistics stats;
     opts.stats = &stats;
     OrdinalIndexReader index;
@@ -154,7 +150,6 @@ TEST_F(OrdinalPageIndexTest, one_data_page) {
     opts.read_file = nullptr;
     opts.use_page_cache = true;
     opts.kept_in_memory = false;
-    opts.skip_fill_data_cache = false;
     OlapReaderStatistics stats;
     opts.stats = &stats;
     OrdinalIndexReader index;

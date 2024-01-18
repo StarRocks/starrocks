@@ -56,6 +56,8 @@
 #include "storage/storage_engine.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
+#include "types/array_type_info.h"
+#include "types/logical_type.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -99,10 +101,7 @@ class SegmentIterator final : public ChunkIterator {
 public:
     SegmentIterator(std::shared_ptr<Segment> segment, Schema _schema, SegmentReadOptions options);
 
-    ~SegmentIterator() override {
-        _get_del_vec_st.permit_unchecked_error();
-        _get_dcg_st.permit_unchecked_error();
-    }
+    ~SegmentIterator() override = default;
 
     void close() override;
 
@@ -248,8 +247,6 @@ private:
 
     Status _read(Chunk* chunk, vector<rowid_t>* rowid, size_t n);
 
-    bool _skip_fill_data_cache() const { return !_opts.fill_data_cache; }
-
     void _init_column_access_paths();
 
     // search delta column group by column uniqueid, if this column exist in delta column group,
@@ -264,9 +261,8 @@ private:
 
     void _update_stats(RandomAccessFile* rfile);
 
-    //  This function will search and build the segment from delta column group,
-    // and also return the columns's index in this segment if need.
-    StatusOr<std::shared_ptr<Segment>> _get_dcg_segment(uint32_t ucid, int32_t* col_index);
+    //  This function will search and build the segment from delta column group.
+    StatusOr<std::shared_ptr<Segment>> _get_dcg_segment(uint32_t ucid);
 
     bool need_early_materialize_subfield(const FieldPtr& field);
 
@@ -455,7 +451,7 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
             _opts.stats->raw_rows_read);
 }
 
-StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t ucid, int32_t* col_index) {
+StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t ucid) {
     // iterate dcg from new ver to old ver
     for (const auto& dcg : _dcgs) {
         // cols file index -> column index in corresponding file
@@ -465,39 +461,6 @@ StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t uc
             if (_dcg_segments.count(column_file) == 0) {
                 ASSIGN_OR_RETURN(auto dcg_segment, _segment->new_dcg_segment(*dcg, idx.first, _opts.tablet_schema));
                 _dcg_segments[column_file] = dcg_segment;
-            }
-            if (col_index != nullptr) {
-                /*
-                    If the number of cols file columns is less than corresponding dcg meta column_ids vector
-                    size, it means that drop column has been done. We should assign col_index more carefully.
-                    The column offset is not the offset in dcg column_ids vector but it should be the column
-                    offset of the loaded cols file.
-                */
-                DCHECK(_dcg_segments[column_file]->num_columns() <= dcg->column_ids()[idx.first].size());
-                if (_dcg_segments[column_file]->num_columns() < dcg->column_ids()[idx.first].size()) {
-                    auto new_schema = std::make_shared<TabletSchema>();
-                    if (_opts.tablet_schema != nullptr) {
-                        new_schema = TabletSchema::create_with_uid(_opts.tablet_schema, dcg->column_ids()[idx.first]);
-                    } else {
-                        new_schema = TabletSchema::create_with_uid(_segment->tablet_schema_share_ptr(),
-                                                                   dcg->column_ids()[idx.first]);
-                    }
-
-                    *col_index = INT32_MIN;
-                    for (int i = 0; i < new_schema->columns().size(); ++i) {
-                        const auto& col = new_schema->column(i);
-                        if (col.unique_id() == dcg->column_ids()[idx.first][idx.second]) {
-                            *col_index = i;
-                            break;
-                        }
-                    }
-                    if (*col_index == INT32_MIN) {
-                        return Status::InternalError("Can not find suitable column in cols file, filename: " +
-                                                     _dcg_segments[column_file]->file_name());
-                    }
-                } else {
-                    *col_index = idx.second;
-                }
             }
             return _dcg_segments[column_file];
         }
@@ -510,13 +473,12 @@ StatusOr<std::unique_ptr<ColumnIterator>> SegmentIterator::_new_dcg_column_itera
                                                                                     std::string* filename,
                                                                                     ColumnAccessPath* path) {
     // build column iter from delta column group
-    int32_t col_index = 0;
-    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(ucid, &col_index));
+    ASSIGN_OR_RETURN(auto dcg_segment, _get_dcg_segment(ucid));
     if (dcg_segment != nullptr) {
         if (filename != nullptr) {
             *filename = dcg_segment->file_name();
         }
-        return dcg_segment->new_column_iterator(col_index, path);
+        return dcg_segment->new_column_iterator(ucid, path);
     }
     return nullptr;
 }
@@ -543,9 +505,10 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     iter_opts.use_page_cache = _opts.use_page_cache;
     iter_opts.check_dict_encoding = check_dict_enc;
     iter_opts.reader_type = _opts.reader_type;
-    iter_opts.fill_data_cache = _opts.fill_data_cache;
+    iter_opts.lake_io_opts = _opts.lake_io_opts;
 
-    RandomAccessFileOptions opts{.skip_fill_local_cache = _skip_fill_data_cache()};
+    RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
+                                 .buffer_size = _opts.lake_io_opts.buffer_size};
 
     ColumnAccessPath* access_path = nullptr;
     if (_column_access_paths.find(cid) != _column_access_paths.end()) {
@@ -560,8 +523,10 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     ASSIGN_OR_RETURN(auto col_iter, _new_dcg_column_iterator((uint32_t)ucid, &dcg_filename, access_path));
     if (col_iter == nullptr) {
         // not found in delta column group, create normal column iterator
-        ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator(cid, access_path, _opts.tablet_schema));
-        ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_name()));
+        auto tablet_schema = _opts.tablet_schema ? _opts.tablet_schema : _segment->tablet_schema_share_ptr();
+        const auto& col = tablet_schema->column(cid);
+        ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, access_path));
+        ASSIGN_OR_RETURN(auto rfile, _opts.fs->new_random_access_file(opts, _segment->file_info()));
         iter_opts.read_file = rfile.get();
         _column_files[cid] = std::move(rfile);
     } else {
@@ -710,7 +675,7 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_key_ranges() {
         return res;
     }
 
-    RETURN_IF_ERROR(_segment->load_index(_skip_fill_data_cache()));
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
     for (const SeekRange& range : _opts.ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
@@ -742,7 +707,7 @@ StatusOr<SparseRange<>> SegmentIterator::_get_row_ranges_by_short_key_ranges() {
         return res;
     }
 
-    RETURN_IF_ERROR(_segment->load_index(_skip_fill_data_cache()));
+    RETURN_IF_ERROR(_segment->load_index(_opts.lake_io_opts));
     for (const auto& short_key_range : _opts.short_key_ranges) {
         rowid_t lower_rowid = 0;
         rowid_t upper_rowid = num_rows();
@@ -1378,7 +1343,16 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
 
         if (use_dict_code || use_global_dict_code) {
             // create FixedLengthColumn<int64_t> for saving dict codewords.
-            auto f2 = std::make_shared<Field>(cid, f->name(), kDictCodeType, -1, -1, f->is_nullable());
+            FieldPtr f2;
+            if (f->type()->type() == TYPE_ARRAY && f->sub_field(0).type()->type() == TYPE_VARCHAR) {
+                auto child = f->sub_field(0);
+                TypeInfoPtr typeInfo = get_array_type_info(get_type_info(kDictCodeType, -1, -1));
+                f2 = std::make_shared<Field>(cid, f->name(), typeInfo, STORAGE_AGGREGATE_NONE, 0, false,
+                                             f->is_nullable());
+                f2->add_sub_field(Field(child.id(), child.name(), kDictCodeType, -1, -1, child.is_nullable()));
+            } else {
+                f2 = std::make_shared<Field>(cid, f->name(), kDictCodeType, -1, -1, f->is_nullable());
+            }
             ColumnIterator* iter = nullptr;
             if (use_global_dict_code) {
                 iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid].get(),
@@ -1699,23 +1673,20 @@ Status SegmentIterator::_init_bitmap_index_iterators() {
         if (_bitmap_index_iterators[cid] == nullptr) {
             ColumnUID ucid = cid_2_ucid[cid];
             // the column's index in this segment file
-            int32_t col_index = 0;
-            ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid, &col_index));
+            ASSIGN_OR_RETURN(std::shared_ptr<Segment> segment_ptr, _get_dcg_segment(ucid));
             if (segment_ptr == nullptr) {
                 // find segment from delta column group failed, using main segment
                 segment_ptr = _segment;
-                col_index = cid;
             }
 
             IndexReadOptions opts;
             opts.use_page_cache = config::enable_bitmap_index_memory_page_cache || !config::disable_storage_page_cache;
             opts.kept_in_memory = config::enable_bitmap_index_memory_page_cache;
-            opts.skip_fill_data_cache = _skip_fill_data_cache();
+            opts.lake_io_opts = _opts.lake_io_opts;
             opts.read_file = _column_files[cid].get();
             opts.stats = _opts.stats;
 
-            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(col_index, opts, &_bitmap_index_iterators[cid],
-                                                                   _opts.tablet_schema));
+            RETURN_IF_ERROR(segment_ptr->new_bitmap_index_iterator(ucid, opts, &_bitmap_index_iterators[cid]));
             _has_bitmap_index |= (_bitmap_index_iterators[cid] != nullptr);
         }
     }

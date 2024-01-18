@@ -36,6 +36,7 @@
 
 #include "common/status.h"
 #include "storage/olap_common.h"
+#include "storage/options.h"
 #include "storage/range.h"
 #include "storage/rowset/common.h"
 
@@ -55,7 +56,7 @@ struct ColumnIteratorOptions {
     // reader statistics
     OlapReaderStatistics* stats = nullptr;
     bool use_page_cache = false;
-    bool fill_data_cache = true;
+    LakeIOOptions lake_io_opts{.fill_data_cache = true};
 
     // check whether column pages are all dictionary encoding.
     bool check_dict_encoding = false;
@@ -121,6 +122,10 @@ public:
     [[nodiscard]] virtual Status fetch_all_dict_words(std::vector<Slice>* words) const {
         return Status::NotSupported("Not Support dict.");
     }
+
+    // only work when all_page_dict_encoded was true.
+    // used to acquire load local dict
+    virtual int dict_size() { return 0; }
 
     // return a non-negative dictionary code of |word| if it exist in this segment file,
     // otherwise -1 is returned.

@@ -170,7 +170,6 @@ private:
     std::vector<std::unique_ptr<TInternalScanRange>> _scan_ranges;
     TupleDescriptor* _tuple_desc = nullptr;
     OlapScanConjunctsManager _conjuncts_manager;
-    DictOptimizeParser _dict_optimize_parser;
     const Schema* _chunk_schema = nullptr;
 
     int32_t _num_scanners = 0;

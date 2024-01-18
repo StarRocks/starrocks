@@ -192,10 +192,10 @@ public class DecimalTypeTest extends PlanTestBase {
         try {
             String sql = "select array_agg(c_0_0) from tab0";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "array_agg[([16: array_agg, struct<col1 array<decimal128(26, 2)>>, true]); " +
+            assertContains(plan, "array_agg[([16: array_agg, struct<col1 array<DECIMAL128(26,2)>>, true]); " +
                     "args: DECIMAL128; result: ARRAY<DECIMAL128(26,2)>;");
             assertContains(plan, "array_agg[([1: c_0_0, DECIMAL128(26,2), false]); " +
-                    "args: DECIMAL128; result: struct<col1 array<decimal128(26, 2)>>;");
+                    "args: DECIMAL128; result: struct<col1 array<DECIMAL128(26,2)>>;");
         } finally {
             connectContext.getSessionVariable().setNewPlanerAggStage(stage);
         }
@@ -266,5 +266,13 @@ public class DecimalTypeTest extends PlanTestBase {
         sql = "select cast(cast('12.56' as decimalv2(9,1)) as varchar);";
         plan = getFragmentPlan(sql);
         assertContains(plan, "'12.56'");
+    }
+
+    @Test
+    public void testDateToDecimal() throws Exception {
+        String sql = "select '1969-12-10 23:46:53' > c_0_0 from tab0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "1:Project\n" +
+                "  |  <slot 16> : CAST(1: c_0_0 AS VARCHAR) < '1969-12-10 23:46:53'");
     }
 }

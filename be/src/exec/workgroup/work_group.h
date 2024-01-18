@@ -119,7 +119,7 @@ using RunningQueryTokenPtr = std::unique_ptr<RunningQueryToken>;
 class WorkGroup : public std::enable_shared_from_this<WorkGroup> {
 public:
     WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit, size_t concurrency,
-              WorkGroupType type);
+              double spill_mem_limit_threshold, WorkGroupType type);
     WorkGroup(const TWorkGroup& twg);
     ~WorkGroup() = default;
 
@@ -134,6 +134,8 @@ public:
 
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
     const MemTracker* mem_tracker() const { return _mem_tracker.get(); }
+
+    MemTracker* connector_scan_mem_tracker() { return _connector_scan_mem_tracker.get(); }
 
     int64_t id() const { return _id; }
     int64_t version() const { return _version; }
@@ -187,7 +189,7 @@ public:
     static int128_t create_unique_id(int64_t id, int64_t version) { return (((int128_t)version) << 64) | id; }
 
     Status check_big_query(const QueryContext& query_context);
-    StatusOr<RunningQueryTokenPtr> acquire_running_query_token();
+    StatusOr<RunningQueryTokenPtr> acquire_running_query_token(bool enable_group_level_query_queue);
     void decr_num_queries();
     int64_t num_running_queries() const { return _num_running_queries; }
     int64_t num_total_queries() const { return _num_total_queries; }
@@ -208,6 +210,12 @@ public:
     static constexpr int64 DEFAULT_VERSION = 0;
     static constexpr int64 DEFAULT_MV_VERSION = 1;
 
+    // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
+    static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
+    // Yield scan io task when maximum time in nano-seconds has spent in current execution round,
+    // if it runs in the worker thread owned by other workgroup, which has running drivers.
+    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 5'000'000L;
+
 private:
     static constexpr double ABSENT_MEMORY_LIMIT = -1;
     static constexpr size_t ABSENT_CONCURRENCY_LIMIT = 0;
@@ -225,8 +233,11 @@ private:
     int64_t _big_query_mem_limit = 0;
     int64_t _big_query_scan_rows_limit = 0;
     int64_t _big_query_cpu_nanos_limit = 0;
+    double _spill_mem_limit_threshold = 1.0;
+    int64_t _spill_mem_limit_bytes = -1;
 
     std::shared_ptr<starrocks::MemTracker> _mem_tracker = nullptr;
+    std::shared_ptr<starrocks::MemTracker> _connector_scan_mem_tracker = nullptr;
 
     WorkGroupDriverSchedEntity _driver_sched_entity;
     WorkGroupScanSchedEntity _scan_sched_entity;

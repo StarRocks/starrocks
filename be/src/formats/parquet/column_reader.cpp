@@ -24,10 +24,14 @@
 #include "exprs/expr.h"
 #include "formats/parquet/column_converter.h"
 #include "formats/parquet/stored_column_reader.h"
+#include "formats/parquet/stored_column_reader_with_index.h"
+#include "formats/parquet/utils.h"
 #include "gutil/strings/substitute.h"
+#include "io/shared_buffered_input_stream.h"
 #include "simd/batch_run_counter.h"
 #include "storage/column_or_predicate.h"
 #include "util/runtime_profile.h"
+#include "util/thrift_util.h"
 #include "utils.h"
 
 namespace starrocks {
@@ -85,6 +89,7 @@ public:
                 const tparquet::ColumnChunk* chunk_metadata) {
         _field = field;
         _col_type = &col_type;
+        _chunk_metadata = chunk_metadata;
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(*field, col_type, _opts.timezone, &converter));
         return StoredColumnReader::create(_opts, field, chunk_metadata, &_reader);
     }
@@ -117,11 +122,15 @@ public:
         ColumnContentType content_type =
                 _dict_filter_ctx == nullptr ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
         if (!converter->need_convert) {
+            SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
             return _reader->read_range(range, filter, content_type, dst);
         } else {
-            SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
             auto column = converter->create_src_column();
-            RETURN_IF_ERROR(_reader->read_range(range, filter, content_type, column.get()));
+            {
+                SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
+                RETURN_IF_ERROR(_reader->read_range(range, filter, content_type, column.get()));
+            }
+            SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
             return converter->convert(column, dst);
         }
     }
@@ -215,6 +224,32 @@ public:
         return Status::OK();
     }
 
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOType type, bool active) override;
+
+    const tparquet::ColumnChunk* get_chunk_metadata() override { return _chunk_metadata; }
+
+    const ParquetField* get_column_parquet_field() override { return _field; }
+
+    StatusOr<tparquet::OffsetIndex*> get_offset_index(const uint64_t rg_first_row) override {
+        if (_offset_index_ctx == nullptr) {
+            _offset_index_ctx = std::make_unique<ColumnOffsetIndexCtx>();
+            _offset_index_ctx->rg_first_row = rg_first_row;
+            int64_t offset_index_offset = _chunk_metadata->offset_index_offset;
+            uint32_t offset_index_length = _chunk_metadata->offset_index_length;
+            std::vector<uint8_t> offset_index_data;
+            offset_index_data.reserve(offset_index_length);
+            RETURN_IF_ERROR(
+                    _opts.file->read_at_fully(offset_index_offset, offset_index_data.data(), offset_index_length));
+
+            RETURN_IF_ERROR(deserialize_thrift_msg(offset_index_data.data(), &offset_index_length,
+                                                   TProtocolType::COMPACT, &_offset_index_ctx->offset_index));
+        }
+        return &_offset_index_ctx->offset_index;
+    }
+
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override;
+
 private:
     // Returns true if all of the data pages in the column chunk are dict encoded
     bool _column_all_pages_dict_encoded();
@@ -226,6 +261,8 @@ private:
 
     std::unique_ptr<ColumnDictFilterContext> _dict_filter_ctx;
     const TypeDescriptor* _col_type = nullptr;
+    const tparquet::ColumnChunk* _chunk_metadata = nullptr;
+    std::unique_ptr<ColumnOffsetIndexCtx> _offset_index_ctx;
 };
 
 bool ScalarColumnReader::_column_all_pages_dict_encoded() {
@@ -286,6 +323,94 @@ bool ScalarColumnReader::_column_all_pages_dict_encoded() {
     }
 
     return true;
+}
+
+void ScalarColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+                                                 int64_t* end_offset, ColumnIOType type, bool active) {
+    const auto& column = _opts.row_group_meta->columns[_field->physical_column_index];
+    if (type == ColumnIOType::PAGES) {
+        const tparquet::ColumnMetaData& column_metadata = column.meta_data;
+        if (_offset_index_ctx != nullptr) {
+            // add dict page
+            if (column_metadata.__isset.dictionary_page_offset) {
+                auto r = io::SharedBufferedInputStream::IORange(
+                        column_metadata.dictionary_page_offset,
+                        column_metadata.data_page_offset - column_metadata.dictionary_page_offset, active);
+                ranges->emplace_back(r);
+                *end_offset = std::max(*end_offset, r.offset + r.size);
+            }
+            _offset_index_ctx->collect_io_range(ranges, end_offset, active);
+        } else {
+            int64_t offset = 0;
+            if (column_metadata.__isset.dictionary_page_offset) {
+                offset = column_metadata.dictionary_page_offset;
+            } else {
+                offset = column_metadata.data_page_offset;
+            }
+            int64_t size = column_metadata.total_compressed_size;
+            auto r = io::SharedBufferedInputStream::IORange(offset, size, active);
+            ranges->emplace_back(r);
+            *end_offset = std::max(*end_offset, offset + size);
+        }
+    } else if (type == ColumnIOType::PAGE_INDEX) {
+        // only active column need column index
+        if (column.__isset.column_index_offset && active) {
+            auto r = io::SharedBufferedInputStream::IORange(column.column_index_offset, column.column_index_length);
+            ranges->emplace_back(r);
+        }
+        // all column need offset index
+        if (column.__isset.offset_index_offset) {
+            auto r = io::SharedBufferedInputStream::IORange(column.offset_index_offset, column.offset_index_length);
+            ranges->emplace_back(r);
+        }
+    }
+}
+
+void ScalarColumnReader::select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) {
+    if (_offset_index_ctx == nullptr) {
+        if (!_chunk_metadata->__isset.offset_index_offset) {
+            return;
+        }
+        auto st = get_offset_index(rg_first_row);
+        if (!st.ok()) {
+            return;
+        }
+    }
+    size_t page_num = _offset_index_ctx->offset_index.page_locations.size();
+    size_t range_size = range.size();
+
+    size_t range_idx = 0;
+    Range<uint64_t> r = range[range_idx++];
+
+    for (size_t i = 0; i < page_num; i++) {
+        int64_t first_row = _offset_index_ctx->offset_index.page_locations[i].first_row_index + rg_first_row;
+        int64_t end_row = first_row;
+        if (i != page_num - 1) {
+            end_row = _offset_index_ctx->offset_index.page_locations[i + 1].first_row_index + rg_first_row;
+        } else {
+            // a little trick, we don't care about the real rows of the last page.
+            if (range.end() < first_row) {
+                _offset_index_ctx->page_selected.emplace_back(false);
+                continue;
+            } else {
+                end_row = range.end();
+            }
+        }
+        if (end_row <= r.begin()) {
+            _offset_index_ctx->page_selected.emplace_back(false);
+            continue;
+        }
+        while (first_row >= r.end() && range_idx < range_size) {
+            r = range[range_idx++];
+        }
+        _offset_index_ctx->page_selected.emplace_back(first_row < r.end() && end_row > r.begin());
+    }
+    const tparquet::ColumnMetaData& column_metadata =
+            _opts.row_group_meta->columns[_field->physical_column_index].meta_data;
+    bool has_dict_page = column_metadata.__isset.dictionary_page_offset;
+    // be compatible with PARQUET-1850
+    has_dict_page |= _offset_index_ctx->check_dictionary_page(column_metadata.data_page_offset);
+    _reader = std::make_unique<StoredColumnReaderWithIndex>(std::move(_reader), _offset_index_ctx.get(), has_dict_page);
 }
 
 Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnReader* reader,
@@ -486,6 +611,15 @@ public:
         _element_reader->set_need_parse_levels(need_parse_levels);
     }
 
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOType type, bool active) override {
+        _element_reader->collect_column_io_range(ranges, end_offset, type, active);
+    }
+
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {
+        _element_reader->select_offset_index(range, rg_first_row);
+    }
+
 private:
     const ParquetField* _field = nullptr;
     std::unique_ptr<ColumnReader> _element_reader;
@@ -681,6 +815,25 @@ public:
 
         if (_value_reader != nullptr) {
             _value_reader->set_need_parse_levels(need_parse_levels);
+        }
+    }
+
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOType type, bool active) override {
+        if (_key_reader != nullptr) {
+            _key_reader->collect_column_io_range(ranges, end_offset, type, active);
+        }
+        if (_value_reader != nullptr) {
+            _value_reader->collect_column_io_range(ranges, end_offset, type, active);
+        }
+    }
+
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {
+        if (_key_reader != nullptr) {
+            _key_reader->select_offset_index(range, rg_first_row);
+        }
+        if (_value_reader != nullptr) {
+            _value_reader->select_offset_index(range, rg_first_row);
         }
     }
 
@@ -970,6 +1123,23 @@ public:
             }
         }
         return Status::OK();
+    }
+
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOType type, bool active) override {
+        for (const auto& pair : _child_readers) {
+            if (pair.second != nullptr) {
+                pair.second->collect_column_io_range(ranges, end_offset, type, active);
+            }
+        }
+    }
+
+    void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {
+        for (const auto& pair : _child_readers) {
+            if (pair.second != nullptr) {
+                pair.second->select_offset_index(range, rg_first_row);
+            }
+        }
     }
 
 private:

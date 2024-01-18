@@ -19,6 +19,7 @@ import com.starrocks.planner.FileTableScanNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
+import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
@@ -62,7 +63,8 @@ public class BackendSelectorFactory {
             return new NormalBackendSelector(scanNode, locations, assignment, workerProvider, false);
         } else if (scanNode instanceof HdfsScanNode || scanNode instanceof IcebergScanNode ||
                 scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode ||
-                scanNode instanceof FileTableScanNode || scanNode instanceof PaimonScanNode) {
+                scanNode instanceof FileTableScanNode || scanNode instanceof PaimonScanNode
+                || scanNode instanceof OdpsScanNode) {
             return new HDFSBackendSelector(scanNode, locations, assignment, workerProvider,
                     sessionVariable.getForceScheduleLocal(),
                     sessionVariable.getHDFSBackendSelectorScanRangeShuffle());

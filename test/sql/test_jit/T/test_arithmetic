@@ -1,0 +1,103 @@
+-- name: test_arithmetic
+DROP TABLE IF EXISTS `jit_basic`;
+CREATE TABLE IF NOT EXISTS `jit_basic` (
+	k1 BIGINT, 
+	k2 BIGINT, 
+	v1 BIGINT REPLACE, 
+	v2 BIGINT REPLACE, 
+	v3 BIGINT REPLACE,
+	v4 BIGINT REPLACE, 
+	v5 BIGINT REPLACE, 
+	v6 BIGINT REPLACE,
+	v7 BIGINT REPLACE,
+	v8 BIGINT REPLACE,
+	v9 BIGINT REPLACE
+) 
+ENGINE = olap 
+AGGREGATE KEY(k1, k2) 
+DISTRIBUTED BY HASH(k1) BUCKETS 10 
+PROPERTIES( 
+	"replication_num" = "1" 
+);
+
+INSERT INTO jit_basic (k1, k2, v1, v2, v3, v4, v5, v6, v7, v8, v9) VALUES
+(0, 9223372036854775807, -9223372036854775808, -5123, 5123, -2147483648, 2147483647, 0, 0, -32768, 32767),
+(100, -9223372036854775808, 9223372036854775807, -100, 200, -200, 0, 10000, -10000, 5000, -5000),
+(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
+(-1000, 1000, 500, -500, 250, -250, 125, -125, 100000, -100000, 50000),
+(100, -200, 300, -400, 500, -600, 700, -800, 900, -1000, 1100),
+(-56789, 56789, 12345, -12345, 67890, -67890, 0, 11111, -11111, 9999, -9999),
+(1, -1, 2, -2, 3, -3, 4, -4, 5, -5, 6),
+(32767, -32768, 2147483647, -2147483648, 9223372036854775807, -9223372036854775808, 100, -100, 200, -200, 0),
+(9999999, -9999999, 8888888, -8888888, 7777777, -7777777, 6666666, -6666666, 5555555, -5555555, 4444444),
+(0, 1, 131, -142, 1234, 134, -12, 17345, 63456, 341, 14),
+(2147483647, -2147483648, 32767, -32768, 100, -100, 200, -200, 0, 1, -1),
+(-1, 1, -2, 2, -3, 3, -4, 4, -5, 5, -6),
+(9223372036854775807, -9223372036854775808, 2147483647, -2147483648, 32767, -32768, 100, -100, 200, -200, 0),
+(1000, -1000, 500, -500, 250, -250, 125, -125, 100000, -100000, 50000),
+(200, -400, 600, -800, 1000, -1200, 1400, -1600, 1800, -2000, 2200),
+(-123456, 123456, 78901, -78901, 234567, -234567, 0, 54321, -54321, 67890, -67890),
+(7, -14, 21, -28, 35, -42, 49, -56, 63, -70, 77),
+(9876543, -9876543, 13579246, -13579246, 2468642, -2468642, 86420964, -86420964, 11111, -11111, 99999),
+(1234, -645, 9223372036854775807, -9223372036854775808, 1, 2, 3, 0, -1, -2, -3),
+(754, -14, 9223372036854775807, -9223372036854775808, 0, 0, 0, 0, 0, 0, 0);
+
+set enable_jit = true;
+
+-- +
+SELECT k1 + k2 + v1 as result FROM jit_basic ORDER BY result;
+SELECT k1 + v2 + 12 as result FROM jit_basic ORDER BY result;
+SELECT k1 + 11 + k2 + v1 + v2 + 12 + 13 as result FROM jit_basic ORDER BY result;
+SELECT k1 + k2 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 as result FROM jit_basic ORDER BY result;
+SELECT k1 + k2 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9 + 18 as result FROM jit_basic ORDER BY result;
+SELECT v1 + v3 + v5 + v7 + v9 as result FROM jit_basic ORDER BY result;
+SELECT v1 + v2 + v3 + v4 + v5 + v6 as result FROM jit_basic ORDER BY result;
+SELECT k1 + k2 + v7 + v9 as result FROM jit_basic ORDER BY result;
+SELECT v2 + v6 + v7 as result FROM jit_basic ORDER BY result;
+-- -
+SELECT k1 - k2 + v1 as result FROM jit_basic ORDER BY result;
+SELECT k1 + v2 - 12 as result FROM jit_basic ORDER BY result;
+SELECT k1 + v3 + v4 - 12 as result FROM jit_basic ORDER BY result;
+SELECT k1 + k2 - v1 + v2 - v3 + v4 + v5 - v6 + v7 + v8 - v9 as result FROM jit_basic ORDER BY result;
+SELECT k1 + k2 - v1 + v2 - v3 - 632 + v4 + v5 - v6 + v7 + v8 - v9 as result FROM jit_basic ORDER BY result;
+SELECT v1 - v3 + v5 + v7 - v9 as result FROM jit_basic ORDER BY result;
+SELECT v1 + v2 - v3 + v4 + v5 - v6 as result FROM jit_basic ORDER BY result;
+SELECT k1 + k2 - v7 + v9 as result FROM jit_basic ORDER BY result;
+SELECT k1 + k2 + 1235 - v7 + v9 - 742 as result FROM jit_basic ORDER BY result;
+-- *
+SELECT k1 * k2 * v1 as result FROM jit_basic ORDER BY result;
+SELECT k1 * k2 * v1 * 62 as result FROM jit_basic ORDER BY result;
+SELECT k1 * k2 - v1 * v2 * v3 + v4 + v5 * v6 + v7 * v8 - v9 as result FROM jit_basic ORDER BY result;
+SELECT k1 * k2 - 7334 - v1 * v2 * v3 + v4 * 732 + v5 * v6 * 821 + v7 * v8 - v9 - 132 as result FROM jit_basic ORDER BY result;
+SELECT v1 * v3 * v5 * v7 - v9 as result FROM jit_basic ORDER BY result;
+SELECT v1 * v2 - v3 * v4 * v5 - v6 as result FROM jit_basic ORDER BY result;
+SELECT v1 * v2 * 11 - v3 * v4 * v5 - v6 + 622 as result FROM jit_basic ORDER BY result;
+SELECT k1 * k2 - v7 + v9 as result FROM jit_basic ORDER BY result;
+-- mix
+SELECT v1 + v2 + v3 * 13 - 1124 as result FROM jit_basic ORDER BY result;
+SELECT v1 - 1323 - v2 + v3 * 2 as result FROM jit_basic ORDER BY result;
+SELECT v1 * v2 + v3 + 0 - v6 * 0 as result FROM jit_basic ORDER BY result;
+SELECT (v1 + v2) * v3 - 1124 as result FROM jit_basic ORDER BY result;
+SELECT (v1 * v2) - (v3 + 0) - (v6 * 0) as result FROM jit_basic ORDER BY result;
+SELECT (v1 + v2) + (k1 - k2) * v3 + 7 as result FROM jit_basic ORDER BY result;
+SELECT v1 * (3 - v2) + v3 * 2 as result FROM jit_basic ORDER BY result;
+SELECT (k1 * k2 + v1) * (k1 - v2) as result FROM jit_basic ORDER BY result;
+SELECT k1 + k2 - v1 * v2 + v3 as result FROM jit_basic ORDER BY result;
+SELECT (v1 - v2) * (k1 + k2 - v3) as result FROM jit_basic ORDER BY result;
+SELECT (k1 * k2 + v1) * v2 + v3 * v4 - v5 as result FROM jit_basic ORDER BY result;
+-- hard
+select bitnot(cast(power(-2,127) as largeint)+1);
+
+create table num_test(c_dis int,c_tinyint tinyint,c_smallint smallint,c_int int,c_bigint bigint,
+            c_largeint largeint,c_float float,c_double double,c_dec32p1s0 decimal32(1,0),
+            c_dec32p9s9 decimal32(9,9),c_dec32p7s3 decimal(7,3),c_dec64p18s0 decimal64(18,0),
+            c_dec64p18s18 decimal64(18,18),c_dec64p10s5 decimal64(10,5),c_dec128p38s18 decimal128(38,18),
+            c_dec128p38s0 decimal(38,0),c_dec128p38s16 decimal128(38,16))
+            distributed by hash(c_dis)  properties("replication_num"="1");
+insert into num_test values(1,127,32767,2147483647,9223372036854775807,170141183460469231731687303715884105727,3.4E+38,1.79E+308,9,0.999999999,9999.999,999999999999999999,0.999999999999999999,99999.99999,99999999999999999999.999999999999999999,99999999999999999999999999999999999999,9999999999999999999999.9999999999999999);
+insert into num_test values(2,-128,-32768,-2147483648,-9223372036854775808,-170141183460469231731687303715884105728,-3.4E+38,-1.79E+308,-9,-0.999999999,-9999.999,-999999999999999999,-0.999999999999999999,-99999.99999,-99999999999999999999.999999999999999999,-99999999999999999999999999999999999999,-9999999999999999999999.9999999999999999);
+select a.c_dis,b.c_largeint + a.c_bigint + b.c_int + a.c_smallint + b.c_tinyint from num_test a left join num_test b
+                on b.c_largeint + b.c_bigint + b.c_int + b.c_smallint + b.c_tinyint = a.c_largeint + a.c_bigint + a.c_int + a.c_smallint + a.c_tinyint
+                order by 1;
+
+DROP TABLE IF EXISTS `jit_basic`;

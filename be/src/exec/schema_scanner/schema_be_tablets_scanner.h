@@ -18,6 +18,7 @@
 
 #include "exec/schema_scanner.h"
 #include "gen_cpp/FrontendService_types.h"
+#include "gen_cpp/Types_types.h" // for TStorageMedium::type
 
 namespace starrocks {
 
@@ -38,6 +39,8 @@ struct TabletBasicInfo {
     std::string data_dir;
     int64_t shard_id{0};
     int64_t schema_hash{0};
+    int64_t index_disk_usage{0};
+    TStorageMedium::type medium_type;
 };
 
 class SchemaBeTabletsScanner : public SchemaScanner {

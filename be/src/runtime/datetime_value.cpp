@@ -138,7 +138,8 @@ bool JodaFormat::prepare(std::string_view format) {
             ++repeat_count;
         }
 
-        switch (*ptr) {
+        char ch = *ptr;
+        switch (ch) {
         case joda::JodaFormatChar::ERA:
         case joda::JodaFormatChar::CENURY:
             // NOT SUPPORTED
@@ -311,16 +312,16 @@ bool JodaFormat::prepare(std::string_view format) {
         }
         case joda::JodaFormatChar::CLOCKHOUR_OF_HALFDAY:
         case joda::JodaFormatChar::CLOCKHOUR_OF_DAY:
-            _token_parsers.emplace_back([&, repeat_count]() {
+            _token_parsers.emplace_back([&, ch, repeat_count]() {
                 int64_t int_value = 0;
                 const char* tmp = val + std::min<int>(repeat_count, val_end - val);
                 if (!str_to_int64(val, &tmp, &int_value)) {
                     return false;
                 }
-                if (UNLIKELY(*ptr == joda::JodaFormatChar::CLOCKHOUR_OF_DAY && int_value > 23)) {
+                if (UNLIKELY(ch == joda::JodaFormatChar::CLOCKHOUR_OF_DAY && int_value > 24)) {
                     return false;
                 }
-                if (UNLIKELY(*ptr == joda::JodaFormatChar::CLOCKHOUR_OF_HALFDAY && int_value > 11)) {
+                if (UNLIKELY(ch == joda::JodaFormatChar::CLOCKHOUR_OF_HALFDAY && int_value > 12)) {
                     return false;
                 }
                 _hour = int_value;
@@ -331,16 +332,16 @@ bool JodaFormat::prepare(std::string_view format) {
             break;
         case joda::JodaFormatChar::HOUR_OF_HALFDAY:
         case joda::JodaFormatChar::HOUR_OF_DAY: {
-            _token_parsers.emplace_back([&, repeat_count]() {
+            _token_parsers.emplace_back([&, ch, repeat_count]() {
                 int64_t int_value = 0;
                 const char* tmp = val + std::min<int>(repeat_count, val_end - val);
                 if (!str_to_int64(val, &tmp, &int_value)) {
                     return false;
                 }
-                if (UNLIKELY(*ptr == joda::JodaFormatChar::HOUR_OF_DAY && int_value > 24)) {
+                if (UNLIKELY(ch == joda::JodaFormatChar::HOUR_OF_DAY && int_value > 23)) {
                     return false;
                 }
-                if (UNLIKELY(*ptr == joda::JodaFormatChar::HOUR_OF_HALFDAY && int_value > 12)) {
+                if (UNLIKELY(ch == joda::JodaFormatChar::HOUR_OF_HALFDAY && int_value > 11)) {
                     return false;
                 }
 
@@ -384,7 +385,13 @@ bool JodaFormat::prepare(std::string_view format) {
                 if (!str_to_int64(val, &tmp, &int_value)) {
                     return false;
                 }
-                _microsecond = int_value * 1000;
+                // The exact number of fractional digits. If more millisecond digits are available then specified the number
+                // will be truncated, if there are fewer than specified then the number will be zero-padded to the right.
+                // When parsing, only the exact number of digits are accepted.
+                for (int actual_count = tmp - val; actual_count < 6; actual_count++) {
+                    int_value *= 10;
+                }
+                _microsecond = int_value;
                 val = tmp;
                 time_part_used = true;
                 frac_part_used = true;
@@ -404,7 +411,6 @@ bool JodaFormat::prepare(std::string_view format) {
             break;
         }
         default: {
-            char ch = *ptr;
             _token_parsers.emplace_back([&, ch]() {
                 if (ch != *val) {
                     return false;
@@ -1052,6 +1058,19 @@ static char* append_with_prefix(const char* str, int str_len, char prefix, int f
     return to;
 }
 
+static char* append_with_suffix(const char* str, int str_len, char suffix, int full_len, char* to) {
+    int len = (str_len > full_len) ? str_len : full_len;
+    len -= str_len;
+    while (str_len-- > 0) {
+        *to++ = *str++;
+    }
+    while (len-- > 0) {
+        *to++ = suffix;
+    }
+
+    return to;
+}
+
 int DateTimeValue::compute_format_len(const char* format, int len) {
     int size = 0;
     const char* ptr = format;
@@ -1355,14 +1374,20 @@ bool DateTimeValue::to_joda_format_string(const char* format, int len, char* to)
             if (write_size + actual_size >= buffer_size) return false;
             to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
             break;
-        case 'S':
+        case 'S': {
             // fraction of second
-            pos = int_to_str(_microsecond / 1000, buf);
+            RETURN_IF(same_ch_size > 6, false);
+            uint64_t val = _microsecond;
+            for (int i = 0; i < 6 - same_ch_size; i++) {
+                val /= 10;
+            }
+            pos = int_to_str(val, buf);
             buf_size = pos - buf;
             actual_size = std::max(buf_size, same_ch_size);
             if (write_size + actual_size >= buffer_size) return false;
-            to = append_with_prefix(buf, pos - buf, '0', actual_size, to);
+            to = append_with_suffix(buf, pos - buf, '0', actual_size, to);
             break;
+        }
         case 'z':
         case 'Z':
             // sr do not support datetime with timezone type， just ignore
@@ -1460,7 +1485,7 @@ bool DateTimeValue::to_format_string(const char* format, int len, char* to) cons
             to = append_with_prefix(buf, pos - buf, '0', 1, to);
             break;
         case 'f':
-            if (write_size + 2 >= buffer_size) return false;
+            if (write_size + 6 >= buffer_size) return false;
             // Microseconds (000000..999999)
             pos = int_to_str(_microsecond, buf);
             to = append_with_prefix(buf, pos - buf, '0', 6, to);
@@ -2413,7 +2438,7 @@ bool TeradataFormat::prepare(std::string_view format) {
         case TeradataFormatChar::T10: {
             //  - / , . ; :	Punctuation characters are ignored
             auto ignored_char = *ptr;
-            _token_parsers.emplace_back([&, repeat_count, ignored_char]() {
+            _token_parsers.emplace_back([&, ignored_char]() {
                 if (*val != ignored_char) {
                     return false;
                 }
@@ -2427,7 +2452,7 @@ bool TeradataFormat::prepare(std::string_view format) {
             if (repeat_count != 2) {
                 return false;
             }
-            _token_parsers.emplace_back([&, repeat_count]() {
+            _token_parsers.emplace_back([&]() {
                 int64_t int_value = 0;
                 const char* tmp = val + std::min<int>(2, val_end - val);
                 if (!str_to_int64(val, &tmp, &int_value)) {
@@ -2453,7 +2478,7 @@ bool TeradataFormat::prepare(std::string_view format) {
                 }
                 ++next_ch_ptr;
             }
-            _token_parsers.emplace_back([&, repeat_count]() {
+            _token_parsers.emplace_back([&]() {
                 int64_t int_value = 0;
                 const char* tmp = val + std::min<int>(2, val_end - val);
                 if (!str_to_int64(val, &tmp, &int_value)) {
@@ -2515,7 +2540,7 @@ bool TeradataFormat::prepare(std::string_view format) {
         case TeradataFormatChar::M: {
             if (repeat_count == 2) {
                 // mm
-                _token_parsers.emplace_back([&, repeat_count]() {
+                _token_parsers.emplace_back([&]() {
                     int64_t int_value = 0;
                     const char* tmp = val + std::min<int>(2, val_end - val);
                     if (!str_to_int64(val, &tmp, &int_value)) {
@@ -2533,7 +2558,7 @@ bool TeradataFormat::prepare(std::string_view format) {
                 ptr++;
 
                 // mi
-                _token_parsers.emplace_back([&, repeat_count]() {
+                _token_parsers.emplace_back([&]() {
                     int64_t int_value = 0;
                     const char* tmp = val + std::min<int>(2, val_end - val);
                     ;
@@ -2554,7 +2579,7 @@ bool TeradataFormat::prepare(std::string_view format) {
                 return false;
             }
             // ss
-            _token_parsers.emplace_back([&, repeat_count]() {
+            _token_parsers.emplace_back([&]() {
                 int64_t int_value = 0;
                 const char* tmp = val + std::min<int>(2, val_end - val);
                 if (!str_to_int64(val, &tmp, &int_value)) {
@@ -2569,7 +2594,7 @@ bool TeradataFormat::prepare(std::string_view format) {
         case TeradataFormatChar::Y: {
             // yy
             if (repeat_count == 2) {
-                _token_parsers.emplace_back([&, repeat_count]() {
+                _token_parsers.emplace_back([&]() {
                     int64_t int_value = 0;
                     const char* tmp = val + std::min<int>(2, val_end - val);
                     ;
@@ -2583,7 +2608,7 @@ bool TeradataFormat::prepare(std::string_view format) {
                 });
             } else if (repeat_count == 4) {
                 // yyyy
-                _token_parsers.emplace_back([&, repeat_count]() {
+                _token_parsers.emplace_back([&]() {
                     int64_t int_value = 0;
                     const char* tmp = val + std::min<int>(4, val_end - val);
                     ;

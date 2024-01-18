@@ -18,6 +18,8 @@
 package com.starrocks.common.util;
 
 import com.google.common.collect.Sets;
+import com.google.common.escape.Escaper;
+import com.google.common.escape.Escapers;
 
 import java.util.Iterator;
 import java.util.Map;
@@ -42,6 +44,8 @@ public class PrintableMap<K, V> {
         SENSITIVE_KEY.add("fs.s3a.secret.key");
         SENSITIVE_KEY.add("aws.s3.access_key");
         SENSITIVE_KEY.add("aws.s3.secret_key");
+        SENSITIVE_KEY.add("aws.glue.access_key");
+        SENSITIVE_KEY.add("aws.glue.secret_key");
         SENSITIVE_KEY.add("fs.oss.accessKeyId");
         SENSITIVE_KEY.add("fs.oss.accessKeySecret");
         SENSITIVE_KEY.add("fs.cosn.userinfo.secretId");
@@ -83,6 +87,11 @@ public class PrintableMap<K, V> {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         Iterator<Map.Entry<K, V>> iter = map.entrySet().iterator();
+
+        Escapers.Builder builder = Escapers.builder();
+        builder.addEscape('"', "\\\"");
+        Escaper escaper = builder.build();
+
         while (iter.hasNext()) {
             Map.Entry<K, V> entry = iter.next();
             if (withQuotation) {
@@ -99,7 +108,11 @@ public class PrintableMap<K, V> {
             if (hidePassword && SENSITIVE_KEY.contains(entry.getKey())) {
                 sb.append("***");
             } else {
-                sb.append(entry.getValue());
+                String text = entry.getValue().toString();
+                if (withQuotation) {
+                    text = escaper.escape(text);
+                }
+                sb.append(text);
             }
             if (withQuotation) {
                 sb.append("\"");

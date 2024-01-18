@@ -36,6 +36,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterRoleStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
@@ -564,7 +565,14 @@ public class AuthorizationMgr {
                 }
 
                 collection.addParentRole(parentRoleId);
-                rolePrivCollectionModified.put(parentRoleId, parentCollection);
+
+                if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(parentRoleId)) {
+                    RolePrivilegeCollectionV2 clone = parentCollection.cloneSelf();
+                    clone.typeToPrivilegeEntryList = new HashMap<>();
+                    rolePrivCollectionModified.put(parentRoleId, clone);
+                } else {
+                    rolePrivCollectionModified.put(parentRoleId, parentCollection);
+                }
             }
 
             invalidateRolesInCacheRoleUnlocked(roleId);
@@ -648,7 +656,13 @@ public class AuthorizationMgr {
                 RolePrivilegeCollectionV2 parentCollection =
                         getRolePrivilegeCollectionUnlocked(parentRoleId, true);
                 parentRoleIdList.add(parentRoleId);
-                rolePrivCollectionModified.put(parentRoleId, parentCollection);
+                if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(parentRoleId)) {
+                    RolePrivilegeCollectionV2 clone = parentCollection.cloneSelf();
+                    clone.typeToPrivilegeEntryList = new HashMap<>();
+                    rolePrivCollectionModified.put(parentRoleId, clone);
+                } else {
+                    rolePrivCollectionModified.put(parentRoleId, parentCollection);
+                }
             }
 
             // write journal to update privilege collections of both role & parent role
@@ -1206,7 +1220,13 @@ public class AuthorizationMgr {
                 if (!PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
                     provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
                 }
+
+                if (PrivilegeBuiltinConstants.IMMUTABLE_BUILT_IN_ROLE_IDS.contains(roleId)) {
+                    RolePrivilegeCollectionV2 builtInRolePrivilegeCollection = this.roleIdToPrivilegeCollection.get(roleId);
+                    privilegeCollection.typeToPrivilegeEntryList = builtInRolePrivilegeCollection.typeToPrivilegeEntryList;
+                }
                 roleIdToPrivilegeCollection.put(roleId, privilegeCollection);
+
                 if (!roleNameToId.containsKey(privilegeCollection.getName())) {
                     roleNameToId.put(privilegeCollection.getName(), roleId);
                 }
@@ -1915,6 +1935,10 @@ public class AuthorizationMgr {
             pluginVersion = ret.pluginVersion;
             userToPrivilegeCollection = ret.userToPrivilegeCollection;
             roleIdToPrivilegeCollection = ret.roleIdToPrivilegeCollection;
+
+            // Initialize the Authorizer class in advance during the loading phase
+            // to prevent loading errors and lack of permissions.
+            Authorizer.getInstance();
         } catch (PrivilegeException e) {
             throw new IOException("failed to load AuthorizationManager!", e);
         }

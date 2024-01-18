@@ -485,21 +485,18 @@ INNER JOIN (join-predicate [2: v2 = 10: v8 AND 8: sum = 12: sum] post-join-predi
 [sql]
 select v1 from t0 where v2 = (with cte as (select v4,v5 from t1 order by 2 limit 10) select v4 from cte order by 1 limit 1)
 [result]
-INNER JOIN (join-predicate [2: v2 = 7: v4] post-join-predicate [null])
+INNER JOIN (join-predicate [2: v2 = 4: v4] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[2: v2 IS NOT NULL])
     EXCHANGE BROADCAST
-        PREDICATE 7: v4 IS NOT NULL
+        PREDICATE 4: v4 IS NOT NULL
             ASSERT LE 1
                 EXCHANGE GATHER
-                    TOP-N (order by [[7: v4 ASC NULLS FIRST]])
-                        TOP-N (order by [[8: v5 ASC NULLS FIRST]])
-                            TOP-N (order by [[8: v5 ASC NULLS FIRST]])
-                                SCAN (columns[7: v4, 8: v5] predicate[null])
+                    TOP-N (order by [[4: v4 ASC NULLS FIRST]])
+                        TOP-N (order by [[5: v5 ASC NULLS FIRST]])
+                            TOP-N (order by [[5: v5 ASC NULLS FIRST]])
+                                SCAN (columns[4: v4, 5: v5] predicate[null])
 [end]
 
-/* test PushDownApplyAggFilterRule */
-/* test PushDownApplyAggFilterRule */
-/* test PushDownApplyAggFilterRule */
 /* test PushDownApplyAggFilterRule */
 
 [sql]

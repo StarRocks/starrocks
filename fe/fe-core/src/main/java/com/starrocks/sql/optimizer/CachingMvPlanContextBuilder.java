@@ -20,26 +20,42 @@ import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.common.Config;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class CachingMvPlanContextBuilder {
+
+    private static final Logger LOG = LogManager.getLogger(CachingMvPlanContextBuilder.class);
     private static final CachingMvPlanContextBuilder INSTANCE = new CachingMvPlanContextBuilder();
 
-    private Cache<MaterializedView, MvPlanContext> mvPlanContextCache = Caffeine.newBuilder()
-            .expireAfterAccess(Config.mv_plan_cache_expire_interval_sec, TimeUnit.SECONDS)
-            .maximumSize(Config.mv_plan_cache_max_size)
-            .build();
+    private Cache<MaterializedView, List<MvPlanContext>> mvPlanContextCache = buildCache();
 
     private CachingMvPlanContextBuilder() {
-
     }
 
     public static CachingMvPlanContextBuilder getInstance() {
         return INSTANCE;
     }
 
-    public MvPlanContext getPlanContext(MaterializedView mv, boolean useCache) {
+    // After view based mv rewrite, one mv may has views as based tables.
+    // It can return logical plans with or without inline views.
+    // So here should return a List<MvPlanContext> for one mv
+    private Cache<MaterializedView, List<MvPlanContext>> buildCache() {
+        return Caffeine.newBuilder()
+                .expireAfterAccess(Config.mv_plan_cache_expire_interval_sec, TimeUnit.SECONDS)
+                .maximumSize(Config.mv_plan_cache_max_size)
+                .build();
+    }
+
+    @VisibleForTesting
+    public void rebuildCache() {
+        mvPlanContextCache = buildCache();
+    }
+
+    public List<MvPlanContext> getPlanContext(MaterializedView mv, boolean useCache) {
         if (useCache) {
             return mvPlanContextCache.get(mv, this::loadMvPlanContext);
         } else {
@@ -47,10 +63,13 @@ public class CachingMvPlanContextBuilder {
         }
     }
 
-    private MvPlanContext loadMvPlanContext(MaterializedView mv) {
-        MvPlanContextBuilder builder = new MvPlanContextBuilder();
-        MvPlanContext result = builder.getPlanContext(mv);
-        return result;
+    private List<MvPlanContext> loadMvPlanContext(MaterializedView mv) {
+        try {
+            return MvPlanContextBuilder.getPlanContext(mv);
+        } catch (Throwable e) {
+            LOG.warn("load mv plan cache failed: {}", mv.getName(), e);
+            return null;
+        }
     }
 
     @VisibleForTesting

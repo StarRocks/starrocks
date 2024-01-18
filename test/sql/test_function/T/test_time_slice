@@ -76,3 +76,30 @@ select date_slice('2023-12-31 03:12:04',interval 3.2 day);
 select date_slice('2023-12-31 03:12:04',interval 3.2 quarter);
 select date_slice('2023-12-31 03:12:04',interval 3.2 week);
 select date_slice('2023-12-31 03:12:04',interval -3.2 week);
+
+-- name: test_time_slice_2
+select time_slice('2023-10-31 23:59:59',interval 1 millisecond);
+select time_slice('2023-10-31 23:59:59',interval 1 millisecond, ceil);
+select time_slice('2023-10-31 23:59:59',interval 17 millisecond);
+select time_slice('2023-10-31 23:59:59',interval 17 millisecond, ceil);
+select time_slice('2023-10-31 23:59:59',interval 1000 millisecond);
+select time_slice('2023-10-31 23:59:59',interval 1000 millisecond, ceil);
+select time_slice('2023-10-31 23:59:59',interval 1001 millisecond);
+select time_slice('2023-10-31 23:59:59',interval 1001 millisecond, ceil);
+select time_slice('2023-10-31 23:59:59',interval 86400000 millisecond);
+select time_slice('2023-10-31 23:59:59',interval 86400000 millisecond, ceil);
+select time_slice('2023-10-31 23:59:59',interval 172800000 millisecond);
+select time_slice('2023-10-31 23:59:59',interval 172800000 millisecond, ceil);
+
+select time_slice('2023-10-31 23:59:59',interval 1 microsecond);
+select time_slice('2023-10-31 23:59:59',interval 1 microsecond, ceil);
+select time_slice('2023-10-31 23:59:59',interval 17 microsecond);
+select time_slice('2023-10-31 23:59:59',interval 17 microsecond, ceil);
+select time_slice('2023-10-31 23:59:59',interval 1000 microsecond);
+select time_slice('2023-10-31 23:59:59',interval 1000 microsecond, ceil);
+select time_slice('2023-10-31 23:59:59',interval 1001 microsecond);
+select time_slice('2023-10-31 23:59:59',interval 1001 microsecond, ceil);
+select time_slice('2023-10-31 23:59:59',interval 1000000 microsecond);
+select time_slice('2023-10-31 23:59:59',interval 1000000 microsecond, ceil);
+select time_slice('2023-10-31 23:59:59',interval 1000001 microsecond);
+select time_slice('2023-10-31 23:59:59',interval 1000001 microsecond, ceil);

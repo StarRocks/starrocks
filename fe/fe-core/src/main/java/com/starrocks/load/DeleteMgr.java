@@ -79,6 +79,8 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.delete.LakeDeleteJob;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -90,8 +92,9 @@ import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.analyzer.DeleteAnalyzer;
 import com.starrocks.sql.ast.DeleteStmt;
-import com.starrocks.transaction.BeginTransactionException;
+import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
@@ -165,7 +168,8 @@ public class DeleteMgr implements Writable {
             Table table = null;
             long transactionId = -1L;
             List<Partition> partitions = Lists.newArrayList();
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             try {
                 String tableName = stmt.getTableName().getTbl();
                 table = db.getTable(tableName);
@@ -177,7 +181,7 @@ public class DeleteMgr implements Writable {
                     throw new DdlException("Delete is not supported on " + table.getType() + " table");
                 }
 
-                List<Predicate> conditions = stmt.getDeleteConditions();
+                List<Predicate> conditions = DeleteAnalyzer.replaceParameterInExpr(stmt.getDeleteConditions());
                 deleteJob = createJob(stmt, conditions, db, (OlapTable) table, partitions);
                 if (deleteJob == null) {
                     return;
@@ -193,7 +197,7 @@ public class DeleteMgr implements Writable {
                 }
                 throw new DdlException(t.getMessage(), t);
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
 
             deleteJob.run(stmt, db, table, partitions);
@@ -206,7 +210,7 @@ public class DeleteMgr implements Writable {
 
     private DeleteJob createJob(DeleteStmt stmt, List<Predicate> conditions, Database db, OlapTable olapTable,
                                 List<Partition> partitions)
-            throws DdlException, AnalysisException, BeginTransactionException {
+            throws DdlException, AnalysisException, RunningTxnExceedException {
         // check table state
         if (olapTable.getState() != OlapTable.OlapTableState.NORMAL) {
             throw new DdlException("Table's state is not normal: " + olapTable.getName());
@@ -219,7 +223,7 @@ public class DeleteMgr implements Writable {
         if (noPartitionSpecified) {
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             if (partitionInfo.isRangePartition()) {
-                partitionNames = extractPartitionNamesByCondition(stmt, olapTable);
+                partitionNames = extractPartitionNamesByCondition(olapTable, conditions);
                 if (partitionNames.isEmpty()) {
                     LOG.info("The delete statement [{}] prunes all partitions",
                             stmt.getOrigStmt().originStmt);
@@ -232,6 +236,9 @@ public class DeleteMgr implements Writable {
                 // TODO: support list partition prune
                 ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
                 List<Long> partitionIds = listPartitionInfo.getPartitionIds(false);
+                if (partitionIds.isEmpty()) {
+                    return null;
+                }
                 for (Long partitionId : partitionIds) {
                     Partition partition = olapTable.getPartition(partitionId);
                     partitionNames.add(partition.getName());
@@ -277,6 +284,7 @@ public class DeleteMgr implements Writable {
         } else {
             deleteJob = new OlapDeleteJob(jobId, transactionId, label, partitionReplicaNum, deleteInfo);
         }
+        deleteJob.setDeleteConditions(conditions);
         idToDeleteJob.put(deleteJob.getTransactionId(), deleteJob);
 
         // add transaction callback
@@ -288,11 +296,16 @@ public class DeleteMgr implements Writable {
     @VisibleForTesting
     public List<String> extractPartitionNamesByCondition(DeleteStmt stmt, OlapTable olapTable)
             throws DdlException, AnalysisException {
+        return extractPartitionNamesByCondition(olapTable, stmt.getDeleteConditions());
+    }
+
+    public List<String> extractPartitionNamesByCondition(OlapTable olapTable, List<Predicate> conditions)
+            throws DdlException, AnalysisException {
         List<String> partitionNames = Lists.newArrayList();
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
-        Map<String, PartitionColumnFilter> columnFilters = extractColumnFilter(stmt, olapTable,
-                rangePartitionInfo.getPartitionColumns());
+        Map<String, PartitionColumnFilter> columnFilters = extractColumnFilter(olapTable,
+                rangePartitionInfo.getPartitionColumns(), conditions);
         Map<Long, Range<PartitionKey>> keyRangeById = rangePartitionInfo.getIdToRange(false);
         if (columnFilters.isEmpty()) {
             partitionNames.addAll(olapTable.getPartitionNames());
@@ -313,11 +326,11 @@ public class DeleteMgr implements Writable {
         return partitionNames;
     }
 
-    private Map<String, PartitionColumnFilter> extractColumnFilter(DeleteStmt stmt, Table table,
-                                                                   List<Column> partitionColumns)
+    private Map<String, PartitionColumnFilter> extractColumnFilter(Table table, List<Column> partitionColumns,
+                                                                   List<Predicate> conditions)
             throws DdlException, AnalysisException {
         Map<String, PartitionColumnFilter> columnFilters = Maps.newHashMap();
-        List<Predicate> deleteConditions = stmt.getDeleteConditions();
+        List<Predicate> deleteConditions = conditions;
         Map<String, Column> nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
         for (Column column : table.getBaseSchema()) {
             nameToColumn.put(column.getName(), column);
@@ -825,12 +838,7 @@ public class DeleteMgr implements Writable {
     }
 
     public long getDeleteInfoCount() {
-        lock.readLock().lock();
-        try {
-            return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
-        } finally {
-            lock.readLock().unlock();
-        }
+        return dbToDeleteInfos.values().stream().mapToLong(List::size).sum();
     }
 
     public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {

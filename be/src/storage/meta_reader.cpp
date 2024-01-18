@@ -26,6 +26,7 @@
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset.h"
+
 namespace starrocks {
 
 std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {"dict_merge", "max", "min", "count"};
@@ -111,11 +112,11 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
         const auto& field = _collect_context.seg_collecter_params.fields[i];
         if (field == "dict_merge") {
             TypeDescriptor item_desc;
-            item_desc = slot->type();
+            item_desc.type = TYPE_VARCHAR;
             TypeDescriptor desc;
             desc.type = TYPE_ARRAY;
             desc.children.emplace_back(item_desc);
-            ColumnPtr column = ColumnHelper::create_column(desc, _has_count_agg ? true : false);
+            ColumnPtr column = ColumnHelper::create_column(desc, _has_count_agg);
             chunk->append_column(std::move(column), slot->id());
         } else if (field == "count") {
             TypeDescriptor item_desc;
@@ -126,7 +127,7 @@ Status MetaReader::_fill_result_chunk(Chunk* chunk) {
             ColumnPtr column = ColumnHelper::create_column(desc, false);
             chunk->append_column(std::move(column), slot->id());
         } else {
-            ColumnPtr column = ColumnHelper::create_column(slot->type(), _has_count_agg ? true : false);
+            ColumnPtr column = ColumnHelper::create_column(slot->type(), _has_count_agg);
             chunk->append_column(std::move(column), slot->id());
         }
     }
@@ -138,29 +139,48 @@ SegmentMetaCollecter::SegmentMetaCollecter(SegmentSharedPtr segment) : _segment(
 SegmentMetaCollecter::~SegmentMetaCollecter() = default;
 
 Status SegmentMetaCollecter::init(const SegmentMetaCollecterParams* params) {
+    if (UNLIKELY(params == nullptr)) {
+        return Status::InvalidArgument("params is nullptr");
+    }
+    if (UNLIKELY(params->fields.size() != params->field_type.size())) {
+        return Status::InvalidArgument(fmt::format("unmatched field name count({}) and field type count({})",
+                                                   params->fields.size(), params->field_type.size()));
+    }
+    if (UNLIKELY(params->fields.size() != params->cids.size())) {
+        return Status::InvalidArgument(fmt::format("unmatched field name count({}) and column id count({})",
+                                                   params->fields.size(), params->cids.size()));
+    }
+    if (UNLIKELY(params->fields.size() != params->read_page.size())) {
+        return Status::InvalidArgument(fmt::format("unmatched field name count({}) and read page flags count({})",
+                                                   params->fields.size(), params->read_page.size()));
+    }
+    if (UNLIKELY(params->tablet_schema == nullptr)) {
+        return Status::InvalidArgument("tablet schema is nullptr");
+    }
     _params = params;
     return Status::OK();
 }
 
 Status SegmentMetaCollecter::open() {
+    if (UNLIKELY(_params == nullptr)) {
+        return Status::InternalError("SegmentMetaCollecter::init() has not been called");
+    }
     RETURN_IF_ERROR(_init_return_column_iterators());
     return Status::OK();
 }
 
 Status SegmentMetaCollecter::_init_return_column_iterators() {
-    DCHECK_EQ(_params->fields.size(), _params->cids.size());
-    DCHECK_EQ(_params->fields.size(), _params->read_page.size());
-
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_segment->file_name()));
     ASSIGN_OR_RETURN(_read_file, fs->new_random_access_file(_segment->file_name()));
 
-    _column_iterators.resize(_params->max_cid + 1);
+    auto max_cid = _params->cids.empty() ? 0 : *std::max_element(_params->cids.begin(), _params->cids.end());
+    _column_iterators.resize(max_cid + 1);
     for (int i = 0; i < _params->fields.size(); i++) {
         if (_params->read_page[i]) {
             auto cid = _params->cids[i];
             if (_column_iterators[cid] == nullptr) {
-                ASSIGN_OR_RETURN(_column_iterators[cid],
-                                 _segment->new_column_iterator(cid, nullptr, _params->tablet_schema));
+                const TabletColumn& col = _params->tablet_schema->column(cid);
+                ASSIGN_OR_RETURN(_column_iterators[cid], _segment->new_column_iterator_or_default(col, nullptr));
 
                 ColumnIteratorOptions iter_opts;
                 iter_opts.check_dict_encoding = true;
@@ -174,7 +194,10 @@ Status SegmentMetaCollecter::_init_return_column_iterators() {
 }
 
 Status SegmentMetaCollecter::collect(std::vector<Column*>* dsts) {
-    DCHECK_EQ(dsts->size(), _params->fields.size());
+    if (UNLIKELY(dsts->size() != _params->fields.size())) {
+        return Status::InvalidArgument(
+                fmt::format("invalid column count. expect: {} real: {}", _params->fields.size(), dsts->size()));
+    }
 
     for (size_t i = 0; i < _params->fields.size(); i++) {
         RETURN_IF_ERROR(_collect(_params->fields[i], _params->cids[i], (*dsts)[i], _params->field_type[i]));
@@ -210,6 +233,11 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
 
     if (words.size() > DICT_DECODE_MAX_SIZE) {
         return Status::GlobalDictError("global dict greater than DICT_DECODE_MAX_SIZE");
+    }
+
+    // array<string> has none dict, return directly
+    if (words.size() < 1) {
+        return Status::OK();
     }
 
     [[maybe_unused]] NullableColumn* nullable_column = nullptr;

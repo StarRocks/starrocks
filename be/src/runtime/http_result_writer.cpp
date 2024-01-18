@@ -52,18 +52,20 @@ void HttpResultWriter::_init_profile() {
 }
 
 // transform one row into json format
-void HttpResultWriter::_transform_row_to_json(const Columns& result_columns, int idx) {
+Status HttpResultWriter::_transform_row_to_json(const Columns& result_columns, int idx) {
     int num_columns = result_columns.size();
 
-    row_str.append("{\"data\":[");
+    _row_str.append("{\"data\":[");
     for (auto& result_column : result_columns) {
-        std::string row = cast_type_to_json_str(result_column, idx).value();
-        row_str.append(row);
+        std::string row;
+        ASSIGN_OR_RETURN(row, cast_type_to_json_str(result_column, idx));
+        _row_str.append(row);
         if (result_column != result_columns[num_columns - 1]) {
-            row_str.append(",");
+            _row_str.append(",");
         }
     }
-    row_str.append("]}\n");
+    _row_str.append("]}\n");
+    return Status::OK();
 }
 
 Status HttpResultWriter::append_chunk(Chunk* chunk) {
@@ -96,7 +98,7 @@ StatusOr<TFetchDataResultPtrs> HttpResultWriter::process_chunk(Chunk* chunk) {
     // Step 2: convert chunk to http json row format row by row
     {
         TRY_CATCH_ALLOC_SCOPE_START()
-        row_str.reserve(128);
+        _row_str.reserve(128);
         size_t current_bytes = 0;
         int current_rows = 0;
         SCOPED_TIMER(_convert_tuple_timer);
@@ -107,12 +109,12 @@ StatusOr<TFetchDataResultPtrs> HttpResultWriter::process_chunk(Chunk* chunk) {
         for (int i = 0; i < num_rows; ++i) {
             switch (_format_type) {
             case TResultSinkFormatType::type::JSON:
-                _transform_row_to_json(result_columns, i);
+                RETURN_IF_ERROR(_transform_row_to_json(result_columns, i));
                 break;
             case TResultSinkFormatType::type::OTHERS:
                 return Status::NotSupported("HttpResultWriter only support json format right now");
             }
-            size_t len = row_str.size();
+            size_t len = _row_str.size();
 
             if (UNLIKELY(current_bytes + len >= _max_row_buffer_size)) {
                 result_rows.resize(current_rows);
@@ -127,10 +129,10 @@ StatusOr<TFetchDataResultPtrs> HttpResultWriter::process_chunk(Chunk* chunk) {
             }
 
             // VLOG_ROW << "written row:" << row_str;
-            result_rows[current_rows] = std::move(row_str);
-            row_str.clear();
+            result_rows[current_rows] = std::move(_row_str);
+            _row_str.clear();
 
-            row_str.reserve(len * 1.1);
+            _row_str.reserve(len * 1.1);
 
             current_bytes += len;
             current_rows += 1;

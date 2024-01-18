@@ -475,6 +475,10 @@ Status SnappyStreamCompression::decompress(uint8_t* input, size_t input_len, siz
             input_len -= 4;
             *input_bytes_read += 4;
         }
+        if (ctx->block_length == 0) {
+            *stream_end = true;
+            return st;
+        }
 
         // see if a compressed unit is ready.
         if (input_len < 4) return st;
@@ -482,6 +486,7 @@ Status SnappyStreamCompression::decompress(uint8_t* input, size_t input_len, siz
         input += 4;
         input_len -= 4;
         if (input_len < compressed_len) {
+            set_compressed_block_size(compressed_len);
             return st;
         }
 
@@ -713,6 +718,7 @@ Status LzoStreamCompression::decompress(uint8_t* input, size_t input_len, size_t
 
         // 5. checksum compressed data
         if (input_len < compressed_size) {
+            set_compressed_block_size(compressed_size);
             return st;
         }
         if (do_compressed_check) {

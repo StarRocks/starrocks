@@ -52,10 +52,12 @@
 #include "json2pb/pb_to_json.h"
 #include "storage/chunk_helper.h"
 #include "storage/data_dir.h"
+#include "storage/delta_column_group.h"
 #include "storage/key_coder.h"
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
+#include "storage/primary_key_dump.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
@@ -85,6 +87,8 @@ using starrocks::PageHandle;
 using starrocks::PagePointer;
 using starrocks::ColumnIteratorOptions;
 using starrocks::PageFooterPB;
+using starrocks::DeltaColumnGroupList;
+using starrocks::PrimaryKeyDump;
 
 DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "get_meta",
@@ -130,10 +134,13 @@ std::string get_usage(const std::string& progname) {
     ss << "./meta_tool.sh --operation=show_segment_footer --file=/path/to/segment/file\n";
     ss << "./meta_tool.sh --operation=dump_segment_data --file=/path/to/segment/file\n";
     ss << "./meta_tool.sh --operation=dump_column_size --file=/path/to/segment/file\n";
+    ss << "./meta_tool.sh --operation=print_pk_dump --file=/path/to/pk/dump/file\n";
     ss << "./meta_tool.sh --operation=dump_short_key_index --file=/path/to/segment/file --key_column_count=2\n";
     ss << "./meta_tool.sh --operation=calc_checksum [--column_index=xx] --file=/path/to/segment/file\n";
     ss << "./meta_tool.sh --operation=check_table_meta_consistency --root_path=/path/to/storage/path "
           "--table_id=tableid\n";
+    ss << "./meta_tool --operation=scan_dcgs --root_path=/path/to/storage/path "
+          "--tablet_id=tabletid\n";
     ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool.sh --operation=print_lake_metadata\n";
     ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool.sh --operation=print_lake_txn_log\n";
     ss << "cat SCHEMA_000000000004204C | ./meta_tool.sh --operation=print_lake_schema\n";
@@ -583,6 +590,18 @@ void check_meta_consistency(DataDir* data_dir) {
     return;
 }
 
+void scan_dcgs(DataDir* data_dir) {
+    DeltaColumnGroupList dcgs;
+    Status st = TabletMetaManager::scan_tablet_delta_column_group(data_dir->get_meta(), FLAGS_tablet_id, &dcgs);
+    if (!st.ok()) {
+        std::cout << "scan delta column group, st: " << st.to_string() << std::endl;
+        return;
+    }
+    for (const auto& dcg : dcgs) {
+        std::cout << dcg->debug_string() << std::endl;
+    }
+}
+
 namespace starrocks {
 
 class SegmentDump {
@@ -681,7 +700,7 @@ Status SegmentDump::_init() {
 
     // open segment
     size_t footer_length = 16 * 1024 * 1024;
-    auto segment_res = Segment::open(_fs, _path, 0, _tablet_schema, &footer_length, nullptr);
+    auto segment_res = Segment::open(_fs, FileInfo{_path}, 0, _tablet_schema, &footer_length, nullptr);
     if (!segment_res.ok()) {
         std::cout << "open segment failed: " << segment_res.status() << std::endl;
         return Status::InternalError("");
@@ -808,7 +827,7 @@ Status SegmentDump::calc_checksum() {
     seg_opts.stats = &stats;
     auto seg_res = _segment->new_iterator(schema, seg_opts);
     if (!seg_res.ok()) {
-        std::cout << "new segment iterator failed: " << seg_res.status().get_error_msg() << std::endl;
+        std::cout << "new segment iterator failed: " << seg_res.status().message() << std::endl;
         return seg_res.status();
     }
     auto seg_iter = std::move(seg_res.value());
@@ -1020,6 +1039,37 @@ int meta_tool_main(int argc, char** argv) {
             std::cout << "dump column size failed: " << st << std::endl;
             return -1;
         }
+    } else if (FLAGS_operation == "print_pk_dump") {
+        if (FLAGS_file == "") {
+            std::cout << "no file flag for pk dump file" << std::endl;
+            return -1;
+        }
+        starrocks::PrimaryKeyDumpPB dump_pb;
+        Status st = starrocks::PrimaryKeyDump::read_deserialize_from_file(FLAGS_file, &dump_pb);
+        if (!st.ok()) {
+            std::cout << "print pk dump failed: " << st << std::endl;
+            return -1;
+        }
+        std::cout << "[pk dump] meta: " << dump_pb.Utf8DebugString() << std::endl;
+        st = starrocks::PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
+                FLAGS_file, dump_pb,
+                [&](const starrocks::Chunk& chunk) {
+                    for (int i = 0; i < chunk.num_rows(); i++) {
+                        std::cout << "pk column " << chunk.debug_row(i) << std::endl;
+                    }
+                },
+                [&](const std::string& filename, const starrocks::PartialKVsPB& kvs) {
+                    std::cout << " pk index, filename: " << filename << std::endl;
+                    for (int i = 0; i < kvs.keys_size(); i++) {
+                        std::cout << "index key " << starrocks::hexdump(kvs.keys(i).data(), kvs.keys(i).size())
+                                  << " value " << kvs.values(i) << std::endl;
+                    }
+                });
+        if (!st.ok()) {
+            std::cout << "print pk dump failed: " << st << std::endl;
+            return -1;
+        }
+
     } else if (FLAGS_operation == "dump_short_key_index") {
         starrocks::MemChunkAllocator::init_instance(nullptr, 2ul * 1024 * 1024 * 1024);
         if (FLAGS_file == "") {
@@ -1044,7 +1094,7 @@ int meta_tool_main(int argc, char** argv) {
         starrocks::SegmentDump segment_dump(FLAGS_file, FLAGS_column_index);
         Status st = segment_dump.calc_checksum();
         if (!st.ok()) {
-            std::cout << "dump segment data failed: " << st.get_error_msg() << std::endl;
+            std::cout << "dump segment data failed: " << st.message() << std::endl;
             return -1;
         }
     } else if (FLAGS_operation == "print_lake_metadata") {
@@ -1103,7 +1153,7 @@ int meta_tool_main(int argc, char** argv) {
                                                   "get_meta_stats",
                                                   "ls",
                                                   "check_table_meta_consistency",
-                                                  "calc_checksum"};
+                                                  "scan_dcgs"};
         if (valid_operations.find(FLAGS_operation) == valid_operations.end()) {
             std::cout << "invalid operation:" << FLAGS_operation << std::endl;
             return -1;
@@ -1111,7 +1161,7 @@ int meta_tool_main(int argc, char** argv) {
 
         bool read_only = false;
         if (FLAGS_operation == "get_meta" || FLAGS_operation == "get_meta_stats" || FLAGS_operation == "ls" ||
-            FLAGS_operation == "check_table_meta_consistency") {
+            FLAGS_operation == "check_table_meta_consistency" || FLAGS_operation == "scan_dcgs") {
             read_only = true;
         }
 
@@ -1140,6 +1190,8 @@ int meta_tool_main(int argc, char** argv) {
             list_meta(data_dir.get());
         } else if (FLAGS_operation == "check_table_meta_consistency") {
             check_meta_consistency(data_dir.get());
+        } else if (FLAGS_operation == "scan_dcgs") {
+            scan_dcgs(data_dir.get());
         } else {
             std::cout << "invalid operation: " << FLAGS_operation << "\n" << usage << std::endl;
             return -1;

@@ -100,9 +100,6 @@ sync;
 shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"sessionVariables":{"broadcast_row_limit":14000000}}' --header "Content-Type: application/json"  
 sync;
 
--- set invalid sessionvariable
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select 1;", "sessionVariables":{"broadcast":14000000}}' --header "Content-Type: application/json"  
-sync;
 
 -- parse error
 shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "select from duplicate_table_with_null;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" 

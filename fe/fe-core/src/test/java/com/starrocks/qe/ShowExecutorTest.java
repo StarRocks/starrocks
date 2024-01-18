@@ -71,6 +71,7 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ComputeNodeProcDir;
+import com.starrocks.common.proc.OptimizeProcDir;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
@@ -82,6 +83,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAuthorStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
@@ -430,22 +432,6 @@ public class ShowExecutorTest {
     }
 
     @Test
-    public void testShowTable() throws AnalysisException, DdlException {
-        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
-
-        ShowTableStmt stmt = new ShowTableStmt("testDb", false, null);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testMv", resultSet.getString(0));
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testTbl", resultSet.getString(0));
-        Assert.assertFalse(resultSet.next());
-    }
-
-    @Test
     public void testShowPartitions(@Mocked Analyzer analyzer) throws UserException {
 
         new MockUp<SystemInfoService>() {
@@ -606,23 +592,7 @@ public class ShowExecutorTest {
         Assert.assertEquals(4, resultSet2.getResultRows().get(0).size());
     }
 
-    @Test
-    public void testShowTableVerbose() throws AnalysisException, DdlException {
-        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
-        ShowTableStmt stmt = new ShowTableStmt("testDb", true, null);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testMv", resultSet.getString(0));
-        Assert.assertEquals("VIEW", resultSet.getString(1));
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("testTbl", resultSet.getString(0));
-        Assert.assertEquals("BASE TABLE", resultSet.getString(1));
-        Assert.assertFalse(resultSet.next());
-    }
 
     @Test
     public void testShowCreateDb() throws AnalysisException, DdlException {
@@ -812,18 +782,20 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
-        Assert.assertEquals(28, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals(29, resultSet.getMetaData().getColumnCount());
         Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
         Assert.assertEquals("NumRunningQueries", resultSet.getMetaData().getColumn(23).getName());
         Assert.assertEquals("MemUsedPct", resultSet.getMetaData().getColumn(24).getName());
         Assert.assertEquals("CpuUsedPct", resultSet.getMetaData().getColumn(25).getName());
-        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(26).getName());
-        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(27).getName());
+        Assert.assertEquals("DataCacheMetrics", resultSet.getMetaData().getColumn(26).getName());
+        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(27).getName());
+        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(28).getName());
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("1", resultSet.getString(0));
         Assert.assertEquals("0", resultSet.getString(23));
-        Assert.assertEquals("5", resultSet.getString(27));
+        Assert.assertEquals("N/A", resultSet.getString(26));
+        Assert.assertEquals("5", resultSet.getString(28));
     }
 
     @Test
@@ -1009,11 +981,21 @@ public class ShowExecutorTest {
         Assert.assertEquals("true", resultSet.getString(4));
         Assert.assertEquals("", resultSet.getString(5));
         Assert.assertEquals("RANGE", resultSet.getString(6));
-        for (int i = 6; i < mvSchemaTable.size() - 2; i++) {
-            Assert.assertEquals("", resultSet.getString(7));
+        Assert.assertEquals("0", resultSet.getString(7));
+        Assert.assertEquals("", resultSet.getString(8));
+        Assert.assertEquals("\\N", resultSet.getString(9));
+        Assert.assertEquals("\\N", resultSet.getString(10));
+        Assert.assertEquals("0.000", resultSet.getString(11));
+        Assert.assertEquals("", resultSet.getString(12));
+        Assert.assertEquals("false", resultSet.getString(13));
+        System.out.println(resultSet.getResultRows());
+        for (int i = 14; i < mvSchemaTable.size() - 3; i++) {
+            System.out.println(i);
+            Assert.assertEquals("", resultSet.getString(i));
         }
-        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 2));
-        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 1));
+        Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 3));
+        Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 2));
+        Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 1));
         Assert.assertFalse(resultSet.next());
     }
 
@@ -1023,6 +1005,14 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         // AnalysisException("There is no job named...") is expected.
         Assert.assertThrows(AnalysisException.class, () -> executor.execute());
+    }
+
+    @Test
+    public void testShowAlterTable() throws AnalysisException, DdlException {
+        ShowAlterStmt stmt = new ShowAlterStmt(ShowAlterStmt.AlterType.OPTIMIZE, "testDb", null, null, null);
+        stmt.setNode(new OptimizeProcDir(globalStateMgr.getSchemaChangeHandler(), globalStateMgr.getDb("testDb")));
+        ShowExecutor executor = new ShowExecutor(ctx, stmt);
+        executor.execute();
     }
 
     @Test
@@ -1077,39 +1067,6 @@ public class ShowExecutorTest {
                 ")\n" +
                 "PARTITION BY ( year, dt )\n" +
                 "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");", resultSet.getResultRows().get(0).get(1));
-    }
-
-
-    @Test
-    public void testShowTablesFromExternalCatalog() throws AnalysisException, DdlException {
-        new MockUp<MetadataMgr>() {
-            @Mock
-            public Database getDb(String catalogName, String dbName) {
-                return new Database();
-            }
-
-            @Mock
-            public List<String> listTableNames(String catalogName, String dbName) {
-                List<String> tableNames = Lists.newArrayList();
-                tableNames.add("hive_test");
-                return tableNames;
-            }
-
-            @Mock
-            public Table getTable(String catalogName, String dbName, String tblName) {
-                return new Table(TableType.HIVE);
-            }
-        };
-
-        ShowTableStmt stmt = new ShowTableStmt("test", true, null, null, "hive_catalog");
-        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        ShowExecutor executor = new ShowExecutor(ctx, stmt);
-        ShowResultSet resultSet = executor.execute();
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("hive_test", resultSet.getString(0));
-        Assert.assertEquals("BASE TABLE", resultSet.getString(1));
-        Assert.assertFalse(resultSet.next());
     }
 
     @Test

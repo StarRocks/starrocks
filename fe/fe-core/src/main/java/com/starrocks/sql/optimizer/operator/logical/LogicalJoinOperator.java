@@ -42,6 +42,8 @@ public class LogicalJoinOperator extends LogicalOperator {
     private JoinOperator joinType;
     private ScalarOperator onPredicate;
     private String joinHint;
+    private ScalarOperator skewColumn;
+    private List<ScalarOperator> skewValues;
     // For mark the node has been push down join on clause, avoid dead-loop
     private boolean hasPushDownJoinOnClause = false;
     private boolean hasDeriveIsNotNullPredicate = false;
@@ -121,6 +123,13 @@ public class LogicalJoinOperator extends LogicalOperator {
 
     public String getJoinHint() {
         return joinHint;
+    }
+
+    public ScalarOperator getSkewColumn() {
+        return skewColumn;
+    }
+    public List<ScalarOperator> getSkewValues() {
+        return skewValues;
     }
 
     public int getTransformMask() {
@@ -242,6 +251,8 @@ public class LogicalJoinOperator extends LogicalOperator {
             builder.joinType = joinOperator.joinType;
             builder.onPredicate = joinOperator.onPredicate;
             builder.joinHint = joinOperator.joinHint;
+            builder.skewColumn = joinOperator.skewColumn;
+            builder.skewValues = joinOperator.skewValues;
             builder.hasPushDownJoinOnClause = joinOperator.hasPushDownJoinOnClause;
             builder.hasDeriveIsNotNullPredicate = joinOperator.hasDeriveIsNotNullPredicate;
             builder.originalOnPredicate = joinOperator.originalOnPredicate;
@@ -265,6 +276,16 @@ public class LogicalJoinOperator extends LogicalOperator {
 
         public Builder setJoinHint(String joinHint) {
             builder.joinHint = joinHint;
+            return this;
+        }
+
+        public Builder setSkewColumn(ScalarOperator column) {
+            builder.skewColumn = column;
+            return this;
+        }
+
+        public Builder setSkewValues(List<ScalarOperator> values) {
+            builder.skewValues = values;
             return this;
         }
 

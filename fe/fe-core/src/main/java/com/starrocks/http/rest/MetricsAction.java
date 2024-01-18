@@ -70,8 +70,7 @@ public class MetricsAction extends RestBaseAction {
         super(controller);
     }
 
-
-    public final class RequestParams {
+    public static final class RequestParams {
         // Whether to collect per table metrics
         private final boolean collectTableMetrics;
         // Whether to collect per table metrics in minified mode, Ignore some heavy metrics if true
@@ -80,7 +79,8 @@ public class MetricsAction extends RestBaseAction {
         private final boolean collectMVMetrics;
         // Whether to collect per materialized view metrics in minified mode, Ignore some heavy metrics if true
         private final boolean minifyMVMetrics;
-        RequestParams(boolean collectTableMetrics, boolean minifyTableMetrics,
+
+        public RequestParams(boolean collectTableMetrics, boolean minifyTableMetrics,
                       boolean collectMVMetrics, boolean minifyMVMetrics) {
             this.collectTableMetrics = collectTableMetrics;
             this.minifyTableMetrics = minifyTableMetrics;

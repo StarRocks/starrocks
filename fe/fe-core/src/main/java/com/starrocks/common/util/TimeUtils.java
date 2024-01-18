@@ -52,6 +52,7 @@ import org.threeten.extra.PeriodDuration;
 import java.text.ParseException;
 import java.text.ParsePosition;
 import java.text.SimpleDateFormat;
+import java.time.Clock;
 import java.time.DateTimeException;
 import java.time.ZoneId;
 import java.time.format.DateTimeParseException;
@@ -159,6 +160,13 @@ public class TimeUtils {
             return getSystemTimeZone();
         }
         return TimeZone.getTimeZone(ZoneId.of(timeZone, TIME_ZONE_ALIAS_MAP));
+    }
+
+    /**
+     * Get UNIX timestamp/Epoch second at system timezone
+     */
+    public static long getEpochSeconds() {
+        return Clock.systemDefaultZone().instant().getEpochSecond();
     }
 
     public static String longToTimeString(long timeStamp, SimpleDateFormat dateFormat) {
@@ -290,24 +298,7 @@ public class TimeUtils {
     }
 
     public static long convertTimeUnitValueToSecond(long value, TimeUnit unit) {
-        switch (unit) {
-            case DAYS:
-                return value * 60 * 60 * 24;
-            case HOURS:
-                return value * 60 * 60;
-            case MINUTES:
-                return value * 60;
-            case SECONDS:
-                return value;
-            case MILLISECONDS:
-                return value / 1000;
-            case MICROSECONDS:
-                return value / 1000 / 1000;
-            case NANOSECONDS:
-                return value / 1000 / 1000 / 1000;
-            default:
-                return 0;
-        }
+        return TimeUnit.SECONDS.convert(value, unit);
     }
 
     /**
@@ -355,5 +346,15 @@ public class TimeUtils {
             return PeriodStyle.LONG.toString(periodDuration.getPeriod()) + " "
                     + DurationStyle.LONG.toString(periodDuration.getDuration());
         }
+    }
+
+    public static String getSessionTimeZone() {
+        String timezone;
+        if (ConnectContext.get() != null) {
+            timezone = ConnectContext.get().getSessionVariable().getTimeZone();
+        } else {
+            timezone = VariableMgr.getDefaultSessionVariable().getTimeZone();
+        }
+        return timezone;
     }
 }

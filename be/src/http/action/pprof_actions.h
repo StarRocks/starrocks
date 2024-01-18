@@ -64,6 +64,14 @@ public:
     void handle(HttpRequest* req) override;
 };
 
+class IOProfileAction : public HttpHandler {
+public:
+    IOProfileAction() = default;
+    ~IOProfileAction() override = default;
+
+    void handle(HttpRequest* req) override;
+};
+
 class PmuProfileAction : public HttpHandler {
 public:
     PmuProfileAction() = default;

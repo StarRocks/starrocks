@@ -15,10 +15,13 @@
 package com.starrocks.service;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -26,11 +29,17 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.UserException;
 import com.starrocks.ha.FrontendNodeType;
+import com.starrocks.meta.lock.LockTimeoutException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TCreatePartitionRequest;
@@ -38,6 +47,8 @@ import com.starrocks.thrift.TCreatePartitionResult;
 import com.starrocks.thrift.TDescribeTableParams;
 import com.starrocks.thrift.TDescribeTableResult;
 import com.starrocks.thrift.TFileType;
+import com.starrocks.thrift.TGetDictQueryParamRequest;
+import com.starrocks.thrift.TGetDictQueryParamResponse;
 import com.starrocks.thrift.TGetLoadTxnStatusRequest;
 import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetTablesInfoRequest;
@@ -48,6 +59,8 @@ import com.starrocks.thrift.TImmutablePartitionRequest;
 import com.starrocks.thrift.TImmutablePartitionResult;
 import com.starrocks.thrift.TListMaterializedViewStatusResult;
 import com.starrocks.thrift.TListTableStatusResult;
+import com.starrocks.thrift.TLoadTxnBeginRequest;
+import com.starrocks.thrift.TLoadTxnBeginResult;
 import com.starrocks.thrift.TLoadTxnCommitRequest;
 import com.starrocks.thrift.TLoadTxnCommitResult;
 import com.starrocks.thrift.TResourceUsage;
@@ -65,6 +78,7 @@ import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.transaction.CommitRateExceededException;
+import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
@@ -78,6 +92,7 @@ import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.mockito.internal.util.collections.Sets;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -136,6 +151,7 @@ public class FrontendServiceImplTest {
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
         Config.enable_strict_storage_medium_check = false;
+        Config.stream_load_max_txn_num_per_be = 5;
         UtFrameUtils.createMinStarRocksCluster();
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
@@ -245,6 +261,20 @@ public class FrontendServiceImplTest {
                         "PARTITION BY time_slice(event_day, interval 5 day)\n" +
                         "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
                         "PROPERTIES(\"replication_num\" = \"1\");")
+                .withTable("CREATE TABLE site_access_list (\n" +
+                        "    event_day DATE not null,\n" +
+                        "    site_id INT DEFAULT '10',\n" +
+                        "    city_code VARCHAR(100),\n" +
+                        "    user_name VARCHAR(32) DEFAULT '',\n" +
+                        "    pv BIGINT DEFAULT '0'\n" +
+                        ")\n" +
+                        "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
+                        "PARTITION BY (event_day) (\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");")
                 .withView("create view v as select * from site_access_empty")
                 .withView("create view v1 as select current_role()")
                 .withView("create view v2 as select current_user()")
@@ -339,6 +369,13 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testCreatePartitionApi() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_day");
         List<List<String>> partitionValues = Lists.newArrayList();
@@ -362,7 +399,57 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testCreatePartitionExceedLimit() throws TException {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_day");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24");
+        partitionValues.add(values);
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+
+        Config.thrift_server_max_worker_threads = 4;
+        TCreatePartitionResult partition = impl.createPartition(request);
+        Config.thrift_server_max_worker_threads = 4096;
+
+        Assert.assertEquals(partition.getStatus().getStatus_code(), TStatusCode.SERVICE_UNAVAILABLE);
+    }
+
+    @Test
+    public void testLoadTxnBegin() throws Exception {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TLoadTxnBeginRequest request = new TLoadTxnBeginRequest();
+        request.setLabel("test_label");
+        request.setDb("test");
+        request.setTbl("site_access_auto");
+        request.setUser("root");
+        request.setPasswd("");
+
+        new MockUp<SessionVariable>() {
+            @Mock
+            public boolean isEnableLoadProfile() {
+                return true;
+            }
+        };
+
+        TLoadTxnBeginResult result = impl.loadTxnBegin(request);
+        Assert.assertEquals(result.getStatus().getStatus_code(), TStatusCode.OK);
+    }
+
+    @Test
     public void testCreatePartitionApiSlice() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_slice");
         List<List<String>> partitionValues = Lists.newArrayList();
@@ -387,6 +474,13 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testCreatePartitionApiMultiValues() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_day");
         List<List<String>> partitionValues = Lists.newArrayList();
@@ -417,6 +511,13 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testCreatePartitionApiMonth() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_month");
         List<List<String>> partitionValues = Lists.newArrayList();
@@ -453,6 +554,13 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testCreatePartitionApiBorder() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_border");
         List<List<String>> partitionValues = Lists.newArrayList();
@@ -532,7 +640,7 @@ public class FrontendServiceImplTest {
         params.setCurrent_user_ident(tUserIdentity);
 
         TGetTablesResult result = impl.getTableNames(params);
-        Assert.assertEquals(15, result.tables.size());
+        Assert.assertEquals(16, result.tables.size());
     }
 
     @Test
@@ -570,6 +678,13 @@ public class FrontendServiceImplTest {
 
     @Test
     public void testCreatePartitionApiHour() throws TException {
+        new MockUp<GlobalTransactionMgr>() {
+            @Mock
+            public TransactionState getTransactionState(long dbId, long transactionId) {
+                return new TransactionState();
+            }
+        };
+
         Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Table table = db.getTable("site_access_hour");
         List<List<String>> partitionValues = Lists.newArrayList();
@@ -944,6 +1059,20 @@ public class FrontendServiceImplTest {
     }
 
     @Test
+    public void testLoadTxnCommitTimeout() throws UserException, TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        request.commitInfos = new ArrayList<>();
+        doThrow(new LockTimeoutException("get database write lock timeout")).when(impl).loadTxnCommitImpl(any(), any());
+        TLoadTxnCommitResult result = impl.loadTxnCommit(request);
+        Assert.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
+    }
+
+    @Test
     public void testLoadTxnCommitFailed() throws UserException, TException {
         FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
         TLoadTxnCommitRequest request = new TLoadTxnCommitRequest();
@@ -955,5 +1084,74 @@ public class FrontendServiceImplTest {
         doThrow(new UserException("injected error")).when(impl).loadTxnCommitImpl(any(), any());
         TLoadTxnCommitResult result = impl.loadTxnCommit(request);
         Assert.assertEquals(TStatusCode.ANALYSIS_ERROR, result.status.status_code);
+    }
+
+    @Test
+    public void testStreamLoadPutTimeout() throws UserException, TException {
+        FrontendServiceImpl impl = spy(new FrontendServiceImpl(exeEnv));
+        TStreamLoadPutRequest request = new TStreamLoadPutRequest();
+        request.db = "test";
+        request.tbl = "tbl_test";
+        request.txnId = 1001L;
+        request.setAuth_code(100);
+        doThrow(new LockTimeoutException("get database read lock timeout")).when(impl).streamLoadPutImpl(any());
+        TStreamLoadPutResult result = impl.streamLoadPut(request);
+        Assert.assertEquals(TStatusCode.TIMEOUT, result.status.status_code);
+    }
+
+    @Test
+    public void testAddListPartitionConcurrency() throws UserException, TException {
+
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("site_access_list");
+        List<List<String>> partitionValues = Lists.newArrayList();
+        List<String> values = Lists.newArrayList();
+        values.add("1990-04-24");
+        partitionValues.add(values);
+        List<String> values2 = Lists.newArrayList();
+        values2.add("1990-04-25");
+        partitionValues.add(values2);
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TCreatePartitionRequest request = new TCreatePartitionRequest();
+        request.setDb_id(db.getId());
+        request.setTable_id(table.getId());
+        request.setPartition_values(partitionValues);
+        TCreatePartitionResult partition = impl.createPartition(request);
+
+        GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        Database testDb = currentState.getDb("test");
+        OlapTable olapTable = (OlapTable) testDb.getTable("site_access_list");
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        DistributionInfo defaultDistributionInfo = olapTable.getDefaultDistributionInfo();
+        List<PartitionDesc> partitionDescs = Lists.newArrayList();
+        Partition p19910425 = olapTable.getPartition("p19900425");
+
+        partitionDescs.add(new ListPartitionDesc(Lists.newArrayList("p19900425"),
+                Lists.newArrayList(new SingleItemListPartitionDesc(true, "p19900425",
+                        Lists.newArrayList("1990-04-25"), Maps.newHashMap()))));
+
+        AddPartitionClause addPartitionClause = new AddPartitionClause(partitionDescs.get(0),
+                defaultDistributionInfo.toDistributionDesc(), Maps.newHashMap(), false);
+
+        List<Partition> partitionList = Lists.newArrayList();
+        partitionList.add(p19910425);
+
+        currentState.getLocalMetastore().addListPartitionLog(testDb, olapTable, partitionDescs,
+                addPartitionClause, partitionInfo, partitionList, Sets.newSet("p19900425"));
+
+    }
+
+    @Test
+    public void testgetDictQueryParam() throws TException {
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+        TGetDictQueryParamRequest request = new TGetDictQueryParamRequest();
+        request.setDb_name("test");
+        request.setTable_name("site_access_auto");
+
+        TGetDictQueryParamResponse result = impl.getDictQueryParam(request);
+
+        System.out.println(result);
+
+        Assert.assertNotEquals(0, result.getLocation().getTabletsSize());
     }
 }

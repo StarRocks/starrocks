@@ -1,0 +1,23 @@
+-- name: test_substr
+
+create table t1 (id int, v bigint) distributed by hash(id) properties ("replication_num" = "1");
+
+select SUBSTR('', 9223372036854775807) ;
+select SUBSTR('', 9223372036854775807, 465254298) ;
+select SUBSTR('', -9223372036854775807, 465254298) ;
+select SUBSTR('', 9223372036854775806, 465254298) ;
+
+select SUBSTRING('', 9223372036854775807) ;
+select SUBSTRING('', 9223372036854775807, 465254298) ;
+select SUBSTRING('', -9223372036854775807, 465254298) ;
+select SUBSTRING('', 9223372036854775806, 465254298) ;
+
+insert into t1 values(1, 9223372036854775807), (2, -9223372036854775807), (3, 9223372036854775806);
+
+select SUBSTR('', v) from t1;
+select SUBSTR('', v, id) from t1;
+select SUBSTR('STARROCKS', v, id) from t1;
+
+select SUBSTRING('', v) from t1;
+select SUBSTRING('', v, id) from t1;
+select SUBSTRING('STARROCKS', v, id) from t1;

@@ -35,7 +35,7 @@ DISTRIBUTED BY HASH(`k1`) BUCKETS 2
 PROPERTIES (
 "replication_num" = "1"
 );
-CREATE MATERIALIZED VIEW `mv1`
+CREATE MATERIALIZED VIEW `test_union_mv1_${uuid0}`
 PARTITION BY (`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 2
 REFRESH ASYNC
@@ -46,10 +46,14 @@ PROPERTIES (
 AS select k1, v1, v2 from t1
 union all
 select k1, v1, v2 from t2;
+
 insert into t1 values ("202301",1,1),("202305",1,2);
-select sleep(15);
-select * from mv1;
--- name: test_materialized_view_auto_refresh_partitions_limit
+refresh materialized view test_union_mv1_${uuid0} with sync mode;
+select * from test_union_mv1_${uuid0} order by k1, v1;
+drop table t1;
+drop table t2;
+drop materialized view test_union_mv1_${uuid0};
+
 CREATE TABLE `t1` (
   `k1` int(11) NULL COMMENT "",
   `v1` int(11) NULL COMMENT "",
@@ -79,7 +83,8 @@ DISTRIBUTED BY HASH(`k1`) BUCKETS 2
 PROPERTIES (
 "replication_num" = "1"
 );
-CREATE MATERIALIZED VIEW `mv1`
+insert into t1 values (202301,1,1),(202305,1,2);
+CREATE MATERIALIZED VIEW `test_union_mv2_${uuid0}`
 PARTITION BY (`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 2
 REFRESH ASYNC
@@ -91,6 +96,8 @@ PROPERTIES (
 AS select k1, v1, v2 from t1
 union
 select k1, v1, v2 from t2;
-insert into t2 values (202301,1,1),(202305,1,2);
-select sleep(15);
-select * from mv1;
+refresh materialized view test_union_mv2_${uuid0} with sync mode;
+select * from test_union_mv2_${uuid0} order by k1, v1;
+drop table t1;
+drop table t2;
+drop materialized view test_union_mv2_${uuid0};

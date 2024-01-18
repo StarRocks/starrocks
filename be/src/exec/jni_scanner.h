@@ -98,6 +98,9 @@ private:
     std::map<std::string, std::string> _jni_scanner_params;
     std::string _jni_scanner_factory_class;
 
+    const std::set<std::string> _skipped_log_jni_scanner_params = {"native_table", "split_info", "predicate_info",
+                                                                   "access_id",    "access_key", "read_session"};
+
 private:
     long* _chunk_meta_ptr;
     int _chunk_meta_index;

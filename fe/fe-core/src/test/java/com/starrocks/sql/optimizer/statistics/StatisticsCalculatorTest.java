@@ -27,6 +27,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
@@ -39,6 +40,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -47,15 +49,20 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -70,6 +77,8 @@ public class StatisticsCalculatorTest {
     private static OptimizerContext optimizerContext;
     private static ColumnRefFactory columnRefFactory;
     private static StarRocksAssert starRocksAssert;
+    @ClassRule
+    public static TemporaryFolder temp = new TemporaryFolder();
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -80,9 +89,10 @@ public class StatisticsCalculatorTest {
         optimizerContext = new OptimizerContext(new Memo(), columnRefFactory, connectContext);
 
         starRocksAssert = new StarRocksAssert(connectContext);
+        ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
+
         String dbName = "statistics_test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
-        FeConstants.runningUnitTest = true;
     }
 
     @Before
@@ -276,9 +286,58 @@ public class StatisticsCalculatorTest {
     }
 
     @Test
-    public void testLogicalOlapTableEmptyPartition(@Mocked CachedStatisticStorage cachedStatisticStorage) {
-        FeConstants.runningUnitTest = false;
+    public void testLogicalIcebergTableScan() {
+        GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        Table icebergTable = globalStateMgr.getMetadataMgr().getTable("iceberg0", "partitioned_db", "t1");
+        List<Column> columns = icebergTable.getColumns();
 
+        Map<ColumnRefOperator, Column> refToColumn = Maps.newHashMap();
+        Map<Column, ColumnRefOperator> columnToRef = Maps.newHashMap();
+        ColumnRefOperator partitionColumn = null;
+        for (int i = 0; i < columns.size(); i++) {
+            Column column = columns.get(i);
+            ColumnRefOperator ref = new ColumnRefOperator(i, column.getType(), column.getName(), true);
+            if (column.getName().equals("date")) {
+                partitionColumn = ref;
+            }
+            refToColumn.put(ref, column);
+            columnToRef.put(column, ref);
+        }
+
+        BinaryPredicateOperator predicateOperator = new BinaryPredicateOperator(BinaryType.LT,
+                partitionColumn, ConstantOperator.createInt(50));
+        LogicalIcebergScanOperator icebergScanOperator = new LogicalIcebergScanOperator(icebergTable, refToColumn,
+                columnToRef, -1, predicateOperator);
+
+        GroupExpression groupExpression = new GroupExpression(icebergScanOperator, Lists.newArrayList());
+        groupExpression.setGroup(new Group(0));
+        ExpressionContext expressionContext = new ExpressionContext(groupExpression);
+
+        new MockUp<MetadataMgr>() {
+            @Mock
+            public Statistics getTableStatisticsFromInternalStatistics(Table table, Map<ColumnRefOperator,
+                    Column> columns) {
+                Statistics.Builder builder = Statistics.builder();
+                icebergScanOperator.getOutputColumns().forEach(col ->
+                        builder.addColumnStatistic(col,
+                                new ColumnStatistic(0, 100, 0.0, 5.0, 100))
+                );
+                builder.setOutputRowCount(100);
+                return builder.build();
+            }
+        };
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext,
+                columnRefFactory, optimizerContext);
+        statisticsCalculator.estimatorStats();
+        Assert.assertEquals(50, expressionContext.getStatistics().getOutputRowCount(), 0.001);
+        Assert.assertEquals(50, expressionContext.getStatistics().
+                getColumnStatistic(partitionColumn).getMaxValue(), 0.001);
+        Assert.assertTrue(optimizerContext.isObtainedFromInternalStatistics());
+        optimizerContext.setObtainedFromInternalStatistics(false);
+    }
+
+    @Test
+    public void testLogicalOlapTableEmptyPartition(@Mocked CachedStatisticStorage cachedStatisticStorage) {
         ColumnRefOperator idDate = columnRefFactory.create("id_date", Type.DATE, true);
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         Table table = globalStateMgr.getDb("statistics_test").getTable("test_all_type");
@@ -332,12 +391,12 @@ public class StatisticsCalculatorTest {
         ColumnStatistic columnStatistic = expressionContext.getStatistics().getColumnStatistic(idDate);
         Assert.assertEquals(30, columnStatistic.getDistinctValuesCount(), 0.001);
 
-        FeConstants.runningUnitTest = true;
     }
 
     @Test
     public void testLogicalOlapTableScanPartitionPrune1(@Mocked CachedStatisticStorage cachedStatisticStorage)
             throws Exception {
+        FeConstants.runningUnitTest = true;
         ColumnRefOperator idDate = columnRefFactory.create("id_date", Type.DATE, true);
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
@@ -427,11 +486,13 @@ public class StatisticsCalculatorTest {
         Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2014, 12, 1, 0, 0, 0)),
                 columnStatistic.getMaxValue(), 0.001);
         Assert.assertEquals(20, columnStatistic.getDistinctValuesCount(), 0.001);
+        FeConstants.runningUnitTest = false;
     }
 
     @Test
     public void testLogicalOlapTableScanPartitionPrune2(@Mocked CachedStatisticStorage cachedStatisticStorage)
             throws Exception {
+        FeConstants.runningUnitTest = true;
         ColumnRefOperator idDate = columnRefFactory.create("id_date", Type.DATE, true);
 
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
@@ -519,6 +580,7 @@ public class StatisticsCalculatorTest {
         Assert.assertEquals(Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 26, 0, 0, 0)),
                 columnStatistic.getMaxValue(), 0.001);
         Assert.assertEquals(2, columnStatistic.getDistinctValuesCount(), 0.001);
+        FeConstants.runningUnitTest = false;
     }
 
     @Test

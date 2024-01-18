@@ -94,7 +94,7 @@ public:
 
     // only work when all_page_dict_encoded was true.
     // used to acquire load local dict
-    int dict_size();
+    int dict_size() override;
 
 private:
     static Status _seek_to_pos_in_page(ParsedPage* page, ordinal_t offset_in_page);
@@ -125,8 +125,6 @@ private:
     Status _load_dict_page();
 
     bool _contains_deleted_row(uint32_t page_index) const;
-
-    bool _skip_fill_data_cache() const { return !_opts.fill_data_cache; }
 
     ColumnReader* _reader;
 

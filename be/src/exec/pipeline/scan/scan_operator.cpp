@@ -93,7 +93,6 @@ Status ScanOperator::prepare(RuntimeState* state) {
 }
 
 void ScanOperator::close(RuntimeState* state) {
-    set_buffer_finished();
     // For the running io task, we close its chunk sources in ~ScanOperator not in ScanOperator::close.
     for (size_t i = 0; i < _chunk_sources.size(); i++) {
         std::lock_guard guard(_task_mutex);
@@ -173,7 +172,10 @@ bool ScanOperator::has_output() const {
 
     // Can pick up more morsels or submit more tasks
     if (!_morsel_queue->empty()) {
-        return true;
+        auto status_or_is_ready = _morsel_queue->ready_for_next();
+        if (status_or_is_ready.ok() && status_or_is_ready.value()) {
+            return true;
+        }
     }
     for (int i = 0; i < _io_tasks_per_scan_operator; ++i) {
         std::shared_lock guard(_task_mutex);
@@ -226,8 +228,19 @@ void ScanOperator::_detach_chunk_sources() {
 }
 
 Status ScanOperator::set_finishing(RuntimeState* state) {
+    // check when expired, are there running io tasks or submitted tasks
+    if (UNLIKELY(state != nullptr && state->query_ctx()->is_query_expired() &&
+                 (_num_running_io_tasks > 0 || _submit_task_counter->value() == 0))) {
+        LOG(WARNING) << "set_finishing scan fragment " << print_id(state->fragment_instance_id()) << " driver_id  "
+                     << get_driver_sequence() << " _num_running_io_tasks= " << _num_running_io_tasks
+                     << " _submit_task_counter= " << _submit_task_counter->value()
+                     << " _morsels_counter= " << _morsels_counter->value()
+                     << (is_buffer_full() && (num_buffered_chunks() == 0) ? ", buff is full but without local chunks"
+                                                                          : "");
+    }
     std::lock_guard guard(_task_mutex);
     _detach_chunk_sources();
+    set_buffer_finished();
     _is_finished = true;
     return Status::OK();
 }
@@ -376,7 +389,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     task.peak_scan_task_queue_size_counter = _peak_scan_task_queue_size_counter;
     const auto io_task_start_nano = MonotonicNanos();
     task.work_function = [wp = _query_ctx, this, state, chunk_source_index, query_trace_ctx, driver_id,
-                          io_task_start_nano]() {
+                          io_task_start_nano](auto& ctx) {
         if (auto sp = wp.lock()) {
             // set driver_id/query_id/fragment_instance_id to thread local
             // driver_id will be used in some Expr such as regex_replace
@@ -405,7 +418,10 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             int64_t prev_scan_rows = chunk_source->get_scan_rows();
             int64_t prev_scan_bytes = chunk_source->get_scan_bytes();
             auto status = chunk_source->buffer_next_batch_chunks_blocking(state, kIOTaskBatchSize, _workgroup.get());
+
             if (!status.ok() && !status.is_end_of_file()) {
+                LOG(ERROR) << "scan fragment " << print_id(state->fragment_instance_id()) << " driver "
+                           << get_driver_sequence() << " Scan tasks error: " << status.to_string();
                 _set_scan_status(status);
             }
 
@@ -538,8 +554,8 @@ void ScanOperator::_merge_chunk_source_profiles(RuntimeState* state) {
         profiles[i] = _chunk_source_profiles[i].get();
     }
 
-    RuntimeProfile* merged_profile =
-            RuntimeProfile::merge_isomorphic_profiles(query_ctx->object_pool(), profiles, false);
+    ObjectPool obj_pool;
+    RuntimeProfile* merged_profile = RuntimeProfile::merge_isomorphic_profiles(&obj_pool, profiles, false);
 
     _unique_metrics->copy_all_info_strings_from(merged_profile);
     _unique_metrics->copy_all_counters_from(merged_profile);

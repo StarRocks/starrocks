@@ -271,7 +271,7 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
         Status st = fs::remove(new_meta_file);
         if (!st.ok()) {
             LOG(WARNING) << "failed to remove meta file. tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash
-                         << ", path=" << schema_hash_path << ", error=" << st.get_error_msg();
+                         << ", path=" << schema_hash_path << ", error=" << st.message();
         }
     }
     if (!dcgs_snapshot_path.empty()) {
@@ -279,7 +279,7 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
         Status st = fs::remove(dcgs_snapshot_path);
         if (!st.ok()) {
             LOG(WARNING) << "failed to remove dcg file. tablet_id=" << _tablet_id << ", schema_hash=" << _schema_hash
-                         << ", path=" << schema_hash_path << ", error=" << st.get_error_msg();
+                         << ", path=" << schema_hash_path << ", error=" << st.message();
         }
     }
     if (!res.ok() && need_remove_new_path) {
@@ -287,7 +287,7 @@ Status EngineStorageMigrationTask::_storage_migrate(TabletSharedPtr tablet) {
         Status st = fs::remove_all(schema_hash_path);
         if (!st.ok()) {
             LOG(WARNING) << "failed to remove storage migration path, tablet_id: " << _tablet_id
-                         << ". schema_hash_path=" << schema_hash_path << ", error=" << st.get_error_msg();
+                         << ". schema_hash_path=" << schema_hash_path << ", error=" << st.message();
         }
     }
 
@@ -355,7 +355,7 @@ Status EngineStorageMigrationTask::_finish_migration(const TabletSharedPtr& tabl
         }
 
         if (!res.ok()) {
-            LOG(WARNING) << "snapshot dcgs failed, " << res.get_error_msg() << " tablet id: " << _tablet_id;
+            LOG(WARNING) << "snapshot dcgs failed, " << res.message() << " tablet id: " << _tablet_id;
             need_remove_new_path = true;
             break;
         }
@@ -363,7 +363,7 @@ Status EngineStorageMigrationTask::_finish_migration(const TabletSharedPtr& tabl
         dcgs_snapshot_path = schema_hash_path + "/" + std::to_string(_tablet_id) + ".dcgs_snapshot";
         res = DeltaColumnGroupListHelper::save_snapshot(dcgs_snapshot_path, dcg_snapshot_pb);
         if (!res.ok()) {
-            LOG(WARNING) << "save dcg snapshot failed, " << res.get_error_msg() << " tablet id: " << _tablet_id;
+            LOG(WARNING) << "save dcg snapshot failed, " << res.message() << " tablet id: " << _tablet_id;
             need_remove_new_path = true;
             break;
         }
@@ -416,6 +416,7 @@ Status EngineStorageMigrationTask::_finish_migration(const TabletSharedPtr& tabl
                 }
 
                 if (dcgs.size() == 0) {
+                    ++idx;
                     continue;
                 }
 

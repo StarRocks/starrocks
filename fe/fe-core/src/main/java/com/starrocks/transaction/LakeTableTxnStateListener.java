@@ -18,7 +18,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
@@ -26,24 +25,28 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
-import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.lake.CommitRateLimiter;
-import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.proto.AbortTxnRequest;
+import com.starrocks.proto.TxnTypePB;
+import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.rpc.BrpcProxy;
-import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
 public class LakeTableTxnStateListener implements TransactionStateListener {
@@ -74,6 +77,10 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     public void preCommit(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
                           List<TabletFailInfo> failedTablets) throws TransactionException {
         Preconditions.checkState(txnState.getTransactionStatus() != TransactionStatus.COMMITTED);
+        txnState.clearAutomaticPartitionSnapshot();
+        if (!finishedTablets.isEmpty()) {
+            txnState.setTabletCommitInfos(finishedTablets);
+        }
         if (table.getState() == OlapTable.OlapTableState.RESTORE) {
             throw new TransactionCommitFailedException("Cannot write RESTORE state table \"" + table.getName() + "\"");
         }
@@ -188,6 +195,17 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
             isFirstPartition = false;
         }
+
+        // The new versions in a replication transaction depend on the versions in ReplicationTxnCommitAttachment
+        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+            ReplicationTxnCommitAttachment attachment = (ReplicationTxnCommitAttachment) txnState
+                    .getTxnCommitAttachment();
+            Map<Long, Long> partitionVersions = attachment.getPartitionVersions();
+            for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+                partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
+            }
+        }
+
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
     }
 
@@ -198,44 +216,75 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void postAbort(TransactionState txnState, List<TabletFailInfo> failedTablets) {
-        Map<Long, List<Long>> tabletGroup = null;
-        Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
-        if (db == null) {
-            return;
+        if (CollectionUtils.isEmpty(txnState.getTabletCommitInfos())) {
+            abortTxnSkipCleanup(txnState);
+        } else {
+            abortTxnWithCleanup(txnState);
         }
+        txnState.clearAutomaticPartitionSnapshot();
+    }
 
-        db.readLock();
-        try {
-            // Preconditions: has acquired the database's reader or writer lock.
-            tabletGroup = Utils.groupTabletID(table);
-        } catch (NoAliveBackendException e) {
-            LOG.warn(e);
-        } finally {
-            db.readUnlock();
+    private void abortTxnSkipCleanup(TransactionState txnState) {
+        List<Long> txnIds = Collections.singletonList(txnState.getTransactionId());
+        List<TxnTypePB> txnTypes = Collections.singletonList(
+                txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                        ? TxnTypePB.TXN_REPLICATION
+                        : TxnTypePB.TXN_NORMAL);
+        List<ComputeNode> nodes = getAllAliveNodes();
+        for (ComputeNode node : nodes) { // Send abortTxn() request to all nodes
+            AbortTxnRequest request = new AbortTxnRequest();
+            request.txnIds = txnIds;
+            request.txnTypes = txnTypes;
+            request.skipCleanup = true;
+            request.tabletIds = null; // unused when skipCleanup is true
+
+            sendAbortTxnRequestIgnoreResponse(request, node);
         }
+    }
 
-        if (tabletGroup == null) {
-            return;
+    private void abortTxnWithCleanup(TransactionState txnState) {
+        List<Long> txnIds = Collections.singletonList(txnState.getTransactionId());
+        List<TxnTypePB> txnTypes = Collections.singletonList(
+                txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                        ? TxnTypePB.TXN_REPLICATION
+                        : TxnTypePB.TXN_NORMAL);
+        Map<Long, List<Long>> tabletGroup = new HashMap<>();
+        for (TabletCommitInfo info : txnState.getTabletCommitInfos()) {
+            tabletGroup.computeIfAbsent(info.getBackendId(), k -> Lists.newArrayList()).add(info.getTabletId());
         }
-
         for (Map.Entry<Long, List<Long>> entry : tabletGroup.entrySet()) {
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(entry.getKey());
-            if (backend == null) {
-                // It's ok to skip sending abort transaction request.
+            ComputeNode node = getAliveNode(entry.getKey());
+            if (node == null) {
                 continue;
             }
             AbortTxnRequest request = new AbortTxnRequest();
-            request.txnIds = Lists.newArrayList();
-            request.txnIds.add(txnState.getTransactionId());
+            request.txnIds = txnIds;
+            request.txnTypes = txnTypes;
             request.tabletIds = entry.getValue();
+            request.skipCleanup = false;
 
-            try {
-                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
-                lakeService.abortTxn(request);
-            } catch (Throwable e) {
-                LOG.error(e);
-            }
+            sendAbortTxnRequestIgnoreResponse(request, node);
         }
+    }
+
+    static void sendAbortTxnRequestIgnoreResponse(AbortTxnRequest request, ComputeNode node) {
+        try {
+            BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort()).abortTxn(request);
+        } catch (Throwable e) {
+            LOG.error(e);
+        }
+    }
+
+    static List<ComputeNode> getAllAliveNodes() {
+        List<ComputeNode> nodes = new ArrayList<>();
+        nodes.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableComputeNodes());
+        nodes.addAll(GlobalStateMgr.getCurrentSystemInfo().getAvailableBackends());
+        return nodes;
+    }
+
+    @Nullable
+    static ComputeNode getAliveNode(Long nodeId) {
+        return GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
     }
 
     static boolean enableIngestSlowdown() {

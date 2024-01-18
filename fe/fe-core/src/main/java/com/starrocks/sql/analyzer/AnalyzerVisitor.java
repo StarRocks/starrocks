@@ -55,6 +55,7 @@ import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDataCacheRuleStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateDictionaryStmt;
 import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
@@ -75,6 +76,7 @@ import com.starrocks.sql.ast.DescStorageVolumeStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDataCacheRuleStmt;
 import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.DropDictionaryStmt;
 import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
@@ -98,6 +100,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
+import com.starrocks.sql.ast.RefreshDictionaryStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RestoreStmt;
@@ -116,6 +119,7 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
+import com.starrocks.sql.ast.ShowDictionaryStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -556,13 +560,13 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitAlterSystemStatement(AlterSystemStmt statement, ConnectContext context) {
-        AlterSystemStmtAnalyzer.analyze(statement, context);
+        new AlterSystemStmtAnalyzer().analyze(statement, context);
         return null;
     }
 
     @Override
     public Void visitCancelAlterSystemStatement(CancelAlterSystemStmt statement, ConnectContext context) {
-        AlterSystemStmtAnalyzer.analyze(statement, context);
+        new AlterSystemStmtAnalyzer().analyze(statement, context);
         return null;
     }
 
@@ -917,9 +921,33 @@ public class AnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         return null;
     }
 
-    @Override
     public Void visitExecuteStatement(ExecuteStmt statement, ConnectContext context) {
         new PrepareAnalyzer(context).analyze(statement);
+        return null;
+    }
+
+    // ---------------------------------------- Dictionary Statement -------------------------------------------
+    @Override
+    public Void visitCreateDictionaryStatement(CreateDictionaryStmt statement, ConnectContext context) {
+        DictionaryAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitDropDictionaryStatement(DropDictionaryStmt statement, ConnectContext context) {
+        DictionaryAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitRefreshDictionaryStatement(RefreshDictionaryStmt statement, ConnectContext context) {
+        DictionaryAnalyzer.analyze(statement, context);
+        return null;
+    }
+
+    @Override
+    public Void visitShowDictionaryStatement(ShowDictionaryStmt statement, ConnectContext context) {
+        DictionaryAnalyzer.analyze(statement, context);
         return null;
     }
 }

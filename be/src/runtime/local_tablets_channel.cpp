@@ -394,7 +394,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         std::lock_guard l(_status_lock);
         if (!_status.ok()) {
             response->mutable_status()->set_status_code(_status.code());
-            response->mutable_status()->add_error_msgs(_status.get_error_msg());
+            response->mutable_status()->add_error_msgs(std::string(_status.message()));
         }
     }
 }
@@ -692,6 +692,7 @@ void LocalTabletsChannel::abort(const std::vector<int64_t>& tablet_ids, const st
     for (auto tablet_id : tablet_ids) {
         auto it = _delta_writers.find(tablet_id);
         if (it != _delta_writers.end()) {
+            it->second->cancel(Status::Cancelled(reason));
             it->second->abort(abort_with_exception);
         }
     }
@@ -834,7 +835,7 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
         DCHECK_EQ(_delta_writers.size(), tablet_ids.size());
         std::sort(tablet_ids.begin(), tablet_ids.end());
         for (size_t i = 0; i < tablet_ids.size(); ++i) {
-            _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
+            _tablet_id_to_sorted_indexes[tablet_ids[i]] = i;
         }
     }
 

@@ -450,9 +450,9 @@ Status PhysicalSplitMorselQueue::_init_segment() {
         if (0 == _rowset_idx) {
             _tablet_seek_ranges.clear();
             _mempool.clear();
-            RETURN_IF_ERROR(TabletReader::parse_seek_range(_tablets[_tablet_idx], _range_start_op, _range_end_op,
-                                                           _range_start_key, _range_end_key, &_tablet_seek_ranges,
-                                                           &_mempool));
+            RETURN_IF_ERROR(TabletReader::parse_seek_range(_tablets[_tablet_idx]->tablet_schema(), _range_start_op,
+                                                           _range_end_op, _range_start_key, _range_end_key,
+                                                           &_tablet_seek_ranges, &_mempool));
         }
         // Read a new rowset.
         RETURN_IF_ERROR(_cur_rowset()->load());
@@ -777,9 +777,9 @@ Status LogicalSplitMorselQueue::_init_tablet() {
 
     if (_tablet_idx == 0) {
         // All the tablets have the same schema, so parse seek range with the first table schema.
-        RETURN_IF_ERROR(TabletReader::parse_seek_range(_tablets[_tablet_idx], _range_start_op, _range_end_op,
-                                                       _range_start_key, _range_end_key, &_tablet_seek_ranges,
-                                                       &_mempool));
+        RETURN_IF_ERROR(TabletReader::parse_seek_range(_tablets[_tablet_idx]->tablet_schema(), _range_start_op,
+                                                       _range_end_op, _range_start_key, _range_end_key,
+                                                       &_tablet_seek_ranges, &_mempool));
     }
 
     _largest_rowset = _find_largest_rowset(_tablet_rowsets[_tablet_idx]);

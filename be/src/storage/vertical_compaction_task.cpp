@@ -219,7 +219,7 @@ StatusOr<size_t> VerticalCompactionTask::_compact_data(bool is_key, int32_t chun
             }
         }
 
-        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet->tablet_schema(), chunk.get());
+        ChunkHelper::padding_char_columns(char_field_indexes, schema, _tablet_schema, chunk.get());
 
         RETURN_IF_ERROR(output_rs_writer->add_columns(*chunk, column_group, is_key));
 

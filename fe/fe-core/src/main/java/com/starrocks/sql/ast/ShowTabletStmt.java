@@ -30,6 +30,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.util.OrderByPair;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -209,7 +211,8 @@ public class ShowTabletStmt extends ShowStmt {
             return ImmutableList.of();
         }
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             Table table = db.getTable(tableName);
             if (table == null || !table.isNativeTableOrMaterializedView()) {
@@ -222,7 +225,7 @@ public class ShowTabletStmt extends ShowStmt {
                 return LocalTabletsProcDir.TITLE_NAMES;
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 

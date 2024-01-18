@@ -42,6 +42,7 @@ public class TabletMeta {
     private final long dbId;
     private final long tableId;
     private final long partitionId;
+    private final long physicalPartitionId;
     private final long indexId;
 
     private final int oldSchemaHash;
@@ -58,11 +59,12 @@ public class TabletMeta {
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
-    public TabletMeta(long dbId, long tableId, long partitionId, long indexId, int schemaHash,
+    public TabletMeta(long dbId, long tableId, long partitionId, long physicalPartitionId, long indexId, int schemaHash,
                       TStorageMedium storageMedium, boolean isLakeTablet) {
         this.dbId = dbId;
         this.tableId = tableId;
         this.partitionId = partitionId;
+        this.physicalPartitionId = physicalPartitionId;
         this.indexId = indexId;
 
         this.oldSchemaHash = schemaHash;
@@ -71,6 +73,12 @@ public class TabletMeta {
         this.storageMedium = storageMedium;
 
         this.isLakeTablet = isLakeTablet;
+    }
+
+    // for single physical partition, the physicalPartitionId is same as partitionId
+    public TabletMeta(long dbId, long tableId, long partitionId, long indexId, int schemaHash,
+                      TStorageMedium storageMedium, boolean isLakeTablet) {
+        this(dbId, tableId, partitionId, partitionId, indexId, schemaHash, storageMedium, isLakeTablet);
     }
 
     public TabletMeta(long dbId, long tableId, long partitionId, long indexId, int schemaHash,
@@ -88,6 +96,10 @@ public class TabletMeta {
 
     public long getPartitionId() {
         return partitionId;
+    }
+
+    public long getPhysicalPartitionId() {
+        return physicalPartitionId;
     }
 
     public long getIndexId() {
@@ -153,6 +165,7 @@ public class TabletMeta {
             sb.append("dbId=").append(dbId);
             sb.append(" tableId=").append(tableId);
             sb.append(" partitionId=").append(partitionId);
+            sb.append(" physicalPartitionId=").append(physicalPartitionId);
             sb.append(" indexId=").append(indexId);
             sb.append(" oldSchemaHash=").append(oldSchemaHash);
             sb.append(" newSchemaHash=").append(newSchemaHash);

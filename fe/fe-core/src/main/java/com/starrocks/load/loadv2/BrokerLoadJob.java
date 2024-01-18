@@ -56,6 +56,8 @@ import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
@@ -71,9 +73,9 @@ import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.CommitRateExceededException;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
@@ -120,7 +122,7 @@ public class BrokerLoadJob extends BulkLoadJob {
 
     @Override
     public void beginTxn()
-            throws LabelAlreadyUsedException, BeginTransactionException, AnalysisException, DuplicatedRequestException {
+            throws LabelAlreadyUsedException, RunningTxnExceedException, AnalysisException, DuplicatedRequestException {
         MetricRepo.COUNTER_LOAD_ADD.increase(1L);
         transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .beginTransaction(dbId, Lists.newArrayList(fileGroupAggInfo.getAllTableIds()), label, null,
@@ -233,7 +235,8 @@ public class BrokerLoadJob extends BulkLoadJob {
 
     private void createLoadingTask(Database db, BrokerPendingTaskAttachment attachment) throws UserException {
         // divide job into broker loading task by table
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             for (Map.Entry<FileGroupAggKey, List<BrokerFileGroup>> entry : fileGroupAggInfo.getAggKeyToFileGroups()
                     .entrySet()) {
@@ -263,7 +266,6 @@ public class BrokerLoadJob extends BulkLoadJob {
                     }
                 }
 
-                String mergeCondition = (brokerDesc == null) ? "" : brokerDesc.getMergeConditionStr();
                 TPartialUpdateMode mode = TPartialUpdateMode.UNKNOWN_MODE;
                 if (partialUpdateMode.equals("column")) {
                     mode = TPartialUpdateMode.COLUMN_UPSERT_MODE;
@@ -298,6 +300,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .setFileStatusList(attachment.getFileStatusByTable(aggKey))
                         .setFileNum(attachment.getFileNumByTable(aggKey))
                         .setLoadId(loadId)
+                        .setJSONOptions(jsonOptions)
                         .build();
 
                 task.prepare();
@@ -319,7 +322,7 @@ public class BrokerLoadJob extends BulkLoadJob {
             }
 
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         // Submit task outside the database lock, cause it may take a while if task queue is full.
@@ -405,7 +408,8 @@ public class BrokerLoadJob extends BulkLoadJob {
     }
 
     private void commitTransactionUnderDatabaseLock(Database db) throws UserException {
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             LOG.info(new LogBuilder(LogKey.LOAD_JOB, id)
                     .add("txn_id", transactionId)
@@ -440,7 +444,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                 }
             });
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 

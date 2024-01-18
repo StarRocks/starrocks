@@ -23,6 +23,11 @@ public class StarRocksPlannerException extends RuntimeException {
         return type;
     }
 
+    public StarRocksPlannerException(String message, ErrorType type, Throwable cause) {
+        super(message, cause);
+        this.type = type;
+    }
+
     public StarRocksPlannerException(String message, ErrorType type) {
         super(message);
         this.type = type;
@@ -32,8 +37,6 @@ public class StarRocksPlannerException extends RuntimeException {
         super(Strings.lenientFormat(messageTemplate, errorMessageArgs));
         this.type = type;
     }
-
-
 
     @Override
     public String getMessage() {

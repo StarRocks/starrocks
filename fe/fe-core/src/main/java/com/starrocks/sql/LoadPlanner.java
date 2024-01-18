@@ -42,6 +42,7 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.Load;
+import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
@@ -131,7 +132,11 @@ public class LoadPlanner {
     TRoutineLoadTask routineLoadTask;
     private TPartialUpdateMode partialUpdateMode = TPartialUpdateMode.ROW_MODE;
 
+    private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
+
     private Boolean missAutoIncrementColumn = Boolean.FALSE;
+
+    private String mergeConditionStr;
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
                        boolean strictMode, String timezone, long timeoutS,
@@ -226,11 +231,22 @@ public class LoadPlanner {
         this.partialUpdateMode = mode;
     }
 
+    public void setMergeConditionStr(String mergeConditionStr) {
+        this.mergeConditionStr = mergeConditionStr;
+    }
+
+    public void setJsonOptions(LoadJob.JSONOptions options) {
+        this.jsonOptions = options;
+    }
+
     public void plan() throws UserException {
         // 1. Generate tuple descriptor
         OlapTable olapDestTable = (OlapTable) destTable;
         List<Column> destColumns = Lists.newArrayList();
         if (isPrimaryKey && partialUpdate) {
+            if (((OlapTable) destTable).hasRowStorageType() && partialUpdateMode != TPartialUpdateMode.ROW_MODE) {
+                throw new DdlException("column with row table only support row mode partial update");
+            }
             if (this.etlJobType == EtlJobType.BROKER) {
                 if (fileGroups.size() != 1) {
                     throw new DdlException("partial update only support single filegroup.");
@@ -372,6 +388,7 @@ public class LoadPlanner {
             fileScanNode.setLoadInfo(loadJobId, txnId, destTable, brokerDesc, fileGroups, strictMode,
                     parallelInstanceNum);
             fileScanNode.setUseVectorizedLoad(true);
+            fileScanNode.setJSONOptions(jsonOptions);
             fileScanNode.init(analyzer);
             fileScanNode.finalizeStats(analyzer);
             scanNode = fileScanNode;
@@ -423,7 +440,8 @@ public class LoadPlanner {
             }
             Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
             dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds,
-                    olapTable.writeQuorum(), forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
+                    olapTable.writeQuorum(),
+                    forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
                     checkNullExprInAutoIncrement(), enableAutomaticPartition);
             if (this.missAutoIncrementColumn == Boolean.TRUE) {
                 ((OlapTableSink) dataSink).setMissAutoIncrementColumn();
@@ -434,7 +452,7 @@ public class LoadPlanner {
             if (completeTabletSink) {
                 ((OlapTableSink) dataSink).init(loadId, txnId, dbId, timeoutS);
                 ((OlapTableSink) dataSink).setPartialUpdateMode(partialUpdateMode);
-                ((OlapTableSink) dataSink).complete();
+                ((OlapTableSink) dataSink).complete(mergeConditionStr);
             }
             // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
             context.getSessionVariable().setPreferComputeNode(false);
@@ -454,7 +472,7 @@ public class LoadPlanner {
             OlapTableSink dataSink = (OlapTableSink) fragments.get(0).getSink();
             dataSink.init(loadId, txnId, dbId, timeoutS);
             dataSink.setPartialUpdateMode(partialUpdateMode);
-            dataSink.complete();
+            dataSink.complete(mergeConditionStr);
         }
         this.txnId = txnId;
     }

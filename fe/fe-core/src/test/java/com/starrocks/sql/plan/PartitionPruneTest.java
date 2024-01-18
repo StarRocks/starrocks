@@ -166,4 +166,11 @@ public class PartitionPruneTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "PREDICATES: 1: k1 = CAST('  -111 2  ' AS INT)");
     }
+
+    @Test
+    public void testNullException() throws Exception {
+        String sql = "select * from ptest partition(p202007) where d2 is null";
+        String plan = getFragmentPlan(sql);
+        assertCContains(plan, "partitions=0/4");
+    }
 }

@@ -31,7 +31,6 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 public class JoinTest extends PlanTestBase {
-
     @Test
     public void testColocateDistributeSatisfyShuffleColumns() throws Exception {
         FeConstants.runningUnitTest = true;
@@ -1138,12 +1137,12 @@ public class JoinTest extends PlanTestBase {
         String sql = "WITH t_temp AS (select join1.id as id1, " +
                 "join2.id as id2 from join1 join join2 on join1.id = join2.id) select * from t_temp";
         String explainString = getFragmentPlan(sql);
-        Assert.assertTrue(explainString.contains("equal join conjunct: 8: id = 11: id"));
-        Assert.assertTrue(explainString.contains("  |----2:EXCHANGE\n" +
+        Assert.assertTrue(explainString, explainString.contains("equal join conjunct: 2: id = 5: id"));
+        Assert.assertTrue(explainString, explainString.contains("  |----2:EXCHANGE\n" +
                 "  |    \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: join1"));
-        Assert.assertTrue(explainString.contains("  1:OlapScanNode\n" +
+        Assert.assertTrue(explainString, explainString.contains("  1:OlapScanNode\n" +
                 "     TABLE: join2\n" +
                 "     PREAGGREGATION: ON"));
     }
@@ -1707,21 +1706,21 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "  6:HASH JOIN\n" +
                 "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 8: expr = 11: expr");
+                "  |  equal join conjunct: 2: expr = 5: expr");
         assertContains(plan, "  4:Project\n" +
-                "  |  <slot 11> : 2\n" +
-                "  |  <slot 12> : 'mike'\n" +
+                "  |  <slot 5> : 2\n" +
+                "  |  <slot 6> : 'mike'\n" +
                 "  |  \n" +
                 "  3:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
         assertContains(plan, "  1:Project\n" +
-                "  |  <slot 8> : 1\n" +
-                "  |  <slot 9> : 'newzland'\n" +
+                "  |  <slot 2> : 1\n" +
+                "  |  <slot 3> : 'newzland'\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
-                "         NULL");
+                "         NULL\n");
     }
 
     @Test
@@ -2719,7 +2718,7 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "21:NESTLOOP JOIN\n" +
                 "  |  join op: LEFT SEMI JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  other join predicates: 19: v4 = 1");
+                "  |  other join predicates: 13: v4 = 1");
     }
 
     @Test
@@ -3174,5 +3173,21 @@ public class JoinTest extends PlanTestBase {
                 "     TABLE: t0");
 
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testNullAwareLeftAntiJoin() throws Exception {
+        String query = "SELECT subt0.v1\n" +
+                "FROM\n" +
+                "  (SELECT t0_6.v1,\n" +
+                "          t0_6.v2,\n" +
+                "          t0_6.v3\n" +
+                "   FROM t0 AS t0_6) subt0 \n" +
+                "WHERE (NOT ((subt0.v2) IN (\n" +
+                "                                (SELECT t0_6.v2\n" +
+                "                                 FROM t0 AS t0_6\n" +
+                "                                 WHERE (t0_6.v1) = (subt0.v1)))))";
+        String plan = getFragmentPlan(query);
+        assertContainsIgnoreColRefs(plan, "other join predicates: 4: v1 = 1: v1");
     }
 }

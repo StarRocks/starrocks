@@ -95,6 +95,10 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/version.cpp
     ${GEN_CPP_DIR}/CloudConfiguration_constants.cpp
     ${GEN_CPP_DIR}/CloudConfiguration_types.cpp
+    ${GEN_CPP_DIR}/ShortCircuit_types.cpp
+    ${GEN_CPP_DIR}/ShortCircuit_constants.cpp
+    ${GEN_CPP_DIR}/DataCache_constants.cpp
+    ${GEN_CPP_DIR}/DataCache_types.cpp
 )
 
 # keep everything in one library, the object files reference

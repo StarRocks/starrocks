@@ -18,6 +18,7 @@
 #include "http/http_client.h"
 
 #include "common/config.h"
+#include "fs/fs_util.h"
 
 namespace starrocks {
 
@@ -175,7 +176,7 @@ Status HttpClient::execute(const std::function<bool(const void* data, size_t len
     return Status::OK();
 }
 
-Status HttpClient::download(const std::string& local_path) {
+StatusOr<uint64_t> HttpClient::download(const std::string& local_path) {
     // set method to GET
     set_method(GET);
 
@@ -185,23 +186,44 @@ Status HttpClient::download(const std::string& local_path) {
     curl_easy_setopt(_curl, CURLOPT_LOW_SPEED_TIME, config::download_low_speed_time);
     curl_easy_setopt(_curl, CURLOPT_MAX_RECV_SPEED_LARGE, config::max_download_speed_kbps * 1024);
 
-    auto fp_closer = [](FILE* fp) { fclose(fp); };
-    std::unique_ptr<FILE, decltype(fp_closer)> fp(fopen(local_path.c_str(), "w"), fp_closer);
-    if (fp == nullptr) {
-        LOG(WARNING) << "open file failed, file=" << local_path;
-        return Status::InternalError("open file failed");
-    }
+    WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    ASSIGN_OR_RETURN(auto output_file, fs::new_writable_file(opts, local_path));
+
     Status status;
-    auto callback = [&status, &fp, &local_path](const void* data, size_t length) {
-        auto res = fwrite(data, length, 1, fp.get());
-        if (res != 1) {
-            LOG(WARNING) << "fail to write data to file, file=" << local_path << ", error=" << ferror(fp.get());
-            status = Status::InternalError("fail to write data when download");
+    auto callback = [&status, &output_file, &local_path](const void* data, size_t length) {
+        status = output_file->append(Slice((const char*)data, length));
+        if (!status.ok()) {
+            LOG(WARNING) << "fail to write data to file, file=" << local_path << ", error=" << status;
             return false;
         }
         return true;
     };
     RETURN_IF_ERROR(execute(callback));
+    RETURN_IF_ERROR(status);
+    RETURN_IF_ERROR(output_file->close());
+    return output_file->size();
+}
+
+Status HttpClient::download(const std::function<Status(const void* data, size_t length)>& callback) {
+    // set method to GET
+    set_method(GET);
+
+    // TODO(zc) Move this download speed limit outside to limit download speed
+    // at system level
+    curl_easy_setopt(_curl, CURLOPT_LOW_SPEED_LIMIT, config::download_low_speed_limit_kbps * 1024);
+    curl_easy_setopt(_curl, CURLOPT_LOW_SPEED_TIME, config::download_low_speed_time);
+    curl_easy_setopt(_curl, CURLOPT_MAX_RECV_SPEED_LARGE, config::max_download_speed_kbps * 1024);
+
+    Status status;
+    auto download_cb = [&callback, &status](const void* data, size_t length) {
+        status = callback(data, length);
+        if (!status.ok()) {
+            LOG(WARNING) << "fail to download file, status: " << status;
+            return false;
+        }
+        return true;
+    };
+    RETURN_IF_ERROR(execute(download_cb));
     return status;
 }
 

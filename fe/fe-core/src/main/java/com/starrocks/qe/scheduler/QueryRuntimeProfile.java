@@ -87,7 +87,7 @@ public class QueryRuntimeProfile {
      */
     private boolean profileAlreadyReported = false;
 
-    private final RuntimeProfile queryProfile;
+    private RuntimeProfile queryProfile;
     private final List<RuntimeProfile> fragmentProfiles;
 
     /**
@@ -171,7 +171,7 @@ public class QueryRuntimeProfile {
         return profileAlreadyReported;
     }
 
-    public void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier) {
+    public synchronized void setTopProfileSupplier(Supplier<RuntimeProfile> topProfileSupplier) {
         this.topProfileSupplier = topProfileSupplier;
     }
 
@@ -265,7 +265,9 @@ public class QueryRuntimeProfile {
         // current batch, the previous reported state will be synchronized to the profile manager.
         long now = System.currentTimeMillis();
         long lastTime = lastRuntimeProfileUpdateTime.get();
-        if (topProfileSupplier != null && execPlan != null && connectContext != null &&
+        Supplier<RuntimeProfile> topProfileSupplier = this.topProfileSupplier;
+        ExecPlan plan = execPlan;
+        if (topProfileSupplier != null && plan != null && connectContext != null &&
                 connectContext.isProfileEnabled() &&
                 // If it's the last done report, avoiding duplicate trigger
                 (!execState.isFinished() || profileDoneSignal.getLeftMarks().size() > 1) &&
@@ -273,11 +275,19 @@ public class QueryRuntimeProfile {
                 now - lastTime > (connectContext.getSessionVariable().getRuntimeProfileReportInterval() * 950L) &&
                 lastRuntimeProfileUpdateTime.compareAndSet(lastTime, now)) {
             RuntimeProfile profile = topProfileSupplier.get();
-            ExecPlan plan = execPlan;
             profile.addChild(buildQueryProfile(connectContext.needMergeProfile()));
-            ProfilingExecPlan profilingPlan = plan == null ? null : plan.getProfilingPlan();
-            ProfileManager.getInstance().pushProfile(profilingPlan, profile);
+            ProfilingExecPlan profilingPlan = plan.getProfilingPlan();
+            saveRunningProfile(profilingPlan, profile);
         }
+    }
+
+    public synchronized void saveRunningProfile(ProfilingExecPlan profilingPlan, RuntimeProfile profile) {
+        // topProfileSupplier may be null when the query is finished.
+        // And here to make sure that runtime profile won't overwrite the final profile
+        if (topProfileSupplier == null) {
+            return;
+        }
+        ProfileManager.getInstance().pushProfile(profilingPlan, profile);
     }
 
     public void finalizeProfile() {

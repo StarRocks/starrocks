@@ -19,6 +19,7 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 
 #include "http/http_status.h"
 
@@ -36,13 +37,13 @@ public:
     static void send_error(HttpRequest* request, HttpStatus status);
 
     // send 200(OK) reply with content
-    static void send_reply(HttpRequest* request, const std::string& content) {
+    static void send_reply(HttpRequest* request, std::string_view content) {
         send_reply(request, HttpStatus::OK, content);
     }
 
     static void send_reply(HttpRequest* request, HttpStatus status = HttpStatus::OK);
 
-    static void send_reply(HttpRequest* request, HttpStatus status, const std::string& content);
+    static void send_reply(HttpRequest* request, HttpStatus status, std::string_view content);
 
     static void send_file(HttpRequest* request, int fd, size_t off, size_t size);
 };

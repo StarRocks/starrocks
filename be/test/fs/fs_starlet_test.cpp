@@ -71,7 +71,6 @@ public:
 
         // cache settings
         shard_info.cache_info.set_enable_cache(false);
-        shard_info.cache_info.set_ttl_seconds(10);
         shard_info.cache_info.set_async_write_back(false);
 
         shard_info.properties["storageGroup"] = "10010";
@@ -389,7 +388,6 @@ TEST_P(StarletFileSystemTest, test_delete_files) {
 
     // cache settings
     shard_info.cache_info.set_enable_cache(false);
-    shard_info.cache_info.set_ttl_seconds(10);
     shard_info.cache_info.set_async_write_back(false);
 
     (void)g_worker->add_shard(shard_info);

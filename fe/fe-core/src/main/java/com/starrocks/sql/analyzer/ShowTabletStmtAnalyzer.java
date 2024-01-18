@@ -31,6 +31,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.util.OrderByPair;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -98,14 +100,15 @@ public class ShowTabletStmtAnalyzer {
                 }
                 String tableName = statement.getTableName();
                 Table table = null;
-                db.readLock();
+                Locker locker = new Locker();
+                locker.lockDatabase(db, LockType.READ);
                 try {
                     table = db.getTable(tableName);
                     if (table == null) {
                         throw new SemanticException("Table %s is not found", tableName);
                     }
                 } finally {
-                    db.readUnlock();
+                    locker.unLockDatabase(db, LockType.READ);
                 }
 
                 orderByPairs = new ArrayList<>();

@@ -120,6 +120,11 @@ public class HiveMetastoreOperationsTest {
     }
 
     @Test
+    public void testTableExists() {
+        Assert.assertTrue(hmsOps.tableExists("db1", "tbl1"));
+    }
+
+    @Test
     public void testGetPartitionKeys() {
         Assert.assertEquals(Lists.newArrayList("col1"), hmsOps.getPartitionKeys("db1", "tbl1"));
     }

@@ -72,6 +72,10 @@ public abstract class Coordinator {
                                                 List<ScanNode> scanNodes, String timezone, long startTime,
                                                 Map<String, String> sessionVariables,
                                                 long execMemLimit);
+
+        Coordinator createRefreshDictionaryCacheScheduler(ConnectContext context, TUniqueId queryId,
+                                                DescriptorTable descTable, List<PlanFragment> fragments,
+                                                List<ScanNode> scanNodes);
     }
 
     // ------------------------------------------------------------------------------------

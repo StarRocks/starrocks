@@ -23,4 +23,6 @@ CompressionTypePB convert_compression_codec(tparquet::CompressionCodec::type par
 
 enum ColumnContentType { VALUE, DICT_CODE };
 
+enum ColumnIOType { PAGE_INDEX, PAGES };
+
 } // namespace starrocks::parquet

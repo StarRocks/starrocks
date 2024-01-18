@@ -24,6 +24,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.util.LogUtil;
 import com.starrocks.credential.CloudConfigurationConstants;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.storagevolume.StorageVolume;
 import org.apache.logging.log4j.LogManager;
@@ -330,7 +332,8 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIdsIncludeRecycleBin();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(dbId);
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             if (dbToStorageVolume.containsKey(dbId)) {
                 continue;
             }
@@ -344,7 +347,7 @@ public class SharedDataStorageVolumeMgr extends StorageVolumeMgr {
                     }
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
         }
         bindings.add(dbBindings);

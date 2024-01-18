@@ -705,8 +705,9 @@ Status StringColumnWriter::append(const Column& column) {
     }
 
     if (_buf_column == nullptr) {
-        // first column size is greater than speculate size
-        if (column.size() >= config::dictionary_speculate_min_chunk_size) {
+        // First column size is greater than speculate size or byte size large than UINT32_MAX.
+        // Because if columns' byte size than UINT32_MAX, that will cause BinaryColumn<uint32_t> overflow
+        if (column.size() >= config::dictionary_speculate_min_chunk_size || column.byte_size() >= UINT32_MAX) {
             _is_speculated = true;
             speculate_column_and_set_encoding(column);
             return _scalar_column_writer->append(column);
@@ -716,16 +717,19 @@ Status StringColumnWriter::append(const Column& column) {
             return Status::OK();
         }
     }
-    _buf_column->append(column, 0, column.size());
-    if (_buf_column->size() < config::dictionary_speculate_min_chunk_size) {
-        return Status::OK();
-    } else {
+    if (column.size() + _buf_column->size() >= config::dictionary_speculate_min_chunk_size ||
+        column.byte_size() + _buf_column->byte_size() >= UINT32_MAX) {
+        // If it is predicted that _buf_column will exceed the limit after append column,
+        // skip append column
         _is_speculated = true;
         speculate_column_and_set_encoding(*_buf_column);
-        Status st = _scalar_column_writer->append(*_buf_column);
+        RETURN_IF_ERROR(_scalar_column_writer->append(*_buf_column));
         _buf_column.reset();
-        return st;
+        RETURN_IF_ERROR(_scalar_column_writer->append(column));
+    } else {
+        _buf_column->append(column, 0, column.size());
     }
+    return Status::OK();
 }
 
 inline void StringColumnWriter::speculate_column_and_set_encoding(const Column& column) {

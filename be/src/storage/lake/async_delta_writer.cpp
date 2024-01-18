@@ -96,7 +96,6 @@ private:
 
 AsyncDeltaWriterImpl::~AsyncDeltaWriterImpl() {
     close();
-    _status.permit_unchecked_error();
 }
 
 inline bool AsyncDeltaWriterImpl::closed() {
@@ -117,7 +116,6 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
     for (; iter; ++iter) {
         // It's safe to run without checking `closed()` but doing so can make the task quit earlier on cancel/error.
         if (async_writer->closed()) {
-            st.permit_unchecked_error();
             iter->cb(Status::InternalError("AsyncDeltaWriter has been closed"));
             continue;
         }

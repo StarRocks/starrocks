@@ -59,22 +59,23 @@ public class DeriveStatsTask extends OptimizerTask {
         Statistics currentStatistics = groupExpression.getGroup().getStatistics();
         // @Todo: update choose algorithm, like choose the least predicate statistics
         // choose best statistics
-        // do set group statistics when the groupExpression is a materialized view scan
-        if (needUpdateGroupStatistics(currentStatistics, expressionContext.getStatistics())) {
-            groupExpression.getGroup().setStatistics(expressionContext.getStatistics());
+        Statistics groupExpressionStatistics = expressionContext.getStatistics();
+        if (needUpdateGroupStatistics(currentStatistics, groupExpressionStatistics)) {
+            groupExpression.getGroup().setStatistics(groupExpressionStatistics);
         }
-        if (currentStatistics != null && !currentStatistics.equals(expressionContext.getStatistics())) {
-            if (isMaterializedView()) {
-                LogicalOlapScanOperator scan = groupExpression.getOp().cast();
-                MaterializedView mv = (MaterializedView) scan.getTable();
-                groupExpression.getGroup().setMvStatistics(mv.getId(), expressionContext.getStatistics());
-            }
+
+        // do set group statistics when the groupExpression is a materialized view scan
+        if (currentStatistics != null && !currentStatistics.equals(groupExpressionStatistics)
+                && isMaterializedView(groupExpression)) {
+            LogicalOlapScanOperator scan = groupExpression.getOp().cast();
+            MaterializedView mv = (MaterializedView) scan.getTable();
+            groupExpression.getGroup().setMvStatistics(mv.getId(), groupExpressionStatistics);
         }
 
         groupExpression.setStatsDerived();
     }
 
-    private boolean isMaterializedView() {
+    private boolean isMaterializedView(GroupExpression groupExpression) {
         return groupExpression.getOp() instanceof LogicalOlapScanOperator
                 && ((LogicalOlapScanOperator) groupExpression.getOp()).getTable().isMaterializedView();
     }

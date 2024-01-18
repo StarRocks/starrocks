@@ -45,11 +45,13 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TAlterJobType;
@@ -146,11 +148,11 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
     public static AlterReplicaTask rollupLocalTablet(long backendId, long dbId, long tableId, long partitionId,
             long rollupIndexId, long rollupTabletId, long baseTabletId,
             long newReplicaId, int newSchemaHash, int baseSchemaHash, long version,
-            long jobId, RollupJobV2Params rollupJobV2Params) {
+            long jobId, RollupJobV2Params rollupJobV2Params, List<Column> baseSchemaColumns) {
         return new AlterReplicaTask(backendId, dbId, tableId, partitionId, rollupIndexId, rollupTabletId,
                 baseTabletId, newReplicaId, newSchemaHash, baseSchemaHash, version, jobId, AlterJobV2.JobType.ROLLUP,
                 TTabletType.TABLET_TYPE_DISK, 0, null,
-                Collections.emptyList(), rollupJobV2Params);
+                baseSchemaColumns, rollupJobV2Params);
     }
 
     private AlterReplicaTask(long backendId, long dbId, long tableId, long partitionId, long rollupIndexId, long rollupTabletId,
@@ -298,14 +300,14 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
         if (db == null) {
             throw new MetaNotFoundException("database " + getDbId() + " does not exist");
         }
-
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable tbl = (OlapTable) db.getTable(getTableId());
             if (tbl == null) {
                 throw new MetaNotFoundException("tbl " + getTableId() + " does not exist");
             }
-            Partition partition = tbl.getPartition(getPartitionId());
+            PhysicalPartition partition = tbl.getPhysicalPartition(getPartitionId());
             if (partition == null) {
                 throw new MetaNotFoundException("partition " + getPartitionId() + " does not exist");
             }
@@ -344,7 +346,7 @@ public class AlterReplicaTask extends AgentTask implements Runnable {
                 LOG.info("after handle alter task tablet: {}, replica: {}", getSignature(), replica);
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
         setFinished(true);
     }

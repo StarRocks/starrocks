@@ -236,25 +236,32 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
     if (_alter_job_type == TAlterJobType::ROLLUP) {
         for (auto slot : _query_slots) {
             size_t column_index = base_chunk->schema()->get_field_index_by_name(slot->col_name());
-            VLOG(2) << "col name:" << slot->col_name() << ", slot_id:" << slot->id()
-                    << ", column_index:" << column_index;
             if (column_index != -1) {
+                VLOG(2) << "col name:" << slot->col_name() << ", slot_id:" << slot->id()
+                        << ", column_index:" << column_index;
                 base_chunk->set_slot_id_to_index(slot->id(), column_index);
             }
         }
         if (_where_expr) {
             auto filter = _execute_where_expr(base_chunk);
+            // If no filtered rows are left, return directly
+            if (SIMD::count_nonzero(filter) == 0) {
+                base_chunk->set_num_rows(0);
+                return true;
+            }
             base_chunk->filter(filter);
         }
+        DCHECK(!base_chunk->is_empty());
     }
 
     for (size_t i = 0; i < new_chunk->num_columns(); ++i) {
         int ref_column = _schema_mapping[i].ref_column;
+        const TypeInfoPtr& new_type_info = new_schema.field(i)->type();
 
         // For rollup, if new column has expr, just evalute the mv expr, otherwise do the normal schema change.
         if (_alter_job_type == TAlterJobType::ROLLUP && _schema_mapping[i].mv_expr_ctx != nullptr) {
-            VLOG(2) << "This rollup column has mv expr, i=" << i << ", ref_column=" << ref_column;
-
+            VLOG(2) << "This rollup column has mv expr, i=" << i << ", ref_column=" << ref_column
+                    << ", new_type=" << new_type_info->type();
             // init for expression evaluation only
             auto new_col_status = (_schema_mapping[i].mv_expr_ctx)->evaluate(base_chunk.get());
             if (!new_col_status.ok()) {
@@ -267,11 +274,22 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
                 return false;
             }
 
-            // NOTE: Unpack const column first to avoid generating NullColumn<ConstColumn> result.
-            new_col = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
+            if (new_col->only_null()) {
+                // unfold only null columns to avoid no default values.
+                auto unfold_col = new_col->clone_empty();
+                unfold_col->append_nulls(new_col->size());
+                new_col = std::move(unfold_col);
+            } else {
+                // NOTE: Unpack const column first to avoid generating NullColumn<ConstColumn> result.
+                new_col = ColumnHelper::unpack_and_duplicate_const_column(new_col->size(), new_col);
+            }
+
             if (new_schema.field(i)->is_nullable()) {
                 new_col = ColumnHelper::cast_to_nullable_column(new_col);
             }
+#ifdef BE_TEST
+            VLOG(2) << "evaluate result:" << new_col->debug_string();
+#endif
             new_chunk->columns()[i] = std::move(new_col);
             continue;
         }
@@ -280,7 +298,6 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             DCHECK(_column_ref_mapping.find(ref_column) != _column_ref_mapping.end());
             int base_index = _column_ref_mapping.at(ref_column);
             const TypeInfoPtr& ref_type_info = base_schema.field(base_index)->type();
-            const TypeInfoPtr& new_type_info = new_schema.field(i)->type();
 
             int reftype_precision = ref_type_info->precision();
             int reftype_scale = ref_type_info->scale();
@@ -533,10 +550,7 @@ Status SchemaChangeUtils::parse_request(const TabletSchemaCSPtr& base_schema, co
     RETURN_IF_ERROR(parse_request_normal(base_schema, new_schema, chunk_changer, materialized_view_param_map,
                                          where_expr, has_delete_predicates, sc_sorting, sc_directly,
                                          generated_column_idxs));
-    if (base_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        return parse_request_for_pk(base_schema, new_schema, sc_sorting, sc_directly);
-    }
-    return Status::OK();
+    return parse_request_for_sort_key(base_schema, new_schema, sc_sorting, sc_directly);
 }
 
 Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_schema,
@@ -703,9 +717,9 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
     return Status::OK();
 }
 
-Status SchemaChangeUtils::parse_request_for_pk(const TabletSchemaCSPtr& base_schema,
-                                               const TabletSchemaCSPtr& new_schema, bool* sc_sorting,
-                                               bool* sc_directly) {
+Status SchemaChangeUtils::parse_request_for_sort_key(const TabletSchemaCSPtr& base_schema,
+                                                     const TabletSchemaCSPtr& new_schema, bool* sc_sorting,
+                                                     bool* sc_directly) {
     const auto& base_sort_key_idxes = base_schema->sort_key_idxes();
     const auto& new_sort_key_idxes = new_schema->sort_key_idxes();
     std::vector<int32_t> base_sort_key_unique_ids;

@@ -44,6 +44,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import io.opentelemetry.api.trace.Span;
@@ -232,7 +234,9 @@ public abstract class AlterJobV2 implements Writable {
     protected boolean checkTableStable(Database db) throws AlterCancelException {
         OlapTable tbl;
         long unHealthyTabletId = TabletInvertedIndex.NOT_EXIST_VALUE;
-        db.readLock();
+
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             tbl = (OlapTable) db.getTable(tableId);
             if (tbl == null) {
@@ -242,10 +246,10 @@ public abstract class AlterJobV2 implements Writable {
             unHealthyTabletId = tbl.checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
                     GlobalStateMgr.getCurrentState().getTabletScheduler());
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
-        db.writeLock();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             if (unHealthyTabletId != TabletInvertedIndex.NOT_EXIST_VALUE) {
                 errMsg = "table is unstable, unhealthy (or doing balance) tablet id: " + unHealthyTabletId;
@@ -259,7 +263,7 @@ public abstract class AlterJobV2 implements Writable {
                 return true;
             }
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 

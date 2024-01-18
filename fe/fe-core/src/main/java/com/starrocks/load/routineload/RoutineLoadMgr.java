@@ -34,6 +34,7 @@
 
 package com.starrocks.load.routineload;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -45,6 +46,7 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.RoutineLoadDesc;
@@ -65,6 +67,7 @@ import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -175,7 +178,7 @@ public class RoutineLoadMgr implements Writable {
         try {
             List<Long> aliveNodeIds = new ArrayList<>();
             // TODO: need to refactor after be split into cn + dn
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (RunMode.isSharedDataMode()) {
                 Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
                 for (long nodeId : warehouse.getAnyAvailableCluster().getComputeNodeIds()) {
                     ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(nodeId);
@@ -220,11 +223,16 @@ public class RoutineLoadMgr implements Writable {
         addRoutineLoadJob(routineLoadJob, createRoutineLoadStmt.getDBName());
     }
 
+    @VisibleForTesting
+    public Map<Long, Integer> getBeTasksNum() {
+        return beTasksNum;
+    }
+
     public void addRoutineLoadJob(RoutineLoadJob routineLoadJob, String dbName) throws DdlException {
         int beNum = 0;
         slotLock.lock();
         try {
-            beNum = beTasksNum.size();
+            beNum = getBeTasksNum().size();
         } finally {
             slotLock.unlock();
         }
@@ -235,17 +243,18 @@ public class RoutineLoadMgr implements Writable {
                 throw new DdlException("Name " + routineLoadJob.getName() + " already used in db "
                         + dbName);
             }
-            long allSlotNum = beNum * Config.max_routine_load_task_num_per_be;
+            long maxConcurrentTasks = beNum * Config.max_routine_load_task_num_per_be;
+            // When calculating the used slots, we only consider Jobs in the NEED_SCHEDULE and RUNNING states.
             List<RoutineLoadJob> jobs = getRoutineLoadJobByState(Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
-                        RoutineLoadJob.JobState.RUNNING, RoutineLoadJob.JobState.PAUSED));
-            long curSlotNum = 0;
+                        RoutineLoadJob.JobState.RUNNING));
+            long curTaskNum = 0;
             for (RoutineLoadJob job : jobs) {
-                curSlotNum += job.calculateCurrentConcurrentTaskNum();
+                curTaskNum += job.calculateCurrentConcurrentTaskNum();
             }
-            int needSlotNum = routineLoadJob.calculateCurrentConcurrentTaskNum();
-            if (curSlotNum + needSlotNum > allSlotNum) {
-                throw new DdlException("Current routine load job is " + curSlotNum + ". "
-                        + "The new job need " + needSlotNum + " tasks. "
+            int newTaskNum = routineLoadJob.calculateCurrentConcurrentTaskNum();
+            if (curTaskNum + newTaskNum > maxConcurrentTasks) {
+                throw new DdlException("Current routine load tasks is " + curTaskNum + ". "
+                        + "The new job need " + newTaskNum + " tasks. "
                         + "But we only support " + beNum + "*" + Config.max_routine_load_task_num_per_be + " tasks."
                         + "Please modify FE config max_routine_load_task_num_per_be if you want more job");
             }
@@ -507,14 +516,9 @@ public class RoutineLoadMgr implements Writable {
     }
 
     public List<RoutineLoadJob> getRoutineLoadJobByState(Set<RoutineLoadJob.JobState> desiredStates) {
-        readLock();
-        try {
-            List<RoutineLoadJob> stateJobs = idToRoutineLoadJob.values().stream()
-                    .filter(entity -> desiredStates.contains(entity.getState())).collect(Collectors.toList());
-            return stateJobs;
-        } finally {
-            readUnlock();
-        }
+        return idToRoutineLoadJob.values().stream()
+                .filter(entity -> desiredStates.contains(entity.getState()))
+                .collect(Collectors.toList());
     }
 
     // RoutineLoadScheduler will run this method at fixed interval, and renew the timeout tasks
@@ -611,6 +615,23 @@ public class RoutineLoadMgr implements Writable {
                 .add("current_state", operation.getJobState())
                 .add("msg", "replay change routine load job")
                 .build());
+    }
+
+    public void setRoutineLoadJobOtherMsg(String reason, TxnCommitAttachment txnCommitAttachment) {
+        if (!(txnCommitAttachment instanceof RLTaskTxnCommitAttachment)) {
+            return;
+        }
+        RLTaskTxnCommitAttachment rLTaskTxnCommitAttachment = (RLTaskTxnCommitAttachment) txnCommitAttachment;
+        long jobId = rLTaskTxnCommitAttachment.getJobId();
+        if (jobId == 0) {
+            return;
+        }
+        RoutineLoadJob routineLoadJob = getJob(jobId);
+        if (routineLoadJob != null && reason != null) {
+            String otherMsg = String.format("The %s task failed due to: %s",
+                    DebugUtil.printId(rLTaskTxnCommitAttachment.getTaskId()), reason);
+            routineLoadJob.setOtherMsg(otherMsg);
+        }
     }
 
     /**

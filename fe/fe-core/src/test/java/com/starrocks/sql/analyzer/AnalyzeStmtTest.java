@@ -17,13 +17,17 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
@@ -39,10 +43,12 @@ import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeJob;
+import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.FullStatisticsCollectJob;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
@@ -52,6 +58,8 @@ import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -127,6 +135,25 @@ public class AnalyzeStmtTest {
         AnalyzeStmt analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
 
         Assert.assertTrue(analyzeStmt.isExternal());
+
+        sql = "analyze table hive0.tpch.customer(C_NAME, C_PHONE)";
+        analyzeStmt = (AnalyzeStmt) analyzeSuccess(sql);
+        Assert.assertEquals("[c_name, c_phone]", analyzeStmt.getColumnNames().toString());
+    }
+
+    @Test
+    public void testAnalyzeHiveResource() {
+        new MockUp<MetaUtils>() {
+            @Mock
+            public Table getTable(ConnectContext session, TableName tableName) {
+                return new HiveTable(1, "customer", Lists.newArrayList(), "resource_name",
+                        CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName("resource_name", "hive"),
+                        "hive", "tpch", "", 0, Lists.newArrayList(), Lists.newArrayList(), Maps.newHashMap(),
+                        Maps.newHashMap(), null, null);
+            }
+        };
+        String sql = "analyze table tpch.customer";
+        analyzeFail(sql, "Don't support analyze external table created by resource mapping.");
     }
 
     @Test
@@ -185,6 +212,11 @@ public class AnalyzeStmtTest {
                         "2020-01-01 01:01:00, 2020-01-01 01:01:00, " +
                         "{}, Test Failed]",
                 ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), analyzeStatus).toString());
+
+        AnalyzeStatus extenalAnalyzeStatus = new ExternalAnalyzeStatus(-1, "hive0", "partitioned_db",
+                "tx", "tx:xxxx", Lists.newArrayList(), StatsConstants.AnalyzeType.FULL,
+                StatsConstants.ScheduleType.ONCE, Maps.newHashMap(), LocalDateTime.MIN);
+        Assert.assertNull(ShowAnalyzeStatusStmt.showAnalyzeStatus(getConnectContext(), extenalAnalyzeStatus));
 
         sql = "show stats meta";
         ShowBasicStatsMetaStmt showAnalyzeMetaStmt = (ShowBasicStatsMetaStmt) analyzeSuccess(sql);

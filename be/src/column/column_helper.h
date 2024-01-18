@@ -15,6 +15,8 @@
 #pragma once
 
 #include <utility>
+
+#include "column/nullable_column.h"
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
@@ -80,6 +82,9 @@ public:
 
     // Find the non-null value in reversed order in [start, end), return start if all null
     static size_t last_nonnull(const Column* col, size_t start, size_t end);
+
+    // Find first value in range [start, end) that not equal to target
+    static int64_t find_first_not_equal(Column* column, int64_t target, int64_t start, int64_t end);
 
     template <LogicalType Type>
     static inline ColumnPtr create_const_column(const RunTimeCppType<Type>& value, size_t chunk_size) {
@@ -162,6 +167,17 @@ public:
         }
 
         return dst_column;
+    }
+
+    static std::tuple<Column*, NullColumn*> unpack_nullable_column(ColumnPtr col) {
+        if (col->is_nullable()) {
+            auto nullable = down_cast<NullableColumn*>(col.get());
+            auto* data = nullable->data_column().get();
+            auto* nulls = nullable->null_column().get();
+            return {data, nulls};
+        } else {
+            return {col.get(), nullptr};
+        }
     }
 
     // Update column according to whether the dest column and source column are nullable or not.

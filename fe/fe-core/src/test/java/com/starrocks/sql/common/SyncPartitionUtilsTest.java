@@ -20,7 +20,10 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
@@ -35,6 +38,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
@@ -81,6 +85,15 @@ public class SyncPartitionUtilsTest {
         PartitionKey upperBoundPartitionKey = PartitionKey.createPartitionKey(Collections.singletonList(upperValue),
                 Collections.singletonList(partitionColumn));
         return Range.closedOpen(lowerBoundPartitionKey, upperBoundPartitionKey);
+    }
+
+    private static FunctionCallExpr createFuncExpr(String granularity, PrimitiveType type) {
+        List<Expr> children = new ArrayList<>();
+        children.add(new StringLiteral(granularity));
+        children.add(slotRef);
+        FunctionCallExpr functionCallExpr = new FunctionCallExpr("date_trunc", children);
+        functionCallExpr.setType(Type.fromPrimitiveType(type));
+        return functionCallExpr;
     }
 
     @Test
@@ -473,7 +486,7 @@ public class SyncPartitionUtilsTest {
 
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
         RangePartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
-                "month", PrimitiveType.DATETIME);
+                createFuncExpr("month", PrimitiveType.DATETIME), null);
         Map<String, Range<PartitionKey>> adds = diff.getAdds();
         Map<String, Range<PartitionKey>> deletes = diff.getDeletes();
 
@@ -499,7 +512,7 @@ public class SyncPartitionUtilsTest {
         mvRange = Maps.newHashMap();
         mvRange.put("p20200101_20200102", createRange("2020-01-01", "2020-01-02"));
         diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
-                "day", PrimitiveType.DATETIME);
+                createFuncExpr("day", PrimitiveType.DATETIME), null);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
 
@@ -519,7 +532,7 @@ public class SyncPartitionUtilsTest {
 
         Map<String, Range<PartitionKey>> mvRange = Maps.newHashMap();
         RangePartitionDiff diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
-                granularity, PrimitiveType.DATETIME);
+                createFuncExpr(granularity, PrimitiveType.DATETIME), null);
 
         Map<String, Range<PartitionKey>> adds = diff.getAdds();
         Map<String, Range<PartitionKey>> deletes = diff.getDeletes();
@@ -546,7 +559,7 @@ public class SyncPartitionUtilsTest {
         mvRange.put("p202001_202002", createRange("2020-01-01", "2020-02-01"));
 
         diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
-                granularity, PrimitiveType.DATETIME);
+                createFuncExpr(granularity, PrimitiveType.DATETIME), null);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
         Assert.assertEquals(1, adds.size());
@@ -566,7 +579,7 @@ public class SyncPartitionUtilsTest {
         mvRange = Maps.newHashMap();
         mvRange.put("p202005_202006", createRange("2020-05-01", "2020-06-01"));
         diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
-                "month", PrimitiveType.DATETIME);
+                createFuncExpr("month", PrimitiveType.DATETIME), null);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
         Assert.assertEquals(1, adds.size());
@@ -586,7 +599,7 @@ public class SyncPartitionUtilsTest {
         mvRange = Maps.newHashMap();
         mvRange.put("p202005_202006", createRange("2020-05-01", "2020-06-01"));
         diff = SyncPartitionUtils.getRangePartitionDiffOfExpr(baseRange, mvRange,
-                "month", PrimitiveType.DATETIME);
+                createFuncExpr("month", PrimitiveType.DATETIME), null);
         adds = diff.getAdds();
         deletes = diff.getDeletes();
         Assert.assertEquals(2, adds.size());

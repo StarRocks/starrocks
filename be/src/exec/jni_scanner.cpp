@@ -118,10 +118,13 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runti
     for (const auto& it : _jni_scanner_params) {
         jstring key = _jni_env->NewStringUTF(it.first.c_str());
         jstring value = _jni_env->NewStringUTF(it.second.c_str());
-        message.append(it.first);
-        message.append("->");
-        message.append(it.second);
-        message.append(", ");
+        // skip encoded object
+        if (_skipped_log_jni_scanner_params.find(it.first) == _skipped_log_jni_scanner_params.end()) {
+            message.append(it.first);
+            message.append("->");
+            message.append(it.second);
+            message.append(", ");
+        }
 
         _jni_env->CallObjectMethod(hashmap_object, hashmap_put, key, value);
         _jni_env->DeleteLocalRef(key);
@@ -177,57 +180,6 @@ Status JniScanner::_append_string_data(const FillColumnArgs& args) {
 
     memcpy(offsets.data(), offset_ptr, (args.num_rows + 1) * sizeof(uint32_t));
     memcpy(bytes.data(), column_ptr, total_length);
-    return Status::OK();
-}
-
-Status JniScanner::_append_date_data(const FillColumnArgs& args) {
-    int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
-    char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
-
-    using ColumnType = typename starrocks::RunTimeColumnType<TYPE_DATE>;
-    auto* runtime_column = down_cast<ColumnType*>(args.column);
-    runtime_column->resize_uninitialized(args.num_rows);
-    DateValue* runtime_data = runtime_column->get_data().data();
-
-    for (int i = 0; i < args.num_rows; i++) {
-        if (args.nulls && args.nulls[i]) {
-            // NULL
-        } else {
-            std::string date_str(column_ptr + offset_ptr[i], column_ptr + offset_ptr[i + 1]);
-            DateValue dv;
-            if (!dv.from_string(date_str.c_str(), date_str.size())) {
-                return Status::DataQualityError(fmt::format("Invalid date value occurs on column[{}], value is [{}]",
-                                                            args.slot_name, date_str));
-            }
-            runtime_data[i] = dv;
-        }
-    }
-    return Status::OK();
-}
-
-Status JniScanner::_append_datetime_data(const FillColumnArgs& args) {
-    int* offset_ptr = static_cast<int*>(next_chunk_meta_as_ptr());
-    char* column_ptr = static_cast<char*>(next_chunk_meta_as_ptr());
-
-    using ColumnType = typename starrocks::RunTimeColumnType<TYPE_DATETIME>;
-    auto* runtime_column = down_cast<ColumnType*>(args.column);
-    runtime_column->resize_uninitialized(args.num_rows);
-    TimestampValue* runtime_data = runtime_column->get_data().data();
-
-    for (int i = 0; i < args.num_rows; i++) {
-        if (args.nulls && args.nulls[i]) {
-            // NULL
-        } else {
-            std::string origin_str(column_ptr + offset_ptr[i], column_ptr + offset_ptr[i + 1]);
-            std::string datetime_str = origin_str.substr(0, origin_str.find('.'));
-            TimestampValue tsv;
-            if (!tsv.from_datetime_format_str(datetime_str.c_str(), datetime_str.size(), "%Y-%m-%d %H:%i:%s")) {
-                return Status::DataQualityError(fmt::format(
-                        "Invalid datetime value occurs on column[{}], value is [{}]", args.slot_name, origin_str));
-            }
-            runtime_data[i] = tsv;
-        }
-    }
     return Status::OK();
 }
 
@@ -372,9 +324,9 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
     } else if (column_type == LogicalType::TYPE_VARBINARY) {
         RETURN_IF_ERROR((_append_string_data<TYPE_VARBINARY>(args)));
     } else if (column_type == LogicalType::TYPE_DATE) {
-        RETURN_IF_ERROR((_append_date_data(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_DATE>(args)));
     } else if (column_type == LogicalType::TYPE_DATETIME) {
-        RETURN_IF_ERROR((_append_datetime_data(args)));
+        RETURN_IF_ERROR((_append_primitive_data<TYPE_DATETIME>(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL32) {
         RETURN_IF_ERROR((_append_primitive_data<TYPE_DECIMAL32>(args)));
     } else if (column_type == LogicalType::TYPE_DECIMAL64) {
@@ -457,11 +409,16 @@ Status JniScanner::fill_empty_chunk(RuntimeState* runtime_state, ChunkPtr* chunk
 Status HiveJniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     // fill chunk with all wanted column exclude partition columns
     Status status = fill_empty_chunk(runtime_state, chunk, _scanner_params.materialize_slots);
-
-    // ====== conjunct evaluation ======
-    // important to add columns before evaluation
-    // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
     size_t chunk_size = (*chunk)->num_rows();
+    if (!_scanner_params.materialize_slots.empty()) {
+        // when the chunk has partition column and non partition column
+        // fill_empty_chunk will only fill partition column for HiveJniScanner
+        // In this situation, Chunk.num_rows() is not reliable  temporally
+        auto slot_desc = _scanner_params.materialize_slots[0];
+        ColumnPtr& first_non_partition_column = (*chunk)->get_column_by_slot_id(slot_desc->id());
+        chunk_size = first_non_partition_column->size();
+    }
+
     _scanner_ctx.append_not_existed_columns_to_chunk(chunk, chunk_size);
     // right now only hive table need append partition columns explictly, paimon and hudi reader will append partition columns in Java side
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);

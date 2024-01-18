@@ -41,10 +41,12 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -61,9 +63,9 @@ public class IndicesProcDir implements ProcDirInterface {
 
     private Database db;
     private OlapTable olapTable;
-    private Partition partition;
+    private PhysicalPartition partition;
 
-    public IndicesProcDir(Database db, OlapTable olapTable, Partition partition) {
+    public IndicesProcDir(Database db, OlapTable olapTable, PhysicalPartition partition) {
         this.db = db;
         this.olapTable = olapTable;
         this.partition = partition;
@@ -77,7 +79,8 @@ public class IndicesProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         // get info
         List<List<Comparable>> indexInfos = new ArrayList<List<Comparable>>();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             result.setNames(TITLE_NAMES);
             for (MaterializedIndex materializedIndex : partition.getMaterializedIndices(IndexExtState.ALL)) {
@@ -91,7 +94,7 @@ public class IndicesProcDir implements ProcDirInterface {
             }
 
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         // sort by index id
@@ -129,7 +132,8 @@ public class IndicesProcDir implements ProcDirInterface {
             throw new AnalysisException("Invalid index id format: " + indexIdStr);
         }
 
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             MaterializedIndex materializedIndex = partition.getIndex(indexId);
             if (materializedIndex == null) {
@@ -141,7 +145,7 @@ public class IndicesProcDir implements ProcDirInterface {
                 return new LocalTabletsProcDir(db, olapTable, materializedIndex);
             }
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
     }
 

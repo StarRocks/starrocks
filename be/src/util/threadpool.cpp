@@ -257,7 +257,6 @@ ThreadPool::~ThreadPool() noexcept {
     CHECK_EQ(1, _tokens.size()) << strings::Substitute("Threadpool $0 destroyed with $1 allocated tokens", _name,
                                                        _tokens.size());
     shutdown();
-    _pool_status.permit_unchecked_error();
 }
 
 Status ThreadPool::init() {
@@ -372,7 +371,7 @@ Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token
 
     // Size limit check.
     int64_t capacity_remaining = 0;
-    const int cur_max_threads = _max_threads.load();
+    const int cur_max_threads = _max_threads.load(std::memory_order_acquire);
     if (cur_max_threads >= _active_threads) {
         capacity_remaining = static_cast<int64_t>(cur_max_threads) - _active_threads +
                              static_cast<int64_t>(_max_queue_size) - _total_queued_tasks;
@@ -384,7 +383,8 @@ Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token
     if (capacity_remaining < 1) {
         return Status::ServiceUnavailable(strings::Substitute(
                 "Thread pool is at capacity ($0/$1 tasks running, $2/$3 tasks queued)",
-                _num_threads + _num_threads_pending_start, _max_threads.load(), _total_queued_tasks, _max_queue_size));
+                _num_threads + _num_threads_pending_start, _max_threads.load(std::memory_order_acquire),
+                _total_queued_tasks, _max_queue_size));
     }
 
     // Should we create another thread?
@@ -407,7 +407,8 @@ Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token
     int inactive_threads = _num_threads + _num_threads_pending_start - _active_threads;
     int additional_threads = static_cast<int>(_queue.size()) + threads_from_this_submit - inactive_threads;
     bool need_a_thread = false;
-    if (additional_threads > 0 && _num_threads + _num_threads_pending_start < _max_threads.load()) {
+    if (additional_threads > 0 &&
+        _num_threads + _num_threads_pending_start < _max_threads.load(std::memory_order_acquire)) {
         need_a_thread = true;
         _num_threads_pending_start++;
     }
@@ -480,8 +481,8 @@ Status ThreadPool::update_max_threads(int max_threads) {
         LOG(WARNING) << err_msg;
         return Status::InvalidArgument(err_msg);
     } else {
-        _max_threads.store(max_threads);
-        LOG(INFO) << "ThreadPool " << _name << " update max threads : " << _max_threads.load();
+        _max_threads.store(max_threads, std::memory_order_release);
+        LOG(INFO) << "ThreadPool " << _name << " update max threads : " << _max_threads.load(std::memory_order_acquire);
     }
     return Status::OK();
 }

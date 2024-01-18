@@ -464,7 +464,7 @@ Status FragmentMgr::exec_plan_fragment(const TExecPlanFragmentParams& params, co
     if (!st.ok()) {
         exec_state->cancel(PPlanFragmentCancelReason::INTERNAL_ERROR);
         std::string error_msg = strings::Substitute("Put planfragment $0 to thread pool failed. err = $1",
-                                                    print_id(fragment_instance_id), st.get_error_msg());
+                                                    print_id(fragment_instance_id), st.message());
         LOG(WARNING) << error_msg;
         {
             // Remove the exec state added
@@ -846,6 +846,8 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         return Status::InvalidArgument(msg.str());
     }
 
+    const auto& output_names = t_query_plan_info.output_names;
+    int i = 0;
     for (const auto& expr : t_query_plan_info.plan_fragment.output_exprs) {
         const auto& nodes = expr.nodes;
         if (nodes.empty() || nodes[0].node_type != TExprNodeType::SLOT_REF) {
@@ -865,9 +867,14 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         }
 
         TScanColumnDesc col;
-        col.__set_name(slot_desc->col_name());
+        if (!output_names.empty()) {
+            col.__set_name(output_names[i]);
+        } else {
+            col.__set_name(slot_desc->col_name());
+        }
         col.__set_type(to_thrift(slot_desc->type().type));
         selected_columns->emplace_back(std::move(col));
+        i++;
     }
 
     LOG(INFO) << "BackendService execute open()  TQueryPlanInfo: "

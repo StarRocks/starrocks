@@ -1,0 +1,7 @@
+-- name: test_alter_view
+create database db_${uuid0};
+use db_${uuid0};
+create or replace view test_view comment 'test comment 1' as ( select "test" as test_column );
+select TABLE_NAME, TABLE_COMMENT from information_schema.tables WHERE TABLE_NAME = 'test_view' and TABLE_SCHEMA = 'db_${uuid0}';
+create or replace view test_view comment 'test comment 2' as ( select "test 2" as test_column );
+select TABLE_NAME, TABLE_COMMENT from information_schema.tables WHERE TABLE_NAME = 'test_view' and TABLE_SCHEMA = 'db_${uuid0}';

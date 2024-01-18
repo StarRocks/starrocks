@@ -860,7 +860,7 @@ TEST_F(TimeFunctionsTest, now) {
         ASSERT_TRUE(ptr->is_constant());
         ASSERT_FALSE(ptr->is_timestamp());
         auto v = ColumnHelper::as_column<ConstColumn>(ptr);
-        ASSERT_EQ("2019-08-06 01:38:57.000805", v->get(0).get_timestamp().to_string());
+        ASSERT_EQ("2019-08-06 01:38:57", v->get(0).get_timestamp().to_string());
     }
 
     {
@@ -875,7 +875,56 @@ TEST_F(TimeFunctionsTest, now) {
         ASSERT_TRUE(ptr->is_constant());
         ASSERT_FALSE(ptr->is_timestamp());
         auto v = ColumnHelper::as_column<ConstColumn>(ptr);
-        ASSERT_EQ(TimestampValue::create(2019, 8, 6, 1, 38, 57, 805), v->get(0).get_timestamp());
+        ASSERT_EQ(TimestampValue::create(2019, 8, 6, 1, 38, 57, 0), v->get(0).get_timestamp());
+    }
+    {
+        TQueryGlobals globals;
+        globals.__set_now_string("2019-08-06 01:38:57");
+        globals.__set_timestamp_ms(1565080737805);
+        globals.__set_timestamp_us(1565080737805123L);
+        globals.__set_time_zone("America/Los_Angeles");
+        starrocks::RuntimeState state(globals);
+        starrocks::FunctionUtils futils(&state);
+        FunctionContext* ctx = futils.get_fn_ctx();
+        Columns args;
+        auto precisions = ColumnHelper::create_const_column<TYPE_INT>(7, 1);
+        args.emplace_back(precisions);
+        ASSERT_FALSE(TimeFunctions::now(ctx, args).ok());
+
+        precisions = ColumnHelper::create_const_column<TYPE_INT>(6, 1);
+        args.clear();
+        args.emplace_back(precisions);
+        ASSERT_TRUE(TimeFunctions::now(ctx, args).ok());
+        ColumnPtr ptr = TimeFunctions::now(ctx, args).value();
+        ASSERT_TRUE(ptr->is_constant());
+        auto v = ColumnHelper::as_column<ConstColumn>(ptr);
+        ASSERT_EQ(TimestampValue::create(2019, 8, 6, 1, 38, 57, 805123), v->get(0).get_timestamp());
+    }
+    {
+        TQueryGlobals globals;
+        globals.__set_now_string("2019-08-06 01:38:57");
+        globals.__set_timestamp_ms(1565080737805);
+        globals.__set_timestamp_us(1565080737805123L);
+        globals.__set_time_zone("America/Los_Angeles");
+        starrocks::RuntimeState state(globals);
+        starrocks::FunctionUtils futils(&state);
+        FunctionContext* ctx = futils.get_fn_ctx();
+        Columns args;
+        auto precisions = Int32Column::create();
+        for (int i = 0; i <= 6; i++) {
+            precisions->append(i);
+        }
+        args.emplace_back(precisions);
+        ColumnPtr ptr = TimeFunctions::now(ctx, args).value();
+        ASSERT_EQ(7, ptr->size());
+        auto v = ColumnHelper::cast_to<TYPE_DATETIME>(ptr);
+        ASSERT_EQ(TimestampValue::create(2019, 8, 6, 1, 38, 57, 0), v->get_data()[0]);
+        ASSERT_EQ(TimestampValue::create(2019, 8, 6, 1, 38, 57, 800000), v->get_data()[1]);
+        ASSERT_EQ(TimestampValue::create(2019, 8, 6, 1, 38, 57, 800000), v->get_data()[2]);
+        ASSERT_EQ(TimestampValue::create(2019, 8, 6, 1, 38, 57, 805000), v->get_data()[3]);
+        ASSERT_EQ(TimestampValue::create(2019, 8, 6, 1, 38, 57, 805100), v->get_data()[4]);
+        ASSERT_EQ(TimestampValue::create(2019, 8, 6, 1, 38, 57, 805120), v->get_data()[5]);
+        ASSERT_EQ(TimestampValue::create(2019, 8, 6, 1, 38, 57, 805123), v->get_data()[6]);
     }
 }
 
@@ -2993,15 +3042,10 @@ TEST_F(TimeFunctionsTest, timeSliceFloorTest) {
         unit_text->append("second");
         auto unit_column = ConstColumn::create(unit_text, 1);
 
-        auto boundary_text = BinaryColumn::create();
-        boundary_text->append("floor");
-        auto boundary_column = ConstColumn::create(boundary_text, 1);
-
         Columns columns;
         columns.emplace_back(tc);
         columns.emplace_back(period_column);
         columns.emplace_back(unit_column);
-        columns.emplace_back(boundary_column);
 
         time_slice_context->set_constant_columns(columns);
 
@@ -3443,7 +3487,7 @@ TEST_F(TimeFunctionsTest, timeSliceTestWithThrowExceptions) {
 
         StatusOr<ColumnPtr> result = TimeFunctions::time_slice(time_slice_context.get(), columns);
         ASSERT_TRUE(result.status().is_invalid_argument());
-        ASSERT_EQ(result.status().get_error_msg(), "time used with time_slice can't before 0001-01-01 00:00:00");
+        ASSERT_EQ(result.status().message(), "time used with time_slice can't before 0001-01-01 00:00:00");
 
         ASSERT_TRUE(
                 TimeFunctions::time_slice_close(time_slice_context.get(),

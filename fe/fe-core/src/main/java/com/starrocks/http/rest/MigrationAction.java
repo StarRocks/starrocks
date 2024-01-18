@@ -51,6 +51,8 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -100,7 +102,8 @@ public class MigrationAction extends RestBaseAction {
         }
 
         List<List<Comparable>> rows = Lists.newArrayList();
-        db.readLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.READ);
         try {
             if (!Strings.isNullOrEmpty(tableName)) {
                 Table table = db.getTable(tableName);
@@ -160,7 +163,7 @@ public class MigrationAction extends RestBaseAction {
             }
 
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
 
         ListComparator<List<Comparable>> comparator = new ListComparator<List<Comparable>>(0, 1, 2);

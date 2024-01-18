@@ -28,7 +28,6 @@
 #include "gutil/strings/util.h"
 #include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_scheduler.h"
-#include "storage/lake/delta_writer.h"
 #include "storage/lake/horizontal_compaction_task.h"
 #include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
@@ -39,9 +38,11 @@
 #include "storage/lake/txn_log.h"
 #include "storage/lake/update_manager.h"
 #include "storage/lake/vacuum.h"
+#include "storage/lake/versioned_tablet.h"
 #include "storage/lake/vertical_compaction_task.h"
 #include "storage/metadata_util.h"
 #include "storage/protobuf_file.h"
+#include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
 #include "testutil/sync_point.h"
 #include "util/raw_container.h"
@@ -83,6 +84,10 @@ std::string TabletManager::tablet_metadata_location(int64_t tablet_id, int64_t v
 
 std::string TabletManager::txn_log_location(int64_t tablet_id, int64_t txn_id) const {
     return _location_provider->txn_log_location(tablet_id, txn_id);
+}
+
+std::string TabletManager::txn_slog_location(int64_t tablet_id, int64_t txn_id) const {
+    return _location_provider->txn_slog_location(tablet_id, txn_id);
 }
 
 std::string TabletManager::txn_vlog_location(int64_t tablet_id, int64_t version) const {
@@ -283,6 +288,11 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_vlog(const std::string& path, bool fi
     return get_txn_log(path, fill_cache);
 }
 
+StatusOr<TxnLogPtr> TabletManager::get_txn_slog(const std::string& path, bool fill_cache) {
+    TEST_ERROR_POINT("TabletManager::get_txn_slog");
+    return get_txn_log(path, fill_cache);
+}
+
 StatusOr<TxnLogPtr> TabletManager::get_txn_log(const std::string& path, bool fill_cache) {
     if (auto ptr = _metacache->lookup_txn_log(path); ptr != nullptr) {
         TRACE("got cached txn log");
@@ -300,11 +310,15 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(int64_t tablet_id, int64_t txn_id
     return get_txn_log(txn_log_location(tablet_id, txn_id));
 }
 
+StatusOr<TxnLogPtr> TabletManager::get_txn_slog(int64_t tablet_id, int64_t txn_id) {
+    return get_txn_log(txn_slog_location(tablet_id, txn_id));
+}
+
 StatusOr<TxnLogPtr> TabletManager::get_txn_vlog(int64_t tablet_id, int64_t version) {
     return get_txn_log(txn_vlog_location(tablet_id, version), false);
 }
 
-Status TabletManager::put_txn_log(const TxnLogPtr& log) {
+Status TabletManager::put_txn_log(const TxnLogPtr& log, const std::string& path) {
     if (UNLIKELY(!log->has_tablet_id())) {
         return Status::InvalidArgument("txn log does not have tablet id");
     }
@@ -312,20 +326,31 @@ Status TabletManager::put_txn_log(const TxnLogPtr& log) {
         return Status::InvalidArgument("txn log does not have txn id");
     }
     auto t0 = butil::gettimeofday_us();
-    auto txn_log_path = txn_log_location(log->tablet_id(), log->txn_id());
 
-    ProtobufFile file(txn_log_path);
+    ProtobufFile file(path);
     RETURN_IF_ERROR(file.save(*log));
 
-    _metacache->cache_txn_log(txn_log_path, log);
+    _metacache->cache_txn_log(path, log);
 
     auto t1 = butil::gettimeofday_us();
     g_put_txn_log_latency << (t1 - t0);
     return Status::OK();
 }
 
+Status TabletManager::put_txn_log(const TxnLogPtr& log) {
+    return put_txn_log(log, txn_log_location(log->tablet_id(), log->txn_id()));
+}
+
 Status TabletManager::put_txn_log(const TxnLog& log) {
     return put_txn_log(std::make_shared<TxnLog>(log));
+}
+
+Status TabletManager::put_txn_slog(const TxnLogPtr& log) {
+    return put_txn_log(log, txn_slog_location(log->tablet_id(), log->txn_id()));
+}
+
+Status TabletManager::put_txn_slog(const TxnLogPtr& log, const std::string& path) {
+    return put_txn_log(log, path);
 }
 
 StatusOr<int64_t> TabletManager::get_tablet_data_size(int64_t tablet_id, int64_t* version_hint) {
@@ -359,15 +384,17 @@ StatusOr<int64_t> TabletManager::get_tablet_data_size(int64_t tablet_id, int64_t
 
 #ifdef USE_STAROS
 bool TabletManager::is_tablet_in_worker(int64_t tablet_id) {
+    bool in_worker = true;
     if (g_worker != nullptr) {
         auto shard_info_or = g_worker->get_shard_info(tablet_id);
         if (absl::IsNotFound(shard_info_or.status())) {
-            return false;
+            in_worker = false;
         }
     }
+    TEST_SYNC_POINT_CALLBACK("is_tablet_in_worker:1", &in_worker);
     // think the tablet is assigned to this worker by default,
     // for we may take action if tablet is not in the worker
-    return true;
+    return in_worker;
 }
 #endif // USE_STAROS
 
@@ -459,17 +486,16 @@ StatusOr<TabletSchemaPtr> TabletManager::get_tablet_schema_by_index_id(int64_t t
 }
 
 StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t version, int64_t txn_id) {
-    ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id));
-    tablet.set_version_hint(version);
-    ASSIGN_OR_RETURN(auto tablet_metadata, tablet.get_metadata(version));
+    ASSIGN_OR_RETURN(auto tablet, get_tablet(tablet_id, version));
+    auto tablet_metadata = tablet.metadata();
     ASSIGN_OR_RETURN(auto compaction_policy, CompactionPolicy::create(this, tablet_metadata));
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets());
     ASSIGN_OR_RETURN(auto algorithm, compaction_policy->choose_compaction_algorithm(input_rowsets));
     if (algorithm == VERTICAL_COMPACTION) {
-        return std::make_shared<VerticalCompactionTask>(txn_id, version, std::move(tablet), std::move(input_rowsets));
+        return std::make_shared<VerticalCompactionTask>(txn_id, std::move(tablet), std::move(input_rowsets));
     } else {
         DCHECK(algorithm == HORIZONTAL_COMPACTION);
-        return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet), std::move(input_rowsets));
+        return std::make_shared<HorizontalCompactionTask>(txn_id, std::move(tablet), std::move(input_rowsets));
     }
 }
 
@@ -536,6 +562,34 @@ void TabletManager::remove_in_writing_data_size(int64_t tablet_id, int64_t txn_i
 void TabletManager::TEST_set_global_schema_cache(int64_t schema_id, TabletSchemaPtr schema) {
     auto cache_key = global_schema_cache_key(schema_id);
     _metacache->cache_tablet_schema(cache_key, std::move(schema), 0);
+}
+
+StatusOr<VersionedTablet> TabletManager::get_tablet(int64_t tablet_id, int64_t version) {
+    ASSIGN_OR_RETURN(auto metadata, get_tablet_metadata(tablet_id, version));
+    return VersionedTablet(this, std::move(metadata));
+}
+
+StatusOr<SegmentPtr> TabletManager::load_segment(const FileInfo& segment_info, int segment_id, size_t* footer_size_hint,
+                                                 const LakeIOOptions& lake_io_opts, bool fill_metadata_cache,
+                                                 TabletSchemaPtr tablet_schema) {
+    auto segment = metacache()->lookup_segment(segment_info.path);
+    if (segment == nullptr) {
+        ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(segment_info.path));
+        segment = std::make_shared<Segment>(std::move(fs), segment_info, segment_id, std::move(tablet_schema), this);
+        if (fill_metadata_cache) {
+            // NOTE: the returned segment may be not the same as the parameter passed in
+            // Use the one in cache if the same key already exists
+            if (auto cached_segment = metacache()->cache_segment_if_absent(segment_info.path, segment);
+                cached_segment != nullptr) {
+                segment = cached_segment;
+            }
+        }
+    }
+    // segment->open will read the footer, and it is time-consuming.
+    // separate it from static Segment::open is to prevent a large number of cache misses,
+    // and many temporary segment objects generation when loading the same segment concurrently.
+    RETURN_IF_ERROR(segment->open(footer_size_hint, nullptr, lake_io_opts));
+    return segment;
 }
 
 } // namespace starrocks::lake

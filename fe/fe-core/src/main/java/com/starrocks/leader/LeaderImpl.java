@@ -34,6 +34,7 @@
 
 package com.starrocks.leader;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -76,6 +77,8 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.OlapDeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -95,6 +98,8 @@ import com.starrocks.task.DownloadTask;
 import com.starrocks.task.DropAutoIncrementMapTask;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.task.PushTask;
+import com.starrocks.task.RemoteSnapshotTask;
+import com.starrocks.task.ReplicateSnapshotTask;
 import com.starrocks.task.SnapshotTask;
 import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.task.UploadTask;
@@ -131,6 +136,8 @@ import com.starrocks.thrift.TSinglePartitionDesc;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableMeta;
+import com.starrocks.thrift.TTableReplicationRequest;
+import com.starrocks.thrift.TTableReplicationResponse;
 import com.starrocks.thrift.TTabletInfo;
 import com.starrocks.thrift.TTabletMeta;
 import com.starrocks.thrift.TTaskType;
@@ -196,7 +203,7 @@ public class LeaderImpl {
         ComputeNode cn = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
 
         if (cn == null) {
-            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            if (RunMode.isSharedDataMode()) {
                 cn = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, bePort);
             }
             if (cn == null) {
@@ -228,8 +235,9 @@ public class LeaderImpl {
         } else {
             if (taskStatus.getStatus_code() != TStatusCode.OK) {
                 task.failed();
-                String errMsg = "task type: " + taskType + ", status_code: " + taskStatus.getStatus_code().toString() +
-                        ", backendId: " + backendId + ", signature: " + signature;
+                String taskErrMsg = taskStatus.getError_msgs() != null ? Joiner.on(",").join(taskStatus.getError_msgs()) : "";
+                String errMsg = "task type: " + taskType + ", status_code: " + taskStatus.getStatus_code().toString() + ", " +
+                        taskErrMsg + ", backendId: " + backendId + ", signature: " + signature;
                 task.setErrorMsg(errMsg);
                 LOG.warn(errMsg);
                 // We start to let FE perceive the task's error msg
@@ -238,7 +246,8 @@ public class LeaderImpl {
                         && taskType != TTaskType.CLONE && taskType != TTaskType.PUBLISH_VERSION
                         && taskType != TTaskType.CREATE && taskType != TTaskType.UPDATE_TABLET_META_INFO
                         && taskType != TTaskType.DROP_AUTO_INCREMENT_MAP
-                        && taskType != TTaskType.STORAGE_MEDIUM_MIGRATE) {
+                        && taskType != TTaskType.STORAGE_MEDIUM_MIGRATE
+                        && taskType != TTaskType.REMOTE_SNAPSHOT && taskType != TTaskType.REPLICATE_SNAPSHOT) {
                     if (taskType == TTaskType.REALTIME_PUSH) {
                         PushTask pushTask = (PushTask) task;
                         if (pushTask.getPushType() == TPushType.DELETE) {
@@ -315,6 +324,12 @@ public class LeaderImpl {
                     break;
                 case COMPACTION:
                     finishCompactionTask(task, request);
+                    break;
+                case REMOTE_SNAPSHOT:
+                    finishRemoteSnapshotTask(task, request);
+                    break;
+                case REPLICATE_SNAPSHOT:
+                    finishReplicateSnapshotTask(task, request);
                     break;
                 default:
                     break;
@@ -419,6 +434,24 @@ public class LeaderImpl {
         AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
     }
 
+    private void finishRemoteSnapshotTask(AgentTask task, TFinishTaskRequest request) throws MetaNotFoundException {
+        try {
+            GlobalStateMgr.getCurrentState().getReplicationMgr().finishRemoteSnapshotTask(
+                    (RemoteSnapshotTask) task, request);
+        } finally {
+            AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+        }
+    }
+
+    private void finishReplicateSnapshotTask(AgentTask task, TFinishTaskRequest request) throws MetaNotFoundException {
+        try {
+            GlobalStateMgr.getCurrentState().getReplicationMgr().finishReplicateSnapshotTask(
+                    (ReplicateSnapshotTask) task, request);
+        } finally {
+            AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
+        }
+    }
+
     private void finishRealtimePush(AgentTask task, TFinishTaskRequest request) {
         List<TTabletInfo> finishTabletInfos = request.getFinish_tablet_infos();
         Preconditions.checkState(finishTabletInfos != null && !finishTabletInfos.isEmpty());
@@ -461,7 +494,8 @@ public class LeaderImpl {
         }
         LOG.debug("push report state: {}", pushState.name());
 
-        db.writeLock();
+        Locker locker = new Locker();
+        locker.lockDatabase(db, LockType.WRITE);
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
             if (olapTable == null) {
@@ -536,7 +570,7 @@ public class LeaderImpl {
             AgentTaskQueue.removeTask(backendId, TTaskType.REALTIME_PUSH, signature);
             LOG.warn("finish push replica error", e);
         } finally {
-            db.writeUnlock();
+            locker.unLockDatabase(db, LockType.WRITE);
         }
     }
 
@@ -699,14 +733,15 @@ public class LeaderImpl {
                 return;
             }
 
-            db.writeLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.WRITE);
             try {
                 // local migration just set path hash
                 Replica replica = GlobalStateMgr.getCurrentInvertedIndex().getReplica(tabletId, task.getBackendId());
                 Preconditions.checkArgument(reportedTablet.isSetPath_hash());
                 replica.setPathHash(reportedTablet.getPath_hash());
             } finally {
-                db.writeUnlock();
+                locker.unLockDatabase(db, LockType.WRITE);
             }
         } finally {
             AgentTaskQueue.removeTask(task.getBackendId(), TTaskType.STORAGE_MEDIUM_MIGRATE, task.getSignature());
@@ -820,8 +855,9 @@ public class LeaderImpl {
             return response;
         }
 
+        Locker locker = new Locker();
         try {
-            db.readLock();
+            locker.lockDatabase(db, LockType.READ);
 
             Table table = db.getTable(tableName);
             if (table == null) {
@@ -1028,7 +1064,7 @@ public class LeaderImpl {
             LOG.info("error msg: {}", e.getMessage(), e);
             response.setStatus(status);
         } finally {
-            db.readUnlock();
+            locker.unLockDatabase(db, LockType.READ);
         }
         return response;
     }
@@ -1276,5 +1312,43 @@ public class LeaderImpl {
         TStatus status = new TStatus(TStatusCode.OK);
         response.setStatus(status);
         return response;
+    }
+
+    public TTableReplicationResponse startTableReplication(TTableReplicationRequest request)
+            throws TException {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        // if current node is follower, forward it to leader
+        if (!globalStateMgr.isLeader()) {
+            TNetworkAddress addr = masterAddr();
+            try {
+                LOG.info("startTableReplication as follower, forward it to master. master: {}", addr.toString());
+                return FrontendServiceProxy.call(addr,
+                        Config.thrift_rpc_timeout_ms,
+                        Config.thrift_rpc_retry_times,
+                        client -> client.startTableReplication(request));
+            } catch (Exception e) {
+                LOG.warn("create thrift client failed during startTableReplication, exception: ", e);
+                TTableReplicationResponse response = new TTableReplicationResponse();
+                TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+                status.setError_msgs(Lists.newArrayList("forward request to fe master failed"));
+                response.setStatus(status);
+                return response;
+            }
+        }
+
+        try {
+            globalStateMgr.getReplicationMgr().addReplicationJob(request);
+            TTableReplicationResponse response = new TTableReplicationResponse();
+            TStatus status = new TStatus(TStatusCode.OK);
+            response.setStatus(status);
+            return response;
+        } catch (Exception e) {
+            LOG.warn("Start table replication failed ", e);
+            TTableReplicationResponse response = new TTableReplicationResponse();
+            TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
+            status.setError_msgs(Lists.newArrayList(e.getMessage()));
+            response.setStatus(status);
+            return response;
+        }
     }
 }

@@ -57,6 +57,7 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadTaskInfo;
+import com.starrocks.meta.lock.LockTimeoutException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -109,6 +110,9 @@ public class GlobalTransactionMgrTest {
     private TransactionState.TxnCoordinator transactionSource =
             new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE, "localfe");
 
+    private TransactionState.TxnCoordinator transactionSourceBe =
+            new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.BE, "localbe");
+
     @Before
     public void setUp() throws InstantiationException, IllegalAccessException, IllegalArgumentException,
             InvocationTargetException, NoSuchMethodException, SecurityException {
@@ -131,7 +135,7 @@ public class GlobalTransactionMgrTest {
 
     @Test
     public void testBeginTransaction() throws LabelAlreadyUsedException, AnalysisException,
-            BeginTransactionException, DuplicatedRequestException {
+            RunningTxnExceedException, DuplicatedRequestException {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long transactionId = masterTransMgr
                 .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
@@ -149,7 +153,7 @@ public class GlobalTransactionMgrTest {
 
     @Test
     public void testBeginTransactionWithSameLabel() throws LabelAlreadyUsedException, AnalysisException,
-            BeginTransactionException, DuplicatedRequestException {
+            RunningTxnExceedException, DuplicatedRequestException {
         FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
         long transactionId = 0;
         try {
@@ -376,11 +380,17 @@ public class GlobalTransactionMgrTest {
         Map<Long, TransactionState> idToTransactionState = Maps.newHashMap();
         idToTransactionState.put(1L, transactionState);
         Deencapsulation.setField(routineLoadJob, "maxErrorNum", 10);
+
         Map<Integer, Long> oldKafkaProgressMap = Maps.newHashMap();
         oldKafkaProgressMap.put(1, 0L);
-        KafkaProgress oldkafkaProgress = new KafkaProgress();
-        Deencapsulation.setField(oldkafkaProgress, "partitionIdToOffset", oldKafkaProgressMap);
+        KafkaProgress oldkafkaProgress = new KafkaProgress(oldKafkaProgressMap);
         Deencapsulation.setField(routineLoadJob, "progress", oldkafkaProgress);
+
+        Map<Integer, Long> kafkaTimestampProgressMap = Maps.newHashMap();
+        kafkaTimestampProgressMap.put(1, 1701411701409L);
+        KafkaProgress oldKafkaTimestampProgress = new KafkaProgress(kafkaTimestampProgressMap);
+        Deencapsulation.setField(routineLoadJob, "timestampProgress", oldKafkaTimestampProgress);
+
         Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
 
         TRLTaskTxnCommitAttachment rlTaskTxnCommitAttachment = new TRLTaskTxnCommitAttachment();
@@ -389,14 +399,25 @@ public class GlobalTransactionMgrTest {
         rlTaskTxnCommitAttachment.setFilteredRows(1);
         rlTaskTxnCommitAttachment.setJobId(Deencapsulation.getField(routineLoadJob, "id"));
         rlTaskTxnCommitAttachment.setLoadSourceType(TLoadSourceType.KAFKA);
+
         TKafkaRLTaskProgress tKafkaRLTaskProgress = new TKafkaRLTaskProgress();
+
         Map<Integer, Long> kafkaProgress = Maps.newHashMap();
         kafkaProgress.put(1, 100L); // start from 0, so rows number is 101, and consumed offset is 100
         tKafkaRLTaskProgress.setPartitionCmtOffset(kafkaProgress);
         rlTaskTxnCommitAttachment.setKafkaRLTaskProgress(tKafkaRLTaskProgress);
+
+        Map<Integer, Long> kafkaTimestampProgress = Maps.newHashMap();
+        kafkaTimestampProgress.put(1, 1701411701509L); // start from 0, so rows number is 101, and consumed offset is 100
+        tKafkaRLTaskProgress.setPartitionCmtOffsetTimestamp(kafkaTimestampProgress);
+
+        rlTaskTxnCommitAttachment.setKafkaRLTaskProgress(tKafkaRLTaskProgress);
+
         TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
 
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        Map<Long, Integer> beTasksNum = routineLoadManager.getBeTasksNum();
+        beTasksNum.put(1L, 0);
         routineLoadManager.addRoutineLoadJob(routineLoadJob, "db");
 
         Deencapsulation.setField(masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1),
@@ -449,11 +470,17 @@ public class GlobalTransactionMgrTest {
         Map<Long, TransactionState> idToTransactionState = Maps.newHashMap();
         idToTransactionState.put(1L, transactionState);
         Deencapsulation.setField(routineLoadJob, "maxErrorNum", 10);
+
         Map<Integer, Long> oldKafkaProgressMap = Maps.newHashMap();
         oldKafkaProgressMap.put(1, 0L);
-        KafkaProgress oldkafkaProgress = new KafkaProgress();
-        Deencapsulation.setField(oldkafkaProgress, "partitionIdToOffset", oldKafkaProgressMap);
+        KafkaProgress oldkafkaProgress = new KafkaProgress(oldKafkaProgressMap);
         Deencapsulation.setField(routineLoadJob, "progress", oldkafkaProgress);
+
+        Map<Integer, Long> oldKafkaTimestampProgressMap = Maps.newHashMap();
+        oldKafkaTimestampProgressMap.put(1, 1701411701409L);
+        KafkaProgress oldKafkaTimestampProgress = new KafkaProgress(oldKafkaTimestampProgressMap);
+        Deencapsulation.setField(routineLoadJob, "timestampProgress", oldKafkaTimestampProgress);
+
         Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
 
         TRLTaskTxnCommitAttachment rlTaskTxnCommitAttachment = new TRLTaskTxnCommitAttachment();
@@ -462,14 +489,25 @@ public class GlobalTransactionMgrTest {
         rlTaskTxnCommitAttachment.setFilteredRows(11);
         rlTaskTxnCommitAttachment.setJobId(Deencapsulation.getField(routineLoadJob, "id"));
         rlTaskTxnCommitAttachment.setLoadSourceType(TLoadSourceType.KAFKA);
+
         TKafkaRLTaskProgress tKafkaRLTaskProgress = new TKafkaRLTaskProgress();
+
         Map<Integer, Long> kafkaProgress = Maps.newHashMap();
-        kafkaProgress.put(1, 110L); // start from 0, so rows number is 111, consumed offset is 110
+        kafkaProgress.put(1, 110L); // start from 0, so rows number is 101, and consumed offset is 100
         tKafkaRLTaskProgress.setPartitionCmtOffset(kafkaProgress);
         rlTaskTxnCommitAttachment.setKafkaRLTaskProgress(tKafkaRLTaskProgress);
+
+        Map<Integer, Long> kafkaTimestampProgress = Maps.newHashMap();
+        kafkaTimestampProgress.put(1, 1701411701609L); // start from 0, so rows number is 101, and consumed offset is 100
+        tKafkaRLTaskProgress.setPartitionCmtOffsetTimestamp(kafkaTimestampProgress);
+
+        rlTaskTxnCommitAttachment.setKafkaRLTaskProgress(tKafkaRLTaskProgress);
+
         TxnCommitAttachment txnCommitAttachment = new RLTaskTxnCommitAttachment(rlTaskTxnCommitAttachment);
 
         RoutineLoadMgr routineLoadManager = new RoutineLoadMgr();
+        Map<Long, Integer> beTasksNum = routineLoadManager.getBeTasksNum();
+        beTasksNum.put(1L, 0);
         routineLoadManager.addRoutineLoadJob(routineLoadJob, "db");
 
         Deencapsulation.setField(masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1),
@@ -721,7 +759,7 @@ public class GlobalTransactionMgrTest {
         File tempFile = File.createTempFile("GlobalTransactionMgrTest", ".image");
         System.err.println("write image " + tempFile.getAbsolutePath());
         DataOutputStream dos = new DataOutputStream(new FileOutputStream(tempFile));
-        masterTransMgr.write(dos);
+        masterTransMgr.saveTransactionStateV2(dos);
         dos.close();
 
         masterTransMgr.removeDatabaseTransactionMgr(dbId);
@@ -730,7 +768,8 @@ public class GlobalTransactionMgrTest {
         // 4. read & check if expired
         DataInputStream dis = new DataInputStream(new FileInputStream(tempFile));
         Assert.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
-        masterTransMgr.readFields(dis);
+        SRMetaBlockReader srMetaBlockReader = new SRMetaBlockReader(dis);
+        masterTransMgr.loadTransactionStateV2(srMetaBlockReader);
         dis.close();
         Assert.assertEquals(1, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
         tempFile.delete();
@@ -862,5 +901,29 @@ public class GlobalTransactionMgrTest {
                 .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
         Assert.assertThrows(UserException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
                 Collections.emptyList(), Collections.emptyList(), 10, null));
+    }
+
+    @Test
+    public void testRetryCommitOnRateLimitExceededThrowLockTimeoutException()
+            throws UserException {
+        Database db = new Database(10L, "db0");
+        GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+        doThrow(LockTimeoutException.class)
+                .when(globalTransactionMgr)
+                .commitTransaction(10L, 1001L, Collections.emptyList(), Collections.emptyList(), null);
+        Assert.assertThrows(LockTimeoutException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001L,
+                Collections.emptyList(), Collections.emptyList(), 10L, null));
+    }
+
+    @Test
+    public void testGetTransactionNumByCoordinateBe() throws LabelAlreadyUsedException, AnalysisException,
+            RunningTxnExceedException, DuplicatedRequestException {
+        masterTransMgr
+                .beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        GlobalStateMgrTestUtil.testTxnLable1,
+                        transactionSourceBe,
+                        LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        long res = masterTransMgr.getTransactionNumByCoordinateBe("localbe");
+        assertEquals(1, res);
     }
 }

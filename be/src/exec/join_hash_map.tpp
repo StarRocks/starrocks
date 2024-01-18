@@ -468,6 +468,10 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::probe(RuntimeState* state, const Col
         {
             // output default values for build-columns as placeholder.
             SCOPED_TIMER(_probe_state->output_build_column_timer);
+            if (_table_items->mor_reader_mode) {
+                return;
+            }
+
             if (!_table_items->with_other_conjunct) {
                 _build_default_output(chunk, _probe_state->count);
             } else {
@@ -615,12 +619,11 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_column(const ColumnPtr& 
                                                                const SlotDescriptor* slot, bool to_nullable) {
     if (to_nullable) {
         auto data_column = src_column->clone_empty();
-        data_column->append_selective_shallow_copy(*src_column, _probe_state->build_index.data(), 0,
-                                                   _probe_state->count);
+        data_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
 
         // When left outer join is executed,
         // build_index[i] Equal to 0 means it is not found in the hash table,
-        // but append_selective_shallow_copy() has set item of NullColumn to not null
+        // but append_selective() has set item of NullColumn to not null
         // so NullColumn needs to be set back to null
         auto null_column = NullColumn::create(_probe_state->count, 0);
         size_t end = _probe_state->count;
@@ -633,8 +636,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_column(const ColumnPtr& 
         (*chunk)->append_column(std::move(dest_column), slot->id());
     } else {
         auto dest_column = src_column->clone_empty();
-        dest_column->append_selective_shallow_copy(*src_column, _probe_state->build_index.data(), 0,
-                                                   _probe_state->count);
+        dest_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
         (*chunk)->append_column(std::move(dest_column), slot->id());
     }
 }
@@ -644,11 +646,11 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_nullable_column(const Co
                                                                         const SlotDescriptor* slot) {
     ColumnPtr dest_column = src_column->clone_empty();
 
-    dest_column->append_selective_shallow_copy(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
+    dest_column->append_selective(*src_column, _probe_state->build_index.data(), 0, _probe_state->count);
 
     // When left outer join is executed,
     // build_index[i] Equal to 0 means it is not found in the hash table,
-    // but append_selective_shallow_copy() has set item of NullColumn to not null
+    // but append_selective() has set item of NullColumn to not null
     // so NullColumn needs to be set back to null
     auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(dest_column);
     size_t end = _probe_state->count;
@@ -1405,7 +1407,6 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join(R
     size_t i = _probe_state->cur_probe_index;
 
     if constexpr (!first_probe) {
-        _probe_state->probe_index[0] = _probe_state->probe_index[state->chunk_size()];
         _probe_state->build_index[0] = _probe_state->build_index[state->chunk_size()];
         match_count = 1;
     }
@@ -1420,7 +1421,6 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_right_semi_join(R
         while (build_index != 0) {
             if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                 if (_probe_state->build_match_index[build_index] == 0) {
-                    _probe_state->probe_index[match_count] = i;
                     _probe_state->build_index[match_count] = build_index;
                     _probe_state->build_match_index[build_index] = 1;
                     match_count++;
@@ -1450,7 +1450,6 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildFunc, ProbeFunc>::_prob
             if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
                 if (_probe_state->build_match_index[build_index] == 0) {
                     COWAIT_IF_CHUNK_FULL()
-                    _probe_state->probe_index[_probe_state->match_count] = i;
                     _probe_state->build_index[_probe_state->match_count] = build_index;
                     _probe_state->build_match_index[build_index] = 1;
                     _probe_state->match_count++;

@@ -55,6 +55,7 @@ import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.http.HttpMetricRegistry;
 import com.starrocks.http.rest.MetricsAction;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.JobState;
@@ -65,7 +66,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.metric.Metric.MetricType;
 import com.starrocks.metric.Metric.MetricUnit;
-import com.starrocks.monitor.jvm.JvmService;
+import com.starrocks.monitor.jvm.JvmStatCollector;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.proto.PKafkaOffsetProxyRequest;
 import com.starrocks.proto.PKafkaOffsetProxyResult;
@@ -73,6 +74,7 @@ import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
@@ -95,7 +97,7 @@ public final class MetricRepo {
     private static final MetricRegistry METRIC_REGISTER = new MetricRegistry();
     private static final StarRocksMetricRegistry STARROCKS_METRIC_REGISTER = new StarRocksMetricRegistry();
 
-    public static volatile boolean isInit = false;
+    public static volatile boolean hasInit = false;
     public static final SystemMetrics SYSTEM_METRICS = new SystemMetrics();
 
     public static final String TABLET_NUM = "tablet_num";
@@ -130,12 +132,15 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_RECEIVED_BYTES;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_ERROR_ROWS;
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_PAUSED;
+    public static LongCounterMetric COUNTER_SHORTCIRCUIT_QUERY;
+    public static LongCounterMetric COUNTER_SHORTCIRCUIT_RPC;
 
     public static Histogram HISTO_QUERY_LATENCY;
     public static Histogram HISTO_EDIT_LOG_WRITE_LATENCY;
     public static Histogram HISTO_JOURNAL_WRITE_LATENCY;
     public static Histogram HISTO_JOURNAL_WRITE_BATCH;
     public static Histogram HISTO_JOURNAL_WRITE_BYTES;
+    public static Histogram HISTO_SHORTCIRCUIT_RPC_LATENCY;
 
     // following metrics will be updated by metric calculator
     public static GaugeMetricImpl<Double> GAUGE_QUERY_PER_SECOND;
@@ -162,7 +167,7 @@ public final class MetricRepo {
     private static final MetricCalculator METRIC_CALCULATOR = new MetricCalculator();
 
     public static synchronized void init() {
-        if (isInit) {
+        if (hasInit) {
             return;
         }
 
@@ -227,14 +232,14 @@ public final class MetricRepo {
         generateBackendsTabletMetrics();
 
         // connections
-        GaugeMetric<Integer> conections = new GaugeMetric<Integer>(
+        GaugeMetric<Integer> connections = new GaugeMetric<Integer>(
                 "connection_total", MetricUnit.CONNECTIONS, "total connections") {
             @Override
             public Integer getValue() {
                 return ExecuteEnv.getInstance().getScheduler().getConnectionNum();
             }
         };
-        STARROCKS_METRIC_REGISTER.addMetric(conections);
+        STARROCKS_METRIC_REGISTER.addMetric(connections);
 
         // journal id
         GaugeMetric<Long> maxJournalId = (GaugeMetric<Long>) new GaugeMetric<Long>(
@@ -402,10 +407,15 @@ public final class MetricRepo {
                 "counter of image succeeded in pushing to other frontends");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_IMAGE_PUSH);
 
+        COUNTER_SHORTCIRCUIT_QUERY = new LongCounterMetric("shortcircuit_query", MetricUnit.REQUESTS, "total shortcircuit query");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_QUERY);
+        COUNTER_SHORTCIRCUIT_RPC = new LongCounterMetric("shortcircuit_rpc", MetricUnit.REQUESTS, "total shortcircuit rpc");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_RPC);
+
         COUNTER_TXN_REJECT =
                 new LongCounterMetric("txn_reject", MetricUnit.REQUESTS, "counter of rejected transactions");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_REJECT);
-        COUNTER_TXN_BEGIN = new LongCounterMetric("txn_begin", MetricUnit.REQUESTS, "counter of begining transactions");
+        COUNTER_TXN_BEGIN = new LongCounterMetric("txn_begin", MetricUnit.REQUESTS, "counter of beginning transactions");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_TXN_BEGIN);
         COUNTER_TXN_SUCCESS =
                 new LongCounterMetric("txn_success", MetricUnit.REQUESTS, "counter of success transactions");
@@ -424,10 +434,10 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_ROUTINE_LOAD_ERROR_ROWS);
 
         COUNTER_UNFINISHED_BACKUP_JOB = new LongCounterMetric("unfinished_backup_job", MetricUnit.REQUESTS,
-        "current unfinished backup job");
+                "current unfinished backup job");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_BACKUP_JOB);
         COUNTER_UNFINISHED_RESTORE_JOB = new LongCounterMetric("unfinished_restore_job", MetricUnit.REQUESTS,
-        "current unfinished restore job");
+                "current unfinished restore job");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_UNFINISHED_RESTORE_JOB);
         List<Database> dbs = Lists.newArrayList();
         if (GlobalStateMgr.getCurrentState().getIdToDb() != null) {
@@ -456,6 +466,7 @@ public final class MetricRepo {
                 METRIC_REGISTER.histogram(MetricRegistry.name("journal", "write", "batch"));
         HISTO_JOURNAL_WRITE_BYTES =
                 METRIC_REGISTER.histogram(MetricRegistry.name("journal", "write", "bytes"));
+        HISTO_SHORTCIRCUIT_RPC_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("shortcircuit", "latency", "ms"));
 
         // init system metrics
         initSystemMetrics();
@@ -463,7 +474,7 @@ public final class MetricRepo {
         initMemoryMetrics();
 
         updateMetrics();
-        isInit = true;
+        hasInit = true;
 
         if (Config.enable_metric_calculator) {
             METRIC_TIMER.scheduleAtFixedRate(METRIC_CALCULATOR, 0, 15 * 1000L, TimeUnit.MILLISECONDS);
@@ -741,7 +752,7 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(agentTaskCount);
     }
 
-    // to generate the metrics related to tablets of each backends
+    // to generate the metrics related to tablets of each backend
     // this metric is reentrant, so that we can add or remove metric along with the backend add or remove
     // at runtime.
     public static void generateBackendsTabletMetrics() {
@@ -758,7 +769,7 @@ public final class MetricRepo {
                 continue;
             }
 
-            // tablet number of each backends
+            // tablet number of each backend
             GaugeMetric<Long> tabletNum = (GaugeMetric<Long>) new GaugeMetric<Long>(TABLET_NUM,
                     MetricUnit.NOUNIT, "tablet number") {
                 @Override
@@ -772,7 +783,7 @@ public final class MetricRepo {
             tabletNum.addLabel(new MetricLabel("backend", be.getHost() + ":" + be.getHeartbeatPort()));
             STARROCKS_METRIC_REGISTER.addMetric(tabletNum);
 
-            // max compaction score of tablets on each backends
+            // max compaction score of tablets on each backend
             GaugeMetric<Long> tabletMaxCompactionScore = (GaugeMetric<Long>) new GaugeMetric<Long>(
                     TABLET_MAX_COMPACTION_SCORE, MetricUnit.NOUNIT,
                     "tablet max compaction score") {
@@ -793,8 +804,8 @@ public final class MetricRepo {
     public static void updateRoutineLoadProcessMetrics() {
         List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadMgr().getRoutineLoadJobByState(
                 Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
-                                RoutineLoadJob.JobState.PAUSED,
-                                RoutineLoadJob.JobState.RUNNING));
+                        RoutineLoadJob.JobState.PAUSED,
+                        RoutineLoadJob.JobState.RUNNING));
 
         List<RoutineLoadJob> kafkaJobs = jobs.stream()
                 .filter(job -> (job instanceof KafkaRoutineLoadJob)
@@ -868,7 +879,7 @@ public final class MetricRepo {
     }
 
     public static synchronized String getMetric(MetricVisitor visitor, MetricsAction.RequestParams requestParams) {
-        if (!isInit) {
+        if (!hasInit) {
             return "";
         }
 
@@ -876,8 +887,8 @@ public final class MetricRepo {
         updateMetrics();
 
         // jvm
-        JvmService jvmService = new JvmService();
-        JvmStats jvmStats = jvmService.stats();
+        JvmStatCollector jvmStatCollector = new JvmStatCollector();
+        JvmStats jvmStats = jvmStatCollector.stats();
         visitor.visitJvm(jvmStats);
 
         // starrocks metrics
@@ -910,6 +921,12 @@ public final class MetricRepo {
             collectRoutineLoadProcessMetrics(visitor);
         }
 
+        // collect http metrics
+        HttpMetricRegistry.getInstance().visit(visitor);
+
+        // collect starmgr related metrics as well
+        StarMgrServer.getCurrentState().visitMetrics(visitor);
+
         // node info
         visitor.getNodeInfo();
         return visitor.build();
@@ -929,23 +946,22 @@ public final class MetricRepo {
             if (null == db) {
                 continue;
             }
-            db.readLock();
-            try {
-                for (Table table : db.getTables()) {
-                    TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(table.getId());
-                    for (Metric m : entity.getMetrics()) {
-                        if (minifyTableMetrics && (null == m.getValue() ||
-                                (MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L))) {
-                            continue;
-                        }
-                        m.addLabel(new MetricLabel("db_name", dbName))
-                                .addLabel(new MetricLabel("tbl_name", table.getName()))
-                                .addLabel(new MetricLabel("tbl_id", String.valueOf(table.getId())));
-                        visitor.visit(m);
+
+            // NOTE: avoid holding database lock here, since we only read all tables, and immutable fields of table
+            for (Table table : db.getTables()) {
+                long tableId = table.getId();
+                String tableName = table.getName();
+                TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
+                for (Metric m : entity.getMetrics()) {
+                    if (minifyTableMetrics && (null == m.getValue() ||
+                            (MetricType.COUNTER == m.type && (Long) m.getValue() == 0L))) {
+                        continue;
                     }
+                    m.addLabel(new MetricLabel("db_name", dbName))
+                            .addLabel(new MetricLabel("tbl_name", tableName))
+                            .addLabel(new MetricLabel("tbl_id", String.valueOf(tableId)));
+                    visitor.visit(m);
                 }
-            } finally {
-                db.readUnlock();
             }
         }
     }

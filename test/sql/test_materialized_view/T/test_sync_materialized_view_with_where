@@ -1,4 +1,4 @@
--- name: test_sync_materialized_view_rewrite @sequential
+-- name: test_sync_materialized_view_with_where @sequential
 CREATE TABLE `duplicate_tbl` (
     `k1` date NULL COMMENT "",   
     `k2` datetime NULL COMMENT "",   

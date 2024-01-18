@@ -573,6 +573,38 @@ message PListFailPointResponse {
     repeated PFailPointInfo fail_points = 2;
 }
 
+message PExecShortCircuitResult {
+    optional StatusPB status = 1;
+    optional int64 affected_rows = 2;
+    optional bytes profile = 3;
+}
+
+message PExecShortCircuitRequest {
+}
+
+enum PProcessDictionaryCacheRequestType {
+    BEGIN = 1;
+    REFRESH = 2;
+    COMMIT = 3;
+    CLEAR = 4;
+    STATISTIC = 5;
+};
+
+message PProcessDictionaryCacheRequest {
+    optional ChunkPB chunk = 1;
+    optional int64 dict_id = 2;
+    optional int64 txn_id = 3;
+    optional POlapTableSchemaParam schema = 4;
+    optional int64 memory_limit = 5;
+    optional int32 key_size = 6;
+    optional bool is_cancel = 7;
+    optional PProcessDictionaryCacheRequestType type = 8;
+};
+
+message PProcessDictionaryCacheResult {
+    optional StatusPB status = 1;
+    optional int64 dictionary_memory_usage = 2;
+};
 
 // NOTE(zc): If you want to add new method here,
 // you must add same method to 'doris_internal_service.proto'.
@@ -612,4 +644,8 @@ service PInternalService {
     
     rpc update_fail_point_status(PUpdateFailPointStatusRequest) returns (PUpdateFailPointStatusResponse);
     rpc list_fail_point(PListFailPointRequest) returns (PListFailPointResponse);
+
+    rpc exec_short_circuit(PExecShortCircuitRequest) returns (PExecShortCircuitResult);
+
+    rpc process_dictionary_cache(starrocks.PProcessDictionaryCacheRequest) returns (starrocks.PProcessDictionaryCacheResult);
 };

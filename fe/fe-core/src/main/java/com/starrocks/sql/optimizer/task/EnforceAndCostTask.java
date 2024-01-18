@@ -122,6 +122,17 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
             return;
         }
 
+        if (context.getOptimizerContext().getSessionVariable().isEnableMaterializedViewForceRewrite() &&
+                groupExpression.getGroup().hasMVGroupExpression()) {
+            if (!groupExpression.hasAppliedMVRules()) {
+                return;
+            } else {
+                // When the group expression is derived from mv-rewrite rules and force rewrite is on,
+                // invalid all existed group expressions by set max cost.
+                groupExpression.getGroup().forceChooseMVExpression(context);
+            }
+        }
+
         // Init costs and get required properties for children
         initRequiredProperties();
 

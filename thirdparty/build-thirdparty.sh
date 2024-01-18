@@ -224,64 +224,6 @@ build_llvm() {
     export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -D_POSIX_C_SOURCE=200112L"
     export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess"
 
-    LLVM_TARGET="X86"
-    if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
-        LLVM_TARGET="AArch64"
-    fi
-
-    LLVM_TARGETS_TO_BUILD=(
-        "LLVMBitstreamReader"
-        "LLVMRuntimeDyld" 
-        "LLVMOption"
-        "LLVMAsmPrinter"
-        "LLVMProfileData"
-        "LLVMAsmParser"
-        "LLVMOrcTargetProcess"
-        "LLVMExecutionEngine"
-        "LLVMBinaryFormat"
-        "LLVMDebugInfoDWARF"
-        "LLVMObjCARCOpts"
-        "LLVMCodeGen"
-        "LLVMMCDisassembler"
-        "LLVMSupport"
-        "LLVMJITLink"
-        "LLVMCFGuard"
-        "LLVMInstrumentation"
-        "LLVMInstCombine"
-        "LLVMipo"
-        "LLVMVectorize"
-        "LLVMIRReader"
-        "LLVMCore"
-        "LLVMTarget"
-        "LLVMMC"
-        "LLVMAnalysis"
-        "LLVMGlobalISel"
-        "LLVMScalarOpts"
-        "LLVMTargetParser"
-        "LLVMDemangle"
-        "LLVMRemarks"
-        "LLVMDebugInfoCodeView"
-        "LLVMOrcShared"
-        "LLVMOrcJIT"
-        "LLVMTextAPI"
-        "LLVMBitWriter"
-        "LLVMBitReader"
-        "LLVMObject"
-        "LLVMTransformUtils"
-        "LLVMSelectionDAG"
-        "LLVMMCParser"
-    )
-    if [ "${LLVM_TARGET}" == "X86" ]; then
-        LLVM_TARGETS_TO_BUILD+=("LLVMX86Info" "LLVMX86Desc" "LLVMX86CodeGen")
-    elif [ "${LLVM_TARGET}" == "AArch64" ]; then
-        LLVM_TARGETS_TO_BUILD+=("LLVMAArch64Info" "LLVMAArch64Desc" "LLVMAArch64CodeGen")
-    fi
-
-    LLVM_TARGETS_TO_INSTALL=()
-    for target in ${LLVM_TARGETS_TO_BUILD[@]}; do
-        LLVM_TARGETS_TO_INSTALL+=("install-${target}")
-    done
-
     check_if_source_exist $LLVM_SOURCE
 
     cd $TP_SOURCE_DIR
@@ -295,22 +237,23 @@ build_llvm() {
     -DLLVM_ENABLE_RTTI:Bool=True \
     -DLLVM_ENABLE_PIC:Bool=True \
     -DLLVM_ENABLE_TERMINFO:Bool=False \
-    -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGET} \
-    -DLLVM_BUILD_LLVM_DYLIB:BOOL=False \
-    -DLLVM_INCLUDE_TOOLS:BOOL=False \
+    `# require tools/llvm-shlib for libllvm` \
+    -DLLVM_INCLUDE_TOOLS:BOOL=TRUE \
     -DLLVM_BUILD_TOOLS:BOOL=False \
     -DLLVM_INCLUDE_EXAMPLES:BOOL=False \
     -DLLVM_INCLUDE_TESTS:BOOL=False \
     -DLLVM_INCLUDE_BENCHMARKS:BOOL=False \
-    -DBUILD_SHARED_LIBS:BOOL=False \
+    -DLLVM_BUILD_LLVM_DYLIB=ON \
+    -DLLVM_LINK_LLVM_DYLIB=ON \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR}/llvm ../${LLVM_SOURCE}
 
-    # TODO(yueyang): Add more targets.
-    # This is a little bit hack, we need to minimize the build time and binary size.
-    ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1 ${LLVM_TARGETS_TO_BUILD[@]}
-    ${BUILD_SYSTEM} install-llvm-headers
-    ${BUILD_SYSTEM} ${LLVM_TARGETS_TO_INSTALL[@]}
+
+    ${BUILD_SYSTEM} -j$PARALLEL REQUIRES_RTTI=1
+    ${BUILD_SYSTEM} install
+    # only reserve libLLVM.so
+    rm -f ${TP_INSTALL_DIR}/llvm/*.a
+    rm -rf ${TP_INSTALL_DIR}/llvm/cmake
 
     restore_compile_flags
 }
@@ -391,7 +334,7 @@ build_simdjson() {
     #ref: https://github.com/simdjson/simdjson/blob/master/HACKING.md
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
-    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_CXX_FLAGS="-O3" -DCMAKE_C_FLAGS="-O3" -DSIMDJSON_AVX512_ALLOWED=OFF ..
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_CXX_FLAGS="-O3" -DCMAKE_C_FLAGS="-O3" -DCMAKE_POSITION_INDEPENDENT_CODE=True -DSIMDJSON_AVX512_ALLOWED=OFF ..
     $CMAKE_CMD --build .
     mkdir -p $TP_INSTALL_DIR/lib
 
@@ -572,7 +515,7 @@ build_rocksdb() {
 build_kerberos() {
     check_if_source_exist $KRB5_SOURCE
     cd $TP_SOURCE_DIR/$KRB5_SOURCE/src
-    CFLAGS="-fcommon" LDFLAGS="-L$TP_INSTALL_DIR/lib -pthread -ldl" \
+    CFLAGS="-fcommon -fPIC" LDFLAGS="-L$TP_INSTALL_DIR/lib -pthread -ldl" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-shared --with-spake-openssl=$TP_INSTALL_DIR
     make -j$PARALLEL
     make install
@@ -582,7 +525,7 @@ build_kerberos() {
 build_sasl() {
     check_if_source_exist $SASL_SOURCE
     cd $TP_SOURCE_DIR/$SASL_SOURCE
-    CFLAGS= LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit
+    CFLAGS="-fPIC" LDFLAGS="-L$TP_INSTALL_DIR/lib -lresolv -pthread -ldl" ./autogen.sh --prefix=$TP_INSTALL_DIR --enable-gssapi=yes --enable-static --disable-shared --with-openssl=$TP_INSTALL_DIR --with-gss_impl=mit
     make -j$PARALLEL
     make install
 }
@@ -1207,6 +1150,36 @@ build_libdeflate() {
     ${BUILD_SYSTEM} install
 }
 
+#clucene
+build_clucene() {
+
+    check_if_source_exist "${CLUCENE_SOURCE}"
+    cd "$TP_SOURCE_DIR/${CLUCENE_SOURCE}"
+
+    mkdir -p "${BUILD_DIR}"
+    cd "${BUILD_DIR}"
+    rm -rf CMakeCache.txt CMakeFiles/
+
+    ${CMAKE_CMD} -G "${CMAKE_GENERATOR}" \
+        -DCMAKE_INSTALL_PREFIX="$TP_INSTALL_DIR" \
+        -DCMAKE_INSTALL_LIBDIR=lib64 \
+        -DBUILD_STATIC_LIBRARIES=ON \
+        -DBUILD_SHARED_LIBRARIES=OFF \
+        -DBOOST_ROOT="$TP_INSTALL_DIR" \
+        -DZLIB_ROOT="$TP_INSTALL_DIR" \
+        -DCMAKE_CXX_FLAGS="-g -fno-omit-frame-pointer -Wno-narrowing" \
+        -DUSE_STAT64=0 \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_CONTRIBS_LIB=ON ..
+    ${BUILD_SYSTEM} -j "${PARALLEL}"
+    ${BUILD_SYSTEM} install
+
+    cd "$TP_SOURCE_DIR/${CLUCENE_SOURCE}"
+    if [[ ! -d "$TP_INSTALL_DIR"/share ]]; then
+        mkdir -p "$TP_INSTALL_DIR"/share
+    fi
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1295,6 +1268,8 @@ build_datasketches
 build_async_profiler
 build_fiu
 build_llvm
+build_clucene
+
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

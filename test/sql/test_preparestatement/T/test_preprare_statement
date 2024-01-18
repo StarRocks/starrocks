@@ -1,7 +1,5 @@
-CREATE DATABASE IF NOT EXISTS demo;
-
-DROP TABLE IF EXISTS demo.prepare_stmt;
-CREATE TABLE IF NOT EXISTS demo.prepare_stmt (
+-- name: test_prepare_statement
+CREATE TABLE IF NOT EXISTS prepare_stmt (
     k1 INT,
     k2 TINYINT Default '20',
     k3 BIGINT,
@@ -16,37 +14,28 @@ CREATE TABLE IF NOT EXISTS demo.prepare_stmt (
     PRIMARY KEY (k1, k2, k3, k4, k5)
     DISTRIBUTED BY HASH(k1, k2, k3, k4, k5) BUCKETS 8 PROPERTIES("replication_num" = "1");
 
-PREPARE stmt1 FROM insert into demo.prepare_stmt values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-PREPARE stmt2 FROM select * from demo.prepare_stmt where k1 = ? and k2 = ?;
-PREPARE stmt3 FROM 'update demo.prepare_stmt set v8 = ?, v10 = ? where k1 = ? and k2 = ?';
-PREPARE stmt4 FROM 'select * from demo.prepare_stmt';
-PREPARE stmt5 FROM select * from demo.prepare_stmt;
-PREPARE stmt6 FROM select k1, k2 from demo.prepare_stmt order by ?, ? desc;
-
+insert into prepare_stmt values (1, 2, 3, 4, '2', true, '2021-02-01', '1', '2021-02-01 00:00:12', '1', 2);
+insert into prepare_stmt values (3, 2, 3, 4, '2', true, '2021-02-01', '1', '2021-02-01 00:00:12', '1', 2);
+PREPARE stmt1 FROM select * from prepare_stmt where k1 = ? and k2 = ?;
+PREPARE stmt2 FROM 'select * from prepare_stmt order by k1';
+PREPARE stmt3 FROM select * from prepare_stmt order by k1;
 
 set @i = 1;
 set @i2 = 2;
+set @i3 = 3;
 set @v = '1';
 set @v2 = '2';
 set @b = true;
 set @t = '2021-02-01 00:00:12';
 
-execute stmt1 using @i, @i, @i, @i, @v, @b, @t, @v, @t, @v, @i;
-execute stmt1 using @i2, @i, @i, @i, @v, @b, @t, @v, @t, @v, @i;
 
-execute stmt2 using @i, @i;
-execute stmt2 using @i2, @i;
+execute stmt1 using @i, @i2;
+execute stmt1 using @i3, @i2;
 
-execute stmt3 using @v2, @v2, @i, @i;
-
-execute stmt4;
-execute stmt5;
-execute stmt6 using @i, @v2;
+execute stmt2;
 
 drop prepare stmt1;
-drop prepare stmt2;
+deallocate prepare stmt2; -- deallocate is alias
 drop prepare stmt3;
-deallocate prepare stmt4; -- deallocate is alias
-drop prepare stmt5;
 
-DROP TABLE demo.prepare_stmt FORCE;
+DROP TABLE prepare_stmt FORCE;

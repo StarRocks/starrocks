@@ -24,10 +24,13 @@ import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
 public class LakeTableTxnLogApplier implements TransactionLogApplier {
+    private static final Logger LOG = LogManager.getLogger(LakeTableTxnLogApplier.class);
     // lake table or lake materialized view
     private final OlapTable table;
 
@@ -40,7 +43,17 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
             long partitionId = partitionCommitInfo.getPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
-            partition.setNextVersion(partition.getNextVersion() + 1);
+            if (partition == null) {
+                LOG.warn("ignored dropped partition {} when applying commit log", partitionId);
+                continue;
+            }
+
+            // The version of a replication transaction may not continuously
+            if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+                partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
+            } else {
+                partition.setNextVersion(partition.getNextVersion() + 1);
+            }
         }
     }
 
@@ -52,11 +65,19 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
         long tableId = table.getId();
         CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
         for (PartitionCommitInfo partitionCommitInfo : commitInfo.getIdToPartitionCommitInfo().values()) {
-            PhysicalPartition partition = table.getPhysicalPartition(partitionCommitInfo.getPartitionId());
+            long partitionId = partitionCommitInfo.getPartitionId();
+            PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+            if (partition == null) {
+                LOG.warn("ignored dropped partition {} when applying visible log", partitionId);
+                continue;
+            }
             long version = partitionCommitInfo.getVersion();
             long versionTime = partitionCommitInfo.getVersionTime();
             Quantiles compactionScore = partitionCommitInfo.getCompactionScore();
-            Preconditions.checkState(version == partition.getVisibleVersion() + 1);
+            // The version of a replication transaction may not continuously
+            Preconditions.checkState(txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION
+                    || version == partition.getVisibleVersion() + 1);
+
             partition.updateVisibleVersion(version, versionTime);
 
             PartitionIdentifier partitionIdentifier =
@@ -66,7 +87,6 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             } else {
                 compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime, compactionScore);
             }
-
             if (!partitionCommitInfo.getInvalidDictCacheColumns().isEmpty()) {
                 for (String column : partitionCommitInfo.getInvalidDictCacheColumns()) {
                     IDictManager.getInstance().removeGlobalDict(tableId, column);
@@ -88,6 +108,13 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
                 IDictManager.getInstance()
                         .updateGlobalDict(tableId, columnName, collectedVersion, maxPartitionVersionTime);
             }
+        }
+    }
+
+    public void applyVisibleLogBatch(TransactionStateBatch txnStateBatch, Database db) {
+        for (TransactionState txnState : txnStateBatch.getTransactionStates()) {
+            TableCommitInfo tableCommitInfo = txnState.getTableCommitInfo(txnStateBatch.getTableId());
+            applyVisibleLog(txnState, tableCommitInfo, db);
         }
     }
 }

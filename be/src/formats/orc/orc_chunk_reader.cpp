@@ -87,7 +87,7 @@ Status OrcChunkReader::init(std::unique_ptr<orc::InputStream> input_stream) {
     try {
         _reader_options.setMemoryPool(*getOrcMemoryPool());
         auto reader = orc::createReader(std::move(input_stream), _reader_options);
-        return init(std::move(reader));
+        RETURN_IF_ERROR(init(std::move(reader)));
     } catch (std::exception& e) {
         auto s = strings::Substitute("OrcChunkReader::init failed. reason = $0, file = $1", e.what(),
                                      _current_file_name);
@@ -364,6 +364,13 @@ static Status _create_type_descriptor_by_orc(const TypeDescriptor& origin_type, 
         result->len = len;
         result->precision = precision;
         result->scale = scale;
+        // To support iceberg table time type
+        // When orc type is bigint and orc attribute iceberg.long-type is TIME, then convert result type to TYPE_TIME
+        if (result->type == TYPE_BIGINT && orc_type->hasAttributeKey("iceberg.long-type")) {
+            if ("TIME" == orc_type->getAttributeValue("iceberg.long-type")) {
+                result->type = TYPE_TIME;
+            }
+        }
     }
     return Status::OK();
 }
@@ -447,16 +454,6 @@ Status OrcChunkReader::_init_cast_exprs() {
         if (starrocks_type.is_assignable(orc_type)) {
             _cast_exprs[column_pos] = slot;
             continue;
-        }
-        // we don't support implicit cast column in query external hive table case.
-        // if we query external table, we heavily rely on type match to do optimization.
-        // For example, if we assume column A is an integer column, but it's stored as string in orc file
-        // then min/max of A is almost unusable. Think that there are values ["10", "10000", "100001", "11"]
-        // min/max will be "10" and "11", and we expect min/max is 10/100001
-        if (!_broker_load_mode && !is_implicit_castable(starrocks_type, orc_type)) {
-            return Status::NotSupported(strings::Substitute("Type mismatch: orc $0 to native $1. file = $2",
-                                                            orc_type.debug_string(), starrocks_type.debug_string(),
-                                                            _current_file_name));
         }
         Expr* cast = VectorizedCastExprFactory::from_type(orc_type, starrocks_type, slot, &_pool);
         if (cast == nullptr) {
@@ -622,6 +619,13 @@ StatusOr<ChunkPtr> OrcChunkReader::_cast_chunk(ChunkPtr* chunk,
         // TODO(murphy) check status
         ASSIGN_OR_RETURN(ColumnPtr col, _cast_exprs[src_index]->evaluate_checked(nullptr, src.get()));
         col = ColumnHelper::unfold_const_column(slot->type(), chunk_size, col);
+
+        // If we feed nullable column to cast_expr, it may return non-nullable column if it really doesn't have null values
+        if (slot->is_nullable()) {
+            // wrap nullable column if necessary
+            col = NullableColumn::wrap_if_necessary(col);
+        }
+
         DCHECK_LE(col->size(), chunk_size);
         cast_chunk->append_column(std::move(col), slot->id());
     }
@@ -1084,6 +1088,17 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::
         ADD_RF_TO_BUILDER                                                                                     \
     }
 
+#define ADD_RF_DECIMAL128_TYPE(xtype)                                                                            \
+    case xtype: {                                                                                                \
+        auto* xrf = dynamic_cast<const RuntimeBloomFilter<xtype>*>(rf);                                          \
+        if (xrf == nullptr) return false;                                                                        \
+        auto lower = orc::Literal(orc::Int128(xrf->min_value() >> 64, xrf->min_value()), slot->type().precision, \
+                                  slot->type().scale);                                                           \
+        auto upper = orc::Literal(orc::Int128(xrf->max_value() >> 64, xrf->max_value()), slot->type().precision, \
+                                  slot->type().scale);                                                           \
+        ADD_RF_TO_BUILDER                                                                                        \
+    }
+
 bool OrcChunkReader::_add_runtime_filter(const SlotDescriptor* slot, const JoinRuntimeFilter* rf,
                                          std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
     LogicalType ltype = slot->type().type;
@@ -1106,7 +1121,7 @@ bool OrcChunkReader::_add_runtime_filter(const SlotDescriptor* slot, const JoinR
         ADD_RF_DECIMALV2_TYPE(LogicalType::TYPE_DECIMALV2);
         ADD_RF_DECIMALV3_TYPE(LogicalType::TYPE_DECIMAL32);
         ADD_RF_DECIMALV3_TYPE(LogicalType::TYPE_DECIMAL64);
-        ADD_RF_DECIMALV3_TYPE(LogicalType::TYPE_DECIMAL128);
+        ADD_RF_DECIMAL128_TYPE(LogicalType::TYPE_DECIMAL128);
     default:;
     }
     return false;
@@ -1161,7 +1176,7 @@ ColumnPtr OrcChunkReader::get_row_delete_filter(const std::set<int64_t>& deleted
     ColumnPtr filter_column = BooleanColumn::create(num_rows, 1);
     auto& filter = static_cast<BooleanColumn*>(filter_column.get())->get_data();
     auto iter = deleted_pos.lower_bound(start_pos);
-    auto end = deleted_pos.upper_bound(start_pos + num_rows);
+    auto end = deleted_pos.upper_bound(start_pos + num_rows - 1);
     for (; iter != end; iter++) {
         const int64_t file_pos = *iter - start_pos;
         filter[file_pos] = 0;

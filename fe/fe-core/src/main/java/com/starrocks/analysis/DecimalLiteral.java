@@ -49,6 +49,8 @@ import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.thrift.TDecimalLiteral;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -61,6 +63,8 @@ import java.nio.ByteOrder;
 import java.util.Objects;
 
 public class DecimalLiteral extends LiteralExpr {
+
+    private static final Logger LOG = LogManager.getLogger(DecimalLiteral.class);
     private BigDecimal value;
 
     public DecimalLiteral() {
@@ -473,8 +477,7 @@ public class DecimalLiteral extends LiteralExpr {
     // given an incorrect result that overflow checking should fail(in decimal style) expectedly but succeeds
     // (in decimal style)actually. When checkLiteralOverflowInDecimalStyle fails, proper cast exprs are interpolated
     // into Predicates to cast the type of decimal constant value to a type wider enough to holds the value.
-    public static void checkLiteralOverflowInDecimalStyle(BigDecimal value, ScalarType scalarType)
-            throws AnalysisException {
+    public static boolean checkLiteralOverflowInDecimalStyle(BigDecimal value, ScalarType scalarType) {
         int realPrecision = getRealPrecision(value);
         int realScale = getRealScale(value);
         BigInteger underlyingInt = value.setScale(scalarType.getScalarScale(), RoundingMode.HALF_UP).unscaledValue();
@@ -482,11 +485,13 @@ public class DecimalLiteral extends LiteralExpr {
         BigInteger minDecimal = BigInteger.TEN.pow(scalarType.decimalPrecision()).negate();
 
         if (underlyingInt.compareTo(minDecimal) <= 0 || underlyingInt.compareTo(maxDecimal) >= 0) {
-            String errMsg = String.format(
-                    "Typed decimal literal(%s) is overflow, value='%s' (precision=%d, scale=%d)",
-                    scalarType.toString(), value.toPlainString(), realPrecision, realScale);
-            throw new AnalysisException(errMsg);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Typed decimal literal({}) is overflow, value='{}' (precision={}, scale={})",
+                        scalarType, value.toPlainString(), realPrecision, realScale);
+            }
+            return false;
         }
+        return true;
     }
 
     @Override

@@ -28,6 +28,11 @@ import com.starrocks.catalog.system.sys.SysDb;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.meta.lock.LockType;
+import com.starrocks.meta.lock.Locker;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.ObjectType;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
@@ -72,7 +77,8 @@ public class DropStmtAnalyzer {
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
-            db.readLock();
+            Locker locker = new Locker();
+            locker.lockDatabase(db, LockType.READ);
             Table table;
             String tableName = statement.getTableName();
             try {
@@ -93,7 +99,7 @@ public class DropStmtAnalyzer {
                     }
                 }
             } finally {
-                db.readUnlock();
+                locker.unLockDatabase(db, LockType.READ);
             }
             // Check if a view
             if (statement.isView()) {
@@ -125,13 +131,15 @@ public class DropStmtAnalyzer {
 
             String dbName = statement.getDbName();
             if (dbName.equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                        context.getCurrentUserIdentity().getUser(), dbName);
+                AccessDeniedException.reportAccessDenied(context.getCurrentCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.DROP.name(), ObjectType.DATABASE.name(), dbName);
             } else if (dbName.equalsIgnoreCase(SysDb.DATABASE_NAME)) {
                 Database db = GlobalStateMgr.getCurrentState().getDb(SysDb.DATABASE_NAME.toLowerCase());
                 if (db.getId() == SystemId.SYS_DB_ID) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                            context.getCurrentUserIdentity().getUser(), dbName);
+                    AccessDeniedException.reportAccessDenied(context.getCurrentCatalog(),
+                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.DROP.name(), ObjectType.DATABASE.name(), dbName);
                 }
             }
             return null;
@@ -160,15 +168,16 @@ public class DropStmtAnalyzer {
                     }
                 } else {
                     Database db = GlobalStateMgr.getCurrentState().getDb(functionName.getDb());
+                    Locker locker = new Locker();
                     if (db != null) {
                         try {
-                            db.readLock();
+                            locker.lockDatabase(db, LockType.READ);
                             func = db.getFunction(statement.getFunctionSearchDesc());
                             if (func == null) {
                                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_FUNC_ERROR, funcDesc.toString());
                             }
                         } finally {
-                            db.readUnlock();
+                            locker.unLockDatabase(db, LockType.READ);
                         }
                     }
                 }

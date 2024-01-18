@@ -99,7 +99,7 @@ public:
     void set_query_slots(DescriptorTbl* desc_tbl) {
         std::vector<TupleDescriptor*> tuples;
         desc_tbl->get_tuple_descs(&tuples);
-        DCHECK_EQ(0, tuples.size());
+        DCHECK_LE(0, tuples.size());
         _query_slots = tuples[0]->slots();
     }
 
@@ -160,8 +160,8 @@ private:
                                        bool* sc_sorting, bool* sc_directly,
                                        std::unordered_set<int>* materialized_column_idxs);
 
-    static Status parse_request_for_pk(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
-                                       bool* sc_sorting, bool* sc_directly);
+    static Status parse_request_for_sort_key(const TabletSchemaCSPtr& base_schema, const TabletSchemaCSPtr& new_schema,
+                                             bool* sc_sorting, bool* sc_directly);
 };
 
 } // namespace starrocks

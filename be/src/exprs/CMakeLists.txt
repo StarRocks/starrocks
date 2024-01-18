@@ -32,6 +32,10 @@ set(EXPR_FILES
   agg/factory/aggregate_resolver_utility.cpp
   agg/factory/aggregate_resolver_variance.cpp
   agg/factory/aggregate_resolver_window.cpp
+  jit/ir_helper.cpp
+  jit/jit_engine.cpp
+  jit/jit_expr.cpp
+  jit/jit_functions.cpp
   anyval_util.cpp
   base64.cpp
   binary_functions.cpp
@@ -99,6 +103,8 @@ set(EXPR_FILES
   substring_index.cpp
   dict_query_expr.cpp
   runtime_filter_layout.cpp
+  dictionary_get_expr.cpp
+  ngram.cpp
 )
 
 add_library(Exprs ${EXPR_FILES})

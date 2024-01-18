@@ -36,6 +36,14 @@ public class IcebergFilter {
         this.predicate = predicate;
     }
 
+    public String getDatabaseName() {
+        return databaseName;
+    }
+
+    public String getTableName() {
+        return tableName;
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

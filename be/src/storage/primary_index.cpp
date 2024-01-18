@@ -19,8 +19,10 @@
 
 #include "common/tracer.h"
 #include "gutil/strings/substitute.h"
+#include "io/io_profiler.h"
 #include "runtime/large_int_value.h"
 #include "storage/chunk_helper.h"
+#include "storage/primary_key_dump.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_options.h"
@@ -69,6 +71,8 @@ public:
 
     // just an estimate value for now
     virtual std::size_t memory_usage() const = 0;
+
+    virtual Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) = 0;
 };
 
 #pragma pack(push)
@@ -130,7 +134,7 @@ public:
                         "key=$4",
                         rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i]);
                 LOG(ERROR) << msg;
-                return Status::InternalError(msg);
+                return Status::AlreadyExist(msg);
             }
         }
         return Status::OK();
@@ -223,6 +227,14 @@ public:
     std::size_t memory_usage() const final {
         return _map.capacity() * (1 + (sizeof(Key) + 3) / 4 * 4 + sizeof(RowIdPack4));
     }
+
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) override {
+        for (const auto& kv : _map) {
+            RETURN_IF_ERROR(dump->add_pindex_kvs(
+                    std::string_view(reinterpret_cast<const char*>(&kv.first), sizeof(Key)), kv.second.value, dump_pb));
+        }
+        return dump->finish_pindex_kvs(dump_pb);
+    }
 };
 
 template <size_t S>
@@ -288,7 +300,7 @@ public:
                             rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
                             hexdump(keys[i].data, keys[i].size));
                     LOG(ERROR) << msg;
-                    return Status::InternalError(msg);
+                    return Status::AlreadyExist(msg);
                 }
                 uint32_t prefetch_i = i + PREFETCHN;
                 if (LIKELY(prefetch_i < idx_end)) {
@@ -309,7 +321,7 @@ public:
                             rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
                             hexdump(keys[i].data, keys[i].size));
                     LOG(ERROR) << msg;
-                    return Status::InternalError(msg);
+                    return Status::AlreadyExist(msg);
                 }
             }
         }
@@ -531,6 +543,15 @@ public:
     }
 
     std::size_t memory_usage() const final { return _map.capacity() * (1 + S * 4 + sizeof(RowIdPack4)); }
+
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) override {
+        for (const auto& kv : _map) {
+            RETURN_IF_ERROR(dump->add_pindex_kvs(
+                    std::string_view(reinterpret_cast<const char*>(kv.first.v), sizeof(FixSlice<S>)), kv.second.value,
+                    dump_pb));
+        }
+        return dump->finish_pindex_kvs(dump_pb);
+    }
 };
 
 struct StringHasher1 {
@@ -571,7 +592,7 @@ public:
                         rssid, rowids[i], (uint32_t)(old >> 32), (uint32_t)(old & ROWID_MASK), keys[i].to_string(),
                         hexdump(keys[i].data, keys[i].size));
                 LOG(ERROR) << msg;
-                return Status::InternalError(msg);
+                return Status::AlreadyExist(msg);
             }
             _total_length += keys[i].size;
         }
@@ -667,6 +688,14 @@ public:
             ret += size() * 8;
         }
         return ret;
+    }
+
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) override {
+        for (const auto& kv : _map) {
+            RETURN_IF_ERROR(
+                    dump->add_pindex_kvs(std::string_view(kv.first.data(), kv.first.size()), kv.second, dump_pb));
+        }
+        return dump->finish_pindex_kvs(dump_pb);
     }
 };
 
@@ -859,6 +888,15 @@ public:
         }
         return ret;
     }
+
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) override {
+        for (const auto& _map : _maps) {
+            if (_map) {
+                RETURN_IF_ERROR(_map->pk_dump(dump, dump_pb));
+            }
+        }
+        return Status::OK();
+    }
 };
 
 static std::unique_ptr<HashIndex> create_hash_index(LogicalType key_type, size_t fix_size) {
@@ -939,6 +977,7 @@ void PrimaryIndex::_set_schema(const Schema& pk_schema) {
 }
 
 Status PrimaryIndex::load(Tablet* tablet) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, tablet->tablet_id());
     std::lock_guard<std::mutex> lg(_lock);
     if (_loaded) {
         return _status;
@@ -984,6 +1023,7 @@ static string int_list_to_string(const vector<uint32_t>& l) {
 }
 
 Status PrimaryIndex::prepare(const EditVersion& version, size_t n) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     if (_persistent_index != nullptr) {
         return _persistent_index->prepare(version, n);
     }
@@ -991,6 +1031,7 @@ Status PrimaryIndex::prepare(const EditVersion& version, size_t n) {
 }
 
 Status PrimaryIndex::commit(PersistentIndexMetaPB* index_meta) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     if (_persistent_index != nullptr) {
         return _persistent_index->commit(index_meta);
     }
@@ -998,6 +1039,7 @@ Status PrimaryIndex::commit(PersistentIndexMetaPB* index_meta) {
 }
 
 Status PrimaryIndex::on_commited() {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     if (_persistent_index != nullptr) {
         return _persistent_index->on_commited();
     }
@@ -1005,6 +1047,7 @@ Status PrimaryIndex::on_commited() {
 }
 
 Status PrimaryIndex::abort() {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     if (_persistent_index != nullptr) {
         return _persistent_index->abort();
     }
@@ -1012,6 +1055,8 @@ Status PrimaryIndex::abort() {
 }
 
 Status PrimaryIndex::_do_load(Tablet* tablet) {
+    _table_id = tablet->belonged_table_id();
+    _tablet_id = tablet->tablet_id();
     auto span = Tracer::Instance().start_trace_tablet("primary_index_load", tablet->tablet_id());
     auto scoped_span = trace::Scope(span);
     MonotonicStopWatch timer;
@@ -1124,8 +1169,6 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
             itr->close();
         }
     }
-    _table_id = tablet->belonged_table_id();
-    _tablet_id = tablet->tablet_id();
     if (size() != total_rows - total_dels) {
         LOG(WARNING) << strings::Substitute("load primary index row count not match tablet:$0 index:$1 != stats:$2",
                                             _tablet_id, size(), total_rows - total_dels);
@@ -1188,6 +1231,7 @@ Status PrimaryIndex::_insert_into_persistent_index(uint32_t rssid, const vector<
 Status PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                                    uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes,
                                                    IOStat* stat) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     Status st;
     uint32_t n = idx_end - idx_begin;
     std::vector<Slice> keys;
@@ -1240,6 +1284,7 @@ Status PrimaryIndex::_get_from_persistent_index(const Column& key_col, std::vect
 [[maybe_unused]] Status PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_start, const Column& pks,
                                                                 const vector<uint32_t>& src_rssid,
                                                                 vector<uint32_t>* deletes) {
+    auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
     std::vector<Slice> keys;
     std::vector<uint64_t> values;
     values.reserve(pks.size());
@@ -1269,9 +1314,11 @@ Status PrimaryIndex::_replace_persistent_index(uint32_t rssid, uint32_t rowid_st
 Status PrimaryIndex::insert(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     if (_persistent_index != nullptr) {
-        RETURN_IF_ERROR(_insert_into_persistent_index(rssid, rowids, pks));
+        auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
+        return _insert_into_persistent_index(rssid, rowids, pks);
+    } else {
+        return _pkey_to_rssid_rowid->insert(rssid, rowids, pks, 0, pks.size());
     }
-    return _pkey_to_rssid_rowid->insert(rssid, rowids, pks, 0, pks.size());
 }
 
 Status PrimaryIndex::insert(uint32_t rssid, uint32_t rowid_start, const Column& pks) {
@@ -1334,6 +1381,7 @@ Status PrimaryIndex::erase(const Column& key_col, DeletesMap* deletes) {
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
+        auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
         st = _erase_persistent_index(key_col, deletes);
     } else {
         _pkey_to_rssid_rowid->erase(key_col, 0, key_col.size(), deletes);
@@ -1345,6 +1393,7 @@ Status PrimaryIndex::get(const Column& key_col, std::vector<uint64_t>* rowids) c
     DCHECK(_status.ok() && (_pkey_to_rssid_rowid || _persistent_index));
     Status st;
     if (_persistent_index != nullptr) {
+        auto scope = IOProfiler::scope(IOProfiler::TAG_PKINDEX, _tablet_id);
         st = _get_from_persistent_index(key_col, rowids);
     } else {
         _pkey_to_rssid_rowid->get(key_col, 0, key_col.size(), rowids);
@@ -1401,6 +1450,54 @@ Status PrimaryIndex::major_compaction(Tablet* tablet) {
     } else {
         return Status::OK();
     }
+}
+
+Status PrimaryIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta) {
+    std::lock_guard<std::mutex> lg(_lock);
+    _table_id = tablet->belonged_table_id();
+    _tablet_id = tablet->tablet_id();
+    const TabletSchemaCSPtr tablet_schema_ptr = tablet->tablet_schema();
+    vector<ColumnId> pk_columns(tablet_schema_ptr->num_key_columns());
+    for (auto i = 0; i < tablet_schema_ptr->num_key_columns(); i++) {
+        pk_columns[i] = (ColumnId)i;
+    }
+    auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
+    _set_schema(pkey_schema);
+
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
+
+    if (tablet->get_enable_persistent_index() && (fix_size <= 128)) {
+        if (_persistent_index != nullptr) {
+            _persistent_index.reset();
+        }
+        _persistent_index = std::make_unique<PersistentIndex>(tablet->schema_hash_path());
+        RETURN_IF_ERROR(_persistent_index->reset(tablet, version, index_meta));
+    } else {
+        if (_pkey_to_rssid_rowid != nullptr) {
+            _pkey_to_rssid_rowid.reset();
+        }
+        _pkey_to_rssid_rowid = create_hash_index(_enc_pk_type, _key_size);
+    }
+    _loaded = true;
+
+    return Status::OK();
+}
+
+void PrimaryIndex::reset_cancel_major_compaction() {
+    if (_persistent_index != nullptr) {
+        _persistent_index->reset_cancel_major_compaction();
+    }
+}
+
+Status PrimaryIndex::pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb) {
+    if (_persistent_index != nullptr) {
+        RETURN_IF_ERROR(_persistent_index->pk_dump(dump, dump_pb));
+    } else {
+        PrimaryIndexDumpPB* level = dump_pb->add_primary_index_levels();
+        level->set_filename("memory primary index");
+        RETURN_IF_ERROR(_pkey_to_rssid_rowid->pk_dump(dump, level));
+    }
+    return Status::OK();
 }
 
 } // namespace starrocks
