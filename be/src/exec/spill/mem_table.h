@@ -67,7 +67,8 @@ public:
                                                   uint32_t size) = 0;
 
     // all data has been added, call `finalize` to serialize data
-    // after `finalize` is successfully called, we can get serialized data by `get_serialized_data`.
+    // after `finalize` is successfully called, we can get serialized data by `get_next_serialized_data`.
+    // NOTE: The implementation of `finalize` needs to ensure reentrancy in order to implement io task yield mechanism
     virtual Status finalize(workgroup::YieldContext& yield_ctx) = 0;
 
     virtual StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) {

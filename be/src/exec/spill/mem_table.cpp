@@ -137,7 +137,6 @@ Status UnorderedMemTable::finalize(workgroup::YieldContext& yield_ctx) {
     auto& serde = _spiller->serde();
     SerdeContext serde_ctx;
     {
-        LOG(INFO) << fmt::format("finalize mem table, idx[{}] total[{}]", _processed_index, _chunks.size());
         while (_processed_index < _chunks.size()) {
             SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
             auto chunk = _chunks[_processed_index++];
@@ -145,8 +144,8 @@ Status UnorderedMemTable::finalize(workgroup::YieldContext& yield_ctx) {
             RETURN_OK_IF_NEED_YIELD(yield_ctx.wg, &yield_ctx.need_yield, yield_ctx.time_spent_ns);
         }
     }
-    LOG(INFO) << fmt::format("finalize spillable unordered memtable done, rows[{}], size[{}] {}", num_rows(),
-                             _block->size(), (void*)this);
+    TRACE_SPILL_LOG << fmt::format("finalize spillable unordered memtable done, rows[{}], size[{}] {}", num_rows(),
+                                   _block->size(), (void*)this);
     return Status::OK();
 }
 
@@ -219,8 +218,8 @@ Status OrderedMemTable::finalize(workgroup::YieldContext& yield_ctx) {
         RETURN_IF_ERROR(serde->serialize_to_block(serde_ctx, chunk, _block));
         RETURN_OK_IF_NEED_YIELD(yield_ctx.wg, &yield_ctx.need_yield, yield_ctx.time_spent_ns);
     }
-    LOG(INFO) << fmt::format("finalize spillable ordered memtable done, rows[{}], size[{}]", num_rows(),
-                             _block->size());
+    TRACE_SPILL_LOG << fmt::format("finalize spillable ordered memtable done, rows[{}], size[{}]", num_rows(),
+                                   _block->size());
     // clear all data
     _chunk_slice.reset(nullptr);
     int64_t old_consumption = _tracker->consumption();
