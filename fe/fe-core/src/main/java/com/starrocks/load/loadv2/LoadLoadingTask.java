@@ -68,7 +68,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 public class LoadLoadingTask extends LoadTask {
     private static final Logger LOG = LogManager.getLogger(LoadLoadingTask.class);
@@ -102,6 +101,7 @@ public class LoadLoadingTask extends LoadTask {
     private LoadPlanner loadPlanner;
     private final OriginStatement originStmt;
 
+<<<<<<< HEAD
     public LoadLoadingTask(Database db, OlapTable table, BrokerDesc brokerDesc, List<BrokerFileGroup> fileGroups,
             long jobDeadlineMs, long execMemLimit, boolean strictMode,
             long txnId, LoadTaskCallback callback, String timezone,
@@ -118,6 +118,30 @@ public class LoadLoadingTask extends LoadTask {
         this.execMemLimit = execMemLimit;
         this.strictMode = strictMode;
         this.txnId = txnId;
+=======
+    private final LoadJob.JSONOptions jsonOptions;
+
+    private LoadLoadingTask(Builder builder) {
+        super(builder.callback, TaskType.LOADING, builder.priority);
+        this.db = builder.db;
+        this.table = builder.table;
+        this.brokerDesc = builder.brokerDesc;
+        this.fileGroups = builder.fileGroups;
+        this.jobDeadlineMs = builder.jobDeadlineMs;
+        this.execMemLimit = builder.execMemLimit;
+        this.strictMode = builder.strictMode;
+        this.txnId = builder.txnId;
+        this.timezone = builder.timezone;
+        this.timeoutS = builder.timeoutS;
+        this.createTimestamp = builder.createTimestamp;
+        this.partialUpdate = builder.partialUpdate;
+        this.mergeConditionStr = builder.mergeConditionStr;
+        this.sessionVariables = builder.sessionVariables;
+        this.context = builder.context;
+        this.loadJobType = builder.loadJobType;
+        this.originStmt = builder.originStmt;
+        this.partialUpdateMode = builder.partialUpdateMode;
+>>>>>>> 592d220e60 ([Refactor] Add retry in the broker load when timeout (#38183))
         this.failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL);
         this.retryTime = 1; // load task retry does not satisfy transaction's atomic
         this.timezone = timezone;
@@ -160,9 +184,6 @@ public class LoadLoadingTask extends LoadTask {
 
     @Override
     protected void executeTask() throws Exception {
-        LOG.info("begin to execute loading task. load id: {} job: {}. db: {}, tbl: {}. left retry: {}",
-                DebugUtil.printId(loadId), callback.getCallbackId(), db.getOriginName(), table.getName(), retryTime);
-        retryTime--;
         executeOnce();
     }
 
@@ -291,6 +312,7 @@ public class LoadLoadingTask extends LoadTask {
         return jobDeadlineMs - System.currentTimeMillis();
     }
 
+<<<<<<< HEAD
     @Override
     public void updateRetryInfo() {
         super.updateRetryInfo();
@@ -301,6 +323,157 @@ public class LoadLoadingTask extends LoadTask {
             planner.updateLoadInfo(this.loadId);
         } else {
             loadPlanner.updateLoadInfo(this.loadId);
+=======
+    public static class Builder {
+        private TUniqueId loadId;
+        private Database db;
+        private OlapTable table;
+        private BrokerDesc brokerDesc;
+        private List<BrokerFileGroup> fileGroups;
+        private long jobDeadlineMs;
+        private long execMemLimit;
+        private boolean strictMode;
+        private long txnId;
+        private String timezone;
+        private long createTimestamp;
+        private boolean partialUpdate;
+        private long timeoutS;
+        private Map<String, String> sessionVariables;
+        private TLoadJobType loadJobType;
+        private String mergeConditionStr;
+        private TPartialUpdateMode partialUpdateMode;
+        private ConnectContext context;
+        private OriginStatement originStmt;
+        private List<List<TBrokerFileStatus>> fileStatusList;
+        private int fileNum = 0;
+        private LoadTaskCallback callback;
+        private int priority;
+
+        private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
+
+        public Builder setCallback(LoadTaskCallback callback) {
+            this.callback = callback;
+            return this;
+        }
+
+        public Builder setPriority(int priority) {
+            this.priority = priority;
+            return this;
+        }
+
+        public Builder setLoadId(TUniqueId loadId) {
+            this.loadId = loadId;
+            return this;
+        }
+
+        public Builder setDb(Database db) {
+            this.db = db;
+            return this;
+        }
+
+        public Builder setTable(OlapTable table) {
+            this.table = table;
+            return this;
+        }
+
+        public Builder setBrokerDesc(BrokerDesc brokerDesc) {
+            this.brokerDesc = brokerDesc;
+            return this;
+        }
+
+        public Builder setFileGroups(List<BrokerFileGroup> fileGroups) {
+            this.fileGroups = fileGroups;
+            return this;
+        }
+
+        public Builder setJobDeadlineMs(long jobDeadlineMs) {
+            this.jobDeadlineMs = jobDeadlineMs;
+            return this;
+        }
+
+        public Builder setExecMemLimit(long execMemLimit) {
+            this.execMemLimit = execMemLimit;
+            return this;
+        }
+
+        public Builder setStrictMode(boolean strictMode) {
+            this.strictMode = strictMode;
+            return this;
+        }
+
+        public Builder setTxnId(long txnId) {
+            this.txnId = txnId;
+            return this;
+        }
+
+        public Builder setTimezone(String timezone) {
+            this.timezone = timezone;
+            return this;
+        }
+
+        public Builder setCreateTimestamp(long createTimestamp) {
+            this.createTimestamp = createTimestamp;
+            return this;
+        }
+
+        public Builder setPartialUpdate(boolean partialUpdate) {
+            this.partialUpdate = partialUpdate;
+            return this;
+        }
+
+        public Builder setTimeoutS(long timeoutS) {
+            this.timeoutS = timeoutS;
+            return this;
+        }
+
+        public Builder setSessionVariables(Map<String, String> sessionVariables) {
+            this.sessionVariables = sessionVariables;
+            return this;
+        }
+
+        public Builder setLoadJobType(TLoadJobType loadJobType) {
+            this.loadJobType = loadJobType;
+            return this;
+        }
+
+        public Builder setMergeConditionStr(String mergeConditionStr) {
+            this.mergeConditionStr = mergeConditionStr;
+            return this;
+        }
+
+        public Builder setPartialUpdateMode(TPartialUpdateMode partialUpdateMode) {
+            this.partialUpdateMode = partialUpdateMode;
+            return this;
+        }
+
+        public Builder setContext(ConnectContext context) {
+            this.context = context;
+            return this;
+        }
+
+        public Builder setOriginStmt(OriginStatement originStmt) {
+            this.originStmt = originStmt;
+            return this;
+        }
+
+        public Builder setFileStatusList(List<List<TBrokerFileStatus>> fileStatusList) {
+            this.fileStatusList = fileStatusList;
+            return this;
+        }
+
+        public Builder setFileNum(int fileNum) {
+            this.fileNum = fileNum;
+            return this;
+        }
+
+        public Builder setJSONOptions(LoadJob.JSONOptions options) {
+            this.jsonOptions = options;
+            return this;
+        }
+
+        public LoadLoadingTask build() {
+            return new LoadLoadingTask(this);
+>>>>>>> 592d220e60 ([Refactor] Add retry in the broker load when timeout (#38183))
         }
     }
 }
