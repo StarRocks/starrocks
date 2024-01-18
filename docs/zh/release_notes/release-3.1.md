@@ -35,7 +35,7 @@ displayed_sidebar: "Chinese"
 - 使用 JDK 时 GC 算法默认采用 G1。[#37386](https://github.com/StarRocks/starrocks/pull/37386)
 - `date_trunc`、`adddate`、`time_slice` 函数的 `interval` 参数可支持毫秒和微秒。[#36386](https://github.com/StarRocks/starrocks/pull/36386)
 - WHERE 子句中 LIKE 运算符右侧字符串中不包括 `%` 或者 `_` 时，LIKE 运算符会转换成 `=` 运算符。[#37515](https://github.com/StarRocks/starrocks/pull/37515)
-- [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/3.1/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加 `LatestSourcePosition`，记录 数据源 Kafka 中 Topic 中各个分区的最新消息位点，便于检查导入延迟情况。[#38298](https://github.com/StarRocks/starrocks/pull/38298)
+- [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/3.1/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加 `LatestSourcePosition`，记录 数据源 Kafka 中 Topic 内各个分区的最新消息位点，便于检查导入延迟情况。[#38298](https://github.com/StarRocks/starrocks/pull/38298)
 - 新增资源组属性 `spill_mem_limit_threshold`，用于设置开启自动落盘（即系统变量 `spill_mode` 设置为 `auto`）时，当前资源组触发落盘的内存占用阈值（百分比）。取值范围：(0,1)。默认取值为 `1`，表示不生效。[#36701](https://github.com/StarRocks/starrocks/pull/36701)
 - [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/3.1/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加时间戳进度信息，展示各个分区当前消费消息的时间戳。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
 - 优化 Rountine Load 的调度策略，慢任务不阻塞其他正常任务的执行。[#37638](https://github.com/StarRocks/starrocks/pull/37638)
