@@ -172,7 +172,6 @@ struct HashTableProbeState {
     // 0: normal
     // 1: all match one
     JoinMatchFlag match_flag = JoinMatchFlag::NORMAL; // all match one
-    bool is_one_match_probe = false;
 
     bool has_remain = false;
     // When one-to-many, one probe may not be able to probe all the data,
@@ -255,7 +254,6 @@ struct HashTableProbeState {
 
 struct HashTableParam {
     bool with_other_conjunct = false;
-    bool is_one_match_probe = false;
     TJoinOp::type join_type = TJoinOp::INNER_JOIN;
     const RowDescriptor* row_desc = nullptr;
     const RowDescriptor* build_row_desc = nullptr;

@@ -238,10 +238,7 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
         if (property != null) {
             constraint.setJoinProperty(property);
 
-            if ((joinType.isInnerJoin() || joinType.isLeftOuterJoin()) && !property.isLeftUK) {
-                // Left table contains fk, so for every fk in the left table, there only one match in the right table.
-                property.isOneMatchProbe = true;
-            } else if ((joinType.isLeftSemiJoin() && property.isLeftUK) ||
+            if ((joinType.isLeftSemiJoin() && property.isLeftUK) ||
                     (joinType.isRightSemiJoin() && !property.isLeftUK)) {
                 // The unique property is preserved
                 if (outputColumns.contains(property.ukColumnRef)) {

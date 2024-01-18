@@ -93,7 +93,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
     // The partitionByExprs which need to check the probe side for partition join.
     protected List<Expr> probePartitionByExprs;
     protected boolean canLocalShuffle = false;
-    protected boolean isOneMatchProbe = false;
 
     public List<RuntimeFilterDescription> getBuildRuntimeFilters() {
         return buildRuntimeFilters;
@@ -398,14 +397,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
         canLocalShuffle = v;
     }
 
-    public boolean isOneMatchProbe() {
-        return isOneMatchProbe;
-    }
-
-    public void setOneMatchProbe(boolean oneMatchProbe) {
-        isOneMatchProbe = oneMatchProbe;
-    }
-
     public void setFKRight(boolean fkRight) {
         this.isFKRight = fkRight;
     }
@@ -462,10 +453,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
 
             if (FeConstants.showJoinLocalShuffleInExplain) {
                 output.append(detailPrefix).append("can local shuffle: " + canLocalShuffle + "\n");
-            }
-
-            if (isOneMatchProbe) {
-                output.append(detailPrefix).append("OneMatchProbeOptimization\n");
             }
         }
         return output.toString();

@@ -91,7 +91,6 @@ public class UKFKConstraints {
         public final ColumnRefOperator ukColumnRef;
         public final ColumnRefOperator fkColumnRef;
         public final boolean isLeftUK;
-        public boolean isOneMatchProbe;
 
         public JoinProperty(BinaryPredicateOperator predicate,
                             UniqueConstraintWrapper ukConstraint,

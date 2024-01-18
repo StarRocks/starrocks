@@ -72,9 +72,6 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.hash_join_node.__isset.sql_predicates) {
         _runtime_profile->add_info_string("Predicates", tnode.hash_join_node.sql_predicates);
     }
-    if (tnode.hash_join_node.__isset.is_one_match_probe) {
-        _is_one_match_probe = tnode.hash_join_node.is_one_match_probe;
-    }
 
     const std::vector<TEqJoinCondition>& eq_join_conjuncts = tnode.hash_join_node.eq_join_conjuncts;
     for (const auto& eq_join_conjunct : eq_join_conjuncts) {
@@ -467,11 +464,10 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     }
 
     auto* pool = context->fragment_context()->runtime_state()->obj_pool();
-    HashJoinerParam param(pool, _hash_join_node, _id, _type, _is_one_match_probe, _is_null_safes, _build_expr_ctxs,
-                          _probe_expr_ctxs, _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(),
-                          child(0)->row_desc(), _row_descriptor, child(1)->type(), child(0)->type(),
-                          child(1)->conjunct_ctxs().empty(), _build_runtime_filters, _output_slots, _output_slots,
-                          _distribution_mode, false);
+    HashJoinerParam param(pool, _hash_join_node, _id, _type, _is_null_safes, _build_expr_ctxs, _probe_expr_ctxs,
+                          _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(), child(0)->row_desc(),
+                          _row_descriptor, child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(),
+                          _build_runtime_filters, _output_slots, _output_slots, _distribution_mode, false);
     auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param);
 
     // add placeholder into RuntimeFilterHub, HashJoinBuildOperator will generate runtime filters and fill it,

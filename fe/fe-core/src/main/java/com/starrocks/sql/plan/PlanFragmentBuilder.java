@@ -125,7 +125,6 @@ import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.UKFKConstraintsCollector;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -140,7 +139,6 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.TopNType;
-import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
@@ -225,7 +223,6 @@ public class PlanFragmentBuilder {
                                               List<String> colNames,
                                               TResultSinkType resultSinkType,
                                               boolean hasOutputFragment) {
-        UKFKConstraintsCollector.collectColumnConstraints(plan);
         ExecPlan execPlan = new ExecPlan(connectContext, colNames, plan, outputColumns);
         createOutputFragment(new PhysicalPlanTranslator(columnRefFactory).translate(plan, execPlan), execPlan,
                 outputColumns, hasOutputFragment);
@@ -2418,14 +2415,6 @@ public class PlanFragmentBuilder {
                         context.getNextNodeId(),
                         leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
                         joinOperator, eqJoinConjuncts, otherJoinConjuncts);
-                UKFKConstraints constraints = optExpr.getConstraints();
-                if (constraints != null) {
-                    UKFKConstraints.JoinProperty joinProperty =
-                            constraints.getJoinProperty();
-                    if (joinProperty != null) {
-                        joinNode.setOneMatchProbe(joinProperty.isOneMatchProbe);
-                    }
-                }
                 joinNode.setFKRight(((PhysicalHashJoinOperator) node).isFKRight());
             } else if (node instanceof PhysicalMergeJoinOperator) {
                 joinNode = new MergeJoinNode(

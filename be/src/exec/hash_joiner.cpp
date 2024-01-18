@@ -56,7 +56,6 @@ HashJoiner::HashJoiner(const HashJoinerParam& param)
         : _hash_join_node(param._hash_join_node),
           _pool(param._pool),
           _join_type(param._hash_join_node.join_op),
-          _is_one_match_probe(param._is_one_match_probe),
           _is_null_safes(param._is_null_safes),
           _build_expr_ctxs(param._build_expr_ctxs),
           _probe_expr_ctxs(param._probe_expr_ctxs),
@@ -137,7 +136,6 @@ Status HashJoiner::prepare_prober(RuntimeState* state, RuntimeProfile* runtime_p
 
 void HashJoiner::_init_hash_table_param(HashTableParam* param) {
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
-    param->is_one_match_probe = _is_one_match_probe;
     param->join_type = _join_type;
     param->row_desc = &_row_descriptor;
     param->build_row_desc = &_build_row_descriptor;

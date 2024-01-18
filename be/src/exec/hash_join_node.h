@@ -96,7 +96,6 @@ private:
     std::vector<ExprContext*> _build_expr_ctxs;
     std::vector<ExprContext*> _other_join_conjunct_ctxs;
     std::vector<bool> _is_null_safes;
-    bool _is_one_match_probe = false;
 
     // If distribution type is SHUFFLE_HASH_BUCKET, local shuffle can use the
     // equivalence of ExchagneNode's partition colums

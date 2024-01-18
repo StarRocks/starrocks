@@ -65,7 +65,7 @@ enum HashJoinPhase {
 };
 struct HashJoinerParam {
     HashJoinerParam(ObjectPool* pool, const THashJoinNode& hash_join_node, TPlanNodeId node_id,
-                    TPlanNodeType::type node_type, bool is_one_match_probe, std::vector<bool> is_null_safes,
+                    TPlanNodeType::type node_type, std::vector<bool> is_null_safes,
                     std::vector<ExprContext*> build_expr_ctxs, std::vector<ExprContext*> probe_expr_ctxs,
                     std::vector<ExprContext*> other_join_conjunct_ctxs, std::vector<ExprContext*> conjunct_ctxs,
                     const RowDescriptor& build_row_descriptor, const RowDescriptor& probe_row_descriptor,
@@ -78,7 +78,6 @@ struct HashJoinerParam {
               _hash_join_node(hash_join_node),
               _node_id(node_id),
               _node_type(node_type),
-              _is_one_match_probe(is_one_match_probe),
               _is_null_safes(std::move(is_null_safes)),
               _build_expr_ctxs(std::move(build_expr_ctxs)),
               _probe_expr_ctxs(std::move(probe_expr_ctxs)),
@@ -104,7 +103,6 @@ struct HashJoinerParam {
     const THashJoinNode& _hash_join_node;
     TPlanNodeId _node_id;
     TPlanNodeType::type _node_type;
-    const bool _is_one_match_probe;
     const std::vector<bool> _is_null_safes;
     const std::vector<ExprContext*> _build_expr_ctxs;
     const std::vector<ExprContext*> _probe_expr_ctxs;
@@ -310,7 +308,6 @@ public:
     }
 
     const TJoinOp::type& join_type() const { return _join_type; }
-    const bool& is_one_match_probe() const { return _is_one_match_probe; }
 
 private:
     static bool _has_null(const ColumnPtr& column);
@@ -400,7 +397,6 @@ private:
     std::atomic<HashJoinPhase> _phase = HashJoinPhase::BUILD;
     bool _is_closed = false;
 
-    const bool& _is_one_match_probe;
     const std::vector<bool>& _is_null_safes;
     // Equal conjuncts in Join On.
     const std::vector<ExprContext*>& _build_expr_ctxs;
