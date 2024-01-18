@@ -284,7 +284,7 @@ Status Rowset::load_segments(std::vector<SegmentPtr>* segments, const LakeIOOpti
             }
             segment_futures.push_back(task->get_future());
         } else {
-            auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id++, &footer_size_hint, fill_data_cache,
+            auto segment_or = _tablet_mgr->load_segment(segment_info, seg_id++, &footer_size_hint, lake_io_opts,
                                                         fill_metadata_cache, _tablet_schema);
             if (auto status = check_status(segment_or, seg_name); !status.ok()) {
                 return status;
