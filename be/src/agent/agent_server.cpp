@@ -174,7 +174,7 @@ void AgentServer::Impl::init_or_die() {
                                        max_publish_version_worker_count, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
                                        _thread_pool_publish_version);
         REGISTER_GAUGE_STARROCKS_METRIC(publish_version_num_workers,
-                                        [this]() { return _thread_pool_publish_version->num_threads(); });
+                                        [this]() { return _thread_pool_publish_version->max_threads(); });
         REGISTER_GAUGE_STARROCKS_METRIC(publish_version_worker_usage, [this]() {
             return _thread_pool_publish_version->update_and_get_metrics().worker_usage();
         });
