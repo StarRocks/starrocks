@@ -67,7 +67,7 @@ StarRocks 支持单独和组合使用数据分布方式。
         user_name VARCHAR(32) DEFAULT ''
     )
     DUPLICATE KEY (event_day,site_id,pv);
-    -- 没有设置任何分区和分桶方式，默认为 Random 分布（目前仅支持明细模型的表）
+    -- 没有设置任何分区和分桶方式，默认为 Random 分布（目前仅支持明细表）
     ```
 
 - Hash 分布
@@ -98,7 +98,7 @@ StarRocks 支持单独和组合使用数据分布方式。
     DUPLICATE KEY(event_day,site_id,pv)
     -- 设为分区方式为表达式分区，并且使用时间函数的分区表达式（当然您也可以设置分区方式为 Range 分区）
     PARTITION BY date_trunc('day', event_day);
-    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细模型的表）
+    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细表）
     ```
 
 - Range + Hash 分布
@@ -131,7 +131,7 @@ StarRocks 支持单独和组合使用数据分布方式。
     DUPLICATE KEY(id)
     -- 设为分区方式为表达式分区，并且使用列分区表达式（当然您也可以设置分区方式为 List 分区）
     PARTITION BY (city);
-    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细模型的表）
+    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细表）
     ```
 
 - List + Hash 分布
@@ -414,7 +414,7 @@ SHOW PARTITIONS FROM site_access;
 
 **使用限制**
 
-- 仅支持明细模型表。
+- 仅支持明细表。
 - 不支持指定 [Colocation Group](../using_starrocks/Colocate_join.md)。
 - 不支持 [Spark Load](../loading/SparkLoad.md)。
 
@@ -769,7 +769,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
     ```SQL
     ALTER TABLE t DISTRIBUTED BY HASH(k1, k2) BUCKETS 20;
-    -- 如果是 StarRocks 的版本是 3.1及以上，并且使用的是明细模型表，则建议直接改成默认分桶设置，即随机分桶并且由 StarRocks 自动设置分桶数量
+    -- 如果是 StarRocks 的版本是 3.1及以上，并且使用的是明细表，则建议直接改成默认分桶设置，即随机分桶并且由 StarRocks 自动设置分桶数量
     ALTER TABLE t DISTRIBUTED BY RANDOM;
     ```
 

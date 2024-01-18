@@ -10,7 +10,7 @@ displayed_sidebar: "Chinese"
 
 ## 排序原理
 
-在明细模型中，排序列就是通过 `DUPLICATE KEY` 关键字指定的列。
+在明细表中，排序列就是通过 `DUPLICATE KEY` 关键字指定的列。
 
 在聚合模型中，排序列就是通过 `AGGREGATE KEY` 关键字指定的列。
 
@@ -18,7 +18,7 @@ displayed_sidebar: "Chinese"
 
 自 3.0 版本起，主键模型解耦了主键列和排序列，排序列通过 `ORDER BY` 关键字指定，主键列通过 `PRIMARY KEY` 关键字指定。
 
-在明细模型、聚合模型、更新模型中定义排序列时，需要注意以下几点：
+在明细表、聚合模型、更新模型中定义排序列时，需要注意以下几点：
 
 - 排序列必须从定义的第一列开始、并且是连续的。
 
@@ -37,11 +37,11 @@ displayed_sidebar: "Chinese"
   - `city_code` 和 `user_id`
   - `site_id`、`city_code` 和 `pv`
 
-下面通过示例来说明如何创建使用各个数据模型的表，以下建表语句适用于至少部署三个 BE 节点的集群环境下。
+下面通过示例来说明如何创建使用各个类型的表，以下建表语句适用于至少部署三个 BE 节点的集群环境下。
 
-### 明细模型
+### 明细表
 
-创建一个名为 `site_access_duplicate` 的明细模型表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
+创建一个名为 `site_access_duplicate` 的明细表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
 
 建表语句如下：
 

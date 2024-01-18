@@ -125,7 +125,7 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"] [AUTO_I
 2. 如果在建表时 `REPLACE_IF_NOT_NULL` 列指定了 NOT NULL，那么 StarRocks 仍然会将其转化 NULL，不会向用户报错。用户可以借助这个类型完成「部分列导入」的功能。
   该类型只对聚合模型有用 (`key_desc` 的 `type` 为 `AGGREGATE KEY`)。
 
-**NULL | NOT NULL**：列数据是否允许为 `NULL`。其中明细模型、聚合模型和更新模型表中所有列都默认指定 `NULL`。主键模型表的指标列默认指定 `NULL`，维度列默认指定 `NOT NULL`。如源数据文件中存在 `NULL` 值，可以用 `\N` 来表示，导入时 StarRocks 会将其解析为 `NULL`。
+**NULL | NOT NULL**：列数据是否允许为 `NULL`。其中明细表、聚合模型和更新模型表中所有列都默认指定 `NULL`。主键模型表的指标列默认指定 `NULL`，维度列默认指定 `NOT NULL`。如源数据文件中存在 `NULL` 值，可以用 `\N` 来表示，导入时 StarRocks 会将其解析为 `NULL`。
 
 **DEFAULT "default_value"**：列数据的默认值。导入数据时，如果该列对应的源数据文件中的字段为空，则自动填充 `DEFAULT` 关键字中指定的默认值。支持以下三种指定方式：
 
@@ -570,7 +570,7 @@ PROPERTIES (
 
 如果 Engine 类型为 olap, 可以指定某列使用 bloom filter 索引。bloom filter 索引使用时有如下限制：
 
-* 主键模型和明细模型中所有列都可以创建 Bloom filter 索引；聚合模型和更新模型中，只有维度列（即 Key 列）支持创建 Bloom filter 索引。
+* 主键模型和明细表中所有列都可以创建 Bloom filter 索引；聚合模型和更新模型中，只有维度列（即 Key 列）支持创建 Bloom filter 索引。
 * 不支持为 TINYINT、FLOAT、DOUBLE 和 DECIMAL 类型的列创建 Bloom filter 索引。
 * Bloom filter 索引只能提高查询条件为 `in` 和 `=` 的查询效率，值越分散效果越好。
 

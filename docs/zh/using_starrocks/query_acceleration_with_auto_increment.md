@@ -114,7 +114,7 @@ displayed_sidebar: "Chinese"
 
 **阶段二：创建目标表，并导入 Hive 表订单数据和字典表 INTEGER 列值。从而在目标表中构建 STRING 和 INTEGER 值的映射关系，后续基于 INTEGER 列进行查询分析。**
 
-1. 创建一张明细模型表 `dest_table`。除了包含 `source_table` 的所有列外，您还需要定义一个 INTEGER 类型的 `order_id_int` 列，与 STRING 类型的`order_uuid`列进行映射。后续会基于 `order_id_int` 列进行查询分析。
+1. 创建一张明细表 `dest_table`。除了包含 `source_table` 的所有列外，您还需要定义一个 INTEGER 类型的 `order_id_int` 列，与 STRING 类型的`order_uuid`列进行映射。后续会基于 `order_id_int` 列进行查询分析。
 
       ```SQL
       CREATE TABLE dest_table (

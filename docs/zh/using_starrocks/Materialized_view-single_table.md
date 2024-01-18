@@ -29,7 +29,7 @@ StarRocks 中的同步物化视图仅能基于 [Default Catalog](../data_source/
 
   物化视图的驱动表。
 
-  对于 StarRocks 的同步物化视图，基表仅可以是 [Default catalog](../data_source/catalog/default_catalog.md) 中的单个内部表。StarRocks 支持在明细模型 (Duplicate Key type)、聚合模型 (Aggregate Key type) 和更新模型 (Unique Key type) 上创建同步物化视图。
+  对于 StarRocks 的同步物化视图，基表仅可以是 [Default catalog](../data_source/catalog/default_catalog.md) 中的单个内部表。StarRocks 支持在明细表 (Duplicate Key type)、聚合模型 (Aggregate Key type) 和更新模型 (Unique Key type) 上创建同步物化视图。
 
 - **刷新（Refresh）**
 

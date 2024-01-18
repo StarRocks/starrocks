@@ -181,7 +181,7 @@ displayed_sidebar: "Chinese"
 
 ### 新增特性
 
-- 支持构建异步多表物化视图，实现多表 JOIN 查询加速。异步物化视图支持所有[数据模型](https://docs.starrocks.io/zh/docs/table_design/table_types/table_types/)。相关文档，请参见 [物化视图](https://docs.starrocks.io/zh/docs/using_starrocks/Materialized_view/)。
+- 支持构建异步多表物化视图，实现多表 JOIN 查询加速。异步物化视图支持所有[表类型](https://docs.starrocks.io/zh/docs/table_design/table_types/table_types/)。相关文档，请参见 [物化视图](https://docs.starrocks.io/zh/docs/using_starrocks/Materialized_view/)。
 
 - 支持通过 INSERT OVERWRITE 语句批量写入并覆盖数据。相关文档，请参见 [INSERT 导入](https://docs.starrocks.io/zh/docs/loading/InsertInto/)。
 
@@ -244,7 +244,7 @@ displayed_sidebar: "Chinese"
 
 - 导入相关问题：
   - Broker Load 导入时设定 ARRAY 列失败。 [#9158](https://github.com/StarRocks/starrocks/pull/9158)
-  - 通过 Broker Load 向非明细模型表导入数据后，副本数据不一致。[#8714](https://github.com/StarRocks/starrocks/pull/8714)
+  - 通过 Broker Load 向非明细表导入数据后，副本数据不一致。[#8714](https://github.com/StarRocks/starrocks/pull/8714)
   - 执行 ALTER ROUTINE LOAD 过程中出现 NPE 错误。 [#7804](https://github.com/StarRocks/starrocks/pull/7804)
 
 - 数据湖分析相关问题：

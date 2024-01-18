@@ -175,5 +175,5 @@ JSON 函数和运算符可以用于构造和处理 JSON 数据。具体说明，
 - 当前 JSON 类型数据支持的最大长度为 16 MB。
 - ORDER BY、GROUP BY、JOIN 子句不支持引用 JSON 类型的列。如果需要引用，您可以提前使用 CAST 函数，将 JSON 类型的列转为其他 SQL 类型。具体转换方式，请参见 [JSON 类型转换](../../sql-functions/json-functions/json-query-and-processing-functions/cast.md)。
 - 支持 JSON 类型的列存在于明细模型、主键模型、更新模型的表中，但不支持存在于聚合模型的表中。
-- 暂不支持 JSON 类型的列作为明细模型、主键模型、更新模型表的分区键、分桶键、维度列，并且不支持用于 JOIN、GROUP BY、ORDER BY 子句。
+- 暂不支持 JSON 类型的列作为明细表、主键模型、更新模型表的分区键、分桶键、维度列，并且不支持用于 JOIN、GROUP BY、ORDER BY 子句。
 - StarRocks 支持使用 `<`，`<=`，`>`，`>=`， `=`，`!=` 运算符查询 JSON 数据，不支持使用 IN 运算符。

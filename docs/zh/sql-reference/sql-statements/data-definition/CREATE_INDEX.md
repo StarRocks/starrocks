@@ -31,7 +31,7 @@ CREATE INDEX index_name ON table_name (column_name) [USING BITMAP] [COMMENT'']
 
 ## 注意事项
 
-- 主键模型和明细模型中所有列都可以创建 bitmap 索引；聚合模型和更新模型中，只有维度列（即 Key 列）支持创建 bitmap 索引。
+- 主键模型和明细表中所有列都可以创建 bitmap 索引；聚合模型和更新模型中，只有维度列（即 Key 列）支持创建 bitmap 索引。
 - 不支持为 FLOAT、DOUBLE、BOOLEAN 和 DECIMAL 类型的列创建 bitmap 索引。
 
 ## 示例

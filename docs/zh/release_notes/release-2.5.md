@@ -277,7 +277,7 @@ displayed_sidebar: "Chinese"
 
 修复了如下问题：
 
-- 明细模型表 Count Distinct 结果异常。[#24222](https://github.com/StarRocks/starrocks/pull/24222)
+- 明细表 Count Distinct 结果异常。[#24222](https://github.com/StarRocks/starrocks/pull/24222)
 - 当 Join 列是 BINARY 类型且过大时 BE 会 crash。[#25084](https://github.com/StarRocks/starrocks/pull/25084)
 - 插入数据长度超出建表时 STRUCT 定义的 CHAR 长度时，插入无响应。 [#25942](https://github.com/StarRocks/starrocks/pull/25942)
 - Coalesce 函数查询结果不正确。[#26250](https://github.com/StarRocks/starrocks/pull/26250)
