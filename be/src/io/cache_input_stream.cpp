@@ -108,9 +108,9 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
     size_t read_size = 0;
     int64_t read_cache_ns = 0;
     ReadCacheOptions options;
+    BlockBuffer block;
     {
         SCOPED_RAW_TIMER(&read_cache_ns);
-        BlockBuffer block;
         if (_enable_block_buffer) {
             res = _cache->read_buffer(_cache_key, block_offset, load_size, &block.buffer, &options);
             read_size = load_size;
@@ -119,23 +119,23 @@ Status CacheInputStream::_read_block(int64_t offset, int64_t size, char* out, bo
             res = r.status();
             read_size = size;
         }
-        if (res.ok()) {
-            if (_enable_block_buffer) {
-                block.buffer.copy_to(out, size, shift);
-                block.offset = block_offset;
-                _block_map[block_id] = block;
-            }
-            _stats.read_cache_count += 1;
-            _stats.read_cache_bytes += read_size;
-            _stats.read_mem_cache_bytes += options.stats.read_mem_bytes;
-            _stats.read_disk_cache_bytes += options.stats.read_disk_bytes;
-            _stats.read_cache_ns += read_cache_ns;
-            _cache->record_read_cache(read_size, read_cache_ns / 1000);
-            return Status::OK();
-        } else if (res.is_resource_busy()) {
-            _stats.skip_read_cache_count += 1;
-            _stats.skip_read_cache_bytes += load_size;
+    }
+    if (res.ok()) {
+        if (_enable_block_buffer) {
+            block.buffer.copy_to(out, size, shift);
+            block.offset = block_offset;
+            _block_map[block_id] = block;
         }
+        _stats.read_cache_count += 1;
+        _stats.read_cache_bytes += read_size;
+        _stats.read_mem_cache_bytes += options.stats.read_mem_bytes;
+        _stats.read_disk_cache_bytes += options.stats.read_disk_bytes;
+        _stats.read_cache_ns += read_cache_ns;
+        _cache->record_read_cache(read_size, read_cache_ns / 1000);
+        return Status::OK();
+    } else if (res.is_resource_busy()) {
+        _stats.skip_read_cache_count += 1;
+        _stats.skip_read_cache_bytes += load_size;
     }
     if (!res.is_not_found() && !res.is_resource_busy()) return res;
 
