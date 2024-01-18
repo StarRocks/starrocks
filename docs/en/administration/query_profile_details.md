@@ -164,7 +164,7 @@ Description: Cumulative deallocated memory for all FragmentInstances under this 
 
 ##### InstancePeakMemoryUsage
 
-Description: Maximum peak memory across all FragmentInstances under this Fragment.
+Description: The peak of memory usage across all FragmentInstances under this Fragment.
 
 ### Pipeline Metrics
 
@@ -436,7 +436,7 @@ To facilitate a better understanding of the various metrics within the Scan Oper
 
 ##### DictDecode
 
-- Description: Time spent decoding dictionary used for low cardinality optimization.
+- Description: Time spent on decoding dictionary for low cardinality optimization.
 - Level: Secondary metric
 
 ##### GetDelVec
