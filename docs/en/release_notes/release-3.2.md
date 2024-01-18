@@ -113,7 +113,7 @@ Added the following functions:
 - hash function: xx_hash3_64
 - Aggregate functions: approx_top_k
 - Window functions: cume_dist, percent_rank and session_number
-- Utility functions: dict_mapping and get_query_profile
+- Utility functions: get_query_profile and is_role_in_session
 
 #### Privileges and security
 
