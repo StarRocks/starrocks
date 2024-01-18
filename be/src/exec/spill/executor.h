@@ -158,7 +158,7 @@ struct SyncTaskExecutor {
     } while (false)
 
 #define RETURN_IF_YIELD(yield) \
-    if (*yield) {              \
+    if (yield) {               \
         return Status::OK();   \
     }
 

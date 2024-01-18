@@ -57,6 +57,9 @@ struct YieldContext {
     size_t yield_point{};
     size_t total_yield_point_cnt{};
     const workgroup::WorkGroup* wg = nullptr;
+    // time spent in current invoke
+    int64_t time_spent_ns = 0;
+    bool need_yield = false;
 };
 
 struct ScanTask {

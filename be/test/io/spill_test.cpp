@@ -402,7 +402,12 @@ TEST_F(SpillTest, unsorted_process) {
             ASSERT_OK(mem_table->append(std::move(chunk)));
         }
         //
-        ASSERT_OK(mem_table->finalize());
+        workgroup::YieldContext yield_ctx;
+        do {
+            yield_ctx.time_spent_ns = 0;
+            yield_ctx.need_yield = false;
+            ASSERT_OK(mem_table->finalize(yield_ctx));
+        } while (yield_ctx.need_yield);
     }
 }
 

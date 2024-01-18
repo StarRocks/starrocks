@@ -24,6 +24,7 @@
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
 #include "exec/spill/block_manager.h"
+#include "exec/workgroup//scan_task_queue.h"
 #include "exprs/expr_context.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
@@ -67,13 +68,16 @@ public:
 
     // all data has been added, call `finalize` to serialize data
     // after `finalize` is successfully called, we can get serialized data by `get_serialized_data`.
-    virtual Status finalize() = 0;
+    virtual Status finalize(workgroup::YieldContext& yield_ctx) = 0;
 
     virtual StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) {
         return Status::NotSupported("unsupport to call as_input_stream");
     }
 
-    virtual StatusOr<Slice> get_serialized_data() const;
+    // virtual StatusOr<Slice> get_serialized_data() const;
+    StatusOr<Slice> get_next_serialized_data();
+    // StatusOr<Slice> get_next_serialized_data();
+    size_t get_serialized_data_size() const;
     virtual void reset() = 0;
 
     size_t num_rows() const { return _num_rows; }
@@ -101,13 +105,13 @@ public:
     [[nodiscard]] Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
                                           uint32_t size) override;
 
-    Status finalize() override;
+    Status finalize(workgroup::YieldContext& yield_ctx) override;
     void reset() override;
 
     StatusOr<std::shared_ptr<SpillInputStream>> as_input_stream(bool shared) override;
 
 private:
-    size_t _processed_index{};
+    size_t _processed_index = 0;
     std::vector<ChunkPtr> _chunks;
 };
 
@@ -123,7 +127,7 @@ public:
     [[nodiscard]] Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
                                           uint32_t size) override;
 
-    Status finalize() override;
+    Status finalize(workgroup::YieldContext& yield_ctx) override;
     void reset() override;
 
 private:
@@ -134,5 +138,6 @@ private:
     Permutation _permutation;
     ChunkPtr _chunk;
     ChunkSharedSlice _chunk_slice;
+    bool _sort_done = false;
 };
 } // namespace starrocks::spill
