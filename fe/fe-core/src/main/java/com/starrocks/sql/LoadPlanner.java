@@ -244,6 +244,9 @@ public class LoadPlanner {
         OlapTable olapDestTable = (OlapTable) destTable;
         List<Column> destColumns = Lists.newArrayList();
         if (isPrimaryKey && partialUpdate) {
+            if (((OlapTable) destTable).hasRowStorageType() && partialUpdateMode != TPartialUpdateMode.ROW_MODE) {
+                throw new DdlException("column with row table only support row mode partial update");
+            }
             if (this.etlJobType == EtlJobType.BROKER) {
                 if (fileGroups.size() != 1) {
                     throw new DdlException("partial update only support single filegroup.");
@@ -437,7 +440,8 @@ public class LoadPlanner {
             }
             Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
             dataSink = new OlapTableSink(olapTable, tupleDesc, partitionIds,
-                    olapTable.writeQuorum(), forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
+                    olapTable.writeQuorum(),
+                    forceReplicatedStorage ? true : ((OlapTable) destTable).enableReplicatedStorage(),
                     checkNullExprInAutoIncrement(), enableAutomaticPartition);
             if (this.missAutoIncrementColumn == Boolean.TRUE) {
                 ((OlapTableSink) dataSink).setMissAutoIncrementColumn();

@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
@@ -26,6 +25,7 @@ import com.staros.proto.ShardInfo;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
+import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
@@ -169,5 +169,51 @@ public class StarOSAgent2ndTest {
             GlobalStateMgr.getCurrentSystemInfo().dropComputeNode(cn);
             workerToBackend.clear();
         }
+    }
+
+    @Test
+    public void testGetPrimaryComputeNodeIdByShard() throws StarClientException, UserException {
+        String workerHost = "127.0.0.1";
+        int workerStarletPort = 9070;
+        int workerHeartbeatPort = 9050;
+        long shardId = 10L;
+
+        WorkerInfo workerInfo = WorkerInfo.newBuilder()
+                .setIpPort(String.format("%s:%d", workerHost, workerStarletPort))
+                .setWorkerId(1L)
+                .setWorkerState(WorkerState.ON)
+                .putWorkerProperties("be_heartbeat_port", String.valueOf(workerHeartbeatPort))
+                .putWorkerProperties("be_brpc_port", "8060")
+                .build();
+
+        ReplicaInfo replica = ReplicaInfo.newBuilder()
+                .setReplicaRole(ReplicaRole.PRIMARY)
+                .setWorkerInfo(workerInfo.toBuilder().build())
+                .build();
+
+        ShardInfo shardInfo0 = ShardInfo.newBuilder().setShardId(shardId)
+                .addReplicaInfo(replica)
+                .build();
+
+        ShardInfo shardInfo1 = ShardInfo.newBuilder().setShardId(shardId)
+                .build();
+
+        new Expectations() {
+            {
+                client.getShardInfo("1", Lists.newArrayList(shardId), StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                minTimes = 0;
+                returns(Lists.newArrayList(shardInfo0), Lists.newArrayList(shardInfo1));
+            }
+        };
+
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
+        Map<Long, Long> workerToBackend = Maps.newHashMap();
+        workerToBackend.put(1L, 2L);
+        Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
+
+        Assert.assertEquals(2, starosAgent.getPrimaryComputeNodeIdByShard(shardId));
+        UserException exception =
+                Assert.assertThrows(UserException.class, () -> starosAgent.getPrimaryComputeNodeIdByShard(shardId));
+        Assert.assertEquals(InternalErrorCode.REPLICA_FEW_ERR, exception.getErrorCode());
     }
 }

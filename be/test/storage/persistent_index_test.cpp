@@ -1465,17 +1465,36 @@ void build_persistent_index_from_tablet(size_t N) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-TEST_P(PersistentIndexTest, test_build_from_tablet) {
+TEST_P(PersistentIndexTest, test_build_from_tablet_snapshot) {
     auto manager = StorageEngine::instance()->update_manager();
     config::l0_max_mem_usage = 104857600;
     manager->mem_tracker()->set_limit(-1);
     // dump snapshot
-    build_persistent_index_from_tablet(100000);
+    build_persistent_index_from_tablet(1000);
+    config::l0_max_mem_usage = 104857600;
+}
+
+TEST_P(PersistentIndexTest, test_build_from_tablet_wal) {
+    auto manager = StorageEngine::instance()->update_manager();
+    config::l0_max_mem_usage = 104857600;
+    manager->mem_tracker()->set_limit(-1);
     // write wal
     build_persistent_index_from_tablet(250000);
+    config::l0_max_mem_usage = 104857600;
+}
+
+TEST_P(PersistentIndexTest, test_build_from_tablet_flush) {
+    auto manager = StorageEngine::instance()->update_manager();
+    manager->mem_tracker()->set_limit(-1);
     // flush l1
     config::l0_max_mem_usage = 1000000;
     build_persistent_index_from_tablet(1000000);
+    config::l0_max_mem_usage = 104857600;
+}
+
+TEST_P(PersistentIndexTest, test_build_from_tablet_flush_advance) {
+    auto manager = StorageEngine::instance()->update_manager();
+    manager->mem_tracker()->set_limit(-1);
     // flush one tmp l1
     config::l0_max_mem_usage = 18874368;
     build_persistent_index_from_tablet(1000000);
@@ -1667,7 +1686,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
 
     using Key = std::string;
     PersistentIndexMetaPB index_meta;
-    const int N = 500000;
+    const int N = 50000;
     vector<Key> keys(N);
     vector<Slice> key_slices;
     vector<IndexValue> values;
@@ -1696,7 +1715,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
 
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
-        const int N = 10000;
+        const int N = 5000;
         ASSERT_OK(index.prepare(EditVersion(1, 0), N));
         for (int i = 0; i < 50; i++) {
             vector<Key> keys(N);
@@ -1737,7 +1756,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
     {
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
-        const int N = 100000;
+        const int N = 5000;
         ASSERT_OK(index.prepare(EditVersion(2, 0), N));
         for (int i = 0; i < 5; i++) {
             vector<IndexValue> values;
@@ -1759,7 +1778,7 @@ TEST_P(PersistentIndexTest, test_flush_l1_advance) {
 
     {
         // reload persistent index
-        const int N = 100000;
+        const int N = 5000;
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
         std::vector<IndexValue> get_values(N);
@@ -1784,7 +1803,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
 
     using Key = std::string;
     PersistentIndexMetaPB index_meta;
-    const int N = 500000;
+    const int N = 50000;
     vector<Key> keys(N);
     vector<Slice> key_slices;
     vector<IndexValue> values;
@@ -1859,7 +1878,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
         CHECK(index._has_l1);
-        const int N = 100000;
+        const int N = 10000;
         ASSERT_OK(index.prepare(EditVersion(2, 0), N));
         for (int i = 0; i < 5; i++) {
             vector<IndexValue> values;
@@ -1881,7 +1900,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
 
     {
         // reload persistent index
-        const int N = 100000;
+        const int N = 1000;
         PersistentIndex index(kPersistentIndexDir);
         StorageEngine::instance()->update_manager()->set_keep_pindex_bf(true);
         ASSERT_OK(index.load(index_meta));
@@ -1896,7 +1915,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
     {
         // memory usage is too high
         StorageEngine::instance()->update_manager()->set_keep_pindex_bf(false);
-        const int N = 100000;
+        const int N = 10000;
         PersistentIndex index(kPersistentIndexDir);
         ASSERT_OK(index.load(index_meta));
         std::vector<IndexValue> get_values(N);

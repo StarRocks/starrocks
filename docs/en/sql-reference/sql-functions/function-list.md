@@ -188,7 +188,7 @@ You can find a function based on the following categories:
 - [date_trunc](./date-time-functions/date_trunc.md)
 - [datediff](./date-time-functions/datediff.md)
 - [day](./date-time-functions/day.md)
-- [day_of_week_iso](./date-time-functions/day_of_week_iso.md)
+- [dayofweek_iso](./date-time-functions/day_of_week_iso.md)
 - [dayname](./date-time-functions/dayname.md)
 - [dayofmonth](./date-time-functions/dayofmonth.md)
 - [dayofweek](./date-time-functions/dayofweek.md)

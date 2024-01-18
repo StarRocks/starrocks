@@ -1,11 +1,52 @@
 # committer will be the owner of all codes
 *   @StarRocks/starrocks-committer
 
+# cpp miscellaneous
+/be/src/common/     @StarRocks/cpp-misc-maintainer
+/be/src/gen_cpp/    @StarRocks/cpp-misc-maintainer
+/be/src/gutil/      @StarRocks/cpp-misc-maintainer
+/be/src/simd/       @StarRocks/cpp-misc-maintainer
+/be/src/testutil/   @StarRocks/cpp-misc-maintainer
+/be/src/util/       @StarRocks/cpp-misc-maintainer
+
+# execution engine 
+/be/src/column/  @StarRocks/execution-maintainer
+/be/src/exec/    @StarRocks/execution-maintainer
+/be/src/exprs/   @StarRocks/execution-maintainer
+/be/src/runtime/ @StarRocks/execution-maintainer
+/be/src/types/   @StarRocks/execution-maintainer
+/be/src/udf/     @StarRocks/execution-maintainer
+
+# storage engine 
+/be/src/fs/       @StarRocks/storage-maintainer
+/be/src/io/       @StarRocks/storage-maintainer
+/be/src/storage/  @StarRocks/storage-maintainer
+
 # /docs/ belong to docs-maintainer
 /docs/  @StarRocks/docs-maintainer
 
 # /docker
 /docker/  @StarRocks/docker-maintainer
+
+# metadata
+/fe/fe-core/src/main/java/com/starrocks/authentication/             @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/privilege/                  @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/common/util/concurrent/     @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/mysql/                      @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/transaction/                @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/healthchecker/              @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/clone/                      @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/consistency/                @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/ha/                         @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/journal/    @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/leader/     @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/meta/       @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/persist/    @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/alter/      @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/backup/     @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/catalog/    @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/metric/     @StarRocks/metadata-maintainer
+/fe/fe-core/src/main/java/com/starrocks/system/     @StarRocks/metadata-maintainer
 
 # parser
 /fe/fe-core/src/main/java/com/starrocks/planner/  @StarRocks/parser
@@ -26,6 +67,7 @@
 /gensrc/script/functions.py  @StarRocks/syntax-committer
 
 # /thirdparty/ /docker/dockerfiles/dev-env/dev-env.Dockerfile belong to thirdparty-maintainer
+/be/src/thirdparty/  @StarRocks/thirdparty-maintainer
 /thirdparty/  @StarRocks/thirdparty-maintainer
 /docker/dockerfiles/dev-env/dev-env.Dockerfile   @StarRocks/thirdparty-maintainer
 
