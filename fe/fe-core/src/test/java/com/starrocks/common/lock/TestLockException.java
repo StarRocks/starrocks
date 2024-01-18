@@ -17,6 +17,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.NotSupportLockException;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.Assert;
 import org.junit.Before;
@@ -88,5 +89,14 @@ public class TestLockException {
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
         Assert.assertTrue(lockManager.isOwner(rid, locker1.getLocker(), LockType.INTENTION_EXCLUSIVE));
         Assert.assertFalse(lockManager.isOwner(rid, locker2.getLocker(), LockType.WRITE));
+    }
+
+    @Test
+    public void testTimeoutError() {
+        long rid = 1L;
+
+        TestLocker locker1 = new TestLocker();
+        Future<LockResult> resultFuture1 = locker1.lock(rid, LockType.READ, -1);
+        LockTestUtils.assertLockFail(resultFuture1, NotSupportLockException.class);
     }
 }
