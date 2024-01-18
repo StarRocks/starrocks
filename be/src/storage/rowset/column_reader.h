@@ -160,6 +160,8 @@ public:
 
     uint32_t num_rows() const { return _segment->num_rows(); }
 
+    void print_debug_info() { _ordinal_index->print_debug_info(); }
+
     size_t mem_usage() const;
 
     const std::string& name() const { return _name; }

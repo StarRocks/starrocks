@@ -67,6 +67,13 @@ public:
         return _stream->skip(count);
     }
 
+    void print_shared_buffer() {
+        for (auto pair : _map) {
+            LOG(INFO) << "origin offset, size: " << pair.second.raw_offset << ", " << pair.second.raw_size;
+            LOG(INFO) << "merged range offset, size" << pair.second.offset << ", " << pair.second.size;
+        }
+    }
+
     Status get_bytes(const uint8_t** buffer, size_t offset, size_t nbytes);
     StatusOr<SharedBuffer*> find_shared_buffer(size_t offset, size_t count);
 

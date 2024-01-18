@@ -207,7 +207,7 @@ Status ScalarColumnIterator::next_batch(size_t* n, Column* dst) {
             RETURN_IF_ERROR(_load_next_page(&eos));
             if (eos) {
                 // release shareBufferStream
-                if (config::io_coalesce_lake_read_enable && _opts.is_lake) {
+                if (config::io_coalesce_lake_read_enable && _opts.is_io_coalesce) {
                     auto shared_buffer_stream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
                     if (shared_buffer_stream != nullptr) {
                         shared_buffer_stream->release();
@@ -251,7 +251,7 @@ Status ScalarColumnIterator::next_batch(const SparseRange<>& range, Column* dst)
             RETURN_IF_ERROR(_load_next_page(&eos));
             if (eos) {
                 // release shareBufferStream
-                if (config::io_coalesce_lake_read_enable && _opts.is_lake) {
+                if (config::io_coalesce_lake_read_enable && _opts.is_io_coalesce) {
                     auto shared_buffer_stream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
                     if (shared_buffer_stream != nullptr) {
                         shared_buffer_stream->release();

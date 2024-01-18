@@ -57,7 +57,7 @@ class RandomAccessFile;
 struct ColumnIteratorOptions {
     //RandomAccessFile* read_file = nullptr;
     io::SeekableInputStream* read_file = nullptr;
-    bool is_lake = false;
+    bool is_io_coalesce = false;
     // reader statistics
     OlapReaderStatistics* stats = nullptr;
     bool use_page_cache = false;
@@ -106,31 +106,58 @@ public:
     }
 
     Status convert_sparse_range_to_io_range(const SparseRange<>& range) {
+        if (auto sharedBufferStream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+            sharedBufferStream == nullptr) {
+            //LOG(INFO) << "not sharedBufferStream, filename: " << _opts.read_file->filename();
+            return Status::OK();
+        }
+
         auto reader = get_column_reader();
+        if (reader == nullptr) {
+            // should't happen
+            LOG(INFO) << "column reader nullptr, filename: " << _opts.read_file->filename();
+            return Status::OK();
+        }
+
         std::vector<io::SharedBufferedInputStream::IORange> result;
+        std::vector<std::pair<int, int>> page_index;
+        //int64_t start_ts = MonotonicMillis();
+        int prev_page_index = -1;
         for (auto index = 0; index < range.size(); index++) {
             auto row_start = range[index].begin();
             auto row_end = range[index].end() - 1;
-            OrdinalPageIndexIterator* iter_start = nullptr;
-            OrdinalPageIndexIterator* iter_end = nullptr;
-            RETURN_IF_ERROR(reader->seek_at_or_before(row_start, iter_start));
-            RETURN_IF_ERROR(reader->seek_at_or_before(row_end, iter_end));
-            for (auto j = iter_start->page_index(); j < iter_end->page_index(); j++) {
-                OrdinalPageIndexIterator* iter = nullptr;
-                RETURN_IF_ERROR(reader->seek_by_page_index(j, iter));
-                auto page_pointer = iter->page();
-                io::SharedBufferedInputStream::IORange io_range(page_pointer.offset, page_pointer.size);
-                result.emplace_back(io_range);
+            //LOG(INFO) << "converse range start1:" << row_start << "row_end:" << row_end;
+            OrdinalPageIndexIterator iter_start;
+            OrdinalPageIndexIterator iter_end;
+            RETURN_IF_ERROR(reader->seek_at_or_before(row_start, &iter_start));
+            RETURN_IF_ERROR(reader->seek_at_or_before(row_end, &iter_end));
+
+            if (prev_page_index == iter_start.page_index()) {
+                // merge page index
+                page_index.back().second = iter_end.page_index();
+            } else {
+                page_index.emplace_back(std::make_pair(iter_start.page_index(), iter_end.page_index()));
             }
+
+            prev_page_index = iter_end.page_index();
         }
 
-        if (auto sharedBufferStream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
-            sharedBufferStream != nullptr) {
-            return sharedBufferStream->set_io_ranges(result);
-        } else {
-            // should't happen
-            return Status::InternalError("io coalesce failed");
+        for (auto pair : page_index) {
+            OrdinalPageIndexIterator iter_start;
+            OrdinalPageIndexIterator iter_end;
+            RETURN_IF_ERROR(reader->seek_by_page_index(pair.first, &iter_start));
+            RETURN_IF_ERROR(reader->seek_by_page_index(pair.second, &iter_end));
+            auto offset = iter_start.page().offset;
+            auto size = iter_end.page().offset - offset + iter_end.page().size;
+            io::SharedBufferedInputStream::IORange io_range(offset, size);
+            result.emplace_back(io_range);
+            LOG(INFO) << this << "pair index from to " << pair.first << " " << pair.second << ", offset size " << offset
+                      << " " << size;
         }
+        //int64_t end_ts = MonotonicMillis();
+        //LOG(INFO) << "converse sparse range to io::range cost " << end_ts - start_ts << " ms";
+
+        return dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file)->set_io_ranges(result);
     }
 
     virtual ordinal_t get_current_ordinal() const = 0;

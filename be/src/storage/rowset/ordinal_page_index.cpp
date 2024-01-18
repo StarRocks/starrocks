@@ -175,7 +175,7 @@ OrdinalPageIndexIterator OrdinalIndexReader::seek_at_or_before(ordinal_t ordinal
 }
 
 OrdinalPageIndexIterator OrdinalIndexReader::seek_by_page_index(int page_index) {
-    if (!(page_index < _num_pages && page_index > 0)) {
+    if (!(page_index < _num_pages && page_index >= 0)) {
         // mean it's valid
         return {this, _num_pages};
     }

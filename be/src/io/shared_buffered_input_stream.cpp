@@ -54,9 +54,14 @@ Status SharedBufferedInputStream::_sort_and_check_overlap(std::vector<IORange>& 
         return a.size < b.size;
     });
 
+    for (auto item : ranges) {
+        LOG(INFO) << this << "sort offset and size " << item.offset << " " << item.size;
+    }
     // check io range is not overlapped.
     for (size_t i = 1; i < ranges.size(); i++) {
         if (ranges[i].offset < (ranges[i - 1].offset + ranges[i - 1].size)) {
+            LOG(INFO) << "io ranges are overalpped" << ranges[i].offset << " "
+                      << ranges[i - 1].offset + ranges[i - 1].size;
             return Status::RuntimeError("io ranges are overalpped");
         }
     }
@@ -75,6 +80,8 @@ void SharedBufferedInputStream::_merge_small_ranges(const std::vector<IORange>& 
                                            .ref_count = ref_count};
             sb.align(_align_size, _file_size);
             _map.insert(std::make_pair(sb.raw_offset + sb.raw_size, sb));
+            LOG(INFO) << this << "merge " << ref_count << "range: start,end" << sb.raw_offset << " " << sb.raw_size;
+            LOG(INFO) << this << "after align" << sb.offset << " " << sb.size;
         };
 
         size_t unmerge = 0;
@@ -116,6 +123,7 @@ Status SharedBufferedInputStream::_set_io_ranges_all_columns(const std::vector<I
 
     _merge_small_ranges(small_ranges);
     _update_estimated_mem_usage();
+    print_shared_buffer();
     return Status::OK();
 }
 
@@ -181,6 +189,7 @@ Status SharedBufferedInputStream::_set_io_ranges_active_and_lazy_columns(const s
     }
 
     _update_estimated_mem_usage();
+    //print_shared_buffer();
     return Status::OK();
 }
 
@@ -236,13 +245,16 @@ void SharedBufferedInputStream::release_to_offset(int64_t offset) {
 
 Status SharedBufferedInputStream::read_at_fully(int64_t offset, void* out, int64_t count) {
     auto st = find_shared_buffer(offset, count);
+    //LOG(INFO) << "shared_buffer_stream, offset: " << offset << ", count: " << count;
     if (!st.ok()) {
+        LOG(INFO) << "shared_buffer_stream not hit direct io";
         SCOPED_RAW_TIMER(&_direct_io_timer);
         _direct_io_count += 1;
         _direct_io_bytes += count;
         RETURN_IF_ERROR(_stream->read_at_fully(offset, out, count));
         return Status::OK();
     }
+    LOG(INFO) << "shared_buffer_stream hit";
     const uint8_t* buffer = nullptr;
     RETURN_IF_ERROR(get_bytes(&buffer, offset, count));
     strings::memcpy_inlined(out, buffer, count);
