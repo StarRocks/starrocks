@@ -11,14 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.meta.lock;
+package com.starrocks.common.util.concurrent.lock;
 
-public class IllegalLockStateException extends Exception {
-    public IllegalLockStateException(String msg) {
-        super(msg);
+public class NotSupportLockException extends IllegalLockStateException {
+    public NotSupportLockException() {
+        super("Lock operations under the new framework are currently not supported.");
     }
 
-    public IllegalLockStateException(String msg, Exception e) {
-        super(msg, e);
+    public NotSupportLockException(String message) {
+        super(message);
     }
 }

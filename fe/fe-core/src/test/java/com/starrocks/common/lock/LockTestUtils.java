@@ -11,12 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.meta;
+package com.starrocks.common.lock;
 
 import com.starrocks.common.Pair;
-import com.starrocks.meta.lock.DeadlockException;
-import com.starrocks.meta.lock.IllegalLockStateException;
-import com.starrocks.meta.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.DeadlockException;
+import com.starrocks.common.util.concurrent.lock.IllegalLockStateException;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import org.junit.Assert;
 
 import java.util.List;
@@ -88,7 +88,7 @@ public class LockTestUtils {
         }
     }
 
-    public static void assertLockFail(Future<LockResult> lockTaskResultFuture, Class<? extends IllegalLockStateException> c) {
+    public static void assertLockFail(Future<LockResult> lockTaskResultFuture, Class<? extends Exception> c) {
         try {
             LockResult lockResult = lockTaskResultFuture.get();
             Assert.assertSame(LockResult.LockTaskResultType.FAIL, lockResult.resultType);

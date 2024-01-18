@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.meta.lock;
+package com.starrocks.common.util.concurrent.lock;
 
 import com.starrocks.common.Config;
 import org.apache.logging.log4j.LogManager;
@@ -48,9 +48,8 @@ public class LockManager {
      * @param locker   The Locker to lock this on behalf of.
      * @param lockType Then lock type requested
      * @param timeout  milliseconds to time out after if lock couldn't be obtained. 0 means block indefinitely.
-     *
      * @throws LockTimeoutException when the transaction time limit was exceeded.
-     * @throws DeadlockException when deadlock was detected
+     * @throws DeadlockException    when deadlock was detected
      */
 
     public void lock(long rid, Locker locker, LockType lockType, long timeout)
@@ -69,11 +68,10 @@ public class LockManager {
                     lockTable.put(rid, lock);
                 } else if (lock instanceof LightWeightLock) {
                     List<LockHolder> owners = new ArrayList<>(lock.getOwners());
-                    if (owners.size() > 0) {
-                        /* Lock is already held by someone else so mutate. */
-                        lock = new MultiUserLock(owners.get(0));
-                        lockTable.put(rid, lock);
-                    }
+                    assert !owners.isEmpty();
+                    /* Lock is already held by someone else so mutate. */
+                    lock = new MultiUserLock(owners.get(0));
+                    lockTable.put(rid, lock);
                 }
 
                 LockGrantType lockGrantType = lock.lock(locker, lockType);
@@ -95,7 +93,7 @@ public class LockManager {
              * Avoid frequent and unnecessary deadlock detection due to lock contention
              */
             long deadLockDetectionDelayTimeMs = Config.dead_lock_detection_delay_time_ms;
-            if (Config.dead_lock_detection && deadLockDetectionDelayTimeMs > 0) {
+            if (deadLockDetectionDelayTimeMs > 0) {
                 if (timeout != 0) {
                     deadLockDetectionDelayTimeMs = Math.min(deadLockDetectionDelayTimeMs, timeRemain(timeout, startTime));
                 }
@@ -114,6 +112,18 @@ public class LockManager {
             }
 
             /*
+             * If the timeout time is less than dead_lock_detection_delay_time_ms,
+             * there is no need to perform subsequent deadlock detection,
+             * and it will be processed directly according to the lock timeout.*/
+            boolean lockTimeOut = (timeout != 0) && timeRemain(timeout, startTime) <= 0;
+            if (lockTimeOut) {
+                removeFromWaiterList(rid, locker, lockType);
+
+                /* Failure to acquire lock within the timeout ms*/
+                throw new LockTimeoutException("");
+            }
+
+            /*
              * After waiting, not acquire lock and entered the waiting period, with deadlock detection enabled
              */
         }
@@ -126,11 +136,9 @@ public class LockManager {
                         break;
                     }
 
-                    if (Config.dead_lock_detection) {
-                        victim = checkAndHandleDeadLock(rid, locker, lockType);
-                    }
+                    victim = checkAndHandleDeadLock(rid, locker, lockType);
                     if (victim != null) {
-                        /* Locker owns the lock and no deadlock was detected. */
+                        /* deadlock was detected. */
                         break;
                     }
 
@@ -150,24 +158,24 @@ public class LockManager {
                         break;
                     }
 
-                    boolean lockTimeOut = (timeout != 0) && timeRemain(timeout, startTime) < 0;
+                    boolean lockTimeOut = (timeout != 0) && timeRemain(timeout, startTime) <= 0;
                     if (lockTimeOut) {
                         removeFromWaiterList(rid, locker, lockType);
 
                         /* Failure to acquire lock within the timeout ms*/
-                        throw new LockTimeoutException();
+                        throw new LockTimeoutException("");
                     }
 
                     /*
                      * There are two reasons for the loop below.
                      *
                      * 1. When another thread detects a deadlock and notifies this thread,
-                     * it will wakeup before the timeout interval has expired. We must loop
+                     * it will wake up before the timeout interval has expired. We must loop
                      * again to perform deadlock detection. Normally, if the deadlock
                      * detected by the other thread is still present, this locker will be
-                     * selected as the victim and we will throw DeadLockException below.
+                     * selected as the victim, and we will throw DeadLockException below.
                      *
-                     * 2. spurious wakeups
+                     * 2. spurious wakeup
                      */
                 }
 
@@ -193,7 +201,9 @@ public class LockManager {
                     return;
                 }
 
-                /* Retry */
+                /*
+                 * After notify the victim, current locker still cannot get the lock and need to wait to be notified again
+                 */
             }
         }
     }
@@ -213,7 +223,7 @@ public class LockManager {
             }
 
             /*
-             * Notify the victim and sleep for 1ms to allow the victim to wakeup and abort.
+             * Notify the victim and sleep for 1ms to allow the victim to wake up and abort.
              */
             synchronized (targetedVictim) {
                 targetedVictim.notify();
@@ -239,14 +249,14 @@ public class LockManager {
                 }
 
                 /*
-                 * DeadLock was broker or victim is different, let the outer caller retry
+                 * DeadLock was broken or victim is different, let the outer caller retry
                  */
                 return false;
             }
         }
     }
 
-    public void release(long rid, Locker locker, LockType lockType) throws NotSupportLockException {
+    public void release(long rid, Locker locker, LockType lockType) {
         Set<Locker> newOwners;
 
         int lockTableIdx = getLockTableIndex(rid);
@@ -254,7 +264,7 @@ public class LockManager {
             Map<Long, Lock> lockTable = lockTables[lockTableIdx];
             Lock lock = lockTable.get(rid);
             if (lock == null) {
-                throw new NotSupportLockException("Attempt to unlock lock, not locked by current locker");
+                throw new IllegalMonitorStateException("Attempt to unlock lock, not locked by current locker");
             }
 
             newOwners = lock.release(locker, lockType);
@@ -267,7 +277,7 @@ public class LockManager {
         if (newOwners != null && newOwners.size() > 0) {
             for (Locker notifyLocker : newOwners) {
                 synchronized (notifyLocker) {
-                    notifyLocker.notifyAll();
+                    notifyLocker.notify();
                 }
             }
         }
@@ -337,15 +347,21 @@ public class LockManager {
     private Locker checkAndHandleDeadLock(Long rid, Locker locker, LockType lockType) throws DeadlockException {
         DeadLockChecker deadLockChecker = new DeadLockChecker(locker, rid, lockType);
         if (deadLockChecker.hasCycle()) {
-            Locker victim = deadLockChecker.chooseTargetedLocker();
-
-            if (victim != locker) {
-                return victim;
+            if (Config.enable_unlock_deadlock) {
+                Locker victim = deadLockChecker.chooseTargetedLocker();
+                if (victim != locker) {
+                    return victim;
+                } else {
+                    removeFromWaiterList(rid, locker, lockType);
+                    DeadlockException exception =
+                            DeadlockException.makeDeadlockException(deadLockChecker, victim, true);
+                    LOG.warn(exception.getMessage());
+                    throw exception;
+                }
             } else {
-                removeFromWaiterList(rid, locker, lockType);
-                DeadlockException exception = DeadlockException.makeDeadlockException(deadLockChecker, victim, true);
-                LOG.warn(exception.getMessage());
-                throw exception;
+                String msg = "Deadlock was detected. \n" + deadLockChecker;
+                LOG.warn(msg);
+                return null;
             }
         }
 

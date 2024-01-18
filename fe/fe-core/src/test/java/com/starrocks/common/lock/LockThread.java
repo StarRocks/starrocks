@@ -11,17 +11,17 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.meta;
+package com.starrocks.common.lock;
 
-import com.starrocks.meta.lock.DeadlockException;
-import com.starrocks.meta.lock.IllegalLockStateException;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.IllegalLockStateException;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 
 import java.util.concurrent.BlockingQueue;
 
-import static com.starrocks.meta.LockResult.makeIllegalLockStateException;
-import static com.starrocks.meta.LockResult.makeSuccessLockResult;
+import static com.starrocks.common.lock.LockResult.makeIllegalLockStateException;
+import static com.starrocks.common.lock.LockResult.makeSuccessLockResult;
 
 public class LockThread extends Thread {
     private Locker locker;
@@ -51,10 +51,10 @@ public class LockThread extends Thread {
                     try {
                         locker.lock(rid, lockType, timeout);
                         lockResult = makeSuccessLockResult();
-                    } catch (DeadlockException deadlockException) {
+                    } catch (IllegalLockStateException deadlockException) {
                         lockResult = makeIllegalLockStateException(deadlockException);
-                    } catch (IllegalLockStateException illegalLockStateException) {
-                        lockResult = makeIllegalLockStateException(illegalLockStateException);
+                    } catch (LockTimeoutException e) {
+                        lockResult = makeIllegalLockStateException(e);
                     }
                     break;
                 }
@@ -64,7 +64,7 @@ public class LockThread extends Thread {
                     try {
                         locker.release(rid, lockType);
                         lockResult = makeSuccessLockResult();
-                    } catch (IllegalLockStateException illegalLockStateException) {
+                    } catch (IllegalMonitorStateException illegalLockStateException) {
                         lockResult = makeIllegalLockStateException(illegalLockStateException);
                     }
                     break;

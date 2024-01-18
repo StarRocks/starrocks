@@ -12,24 +12,23 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.meta.lock;
+package com.starrocks.common.util.concurrent.lock;
 
-import java.util.Set;
+public enum LockGrantType {
 
-public abstract class Lock {
-    public abstract LockGrantType lock(Locker locker, LockType lockType);
+    /**
+     * The locker did not previously own a lock on the node, and a new lock has been granted.
+     */
+    NEW,
 
-    public abstract Set<Locker> release(Locker locker, LockType lockType) throws NotSupportLockException;
+    /**
+     * The locker did not previously own a lock, and must wait for
+     * a new lock because a conflicting lock is held by another locker.
+     */
+    WAIT,
 
-    public abstract boolean isOwner(Locker locker, LockType lockType);
-
-    public abstract int ownerNum();
-
-    public abstract int waiterNum();
-
-    public abstract Set<LockHolder> getOwners();
-
-    public abstract Set<LockHolder> cloneOwners();
-
-    public abstract void removeWaiter(Locker locker, LockType lockType);
+    /**
+     * The locker already owns the requested lock, just increment the reference count
+     */
+    EXISTING,
 }

@@ -11,15 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+package com.starrocks.common.util.concurrent.lock;
 
-package com.starrocks.meta.lock;
-
-import com.google.common.base.Strings;
-
-public class LockTimeoutException extends RuntimeException {
-
-    public LockTimeoutException(String msg) {
-        super(Strings.nullToEmpty(msg));
+public class IllegalLockStateException extends Exception {
+    public IllegalLockStateException(String msg) {
+        super(msg);
     }
 
+    public IllegalLockStateException(String msg, Exception e) {
+        super(msg, e);
+    }
 }

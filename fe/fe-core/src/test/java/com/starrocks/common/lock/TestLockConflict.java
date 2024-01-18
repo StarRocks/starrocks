@@ -11,20 +11,20 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.meta;
+package com.starrocks.common.lock;
 
 import com.starrocks.common.Config;
-import com.starrocks.meta.lock.LockManager;
-import com.starrocks.meta.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.concurrent.Future;
 
-import static com.starrocks.meta.LockTestUtils.assertLockFail;
-import static com.starrocks.meta.LockTestUtils.assertLockSuccess;
-import static com.starrocks.meta.LockTestUtils.assertLockWait;
+import static com.starrocks.common.lock.LockTestUtils.assertLockFail;
+import static com.starrocks.common.lock.LockTestUtils.assertLockSuccess;
+import static com.starrocks.common.lock.LockTestUtils.assertLockWait;
 
 public class TestLockConflict {
     @Before
@@ -138,7 +138,7 @@ public class TestLockConflict {
     public void testReleaseNotLock() {
         TestLocker locker = new TestLocker();
         Future<LockResult> resultFuture = locker.release(1L, LockType.READ);
-        assertLockFail(resultFuture, "Attempt to unlock lock, not locked by current locker");
+        assertLockFail(resultFuture, IllegalMonitorStateException.class);
     }
 
     @Test
@@ -149,7 +149,7 @@ public class TestLockConflict {
 
         TestLocker locker2 = new TestLocker();
         Future<LockResult> resultFuture2 = locker2.release(1L, LockType.READ);
-        assertLockFail(resultFuture2, "Attempt to unlock lock, not locked by current locker");
+        assertLockFail(resultFuture2, IllegalMonitorStateException.class);
 
         long rid2 = 2L;
         TestLocker locker3 = new TestLocker();
@@ -158,7 +158,7 @@ public class TestLockConflict {
 
         TestLocker locker4 = new TestLocker();
         assertLockSuccess(locker4.lock(rid2, LockType.READ));
-        assertLockFail(locker3.release(rid2, LockType.READ), "Attempt to unlock lock, not locked by current locker");
+        assertLockFail(locker3.release(rid2, LockType.READ), IllegalMonitorStateException.class);
     }
 
     @Test
@@ -166,14 +166,14 @@ public class TestLockConflict {
         TestLocker locker = new TestLocker();
         assertLockSuccess(locker.lock(1L, LockType.READ));
         assertLockSuccess(locker.release(1L, LockType.READ));
-        assertLockFail(locker.release(1L, LockType.READ), "Attempt to unlock lock, not locked by current locker");
+        assertLockFail(locker.release(1L, LockType.READ), IllegalMonitorStateException.class);
     }
 
     @Test
     public void testReleaseErrorType() {
         TestLocker locker = new TestLocker();
         assertLockSuccess(locker.lock(1L, LockType.READ));
-        assertLockFail(locker.release(1L, LockType.WRITE), "Attempt to unlock lock, not locked by current locker");
+        assertLockFail(locker.release(1L, LockType.WRITE), IllegalMonitorStateException.class);
         assertLockSuccess(locker.release(1L, LockType.READ));
     }
 }

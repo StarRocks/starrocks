@@ -11,17 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.meta;
+package com.starrocks.common.lock;
 
 import com.starrocks.common.Config;
-import com.starrocks.meta.lock.LockManager;
-import com.starrocks.meta.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.Before;
 import org.junit.Test;
-
-import static com.starrocks.meta.LockTestUtils.assertLockSuccess;
-import static com.starrocks.meta.LockTestUtils.assertLockWait;
 
 public class TestIntendLock {
     @Before
@@ -38,31 +35,31 @@ public class TestIntendLock {
         long rid = 1L;
 
         TestLocker testLocker1 = new TestLocker();
-        assertLockSuccess(testLocker1.lock(rid, LockType.INTENTION_SHARED));
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.INTENTION_SHARED));
 
         TestLocker testLocker2 = new TestLocker();
-        assertLockSuccess(testLocker2.lock(rid, LockType.INTENTION_SHARED));
+        LockTestUtils.assertLockSuccess(testLocker2.lock(rid, LockType.INTENTION_SHARED));
 
         long rid2 = 2L;
         TestLocker testLocker3 = new TestLocker();
-        assertLockSuccess(testLocker3.lock(rid2, LockType.INTENTION_SHARED));
+        LockTestUtils.assertLockSuccess(testLocker3.lock(rid2, LockType.INTENTION_SHARED));
 
         TestLocker testLocker4 = new TestLocker();
-        assertLockSuccess(testLocker4.lock(rid2, LockType.INTENTION_EXCLUSIVE));
+        LockTestUtils.assertLockSuccess(testLocker4.lock(rid2, LockType.INTENTION_EXCLUSIVE));
 
         long rid3 = 3L;
         TestLocker testLocker5 = new TestLocker();
-        assertLockSuccess(testLocker5.lock(rid3, LockType.INTENTION_SHARED));
+        LockTestUtils.assertLockSuccess(testLocker5.lock(rid3, LockType.INTENTION_SHARED));
 
         TestLocker testLocker6 = new TestLocker();
-        assertLockSuccess(testLocker6.lock(rid3, LockType.READ));
+        LockTestUtils.assertLockSuccess(testLocker6.lock(rid3, LockType.READ));
 
         long rid4 = 4L;
         TestLocker testLocker7 = new TestLocker();
-        assertLockSuccess(testLocker7.lock(rid4, LockType.INTENTION_SHARED));
+        LockTestUtils.assertLockSuccess(testLocker7.lock(rid4, LockType.INTENTION_SHARED));
 
         TestLocker testLocker8 = new TestLocker();
-        assertLockWait(testLocker8.lock(rid4, LockType.WRITE));
+        LockTestUtils.assertLockWait(testLocker8.lock(rid4, LockType.WRITE));
     }
 
     /**
@@ -72,31 +69,31 @@ public class TestIntendLock {
     public void testIXConflict() {
         long rid = 1L;
         TestLocker testLocker1 = new TestLocker();
-        assertLockSuccess(testLocker1.lock(rid, LockType.INTENTION_EXCLUSIVE));
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.INTENTION_EXCLUSIVE));
 
         TestLocker testLocker2 = new TestLocker();
-        assertLockSuccess(testLocker2.lock(rid, LockType.INTENTION_SHARED));
+        LockTestUtils.assertLockSuccess(testLocker2.lock(rid, LockType.INTENTION_SHARED));
 
         long rid2 = 2L;
         TestLocker testLocker3 = new TestLocker();
-        assertLockSuccess(testLocker3.lock(rid2, LockType.INTENTION_EXCLUSIVE));
+        LockTestUtils.assertLockSuccess(testLocker3.lock(rid2, LockType.INTENTION_EXCLUSIVE));
 
         TestLocker testLocker4 = new TestLocker();
-        assertLockSuccess(testLocker4.lock(rid2, LockType.INTENTION_EXCLUSIVE));
+        LockTestUtils.assertLockSuccess(testLocker4.lock(rid2, LockType.INTENTION_EXCLUSIVE));
 
         long rid3 = 3L;
         TestLocker testLocker5 = new TestLocker();
-        assertLockSuccess(testLocker5.lock(rid3, LockType.INTENTION_EXCLUSIVE));
+        LockTestUtils.assertLockSuccess(testLocker5.lock(rid3, LockType.INTENTION_EXCLUSIVE));
 
         TestLocker testLocker6 = new TestLocker();
-        assertLockWait(testLocker6.lock(rid3, LockType.READ));
+        LockTestUtils.assertLockWait(testLocker6.lock(rid3, LockType.READ));
 
         long rid4 = 4L;
         TestLocker testLocker7 = new TestLocker();
-        assertLockSuccess(testLocker7.lock(rid4, LockType.INTENTION_EXCLUSIVE));
+        LockTestUtils.assertLockSuccess(testLocker7.lock(rid4, LockType.INTENTION_EXCLUSIVE));
 
         TestLocker testLocker8 = new TestLocker();
-        assertLockWait(testLocker8.lock(rid4, LockType.WRITE));
+        LockTestUtils.assertLockWait(testLocker8.lock(rid4, LockType.WRITE));
     }
 
     /**
@@ -106,31 +103,31 @@ public class TestIntendLock {
     public void testSConflict() {
         long rid = 1L;
         TestLocker testLocker1 = new TestLocker();
-        assertLockSuccess(testLocker1.lock(rid, LockType.READ));
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.READ));
 
         TestLocker testLocker2 = new TestLocker();
-        assertLockSuccess(testLocker2.lock(rid, LockType.INTENTION_SHARED));
+        LockTestUtils.assertLockSuccess(testLocker2.lock(rid, LockType.INTENTION_SHARED));
 
         long rid2 = 2L;
         TestLocker testLocker3 = new TestLocker();
-        assertLockSuccess(testLocker3.lock(rid2, LockType.READ));
+        LockTestUtils.assertLockSuccess(testLocker3.lock(rid2, LockType.READ));
 
         TestLocker testLocker4 = new TestLocker();
-        assertLockWait(testLocker4.lock(rid2, LockType.INTENTION_EXCLUSIVE));
+        LockTestUtils.assertLockWait(testLocker4.lock(rid2, LockType.INTENTION_EXCLUSIVE));
 
         long rid3 = 3L;
         TestLocker testLocker5 = new TestLocker();
-        assertLockSuccess(testLocker5.lock(rid3, LockType.READ));
+        LockTestUtils.assertLockSuccess(testLocker5.lock(rid3, LockType.READ));
 
         TestLocker testLocker6 = new TestLocker();
-        assertLockSuccess(testLocker6.lock(rid3, LockType.READ));
+        LockTestUtils.assertLockSuccess(testLocker6.lock(rid3, LockType.READ));
 
         long rid4 = 4L;
         TestLocker testLocker7 = new TestLocker();
-        assertLockSuccess(testLocker7.lock(rid4, LockType.READ));
+        LockTestUtils.assertLockSuccess(testLocker7.lock(rid4, LockType.READ));
 
         TestLocker testLocker8 = new TestLocker();
-        assertLockWait(testLocker8.lock(rid4, LockType.WRITE));
+        LockTestUtils.assertLockWait(testLocker8.lock(rid4, LockType.WRITE));
     }
 
     /**
@@ -140,30 +137,30 @@ public class TestIntendLock {
     public void testXConflict() {
         long rid = 1L;
         TestLocker testLocker1 = new TestLocker();
-        assertLockSuccess(testLocker1.lock(rid, LockType.WRITE));
+        LockTestUtils.assertLockSuccess(testLocker1.lock(rid, LockType.WRITE));
 
         TestLocker testLocker2 = new TestLocker();
-        assertLockWait(testLocker2.lock(rid, LockType.INTENTION_SHARED));
+        LockTestUtils.assertLockWait(testLocker2.lock(rid, LockType.INTENTION_SHARED));
 
         long rid2 = 2L;
         TestLocker testLocker3 = new TestLocker();
-        assertLockSuccess(testLocker3.lock(rid2, LockType.WRITE));
+        LockTestUtils.assertLockSuccess(testLocker3.lock(rid2, LockType.WRITE));
 
         TestLocker testLocker4 = new TestLocker();
-        assertLockWait(testLocker4.lock(rid2, LockType.INTENTION_EXCLUSIVE));
+        LockTestUtils.assertLockWait(testLocker4.lock(rid2, LockType.INTENTION_EXCLUSIVE));
 
         long rid3 = 3L;
         TestLocker testLocker5 = new TestLocker();
-        assertLockSuccess(testLocker5.lock(rid3, LockType.WRITE));
+        LockTestUtils.assertLockSuccess(testLocker5.lock(rid3, LockType.WRITE));
 
         TestLocker testLocker6 = new TestLocker();
-        assertLockWait(testLocker6.lock(rid3, LockType.READ));
+        LockTestUtils.assertLockWait(testLocker6.lock(rid3, LockType.READ));
 
         long rid4 = 4L;
         TestLocker testLocker7 = new TestLocker();
-        assertLockSuccess(testLocker7.lock(rid4, LockType.WRITE));
+        LockTestUtils.assertLockSuccess(testLocker7.lock(rid4, LockType.WRITE));
 
         TestLocker testLocker8 = new TestLocker();
-        assertLockWait(testLocker8.lock(rid4, LockType.WRITE));
+        LockTestUtils.assertLockWait(testLocker8.lock(rid4, LockType.WRITE));
     }
 }

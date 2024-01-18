@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.meta.lock;
+package com.starrocks.common.util.concurrent.lock;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -30,12 +30,12 @@ public class LightWeightLock extends Lock {
     }
 
     @Override
-    public Set<Locker> release(Locker locker, LockType lockType) throws NotSupportLockException {
+    public Set<Locker> release(Locker locker, LockType lockType) {
         if (lockHolder.equals(new LockHolder(locker, lockType))) {
             this.lockHolder = null;
             return null;
         } else {
-            throw new NotSupportLockException("Attempt to unlock lock, not locked by current locker");
+            throw new IllegalMonitorStateException("Attempt to unlock lock, not locked by current locker");
         }
     }
 

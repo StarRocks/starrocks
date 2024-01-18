@@ -11,9 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.meta;
+package com.starrocks.common.lock;
 
-import com.starrocks.meta.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.concurrent.CountDownLatch;
@@ -22,7 +22,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import static com.starrocks.meta.LockResult.makeWaitStateLockResult;
+import static com.starrocks.common.lock.LockResult.makeWaitStateLockResult;
 
 public class LockTask implements Future<LockResult> {
     public LockState lockState;

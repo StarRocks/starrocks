@@ -12,28 +12,35 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.meta;
+package com.starrocks.common.lock;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
-import com.starrocks.meta.lock.LockManager;
-import com.starrocks.meta.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.server.GlobalStateMgr;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.util.concurrent.Future;
 
-import static com.starrocks.meta.LockTestUtils.assertDeadLock;
-import static com.starrocks.meta.LockTestUtils.assertLockSuccess;
-import static com.starrocks.meta.LockTestUtils.assertLockWait;
+import static com.starrocks.common.lock.LockTestUtils.assertDeadLock;
+import static com.starrocks.common.lock.LockTestUtils.assertLockSuccess;
+import static com.starrocks.common.lock.LockTestUtils.assertLockWait;
 
 public class DeadLockTest {
     @Before
     public void setUp() {
         GlobalStateMgr.getCurrentState().setLockManager(new LockManager());
         Config.dead_lock_detection_delay_time_ms = 0;
+        Config.enable_unlock_deadlock = true;
+    }
+
+    @After
+    public void tearDown() {
+        Config.enable_unlock_deadlock = false;
     }
 
     @Test

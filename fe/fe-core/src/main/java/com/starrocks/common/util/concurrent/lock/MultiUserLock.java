@@ -11,7 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.meta.lock;
+package com.starrocks.common.util.concurrent.lock;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -20,9 +20,21 @@ import java.util.List;
 import java.util.Set;
 
 public class MultiUserLock extends Lock {
+    /*
+     * The owner of the current Lock. For efficiency reasons, the first owner is stored separately.
+     * If Locker successfully obtains the lock, it will be added to the owner.
+     **/
     protected LockHolder firstOwner;
+    private Set<LockHolder> otherOwners;
+
+    /*
+     * The waiter of the current Lock. For efficiency reasons, the first waiter is stored separately.
+     * When a lock conflict occurs and the lock cannot be obtained immediately,
+     * the Locker will be added to the waiter to wait
+     *
+     * Using the fair lock strategy, when release occurs, wake up in order from the waiter list
+     **/
     protected LockHolder firstWaiter;
-    private List<LockHolder> otherOwners;
     private List<LockHolder> otherWaiters;
 
     public MultiUserLock(LockHolder lockHolder) {
@@ -77,7 +89,7 @@ public class MultiUserLock extends Lock {
             if (ownerIterator != null && ownerIterator.hasNext()) {
                 lockOwner = ownerIterator.next();
             } else {
-                lockOwner = null;
+                break;
             }
         }
 
@@ -98,7 +110,7 @@ public class MultiUserLock extends Lock {
     }
 
     @Override
-    public Set<Locker> release(Locker locker, LockType lockType) throws NotSupportLockException {
+    public Set<Locker> release(Locker locker, LockType lockType) {
         boolean hasOwner = false;
         boolean reentrantLock = false;
         LockHolder lockHolder = new LockHolder(locker, lockType);
@@ -133,7 +145,7 @@ public class MultiUserLock extends Lock {
         }
 
         if (!hasOwner) {
-            throw new NotSupportLockException("Attempt to unlock lock, not locked by current locker");
+            throw new IllegalMonitorStateException("Attempt to unlock lock, not locked by current locker");
         }
 
         if (reentrantLock) {
@@ -187,7 +199,7 @@ public class MultiUserLock extends Lock {
             if (lockWaiterIterator != null && lockWaiterIterator.hasNext()) {
                 lockWaiter = lockWaiterIterator.next();
             } else {
-                lockWaiter = null;
+                break;
             }
         }
 
@@ -231,7 +243,7 @@ public class MultiUserLock extends Lock {
             firstOwner = lockHolder;
         } else {
             if (otherOwners == null) {
-                otherOwners = new ArrayList<>();
+                otherOwners = new HashSet<>();
             }
             otherOwners.add(lockHolder);
         }

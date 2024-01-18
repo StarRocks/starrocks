@@ -57,11 +57,11 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
@@ -222,7 +222,6 @@ public class ScalarOperatorFunctions {
     public static ConstantOperator secondsAdd(ConstantOperator date, ConstantOperator second) {
         return ConstantOperator.createDatetimeOrNull(date.getDatetime().plusSeconds(second.getInt()));
     }
-
 
     @ConstantFunction.List(list = {
             @ConstantFunction(name = "date_trunc", argTypes = {VARCHAR, DATETIME}, returnType = DATETIME, isMonotonic = true),
@@ -543,7 +542,7 @@ public class ScalarOperatorFunctions {
         Instant instant = connectContext.getStartTimeInstant();
         int factor = NOW_PRECISION_FACTORS[fspVal - 1];
         LocalDateTime startTime = Instant.ofEpochSecond(
-                instant.getEpochSecond(), instant.getNano() / factor * factor)
+                        instant.getEpochSecond(), instant.getNano() / factor * factor)
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         return ConstantOperator.createDatetimeOrNull(startTime);
     }

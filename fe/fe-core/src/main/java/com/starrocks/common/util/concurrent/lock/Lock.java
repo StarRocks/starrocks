@@ -11,14 +11,25 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-package com.starrocks.meta.lock;
 
-public class NotSupportLockException extends IllegalLockStateException {
-    public NotSupportLockException() {
-        super("Lock operations under the new framework are currently not supported.");
-    }
+package com.starrocks.common.util.concurrent.lock;
 
-    public NotSupportLockException(String message) {
-        super(message);
-    }
+import java.util.Set;
+
+public abstract class Lock {
+    public abstract LockGrantType lock(Locker locker, LockType lockType);
+
+    public abstract Set<Locker> release(Locker locker, LockType lockType);
+
+    public abstract boolean isOwner(Locker locker, LockType lockType);
+
+    public abstract int ownerNum();
+
+    public abstract int waiterNum();
+
+    public abstract Set<LockHolder> getOwners();
+
+    public abstract Set<LockHolder> cloneOwners();
+
+    public abstract void removeWaiter(Locker locker, LockType lockType);
 }

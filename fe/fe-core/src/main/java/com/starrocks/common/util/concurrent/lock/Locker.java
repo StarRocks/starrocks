@@ -12,16 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.meta.lock;
+package com.starrocks.common.util.concurrent.lock;
 
 import com.google.common.base.Objects;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.server.GlobalStateMgr;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class Locker {
@@ -36,7 +37,7 @@ public class Locker {
     private final long threadID;
 
     /* The thread stack that created this locker */
-    private final String stackLine;
+    private final String stackTrace;
 
     public Locker() {
         this.waitingForRid = null;
@@ -44,7 +45,7 @@ public class Locker {
         /* Save the thread used to create the locker and thread stack. */
         this.threadID = Thread.currentThread().getId();
         this.threadName = Thread.currentThread().getName();
-        this.stackLine = getStackLine();
+        this.stackTrace = getStackTrace();
     }
 
     /**
@@ -74,9 +75,9 @@ public class Locker {
      * Release lock
      *
      * @param rid The resource id of the lock to release.
-     * @throws IllegalLockStateException when attempt to unlock lock not locked by current locker
+     * @throws IllegalMonitorStateException – if the current thread does not hold this lock
      */
-    public void release(long rid, LockType lockType) throws IllegalLockStateException {
+    public void release(long rid, LockType lockType) {
         LockManager lockManager = GlobalStateMgr.getCurrentState().getLockManager();
         lockManager.release(rid, this, lockType);
     }
@@ -144,11 +145,7 @@ public class Locker {
     public void unLockDatabase(Database database, LockType lockType) {
         if (Config.use_lock_manager) {
             assert database != null;
-            try {
-                release(database.getId(), lockType);
-            } catch (IllegalLockStateException e) {
-                ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
-            }
+            release(database.getId(), lockType);
         } else {
             if (lockType.isWriteLock()) {
                 database.writeUnlock();
@@ -183,12 +180,20 @@ public class Locker {
     /**
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
-    public void lockTable(Database database, Table table, LockType lockType) {
+    public void lockTables(Database database, List<Long> tableList, LockType lockType) {
         if (Config.use_lock_manager) {
-            assert table != null;
-
             try {
-                lock(table.getId(), lockType, 0);
+                assert !tableList.isEmpty();
+                if (lockType == LockType.WRITE) {
+                    this.lock(database.getId(), LockType.INTENTION_EXCLUSIVE, 0);
+                } else if (lockType == LockType.READ) {
+                    this.lock(database.getId(), LockType.INTENTION_SHARED, 0);
+                }
+
+                Collections.sort(tableList);
+                for (Long rid : tableList) {
+                    this.lock(rid, lockType, 0);
+                }
             } catch (IllegalLockStateException e) {
                 ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
             }
@@ -198,16 +203,44 @@ public class Locker {
         }
     }
 
+    public boolean tryLockTables(Database database, List<Long> tableList, LockType lockType, long timeout) {
+        if (Config.use_lock_manager) {
+            assert !tableList.isEmpty();
+            try {
+                if (lockType == LockType.WRITE) {
+                    this.lock(database.getId(), LockType.INTENTION_EXCLUSIVE, timeout);
+                } else if (lockType == LockType.READ) {
+                    this.lock(database.getId(), LockType.INTENTION_SHARED, timeout);
+                }
+
+                Collections.sort(tableList);
+                for (Long rid : tableList) {
+                    this.lock(rid, lockType, timeout);
+                }
+
+                return true;
+            } catch (IllegalLockStateException e) {
+                return false;
+            }
+        } else {
+            //Fallback to db lock
+            return tryLockDatabase(database, lockType, timeout);
+        }
+    }
+
     /**
      * Before the new version of LockManager is fully enabled, it is used to be compatible with the original db lock logic.
      */
-    public void unLockTable(Database database, Table table, LockType lockType) {
+    public void unLockTables(Database database, List<Long> tableList, LockType lockType) {
         if (Config.use_lock_manager) {
-            assert table != null;
-            try {
-                release(table.getId(), lockType);
-            } catch (IllegalLockStateException e) {
-                ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+            if (lockType == LockType.WRITE) {
+                this.release(database.getId(), LockType.INTENTION_EXCLUSIVE);
+            } else if (lockType == LockType.READ) {
+                this.release(database.getId(), LockType.INTENTION_SHARED);
+            }
+            Collections.sort(tableList);
+            for (Long rid : tableList) {
+                this.release(rid, lockType);
             }
         } else {
             //Fallback to db lock
@@ -237,7 +270,7 @@ public class Locker {
         waitingForType = null;
     }
 
-    private String getStackLine() {
+    private String getStackTrace() {
         StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
         StackTraceElement element = stackTrace[3];
         int lastIdx = element.getClassName().lastIndexOf(".");
@@ -246,7 +279,7 @@ public class Locker {
 
     @Override
     public String toString() {
-        return ("(" + threadName + "|" + threadID) + ")" + " [" + stackLine + "]";
+        return ("(" + threadName + "|" + threadID) + ")" + " [" + stackTrace + "]";
     }
 
     @Override
