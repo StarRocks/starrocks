@@ -478,9 +478,9 @@ public class Pipe implements GsonPostProcessable {
             Constants.TaskRunState taskRunState = taskDesc.getFuture().get();
             if (taskRunState == Constants.TaskRunState.FAILED) {
                 TaskManager tm = GlobalStateMgr.getCurrentState().getTaskManager();
-                TaskRunStatus status = tm.getTaskRunHistory().getTaskByName(taskDesc.getUniqueTaskName());
-                if (status != null) {
-                    throw new DmlException("execution failed: " + status.getErrorMessage());
+                List<TaskRunStatus> status = tm.getTaskRunHistory().getTaskByName(taskDesc.getUniqueTaskName());
+                if (CollectionUtils.isNotEmpty(status)) {
+                    throw new DmlException("execution failed: " + status.get(0).getErrorMessage());
                 } else {
                     throw new DmlException("task failed with unknown status");
                 }

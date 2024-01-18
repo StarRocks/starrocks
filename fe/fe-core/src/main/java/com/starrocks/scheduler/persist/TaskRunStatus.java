@@ -24,11 +24,19 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TResultBatch;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import org.apache.commons.collections.MapUtils;
+import org.apache.commons.collections4.ListUtils;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 public class TaskRunStatus implements Writable {
@@ -117,6 +125,9 @@ public class TaskRunStatus implements Writable {
 
     @SerializedName("properties")
     private volatile Map<String, String> properties;
+
+    @SerializedName("useTableBasedHistory")
+    private boolean useTableBasedHistory = false;
 
     public TaskRunStatus() {
     }
@@ -306,6 +317,14 @@ public class TaskRunStatus implements Writable {
         }
     }
 
+    public boolean isUseTableBasedHistory() {
+        return useTableBasedHistory;
+    }
+
+    public void setUseTableBasedHistory(boolean value) {
+        this.useTableBasedHistory = value;
+    }
+
     public long getProcessStartTime() {
         return processStartTime;
     }
@@ -408,5 +427,38 @@ public class TaskRunStatus implements Writable {
                 ", mergeRedundant=" + mergeRedundant +
                 ", extraMessage=" + getExtraMessage() +
                 '}';
+    }
+
+    public String toJSON() {
+        return GsonUtils.GSON.toJson(this);
+    }
+
+    public static TaskRunStatus fromJson(String json) {
+        return GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
+    }
+
+    static class TaskRunStatusJSONRecord {
+        /**
+         * Only one item in the array, like:
+         * { data: [ {TaskRunStatus} ] }
+         */
+        @SerializedName("data")
+        public List<TaskRunStatus> data;
+
+        public static TaskRunStatusJSONRecord fromJson(String json) {
+            return GsonUtils.GSON.fromJson(json, TaskRunStatusJSONRecord.class);
+        }
+    }
+
+    public static List<TaskRunStatus> fromResultBatch(List<TResultBatch> batches) {
+        List<TaskRunStatus> res = new ArrayList<>();
+        for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
+            for (ByteBuffer buffer : batch.getRows()) {
+                ByteBuf copied = Unpooled.copiedBuffer(buffer);
+                String jsonString = copied.toString(Charset.defaultCharset());
+                res.addAll(ListUtils.emptyIfNull(TaskRunStatusJSONRecord.fromJson(jsonString).data));
+            }
+        }
+        return res;
     }
 }

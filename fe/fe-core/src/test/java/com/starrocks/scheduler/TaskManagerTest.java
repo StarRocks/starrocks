@@ -496,7 +496,7 @@ public class TaskManagerTest {
             TaskRunStatus taskRunStatus = new TaskRunStatus();
             taskRunStatus.setQueryId("test" + i);
             taskRunStatus.setTaskName("test" + i);
-            taskRunManager.getTaskRunHistory().addHistory(taskRunStatus);
+            taskRunManager.getTaskRunHistory().addHistory(taskRunStatus, false);
         }
         Config.task_runs_max_history_number = 20;
         taskRunManager.getTaskRunHistory().forceGC();
@@ -511,7 +511,7 @@ public class TaskManagerTest {
             TaskRunStatus taskRunStatus = new TaskRunStatus();
             taskRunStatus.setQueryId("test" + i);
             taskRunStatus.setTaskName("test" + i);
-            taskRunManager.getTaskRunHistory().addHistory(taskRunStatus);
+            taskRunManager.getTaskRunHistory().addHistory(taskRunStatus, false);
         }
         Config.task_runs_max_history_number = 20;
         taskRunManager.getTaskRunHistory().forceGC();

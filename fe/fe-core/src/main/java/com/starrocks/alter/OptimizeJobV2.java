@@ -53,6 +53,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.OptimizeClause;
 import io.opentelemetry.api.trace.StatusCode;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -352,14 +353,14 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 allFinished = false;
                 continue;
             }
-            TaskRunStatus status = GlobalStateMgr.getCurrentState().getTaskManager()
+            List<TaskRunStatus> status = GlobalStateMgr.getCurrentState().getTaskManager()
                     .getTaskRunManager().getTaskRunHistory().getTaskByName(rewriteTask.getName());
-            if (status == null) {
+            if (CollectionUtils.isEmpty(status)) {
                 allFinished = false;
                 continue;
             }
 
-            if (status.getState() == Constants.TaskRunState.FAILED) {
+            if (status.get(0).getState() == Constants.TaskRunState.FAILED) {
                 LOG.warn("optimize task {} failed", rewriteTask.getName());
                 rewriteTask.setOptimizeTaskState(Constants.TaskRunState.FAILED);
             }

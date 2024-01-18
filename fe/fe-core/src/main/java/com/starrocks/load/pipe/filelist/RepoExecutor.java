@@ -82,7 +82,6 @@ public class RepoExecutor {
         try {
             ConnectContext context = createConnectContext();
 
-            // TODO: use json sink protocol, instead of statistic protocol
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.HTTP_PROTOCAL);
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
@@ -96,7 +95,7 @@ public class RepoExecutor {
             }
             return sqlResult.first;
         } catch (Exception e) {
-            LOG.error("Repo execute SQL failed {}", sql, e);
+            LOG.error("RepoExecutor execute SQL failed {}", sql, e);
             throw new SemanticException("execute sql failed: " + sql, e);
         } finally {
             ConnectContext.remove();
@@ -112,7 +111,7 @@ public class RepoExecutor {
             AuditLog.getInternalAudit().info("RepoExecutor execute DDL | SQL {}", sql);
             GlobalStateMgr.getCurrentState().getDdlStmtExecutor().execute(parsedStmt, context);
         } catch (Exception e) {
-            LOG.error("execute DDL error: {}", sql, e);
+            LOG.error("RepoExecutor execute DDL error: {}", sql, e);
             throw new RuntimeException(e);
         } finally {
             ConnectContext.remove();

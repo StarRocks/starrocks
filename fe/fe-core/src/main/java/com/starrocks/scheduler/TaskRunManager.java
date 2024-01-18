@@ -23,6 +23,8 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.history.MemBasedTaskRunHistory;
+import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
@@ -42,7 +44,7 @@ public class TaskRunManager implements MemoryTrackable {
     private final TaskRunScheduler taskRunScheduler = new TaskRunScheduler();
 
     // include SUCCESS/FAILED/CANCEL taskRun
-    private final TaskRunHistory taskRunHistory = new TaskRunHistory();
+    private final TaskRunHistory taskRunHistory = new MemBasedTaskRunHistory();
 
     // Use to execute actual TaskRun
     private final TaskRunExecutor taskRunExecutor = new TaskRunExecutor();

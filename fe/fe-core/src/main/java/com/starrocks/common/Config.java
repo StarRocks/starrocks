@@ -381,6 +381,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int history_job_keep_max_second = 7 * 24 * 3600; // 7 days
 
+    @ConfField(mutable = true, comment = "Interval of TableKeeper daemon")
+    public static int table_keeper_interval_second = 30;
+
     /**
      * the transaction will be cleaned after transaction_clean_interval_second seconds if the transaction is visible or aborted
      * we should make this interval as short as possible and each clean cycle as soon as possible
@@ -1138,6 +1141,9 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int max_task_runs_threads_num = 512;
+
+    @ConfField(mutable = true, comment = "Use the table-based task-run-history storage")
+    public static boolean use_table_based_task_run_history = false;
 
     /**
      * Default timeout of export jobs.
