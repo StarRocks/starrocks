@@ -86,81 +86,85 @@ Query Profile 包含大量查询执行详细信息的指标。在大多数情况
 
 ##### FrontendProfileMergeTime
 
-描述：Query Profile 在 FE 侧的处理时间
+描述：Query Profile 在 FE 侧的处理时间。
 
 ##### QueryAllocatedMemoryUsage
 
-描述：所有计算节点，累计分配内存之和
+描述：所有计算节点，累计分配内存之和。
 
 ##### QueryDeallocatedMemoryUsage
 
-描述：所有计算节点，累计释放内存之和
+描述：所有计算节点，累计释放内存之和。
 
 ##### QueryPeakMemoryUsage
 
-描述：所有计算节点中，峰值内存的最大值
+描述：所有计算节点中，峰值内存的最大值。
 
 ##### QueryExecutionWallTime
 
-描述：执行的墙上时间
+描述：执行的墙上时间。
 
 ##### QueryCumulativeCpuTime
 
-描述：所有计算节点，累计 CPU 耗时之和
+描述：所有计算节点，累计 CPU 耗时之和。
 
 ##### QueryCumulativeOperatorTime
 
-描述：所有节点耗时之和。这里是简单的线性累加，但实际上，不同的算子的执行时间可能是有重叠的。该参数作为计算算子时间占比的分母
+描述：所有节点耗时之和。这里是简单的线性累加，但实际上，不同的算子的执行时间可能是有重叠的。该参数作为计算算子时间占比的分母。
 
 ##### QueryCumulativeNetworkTime
 
-描述：所有 Exchange 节点的网络时间之和。这里是简单的线性累加，但实际上，不同 Exchange 的执行时间可能是有重叠的
+描述：所有 Exchange 节点的网络时间之和。这里是简单的线性累加，但实际上，不同 Exchange 的执行时间可能是有重叠的。
 
 ##### QueryCumulativeScanTime
 
-描述：所有 Scan 节点的 IO 时间之和。这里是简单的线性累加，但实际上，不同 Scan 的执行时间可能是有重叠的
+描述：所有 Scan 节点的 IO 时间之和。这里是简单的线性累加，但实际上，不同 Scan 的执行时间可能是有重叠的。
 
 ##### QueryPeakScheduleTime
 
-描述：所有Pipeline中，ScheduleTime 指标的最大值
+描述：所有Pipeline中，ScheduleTime 指标的最大值。
 
 ##### QuerySpillBytes
 
-描述：Spill 到本地磁盘的字节数量
+描述：Spill 到本地磁盘的字节数量。
 
 ##### ResultDeliverTime
 
-描述：传输结果的额外耗时，对于查询语句，这个参数是指数据传回客户端的时间；对于插入语句，这个参数是指数据写入到存储层的时间
+描述：传输结果的额外耗时，对于查询语句，这个参数是指数据传回客户端的时间；对于插入语句，这个参数是指数据写入到存储层的时间。
 
 ### Fragment 指标
 
 ##### InstanceNum
 
-描述：该 Fragment 的所有 FragmentInstance 的数量
+描述：该 Fragment 的所有 FragmentInstance 的数量。
 
 ##### InstanceIds
 
-描述：该 Fragment 的所有 FragmentInstance ID
+描述：该 Fragment 的所有 FragmentInstance ID。
 
 ##### BackendNum
 
-描述：参与该 Fragment 执行的 BE 的数量
+描述：参与该 Fragment 执行的 BE 的数量。
 
 ##### BackendAddresses
 
-描述：参与该 Fragment 执行的所有 BE 的地址信息
+描述：参与该 Fragment 执行的所有 BE 的地址信息。
 
 ##### FragmentInstancePrepareTime
 
-描述：Fragment Prepare 阶段的耗时
+描述：Fragment Prepare 阶段的耗时。
 
 ##### InstanceAllocatedMemoryUsage
 
-描述：该 Fragment 下所有 FragmentInstance 的累计分配内存
+描述：该 Fragment 下所有 FragmentInstance 的累计分配内存。
 
 ##### InstanceDeallocatedMemoryUsage
 
-描述：该 Fragment 下所有 FragmentInstance 的累计释放内存
+描述：该 Fragment 下所有 FragmentInstance 的累计释放内存。
+
+##### InstancePeakMemoryUsage
+
+描述：该 Fragment 下所有 FragmentInstance 中，峰值内存的最大值。
 
 ### Pipeline 指标
 
@@ -421,11 +425,16 @@ Scan Operator 会使用一个额外的线程池来执行 IO 任务，因此该�
 
 - 描述：IO 任务的执行时间。
 - 级别：一级指标
-- 下属指标：CreateSegmentIter、GetDelVec、GetDeltaColumnGroup、GetRowsets、IOTime、LateMaterialize、ReadPKIndex、SegmentInit、SegmentRead
+- 下属指标：CreateSegmentIter、DictDecode、GetDelVec、GetDeltaColumnGroup、GetRowsets、IOTime、LateMaterialize、ReadPKIndex、SegmentInit、SegmentRead
 
 ##### CreateSegmentIter
 
 - 描述：创建 Segment 迭代器的时间。
+- 级别：二级指标
+
+##### DictDecode
+
+- 描述：低基数优化字典解码的时间。
 - 级别：二级指标
 
 ##### GetDelVec
