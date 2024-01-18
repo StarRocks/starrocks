@@ -81,11 +81,17 @@ public class StreamLoadPlanner {
 
     private Analyzer analyzer;
     private DescriptorTable descTable;
+    private int tabletSinkDop;
 
     public StreamLoadPlanner(Database db, OlapTable destTable, StreamLoadTask streamLoadTask) {
         this.db = db;
         this.destTable = destTable;
         this.streamLoadTask = streamLoadTask;
+        this.tabletSinkDop = 1;
+    }
+
+    public void setTabletSinkDop(int tabletSinkDop) {
+        this.tabletSinkDop = tabletSinkDop;
     }
 
     private void resetAnalyzer() {
@@ -163,6 +169,7 @@ public class StreamLoadPlanner {
         List<Long> partitionIds = getAllPartitionIds();
         OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds);
         olapTableSink.init(loadId, streamLoadTask.getTxnId(), db.getId(), streamLoadTask.getTimeout());
+        olapTableSink.setTabletSinkDop(tabletSinkDop);
         olapTableSink.complete();
 
         // for stream load, we only need one fragment, ScanNode -> DataSink.

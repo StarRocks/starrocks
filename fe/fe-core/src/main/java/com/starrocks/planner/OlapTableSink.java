@@ -85,6 +85,7 @@ public class OlapTableSink extends DataSink {
     private final TupleDescriptor tupleDescriptor;
     // specified partition ids. this list should not be empty and should contains all related partition ids
     private final List<Long> partitionIds;
+    private int tabletSinkDop;
 
     // set after init called
     private TDataSink tDataSink;
@@ -95,6 +96,7 @@ public class OlapTableSink extends DataSink {
         Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
         this.partitionIds = partitionIds;
         this.clusterId = dstTable.getClusterId();
+        this.tabletSinkDop = 1;
     }
 
     public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS) throws AnalysisException {
@@ -113,6 +115,10 @@ public class OlapTableSink extends DataSink {
                 ErrorReport.reportAnalysisException(ErrorCode.ERR_UNKNOWN_PARTITION, partitionId, dstTable.getName());
             }
         }
+    }
+
+    public void setTabletSinkDop(int tabletSinkDop) {
+        this.tabletSinkDop = tabletSinkDop;
     }
 
     public void updateLoadId(TUniqueId newLoadId) {
@@ -136,6 +142,7 @@ public class OlapTableSink extends DataSink {
         tSink.setPartition(createPartition(tSink.getDb_id(), dstTable));
         tSink.setLocation(createLocation(dstTable));
         tSink.setNodes_info(createStarrocksNodesInfo());
+        tSink.setTablet_sink_split_chunk_dop(tabletSinkDop);
     }
 
     @Override
