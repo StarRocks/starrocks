@@ -1,7 +1,7 @@
 name: CI PIPELINE - CLOUD
 
 on:
-  pull_request_target:
+  pull_request:
     types:
       - opened
       - synchronize
