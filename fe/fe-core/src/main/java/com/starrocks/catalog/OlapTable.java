@@ -2473,7 +2473,6 @@ public class OlapTable extends Table {
 
             // drop all replicas
             for (Partition partition : table.getAllPartitions()) {
-<<<<<<< HEAD
                 List<MaterializedIndex> allIndices =
                         partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 for (MaterializedIndex materializedIndex : allIndices) {
@@ -2491,33 +2490,10 @@ public class OlapTable extends Table {
                                 batchTaskMap.put(backendId, batchTask);
                             }
                             batchTask.addTask(dropTask);
+                            LOG.info("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
+                                    tabletId, backendId, table.getId(), table.getName());
                         } // end for replicas
                     } // end for tablets
-=======
-                for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                    List<MaterializedIndex> allIndices = physicalPartition
-                            .getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
-                    for (MaterializedIndex materializedIndex : allIndices) {
-                        long indexId = materializedIndex.getId();
-                        int schemaHash = table.getSchemaHashByIndexId(indexId);
-                        for (Tablet tablet : materializedIndex.getTablets()) {
-                            long tabletId = tablet.getId();
-                            List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
-                            for (Replica replica : replicas) {
-                                long backendId = replica.getBackendId();
-                                DropReplicaTask dropTask = new DropReplicaTask(backendId, tabletId, schemaHash, true);
-                                AgentBatchTask batchTask = batchTaskMap.get(backendId);
-                                if (batchTask == null) {
-                                    batchTask = new AgentBatchTask();
-                                    batchTaskMap.put(backendId, batchTask);
-                                }
-                                batchTask.addTask(dropTask);
-                                LOG.info("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
-                                        tabletId, backendId, table.getId(), table.getName());
-                            } // end for replicas
-                        } // end for tablets
-                    }
->>>>>>> 4cfeb9afe6 ([Enhancement] Print Drop tablet log when dropping table (#39109))
                 } // end for indices
             } // end for partitions
 
