@@ -21,7 +21,7 @@ show create table partition_unixtime;
 partition_unixtime	CREATE TABLE `partition_unixtime` (
   `create_time` bigint(20) NULL COMMENT "",
   `sku_id` varchar(100) NULL COMMENT "",
-  `total_amount` decimal64(10, 0) NULL COMMENT "",
+  `total_amount` decimal(10, 0) NULL COMMENT "",
   `id` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`create_time`, `sku_id`)
@@ -72,7 +72,7 @@ show create table partition_unixtime_ms;
 partition_unixtime_ms	CREATE TABLE `partition_unixtime_ms` (
   `create_time` bigint(20) NULL COMMENT "",
   `sku_id` varchar(100) NULL COMMENT "",
-  `total_amount` decimal64(10, 0) NULL COMMENT "",
+  `total_amount` decimal(10, 0) NULL COMMENT "",
   `id` int(11) NULL COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`create_time`, `sku_id`)

@@ -238,6 +238,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：毫秒
 - 默认值：500
 
+#### pindex_major_compaction_limit_per_disk
+
+- 含义：每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题。
+- 默认值：1
+- 引入版本：3.0.9
+
 #### load_error_log_reserve_hours  
 
 - 含义：导入数据信息保留的时长。
@@ -415,6 +421,18 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。
 - 默认值：10
 
+#### lake_enable_vertical_compaction_fill_data_cache
+
+- 含义：存算分离集群下，是否允许 Compaction 任务在执行时缓存数据到本地磁盘上。
+- 默认值：false
+- 引入版本：v3.1.7、v3.2.3
+
+#### compact_threads
+
+- 含义：并发 Compaction 任务的最大线程数。自 v3.1.7，v3.2.2 起变为动态参数。
+- 默认值：4
+- 引入版本：v3.0.0
+
 #### update_compaction_ratio_threshold
 
 - 含义：存算分离集群下主键模型表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
@@ -534,6 +552,18 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：计算 tablet 的校验和 (checksum)。
 - 默认值：1
+
+#### object_storage_connect_timeout_ms
+
+- 含义：对象存储 Socket 连接的超时时间。
+- 默认值：`-1`，表示使用 SDK 中的默认时间。
+- 引入版本：3.0.9
+
+#### object_storage_request_timeout_ms
+
+- 含义：对象存储 HTTP 连接的超时时间。
+- 默认值：`-1`，表示使用 SDK 中的默认时间。
+- 引入版本：3.0.9
 
 #### sys_log_dir
 

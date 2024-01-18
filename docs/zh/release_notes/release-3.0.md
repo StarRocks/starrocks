@@ -52,7 +52,7 @@ displayed_sidebar: "Chinese"
 #### BE 配置项
 
 - 新增 BE 配置项 `enable_stream_load_verbose_log`，默认取值是 `false`，打开后日志中可以记录 Stream Load 的 HTTP 请求和响应信息，方便出现问题后的定位调试。[#36113](https://github.com/StarRocks/starrocks/pull/36113)
-- 新增 BE 配置项 `pindex_major_compaction_limit_per_disk`，配置每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题，默认取值为 2。[#36681](https://github.com/StarRocks/starrocks/pull/36681)
+- 新增 BE 配置项 `pindex_major_compaction_limit_per_disk`，配置每块盘 Compaction 的最大并发数，用于解决 Compaction 在磁盘之间不均衡导致个别磁盘 I/O 过高的问题，默认取值为 `1`。[#37694](https://github.com/StarRocks/starrocks/pull/37694)
 - 新增 BE 配置项，配置对象存储连接超时时间。
   - `object_storage_connect_timeout_ms`，对象存储 socket 连接的超时时间，默认取值 `-1`，表示使用 SDK 中的默认时间。
   - `object_storage_request_timeout_ms`，对象存储 http 连接的超时时间，默认取值 `-1`，表示使用 SDK 中的默认时间。

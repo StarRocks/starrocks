@@ -98,7 +98,10 @@ import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 
+import static com.starrocks.scheduler.MVActiveChecker.MV_BACKUP_INACTIVE_REASON;
+
 public class BackupHandler extends FrontendDaemon implements Writable, MemoryTrackable {
+
     private static final Logger LOG = LogManager.getLogger(BackupHandler.class);
 
     public static final int SIGNATURE_VERSION = 1;
@@ -356,8 +359,8 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                 }
                 if (copiedTbl.isMaterializedView()) {
                     MaterializedView copiedMv = (MaterializedView) copiedTbl;
-                    copiedMv.setInactiveAndReason(String.format("Set the materialized view %s inactive in backup and " +
-                            "active it in restore if possible", copiedMv.getName()));
+                    copiedMv.setInactiveAndReason(String.format("Set the materialized view %s inactive because %s",
+                            copiedMv.getName(), MV_BACKUP_INACTIVE_REASON));
                 }
                 backupTbls.add(copiedTbl);
             }

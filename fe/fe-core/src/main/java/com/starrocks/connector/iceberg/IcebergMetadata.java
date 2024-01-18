@@ -67,6 +67,8 @@ import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.MetadataTableUtils;
 import org.apache.iceberg.Metrics;
+import org.apache.iceberg.MetricsConfig;
+import org.apache.iceberg.MetricsModes;
 import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionSpecParser;
@@ -119,6 +121,7 @@ import static com.starrocks.connector.iceberg.IcebergCatalogType.GLUE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.HIVE_CATALOG;
 import static com.starrocks.connector.iceberg.IcebergCatalogType.REST_CATALOG;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
+import static org.apache.iceberg.TableProperties.DEFAULT_WRITE_METRICS_MODE_DEFAULT;
 
 public class IcebergMetadata implements ConnectorMetadata {
 
@@ -343,6 +346,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                         return ImmutableList.of(partition);
                     }
                 }
+                // for empty table, use -1 as last updated time
+                return ImmutableList.of(new Partition(-1));
             } catch (IOException e) {
                 throw new StarRocksConnectorException("Failed to get partitions for table: " + table.getName(), e);
             }
@@ -482,6 +487,14 @@ public class IcebergMetadata implements ConnectorMetadata {
         org.apache.iceberg.Table nativeTbl = icebergTable.getNativeTable();
         Types.StructType schema = nativeTbl.schema().asStruct();
 
+        Map<String, MetricsModes.MetricsMode> fieldToMetricsMode = getIcebergMetricsConfig(icebergTable);
+        Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".write_metrics_mode_default",
+                DEFAULT_WRITE_METRICS_MODE_DEFAULT);
+        Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".non-default.size",
+                String.valueOf(fieldToMetricsMode.size()));
+        Tracers.record(Tracers.Module.EXTERNAL, "ICEBERG.MetricsConfig." + nativeTbl + ".non-default.columns",
+                fieldToMetricsMode.toString());
+
         List<ScalarOperator> scalarOperators = Utils.extractConjuncts(predicate);
         ScalarOperatorToIcebergExpr.IcebergContext icebergContext = new ScalarOperatorToIcebergExpr.IcebergContext(schema);
         Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
@@ -577,6 +590,45 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         splitTasks.put(key, icebergScanTasks);
         scannedTables.add(key);
+    }
+
+    /**
+     * To optimize the MetricsModes of the Iceberg tables, it's necessary to display the columns MetricsMode in the
+     * ICEBERG query profile.
+     * <br>
+     * None:
+     * <p>
+     * Under this mode, value_counts, null_value_counts, nan_value_counts, lower_bounds, upper_bounds
+     * are not persisted.
+     * </p>
+     * Counts:
+     * <p>
+     * Under this mode, only value_counts, null_value_counts, nan_value_counts are persisted.
+     * </p>
+     * Truncate:
+     * <p>
+     * Under this mode, value_counts, null_value_counts, nan_value_counts and truncated lower_bounds,
+     * upper_bounds are persisted.
+     * </p>
+     * Full:
+     * <p>
+     * Under this mode, value_counts, null_value_counts, nan_value_counts and full lower_bounds,
+     * upper_bounds are persisted.
+     * </p>
+     */
+    public static Map<String, MetricsModes.MetricsMode> getIcebergMetricsConfig(IcebergTable table) {
+        MetricsModes.MetricsMode defaultMode = MetricsModes.fromString(DEFAULT_WRITE_METRICS_MODE_DEFAULT);
+        MetricsConfig metricsConf = MetricsConfig.forTable(table.getNativeTable());
+        Map<String, MetricsModes.MetricsMode> filedToMetricsMode = Maps.newHashMap();
+        for (Types.NestedField field : table.getNativeTable().schema().columns()) {
+            MetricsModes.MetricsMode mode = metricsConf.columnMode(field.name());
+            // To reduce printing, only print specific metrics that are not in the
+            // DEFAULT_WRITE_METRICS_MODE_DEFAULT: truncate(16) mode
+            if (!mode.equals(defaultMode)) {
+                filedToMetricsMode.put(field.name(), mode);
+            }
+        }
+        return filedToMetricsMode;
     }
 
     @Override

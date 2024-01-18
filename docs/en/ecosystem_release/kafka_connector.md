@@ -8,9 +8,11 @@ displayed_sidebar: "English"
 
 **User guide:** [Load data using Kafka connector](../loading/Kafka-connector-starrocks.md)
 
+**Source codes:** [starrocks-connector-for-kafka](https://github.com/StarRocks/starrocks-connector-for-kafka)
+
 **Naming format of the compressed file:** `starrocks-kafka-connector-${connector_version}.tar.gz`
 
-**Download link of the compressed file:** [starrocks-kafka-connector-1.0.0.tar.gz](https://releases.starrocks.io/starrocks/starrocks-kafka-connector-1.0.0.tar.gz)
+**Download link of the compressed file:** [starrocks-kafka-connector](https://github.com/StarRocks/starrocks-connector-for-kafka/releases)
 
 **Version requirements:**
 

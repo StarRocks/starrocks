@@ -15,6 +15,7 @@
 package com.starrocks.replication;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
@@ -32,6 +33,7 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -64,7 +66,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 public class ReplicationJob implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(ReplicationJob.class);
@@ -252,6 +253,9 @@ public class ReplicationJob implements GsonPostProcessable {
         }
     }
 
+    @SerializedName(value = "jobId")
+    private final String jobId;
+
     @SerializedName(value = "srcToken")
     private final String srcToken;
 
@@ -279,12 +283,17 @@ public class ReplicationJob implements GsonPostProcessable {
     @SerializedName(value = "state")
     private volatile ReplicationJobState state;
 
-    @SerializedName(value = "stateStartTime")
-    private volatile long stateStartTime;
-
     private Map<AgentTask, AgentTask> runningTasks = Maps.newConcurrentMap();
     private volatile int taskNum = 0;
     private Map<AgentTask, AgentTask> finishedTasks = Maps.newConcurrentMap();
+
+    public String getJobId() {
+        return jobId;
+    }
+
+    public long getDatabaseId() {
+        return databaseId;
+    }
 
     public long getTableId() {
         return tableId;
@@ -300,16 +309,19 @@ public class ReplicationJob implements GsonPostProcessable {
 
     private void setState(ReplicationJobState state) {
         this.state = state;
-        this.stateStartTime = System.currentTimeMillis();
-    }
-
-    public Map<AgentTask, AgentTask> getRunningTasks() {
-        return runningTasks;
+        GlobalStateMgr.getServingState().getEditLog().logReplicationJob(this);
+        LOG.info("Replication job state: {}, database id: {}, table id: {}, transaction id: {}",
+                state, databaseId, tableId, transactionId);
     }
 
     public ReplicationJob(TTableReplicationRequest request) throws MetaNotFoundException {
         Preconditions.checkState(request.src_table_type == TTableType.OLAP_TABLE);
 
+        if (Strings.isNullOrEmpty(request.job_id)) {
+            this.jobId = UUIDUtil.genUUID().toString();
+        } else {
+            this.jobId = request.job_id;
+        }
         this.srcToken = request.src_token;
         this.databaseId = request.database_id;
         this.tableId = request.table_id;
@@ -319,15 +331,20 @@ public class ReplicationJob implements GsonPostProcessable {
         this.replicationDataSize = request.src_table_data_size - tableInfo.getTableDataSize();
         this.partitionInfos = tableInfo.getPartitionInfos();
         this.transactionId = 0;
-        this.setState(ReplicationJobState.INITIALIZING);
+        this.state = ReplicationJobState.INITIALIZING;
 
         if (partitionInfos.isEmpty()) {
             throw new RuntimeException("No data need to replicate");
         }
     }
 
-    public ReplicationJob(String srcToken, long databaseId, OlapTable table, OlapTable srcTable,
+    public ReplicationJob(String jobId, String srcToken, long databaseId, OlapTable table, OlapTable srcTable,
             SystemInfoService srcSystemInfoService) {
+        if (Strings.isNullOrEmpty(jobId)) {
+            this.jobId = UUIDUtil.genUUID().toString();
+        } else {
+            this.jobId = jobId;
+        }
         this.srcToken = srcToken;
         this.databaseId = databaseId;
         this.tableId = table.getId();
@@ -336,7 +353,7 @@ public class ReplicationJob implements GsonPostProcessable {
         this.replicationDataSize = srcTable.getDataSize() - table.getDataSize();
         this.partitionInfos = initPartitionInfos(table, srcTable, srcSystemInfoService);
         this.transactionId = 0;
-        this.setState(ReplicationJobState.INITIALIZING);
+        this.state = ReplicationJobState.INITIALIZING;
 
         if (partitionInfos.isEmpty()) {
             throw new RuntimeException("No data need to replicate");
@@ -353,10 +370,6 @@ public class ReplicationJob implements GsonPostProcessable {
         }
 
         setState(ReplicationJobState.ABORTED);
-
-        GlobalStateMgr.getServingState().getEditLog().logReplicationJob(this);
-        LOG.warn("Replication job cancelled, abort, database id: {}, table id: {}, transaction id: {}",
-                databaseId, tableId, transactionId);
     }
 
     public void run() {
@@ -365,15 +378,9 @@ public class ReplicationJob implements GsonPostProcessable {
                 beginTransaction();
                 sendRemoteSnapshotTasks();
                 setState(ReplicationJobState.SNAPSHOTING);
-                GlobalStateMgr.getServingState().getEditLog().logReplicationJob(this);
-                LOG.info("Replication job state: {}, database id: {}, table id: {}, transaction id: {}", state,
-                        databaseId, tableId, transactionId);
             } else if (state.equals(ReplicationJobState.SNAPSHOTING)) {
                 if (isTransactionAborted()) {
                     setState(ReplicationJobState.ABORTED);
-                    GlobalStateMgr.getServingState().getEditLog().logReplicationJob(this);
-                    LOG.warn("Replication job snapshot timeout, database id: {}, table id: {}, transaction id: {}, ",
-                            databaseId, tableId, transactionId);
                 } else if (isCrashRecovery()) {
                     sendRemoteSnapshotTasks();
                     LOG.info("Replication job recovered, state: {}, database id: {}, table id: {}, transaction id: {}",
@@ -381,16 +388,10 @@ public class ReplicationJob implements GsonPostProcessable {
                 } else if (isAllTaskFinished()) {
                     sendReplicateSnapshotTasks();
                     setState(ReplicationJobState.REPLICATING);
-                    GlobalStateMgr.getServingState().getEditLog().logReplicationJob(this);
-                    LOG.info("Replication job state: {}, database id: {}, table id: {}, transaction id: {}", state,
-                            databaseId, tableId, transactionId);
                 }
             } else if (state.equals(ReplicationJobState.REPLICATING)) {
                 if (isTransactionAborted()) {
                     setState(ReplicationJobState.ABORTED);
-                    GlobalStateMgr.getServingState().getEditLog().logReplicationJob(this);
-                    LOG.warn("Replication job replicate timeout, database id: {}, table id: {}, transaction id: {}, ",
-                            databaseId, tableId, transactionId);
                 } else if (isCrashRecovery()) {
                     sendReplicateSnapshotTasks();
                     LOG.info("Replication job recovered, state: {}, database id: {}, table id: {}, transaction id: {}",
@@ -398,17 +399,11 @@ public class ReplicationJob implements GsonPostProcessable {
                 } else if (isAllTaskFinished()) {
                     commitTransaction();
                     setState(ReplicationJobState.COMMITTED);
-                    GlobalStateMgr.getServingState().getEditLog().logReplicationJob(this);
-                    LOG.info("Replication job state: {}, database id: {}, table id: {}, transaction id: {}", state,
-                            databaseId, tableId, transactionId);
                 }
             }
         } catch (Exception e) {
             abortTransaction(e.getMessage());
             setState(ReplicationJobState.ABORTED);
-            GlobalStateMgr.getServingState().getEditLog().logReplicationJob(this);
-            LOG.warn("Replication job run failed, abort, database id: {}, table id: {}, transaction id: {}, ",
-                    databaseId, tableId, transactionId, e);
         }
     }
 
@@ -431,6 +426,7 @@ public class ReplicationJob implements GsonPostProcessable {
 
                 replicaInfo.setSrcSnapshotPath(request.snapshot_path);
                 replicaInfo.setSrcIncrementalSnapshot(request.incremental_snapshot);
+                task.setFinished(true);
             } else {
                 task.setFailed(true);
                 task.setErrorMsg("No snapshot path or incremental snapshot");
@@ -451,7 +447,9 @@ public class ReplicationJob implements GsonPostProcessable {
             return;
         }
 
-        if (request.getTask_status().getStatus_code() != TStatusCode.OK) {
+        if (request.getTask_status().getStatus_code() == TStatusCode.OK) {
+            task.setFinished(true);
+        } else {
             task.setFailed(true);
             task.setErrorMsg(request.getTask_status().getError_msgs().get(0));
             LOG.warn("Replicate snapshot task failed, task: {}, error: {}", task, task.getErrorMsg());
@@ -643,7 +641,7 @@ public class ReplicationJob implements GsonPostProcessable {
             throws LabelAlreadyUsedException, DuplicatedRequestException, AnalysisException, RunningTxnExceedException {
         TransactionState.LoadJobSourceType loadJobSourceType = TransactionState.LoadJobSourceType.REPLICATION;
         TransactionState.TxnCoordinator coordinator = TransactionState.TxnCoordinator.fromThisFE();
-        String label = String.format("REPLICATION_%d_%d_%s", databaseId, tableId, UUID.randomUUID().toString());
+        String label = String.format("REPLICATION_%d_%d_%s", databaseId, tableId, jobId);
         transactionId = GlobalStateMgr.getServingState().getGlobalTransactionMgr().beginTransaction(databaseId,
                 Lists.newArrayList(tableId), label, coordinator, loadJobSourceType,
                 Config.replication_transaction_timeout_sec);
@@ -675,18 +673,29 @@ public class ReplicationJob implements GsonPostProcessable {
             GlobalStateMgr.getServingState().getGlobalTransactionMgr().abortTransaction(databaseId, transactionId,
                     reason);
         } catch (Exception e) {
-            LOG.warn("Replication job abort transaction failed, ignore, database id: {}, table id: {}, ",
-                    databaseId, tableId, e);
+            LOG.warn("Abort transaction failed, ignore, database id: {}, table id: {}, transaction id: {}, ",
+                    databaseId, tableId, transactionId, e);
         }
+
+        removeRunningTasks();
     }
 
     private boolean isTransactionAborted() {
         TransactionState txnState = GlobalStateMgr.getServingState().getGlobalTransactionMgr()
                 .getTransactionState(databaseId, transactionId);
-        if (txnState == null) {
+        if (txnState == null || txnState.getTransactionStatus() == TransactionStatus.ABORTED) {
+            removeRunningTasks();
             return true;
         }
-        return txnState.getTransactionStatus() == TransactionStatus.ABORTED;
+
+        if (txnState.getTransactionStatus() == TransactionStatus.PREPARE) {
+            Database db = GlobalStateMgr.getServingState().getDb(databaseId);
+            if (db == null || db.getTable(tableId) == null) {
+                abortTransaction("Table is deleted");
+                return true;
+            }
+        }
+        return false;
     }
 
     private void sendRemoteSnapshotTasks() {
@@ -702,7 +711,7 @@ public class ReplicationJob implements GsonPostProcessable {
                                 srcToken, tabletInfo.getSrcTabletId(), getTabletType(srcTableType),
                                 indexInfo.getSrcSchemaHash(), partitionInfo.getSrcVersion(),
                                 Lists.newArrayList(replicaInfo.getSrcBackend()),
-                                Config.replication_transaction_remote_snapshot_timeout_sec);
+                                Config.replication_transaction_timeout_sec);
                         runningTasks.put(task, task);
                     }
                 }
@@ -758,37 +767,20 @@ public class ReplicationJob implements GsonPostProcessable {
         AgentTaskExecutor.submit(batchTask);
     }
 
-    private void setAllTaskTimeout() {
-        List<AgentTask> tasks = Lists.newArrayList(runningTasks.values());
-        for (AgentTask task : tasks) {
-            if (runningTasks.remove(task, task)) {
-                task.setFailed(true);
-                task.setErrorMsg("Task timeout");
-                finishedTasks.put(task, task);
-                LOG.warn("Task timeout, task: {}, error: {}", task, task.getErrorMsg());
-            }
+    private void removeRunningTasks() {
+        for (AgentTask task : runningTasks.values()) {
+            AgentTaskQueue.removeTask(task.getBackendId(), task.getTaskType(), task.getSignature());
         }
+        runningTasks.clear();
     }
 
     private boolean isAllTaskFinished() {
         if (runningTasks.isEmpty() && finishedTasks.size() == taskNum) {
             return true;
         }
-
-        long timeoutMs = 0;
-        if (state.equals(ReplicationJobState.SNAPSHOTING)) {
-            timeoutMs = Config.replication_transaction_remote_snapshot_timeout_sec * 1000;
-        } else if (state.equals(ReplicationJobState.REPLICATING)) {
-            timeoutMs = Config.replication_transaction_replicate_snapshot_timeout_sec * 1000;
-        } else {
-            throw new RuntimeException("Invalid replication job state: " + state);
-        }
-
-        if (System.currentTimeMillis() > stateStartTime + timeoutMs) {
-            setAllTaskTimeout();
-        }
-
-        return runningTasks.isEmpty() && finishedTasks.size() == taskNum;
+        LOG.info("Replication job running tasks: {}, finished tasks: {}, transaction id: {}",
+                runningTasks.size(), finishedTasks.size(), transactionId);
+        return false;
     }
 
     private boolean isCrashRecovery() {
