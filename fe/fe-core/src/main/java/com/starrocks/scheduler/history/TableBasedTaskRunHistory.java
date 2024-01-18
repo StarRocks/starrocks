@@ -34,7 +34,8 @@ import java.time.ZoneId;
 import java.util.List;
 
 /**
- * History storage that leverage a regular starrocks table to store the data
+ * History storage that leverage a regular starrocks table to store the data.
+ * By default, using the time-based garbage collection strategy, which keep 7days' history
  */
 public class TableBasedTaskRunHistory implements ITaskRunHistory {
 
@@ -66,12 +67,12 @@ public class TableBasedTaskRunHistory implements ITaskRunHistory {
                     "PARTITION BY RANGE(create_time) " +
                     "DISTRIBUTED BY HASH(id) BUCKETS 8 " +
                     "PROPERTIES(" +
-                    "'replication_num' = '%d'," +
+                    "'replication_num' = '1'," +
                     "'dynamic_partition.time_unit' = 'DAY', " +
-                    "'dynamic_partition.start' = '-3', " +
+                    "'dynamic_partition.start' = '-7', " +
                     "'dynamic_partition.end' = '3', " +
                     "'dynamic_partition.prefix' = 'p' " +
-                    ") ", TABLE_NAME, 3);
+                    ") ", TABLE_NAME);
 
     private final static String COLUMN_LIST = "task_id, task_run_id, task_name, " +
             "create_time, finish_time, expire_time, " +
@@ -85,10 +86,11 @@ public class TableBasedTaskRunHistory implements ITaskRunHistory {
             " WHERE task_name = {0}";
     private final static String SELECT_BY_TASK_RUN_ID = "SELECT " + COLUMN_LIST + " FROM " + TABLE_FULL_NAME +
             " WHERE task_run_id = {0}";
+    private final static String SELECT_ALL = "SELECT " + COLUMN_LIST + " FROM " + TABLE_FULL_NAME;
     private final static String COUNT_TASK_RUNS = "SELECT count(*) as cnt FROM " + TABLE_FULL_NAME;
 
     public static TableKeeper createKeeper() {
-        return new TableKeeper(DATABASE_NAME, TABLE_NAME, CREATE_TABLE, 3);
+        return new TableKeeper(DATABASE_NAME, TABLE_NAME, CREATE_TABLE, TABLE_REPLICAS);
     }
 
     @Override
@@ -130,7 +132,8 @@ public class TableBasedTaskRunHistory implements ITaskRunHistory {
     // TODO: don't return all history, which is very expensive
     @Override
     public List<TaskRunStatus> getAllHistory() {
-        return null;
+        List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(SELECT_ALL);
+        return TaskRunStatus.fromResultBatch(batch);
     }
 
     @Override
