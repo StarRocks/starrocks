@@ -361,4 +361,200 @@ TEST(SortingTest, merge_sorted_stream) {
         }
     }
 }
+<<<<<<< HEAD
+=======
+
+static void test_merge_path(const size_t num_cols, const size_t left_start, const size_t left_num_rows,
+                            const size_t right_start, const size_t right_num_rows, const size_t dest_num_rows,
+                            const size_t processor_num, bool& success) {
+    ASSERT_LE(dest_num_rows, (left_num_rows - left_start) + (right_num_rows - right_start));
+    auto runtime_state = create_runtime_state();
+    TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
+    std::vector<bool> orders(num_cols, true);
+    std::vector<bool> null_firsts(num_cols, false);
+    SortDescs sort_descs(std::move(orders), std::move(null_firsts));
+    std::vector<ExprContext*> sort_exprs;
+    std::vector<std::unique_ptr<ColumnRef>> exprs;
+    Chunk::SlotHashMap map;
+
+    for (int i = 0; i < num_cols; i++) {
+        auto expr = std::make_unique<ColumnRef>(type_desc, i);
+        exprs.emplace_back(std::move(expr));
+        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        map[i] = i;
+    }
+    ASSERT_OK(Expr::prepare(sort_exprs, runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, runtime_state.get()));
+    DeferOp defer([&]() { clear_exprs(sort_exprs); });
+
+    static std::default_random_engine e(0);
+    static std::uniform_int_distribution<int32_t> u_segment(1, 4);
+    static std::uniform_int_distribution<size_t> u_run_extra(0, 4);
+    SortedRuns left_runs;
+    size_t left_segment_num = u_segment(e);
+    if (left_segment_num > left_num_rows) {
+        left_segment_num = 1;
+    }
+    std::vector<Columns> left_segment_columns(left_segment_num);
+    // make SortedRun::range be the subpart of the whole chunk, like:
+    // (left_pad, start_index, ...., end_index, right_pad)
+    std::vector<std::pair<size_t, size_t>> left_segment_paddings;
+    for (int i = 0; i < left_segment_num; i++) {
+        left_segment_paddings.emplace_back(u_run_extra(e), u_run_extra(e));
+    }
+    for (size_t col = 0; col < num_cols; col++) {
+        auto columns =
+                build_random_sorted_columns(type_desc, left_segment_num, left_segment_paddings, 0, left_num_rows, 256);
+        for (size_t seg = 0; seg < left_segment_num; seg++) {
+            left_segment_columns[seg].push_back(std::move(columns[seg]));
+        }
+    }
+    size_t left_cnt = 0;
+    for (size_t seg = 0; seg < left_segment_num; seg++) {
+        auto left_chunk = std::make_shared<Chunk>(left_segment_columns[seg], map);
+        size_t start_index = left_segment_paddings[seg].first;
+        size_t end_index = left_chunk->num_rows() - left_segment_paddings[seg].second;
+        SortedRun left_run(std::move(left_chunk), &sort_exprs);
+        left_run.set_range(start_index, end_index);
+        left_cnt += left_run.num_rows();
+        left_runs.chunks.push_back(std::move(left_run));
+    }
+    ASSERT_EQ(left_num_rows, left_cnt);
+
+    SortedRuns right_runs;
+    size_t right_segment_num = u_segment(e);
+    if (right_segment_num > right_num_rows) {
+        right_segment_num = 1;
+    }
+    std::vector<Columns> right_segment_columns(right_segment_num);
+    // make SortedRun::range be the subpart of the whole chunk, like:
+    // (left_pad, start_index, ...., end_index, right_pad)
+    std::vector<std::pair<size_t, size_t>> right_segment_paddings;
+    for (int i = 0; i < right_segment_num; i++) {
+        right_segment_paddings.emplace_back(u_run_extra(e), u_run_extra(e));
+    }
+    for (size_t col = 0; col < num_cols; col++) {
+        auto columns = build_random_sorted_columns(type_desc, right_segment_num, right_segment_paddings, 0,
+                                                   right_num_rows, 256);
+        for (size_t seg = 0; seg < right_segment_num; seg++) {
+            right_segment_columns[seg].push_back(std::move(columns[seg]));
+        }
+    }
+    size_t right_cnt = 0;
+    for (size_t seg = 0; seg < right_segment_num; seg++) {
+        auto right_chunk = std::make_shared<Chunk>(right_segment_columns[seg], map);
+        size_t start_index = right_segment_paddings[seg].first;
+        size_t end_index = right_chunk->num_rows() - right_segment_paddings[seg].second;
+        SortedRun right_run(std::move(right_chunk), &sort_exprs);
+        right_run.set_range(start_index, end_index);
+        right_cnt += right_run.num_rows();
+        right_runs.chunks.push_back(std::move(right_run));
+    }
+    ASSERT_EQ(right_num_rows, right_cnt);
+
+    Columns dest_columns;
+    for (size_t col = 0; col < num_cols; col++) {
+        auto column = ColumnHelper::create_column(type_desc, false);
+        dest_columns.push_back(std::move(column));
+    }
+    auto primitive_dest_chunk = std::make_shared<Chunk>(dest_columns, map);
+
+    ASSERT_LE(left_start, left_num_rows);
+    ASSERT_LE(right_start, right_num_rows);
+    const size_t left_len = left_num_rows - left_start;
+    const size_t right_len = right_num_rows - right_start;
+
+    merge_path::InputSegment left(std::move(left_runs), left_start, left_len);
+    merge_path::InputSegment right(std::move(right_runs), right_start, right_len);
+    std::vector<merge_path::OutputSegment> dests;
+    for (size_t processor_idx = 0; processor_idx < processor_num; processor_idx++) {
+        ChunkPtr dest_chunk = primitive_dest_chunk->clone_empty_with_slot();
+        Columns dest_orderby;
+        std::vector<int32_t> orderby_indexes;
+        for (size_t col = 0; col < num_cols; col++) {
+            auto column = ColumnHelper::create_column(type_desc, false);
+            dest_orderby.push_back(std::move(column));
+            orderby_indexes.push_back(-1);
+        }
+        SortedRun dest_run(std::move(dest_chunk), std::move(dest_orderby));
+        dests.emplace_back(std::move(dest_run), std::move(orderby_indexes), dest_num_rows);
+    }
+
+    std::vector<std::thread> threads;
+    for (size_t processor_idx = 0; processor_idx < processor_num; processor_idx++) {
+        threads.emplace_back([&sort_descs, &left, &right, &dests, processor_idx, processor_num]() {
+            merge_path::merge(sort_descs, left, right, dests[processor_idx], processor_idx, processor_num);
+        });
+    }
+    for (size_t processor_idx = 0; processor_idx < processor_num; processor_idx++) {
+        threads[processor_idx].join();
+    }
+
+    auto gathered_dest_chunk = dests[0].run.chunk;
+    auto& gathered_dest_orderby = dests[0].run.orderby;
+    for (size_t processor_idx = 1; processor_idx < processor_num; processor_idx++) {
+        gathered_dest_chunk->append(*dests[processor_idx].run.chunk);
+        for (int col = 0; col < num_cols; col++) {
+            gathered_dest_orderby[col]->append(*dests[processor_idx].run.orderby[col]);
+        }
+    }
+
+    ASSERT_EQ(dest_num_rows, gathered_dest_chunk->num_rows());
+    for (size_t col = 0; col < num_cols; col++) {
+        ASSERT_EQ(dest_num_rows, gathered_dest_orderby[col]->size());
+    }
+
+    for (size_t row = 1; row < dest_num_rows; row++) {
+        for (size_t col = 0; col < num_cols; col++) {
+            auto column = gathered_dest_chunk->get_column_by_index(col);
+            auto cmp = column->compare_at(row - 1, row, *column, sort_descs.get_column_desc(col).null_first);
+            ASSERT_TRUE(cmp <= 0);
+            if (cmp < 0) {
+                break;
+            }
+        }
+        for (size_t col = 0; col < num_cols; col++) {
+            auto column = gathered_dest_orderby[col];
+            auto cmp = column->compare_at(row - 1, row, *column, sort_descs.get_column_desc(col).null_first);
+            ASSERT_TRUE(cmp <= 0);
+            if (cmp < 0) {
+                break;
+            }
+        }
+    }
+
+    success = true;
+}
+
+TEST(MergePathTest, test1) {
+    for (size_t num_col = 1; num_col <= 2; num_col++) {
+        for (size_t left_num_rows = 0; left_num_rows <= 4096; left_num_rows += 2048) {
+            for (size_t right_num_rows = 0; right_num_rows <= 4096; right_num_rows += 2048) {
+                for (size_t left_start : std::array<size_t, 2>{0, left_num_rows / 2}) {
+                    for (size_t right_start : std::array<size_t, 2>{0, right_num_rows / 2}) {
+                        for (int processor_num = 1; processor_num <= 8; processor_num *= 2) {
+                            const size_t left_len = left_num_rows - left_start;
+                            const size_t right_len = right_num_rows - right_start;
+                            const size_t dest_size = left_len + right_len;
+                            bool success = false;
+                            test_merge_path(num_col, left_start, left_num_rows, right_start, right_num_rows, dest_size,
+                                            processor_num, success);
+                            ASSERT_TRUE(success);
+
+                            const size_t half_dest_size = dest_size / 2;
+                            if (half_dest_size > 0 && half_dest_size < dest_size) {
+                                success = false;
+                                test_merge_path(num_col, left_start, left_num_rows, right_start, right_num_rows,
+                                                half_dest_size, processor_num, success);
+                                ASSERT_TRUE(success);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+>>>>>>> 7e63ad790c ([UT] Make merge path ut run faster (#39257))
 } // namespace starrocks
