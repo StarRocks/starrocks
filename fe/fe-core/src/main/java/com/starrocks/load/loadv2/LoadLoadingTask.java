@@ -68,7 +68,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 public class LoadLoadingTask extends LoadTask {
     private static final Logger LOG = LogManager.getLogger(LoadLoadingTask.class);
@@ -119,7 +118,6 @@ public class LoadLoadingTask extends LoadTask {
         this.strictMode = strictMode;
         this.txnId = txnId;
         this.failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL);
-        this.retryTime = 1; // load task retry does not satisfy transaction's atomic
         this.timezone = timezone;
         this.timeoutS = timeoutS;
         this.createTimestamp = createTimestamp;
@@ -159,9 +157,6 @@ public class LoadLoadingTask extends LoadTask {
 
     @Override
     protected void executeTask() throws Exception {
-        LOG.info("begin to execute loading task. load id: {} job: {}. db: {}, tbl: {}. left retry: {}",
-                DebugUtil.printId(loadId), callback.getCallbackId(), db.getOriginName(), table.getName(), retryTime);
-        retryTime--;
         executeOnce();
     }
 
@@ -288,18 +283,5 @@ public class LoadLoadingTask extends LoadTask {
 
     private long getLeftTimeMs() {
         return jobDeadlineMs - System.currentTimeMillis();
-    }
-
-    @Override
-    public void updateRetryInfo() {
-        super.updateRetryInfo();
-        UUID uuid = UUID.randomUUID();
-        this.loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
-
-        if (!Config.enable_pipeline_load) {
-            planner.updateLoadInfo(this.loadId);
-        } else {
-            loadPlanner.updateLoadInfo(this.loadId);
-        }
     }
 }
