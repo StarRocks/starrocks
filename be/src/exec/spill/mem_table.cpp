@@ -134,6 +134,7 @@ Status UnorderedMemTable::append_selective(const Chunk& src, const uint32_t* ind
 }
 
 Status UnorderedMemTable::finalize(workgroup::YieldContext& yield_ctx) {
+    DCHECK(_is_done) << "done must invoke before finalize";
     SCOPED_TIMER(_spiller->metrics().mem_table_finalize_timer);
     if (_block == nullptr) {
         _block = std::make_shared<MemoryBlock>();
@@ -201,14 +202,15 @@ Status OrderedMemTable::append_selective(const Chunk& src, const uint32_t* index
     return Status::OK();
 }
 
+Status OrderedMemTable::done() {
+    ASSIGN_OR_RETURN(_chunk, _do_sort(_chunk));
+    _chunk_slice.reset(_chunk);
+    return SpillableMemTable::done();
+}
+
 Status OrderedMemTable::finalize(workgroup::YieldContext& yield_ctx) {
+    DCHECK(_is_done) << "done must invoke before finalize";
     SCOPED_TIMER(_spiller->metrics().mem_table_finalize_timer);
-    if (!_sort_done) {
-        SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
-        // do sort
-        ASSIGN_OR_RETURN(_chunk, _do_sort(_chunk));
-        _chunk_slice.reset(_chunk);
-    }
     RETURN_OK_IF_NEED_YIELD(yield_ctx.wg, &yield_ctx.need_yield, yield_ctx.time_spent_ns);
     // seriealize data, store result into _block
     auto& serde = _spiller->serde();
@@ -238,11 +240,9 @@ void OrderedMemTable::reset() {
     SpillableMemTable::reset();
     _chunk_slice.reset(nullptr);
     _chunk.reset();
-    _sort_done = false;
 }
 
 StatusOr<ChunkPtr> OrderedMemTable::_do_sort(const ChunkPtr& chunk) {
-    DCHECK(!_sort_done) << " cannot sort multiple times";
     RETURN_IF_ERROR(chunk->upgrade_if_overflow());
     DataSegment segment(_sort_exprs, chunk);
     _permutation.resize(0);
@@ -258,8 +258,6 @@ StatusOr<ChunkPtr> OrderedMemTable::_do_sort(const ChunkPtr& chunk) {
         SCOPED_TIMER(_spiller->metrics().materialize_chunk_timer);
         materialize_by_permutation(sorted_chunk.get(), {_chunk}, _permutation);
     }
-    _sort_done = true;
-
     return sorted_chunk;
 }
 } // namespace starrocks::spill

@@ -143,6 +143,7 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
     if (captured_mem_table == nullptr) {
         return Status::OK();
     }
+    RETURN_IF_ERROR(captured_mem_table->done());
 
     _running_flush_tasks++;
     // TODO: handle spill queue

@@ -66,7 +66,20 @@ public:
     [[nodiscard]] virtual Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
                                                   uint32_t size) = 0;
 
-    // all data has been added, call `finalize` to serialize data
+    // @TODO(silverbullet233)
+    // Theoretically, the implementation of done and finalize interfaces only have calculation logic, and there is no need to do them separately.
+    // However, there are some limitations at this stage:
+    // 1. The pipeline scheduling mechanism does not support reentrancy. It is difficult to implement the yield mechanism in the computing thread. we can only rely on the yield mechanism of the scan task.
+    // 2. Some long-time operations do not support yield (such as sorting). If they are placed in the io thread, they may have a greater impact on other tasks.
+    // In order to make a compromise, we can only adopt this approach now, and we can consider unifying it after our yield mechanism is perfected.
+
+    // call `done` to do something after all data has been added
+    // this function is called in the pipeline execution thread
+    virtual Status done() {
+        _is_done = true;
+        return Status::OK();
+    }
+    // call `finalize` to serialize data after `done` is called
     // after `finalize` is successfully called, we can get serialized data by `get_next_serialized_data`.
     // NOTE: The implementation of `finalize` needs to ensure reentrancy in order to implement io task yield mechanism
     virtual Status finalize(workgroup::YieldContext& yield_ctx) = 0;
@@ -89,6 +102,7 @@ protected:
     Spiller* _spiller = nullptr;
     size_t _num_rows = 0;
     MemoryBlockPtr _block;
+    bool _is_done = false;
 };
 
 using MemTablePtr = std::shared_ptr<SpillableMemTable>;
@@ -126,6 +140,7 @@ public:
     [[nodiscard]] Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
                                           uint32_t size) override;
 
+    Status done() override;
     Status finalize(workgroup::YieldContext& yield_ctx) override;
     void reset() override;
 
@@ -137,6 +152,5 @@ private:
     Permutation _permutation;
     ChunkPtr _chunk;
     ChunkSharedSlice _chunk_slice;
-    bool _sort_done = false;
 };
 } // namespace starrocks::spill

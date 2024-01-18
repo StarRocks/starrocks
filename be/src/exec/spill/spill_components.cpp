@@ -278,6 +278,7 @@ Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush
             // partition not in memory
             if (!partition->in_mem && partition->level < config::spill_max_partition_level &&
                 mem_table->mem_usage() + partition->bytes > options().spill_mem_table_bytes_size) {
+                RETURN_IF_ERROR(mem_table->done());
                 partition->in_mem = false;
                 partition->mem_size = 0;
                 partition->bytes += mem_table->mem_usage();
@@ -296,6 +297,7 @@ Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush
             continue;
         }
         if (mem_table->is_full()) {
+            RETURN_IF_ERROR(mem_table->done());
             partition->in_mem = false;
             partition->mem_size = 0;
             partitions_need_flush.emplace_back(partition);
@@ -319,6 +321,8 @@ Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush
         size_t in_mem_bytes = 0;
         for (auto partition : partitions_can_flush) {
             if (in_mem_bytes + partition->bytes > options().spill_mem_table_bytes_size) {
+                const auto& mem_table = partition->spill_writer->mem_table();
+                RETURN_IF_ERROR(mem_table->done());
                 partition->in_mem = false;
                 partition->mem_size = 0;
                 partitions_need_flush.emplace_back(partition);
@@ -338,7 +342,9 @@ Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush
                   });
         size_t accumulate_spill_bytes = 0;
         for (auto partition : partitions_can_flush) {
-            accumulate_spill_bytes += partition->spill_writer->mem_table()->mem_usage();
+            const auto& mem_table = partition->spill_writer->mem_table();
+            RETURN_IF_ERROR(mem_table->done());
+            accumulate_spill_bytes += mem_table->mem_usage();
             partition->in_mem = false;
             partition->mem_size = 0;
             partitions_need_flush.emplace_back(partition);
@@ -581,8 +587,8 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
     {
         auto flush_partition = [this, &spill_ctx, &yield_ctx](SpilledPartition* partition) -> Status {
             auto mem_table = partition->spill_writer->mem_table();
-            if (mem_table->num_rows() == 0) {
-                TRACE_SPILL_LOG << "skip to flush empty partition: " << partition->debug_string();
+            if (mem_table->mem_usage() < _spiller->options().spill_mem_table_bytes_size) {
+                TRACE_SPILL_LOG << fmt::format("skip to flush small partition: {}", partition->debug_string());
                 return Status::OK();
             }
             return this->spill_partition(yield_ctx, spill_ctx, partition);

@@ -15,6 +15,7 @@
 #pragma once
 
 #include <butil/macros.h>
+
 #include <cstring>
 
 #include "column/vectorized_fwd.h"
@@ -48,9 +49,9 @@ struct AlignedBuffer {
     }
     AlignedBuffer& operator=(AlignedBuffer&& other) noexcept {
         if (this != &other) {
-           std::swap(_data, other._data);
-           std::swap(_capacity, other._capacity);
-           std::swap(_size, other._size); 
+            std::swap(_data, other._data);
+            std::swap(_capacity, other._capacity);
+            std::swap(_size, other._size);
         }
         return *this;
     }
