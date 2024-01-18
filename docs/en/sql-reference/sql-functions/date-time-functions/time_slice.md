@@ -8,7 +8,9 @@ displayed_sidebar: "English"
 
 Converts a given time into the beginning or end of a time interval based on the specified time granularity.
 
-This function is supported from v2.3. v2.5 supports converting a given time into the end of a time interval.
+This function is supported from v2.3.
+
+v2.5 supports converting a given time into the end of a time interval.
 
 ## Syntax
 
@@ -68,7 +70,7 @@ order by id_int;
 5 rows in set (0.16 sec)
 ```
 
-Example 2: Convert a given DATETIME value to the beginning of a 5-day time interval with  `boundary` set to FLOOR.
+Example 2: Convert a given DATETIME value to the beginning of a 5-day time interval with  `boundary` set to `FLOOR`.
 
 ```Plaintext
 select time_slice(id_datetime, interval 5 day, FLOOR)
@@ -101,6 +103,7 @@ order by id_int;
 | 1751-03-23 00:00:00                           |
 | 1861-09-17 00:00:00                           |
 +-----------------------------------------------+
+```
 
 Example 4: Convert a given DATETIME value to the end of a 1-millisecond time interval.
 

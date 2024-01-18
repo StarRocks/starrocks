@@ -42,6 +42,7 @@ You can find a function based on the following categories:
 - [covar_pop](./aggregate-functions/covar_pop.md)
 - [covar_samp](./aggregate-functions/covar_samp.md)
 - [count](./aggregate-functions/count.md)
+- [count_if](./aggregate-functions/count_if.md)
 - [group_concat](./aggregate-functions/group_concat.md)
 - [grouping](./aggregate-functions/grouping.md)
 - [grouping_id](./aggregate-functions/grouping_id.md)

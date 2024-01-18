@@ -176,7 +176,8 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [corr](./aggregate-functions/corr.md) | 返回两个随机变量的皮尔逊相关系数. |
 |  [covar_pop](./aggregate-functions/covar_pop.md)| 返回两个随机变量的总体协方差。 |
 |  [covar_samp](./aggregate-functions/covar_samp.md)| 返回两个随机变量的样本协方差。 |
-|  [count](./aggregate-functions/count.md)| 返回满足条件的行数。 |
+|  [count](./aggregate-functions/count.md)| 计算总行数。 |
+|  [count_if](./aggregate-functions/count.md)| 计算满足指定条件的记录数。 |
 |  [group_concat](./string-functions/group_concat.md)| 将结果集中的多行结果连接成一个字符串。|
 |  [grouping](./aggregate-functions/grouping.md)| 判断一个列是否为聚合列，如果是聚合列则返回 0，否则返回 1。|
 |  [grouping_id](./aggregate-functions/grouping_id.md)| 用于区分相同分组标准的分组统计结果。 |
@@ -421,7 +422,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [like](./like-predicate-functions/like.md) | 判断字符串是否**模糊匹配**给定的模式 `pattern`。 |
 |  [regexp](./like-predicate-functions/regexp.md) | 判断字符串是否匹配给定的正则表达式 `pattern`。 |
 |  [regexp_extract](./like-predicate-functions/regexp_extract.md) | 对字符串进行正则匹配，抽取符合 pattern 的第 pos 个匹配部分，需要 pattern 完全匹配 str 中的某部分，才能返回 pattern 部分中需匹配部分，如果没有匹配就返回空字符串。 |
-|  [regexp_extract_all](./like-predicate-functions/regexp_extract_all.md) |  |
+|  [regexp_extract_all](./like-predicate-functions/regexp_extract_all.md) | 从 `str` 中提取与正则表达式 `pattern` 相匹配的子字符串并返回一个字符串数组。字符串必须匹配 `pos` 指定的正则分组。 |
 |  [regexp_replace](./like-predicate-functions/regexp_replace.md) | 对字符串进行正则匹配，将命中 pattern 的部分使用 repl 来进行替换。 |
 
 ## 条件函数

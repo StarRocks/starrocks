@@ -22,7 +22,7 @@ DATETIME time_slice(DATETIME dt, INTERVAL N type[, boundary])
 
 - `INTERVAL N type`：时间粒度周期，例如 `interval 5 second` 表示时间粒度为 5 秒。
   - `N` 是 INT 类型的时间粒度周期的长度。
-  - `type` 是时间粒度周期的单位，取值可以是 YEAR，QUARTER，MONTH，WEEK，DAY，HOUR，MINUTE，SECOND，MILLISECOND(3.1.7 及以后)，MICROSECOND (3.1.7 及以后)。
+  - `type` 是时间粒度周期的单位，取值可以是 YEAR，QUARTER，MONTH，WEEK，DAY，HOUR，MINUTE，SECOND，MILLISECOND（3.1.7 及以后），MICROSECOND（3.1.7 及以后）。
 
 - `boundary`：可选，用于指定返回时间周期的起始时刻 (`FLOOR`) 还是结束时刻 (`CEIL`)。取值范围：FLOOR，CEIL。如果不指定，默认为 `FLOOR`。该参数从 2.5 版本开始支持。
 

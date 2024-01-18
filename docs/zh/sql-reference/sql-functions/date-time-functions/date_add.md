@@ -20,7 +20,7 @@ DATETIME DATE_ADD(DATETIME|DATE date,INTERVAL expr type)
 
 * `expr`：需要添加的时间间隔，支持的数据类型为 INT。
 
-* `type`：时间间隔的单位，取值可以是 YEAR，QUARTER，MONTH，DAY，HOUR，MINUTE，SECOND，MILLISECOND (3.1.7 及以后), MICROSECOND (3.1.7 及以后)。
+* `type`：时间间隔的单位，取值可以是 YEAR，QUARTER，MONTH，DAY，HOUR，MINUTE，SECOND，MILLISECOND (3.1.7 及以后)，MICROSECOND (3.1.7 及以后)。
 
 ## 返回值说明
 
