@@ -112,7 +112,7 @@ public class AST2StringBuilderTest {
                 "@`var1` = cast (1 as tinyint(4))," +
                 "@`var2` = cast ('2020-01-01' as date)," +
                 "@`var3` = cast ('foo' as varchar)," +
-                "@`var4` = cast (1.23 as decimal32(3, 2))," +
+                "@`var4` = cast (1.23 as decimal(3, 2))," +
                 "@`select` = cast (7 as int(11))", AstToStringBuilder.toString(originStmt));
 
         statementBase = SqlParser.parse(
