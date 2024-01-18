@@ -3359,7 +3359,7 @@ public class GlobalStateMgr {
     // Change current warehouse of this session.
     public void changeWarehouse(ConnectContext ctx, String newWarehouseName) throws DdlException {
         if (!warehouseMgr.warehouseExists(newWarehouseName)) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, newWarehouseName);
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, newWarehouseName);
         }
 
         try {

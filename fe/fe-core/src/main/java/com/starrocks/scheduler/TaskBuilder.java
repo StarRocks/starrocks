@@ -103,7 +103,7 @@ public class TaskBuilder {
             // warehouse: translate the warehouse into warehouse_id, in case it changed after renaming
             if (entry.getKey().equalsIgnoreCase(SessionVariable.WAREHOUSE)) {
                 Warehouse wa = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(entry.getValue());
-                Preconditions.checkArgument(wa != null, "warehouse not exists: " + entry.getValue());
+                Preconditions.checkArgument(wa != null, "Warehouse not exists: " + entry.getValue());
 
                 toRemove.add(entry.getKey());
                 toAdd.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID, String.valueOf(wa.getId()));

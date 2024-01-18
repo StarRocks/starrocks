@@ -287,9 +287,6 @@ public enum ErrorCode {
             "Incorrect logical plan found in operator: %s. Invalid reason: %s"),
     ERR_INVALID_DATE_ERROR(6001, new byte[] {'2', '2', '0', '0', '0'}, "Incorrect %s value %s"),
 
-    ERR_BAD_WAREHOUSE_ERROR(6002, new byte[] {'4', '2', '0', '0', '0'},
-            "Unknown warehouse '%s'"),
-
     ERR_BAD_PIPE_STATEMENT(6010, new byte[] {'4', '2', '0', '0', '0'}, "Bad pipe statement: '%s'"),
     ERR_UNKNOWN_PIPE(6011, new byte[] {'4', '2', '0', '0', '0'}, "Unknown pipe '%s'"),
     ERR_PIPE_EXISTS(6012, new byte[] {'4', '2', '0', '0', '0'}, "Pipe exists"),
@@ -320,7 +317,19 @@ public enum ErrorCode {
                     "Current role(s): %s. Inactivated role(s): %s."),
     ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER(5204, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
-    ;
+
+    // warehouse
+    ERR_UNKNOWN_WAREHOUSE(10001, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' not exist."),
+    ERR_WAREHOUSE_EXISTS(10002, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' already exists."),
+    ERR_WAREHOUSE_SUSPENDED(10003, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' has been suspended."),
+    ERR_WAREHOUSE_UNAVAILABLE(10004, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse '%s' is not available."),
+    ERR_NO_NODES_IN_WAREHOUSE(10005, new byte[] {'4', '2', '0', '0', '0'},
+            "No alive backend or compute node in warehouse '%s'."),
+    ERR_INVALID_WAREHOUSE_NAME(10006, new byte[] {'4', '2', '0', '0', '0'}, "Warehouse name can not be null or empty"),
+
+    ERR_NOT_SUPPORTED_STATEMENT_IN_SHARED_NOTHING_MODE(10007, new byte[] {'4', '2', '0', '0', '0'},
+            "unsupported statement in shared_nothing mode");
+
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

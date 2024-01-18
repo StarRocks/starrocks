@@ -29,6 +29,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.Daemon;
+import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.meta.lock.LockType;
@@ -347,21 +348,15 @@ public class CompactionScheduler extends Daemon {
         return tasks;
     }
 
-    static long getCompactionWorkerGroupId() throws BeginTransactionException {
+    static long getCompactionWorkerGroupId() throws WarehouseUnavailableException {
         String warehouseName = Config.lake_compaction_warehouse;
-        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
-        if (warehouse == null) {
-            throw new BeginTransactionException("warehouse " + warehouseName + " not exist");
-        }
-        if (!warehouse.isAvailable()) {
-            throw new BeginTransactionException("warehouse " + warehouseName + " is not available");
-        }
+        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getAvailbleWarehouse(warehouseName);
         return warehouse.getAnyAvailableCluster().getWorkerGroupId();
     }
 
     @NotNull
     private Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition)
-            throws BeginTransactionException {
+            throws WarehouseUnavailableException {
         List<MaterializedIndex> visibleIndexes = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
         Map<Long, List<Long>> nodeToTablets = new HashMap<>();
         for (MaterializedIndex index : visibleIndexes) {
@@ -379,7 +374,8 @@ public class CompactionScheduler extends Daemon {
 
     // REQUIRE: has acquired the exclusive lock of Database.
     protected long beginTransaction(PartitionIdentifier partition)
-            throws BeginTransactionException, AnalysisException, LabelAlreadyUsedException, DuplicatedRequestException {
+            throws BeginTransactionException, AnalysisException, LabelAlreadyUsedException,
+            DuplicatedRequestException, WarehouseUnavailableException {
         long dbId = partition.getDbId();
         long tableId = partition.getTableId();
         long partitionId = partition.getPartitionId();

@@ -56,7 +56,7 @@ public class WarehouseProcDir implements ProcDirInterface {
     @Override
     public ProcNodeInterface lookup(String idOrName) throws AnalysisException {
         if (Strings.isNullOrEmpty(idOrName)) {
-            throw new AnalysisException("warehouse id or name is null or empty");
+            throw new AnalysisException("Warehouse id or name is null or empty.");
         }
         Warehouse warehouse;
         try {
@@ -65,7 +65,7 @@ public class WarehouseProcDir implements ProcDirInterface {
             warehouse = warehouseManager.getWarehouse(idOrName);
         }
         if (warehouse == null) {
-            throw new AnalysisException("Unknown warehouse id or name \"" + idOrName + "\"");
+            throw new AnalysisException("Unknown warehouse id or name \"" + idOrName + ".\"");
         }
         return new WarehouseClusterProcNode(warehouse);
     }

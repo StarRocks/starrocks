@@ -195,7 +195,7 @@ public class ShowStmtAnalyzer {
                 warehouseName = context.getCurrentWarehouseName();
             }
             if (!GlobalStateMgr.getCurrentState().getWarehouseMgr().warehouseExists(warehouseName)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, warehouseName);
+                ErrorReport.reportSemanticException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
             }
             return null;
         }

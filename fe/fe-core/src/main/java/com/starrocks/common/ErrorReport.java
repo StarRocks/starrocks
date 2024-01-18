@@ -34,10 +34,12 @@
 
 package com.starrocks.common;
 
+import com.starrocks.epack.warehouse.WarehouseUnavailableException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.optimizer.validate.ValidateException;
+import com.starrocks.transaction.BeginTransactionException;
 
 // Used to report error happened when execute SQL of user
 public class ErrorReport {
@@ -101,6 +103,16 @@ public class ErrorReport {
 
     public static void reportValidateException(ErrorCode errorCode, ErrorType errorType, Object... objs) {
         throw new ValidateException(errorCode.formatErrorMsg(objs), errorType);
+    }
+
+    public static void reportWarehouseUnavailableException(ErrorCode errorCode, Object... objs)
+            throws WarehouseUnavailableException {
+        throw new WarehouseUnavailableException(reportCommon(null, errorCode, objs));
+    }
+
+    public static void reportBeginTransactionException(ErrorCode errorCode, Object... objs)
+            throws BeginTransactionException {
+        throw new BeginTransactionException(reportCommon(null, errorCode, objs));
     }
 
     public interface DdlExecutor {

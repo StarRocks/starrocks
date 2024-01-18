@@ -19,6 +19,8 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableMap;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.epack.persist.SRMetaBlockIDEPack;
@@ -95,10 +97,10 @@ public class WarehouseManager implements Writable {
     public Warehouse getAvailbleWarehouse(long warehouseId) throws WarehouseUnavailableException {
         Warehouse warehouse = getWarehouse(warehouseId);
         if (warehouse == null) {
-            throw new WarehouseUnavailableException("warehouse " + warehouseId + " not exist");
+            ErrorReport.reportWarehouseUnavailableException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.valueOf(warehouseId));
         }
         if (warehouse.getState() == Warehouse.WarehouseState.SUSPENDED) {
-            throw new WarehouseUnavailableException("warehouse " + warehouse.getName() + " has been suspended");
+            ErrorReport.reportWarehouseUnavailableException(ErrorCode.ERR_WAREHOUSE_SUSPENDED, warehouse.getName());
         }
         return warehouse;
     }
@@ -106,10 +108,10 @@ public class WarehouseManager implements Writable {
     public Warehouse getAvailbleWarehouse(String warehouseName) throws WarehouseUnavailableException {
         Warehouse warehouse = getWarehouse(warehouseName);
         if (warehouse == null) {
-            throw new WarehouseUnavailableException("warehouse " + warehouseName + " not exist");
+            ErrorReport.reportWarehouseUnavailableException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
         }
         if (warehouse.getState() == Warehouse.WarehouseState.SUSPENDED) {
-            throw new WarehouseUnavailableException("warehouse " + warehouseName + " has been suspended");
+            ErrorReport.reportWarehouseUnavailableException(ErrorCode.ERR_WAREHOUSE_SUSPENDED, warehouseName);
         }
         return warehouse;
     }

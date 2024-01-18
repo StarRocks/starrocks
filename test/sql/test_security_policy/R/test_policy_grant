@@ -42,7 +42,7 @@ show grants;
 -- !result
 create masking policy mp2 as ( v1 bigint) returns bigint -> v1 + 1;
 -- result:
-E: (1252, 'Access denied; you need (at least one of) the CREATE MASKING POLICY privilege(s) on DATABASE test_masking_policy_grant for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
+E: (5203, 'Access denied; you need (at least one of) the CREATE MASKING POLICY privilege(s) on DATABASE test_masking_policy_grant for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
 -- !result
 execute as root with no revert;
 -- result:
@@ -105,14 +105,14 @@ execute as u1 with no revert;
 -- !result
 alter table t0 modify column v1 set masking policy mp;
 -- result:
-E: (1252, 'Access denied; you need (at least one of) the APPLY privilege(s) on MASKING POLICY mp for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
+E: (5203, 'Access denied; you need (at least one of) the APPLY privilege(s) on MASKING POLICY mp for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
 -- !result
 select * from sys.policy_references where POLICY_DATABASE='test_policy_grant';
 -- result:
 -- !result
 drop masking policy mp;
 -- result:
-E: (1252, 'Access denied; you need (at least one of) the DROP privilege(s) on MASKING POLICY mp for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
+E: (5203, 'Access denied; you need (at least one of) the DROP privilege(s) on MASKING POLICY mp for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
 -- !result
 execute as root with no revert;
 -- result:
@@ -173,7 +173,7 @@ show grants;
 -- !result
 create row access policy rp2 as (v1 bigint) returns boolean -> true;
 -- result:
-E: (1252, 'Access denied; you need (at least one of) the CREATE ROW ACCESS POLICY privilege(s) on DATABASE test_row_access_policy_grant for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
+E: (5203, 'Access denied; you need (at least one of) the CREATE ROW ACCESS POLICY privilege(s) on DATABASE test_row_access_policy_grant for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
 -- !result
 execute as root with no revert;
 -- result:
@@ -236,14 +236,14 @@ execute as u2 with no revert;
 -- !result
 alter table t0 add row access policy rp on (v1);
 -- result:
-E: (1252, 'Access denied; you need (at least one of) the APPLY privilege(s) on ROW ACCESS POLICY rp for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
+E: (5203, 'Access denied; you need (at least one of) the APPLY privilege(s) on ROW ACCESS POLICY rp for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
 -- !result
 select * from sys.policy_references where POLICY_DATABASE='test_policy_grant';
 -- result:
 -- !result
 drop row access policy rp;
 -- result:
-E: (1252, 'Access denied; you need (at least one of) the DROP privilege(s) on ROW ACCESS POLICY rp for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
+E: (5203, 'Access denied; you need (at least one of) the DROP privilege(s) on ROW ACCESS POLICY rp for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
 -- !result
 execute as root with no revert;
 -- result:

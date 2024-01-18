@@ -5,6 +5,8 @@ package com.starrocks.epack.system;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.DropComputeNodeLog;
@@ -67,7 +69,7 @@ public class SystemInfoServiceEpack extends SystemInfoService {
         Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName);
         // check if the warehouse exist
         if (warehouse == null) {
-            throw new DdlException("warehouse " + warehouseName + " not exist");
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
         }
 
         computeNode.setWorkerGroupId(warehouse.getAnyAvailableCluster().getWorkerGroupId());
@@ -123,7 +125,7 @@ public class SystemInfoServiceEpack extends SystemInfoService {
 
         // check if the warehouse exist
         if (GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName) == null) {
-            throw new DdlException("warehouse " + warehouseName + " not exist");
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
@@ -179,7 +181,7 @@ public class SystemInfoServiceEpack extends SystemInfoService {
 
         // check if the warehouse exist
         if (GlobalStateMgr.getCurrentWarehouseMgr().getWarehouse(warehouseName) == null) {
-            throw new DdlException("warehouse " + warehouseName + " not exist");
+            ErrorReport.reportDdlException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, warehouseName);
         }
 
         for (Pair<String, Integer> pair : hostPortPairs) {
