@@ -20,7 +20,6 @@
 
 namespace starrocks::pipeline {
 
-// TODO(letian-jiang): optimize
 StatusOr<std::string> column_to_string(const TypeDescriptor& type_desc, const ColumnPtr& column) {
     auto datum = column->get(0);
     if (datum.is_null()) {
@@ -81,10 +80,9 @@ Status ConnectorSinkOperator::prepare(RuntimeState* state) {
 }
 
 void ConnectorSinkOperator::close(RuntimeState* state) {
-    for (const auto& writer : _partition_writers) {
-        if (!writer.second->closed()) {
-            WARN_IF_ERROR(writer.second->close(state), "close writer failed");
-        }
+    while (!_rollback_actions.empty()) {
+        _rollback_actions.front()();
+        _rollback_actions.pop();
     }
     Operator::close(state);
 }
@@ -95,61 +93,74 @@ bool is_ready(std::future<R> const& f) {
 }
 
 bool ConnectorSinkOperator::need_input() const {
-    if (_is_finished) {
+    if (_no_more_input) {
         return false;
     }
 
     // LOG(INFO) << "need input";
-    while (!_blocking_futures.empty()) {
+    while (!_add_chunk_future_queue.empty()) {
         // return if any future is not ready, check in order of FIFO
-        if (!is_ready(_blocking_futures.front())) {
+        if (!is_ready(_add_chunk_future_queue.front())) {
             return false;
         }
-        if (auto st = _blocking_futures.front().get(); !st.ok()) {
+        if (auto st = _add_chunk_future_queue.front().get(); !st.ok()) {
             LOG(WARNING) << "cancel fragment: " << st;
-            _fragment_ctx->cancel(st);
+            _fragment_context->cancel(st);
             return false;
         }
-        _blocking_futures.pop();
+        _add_chunk_future_queue.pop();
     }
 
     return true;
-
-    /*
-    for (const auto& writer : _partition_writers) {
-        if (!writer.second->writable()) {
-            return false;
-        }
-    }
-
-    return true;
-    */
 }
 
 bool ConnectorSinkOperator::is_finished() const {
-    // LOG(INFO) << "is finished";
-    if (!_is_finished) {
+    LOG(INFO) << "is finished";
+    if (!_no_more_input) {
         return false;
     }
-    // TODO:
-    return _next_id == _rollback_actions.size();
+
+    while (!_add_chunk_future_queue.empty()) {
+        // return if any future is not ready, check in order of FIFO
+        if (!is_ready(_add_chunk_future_queue.front())) {
+            return false;
+        }
+        if (auto st = _add_chunk_future_queue.front().get(); !st.ok()) {
+            LOG(WARNING) << "cancel fragment: " << st;
+            _fragment_context->cancel(st);
+            return false;
+        }
+        _add_chunk_future_queue.pop();
+    }
+
+    while (!_commit_file_future_queue.empty()) {
+        // return if any future is not ready, check in order of FIFO
+        if (!is_ready(_commit_file_future_queue.front())) {
+            return false;
+        }
+
+        auto result = _commit_file_future_queue.front().get();
+        _commit_file_future_queue.pop();
+
+        if (auto st = result.io_status; st.ok()) {
+            _connector_chunk_sink->callbackOnCommitSuccess()(result);
+        } else {
+            LOG(WARNING) << "cancel fragment: " << st;
+            _fragment_context->cancel(st);
+        }
+        _rollback_actions.push(result.rollback_action);
+    }
+
+    DCHECK(_add_chunk_future_queue.empty());
+    DCHECK(_commit_file_future_queue.empty());
+    return true;
 }
 
 Status ConnectorSinkOperator::set_finishing(RuntimeState* state) {
-    _is_finished = true;
+    _no_more_input = true;
     LOG(INFO) << "set finishing";
-    if (_file_writer != nullptr) {
-        _file_writer->commitAsync([&, fragment_ctx = _fragment_ctx, state = state](FileWriter::CommitResult result) {
-            if (!result.io_status.ok()) {
-                LOG(WARNING) << "cancel fragment instance " << state->fragment_instance_id() << ": " << result.io_status;
-                fragment_ctx->cancel(result.io_status);
-                return;
-            }
-            state->update_num_rows_load_sink(result.file_metrics.record_count);
-            _rollback_actions.push(result.rollback_action);
-        });
-    }
-    return Status::OK();
+    auto future = _connector_chunk_sink->finish();
+    return enqueue_futures(std::move(future));
 }
 
 bool ConnectorSinkOperator::pending_finish() const {
@@ -157,27 +168,28 @@ bool ConnectorSinkOperator::pending_finish() const {
 }
 
 Status ConnectorSinkOperator::set_cancelled(RuntimeState* state) {
-    // TODO: cancel
+    _is_cancelled = true;
     return Status::OK();
 }
 
 StatusOr<ChunkPtr> ConnectorSinkOperator::pull_chunk(RuntimeState* state) {
-    CHECK(false) << "not allowed to pull chunk from ConnectorSinkOperator";
+    CHECK(false) << "ConnectorSinkOperator::pull_chunk";
     __builtin_unreachable();
 }
 
 Status ConnectorSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
-    auto future_handler = [&](auto&& future) {
-        if (is_ready(future)) {
-            RETURN_IF_ERROR(future.get());
-        } else {
-            _blocking_futures.push(std::move(future));
-        }
-        return Status::OK();
-    };
-
     auto future = _connector_chunk_sink->add(chunk);
-    return future_handler(future);
+    return enqueue_futures(std::move(future));
+}
+
+Status ConnectorSinkOperator::enqueue_futures(ConnectorChunkSink::Futures future) {
+    for (auto& f : future.add_chunk_future) {
+        _add_chunk_future_queue.push(std::move(f));
+    }
+    for (auto& f : future.commit_file_future) {
+        _commit_file_future_queue.push(std::move(f));
+    }
+    return Status::OK();
 }
 
 ConnectorSinkOperatorFactory::ConnectorSinkOperatorFactory(

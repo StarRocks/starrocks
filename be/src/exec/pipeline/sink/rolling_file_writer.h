@@ -23,6 +23,21 @@ namespace starrocks::pipeline {
 
 class FileWriter {
 public:
+    enum class FileFormat {
+        PARQUET,
+        ORC,
+        CSV,
+        UNKNOWN,
+    };
+
+    enum class Compression {
+        NONE,
+    };
+
+    struct FileWriterOptions {
+        virtual ~FileWriterOptions();
+    };
+
     struct FileMetrics {
         std::string file_location;
         std::string partition_location;
@@ -44,11 +59,9 @@ public:
 
     virtual ~FileWriter() = default;
     virtual Status init() = 0;
-    virtual int64_t getWrittenBytes() = 0;
+    virtual int64_t get_written_bytes() = 0;
     virtual std::future<Status> write(ChunkPtr chunk) = 0;
-    // virtual std::future<CommitResult> commit() = 0;
-    virtual void commitAsync(std::function<void(CommitResult)> callback) = 0;
-    virtual void rollback() = 0;
+    virtual std::future<CommitResult> commit() = 0;
 };
 
 class FileWriterBuilder {

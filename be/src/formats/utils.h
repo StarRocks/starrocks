@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <future>
 #include <boost/algorithm/string.hpp>
 #include <string>
 
@@ -24,5 +25,21 @@ public:
         return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
     }
 };
+
+template <typename T>
+std::future<T> make_ready_future(T&& t) {
+    std::promise<T> p;
+    p.set_value(std::forward<T>(t));
+    return p.get_future();
+}
+
+
+template <typename T>
+std::future<T> make_ready_future(const T& t) {
+    T copy = t;
+    std::promise<T> p;
+    p.set_value(std::forward<T>(copy));
+    return p.get_future();
+}
 
 } // namespace starrocks

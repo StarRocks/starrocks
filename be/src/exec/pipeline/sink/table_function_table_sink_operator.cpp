@@ -189,7 +189,7 @@ Status TableFunctionTableSinkOperator::push_chunk(RuntimeState* state, const Chu
 
     // poc: unpartitoned writer
     // commit writer if exceeds target file size
-    if (_file_writer->getWrittenBytes() > 1 << 30) {
+    if (_file_writer->get_written_bytes() > 1 << 30) {
         _file_writer->commitAsync([&, fragment_ctx = _fragment_ctx, state = state](FileWriter::CommitResult result) {
             if (!result.io_status.ok()) {
                 LOG(WARNING) << "cancel fragment instance " << state->fragment_instance_id() << ": " << result.io_status;

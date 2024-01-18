@@ -534,8 +534,8 @@ Status AsyncFileWriter::close(RuntimeState* state,
 }
 
 ParquetFileWriter::ParquetFileWriter(std::unique_ptr<WritableFile> writable_file,
-    std::shared_ptr<::parquet::WriterProperties> properties, std::shared_ptr<::parquet::schema::GroupNode> schema,
-    const std::vector<ExprContext*>& output_expr_ctxs, int64_t _max_file_size)
+                                     std::shared_ptr<::parquet::WriterProperties> properties, std::shared_ptr<::parquet::schema::GroupNode> schema,
+                                     const std::vector<ExprContext*>& output_expr_ctxs, int64_t _max_file_size)
     : _properties(std::move(properties)),
     _schema(std::move(schema)) {
     _output_stream = std::make_shared<ParquetOutputStream>(std::move(writable_file));
@@ -549,8 +549,6 @@ ParquetFileWriter::ParquetFileWriter(std::unique_ptr<WritableFile> writable_file
     _executors = ExecEnv::GetInstance()->pipeline_sink_io_pool();
 }
 
-ParquetFileWriter::~ParquetFileWriter() = default;
-
 std::future<Status> ParquetFileWriter::write(ChunkPtr chunk) {
     // TOD): init rowgroup writer
     if (_rowgroup_writer == nullptr) {
@@ -563,50 +561,68 @@ std::future<Status> ParquetFileWriter::write(ChunkPtr chunk) {
     return make_completed_future(Status::OK());
 }
 
-void ParquetFileWriter::commitAsync(std::function<void(CommitResult)> callback) {
-    if (bool ok = _executors->try_offer([writer = _writer, output_stream = _output_stream, callback]{
+std::future<pipeline::FileWriter::CommitResult> ParquetFileWriter::commit() {
+    auto promise = std::make_shared<std::promise<CommitResult>>();
+    std::future<CommitResult> future = promise->get_future();
+
+    if (bool ok = _executors->try_offer([writer = _writer, p = promise] {
+        CommitResult result;
         try {
             writer->Close();
-            LOG(INFO) << "close writer";
-            // _set_metrics(writer->metadata().get());
         } catch (const ::parquet::ParquetStatusException& e) {
-            auto exception = Status::IOError(fmt::format("{}: {}", "close writer error", e.what()));
+            Status exception = Status::IOError(fmt::format("{}: {}", "close file error", e.what()));
+            result.io_status = exception;
             LOG(WARNING) << exception;
-            callback({.io_status = exception});
+            p->set_value(CommitResult{.io_status = exception});
             return;
         }
-
-        if (auto st = output_stream->Close(); !st.ok()) {
-            auto exception = Status::IOError(fmt::format("{}: {}", "close output stream error", st.message()));
-            LOG(WARNING) << exception;
-            callback({.io_status = exception});
-            return;
-        }
-        LOG(INFO) << "close output stream";
-
-        // io task succeed
-        callback(CommitResult{
-            .io_status = Status::OK(),
-            .file_metrics = FileMetrics{.record_count = writer->metadata()->num_rows()}, // TODO
-            .rollback_action = []() {}, // TODO
-        });
+        p->set_value(CommitResult{.io_status = Status::OK()});
     }); !ok) {
-        auto exception = Status::ResourceBusy("submit flush row group task fails");
+        Status exception = Status::ResourceBusy("submit close file task fails");
         LOG(WARNING) << exception;
-        callback({.io_status = exception});
+        promise->set_value(CommitResult{.io_status = exception});
     }
+
+    _writer = nullptr;
+    return future;
 }
 
-void ParquetFileWriter::rollback() {
-    // necessary?
-}
+// void ParquetFileWriter::commitAsync(std::function<void(CommitResult)> callback) {
+//     if (bool ok = _executors->try_offer([writer = _writer, output_stream = _output_stream, callback]{
+//         try {
+//             writer->Close();
+//             LOG(INFO) << "close writer";
+//             // _set_metrics(writer->metadata().get());
+//         } catch (const ::parquet::ParquetStatusException& e) {
+//             auto exception = Status::IOError(fmt::format("{}: {}", "close writer error", e.what()));
+//             LOG(WARNING) << exception;
+//             callback({.io_status = exception});
+//             return;
+//         }
+//
+//         if (auto st = output_stream->Close(); !st.ok()) {
+//             auto exception = Status::IOError(fmt::format("{}: {}", "close output stream error", st.message()));
+//             LOG(WARNING) << exception;
+//             callback({.io_status = exception});
+//             return;
+//         }
+//         LOG(INFO) << "close output stream";
+//
+//         // io task succeed
+//         callback(CommitResult{
+//             .io_status = Status::OK(),
+//             .file_metrics = FileMetrics{.record_count = writer->metadata()->num_rows()}, // TODO
+//             .rollback_action = []() {}, // TODO
+//         });
+//     }); !ok) {
+//         auto exception = Status::ResourceBusy("submit flush row group task fails");
+//         LOG(WARNING) << exception;
+//         callback({.io_status = exception});
+//     }
+// }
 
-Status ParquetFileWriter::init() {
-    _writer = ::parquet::ParquetFileWriter::Open(_output_stream, _schema, _properties);
-    return Status::OK();
-}
-
-int64_t ParquetFileWriter::getWrittenBytes() {
+int64_t ParquetFileWriter::get_written_bytes() {
+    // TODO: implement
     return 0;
 }
 
@@ -663,7 +679,7 @@ void merge_stats(const std::shared_ptr<::parquet::Statistics>& left,
     }
 }
 
-void ParquetFileWriter::_set_metrics(::parquet::FileMetaData* meta) {
+pipeline::FileWriter::FileMetrics ParquetFileWriter::_metrics(const ::parquet::FileMetaData* meta) {
     DCHECK(meta != nullptr);
     FileMetrics file_metrics;
     // field_id -> column_stat
@@ -718,7 +734,7 @@ void ParquetFileWriter::_set_metrics(::parquet::FileMetaData* meta) {
         file_metrics.upper_bounds = std::move(upper_bounds);
     }
 
-    _metrics = file_metrics;
+    return file_metrics;
 }
 
 } // namespace starrocks::parquet

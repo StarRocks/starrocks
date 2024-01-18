@@ -243,28 +243,32 @@ std::future<T> make_completed_future(T&& t) {
 
 class ParquetFileWriter final : public pipeline::FileWriter {
 public:
-    ParquetFileWriter(std::unique_ptr<WritableFile> writable_file, std::shared_ptr<::parquet::WriterProperties> properties,
-                   std::shared_ptr<::parquet::schema::GroupNode> schema,
-                   const std::vector<ExprContext*>& output_expr_ctxs, int64_t _max_file_size);
+    struct ParquetWriterOptions : FileWriterOptions {
+        int64_t dictionary_pagesize = 1024 * 1024; // 1MB
+        int64_t page_size = 1024 * 1024; // 1MB
+        int64_t write_batch_size = 4096;
+        int64_t rowgroup_size = 1 << 27; // 128MB
+    };
 
-    ~ParquetFileWriter() override;
+    ParquetFileWriter(std::unique_ptr<ParquetOutputStream> output_stream, const std::vector<std::string>& column_names,
+                  const std::vector<ExprContext*>& output_exprs, std::shared_ptr<ParquetWriterOptions> options,
+                  PriorityThreadPool* executors = nullptr);
 
-    std::future<Status> write(ChunkPtr chunk) override;
-
-    void commitAsync(std::function<void(CommitResult)> callback) override;
-
-    void rollback() override;
+    ~ParquetFileWriter() override = default;
 
     Status init() override;
 
-    int64_t getWrittenBytes() override;
+    int64_t get_written_bytes() override;
+
+    std::future<Status> write(ChunkPtr chunk) override;
+
+    std::future<CommitResult> commit() override;
 
 private:
+    static FileMetrics _metrics(const ::parquet::FileMetaData* meta_data);
+
     std::future<Status> _flush_row_group();
 
-    void _set_metrics(::parquet::FileMetaData* meta_data);
-
-private:
     std::shared_ptr<::parquet::WriterProperties> _properties;
     std::shared_ptr<::parquet::schema::GroupNode> _schema;
 
@@ -275,10 +279,7 @@ private:
     std::shared_ptr<::parquet::ParquetFileWriter> _writer;
     std::shared_ptr<ChunkWriter> _rowgroup_writer;
     std::shared_ptr<ParquetOutputStream> _output_stream;
-    std::optional<FileMetrics> _metrics; // set metrics after commit
     PriorityThreadPool* _executors;
-
-    inline static std::future<Status> NON_BLOCKED_OK = make_completed_future(Status::OK());
 };
 
 

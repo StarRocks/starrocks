@@ -32,24 +32,9 @@ namespace starrocks::pipeline {
 class ConnectorSinkOperator final : public Operator {
 public:
     ConnectorSinkOperator(OperatorFactory* factory, const int32_t id, const int32_t plan_node_id,
-                                   const int32_t driver_sequence, const string& path, const string& file_format,
-                                   const TCompressionType::type& compression_type,
-                                   const std::vector<ExprContext*>& output_exprs,
-                                   const std::vector<ExprContext*>& partition_exprs,
-                                   const std::vector<std::string>& partition_column_names, bool write_single_file,
-                                   const TCloudConfiguration& cloud_conf, FragmentContext* fragment_ctx,
-                                   std::shared_ptr<::parquet::schema::GroupNode> parquet_file_schema)
+                          const int32_t driver_sequence, std::unique_ptr<ConnectorChunkSink> connector_chunk_sink, FragmentContext* fragment_context)
             : Operator(factory, id, "connector_sink_operator", plan_node_id, false, driver_sequence),
-              _path(path),
-              _file_format(file_format),
-              _compression_type(compression_type),
-              _output_exprs(output_exprs),
-              _partition_exprs(partition_exprs),
-              _partition_column_names(partition_column_names),
-              _write_single_file(write_single_file),
-              _cloud_conf(cloud_conf),
-              _fragment_ctx(fragment_ctx),
-              _parquet_file_schema(std::move(parquet_file_schema)) {}
+              _connector_chunk_sink(std::move(connector_chunk_sink)), _fragment_context(fragment_context) {}
 
     ~ConnectorSinkOperator() override = default;
 
@@ -74,29 +59,17 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
+    Status enqueue_futures(ConnectorChunkSink::Futures future);
+
     std::unique_ptr<ConnectorChunkSink> _connector_chunk_sink;
 
-    const std::string _path;
-    const std::string _file_format;
-    const TCompressionType::type _compression_type;
-    const std::vector<ExprContext*> _output_exprs;
-    const std::vector<ExprContext*> _partition_exprs;
-    const std::vector<std::string> _partition_column_names;
-    const bool _write_single_file;
-    const TCloudConfiguration _cloud_conf;
-    mutable FragmentContext* _fragment_ctx;
+    mutable std::queue<std::future<Status>> _add_chunk_future_queue;
+    mutable std::queue<std::future<FileWriter::CommitResult>> _commit_file_future_queue;
+    mutable std::queue<std::function<void()>> _rollback_actions;
 
-    const std::shared_ptr<::parquet::schema::GroupNode> _parquet_file_schema;
-    std::unordered_map<std::string, std::unique_ptr<starrocks::RollingAsyncParquetWriter>> _partition_writers;
-    std::atomic<bool> _is_finished = false;
-
-    std::unique_ptr<FileWriter> _file_writer;
-    int _next_id = 0;
-    // TODO: need lock?
-    mutable std::queue<std::future<Status>> _blocking_futures;
-
-    // TODO: lock
-    std::queue<std::function<void()>> _rollback_actions;
+    bool _no_more_input = false;
+    bool _is_cancelled = false;
+    FragmentContext* _fragment_context;
 };
 
 class ConnectorSinkOperatorFactory final : public OperatorFactory {

@@ -38,6 +38,7 @@ uint64_t OrcOutputStream::getLength() const {
 }
 
 uint64_t OrcOutputStream::getNaturalWriteSize() const {
+    // TODO: enlarge
     return config::vector_chunk_size;
 }
 

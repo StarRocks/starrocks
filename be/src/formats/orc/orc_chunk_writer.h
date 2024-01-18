@@ -14,8 +14,9 @@
 
 #pragma once
 
-#include <functional>
 #include <formats/parquet/file_writer.h>
+
+#include <functional>
 
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"

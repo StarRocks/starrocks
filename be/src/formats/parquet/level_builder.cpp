@@ -134,6 +134,8 @@ void LevelBuilder::_write_column_chunk(const LevelBuilderContext& ctx, const Typ
         break;
     }
     default: {
+        // should check unsupported types in make_schema
+        CHECK(false) << "unreachable";
     }
     }
 }
