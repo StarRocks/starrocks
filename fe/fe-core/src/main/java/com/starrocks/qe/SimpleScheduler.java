@@ -42,7 +42,6 @@ import com.starrocks.common.Reference;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
-import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -70,7 +69,7 @@ public class SimpleScheduler {
     //count id for backend get TNetworkAddress
     private static AtomicLong nextBackendHostId = new AtomicLong(0);
     //count id for get ComputeNode
-    private static Map<Long, Integer> blacklistBackends = Maps.newHashMap();
+    private static Map<Long, Integer> blacklistNodes = Maps.newHashMap();
     private static Lock lock = new ReentrantLock();
     private static UpdateBlacklistThread updateBlacklistThread;
     private static AtomicBoolean enableUpdateBlacklistThread;
@@ -85,7 +84,7 @@ public class SimpleScheduler {
     public static TNetworkAddress getHost(long nodeId,
                                           List<TScanRangeLocation> locations,
                                           ImmutableMap<Long, ComputeNode> computeNodes,
-                                          Reference<Long> backendIdRef) {
+                                          Reference<Long> nodeIdRef) {
 
         if (locations == null || computeNodes == null) {
             return null;
@@ -96,8 +95,8 @@ public class SimpleScheduler {
 
         lock.lock();
         try {
-            if (node != null && node.isAlive() && !blacklistBackends.containsKey(nodeId)) {
-                backendIdRef.setRef(nodeId);
+            if (node != null && node.isAlive() && !blacklistNodes.containsKey(nodeId)) {
+                nodeIdRef.setRef(nodeId);
                 return new TNetworkAddress(node.getHost(), node.getBePort());
             } else {
                 for (TScanRangeLocation location : locations) {
@@ -105,11 +104,11 @@ public class SimpleScheduler {
                         continue;
                     }
                     // choose the first alive backend(in analysis stage, the locations are random)
-                    ComputeNode candidateBackend = computeNodes.get(location.backend_id);
-                    if (candidateBackend != null && candidateBackend.isAlive()
-                            && !blacklistBackends.containsKey(location.backend_id)) {
-                        backendIdRef.setRef(location.backend_id);
-                        return new TNetworkAddress(candidateBackend.getHost(), candidateBackend.getBePort());
+                    ComputeNode candidateNode = computeNodes.get(location.backend_id);
+                    if (candidateNode != null && candidateNode.isAlive()
+                            && !blacklistNodes.containsKey(location.backend_id)) {
+                        nodeIdRef.setRef(location.backend_id);
+                        return new TNetworkAddress(candidateNode.getHost(), candidateNode.getBePort());
                     }
                 }
 
@@ -119,11 +118,11 @@ public class SimpleScheduler {
                     allNodes.addAll(computeNodes.values());
                     List<ComputeNode> candidateNodes = allNodes.stream()
                             .filter(x -> x.getId() != nodeId && x.isAlive() &&
-                                    !blacklistBackends.containsKey(x.getId())).collect(Collectors.toList());
+                                    !blacklistNodes.containsKey(x.getId())).collect(Collectors.toList());
                     if (!candidateNodes.isEmpty()) {
                         // use modulo operation to ensure that the same node is selected for the dead node
                         ComputeNode candidateNode = candidateNodes.get((int) (nodeId % candidateNodes.size()));
-                        backendIdRef.setRef(candidateNode.getId());
+                        nodeIdRef.setRef(candidateNode.getId());
                         return new TNetworkAddress(candidateNode.getHost(), candidateNode.getBePort());
                     }
                 }
@@ -131,7 +130,7 @@ public class SimpleScheduler {
         } finally {
             lock.unlock();
         }
-        // no backend returned
+        // no backend or compute node returned
         return null;
     }
 
@@ -178,7 +177,7 @@ public class SimpleScheduler {
         long id = nextId.getAndIncrement();
         for (int i = 0; i < nodes.size(); i++) {
             T node = nodes.get((int) (id % nodes.size()));
-            if (node != null && node.isAlive() && !blacklistBackends.containsKey(node.getId())) {
+            if (node != null && node.isAlive() && !blacklistNodes.containsKey(node.getId())) {
                 nextId.addAndGet(i); // skip failed nodes
                 return node;
             }
@@ -187,37 +186,37 @@ public class SimpleScheduler {
         return null;
     }
 
-    public static void addToBlacklist(Long backendID) {
-        if (backendID == null) {
+    public static void addToBlacklist(Long nodeID) {
+        if (nodeID == null) {
             return;
         }
         lock.lock();
         try {
             int tryTime = Config.heartbeat_timeout_second + 1;
-            blacklistBackends.put(backendID, tryTime);
-            LOG.warn("add black list " + backendID);
+            blacklistNodes.put(nodeID, tryTime);
+            LOG.warn("add black list " + nodeID);
         } finally {
             lock.unlock();
         }
     }
 
-    public static boolean isInBlacklist(long backendId) {
+    public static boolean isInBlacklist(long nodeId) {
         lock.lock();
         try {
-            return blacklistBackends.containsKey(backendId);
+            return blacklistNodes.containsKey(nodeId);
         } finally {
             lock.unlock();
         }
     }
 
     // The function is used for unit test
-    public static boolean removeFromBlacklist(Long backendID) {
-        if (backendID == null) {
+    public static boolean removeFromBlacklist(Long nodeID) {
+        if (nodeID == null) {
             return true;
         }
         lock.lock();
         try {
-            return blacklistBackends.remove(backendID) != null;
+            return blacklistNodes.remove(nodeID) != null;
         } finally {
             lock.unlock();
         }
@@ -227,41 +226,41 @@ public class SimpleScheduler {
         SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
 
         lock.lock();
-        Map<Long, Integer> blackListBackendsCopy = new HashMap<>(blacklistBackends);
+        Map<Long, Integer> blackListBackendsCopy = new HashMap<>(blacklistNodes);
         lock.unlock();
 
-        List<Long> removedBackends = new ArrayList<>();
-        Map<Long, Integer> retryingBackends = new HashMap<>();
+        List<Long> removedNodes = new ArrayList<>();
+        Map<Long, Integer> retryingNodes = new HashMap<>();
 
         Iterator<Map.Entry<Long, Integer>> iterator = blackListBackendsCopy.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<Long, Integer> entry = iterator.next();
-            Long backendId = entry.getKey();
+            Long nodeId = entry.getKey();
 
             // 1. If the backend is null, means that the backend has been removed.
             // 2. check the all ports of the backend
             // 3. retry Config.heartbeat_timeout_second + 1 times
             // If both of the above conditions are met, the backend is removed from the blacklist
-            Backend backend = clusterInfoService.getBackend(backendId);
-            if (backend == null) {
-                removedBackends.add(backendId);
-                LOG.warn("remove backendID {} from blacklist", backendId);
-            } else if (clusterInfoService.checkBackendAvailable(backendId)) {
-                String host = backend.getHost();
+            ComputeNode node = clusterInfoService.getBackendOrComputeNode(nodeId);
+            if (node == null) {
+                removedNodes.add(nodeId);
+                LOG.warn("remove nodeID {} from blacklist", nodeId);
+            } else if (clusterInfoService.checkNodeAvailable(node)) {
+                String host = node.getHost();
                 List<Integer> ports = new ArrayList<Integer>();
-                Collections.addAll(ports, backend.getBePort(), backend.getBrpcPort(), backend.getHttpPort());
+                Collections.addAll(ports, node.getBePort(), node.getBrpcPort(), node.getHttpPort());
                 if (NetUtils.checkAccessibleForAllPorts(host, ports)) {
-                    removedBackends.add(backendId);
-                    LOG.warn("remove backendID {} from blacklist", backendId);
+                    removedNodes.add(nodeId);
+                    LOG.warn("remove nodeID {} from blacklist", nodeId);
                 }
             } else {
                 Integer retryTimes = entry.getValue();
                 retryTimes = retryTimes - 1;
                 if (retryTimes <= 0) {
-                    removedBackends.add(backendId);
-                    LOG.warn("remove backendID {} from blacklist", backendId);
+                    removedNodes.add(nodeId);
+                    LOG.warn("remove nodeID {} from blacklist", nodeId);
                 } else {
-                    retryingBackends.put(backendId, retryTimes);
+                    retryingNodes.put(nodeId, retryTimes);
                 }
             }
         }
@@ -269,14 +268,14 @@ public class SimpleScheduler {
         lock.lock();
         try {
             // remove backends.
-            for (Long backendId : removedBackends) {
-                blacklistBackends.remove(backendId);
+            for (Long backendId : removedNodes) {
+                blacklistNodes.remove(backendId);
             }
 
             // update the retry times.
-            for (Map.Entry<Long, Integer> entry : retryingBackends.entrySet()) {
-                if (blacklistBackends.containsKey(entry.getKey())) {
-                    blacklistBackends.put(entry.getKey(), entry.getValue());
+            for (Map.Entry<Long, Integer> entry : retryingNodes.entrySet()) {
+                if (blacklistNodes.containsKey(entry.getKey())) {
+                    blacklistNodes.put(entry.getKey(), entry.getValue());
                 }
             }
         } finally {
