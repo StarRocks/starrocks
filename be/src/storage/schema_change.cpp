@@ -461,12 +461,10 @@ Status SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_row
             continue;
         }
 
-#ifdef BE_TEST
         if (auto st = _chunk_changer->fill_generated_columns(new_chunk); !st.ok()) {
             LOG(WARNING) << alter_msg_header() << "fill generated columns failed: " << st.get_error_msg();
             return st;
         }
-#endif
 
         ChunkHelper::padding_char_columns(char_field_indexes, new_schema, new_tablet->tablet_schema(), new_chunk.get());
 
