@@ -828,7 +828,7 @@ public class OlapTable extends Table {
         return Status.OK;
     }
 
-    public Status doAfterRestore(Database db, MvRestoreContext mvRestoreContext) throws DdlException {
+    public Status doAfterRestore(MvRestoreContext mvRestoreContext) throws DdlException {
         if (relatedMaterializedViews == null || relatedMaterializedViews.isEmpty()) {
             return Status.OK;
         }
@@ -859,7 +859,7 @@ public class OlapTable extends Table {
             }
             MaterializedView mv = (MaterializedView) mvTable;
             // Do this no matter whether mv is active or not to restore version map for mv rewrite.
-            mv.doAfterRestore(db, mvRestoreContext);
+            mv.doAfterRestore(mvRestoreContext);
         }
         return Status.OK;
     }
