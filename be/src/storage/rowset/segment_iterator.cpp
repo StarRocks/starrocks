@@ -324,6 +324,14 @@ private:
 
     std::unordered_map<ColumnId, ColumnAccessPath*> _column_access_paths;
     std::unordered_map<ColumnId, ColumnAccessPath*> _predicate_column_access_paths;
+
+    int64_t t_segment_begin = 0;
+    int64_t t_segment_end = 0;
+
+    int64_t t_pred_time = 0;
+    int64_t t_expr_pred_time = 0;
+
+    int64_t t_read_time = 0;
 };
 
 SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema, SegmentReadOptions options)
@@ -371,6 +379,7 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
 }
 
 Status SegmentIterator::_init() {
+    t_segment_begin = MonotonicNanos();
     SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);
     if (_opts.is_cancelled != nullptr && _opts.is_cancelled->load(std::memory_order_acquire)) {
         return Status::Cancelled("Cancelled");
@@ -1028,6 +1037,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     uint16_t chunk_start = chunk->num_rows();
 
     while ((chunk_start < return_chunk_threshold) & _range_iter.has_more()) {
+        SCOPED_RAW_TIMER(&t_read_time);
         RETURN_IF_ERROR(_read(chunk, rowid, chunk_capacity - chunk_start));
         chunk->check_or_die();
         size_t next_start = chunk->num_rows();
@@ -1187,6 +1197,7 @@ Status SegmentIterator::_switch_context(ScanContext* to) {
 }
 
 StatusOr<uint16_t> SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid, uint16_t from, uint16_t to) {
+    int64_t t_begin_pred = MonotonicNanos();
     // There must be one predicate, either vectorized or branchless.
     DCHECK(_vectorized_preds.size() + _branchless_preds.size() > 0 || _del_vec);
 
@@ -1253,10 +1264,13 @@ StatusOr<uint16_t> SegmentIterator::_filter(Chunk* chunk, vector<rowid_t>* rowid
         }
     }
     _opts.stats->rows_vec_cond_filtered += (to - chunk_size);
+    int64_t t_end_pred = MonotonicNanos();
+    t_pred_time += (t_end_pred - t_begin_pred);
     return chunk_size;
 }
 
 StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vector<rowid_t>* rowid) {
+    int64_t t_expr_begin_pred = MonotonicNanos();
     size_t chunk_size = chunk->num_rows();
     if (_expr_ctx_preds.size() != 0 && chunk_size > 0) {
         SCOPED_RAW_TIMER(&_opts.stats->expr_cond_evaluate_ns);
@@ -1288,6 +1302,8 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vec
         _opts.stats->rows_vec_cond_filtered += (chunk_size - new_size);
         chunk_size = new_size;
     }
+    int64_t t_expr_end_pred = MonotonicNanos();
+    t_expr_pred_time += (t_expr_end_pred - t_expr_begin_pred);
     return chunk_size;
 }
 
@@ -1927,6 +1943,17 @@ void SegmentIterator::close() {
     for (auto* iter : _bitmap_index_iterators) {
         delete iter;
     }
+
+    t_segment_end = MonotonicNanos();
+    LOG(INFO) << "segment life time: " << t_segment_end - t_segment_begin << " "
+              << "segment predicate time: " << t_pred_time << " "
+              << "segment expr predicate time: " << t_expr_pred_time << " "
+              << "late materialized time: " << _opts.stats->late_materialize_ns << " "
+              << "decode dict time: " << _opts.stats->decode_dict_ns << " "
+              << "segment read time: " << t_read_time << " "
+              << "segment seek column time: " << _opts.stats->block_seek_ns << " "
+              << "segment read column time: " << _opts.stats->block_fetch_ns;
+
 }
 
 // put the field that has predicated on it ahead of those without one, for handle late
