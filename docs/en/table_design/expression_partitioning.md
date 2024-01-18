@@ -132,6 +132,10 @@ partition_columns ::=
 
 ### Parameters
 
+:::note
+As of 3.1, only support partition by date_trunc() for date or datetime.
+:::
+
 | **Parameters**          | **Required** | **Description**                                                  |
 | ----------------------- | -------- | ------------------------------------------------------------ |
 | `partition_columns`     | YES      | The names of partition columns.<br/> <ul><li>The partition column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partition column allows `NULL` values.</li><li> Each partition can only contain data with the same value for a partition column. To include data with different values in a partition column in a partition, see [List partitioning](./list_partitioning.md).</li></ul> |
