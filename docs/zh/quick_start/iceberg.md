@@ -50,15 +50,15 @@ CN 节点负责在**存算分离**或**存算一体**集群中执行查询。
 
 ### BE
 
-BE 节点在**存算一体**集群中负责数据存储和执行查询。使用 External Catalog（例如本指南中使用的 Iceberg Catalog）时，BE 仅用于存储本地数据。
+BE 节点在**存算一体**集群中负责数据存储和执行查询。使用 External Catalog（例如本教程中使用的 Iceberg Catalog）时，BE 仅用于存储本地数据。
 
 ---
 
 ## 环境
 
-本教程使用了六个 Docker 容器（服务），均使用 Docker Compose 部署。这些服务及其职责如下：
+本教程使用了六个 Docker 容器（服务），均使用 Docker Compose 部署。这些服务及其功能如下：
 
-| 服务                 | 职责                                                                |
+| 服务                 | 功能                                                                |
 |---------------------|---------------------------------------------------------------------|
 | **`starrocks-fe`**  | 负责元数据管理、客户端连接、查询规划和调度。                               |
 | **`starrocks-be`**  | 负责执行查询计划。                                                     |
@@ -174,9 +174,9 @@ SparkSession available as 'spark'.
 
 ### 导入数据集至 DataFrame 中
 
-DataFrame 是 Spark SQL 的一部分，提供了类似于数据库表的数据结构。
+DataFrame 是 Spark SQL 的一部分，提供类似于数据库表的数据结构。
 
-您需要从 `/opt/spark` 路径导入数据集文件导入至 DataFrame 中，并通过查询其中部分数据检查数据导入是否成功。
+您需要从 `/opt/spark` 路径导入数据集文件至 DataFrame 中，并通过查询其中部分数据检查数据导入是否成功。
 
 在 PySpark Session 运行以下命令：
 
@@ -233,7 +233,7 @@ only showing top 3 rows
 ```
 ### 创建 Iceberg 表并导入数据
 
-根据以下信息创建 Iceberg 表并将上一步中的数据导入其中：
+根据以下信息创建 Iceberg 表并将上一步中的数据导入表中：
 
 - Catalog 名：`demo`
 - 数据库名：`nyc`
@@ -301,8 +301,8 @@ PROPERTIES
 | `aws.s3.access_key`              | MinIO Access Key。在此示例中，Compose 文件中设置 Access Key 为 `admin`。                     |
 | `aws.s3.secret_key`              | MinIO Secret Key。在此示例中，Compose 文件中设置 Secret Key 为 `password`。                  |
 | `aws.s3.endpoint`                | MinIO 端点。                                                                             |
-| `aws.s3.enable_path_style_access`| 是否开启路径类型访问 (Path-Style Access)。使用 MinIO 作为对象存储时，该项为必须。                |
-| `client.factory`                 | 此示例中使用 `iceberg.IcebergAwsClientFactory`。`aws.s3.access_key` 和 `aws.s3.secret_key` 参数用于身份验证。|
+| `aws.s3.enable_path_style_access`| 是否开启路径类型访问 (Path-Style Access)。使用 MinIO 作为对象存储时，该项为必填。                |
+| `client.factory`                 | 此示例中使用 `iceberg.IcebergAwsClientFactory`。`aws.s3.access_key` 和 `aws.s3.secret_key` 参数进行身份验证。|
 
 创建成功后，运行以下命令查看创建的 Catalog。
 
