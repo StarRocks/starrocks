@@ -13,6 +13,7 @@
 #include "storage/storage_engine.h"
 #include "util/disk_info.h"
 #include "util/mem_info.h"
+#include "env/env_s3.h"
 
 //TODO: test multi thread
 //TODO: test runtime filter
@@ -411,4 +412,50 @@ TEST_F(HdfsScanNodeTest, TestBasic) {
         ASSERT_TRUE(status.ok());
     }
 }
+
+TEST_F(HdfsScanNodeTest, TestHdfsEnv) {
+    auto tnode = _create_tplan_node();
+    auto* descs = _create_table_desc();
+    _runtime_state->set_desc_tbl(descs);
+    auto hdfs_scan_node = std::make_shared<HdfsScanNode>(_pool, *tnode, *descs);
+
+    Status status = hdfs_scan_node->init(*tnode, _runtime_state.get());
+    ASSERT_TRUE(status.ok());
+
+    status = hdfs_scan_node->prepare(_runtime_state.get());
+    ASSERT_TRUE(status.ok());
+    hdfs_scan_node->_lake_table = nullptr;
+
+    auto scan_ranges = _create_scan_ranges();
+    auto hdfs_scan_range = scan_ranges[0].scan_range.hdfs_scan_range;
+
+    // local file
+    hdfs_scan_range.full_path = "/disk/dir/data_file";
+    hdfs_scan_node->_find_and_insert_hdfs_file(hdfs_scan_range);
+    ASSERT_EQ(hdfs_scan_node->_hdfs_files.size(), 1);
+    auto env = hdfs_scan_node->_hdfs_files.back()->env;
+    ASSERT_EQ(typeid(*env), typeid(*(Env::Default())));
+
+    // hdfs file
+    hdfs_scan_range.full_path = "hdfs://dir/data_file";
+    hdfs_scan_node->_find_and_insert_hdfs_file(hdfs_scan_range);
+    ASSERT_EQ(hdfs_scan_node->_hdfs_files.size(), 2);
+    env = hdfs_scan_node->_hdfs_files.back()->env;
+    ASSERT_EQ(typeid(*env), typeid(EnvHdfs));
+
+    // juicefs file
+    hdfs_scan_range.full_path = "jfs://dir/data_file";
+    hdfs_scan_node->_find_and_insert_hdfs_file(hdfs_scan_range);
+    ASSERT_EQ(hdfs_scan_node->_hdfs_files.size(), 3);
+    env = hdfs_scan_node->_hdfs_files.back()->env;
+    ASSERT_EQ(typeid(*env), typeid(EnvHdfs));
+
+    // oss file
+    hdfs_scan_range.full_path = "oss://dir/data_file";
+    hdfs_scan_node->_find_and_insert_hdfs_file(hdfs_scan_range);
+    ASSERT_EQ(hdfs_scan_node->_hdfs_files.size(), 4);
+    env = hdfs_scan_node->_hdfs_files.back()->env;
+    ASSERT_EQ(typeid(*env), typeid(EnvS3));
+}
+
 } // namespace starrocks::vectorized
