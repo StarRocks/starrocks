@@ -274,7 +274,12 @@ public abstract class BulkLoadJob extends LoadJob {
                 // load id will be added to loadStatistic when executing this task
                 try {
                     if (loadTask.getTaskType() == LoadTask.TaskType.PENDING) {
-                        submitTask(GlobalStateMgr.getCurrentState().getPendingLoadTaskScheduler(), loadTask);
+                        if (loadTask instanceof SparkLoadPendingTask) {
+                            submitTask(GlobalStateMgr.getCurrentState().getPendingSparkLoadTaskScheduler(), loadTask);
+                        }
+                        if (loadTask instanceof BrokerLoadPendingTask) {
+                            submitTask(GlobalStateMgr.getCurrentState().getPendingBrokerLoadTaskScheduler(), loadTask);
+                        }
                     } else if (loadTask.getTaskType() == LoadTask.TaskType.LOADING) {
                         submitTask(GlobalStateMgr.getCurrentState().getLoadingLoadTaskScheduler(), loadTask);
                     } else {

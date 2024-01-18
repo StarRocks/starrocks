@@ -476,7 +476,9 @@ public class GlobalStateMgr {
     private TabletChecker tabletChecker;
 
     // Thread pools for pending and loading task, separately
-    private LeaderTaskExecutor pendingLoadTaskScheduler;
+    private LeaderTaskExecutor pendingBrokerLoadTaskScheduler;
+    // Thread pools for pending spark load task
+    private LeaderTaskExecutor pendingSparkLoadTaskScheduler;
     private PriorityLeaderTaskExecutor loadingLoadTaskScheduler;
 
     private LoadJobScheduler loadJobScheduler;
@@ -741,9 +743,11 @@ public class GlobalStateMgr {
         this.tabletScheduler = new TabletScheduler(stat);
         this.tabletChecker = new TabletChecker(tabletScheduler, stat);
 
-        this.pendingLoadTaskScheduler =
-                new LeaderTaskExecutor("pending_load_task_scheduler", Config.max_broker_load_job_concurrency,
+        this.pendingBrokerLoadTaskScheduler =
+                new LeaderTaskExecutor("pending_broker_load_task_scheduler", Config.max_broker_load_job_concurrency,
                         Config.desired_max_waiting_jobs, !isCkptGlobalState);
+        this.pendingSparkLoadTaskScheduler = new LeaderTaskExecutor("pending_spark_load_task_scheduler",
+                Config.max_spark_load_job_concurrency, Config.desired_max_waiting_jobs, !isCkptGlobalState);
         // One load job will be split into multiple loading tasks, the queue size is not
         // determined, so set desired_max_waiting_jobs * 10
         this.loadingLoadTaskScheduler = new PriorityLeaderTaskExecutor("loading_load_task_scheduler",
@@ -1403,7 +1407,9 @@ public class GlobalStateMgr {
         heartbeatMgr.setLeader(nodeMgr.getClusterId(), nodeMgr.getToken(), epoch);
         heartbeatMgr.start();
         // New load scheduler
-        pendingLoadTaskScheduler.start();
+        pendingBrokerLoadTaskScheduler.start();
+        // New spark load scheduler
+        pendingSparkLoadTaskScheduler.start();
         loadingLoadTaskScheduler.start();
         loadMgr.prepareJobs();
         loadJobScheduler.start();
@@ -2893,8 +2899,12 @@ public class GlobalStateMgr {
         return loadMgr;
     }
 
-    public LeaderTaskExecutor getPendingLoadTaskScheduler() {
-        return pendingLoadTaskScheduler;
+    public LeaderTaskExecutor getPendingBrokerLoadTaskScheduler() {
+        return pendingBrokerLoadTaskScheduler;
+    }
+
+    public LeaderTaskExecutor getPendingSparkLoadTaskScheduler() {
+        return pendingSparkLoadTaskScheduler;
     }
 
     public PriorityLeaderTaskExecutor getLoadingLoadTaskScheduler() {

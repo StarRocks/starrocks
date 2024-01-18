@@ -986,6 +986,12 @@ public class Config extends ConfigBase {
     public static int max_broker_load_job_concurrency = 5;
 
     /**
+     * The spark load task executor pool size, this pool size limits the max running spark load tasks.
+     */
+    @ConfField(mutable = true)
+    public static int max_spark_load_job_concurrency = 5;
+
+    /**
      * Same meaning as *tablet_create_timeout_second*, but used when delete a tablet.
      */
     @ConfField(mutable = true)

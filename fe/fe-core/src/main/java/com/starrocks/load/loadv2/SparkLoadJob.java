@@ -245,7 +245,7 @@ public class SparkLoadJob extends BulkLoadJob {
                 sparkResource, brokerDesc);
         task.init();
         idToTasks.put(task.getSignature(), task);
-        submitTask(GlobalStateMgr.getCurrentState().getPendingLoadTaskScheduler(), task);
+        submitTask(GlobalStateMgr.getCurrentState().getPendingSparkLoadTaskScheduler(), task);
     }
 
     @Override
