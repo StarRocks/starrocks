@@ -6,7 +6,7 @@ displayed_sidebar: "Chinese"
 
 ## 功能
 
-创建一个 Pipe，用于定义一个实现数据导入的 INSERT INTO SELECT FROM FILES 语句。
+创建一个 Pipe，用于定义一个实现数据导入的 INSERT INTO SELECT FROM FILES 语句。该命令自 3.2 版本起支持。
 
 ## 语法
 
@@ -74,3 +74,11 @@ SELECT * FROM FILES
 > 把上面命令示例中的 `AAA` 和 `BBB` 替换成真实有效的 Access Key 和 Secret Key 作为访问凭证。由于这里使用的数据对象对所有合法的 AWS 用户开放，因此您填入任何真实有效的 Access Key 和 Secret Key 都可以。
 
 该示例以基于 IAM User 的认证鉴权方式为例，并假设 Parquet 源文件与 StarRocks 目标表的结构相同。有关认证方式和语句详情，参见[配置 AWS 认证信息](../../../integrations/authenticate_to_aws_resources.md)和 [FILES](../../../sql-reference/sql-functions/table-functions/files.md)。
+
+## 相关文档
+
+- [ALTER PIPE](../data-manipulation/CREATE_PIPE.md)
+- [DROP PIPE](../data-manipulation/DROP_PIPE.md)
+- [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
+- [SUSPEND or RESUME PIPE](../data-manipulation/SUSPEND_or_RESUME_PIPE.md)
+- [RETRY FILE](../data-manipulation/RETRY_FILE.md)

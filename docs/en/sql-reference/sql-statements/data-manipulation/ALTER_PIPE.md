@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Alters the settings of the properties of a pipe.
+Alters the settings of the properties of a pipe. This command is supported from v3.2 onwards.
 
 ## Syntax
 
@@ -44,3 +44,11 @@ SET
     "AUTO_INGEST" = "FALSE"
 );
 ```
+
+## References
+
+- [CREATE PIPE](../data-manipulation/CREATE_PIPE.md)
+- [DROP PIPE](../data-manipulation/DROP_PIPE.md)
+- [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
+- [SUSPEND or RESUME PIPE](../data-manipulation/SUSPEND_or_RESUME_PIPE.md)
+- [RETRY FILE](../data-manipulation/RETRY_FILE.md)
