@@ -63,7 +63,7 @@ public:
             _inited = true;
             return check_meta_version();
         } else {
-            return Status::InternalError("primary key does not support concurrent log applying");
+            return Status::ResourceBusy("primary key does not support concurrent log applying");
         }
     }
 
