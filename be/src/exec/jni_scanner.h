@@ -31,15 +31,14 @@ public:
     ~JniScanner() override { close(); }
 
     [[nodiscard]] Status do_open(RuntimeState* runtime_state) override;
-    void do_update_counter(HdfsScanProfile* profile) override;
+    void do_update_counter(HdfsScanProfile* profile) override {}
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     [[nodiscard]] Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
     bool is_jni_scanner() override { return true; }
 
 protected:
-    [[nodiscard]] Status fill_empty_chunk(RuntimeState* runtime_state, ChunkPtr* chunk,
-                                          const std::vector<SlotDescriptor*>& slot_desc_list);
+    [[nodiscard]] Status fill_empty_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slot_desc_list);
 
     Filter _chunk_filter;
 
@@ -54,27 +53,22 @@ private:
         bool must_nullable;
     };
 
-    [[nodiscard]] static Status _check_jni_exception(JNIEnv* _jni_env, const std::string& message);
+    [[nodiscard]] static Status _check_jni_exception(JNIEnv* env, const std::string& message);
 
-    [[nodiscard]] Status _init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runtime_state);
+    [[nodiscard]] Status _init_jni_table_scanner(JNIEnv* env, RuntimeState* runtime_state);
 
-    void _init_profile(const HdfsScannerParams& scanner_params);
+    void _init_profile(const HdfsScannerParams& scanner_params) {}
 
-    [[nodiscard]] Status _init_jni_method(JNIEnv* _jni_env);
+    [[nodiscard]] Status _init_jni_method(JNIEnv* env);
 
-    [[nodiscard]] Status _get_next_chunk(JNIEnv* _jni_env, long* chunk_meta);
+    [[nodiscard]] Status _get_next_chunk(JNIEnv* env, long* chunk_meta);
 
     template <LogicalType type>
     [[nodiscard]] Status _append_primitive_data(const FillColumnArgs& args);
 
     template <LogicalType type>
-    [[nodiscard]] Status _append_decimal_data(const FillColumnArgs& args);
-
-    template <LogicalType type>
     [[nodiscard]] Status _append_string_data(const FillColumnArgs& args);
 
-    [[nodiscard]] Status _append_date_data(const FillColumnArgs& args);
-    [[nodiscard]] Status _append_datetime_data(const FillColumnArgs& args);
     [[nodiscard]] Status _append_array_data(const FillColumnArgs& args);
     [[nodiscard]] Status _append_map_data(const FillColumnArgs& args);
     [[nodiscard]] Status _append_struct_data(const FillColumnArgs& args);
@@ -82,10 +76,9 @@ private:
     [[nodiscard]] Status _fill_column(FillColumnArgs* args);
 
     // fill chunk according to slot_desc_list(with or without partition columns)
-    [[nodiscard]] Status _fill_chunk(JNIEnv* _jni_env, ChunkPtr* chunk,
-                                     const std::vector<SlotDescriptor*>& slot_desc_list);
+    [[nodiscard]] Status _fill_chunk(JNIEnv* env, ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slot_desc_list);
 
-    [[nodiscard]] Status _release_off_heap_table(JNIEnv* _jni_env);
+    [[nodiscard]] Status _release_off_heap_table(JNIEnv* env);
 
     jclass _jni_scanner_cls = nullptr;
     jobject _jni_scanner_obj = nullptr;
