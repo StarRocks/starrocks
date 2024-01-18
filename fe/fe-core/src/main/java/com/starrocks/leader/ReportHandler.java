@@ -1632,9 +1632,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                 int tabletOrderIdx = materializedIndex.getTabletOrderIdx(tabletId);
                 Preconditions.checkState(tabletOrderIdx != -1);
                 Set<Long> backendsSet = colocateTableIndex.getTabletBackendsByGroup(groupId, tabletOrderIdx);
-                TabletStatus status =
-                        TabletChecker.getColocateTabletHealthStatus(visibleVersion, replicationNum, backendsSet);
-                if (status == TabletStatus.HEALTHY) {
+                TabletHealthStatus status =
+                        TabletChecker.getColocateTabletHealthStatus(tablet, visibleVersion, replicationNum, backendsSet);
+                if (status == TabletHealthStatus.HEALTHY) {
                     throw new MetaNotFoundException("colocate tablet [" + tabletId + "] is healthy");
                 } else {
                     return;
