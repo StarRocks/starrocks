@@ -999,11 +999,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
      * @param txnState
      * @param txnOperated
      * @param txnStatusChangeReason
-     * @throws UserException
      */
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
-            throws UserException {
+    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
         if (!txnOperated) {
             return;
         }
