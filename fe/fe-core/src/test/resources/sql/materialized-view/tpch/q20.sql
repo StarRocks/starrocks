@@ -45,7 +45,7 @@ TOP-N (order by [[2: s_name ASC NULLS FIRST]])
                 EXCHANGE BROADCAST
                     SCAN (table[nation] columns[8: n_nationkey, 9: n_name] predicate[9: n_name = ARGENTINA])
             EXCHANGE SHUFFLE[13]
-                INNER JOIN (join-predicate [12: ps_partkey = 30: l_partkey AND 13: ps_suppkey = 31: l_suppkey AND cast(14: ps_availqty as decimal128(38, 3)) > multiply(0.5, 43: sum)] post-join-predicate [null])
+                INNER JOIN (join-predicate [12: ps_partkey = 30: l_partkey AND 13: ps_suppkey = 31: l_suppkey AND cast(14: ps_availqty as DECIMAL128(38,3)) > multiply(0.5, 43: sum)] post-join-predicate [null])
                     LEFT SEMI JOIN (join-predicate [12: ps_partkey = 17: p_partkey] post-join-predicate [null])
                         SCAN (table[partsupp] columns[12: ps_partkey, 13: ps_suppkey, 14: ps_availqty] predicate[null])
                         EXCHANGE SHUFFLE[17]
