@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.RowOutputInfo;
 import com.starrocks.sql.optimizer.UKFKConstraintsCollector;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.UKFKConstraints;
@@ -64,7 +65,7 @@ public class PruneUKFKJoinRule extends TransformationRule {
         UKFKConstraints constraints = joinOpt.getConstraints();
         UKFKConstraints.JoinProperty property = constraints.getJoinProperty();
 
-        if (property == null || !property.ukConstraint.isIntact) {
+        if (property == null) {
             return Lists.newArrayList();
         }
 
@@ -83,7 +84,7 @@ public class PruneUKFKJoinRule extends TransformationRule {
                     !isNonUKColumnUsedByJoinItself(property, joinOpt, ukChildOpt) &&
                     !isNonUKColumnUsedByUKSideChildren(property, ukChildOpt)) {
 
-                OptExpression filterOpt = buildFilterOpt(property, fkChildOpt);
+                OptExpression filterOpt = buildFilterOpt(property, ukChildOpt, fkChildOpt);
                 OptExpression newProjectOpt = buildProjectOpt(property, projectOp, filterOpt);
 
                 return Lists.newArrayList(newProjectOpt);
@@ -130,11 +131,36 @@ public class PruneUKFKJoinRule extends TransformationRule {
         return childrenUsedColumns.containsAny(nonUkColumnRefs);
     }
 
+    private ScalarOperator collectUKPredicate(OptExpression ukChildOpt) {
+        List<ScalarOperator> predicates = Lists.newArrayList();
+        while (ukChildOpt != null) {
+            if (ukChildOpt.getOp().getPredicate() != null) {
+                predicates.add(ukChildOpt.getOp().getPredicate());
+            }
+            if (ukChildOpt.arity() != 1) {
+                break;
+            }
+            ukChildOpt = ukChildOpt.inputAt(0);
+        }
+
+        return Utils.compoundAnd(predicates);
+    }
+
     private OptExpression buildFilterOpt(UKFKConstraints.JoinProperty property,
-                                         OptExpression ukChildOpt) {
-        IsNullPredicateOperator predicate = new IsNullPredicateOperator(true, property.fkColumnRef);
+                                         OptExpression ukChildOpt,
+                                         OptExpression fkChildOpt) {
+        ScalarOperator ukPredicate = collectUKPredicate(ukChildOpt);
+        if (ukPredicate != null) {
+            Map<ColumnRefOperator, ScalarOperator> replaceMap = Maps.newHashMap();
+            replaceMap.put(property.ukColumnRef, property.fkColumnRef);
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(replaceMap, true);
+            ukPredicate = rewriter.rewrite(ukPredicate);
+        }
+
+        IsNullPredicateOperator isNullPredicate = new IsNullPredicateOperator(true, property.fkColumnRef);
+        ScalarOperator predicate = Utils.compoundAnd(ukPredicate, isNullPredicate);
         LogicalFilterOperator filterOp = new LogicalFilterOperator(predicate);
-        return OptExpression.create(filterOp, ukChildOpt);
+        return OptExpression.create(filterOp, fkChildOpt);
     }
 
     private OptExpression buildProjectOpt(UKFKConstraints.JoinProperty property, LogicalProjectOperator projectOp,

@@ -150,7 +150,7 @@ public class UKFKConstraintsCollector extends OptExpressionVisitor<Void, Void> {
                     if (columnRefOperator != null && outputColumns.contains(columnRefOperator)) {
                         constraint.addUniqueKey(columnRefOperator.getId(),
                                 new UKFKConstraints.UniqueConstraintWrapper(ukConstraint,
-                                        nonUkColumnRefs, !usedColumns.containsAny(nonUkColumnRefs)));
+                                        nonUkColumnRefs, usedColumns.isEmpty()));
                     }
                 }
             }

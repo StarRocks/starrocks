@@ -367,28 +367,28 @@ public abstract class JoinOrder {
         boolean reverse = false;
         if (joinProperty != null && joinProperty.ukConstraint.isIntact) {
             if (joinProperty.isLeftUK) {
-                if (cannotLetFKAsRightTable(leftExprInfo, rightExprInfo)) {
-                    // If the uk table is too small, then use it as right table
-                    reverse = true;
-                    joinExpr = OptExpression.create(newJoin, rightExprInfo.expr,
-                            leftExprInfo.expr);
-                } else {
-                    // Otherwise, use the fk table as the right table
+                if (allowFKAsRightTable(leftExprInfo, rightExprInfo)) {
+                    // Use the fk table as the right table
                     newJoin.setFKRight(true);
                     joinExpr = OptExpression.create(newJoin, leftExprInfo.expr,
                             rightExprInfo.expr);
+                } else {
+                    // If the uk table is too small or the fk table is too large, then use it as right table
+                    reverse = true;
+                    joinExpr = OptExpression.create(newJoin, rightExprInfo.expr,
+                            leftExprInfo.expr);
                 }
             } else {
-                if (cannotLetFKAsRightTable(rightExprInfo, leftExprInfo)) {
-                    // If the uk table is too small, then use it as right table
-                    joinExpr = OptExpression.create(newJoin, leftExprInfo.expr,
-                            rightExprInfo.expr);
-                } else {
-                    // Otherwise, use the fk table as the right table
+                if (allowFKAsRightTable(rightExprInfo, leftExprInfo)) {
+                    // Use the fk table as the right table
                     reverse = true;
                     newJoin.setFKRight(true);
                     joinExpr = OptExpression.create(newJoin, rightExprInfo.expr,
                             leftExprInfo.expr);
+                } else {
+                    // If the uk table is too small or the fk table is too large, then use it as right table
+                    joinExpr = OptExpression.create(newJoin, leftExprInfo.expr,
+                            rightExprInfo.expr);
                 }
             }
         } else {
@@ -416,7 +416,7 @@ public abstract class JoinOrder {
         }
     }
 
-    private boolean cannotLetFKAsRightTable(ExpressionInfo ukExprInfo, ExpressionInfo fkExprInfo) {
+    private boolean allowFKAsRightTable(ExpressionInfo ukExprInfo, ExpressionInfo fkExprInfo) {
         RowOutputInfo ukRowOutputInfo = ukExprInfo.expr.getRowOutputInfo();
         RowOutputInfo fkRowOutputInfo = fkExprInfo.expr.getRowOutputInfo();
 
@@ -433,7 +433,11 @@ public abstract class JoinOrder {
                 .reduce(1, Integer::sum);
         double fkNormalizedRows = fkExprInfo.rowCount * fkTypeSize / ukTypeSize;
 
-        return ConnectContext.get().getSessionVariable().getUkfkJoinThreshold() * ukNormalizedRows < fkNormalizedRows;
+        double scaleRatio = fkNormalizedRows / Math.max(1, ukNormalizedRows);
+
+        SessionVariable variable = ConnectContext.get().getSessionVariable();
+        return scaleRatio < variable.getMaxUKFKJoinReorderScaleRatio()
+                && fkNormalizedRows < variable.getMaxUKFKJoinReorderFKRows();
     }
 
     private void pushRequiredColumns(ExpressionInfo exprInfo, Map<ColumnRefOperator, ScalarOperator> expression) {
