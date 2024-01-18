@@ -1800,11 +1800,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：心跳线程数。
 - 默认值：1
 
-#### create_tablet_worker_count
-
-- 含义：创建 tablet 的线程数。
-- 默认值：3
-
 #### drop_tablet_worker_count
 
 - 含义：删除 tablet 的线程数。
@@ -1984,11 +1979,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：小批量导入生成的文件保留的时。
 - 默认值：4
-
-#### number_tablet_writer_threads
-
-- 含义：流式导入的线程数。
-- 默认值：16
 
 #### streaming_load_rpc_max_alive_time_sec
 
