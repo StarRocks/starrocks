@@ -177,7 +177,7 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [covar_pop](./aggregate-functions/covar_pop.md)| 返回两个随机变量的总体协方差。 |
 |  [covar_samp](./aggregate-functions/covar_samp.md)| 返回两个随机变量的样本协方差。 |
 |  [count](./aggregate-functions/count.md)| 计算总行数。 |
-|  [count_if](./aggregate-functions/count.md)| 计算满足指定条件的记录数。 |
+|  [count_if](./aggregate-functions/count_if.md)| 计算满足指定条件的记录数。 |
 |  [group_concat](./string-functions/group_concat.md)| 将结果集中的多行结果连接成一个字符串。|
 |  [grouping](./aggregate-functions/grouping.md)| 判断一个列是否为聚合列，如果是聚合列则返回 0，否则返回 1。|
 |  [grouping_id](./aggregate-functions/grouping_id.md)| 用于区分相同分组标准的分组统计结果。 |

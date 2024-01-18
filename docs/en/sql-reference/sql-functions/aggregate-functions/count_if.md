@@ -2,7 +2,6 @@
 displayed_sidebar: "English"
 ---
 
-
 # count_if
 
 ## Description
