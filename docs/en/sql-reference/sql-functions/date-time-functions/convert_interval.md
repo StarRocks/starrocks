@@ -1,5 +1,5 @@
 ---
-Dispkayed_sidebar:"English"
+displayed_sidebar: "English"
 ---
 
 # convert_interval
