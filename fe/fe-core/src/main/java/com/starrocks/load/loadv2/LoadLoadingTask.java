@@ -68,7 +68,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 public class LoadLoadingTask extends LoadTask {
     private static final Logger LOG = LogManager.getLogger(LoadLoadingTask.class);
@@ -267,15 +266,6 @@ public class LoadLoadingTask extends LoadTask {
 
     private long getLeftTimeMs() {
         return jobDeadlineMs - System.currentTimeMillis();
-    }
-
-    @Override
-    public void updateRetryInfo() {
-        super.updateRetryInfo();
-        UUID uuid = UUID.randomUUID();
-        this.loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
-
-        loadPlanner.updateLoadInfo(this.loadId);
     }
 
     public static class Builder {

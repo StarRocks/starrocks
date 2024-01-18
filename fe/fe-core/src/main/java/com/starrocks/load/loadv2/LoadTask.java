@@ -104,11 +104,6 @@ public abstract class LoadTask extends PriorityLeaderTask {
      */
     abstract void executeTask() throws Exception;
 
-    // Derived class may need to override this.
-    public void updateRetryInfo() {
-        this.signature = GlobalStateMgr.getCurrentState().getNextId();
-    }
-
     public TaskType getTaskType() {
         return taskType;
     }
