@@ -131,12 +131,12 @@ public class InvertedIndexParams {
         /**
          * Specific index parser
          */
-        GRAM_NUM("2", true),
+        GRAM_NUM(String.valueOf(FeConstants.DEFAULT_GRAM_NUM), true),
 
         /**
          * Whether to omit term frequency and term position when indexing
          */
-        FPP("0.05");
+        FPP(String.valueOf(FeConstants.DEFAULT_BLOOM_FILTER_FPP));
 
         private final String defaultValue;
         private boolean needDefault = false;

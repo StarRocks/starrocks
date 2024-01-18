@@ -310,10 +310,12 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
                                             " do not support to build with more than one column"));
 
                 index_pb->set_index_type(IndexType::NGRAMBF);
-                const auto& mit = column_map.find(boost::to_lower_copy(index.columns[0]));
+                const auto& index_col_name = index.columns[0];
+                const auto& mit = column_map.find(index_col_name);
 
                 if (mit != column_map.end()) {
                     mit->second->set_is_bf_column(true);
+                    index_pb->add_col_unique_id(mit->second->unique_id());
                 } else {
                     LOG(WARNING) << "index column (" << index.columns[0] << ") can not be found in table columns";
                 }

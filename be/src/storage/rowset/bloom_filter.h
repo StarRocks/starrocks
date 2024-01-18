@@ -50,6 +50,9 @@ struct BloomFilterOptions {
     // false positive probablity
     double fpp = 0.05;
     HashStrategyPB strategy = HASH_MURMUR3_X64_64;
+    bool use_ngram = false;
+    // only use when use_ngram is true
+    size_t gram_num = 0;
 };
 
 // Base class for bloom filter
