@@ -53,7 +53,7 @@ public:
     static void SetUpTestCase() {
         auto cache = BlockCache::instance();
         CacheOptions options;
-        options.mem_space_size = 100 * 1024 * 1024;
+        options.mem_space_size = 20 * 1024 * 1024;
 #ifdef WITH_STARCACHE
         options.engine = "starcache";
 #else
@@ -96,7 +96,7 @@ public:
     static const int64_t block_size;
 };
 
-const int64_t CacheInputStreamTest::block_size = 1024 * 1024;
+const int64_t CacheInputStreamTest::block_size = 256 * 1024;
 
 TEST_F(CacheInputStreamTest, test_aligned_read) {
     const int64_t block_count = 3;

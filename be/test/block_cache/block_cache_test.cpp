@@ -27,22 +27,24 @@ namespace starrocks {
 
 class BlockCacheTest : public ::testing::Test {
 protected:
-    static void SetUpTestCase() { ASSERT_TRUE(fs::create_directories("./block_disk_cache").ok()); }
+    static void SetUpTestCase() {}
 
-    static void TearDownTestCase() { ASSERT_TRUE(fs::remove_all("./block_disk_cache").ok()); }
+    static void TearDownTestCase() {}
 
     void SetUp() override {}
     void TearDown() override {}
 };
 
 TEST_F(BlockCacheTest, auto_create_disk_cache_path) {
+    const std::string cache_dir = "./block_cache_final_entry_not_exist";
+
     std::unique_ptr<BlockCache> cache(new BlockCache);
-    const size_t block_size = 1024 * 1024;
+    const size_t block_size = 256 * 1024;
 
     CacheOptions options;
-    options.mem_space_size = 20 * 1024 * 1024;
-    size_t quota = 500 * 1024 * 1024;
-    options.disk_spaces.push_back({.path = "./final_entry_not_exist", .size = quota});
+    options.mem_space_size = 5 * 1024 * 1024;
+    size_t quota = 50 * 1024 * 1024;
+    options.disk_spaces.push_back({.path = cache_dir, .size = quota});
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
     options.enable_checksum = false;
@@ -77,6 +79,7 @@ TEST_F(BlockCacheTest, auto_create_disk_cache_path) {
     }
 
     cache->shutdown();
+    fs::remove_all(cache_dir).ok();
 }
 
 TEST_F(BlockCacheTest, copy_to_iobuf) {
@@ -120,33 +123,40 @@ TEST_F(BlockCacheTest, parse_cache_space_str) {
     ASSERT_EQ(parse_mem_size("10T"), mem_size);
     ASSERT_EQ(parse_mem_size("10%", 10 * 1024), 1024);
 
-    std::string disk_path = "./block_disk_cache";
-    uint64_t disk_size = 10;
-    ASSERT_EQ(parse_disk_size(disk_path, "10"), disk_size);
-    disk_size *= 1024;
-    ASSERT_EQ(parse_disk_size(disk_path, "10K"), disk_size);
-    disk_size *= 1024;
-    ASSERT_EQ(parse_disk_size(disk_path, "10M"), disk_size);
-    disk_size *= 1024;
-    ASSERT_EQ(parse_disk_size(disk_path, "10G"), disk_size);
-    disk_size *= 1024;
-    ASSERT_EQ(parse_disk_size(disk_path, "10T"), disk_size);
+    std::string cache_dir = "./block_cache_parse_cache_space";
+    ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
-    disk_size = parse_disk_size(disk_path, "10%");
+    uint64_t disk_size = 10;
+    ASSERT_EQ(parse_disk_size(cache_dir, "10"), disk_size);
+    disk_size *= 1024;
+    ASSERT_EQ(parse_disk_size(cache_dir, "10K"), disk_size);
+    disk_size *= 1024;
+    ASSERT_EQ(parse_disk_size(cache_dir, "10M"), disk_size);
+    disk_size *= 1024;
+    ASSERT_EQ(parse_disk_size(cache_dir, "10G"), disk_size);
+    disk_size *= 1024;
+    ASSERT_EQ(parse_disk_size(cache_dir, "10T"), disk_size);
+
+    disk_size = parse_disk_size(cache_dir, "10%");
     std::error_code ec;
-    auto space_info = std::filesystem::space(disk_path, ec);
+    auto space_info = std::filesystem::space(cache_dir, ec);
     ASSERT_EQ(disk_size, int64_t(10.0 / 100.0 * space_info.capacity));
+
+    fs::remove_all(cache_dir).ok();
 }
 
 #ifdef WITH_STARCACHE
 TEST_F(BlockCacheTest, hybrid_cache) {
+    const std::string cache_dir = "./block_cache_hybrid_cache";
+    ASSERT_TRUE(fs::create_directories(cache_dir).ok());
+
     std::unique_ptr<BlockCache> cache(new BlockCache);
-    const size_t block_size = 1024 * 1024;
+    const size_t block_size = 256 * 1024;
 
     CacheOptions options;
-    options.mem_space_size = 10 * 1024 * 1024;
-    size_t quota = 500 * 1024 * 1024;
-    options.disk_spaces.push_back({.path = "./block_disk_cache", .size = quota});
+    options.mem_space_size = 2 * 1024 * 1024;
+    size_t quota = 50 * 1024 * 1024;
+    options.disk_spaces.push_back({.path = cache_dir, .size = quota});
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
     options.engine = "starcache";
@@ -154,7 +164,7 @@ TEST_F(BlockCacheTest, hybrid_cache) {
     ASSERT_TRUE(status.ok());
 
     const size_t batch_size = block_size - 1234;
-    const size_t rounds = 20;
+    const size_t rounds = 10;
     const std::string cache_key = "test_file";
 
     // write cache
@@ -188,14 +198,15 @@ TEST_F(BlockCacheTest, hybrid_cache) {
     ASSERT_TRUE(res.status().is_not_found());
 
     cache->shutdown();
+    fs::remove_all(cache_dir).ok();
 }
 
 TEST_F(BlockCacheTest, write_with_overwrite_option) {
     std::unique_ptr<BlockCache> cache(new BlockCache);
-    const size_t block_size = 1024 * 1024;
+    const size_t block_size = 256 * 1024;
 
     CacheOptions options;
-    options.mem_space_size = 20 * 1024 * 1024;
+    options.mem_space_size = 5 * 1024 * 1024;
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
     options.engine = "starcache";
@@ -229,13 +240,16 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
 }
 
 TEST_F(BlockCacheTest, read_cache_with_adaptor) {
+    const std::string cache_dir = "./block_cache_read_adaptor";
+    ASSERT_TRUE(fs::create_directories(cache_dir).ok());
+
     std::unique_ptr<BlockCache> cache(new BlockCache);
-    const size_t block_size = 1024 * 1024;
+    const size_t block_size = 256 * 1024;
 
     CacheOptions options;
     options.mem_space_size = 1024;
-    size_t quota = 500 * 1024 * 1024;
-    options.disk_spaces.push_back({.path = "./block_disk_cache", .size = quota});
+    size_t quota = 50 * 1024 * 1024;
+    options.disk_spaces.push_back({.path = cache_dir, .size = quota});
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
     options.engine = "starcache";
@@ -291,6 +305,7 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
     }
 
     cache->shutdown();
+    fs::remove_all(cache_dir).ok();
 }
 
 #endif
@@ -298,7 +313,7 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
 #ifdef WITH_CACHELIB
 TEST_F(BlockCacheTest, custom_lru_insertion_point) {
     std::unique_ptr<BlockCache> cache(new BlockCache);
-    const size_t block_size = 1024 * 1024;
+    const size_t block_size = 256 * 1024;
 
     CacheOptions options;
     options.mem_space_size = 20 * 1024 * 1024;
