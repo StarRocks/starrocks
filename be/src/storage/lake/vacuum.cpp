@@ -768,7 +768,8 @@ static StatusOr<std::map<std::string, DirEntry>> find_orphan_data_files(FileSyst
 }
 
 // root_location is a partition dir in s3
-Status datafile_gc(std::string_view root_location, std::string_view audit_file_path, int64_t expired_seconds) {
+Status datafile_gc(std::string_view root_location, std::string_view audit_file_path, int64_t expired_seconds,
+                   bool do_delete) {
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_location));
     std::ofstream audit_ostream(std::string(audit_file_path), std::ofstream::app);
     if (!audit_ostream) {
@@ -822,20 +823,20 @@ Status datafile_gc(std::string_view root_location, std::string_view audit_file_p
     LOG(INFO) << "Total orphan data files: " << orphan_data_files.size() << ", total size: " << bytes_to_delete
               << ", total transaction ids: " << transaction_ids.size();
 
-    audit_ostream.close();
-
-    return Status::OK();
-    /*
-    std::cout << root_location << " has " << orphan_datafiles.size()
-              << " orphan data files, total size: " << bytes_to_delete << ", delete them ? (y/n)" << std::endl;
-
-    std::string input;
-    if (std::cin >> input && input != "y") {
+    if (!do_delete) {
+        audit_ostream.close();
         return Status::OK();
     }
 
+    audit_ostream << "Start to delete orphan data files: " << orphan_data_files.size()
+                  << ", total size: " << bytes_to_delete << ", total transaction ids: " << transaction_ids.size()
+                  << std::endl;
+    LOG(INFO) << "Start to delete orphan data files: " << orphan_data_files.size()
+              << ", total size: " << bytes_to_delete << ", total transaction ids: " << transaction_ids.size();
+
+    audit_ostream.close();
+
     return do_delete_files(fs.get(), files_to_delete);
-    */
 }
 
 } // namespace starrocks::lake

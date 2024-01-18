@@ -109,6 +109,7 @@ DEFINE_int32(key_column_count, 0, "key column count");
 DEFINE_int64(expired_sec, 86400, "expired seconds");
 DEFINE_string(conf_file, "", "conf file path");
 DEFINE_string(audit_file, "", "audit file path");
+DEFINE_bool(do_delete, false, "do delete files");
 
 std::string get_usage(const std::string& progname) {
     std::stringstream ss;
@@ -148,7 +149,7 @@ std::string get_usage(const std::string& progname) {
     ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool.sh --operation=print_lake_txn_log\n";
     ss << "cat SCHEMA_000000000004204C | ./meta_tool.sh --operation=print_lake_schema\n";
     ss << "./meta_tool.sh --operation=lake_datafile_gc --root_path=path --expired_sec=expiredsec --conf_file=path "
-          "--audit_file=path\n";
+          "--audit_file=path --do_delete=false\n";
     return ss.str();
 }
 
@@ -1127,7 +1128,8 @@ int meta_tool_main(int argc, char** argv) {
         }
         Aws::SDKOptions options;
         Aws::InitAPI(options);
-        auto status = starrocks::lake::datafile_gc(FLAGS_root_path, FLAGS_audit_file, FLAGS_expired_sec);
+        auto status =
+                starrocks::lake::datafile_gc(FLAGS_root_path, FLAGS_audit_file, FLAGS_expired_sec, FLAGS_do_delete);
         if (!status.ok()) {
             std::cout << status << std::endl;
         }
