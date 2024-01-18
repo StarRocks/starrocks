@@ -1832,12 +1832,6 @@ BE static parameters are as follows.
 - **Unit**: N/A
 - **Description**: The thread count of the BE heartbeat service.
 
-#### create_tablet_worker_count
-
-- **Default**: 3
-- **Unit**: N/A
-- **Description**: The number of threads used to create a tablet.
-
 #### drop_tablet_worker_count
 
 - **Default**: 3
@@ -2080,12 +2074,6 @@ BE static parameters are as follows.
 - **Default**: 4
 - **Unit**: Hour
 - **Description**: The reservation time for the files produced by small-scale loadings.
-
-#### number_tablet_writer_threads
-
-- **Default**: 16
-- **Unit**: N/A
-- **Description**: The number of threads used for Stream Load.
 
 #### streaming_load_rpc_max_alive_time_sec
 
