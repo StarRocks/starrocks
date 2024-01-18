@@ -176,6 +176,32 @@ public:
     /// Convenience method
     static std::string print_bytes(int64_t value) { return PrettyPrinter::print(value, TUnit::BYTES); }
 
+    // convert a vector of int to a string, consecutive numbers are printed as a range
+    // integers in input must be sorted & unique
+    template <typename T>
+    static std::string print_unique_int_list_range(const std::vector<T>& vs) {
+        std::stringstream ss;
+        if (vs.size() > 0) {
+            size_t start = 0;
+            for (size_t i = 1; i < vs.size(); ++i) {
+                if (vs[i] != vs[i - 1] + 1) {
+                    if (start == i - 1) {
+                        ss << vs[start] << ",";
+                    } else {
+                        ss << vs[start] << "-" << vs[i - 1] << ",";
+                    }
+                    start = i;
+                }
+            }
+            if (start == vs.size() - 1) {
+                ss << vs[start];
+            } else {
+                ss << vs[start] << "-" << vs[vs.size() - 1];
+            }
+        }
+        return ss.str();
+    }
+
 private:
     static const int PRECISION = 2;
     static const int TIME_NS_PRECISION = 3;

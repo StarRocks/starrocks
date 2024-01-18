@@ -75,7 +75,8 @@ public:
             close(_state);
         }
     }
-    Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc, const TupleDescriptor* result_tuple_desc);
+    Analytor(const TPlanNode& tnode, const RowDescriptor& child_row_desc, const TupleDescriptor* result_tuple_desc,
+             bool use_hash_based_partition);
 
     Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile);
     Status open(RuntimeState* state);
@@ -84,6 +85,7 @@ public:
     bool is_sink_complete() { return _is_sink_complete.load(std::memory_order_acquire); }
     void sink_complete() { _is_sink_complete.store(true, std::memory_order_release); }
     bool is_chunk_buffer_empty();
+    bool is_chunk_buffer_full();
     vectorized::ChunkPtr poll_chunk_buffer();
     void offer_chunk_to_buffer(const vectorized::ChunkPtr& chunk);
 
@@ -138,7 +140,7 @@ public:
     void create_agg_result_columns(int64_t chunk_size);
 
     bool is_new_partition();
-    int64_t get_total_position(int64_t local_position);
+    int64_t get_total_position(int64_t local_position) const;
     void find_partition_end();
     void find_peer_group_end();
     void reset_state_for_cur_partition();
@@ -155,7 +157,7 @@ public:
     Status check_has_error();
 
 #ifdef NDEBUG
-    static constexpr int32_t BUFFER_CHUNK_NUMBER = 1000;
+    static constexpr int32_t BUFFER_CHUNK_NUMBER = 128;
 #else
     static constexpr int32_t BUFFER_CHUNK_NUMBER = 1;
 #endif
@@ -167,6 +169,8 @@ private:
     const TPlanNode& _tnode;
     const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;
+    const bool _use_hash_based_partition;
+
     ObjectPool* _pool;
     std::unique_ptr<MemPool> _mem_pool;
     // The open phase still relies on the TFunction object for some initialization operations
@@ -274,6 +278,7 @@ private:
                                        int64_t frame_end);
 
     int64_t _find_first_not_equal(vectorized::Column* column, int64_t target, int64_t start, int64_t end);
+    int64_t _find_first_not_equal_for_hash_based_partition(int64_t target, int64_t start, int64_t end);
     void _find_candidate_partition_ends();
     void _find_candidate_peer_group_ends();
 };
@@ -309,8 +314,12 @@ using AnalytorFactoryPtr = std::shared_ptr<AnalytorFactory>;
 class AnalytorFactory {
 public:
     AnalytorFactory(size_t dop, const TPlanNode& tnode, const RowDescriptor& child_row_desc,
-                    const TupleDescriptor* result_tuple_desc)
-            : _analytors(dop), _tnode(tnode), _child_row_desc(child_row_desc), _result_tuple_desc(result_tuple_desc) {}
+                    const TupleDescriptor* result_tuple_desc, const bool use_hash_based_partition)
+            : _analytors(dop),
+              _tnode(tnode),
+              _child_row_desc(child_row_desc),
+              _result_tuple_desc(result_tuple_desc),
+              _use_hash_based_partition(use_hash_based_partition) {}
     AnalytorPtr create(int i);
 
 private:
@@ -318,5 +327,6 @@ private:
     const TPlanNode& _tnode;
     const RowDescriptor& _child_row_desc;
     const TupleDescriptor* _result_tuple_desc;
+    const bool _use_hash_based_partition;
 };
 } // namespace starrocks

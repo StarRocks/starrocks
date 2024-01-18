@@ -97,4 +97,17 @@ public class OlapTableTest {
             Assert.assertEquals(Sets.newHashSet(), tbl.getRelatedMaterializedViews());
         }
     }
+
+    @Test
+    public void testCopyOnlyForQuery() {
+        OlapTable olapTable = new OlapTable();
+        olapTable.setHasDelete();
+
+        OlapTable copied = new OlapTable();
+        olapTable.copyOnlyForQuery(copied);
+
+        Assert.assertEquals(olapTable.hasDelete(), copied.hasDelete());
+        Assert.assertEquals(olapTable.hasForbitGlobalDict(), copied.hasForbitGlobalDict());
+        Assert.assertEquals(olapTable, copied);
+    }
 }

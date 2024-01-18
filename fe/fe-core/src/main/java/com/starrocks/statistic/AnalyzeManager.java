@@ -7,6 +7,7 @@ import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -40,10 +41,14 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.ExecutorService;
+import java.util.stream.Collectors;
 
 public class AnalyzeManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(AnalyzeManager.class);
+    private static final Pair<Long, Long> CHECK_ALL_TABLES =
+            new Pair<>(StatsConstants.DEFAULT_ALL_ID, StatsConstants.DEFAULT_ALL_ID);
 
     private final Map<Long, AnalyzeJob> analyzeJobMap;
     private final Map<Long, AnalyzeStatus> analyzeStatusMap;
@@ -54,6 +59,9 @@ public class AnalyzeManager implements Writable {
     private static final ExecutorService ANALYZE_TASK_THREAD_POOL = ThreadPoolManager.newDaemonFixedThreadPool(
             Config.statistic_collect_concurrency, 100,
             "analyze-task-concurrency-pool", true);
+
+    private final Set<Long> dropPartitionIds = new ConcurrentSkipListSet<>();
+    private final List<Pair<Long, Long>> checkTableIds = Lists.newArrayList(CHECK_ALL_TABLES);
 
     public AnalyzeManager() {
         analyzeJobMap = Maps.newConcurrentMap();
@@ -236,9 +244,110 @@ public class AnalyzeManager implements Writable {
 
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
         statsConnectCtx.setThreadLocalInfo();
+        statsConnectCtx.setStatisticsConnection(true);
 
         dropBasicStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
         dropHistogramStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
+    }
+
+    public void dropPartition(long partitionId) {
+        dropPartitionIds.add(partitionId);
+    }
+
+    public void clearStatisticFromDroppedPartition() {
+        checkAndDropPartitionStatistics();
+        dropPartitionStatistics();
+    }
+
+    private void dropPartitionStatistics() {
+        if (dropPartitionIds.isEmpty()) {
+            return;
+        }
+
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        statsConnectCtx.setThreadLocalInfo();
+        statsConnectCtx.setStatisticsConnection(true);
+
+        List<Long> pids = dropPartitionIds.stream().limit(Config.expr_children_limit / 2).collect(Collectors.toList());
+
+        StatisticExecutor executor = new StatisticExecutor();
+        statsConnectCtx.setThreadLocalInfo();
+        if (executor.dropPartitionStatistics(statsConnectCtx, pids)) {
+            pids.forEach(dropPartitionIds::remove);
+        }
+    }
+
+    private void checkAndDropPartitionStatistics() {
+        if (!Config.statistic_check_expire_partition || checkTableIds.isEmpty()) {
+            return;
+        }
+
+        if (checkTableIds.contains(CHECK_ALL_TABLES)) {
+            checkTableIds.clear();
+            List<Long> dbIds = GlobalStateMgr.getCurrentState().getDbIds();
+            for (Long dbId : dbIds) {
+                Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+                if (null == db || StatisticUtils.statisticDatabaseBlackListCheck(db.getFullName())) {
+                    continue;
+                }
+
+                for (Table table : db.getTables()) {
+                    if (table == null || !table.isOlapOrLakeTable()) {
+                        continue;
+                    }
+                    checkTableIds.add(new Pair<>(dbId, table.getId()));
+                }
+            }
+
+        }
+
+        List<Pair<Long, Long>> checkDbTableIds = Lists.newArrayList();
+        List<Long> checkPartitionIds = Lists.newArrayList();
+        ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
+        statsConnectCtx.setStatisticsConnection(true);
+
+        int exprLimit = Config.expr_children_limit / 2;
+        for (Pair<Long, Long> dbTableId : checkTableIds) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbTableId.first);
+            if (null == db) {
+                continue;
+            }
+
+            Table table = db.getTable(dbTableId.second);
+            if (table == null) {
+                continue;
+            }
+
+            List<Long> pids = table.getPartitions().stream().map(Partition::getId).collect(Collectors.toList());
+
+            // SQL parse will limit expr number, so we need modify it in the session
+            // Of course, it's low probability to reach the limit
+            if (pids.size() > exprLimit) {
+                checkDbTableIds.clear();
+                checkPartitionIds.clear();
+                checkDbTableIds.add(dbTableId);
+                checkPartitionIds.addAll(pids);
+                break;
+            } else if ((checkDbTableIds.size() + checkPartitionIds.size() + pids.size()) > exprLimit) {
+                break;
+            }
+
+            checkDbTableIds.add(dbTableId);
+            checkPartitionIds.addAll(pids);
+        }
+
+        if (checkDbTableIds.isEmpty() || checkPartitionIds.isEmpty()) {
+            return;
+        }
+
+        statsConnectCtx.setThreadLocalInfo();
+        StatisticExecutor executor = new StatisticExecutor();
+        List<Long> tables = checkDbTableIds.stream().map(p -> p.second).collect(Collectors.toList());
+
+        statsConnectCtx.getSessionVariable().setExprChildrenLimit(checkPartitionIds.size() * 3);
+        if (executor.dropTableInvalidPartitionStatistics(statsConnectCtx, tables, checkPartitionIds)) {
+            checkDbTableIds.forEach(checkTableIds::remove);
+        }
     }
 
     public void dropBasicStatsMetaAndData(ConnectContext statsConnectCtx, Set<Long> tableIdHasDeleted) {
@@ -317,16 +426,32 @@ public class AnalyzeManager implements Writable {
         }
         TxnCommitAttachment attachment = transactionState.getTxnCommitAttachment();
         if (attachment instanceof RLTaskTxnCommitAttachment) {
+<<<<<<< HEAD
             BasicStatsMeta basicStatsMeta =
                     GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
                             .get(transactionState.getTableIdList().get(0));
+=======
+            BasicStatsMeta basicStatsMeta = null;
+            if (!transactionState.getTableIdList().isEmpty()) {
+                basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
+                        .get(transactionState.getTableIdList().get(0));
+            }
+>>>>>>> 2.5.18
             if (basicStatsMeta != null) {
                 basicStatsMeta.increaseUpdateRows(((RLTaskTxnCommitAttachment) attachment).getLoadedRows());
             }
         } else if (attachment instanceof ManualLoadTxnCommitAttachment) {
+<<<<<<< HEAD
             BasicStatsMeta basicStatsMeta =
                     GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
                             .get(transactionState.getTableIdList().get(0));
+=======
+            BasicStatsMeta basicStatsMeta = null;
+            if (!transactionState.getTableIdList().isEmpty()) {
+                basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
+                        .get(transactionState.getTableIdList().get(0));
+            }
+>>>>>>> 2.5.18
             if (basicStatsMeta != null) {
                 basicStatsMeta.increaseUpdateRows(((ManualLoadTxnCommitAttachment) attachment).getLoadedRows());
             }
@@ -342,14 +467,24 @@ public class AnalyzeManager implements Writable {
                     }
             );
         } else if (attachment instanceof InsertTxnCommitAttachment) {
+<<<<<<< HEAD
             BasicStatsMeta basicStatsMeta =
                     GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
                             .get(transactionState.getTableIdList().get(0));
+=======
+            BasicStatsMeta basicStatsMeta = null;
+            if (!transactionState.getTableIdList().isEmpty()) {
+                basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap()
+                        .get(transactionState.getTableIdList().get(0));
+            }
+>>>>>>> 2.5.18
             if (basicStatsMeta != null) {
                 long loadRows = ((InsertTxnCommitAttachment) attachment).getLoadedRows();
                 if (loadRows == 0) {
                     OlapTable table = (OlapTable) db.getTable(basicStatsMeta.getTableId());
-                    basicStatsMeta.increaseUpdateRows(table.getRowCount());
+                    if (table != null) {
+                        basicStatsMeta.increaseUpdateRows(table.getRowCount());
+                    }
                 } else {
                     basicStatsMeta.increaseUpdateRows(((InsertTxnCommitAttachment) attachment).getLoadedRows());
                 }

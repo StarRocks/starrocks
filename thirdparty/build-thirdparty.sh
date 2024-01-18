@@ -172,13 +172,6 @@ build_libevent() {
 }
 
 build_openssl() {
-    OLD_FLAGS=$CXXFLAGS
-    OLD_CFLAGS=$CFLAGS
-
-    unset CXXFLAGS
-    unset CPPFLAGS
-    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
-
     OPENSSL_PLATFORM="linux-x86_64"
     if [[ "${MACHINE_TYPE}" == "aarch64" ]]; then
         OPENSSL_PLATFORM="linux-aarch64"
@@ -187,15 +180,18 @@ build_openssl() {
     check_if_source_exist $OPENSSL_SOURCE
     cd $TP_SOURCE_DIR/$OPENSSL_SOURCE
 
+    # use customized CFLAGS/CPPFLAGS/CXXFLAGS/LDFLAGS
+    unset CXXFLAGS
+    unset CPPFLAGS
+    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC"
+
     LDFLAGS="-L${TP_LIB_DIR}" \
     LIBDIR="lib" \
     ./Configure --prefix=$TP_INSTALL_DIR -zlib no-shared no-tests ${OPENSSL_PLATFORM}
     make -j$PARALLEL
     make install_sw
 
-    export CXXFLAGS=$OLD_FLAGS
-    export CPPFLAGS=$OLD_FLAGS
-    export CFLAGS=$OLD_CFLAGS
+    restore_compile_flags
 }
 
 # thrift
@@ -370,20 +366,27 @@ build_snappy() {
 build_gperftools() {
     check_if_source_exist $GPERFTOOLS_SOURCE
     cd $TP_SOURCE_DIR/$GPERFTOOLS_SOURCE
+<<<<<<< HEAD
 
     OLD_FLAGS=$CFLAGS
     CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
+=======
+>>>>>>> 2.5.18
 
     if [ ! -f configure ]; then
         ./autogen.sh
     fi
 
     LDFLAGS="-L${TP_LIB_DIR}" \
+    CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
     ./configure --prefix=$TP_INSTALL_DIR/gperftools --disable-shared --enable-static --disable-libunwind --with-pic --enable-frame-pointers
     make -j$PARALLEL
     make install
+<<<<<<< HEAD
 
     CFLAGS=$OLD_FLAGS
+=======
+>>>>>>> 2.5.18
 }
 
 # zlib
@@ -499,9 +502,7 @@ build_rocksdb() {
     cd $TP_SOURCE_DIR/$ROCKSDB_SOURCE
     make clean
 
-    OLD_FLAGS=$CFLAGS
-    CFLAGS=""
-
+    CFLAGS= \
     EXTRA_CFLAGS="-I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy -I ${TP_INCLUDE_DIR}/lz4 -L${TP_LIB_DIR}" \
     EXTRA_CXXFLAGS="-fPIC -Wno-deprecated-copy -Wno-stringop-truncation -Wno-pessimizing-move -I ${TP_INCLUDE_DIR} -I ${TP_INCLUDE_DIR}/snappy" \
     EXTRA_LDFLAGS="-static-libstdc++ -static-libgcc" \
@@ -509,8 +510,11 @@ build_rocksdb() {
 
     cp librocksdb.a $TP_LIB_DIR/librocksdb.a
     cp -r include/rocksdb $TP_INCLUDE_DIR
+<<<<<<< HEAD
 
     export CFLAGS=$OLD_FLAGS
+=======
+>>>>>>> 2.5.18
 }
 
 # librdkafka
@@ -558,9 +562,6 @@ build_flatbuffers() {
 
 # arrow
 build_arrow() {
-    OLD_FLAGS=$CXXFLAGS
-    OLD_CFLAGS=$CFLAGS
-
     export CXXFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
     export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
     export CPPFLAGS=$CXXFLAGS
@@ -578,9 +579,17 @@ build_arrow() {
     export ARROW_ZSTD_URL=${TP_SOURCE_DIR}/${ZSTD_NAME}
     export LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc"
 
+    # https://github.com/apache/arrow/blob/apache-arrow-5.0.0/cpp/src/arrow/memory_pool.cc#L286
+    #
+    # JemallocAllocator use mallocx and rallocx to allocate new memory, but mallocx and rallocx are Non-standard APIs,
+    # and can not be hooked in BE, the memory used by arrow can not be counted by BE,
+    # so disable jemalloc here and use SystemAllocator.
+    #
+    # Currently, the standard APIs are hooked in BE, so the jemalloc standard APIs will actually be used.
     ${CMAKE_CMD} -DARROW_PARQUET=ON -DARROW_JSON=ON -DARROW_IPC=ON -DARROW_USE_GLOG=OFF -DARROW_BUILD_SHARED=OFF \
     -DARROW_WITH_BROTLI=ON -DARROW_WITH_LZ4=ON -DARROW_WITH_SNAPPY=ON -DARROW_WITH_ZLIB=ON -DARROW_WITH_ZSTD=ON \
     -DARROW_WITH_UTF8PROC=OFF -DARROW_WITH_RE2=OFF \
+    -DARROW_JEMALLOC=OFF -DARROW_MIMALLOC=OFF \
     -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
     -DCMAKE_INSTALL_LIBDIR=lib64 \
     -DARROW_BOOST_USE_SHARED=OFF -DARROW_GFLAGS_USE_SHARED=OFF -DBoost_NO_BOOST_CMAKE=ON -DBOOST_ROOT=$TP_INSTALL_DIR \
@@ -608,9 +617,7 @@ build_arrow() {
     mkdir -p ${TP_INSTALL_DIR}/include/zstd
     cp ./zstd_ep-install/include/* ${TP_INSTALL_DIR}/include/zstd
 
-    export CXXFLAGS=$OLD_FLAGS
-    export CPPFLAGS=$OLD_FLAGS
-    export CFLAGS=$OLD_CFLAGS
+    restore_compile_flags
 }
 
 # s2
@@ -770,18 +777,17 @@ build_breakpad() {
     cd $TP_SOURCE_DIR/$BREAK_PAD_SOURCE
     mkdir -p src/third_party/lss
     cp $TP_PATCH_DIR/linux_syscall_support.h src/third_party/lss
-    OLD_FLAGS=$CFLAGS
-    unset CFLAGS
-    ./configure --prefix=$TP_INSTALL_DIR --enable-shared=no --disable-samples --disable-libevent-regress
+    CFLAGS= ./configure --prefix=$TP_INSTALL_DIR --enable-shared=no --disable-samples --disable-libevent-regress
     make -j$PARALLEL
     make install
-    export CFLAGS=$OLD_FLAGS
 }
 
 #hadoop
 build_hadoop() {
     check_if_source_exist $HADOOP_SOURCE
     cp -r $TP_SOURCE_DIR/$HADOOP_SOURCE $TP_INSTALL_DIR/hadoop
+    # remove unnecessary doc and logs
+    rm -rf $TP_INSTALL_DIR/hadoop/logs/* $TP_INSTALL_DIR/hadoop/share/doc/hadoop
     mkdir -p $TP_INSTALL_DIR/include/hdfs
     cp $TP_SOURCE_DIR/$HADOOP_SOURCE/include/hdfs.h $TP_INSTALL_DIR/include/hdfs
     cp $TP_SOURCE_DIR/$HADOOP_SOURCE/lib/native/libhdfs.a $TP_INSTALL_DIR/lib
@@ -819,8 +825,6 @@ build_hyperscan() {
 
 #mariadb-connector-c
 build_mariadb() {
-    OLD_FLAGS=$CXXFLAGS
-    OLD_CFLAGS=$CFLAGS
     OLD_CMAKE_GENERATOR=${CMAKE_GENERATOR}
     OLD_BUILD_SYSTEM=${BUILD_SYSTEM}
 
@@ -851,9 +855,7 @@ build_mariadb() {
     cd $TP_SOURCE_DIR/$MARIADB_SOURCE/build/include
     ${BUILD_SYSTEM} install
 
-    export CXXFLAGS=$OLD_FLAGS
-    export CPPFLAGS=$OLD_FLAGS
-    export CFLAGS=$OLD_CFLAGS
+    restore_compile_flags
     export CMAKE_GENERATOR=$OLD_CMAKE_GENERATOR
     export BUILD_SYSTEM=$OLD_BUILD_SYSTEM
 }
@@ -872,16 +874,12 @@ build_tencent_cos_jars() {
 }
 
 build_aws_cpp_sdk() {
-    OLD_CFLAGS=$CFLAGS
-    export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -D_POSIX_C_SOURCE=200112L"
-
     check_if_source_exist $AWS_SDK_CPP_SOURCE
     cd $TP_SOURCE_DIR/$AWS_SDK_CPP_SOURCE
     # only build s3, s3-crt, transfer manager, identity-management and sts, you can add more components if you want.
     $CMAKE_CMD -Bbuild -DBUILD_ONLY="core;s3;s3-crt;transfer;identity-management;sts" -DCMAKE_BUILD_TYPE=RelWithDebInfo \
                -DBUILD_SHARED_LIBS=OFF -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DENABLE_TESTING=OFF \
                -G "${CMAKE_GENERATOR}" \
-               -D_POSIX_C_SOURCE=200112L \
                -DCURL_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libcurl.a   \
                -DZLIB_LIBRARY_RELEASE=${TP_INSTALL_DIR}/lib/libz.a      \
                -DOPENSSL_ROOT_DIR=${TP_INSTALL_DIR}                     \
@@ -892,7 +890,7 @@ build_aws_cpp_sdk() {
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 
-    export CFLAGS=$OLD_CFLAGS
+    restore_compile_flags
 }
 
 # velocypack
@@ -932,11 +930,8 @@ build_opentelemetry() {
 
 # jemalloc
 build_jemalloc() {
-    OLD_CFLAGS=$CFLAGS
     check_if_source_exist $JEMALLOC_SOURCE
 
-    unset CFLAGS
-    export CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g"
     cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
     # jemalloc supports a runtime page size that's smaller or equal to the build
     # time one, but aborts on a larger one. If not defined, it falls back to the
@@ -947,10 +942,17 @@ build_jemalloc() {
         # change to 64K for arm architecture
         addition_opts=" --with-lg-page=16"
     fi
+<<<<<<< HEAD
     ./configure --prefix=${TP_INSTALL_DIR} --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl --disable-shared $addition_opts
     make -j$PARALLEL
     make install
     export CFLAGS=$OLD_CFLAGS
+=======
+    CFLAGS="-O3 -fno-omit-frame-pointer -fPIC -g" \
+    ./configure --prefix=${TP_INSTALL_DIR} --with-jemalloc-prefix=je --enable-prof --disable-cxx --disable-libdl --disable-shared $addition_opts
+    make -j$PARALLEL
+    make install
+>>>>>>> 2.5.18
 }
 
 # google benchmark
@@ -999,10 +1001,41 @@ build_streamvbyte() {
     make install
 }
 
-export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g"
-export CPPFLAGS="-I ${TP_INCLUDE_DIR}"
+# async-profiler
+build_async_profiler() {
+    check_if_source_exist $ASYNC_PROFILER_SOURCE
+    mkdir -p $TP_INSTALL_DIR/async-profiler
+    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/build $TP_INSTALL_DIR/async-profiler
+    cp -r $TP_SOURCE_DIR/$ASYNC_PROFILER_SOURCE/profiler.sh $TP_INSTALL_DIR/async-profiler
+}
+
+# restore cxxflags/cppflags/cflags to default one
+restore_compile_flags() {
+    # c preprocessor flags
+    export CPPFLAGS=$GLOBAL_CPPFLAGS
+    # c flags
+    export CFLAGS=$GLOBAL_CFLAGS
+    # c++ flags
+    export CXXFLAGS=$GLOBAL_CXXFLAGS
+}
+
+strip_binary() {
+    # strip binary tools and ignore any errors
+    echo "Strip binaries in $TP_INSTALL_DIR/bin/ ..."
+    strip $TP_INSTALL_DIR/bin/* 2>/dev/null || true
+}
+
+
+# set GLOBAL_C*FLAGS for easy restore in each sub build process
+export GLOBAL_CPPFLAGS="-I ${TP_INCLUDE_DIR}"
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
-export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=199309L"
+export GLOBAL_CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=200112L"
+export GLOBAL_CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g"
+
+# set those GLOBAL_*FLAGS to the CFLAGS/CXXFLAGS/CPPFLAGS
+export CPPFLAGS=$GLOBAL_CPPFLAGS
+export CXXFLAGS=$GLOBAL_CXXFLAGS
+export CFLAGS=$GLOBAL_CFLAGS
 
 build_libevent
 build_zlib
@@ -1051,10 +1084,13 @@ build_benchmark
 build_fast_float
 build_cachelib
 build_streamvbyte
+build_async_profiler
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad
 fi
 
-echo "Finished to build all thirdparties"
+# strip unnecessary debug symbol for binaries in thirdparty
+strip_binary
 
+echo "Finished to build all thirdparties"

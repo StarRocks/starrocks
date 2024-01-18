@@ -81,7 +81,7 @@ public class TPCDSCoordTest extends TPCDSPlanTestBase {
 
         PlanFragmentId topFragmentId = coord.getFragments().get(0).getFragmentId();
         Coordinator.FragmentExecParams params = coord.getFragmentExecParamsMap().get(topFragmentId);
-        Assert.assertEquals(params.runtimeFilterParams.id_to_prober_params.get(1).size(), 10);
+        Assert.assertEquals(params.instanceExecParams.get(0).runtimeFilterParams.id_to_prober_params.get(1).size(), 10);
     }
 
     @Test

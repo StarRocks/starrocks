@@ -115,8 +115,11 @@ import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+<<<<<<< HEAD
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+=======
+>>>>>>> 2.5.18
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -190,7 +193,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
         Projection projection = node.getProjection();
         if (projection != null) {
-            Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
             for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
                 ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
                 statisticsBuilder.addColumnStatistic(columnRefOperator,
@@ -219,9 +221,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
         Preconditions.checkState(context.arity() == 0);
         // 1. get table row count
-        long tableRowCount = getTableRowCount(table, node);
+        long tableRowCount = StatisticsCalcUtils.getTableRowCount(table, node, optimizerContext);
         // 2. get required columns statistics
-        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(table, colRefToColumnMetaMap, optimizerContext);
         if (tableRowCount <= 1) {
             builder.setTableRowCountMayInaccurate(true);
         }
@@ -372,38 +374,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
     }
 
-    private Statistics.Builder estimateScanColumns(Table table, Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
-        Statistics.Builder builder = Statistics.builder();
-        List<ColumnRefOperator> requiredColumnRefs = new ArrayList<>(colRefToColumnMetaMap.keySet());
-        List<String> columns = new ArrayList<>(colRefToColumnMetaMap.values())
-                .stream().map(Column::getName).collect(Collectors.toList());
-        List<ColumnStatistic> columnStatisticList =
-                GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
-        Preconditions.checkState(requiredColumnRefs.size() == columnStatisticList.size());
-
-        Map<String, Histogram> histogramStatistics =
-                GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columns);
-
-        for (int i = 0; i < requiredColumnRefs.size(); ++i) {
-            ColumnStatistic columnStatistic;
-            if (histogramStatistics.containsKey(requiredColumnRefs.get(i).getName())) {
-                columnStatistic = ColumnStatistic.buildFrom(columnStatisticList.get(i)).setHistogram(
-                        histogramStatistics.get(requiredColumnRefs.get(i).getName())).build();
-            } else {
-                columnStatistic = columnStatisticList.get(i);
-            }
-            builder.addColumnStatistic(requiredColumnRefs.get(i), columnStatistic);
-            optimizerContext.getDumpInfo()
-                    .addTableStatistics(table, requiredColumnRefs.get(i).getName(), columnStatisticList.get(i));
-        }
-
-        return builder;
-    }
-
     private Void computeNormalExternalTableScanNode(Operator node, ExpressionContext context, Table table,
                                                     Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
                                                     int outputRowCount) {
-        Statistics.Builder builder = estimateScanColumns(table, colRefToColumnMetaMap);
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(table, colRefToColumnMetaMap, optimizerContext);
         builder.setOutputRowCount(outputRowCount);
 
         context.setStatistics(builder.build());
@@ -437,7 +411,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitLogicalSchemaScan(LogicalSchemaScanOperator node, ExpressionContext context) {
         Table table = node.getTable();
-        Statistics.Builder builder = estimateScanColumns(table, node.getColRefToColumnMetaMap());
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(table,
+                node.getColRefToColumnMetaMap(), optimizerContext);
         builder.setOutputRowCount(1);
 
         context.setStatistics(builder.build());
@@ -447,7 +422,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     @Override
     public Void visitPhysicalSchemaScan(PhysicalSchemaScanOperator node, ExpressionContext context) {
         Table table = node.getTable();
-        Statistics.Builder builder = estimateScanColumns(table, node.getColRefToColumnMetaMap());
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(table,
+                node.getColRefToColumnMetaMap(), optimizerContext);
         builder.setOutputRowCount(1);
 
         context.setStatistics(builder.build());
@@ -456,7 +432,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalMetaScan(LogicalMetaScanOperator node, ExpressionContext context) {
-        Statistics.Builder builder = estimateScanColumns(node.getTable(), node.getColRefToColumnMetaMap());
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(node.getTable(),
+                node.getColRefToColumnMetaMap(), optimizerContext);
         builder.setOutputRowCount(node.getAggColumnIdToNames().size());
 
         context.setStatistics(builder.build());
@@ -465,7 +442,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalMetaScan(PhysicalMetaScanOperator node, ExpressionContext context) {
-        Statistics.Builder builder = estimateScanColumns(node.getTable(), node.getColRefToColumnMetaMap());
+        Statistics.Builder builder = StatisticsCalcUtils.estimateScanColumns(node.getTable(),
+                node.getColRefToColumnMetaMap(), optimizerContext);
         builder.setOutputRowCount(node.getAggColumnIdToNames().size());
 
         context.setStatistics(builder.build());
@@ -499,7 +477,10 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             String partitionColumn = olapTable.getPartitionColumnNames().get(0);
             ColumnStatistic partitionColumnStatistic =
                     GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistic(olapTable, partitionColumn);
-            optimizerContext.getDumpInfo().addTableStatistics(olapTable, partitionColumn, partitionColumnStatistic);
+
+            if (optimizerContext.getDumpInfo() != null) {
+                optimizerContext.getDumpInfo().addTableStatistics(olapTable, partitionColumn, partitionColumnStatistic);
+            }
 
             PartitionInfo partitionInfo = olapTable.getPartitionInfo();
             if (partitionInfo instanceof RangePartitionInfo) {
@@ -548,6 +529,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return null;
     }
 
+<<<<<<< HEAD
     private long getTableRowCount(Table table, Operator node) {
         if (table.isNativeTable()) {
             OlapTable olapTable = (OlapTable) table;
@@ -622,6 +604,8 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         return 1;
     }
 
+=======
+>>>>>>> 2.5.18
     @Override
     public Void visitLogicalProject(LogicalProjectOperator node, ExpressionContext context) {
         return computeProjectNode(context, node.getColumnRefMap());
@@ -629,7 +613,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalProject(PhysicalProjectOperator node, ExpressionContext context) {
-        Preconditions.checkState(node.getCommonSubOperatorMap().isEmpty());
         return computeProjectNode(context, node.getColumnRefMap());
     }
 
@@ -1361,14 +1344,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeCTEConsume(Operator node, ExpressionContext context, int cteId,
                                    Map<ColumnRefOperator, ColumnRefOperator> columnRefMap) {
-        Optional<Statistics> produceStatisticsOp = optimizerContext.getCteContext().getCTEStatistics(cteId);
-
-        // The statistics of producer and children are equal theoretically, but statistics of children
-        // plan maybe more accurate in actually
-        if (!produceStatisticsOp.isPresent() && (context.getChildrenStatistics().isEmpty() ||
-                context.getChildrenStatistics().stream().anyMatch(Objects::isNull))) {
-            Preconditions.checkState(false, "Impossible cte statistics");
-        }
 
         if (!context.getChildrenStatistics().isEmpty() && context.getChildStatistics(0) != null) {
             //  use the statistics of children first
@@ -1376,7 +1351,6 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             Projection projection = node.getProjection();
             if (projection != null) {
                 Statistics.Builder statisticsBuilder = Statistics.buildFrom(context.getStatistics());
-                Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
                 for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
                     ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
                     statisticsBuilder.addColumnStatistic(columnRefOperator,
@@ -1388,7 +1362,9 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
         }
 
         // None children, may force CTE, use the statistics of producer
-        Preconditions.checkState(produceStatisticsOp.isPresent());
+        Optional<Statistics> produceStatisticsOp = optimizerContext.getCteContext().getCTEStatistics(cteId);
+        Preconditions.checkState(produceStatisticsOp.isPresent(),
+                "cannot obtain cte statistics for %s", node);
         Statistics produceStatistics = produceStatisticsOp.get();
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator ref : columnRefMap.keySet()) {

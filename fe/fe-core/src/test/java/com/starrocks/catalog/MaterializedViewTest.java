@@ -20,7 +20,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionValue;
@@ -667,6 +666,7 @@ public class MaterializedViewTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testAlterAsyncMaterializedViewWithInterval() throws Exception {
         FeConstants.runningUnitTest = true;
         Config.enable_experimental_mv = true;
@@ -714,6 +714,8 @@ public class MaterializedViewTest {
     }
 
     @Test
+=======
+>>>>>>> 2.5.18
     public void testMvMysqlType() {
         MaterializedView mv = new MaterializedView();
         String mysqlType = mv.getMysqlType();

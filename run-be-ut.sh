@@ -40,7 +40,6 @@ Usage: $0 <options>
      --with-bench                   enable to build with benchmark
      --with-gcov                    enable to build with gcov
      --module                       module to run uts
-     --use-staros                   enable to build with staros
      -j                             build parallel
 
   Eg.
@@ -64,7 +63,6 @@ OPTS=$(getopt \
   -l 'module:' \
   -l 'with-aws' \
   -l 'with-bench' \
-  -l 'use-staros' \
   -o 'j:' \
   -l 'help' \
   -l 'run' \
@@ -83,8 +81,7 @@ TEST_NAME=*
 TEST_MODULE=".*"
 HELP=0
 WITH_AWS=OFF
-USE_STAROS=OFF
-WITH_BLOCK_CACHE=OFF
+WITH_BLOCK_CACHE=ON
 WITH_GCOV=OFF
 while true; do
     case "$1" in
@@ -97,7 +94,6 @@ while true; do
         --help) HELP=1 ; shift ;;
         --with-aws) WITH_AWS=ON; shift ;;
         --with-gcov) WITH_GCOV=ON; shift ;;
-        --use-staros) USE_STAROS=ON; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
@@ -131,36 +127,15 @@ fi
 
 cd ${CMAKE_BUILD_DIR}
 
-if [ "${USE_STAROS}" == "ON"  ]; then
-  if [ -z "$STARLET_INSTALL_DIR" ] ; then
-    # assume starlet_thirdparty is installed to ${STARROCKS_THIRDPARTY}/installed/starlet/
-    STARLET_INSTALL_DIR=${STARROCKS_THIRDPARTY}/installed/starlet
-  fi
-  ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
-              -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
-              -DSTARROCKS_HOME=${STARROCKS_HOME} \
-              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-              -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-              -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
-              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-              -DUSE_STAROS=${USE_STAROS} -DWITH_GCOV=${WITH_GCOV} \
-              -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
-              -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
-              -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
-              -DgRPC_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/grpc \
-              -Dprometheus-cpp_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/prometheus-cpp \
-              -Dstarlet_DIR=${STARLET_INSTALL_DIR}/starlet_install/lib64/cmake ..
-else
-  ${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
-              -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
-              -DSTARROCKS_HOME=${STARROCKS_HOME} \
-              -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-              -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
-              -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
-              -DWITH_GCOV=${WITH_GCOV} \
-              -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
-              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
-fi
+${CMAKE_CMD}  -G "${CMAKE_GENERATOR}" \
+            -DSTARROCKS_THIRDPARTY=${STARROCKS_THIRDPARTY}\
+            -DSTARROCKS_HOME=${STARROCKS_HOME} \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
+            -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
+            -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
+            -DWITH_GCOV=${WITH_GCOV} \
+            -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ../
 ${BUILD_SYSTEM} -j${PARALLEL}
 
 echo "*********************************"

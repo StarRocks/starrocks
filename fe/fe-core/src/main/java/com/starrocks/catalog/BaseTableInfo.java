@@ -45,15 +45,27 @@ public class BaseTableInfo {
     @SerializedName(value = "tableName")
     private String tableName;
 
+<<<<<<< HEAD
     public BaseTableInfo(long dbId, String dbName, long tableId) {
+=======
+    public BaseTableInfo(long dbId, String dbName, long tableId, String tableName) {
+>>>>>>> 2.5.18
         this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         this.dbId = dbId;
         this.dbName = dbName;
         this.tableId = tableId;
+<<<<<<< HEAD
     }
 
     public BaseTableInfo(long dbId, long tableId) {
         this(dbId, null, tableId);
+=======
+        this.tableName = tableName;
+    }
+
+    public BaseTableInfo(long dbId, long tableId) {
+        this(dbId, null, tableId, null);
+>>>>>>> 2.5.18
     }
 
     public BaseTableInfo(String catalogName, String dbName, String tableIdentifier) {
@@ -149,6 +161,17 @@ public class BaseTableInfo {
         }
     }
 
+<<<<<<< HEAD
+=======
+    public String getReadableString() {
+        String dbName = getDbName();
+        dbName = dbName != null ? dbName : "null";
+        String tableName = getTableName();
+        tableName = tableName != null ? tableName : "null";
+        return catalogName + "." + dbName + "." + tableName;
+    }
+
+>>>>>>> 2.5.18
     @Override
     public boolean equals(Object o) {
         if (this == o) {

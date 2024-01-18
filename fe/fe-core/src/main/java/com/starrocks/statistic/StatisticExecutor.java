@@ -96,6 +96,19 @@ public class StatisticExecutor {
         }
     }
 
+    public boolean dropPartitionStatistics(ConnectContext statsConnectCtx, List<Long> pids) {
+        String sql = StatisticSQLBuilder.buildDropPartitionSQL(pids);
+        LOG.debug("Expire partition statistic SQL: {}", sql);
+        return executeDML(statsConnectCtx, sql);
+    }
+
+    public boolean dropTableInvalidPartitionStatistics(ConnectContext statsConnectCtx, List<Long> tables,
+                                                    List<Long> pids) {
+        String sql = StatisticSQLBuilder.buildDropTableInvalidPartitionSQL(tables, pids);
+        LOG.debug("Expire invalid partition statistic SQL: {}", sql);
+        return executeDML(statsConnectCtx, sql);
+    }
+
     public List<TStatisticData> queryHistogram(ConnectContext statsConnectCtx, Long tableId, List<String> columnNames) {
         String sql = StatisticSQLBuilder.buildQueryHistogramStatisticsSQL(tableId, columnNames);
         return executeStatisticDQL(statsConnectCtx, sql);
@@ -136,10 +149,13 @@ public class StatisticExecutor {
                 " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
 
         ConnectContext context = StatisticUtils.buildConnectContext();
+        // The parallelism degree of low-cardinality dict collect task is uniformly set to 1 to
+        // prevent collection tasks from occupying a large number of be execution threads and scan threads.
+        context.getSessionVariable().setPipelineDop(1);
         context.setThreadLocalInfo();
-        StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+        StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
 
-        ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, false, TResultSinkType.STATISTIC);
+        ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
@@ -194,6 +210,10 @@ public class StatisticExecutor {
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.RUNNING);
             GlobalStateMgr.getCurrentAnalyzeMgr().replayAddAnalyzeStatus(analyzeStatus);
 
+<<<<<<< HEAD
+=======
+            statsConnectCtx.setStatisticsConnection(true);
+>>>>>>> 2.5.18
             statsJob.collect(statsConnectCtx, analyzeStatus);
         } catch (Exception e) {
             LOG.warn("Collect statistics error ", e);
@@ -209,6 +229,9 @@ public class StatisticExecutor {
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FINISH);
         analyzeStatus.setEndTime(LocalDateTime.now());
         GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+
+        // update StatisticsCache
+        statsConnectCtx.setStatisticsConnection(false);
         if (statsJob.getType().equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
             for (String columnName : statsJob.getColumns()) {
                 HistogramStatsMeta histogramStatsMeta = new HistogramStatsMeta(db.getId(),
@@ -239,14 +262,23 @@ public class StatisticExecutor {
     }
 
     private List<TResultBatch> executeDQL(ConnectContext context, String sql) {
+<<<<<<< HEAD
         StatementBase parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, true, TResultSinkType.STATISTIC);
+=======
+        StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+        ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
+>>>>>>> 2.5.18
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
         context.setExecutor(executor);
         context.setQueryId(UUIDUtil.genUUID());
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
+<<<<<<< HEAD
             throw new SemanticException("Statistics query fail | Error Message [%s] | {} | SQL [%s]",
+=======
+            throw new SemanticException("Statistics query fail | Error Message [%s] | QueryId [%s] | SQL [%s]",
+>>>>>>> 2.5.18
                     context.getState().getErrorMessage(), DebugUtil.printId(context.getQueryId()), sql);
         } else {
             return sqlResult.first;
@@ -256,14 +288,22 @@ public class StatisticExecutor {
     private boolean executeDML(ConnectContext context, String sql) {
         StatementBase parsedStmt;
         try {
+<<<<<<< HEAD
             parsedStmt = SqlParser.parseFirstStatement(sql, context.getSessionVariable().getSqlMode());
+=======
+            parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+>>>>>>> 2.5.18
             StmtExecutor executor = new StmtExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             executor.execute();
             return true;
         } catch (Exception e) {
+<<<<<<< HEAD
             LOG.warn("Execute statistic DML " + sql + " fail.", e);
+=======
+            LOG.warn("Execute statistic DML fail | {} | SQL {}", DebugUtil.printId(context.getQueryId()), sql, e);
+>>>>>>> 2.5.18
             return false;
         }
     }

@@ -14,12 +14,13 @@ import org.junit.Test;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.connector.hive.MockedRemoteFileSystem.TEST_FILES;
+import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_HIVE_TABLE;
+import static com.starrocks.connector.hive.MockedRemoteFileSystem.HDFS_RECURSIVE_TABLE;
 
 public class HiveRemoteFileIOTest {
     @Test
     public void testGetRemoteFiles() {
-        FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
         HiveRemoteFileIO fileIO = new HiveRemoteFileIO(new Configuration());
         fileIO.setFileSystem(fs);
         FeConstants.runningUnitTest = true;
@@ -34,6 +35,7 @@ public class HiveRemoteFileIOTest {
         Assert.assertEquals("000000_0", fileDesc.getFileName());
         Assert.assertEquals("", fileDesc.getCompression());
         Assert.assertEquals(20, fileDesc.getLength());
+        Assert.assertEquals(1234567890, fileDesc.getModificationTime());
         Assert.assertFalse(fileDesc.isSplittable());
         Assert.assertNull(fileDesc.getTextFileFormatDesc());
 
@@ -46,8 +48,44 @@ public class HiveRemoteFileIOTest {
     }
 
     @Test
+<<<<<<< HEAD
     public void testPathContainsEmptySpace() {
         FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
+=======
+    public void testGetRemoteRecursiveFiles() {
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_RECURSIVE_TABLE);
+        HiveRemoteFileIO fileIO = new HiveRemoteFileIO(new Configuration());
+        fileIO.setFileSystem(fs);
+        FeConstants.runningUnitTest = true;
+        String tableLocation = "hdfs://127.0.0.1:10000/hive.db/recursive_tbl";
+        RemotePathKey pathKey = RemotePathKey.of(tableLocation, true);
+        Map<RemotePathKey, List<RemoteFileDesc>> remoteFileInfos = fileIO.getRemoteFiles(pathKey);
+        List<RemoteFileDesc> fileDescs = remoteFileInfos.get(pathKey);
+        Assert.assertNotNull(fileDescs);
+        Assert.assertEquals(2, fileDescs.size());
+        RemoteFileDesc fileDesc = fileDescs.get(0);
+        Assert.assertNotNull(fileDesc);
+        Assert.assertEquals("subdir1/000000_0", fileDesc.getFileName());
+        Assert.assertEquals("", fileDesc.getCompression());
+        Assert.assertEquals(20, fileDesc.getLength());
+        Assert.assertEquals(1234567890, fileDesc.getModificationTime());
+        Assert.assertFalse(fileDesc.isSplittable());
+        Assert.assertNull(fileDesc.getTextFileFormatDesc());
+
+        fileDesc = fileDescs.get(1);
+        Assert.assertNotNull(fileDesc);
+        Assert.assertEquals("subdir1/000000_1", fileDesc.getFileName());
+        Assert.assertEquals("", fileDesc.getCompression());
+        Assert.assertEquals(20, fileDesc.getLength());
+        Assert.assertEquals(1234567890, fileDesc.getModificationTime());
+        Assert.assertFalse(fileDesc.isSplittable());
+        Assert.assertNull(fileDesc.getTextFileFormatDesc());
+    }
+
+    @Test
+    public void testPathContainsEmptySpace() {
+        FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
+>>>>>>> 2.5.18
         HiveRemoteFileIO fileIO = new HiveRemoteFileIO(new Configuration());
         fileIO.setFileSystem(fs);
         FeConstants.runningUnitTest = true;

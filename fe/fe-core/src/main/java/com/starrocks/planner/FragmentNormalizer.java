@@ -28,6 +28,7 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TCacheParam;
+import com.starrocks.thrift.TGlobalDict;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TExpr;
 import org.apache.thrift.TException;
@@ -40,6 +41,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -201,8 +203,11 @@ public class FragmentNormalizer {
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
 
             for (TNormalPlanNode node : normalizedPlanNodes) {
-                byte[] data = serializer.serialize(node);
-                digest.update(data);
+                digest.update(serializer.serialize(node));
+            }
+            List<TGlobalDict> dicts = normalizeDicts(getAllOffspringFragments(fragment));
+            for (TGlobalDict dict : dicts) {
+                digest.update(serializer.serialize(dict));
             }
             List<SlotId> slotIds = topmostPlanNode.getOutputSlotIds(execPlan.getDescTbl());
             List<Integer> remappedSlotIds = remapSlotIds(slotIds);
@@ -224,6 +229,33 @@ public class FragmentNormalizer {
         } catch (TException | NoSuchAlgorithmException e) {
             throw new RuntimeException("Fatal error happens when normalize PlanFragment", e);
         }
+    }
+
+    // get All of offspring fragments of the current fragment, the current fragment
+    // is also included. fragments containing MulticastSink are counted once.
+    private List<PlanFragment> getAllOffspringFragments(PlanFragment fragment) {
+        List<ExchangeNode> exchangeNodes = Lists.newArrayList();
+        fragment.getPlanRoot().collect(ExchangeNode.class, exchangeNodes);
+        List<PlanFragment> fragments = exchangeNodes.stream()
+                .flatMap(ex -> ex.getChildren().stream().map(PlanNode::getFragment))
+                .sorted(Comparator.comparingInt(frag -> frag.getFragmentId().asInt()))
+                .distinct().collect(Collectors.toList());
+        fragments.add(fragment);
+        return fragments;
+    }
+
+    // Normalize global dicts of the given fragments
+    private List<TGlobalDict> normalizeDicts(List<PlanFragment> fragments) {
+        List<TGlobalDict> dicts = Lists.newArrayList();
+        for (PlanFragment fragment : fragments) {
+            if (fragment.getQueryGlobalDicts() != null) {
+                dicts.addAll(fragment.normalizeDicts(fragment.getQueryGlobalDicts(), this));
+            }
+            if (fragment.getLoadGlobalDicts() != null) {
+                dicts.addAll(fragment.normalizeDicts(fragment.getLoadGlobalDicts(), this));
+            }
+        }
+        return dicts;
     }
 
     public PlanNode findMaximumNormalizableSubTree(PlanNode node) {
@@ -304,11 +336,18 @@ public class FragmentNormalizer {
     boolean hasNonDeterministicFunctions(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
             FunctionCallExpr callExpr = (FunctionCallExpr) expr;
-            if (FunctionSet.nonDeterministicFunctions.contains(callExpr.getFn().functionName())) {
+            String funcName = callExpr.getFn().functionName();
+            if (FunctionSet.nonDeterministicFunctions.contains(funcName)) {
+                return true;
+            }
+            if (FunctionSet.NOW.equals(funcName)) {
+                return true;
+            }
+            if (FunctionSet.nonDeterministicTimeFunctions.contains(funcName) && callExpr.getChildren().isEmpty()) {
                 return true;
             }
         }
-        return expr.getChildren().stream().anyMatch(e -> hasNonDeterministicFunctions(e));
+        return expr.getChildren().stream().anyMatch(this::hasNonDeterministicFunctions);
     }
 
     List<Range<PartitionKey>> convertPredicateToRange(Column partitionColumn, Expr expr) {

@@ -140,6 +140,11 @@ public class ScalarApply2JoinRule extends TransformationRule {
         // any_value aggregate
         ScalarOperator subqueryOperator = apply.getSubqueryOperator();
         CallOperator anyValueCallOp = SubqueryUtils.createAnyValueOperator(subqueryOperator);
+        if (anyValueCallOp.getFunction() == null) {
+            throw new SemanticException(String.format(
+                    "NOT support scalar correlated sub-query of type %s",
+                    subqueryOperator.getType().toSql()));
+        }
         ColumnRefOperator anyValue = factory.create("anyValue", anyValueCallOp.getType(), anyValueCallOp.isNullable());
         aggregates.put(anyValue, anyValueCallOp);
 

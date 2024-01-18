@@ -56,7 +56,7 @@ static const uint8_t VALID_SEL_OK_AND_NULL = 0x3;
 namespace starrocks::stream_load {
 
 NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id) : _parent(parent), _node_id(node_id) {
-    // restrict the chunk memory usage of send queue
+    // restrict the chunk memory usage of send queue & brpc write buffer
     _mem_tracker = std::make_unique<MemTracker>(config::send_channel_buffer_limit, "", nullptr);
 }
 
@@ -192,6 +192,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
 
     // set global dict
     const auto& global_dict = _runtime_state->get_load_global_dict_map();
+    const auto& dict_version = _runtime_state->load_dict_versions();
     for (size_t i = 0; i < request.schema().slot_descs_size(); i++) {
         auto slot = request.mutable_schema()->mutable_slot_descs(i);
         auto it = global_dict.find(slot->id());
@@ -200,12 +201,22 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
             for (auto& item : dict) {
                 slot->add_global_dict_words(item.first.to_string());
             }
+            auto it_version = dict_version.find(slot->id());
+            if (it_version != dict_version.end()) {
+                slot->set_global_dict_version(it_version->second);
+            }
         }
     }
 
     // This ref is for RPC's reference
     open_closure->ref();
+
     open_closure->cntl.set_timeout_ms(config::tablet_writer_open_rpc_timeout_sec * 1000);
+<<<<<<< HEAD
+=======
+    open_closure->cntl.ignore_eovercrowded();
+
+>>>>>>> 2.5.18
     if (request.ByteSizeLong() > _parent->_rpc_http_min_size) {
         TNetworkAddress brpc_addr;
         brpc_addr.hostname = _node_info->host;
@@ -524,6 +535,13 @@ Status NodeChannel::_send_request(bool eos) {
     _add_batch_closures[_current_request_index]->ref();
     _add_batch_closures[_current_request_index]->reset();
     _add_batch_closures[_current_request_index]->cntl.set_timeout_ms(_rpc_timeout_ms);
+<<<<<<< HEAD
+=======
+    _add_batch_closures[_current_request_index]->cntl.ignore_eovercrowded();
+    _add_batch_closures[_current_request_index]->request_size = request.ByteSizeLong();
+
+    _mem_tracker->consume(_add_batch_closures[_current_request_index]->request_size);
+>>>>>>> 2.5.18
 
     if (_enable_colocate_mv_index) {
         request.set_is_repeated_chunk(true);
@@ -575,6 +593,7 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
     if (!closure->join()) {
         return Status::OK();
     }
+    _mem_tracker->release(closure->request_size);
 
     _parent->_client_rpc_timer->update(closure->latency());
 
@@ -614,8 +633,12 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
         _add_batch_counter.add_batch_num++;
     }
 
+<<<<<<< HEAD
     std::unordered_set<std::string> invalid_dict_cache_column_set;
     std::unordered_set<std::string> valid_dict_cache_column_set;
+=======
+    std::vector<int64_t> tablet_ids;
+>>>>>>> 2.5.18
     for (auto& tablet : closure->result.tablet_vec()) {
         TTabletCommitInfo commit_info;
         commit_info.tabletId = tablet.tablet_id();
@@ -625,12 +648,27 @@ Status NodeChannel::_wait_request(ReusableClosure<PTabletWriterAddBatchResult>* 
             commit_info.backendId = _node_id;
         }
 
+<<<<<<< HEAD
         for (auto& col_name : tablet.invalid_dict_cache_columns()) {
             invalid_dict_cache_column_set.insert(col_name);
         }
 
         for (auto& col_name : tablet.valid_dict_cache_columns()) {
             valid_dict_cache_column_set.insert(col_name);
+=======
+        for (const auto& col_name : tablet.invalid_dict_cache_columns()) {
+            _valid_dict_cache_info.invalid_dict_cache_column_set.insert(col_name);
+        }
+
+        for (size_t i = 0; i < tablet.valid_dict_cache_columns_size(); ++i) {
+            int64_t version = 0;
+            // Some BEs don't have this field during grayscale upgrades, and we need to detect this case
+            if (tablet.valid_dict_collected_version_size() == tablet.valid_dict_cache_columns_size()) {
+                version = tablet.valid_dict_collected_version(i);
+            }
+            const auto& col_name = tablet.valid_dict_cache_columns(i);
+            _valid_dict_cache_info.valid_dict_cache_column_set.emplace(std::make_pair(col_name, version));
+>>>>>>> 2.5.18
         }
 
         _tablet_commit_infos.emplace_back(std::move(commit_info));
@@ -786,6 +824,7 @@ void NodeChannel::_cancel(int64_t index_id, const Status& err_st) {
 
     closure->ref();
     closure->cntl.set_timeout_ms(_rpc_timeout_ms);
+    closure->cntl.ignore_eovercrowded();
     _stub->tablet_writer_cancel(&closure->cntl, &request, &closure->result, closure);
     request.release_id();
 }
@@ -1092,7 +1131,8 @@ Status OlapTableSink::open_wait() {
             }
         });
 
-        if (has_intolerable_failure()) {
+        // when enable replicated storage, we only send to primary replica, one node channel fail lead to indicate whole load fail
+        if (has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
             LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
             return err_st;
         }
@@ -1109,7 +1149,7 @@ Status OlapTableSink::open_wait() {
                 }
             });
 
-            if (index_channel->has_intolerable_failure()) {
+            if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
                 LOG(WARNING) << "Open channel failed. load_id: " << _load_id << ", error: " << err_st.to_string();
                 return err_st;
             }
@@ -1302,6 +1342,11 @@ Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel
                                           std::vector<uint16_t>& selection_idx) {
     Status err_st = Status::OK();
     for (auto& it : channel->_node_channels) {
+        NodeChannel* node = it.second.get();
+        if (channel->is_failed_channel(node)) {
+            // skip open fail channel
+            continue;
+        }
         int64_t be_id = it.first;
         _node_select_idx.clear();
         _node_select_idx.reserve(selection_idx.size());
@@ -1320,7 +1365,7 @@ Status OlapTableSink::_send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel
                 }
             }
         }
-        NodeChannel* node = it.second.get();
+
         auto st = node->add_chunk(chunk, _tablet_ids, _node_select_idx, 0, _node_select_idx.size(), false /* eos */);
 
         if (!st.ok()) {
@@ -1378,7 +1423,7 @@ Status OlapTableSink::try_close(RuntimeState* state) {
         }
     }
 
-    if (intolerable_failure) {
+    if (intolerable_failure || (_enable_replicated_storage && !err_st.ok())) {
         return err_st;
     } else {
         return Status::OK();
@@ -1442,7 +1487,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
                     }
                     ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
                 });
-                if (has_intolerable_failure()) {
+                if (has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
                     status = err_st;
                     for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
                 }
@@ -1461,7 +1506,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
                         }
                         ch->time_report(&node_add_batch_counter_map, &serialize_batch_ns, &actual_consume_ns);
                     });
-                    if (index_channel->has_intolerable_failure()) {
+                    if (index_channel->has_intolerable_failure() || (_enable_replicated_storage && !err_st.ok())) {
                         status = err_st;
                         index_channel->for_each_node_channel([&status](NodeChannel* ch) { ch->cancel(status); });
                     }

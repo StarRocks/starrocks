@@ -28,8 +28,6 @@ public:
 
     StatusOr<int64_t> read(void* data, int64_t count) override;
 
-    bool allows_peek() const override { return true; }
-
     StatusOr<std::string_view> peek(int64_t nbytes) override;
 
     StatusOr<int64_t> get_size() override { return _size; }

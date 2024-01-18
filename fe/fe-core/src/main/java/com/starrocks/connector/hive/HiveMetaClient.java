@@ -136,7 +136,7 @@ public class HiveMetaClient {
             return (T) method.invoke(client.hiveClient, args);
         } catch (Exception e) {
             LOG.error(messageIfError, e);
-            connectionException = new StarRocksConnectorException(messageIfError + ", msg: " + e.getMessage());
+            connectionException = new StarRocksConnectorException(messageIfError + ", msg: " + e.getMessage(), e);
             throw connectionException;
         } finally {
             if (client == null && connectionException != null) {
@@ -318,8 +318,9 @@ public class HiveMetaClient {
                                                          IMetaStoreClient.NotificationFilter filter)
             throws MetastoreNotificationFetchException {
         try {
+            Class<?>[] argClasses = {long.class, int.class, IMetaStoreClient.NotificationFilter.class};
             return callRPC("getNextNotification", "Failed to get next notification based on last event id: " + lastEventId,
-                    lastEventId, maxEvents, filter);
+                    argClasses, lastEventId, maxEvents, filter);
         } catch (Exception e) {
             throw new MetastoreNotificationFetchException(e.getMessage());
         }

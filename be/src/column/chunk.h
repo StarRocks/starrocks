@@ -110,6 +110,8 @@ public:
     const ColumnPtr& get_column_by_slot_id(SlotId slot_id) const;
     ColumnPtr& get_column_by_slot_id(SlotId slot_id);
 
+    bool is_column_nullable(SlotId slot_id) const;
+
     void set_slot_id_to_index(SlotId slot_id, size_t idx) { _slot_id_to_index[slot_id] = idx; }
     bool is_slot_exist(SlotId id) const { return _slot_id_to_index.contains(id); }
     bool is_tuple_exist(TupleId id) const { return _tuple_id_to_index.contains(id); }
@@ -282,6 +284,10 @@ inline ColumnPtr& Chunk::get_column_by_slot_id(SlotId slot_id) {
     DCHECK(is_slot_exist(slot_id)) << slot_id;
     size_t idx = _slot_id_to_index[slot_id];
     return _columns[idx];
+}
+
+inline bool Chunk::is_column_nullable(SlotId slot_id) const {
+    return get_column_by_slot_id(slot_id)->is_nullable();
 }
 
 inline const ColumnPtr& Chunk::get_column_by_index(size_t idx) const {

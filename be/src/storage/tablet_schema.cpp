@@ -486,6 +486,9 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
             _sort_key_idxes.push_back(schema.sort_key_idxes(i));
         }
     }
+    for (auto cid : _sort_key_idxes) {
+        _cols[cid].set_is_sort_key(true);
+    }
     _num_short_key_columns = schema.num_short_key_columns();
     _num_rows_per_row_block = schema.num_rows_per_row_block();
     _next_column_unique_id = schema.next_column_unique_id();

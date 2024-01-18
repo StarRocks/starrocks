@@ -171,13 +171,18 @@ public class LoadingTaskPlanner {
         }
 
         if (Config.enable_shuffle_load && needShufflePlan()) {
-            buildShufflePlan(loadId, fileStatusesList, filesAdded);
+            if (Config.eliminate_shuffle_load_by_replicated_storage) {
+                buildDirectPlan(loadId, fileStatusesList, filesAdded, true);
+            } else {
+                buildShufflePlan(loadId, fileStatusesList, filesAdded);
+            }
         } else {
-            buildDirectPlan(loadId, fileStatusesList, filesAdded);
+            buildDirectPlan(loadId, fileStatusesList, filesAdded, false);
         }
     }
 
-    public void buildDirectPlan(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded)
+    public void buildDirectPlan(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusesList,
+            int filesAdded, boolean forceReplicatedStorage)
             throws UserException {
         // Generate plan trees
         // 1. Broker scan node
@@ -193,7 +198,7 @@ public class LoadingTaskPlanner {
         // 2. Olap table sink
         List<Long> partitionIds = getAllPartitionIds();
         OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
-                table.writeQuorum(), table.enableReplicatedStorage());
+                table.writeQuorum(), forceReplicatedStorage ? true : table.enableReplicatedStorage());
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
         Load.checkMergeCondition(mergeConditionStr, table);
         olapTableSink.complete(mergeConditionStr);

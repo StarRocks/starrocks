@@ -26,6 +26,9 @@ public class RangePartitionDesc extends PartitionDesc {
     private final List<SingleRangePartitionDesc> singleRangePartitionDescs;
     private final List<MultiRangePartitionDesc> multiRangePartitionDescs;
 
+    // for automatic partition table is ture. otherwise is false
+    protected boolean isAutoPartitionTable = false;
+
     public RangePartitionDesc(List<String> partitionColNames, List<PartitionDesc> partitionDescs) {
         type = PartitionType.RANGE;
         this.partitionColNames = partitionColNames;
@@ -117,8 +120,12 @@ public class RangePartitionDesc extends PartitionDesc {
             } else if (partitionType != desc.getPartitionKeyDesc().getPartitionType()) {
                 throw new AnalysisException("You can only use one of these methods to create partitions");
             }
-            desc.analyze(columnDefs.size(), givenProperties);
+            desc.analyze(partitionColNames.size(), givenProperties);
         }
+    }
+
+    public void setAutoPartitionTable(boolean autoPartitionTable) {
+        this.isAutoPartitionTable = autoPartitionTable;
     }
 
     @Override

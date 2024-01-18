@@ -188,43 +188,43 @@ JsonFunctionType JsonTypeTraits<TYPE_INT>::JsonType = JSON_FUN_INT;
 JsonFunctionType JsonTypeTraits<TYPE_DOUBLE>::JsonType = JSON_FUN_DOUBLE;
 JsonFunctionType JsonTypeTraits<TYPE_VARCHAR>::JsonType = JSON_FUN_STRING;
 
-ColumnPtr JsonFunctions::get_json_int(FunctionContext* context, const Columns& columns) {
-    auto jsons = _string_json(context, columns);
+StatusOr<ColumnPtr> JsonFunctions::get_json_int(FunctionContext* context, const Columns& columns) {
+    ASSIGN_OR_RETURN(auto jsons, _string_json(context, columns));
     const auto& paths = columns[1];
 
-    jsons = json_query(context, Columns{jsons, paths});
+    ASSIGN_OR_RETURN(jsons, json_query(context, Columns{jsons, paths}));
     return _json_int(context, Columns{jsons});
 }
 
-ColumnPtr JsonFunctions::get_json_double(FunctionContext* context, const Columns& columns) {
-    auto jsons = _string_json(context, columns);
+StatusOr<ColumnPtr> JsonFunctions::get_json_double(FunctionContext* context, const Columns& columns) {
+    ASSIGN_OR_RETURN(auto jsons, _string_json(context, columns))
     const auto& paths = columns[1];
 
-    jsons = json_query(context, Columns{jsons, paths});
+    ASSIGN_OR_RETURN(jsons, json_query(context, Columns{jsons, paths}))
     return _json_double(context, Columns{jsons});
 }
 
-ColumnPtr JsonFunctions::get_json_string(FunctionContext* context, const Columns& columns) {
-    auto jsons = _string_json(context, columns);
+StatusOr<ColumnPtr> JsonFunctions::get_json_string(FunctionContext* context, const Columns& columns) {
+    ASSIGN_OR_RETURN(auto jsons, _string_json(context, columns));
     const auto& paths = columns[1];
 
-    jsons = json_query(context, Columns{jsons, paths});
+    ASSIGN_OR_RETURN(jsons, json_query(context, Columns{jsons, paths}))
     return _json_string_unescaped(context, Columns{jsons});
 }
 
-ColumnPtr JsonFunctions::get_native_json_int(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::get_native_json_int(FunctionContext* context, const Columns& columns) {
     return _json_query_impl<TYPE_INT>(context, columns);
 }
 
-ColumnPtr JsonFunctions::get_native_json_double(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::get_native_json_double(FunctionContext* context, const Columns& columns) {
     return _json_query_impl<TYPE_DOUBLE>(context, columns);
 }
 
-ColumnPtr JsonFunctions::get_native_json_string(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::get_native_json_string(FunctionContext* context, const Columns& columns) {
     return _json_query_impl<TYPE_VARCHAR>(context, columns);
 }
 
-ColumnPtr JsonFunctions::parse_json(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::parse_json(FunctionContext* context, const Columns& columns) {
     int num_rows = columns[0]->size();
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
     ColumnBuilder<TYPE_JSON> result(num_rows);
@@ -248,7 +248,7 @@ ColumnPtr JsonFunctions::parse_json(FunctionContext* context, const Columns& col
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr JsonFunctions::json_string(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::json_string(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_JSON> viewer(columns[0]);
     ColumnBuilder<TYPE_VARCHAR> result(columns[0]->size());
 
@@ -268,7 +268,7 @@ ColumnPtr JsonFunctions::json_string(FunctionContext* context, const Columns& co
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr JsonFunctions::_json_int(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::_json_int(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_JSON> viewer(columns[0]);
     ColumnBuilder<TYPE_INT> result(columns[0]->size());
 
@@ -288,7 +288,7 @@ ColumnPtr JsonFunctions::_json_int(FunctionContext* context, const Columns& colu
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr JsonFunctions::_json_double(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::_json_double(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_JSON> viewer(columns[0]);
     ColumnBuilder<TYPE_DOUBLE> result(columns[0]->size());
 
@@ -308,7 +308,7 @@ ColumnPtr JsonFunctions::_json_double(FunctionContext* context, const Columns& c
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr JsonFunctions::_string_json(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::_string_json(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_VARCHAR> viewer(columns[0]);
     ColumnBuilder<TYPE_JSON> result(columns[0]->size());
 
@@ -329,7 +329,7 @@ ColumnPtr JsonFunctions::_string_json(FunctionContext* context, const Columns& c
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr JsonFunctions::_json_string_unescaped(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::_json_string_unescaped(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_JSON> viewer(columns[0]);
     ColumnBuilder<TYPE_VARCHAR> result(columns[0]->size());
 
@@ -406,7 +406,7 @@ Status JsonFunctions::native_json_path_close(starrocks_udf::FunctionContext* con
     return Status::OK();
 }
 
-ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::json_query(FunctionContext* context, const Columns& columns) {
     return _json_query_impl<TYPE_JSON>(context, columns);
 }
 
@@ -447,7 +447,7 @@ static Status _convert_json_slice(const vpack::Slice& slice, vectorized::ColumnB
 }
 
 template <PrimitiveType ResultType>
-ColumnPtr JsonFunctions::_json_query_impl(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::_json_query_impl(FunctionContext* context, const Columns& columns) {
     auto num_rows = columns[0]->size();
     auto json_viewer = ColumnViewer<TYPE_JSON>(columns[0]);
     auto path_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
@@ -481,7 +481,7 @@ ColumnPtr JsonFunctions::_json_query_impl(FunctionContext* context, const Column
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr JsonFunctions::json_exists(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::json_exists(FunctionContext* context, const Columns& columns) {
     auto num_rows = columns[0]->size();
     auto json_viewer = ColumnViewer<TYPE_JSON>(columns[0]);
     auto path_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
@@ -512,7 +512,7 @@ ColumnPtr JsonFunctions::json_exists(FunctionContext* context, const Columns& co
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr JsonFunctions::json_array_empty(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::json_array_empty(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(0, columns.size());
     ColumnBuilder<TYPE_JSON> result(1);
     JsonValue json(vpack::Slice::emptyArraySlice());
@@ -520,7 +520,7 @@ ColumnPtr JsonFunctions::json_array_empty(FunctionContext* context, const Column
     return result.build(true);
 }
 
-ColumnPtr JsonFunctions::json_array(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::json_array(FunctionContext* context, const Columns& columns) {
     namespace vpack = arangodb::velocypack;
 
     DCHECK_GT(columns.size(), 0);
@@ -552,7 +552,7 @@ ColumnPtr JsonFunctions::json_array(FunctionContext* context, const Columns& col
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr JsonFunctions::json_object_empty(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::json_object_empty(FunctionContext* context, const Columns& columns) {
     DCHECK_EQ(0, columns.size());
     ColumnBuilder<TYPE_JSON> result(1);
     JsonValue json(vpack::Slice::emptyObjectSlice());
@@ -560,7 +560,7 @@ ColumnPtr JsonFunctions::json_object_empty(FunctionContext* context, const Colum
     return result.build(true);
 }
 
-ColumnPtr JsonFunctions::json_object(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::json_object(FunctionContext* context, const Columns& columns) {
     namespace vpack = arangodb::velocypack;
 
     DCHECK_GT(columns.size(), 0);
@@ -619,7 +619,7 @@ ColumnPtr JsonFunctions::json_object(FunctionContext* context, const Columns& co
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr JsonFunctions::json_length(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::json_length(FunctionContext* context, const Columns& columns) {
     DCHECK_GT(columns.size(), 0);
     size_t rows = columns[0]->size();
     ColumnBuilder<TYPE_INT> result(rows);
@@ -664,7 +664,7 @@ ColumnPtr JsonFunctions::json_length(FunctionContext* context, const Columns& co
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr JsonFunctions::json_keys(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> JsonFunctions::json_keys(FunctionContext* context, const Columns& columns) {
     auto rows = columns[0]->size();
     auto json_viewer = ColumnViewer<TYPE_JSON>(columns[0]);
     ColumnBuilder<TYPE_JSON> result(rows);
@@ -715,7 +715,11 @@ ColumnPtr JsonFunctions::json_keys(FunctionContext* context, const Columns& colu
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
+<<<<<<< HEAD
 ColumnPtr JsonFunctions::to_json(FunctionContext* context, const Columns& columns) {
+=======
+StatusOr<ColumnPtr> JsonFunctions::to_json(FunctionContext* context, const Columns& columns) {
+>>>>>>> 2.5.18
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
     return cast_nested_to_json(columns[0]).value();
 }

@@ -51,6 +51,31 @@ class ColocateJoinTest extends PlanTestBase {
         Assert.assertEquals(plan, 2, count);
     }
 
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("otherJoinTypeColocateOnceSqls")
+    void testOtherJoinColocateOnce(String sql) throws Exception {
+        connectContext.getSessionVariable().disableJoinReorder();
+        String plan = getFragmentPlan(sql);
+        int colocateCount = StringUtils.countMatches(plan, "(COLOCATE)");
+        int bucketShuffleCount = StringUtils.countMatches(plan, "(BUCKET_SHUFFLE)");
+
+        Assert.assertEquals(plan, 1, colocateCount);
+        Assert.assertEquals(plan, 1, bucketShuffleCount);
+
+        connectContext.getSessionVariable().enableJoinReorder();
+    }
+
+    @ParameterizedTest(name = "sql_{index}: {0}.")
+    @MethodSource("otherJoinTypeColocateTwiceSqls")
+    void testOtherJoinColocateTwice(String sql) throws Exception {
+        connectContext.getSessionVariable().disableJoinReorder();
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        int count = StringUtils.countMatches(plan, "COLOCATE");
+        Assert.assertEquals(plan, 2, count);
+        connectContext.getSessionVariable().enableJoinReorder();
+    }
+
 
     private static Stream<Arguments> colocateJoinOnceSqls() {
         List<String> sqls = Lists.newArrayList();
@@ -63,12 +88,11 @@ class ColocateJoinTest extends PlanTestBase {
         sqls.add("select * from colocate_t0, colocate_t1 where v1 = v5 and v1 = v4");
         sqls.add("select * from colocate_t0, colocate_t1 where v2 = v4 and v1 = v4");
         sqls.add("select * from colocate_t0, colocate_t1 where v1 + v2 = v4 + v5 and v1 = v4 + 1 and v1 = v4");
-
         sqls.add("select * from colocate_t0, colocate_t1, colocate_t2_1 where  v1 = v5 and v5 = v7");
+        sqls.add("select * from colocate_t0 join colocate_t1 on v1 = v5 join colocate_t2_1 on v5 = v7");
 
         // TODO(packy) now we cannot derive v1 = v7 plan from the below sqls
-        unsupportedSqls.add("select * from colocate_t0 join colocate_t1 on v1 = v5 join colocate_t2 on v5 = v7");
-        unsupportedSqls.add("select * from colocate_t0 join colocate_t1 on v1 = v5 + v6 join colocate_t2 on v5 + v6 = v7");
+        unsupportedSqls.add("select * from colocate_t0 join colocate_t1 on v1 = v5 + v6 join colocate_t2_1 on v5 + v6 = v7");
         unsupportedSqls.add("select * from colocate_t0, colocate_t1, colocate_t2_1 where  v1 = v5 + v6 and v5 + v6 = v7");
         return sqls.stream().map(e -> Arguments.of(e));
     }
@@ -94,6 +118,45 @@ class ColocateJoinTest extends PlanTestBase {
                 "join colocate_t2_1 on v5 - v4 = v7 and v7 = v1");
         unsupportedSqls.add("select * from colocate_t0 join colocate_t1 on v1 + v2 = v4 - v3 and v1 = v4 + v5 " +
                 "join colocate_t2_1 on v4 + v5 = v4 and v4 + v5 = v7");
+        return sqls.stream().map(e -> Arguments.of(e));
+    }
+
+    private static Stream<Arguments> otherJoinTypeColocateOnceSqls() {
+        List<String> sqls = Lists.newArrayList();
+        sqls.add("select * from colocate_t0 left join colocate_t1 on v1 = v4 left join colocate_t2_1 on v1 = v8");
+        sqls.add("select * from colocate_t0 left semi join colocate_t1 on v1 = v4 left join colocate_t2_1 on v1 = v8");
+        sqls.add("select * from colocate_t0 left anti join colocate_t1 on v1 = v4 left join colocate_t2_1 on v1 = v8");
+        sqls.add("select * from colocate_t0 left join colocate_t1 on v1 = v4 and v2 = v5 left semi join colocate_t2_1 " +
+                "on v1 = v8 and v3 = v9");
+
+        sqls.add("select * from colocate_t0 right join colocate_t1 on v1 = v4 left join colocate_t2_1 on v4 = v8");
+        sqls.add("select * from colocate_t0 right semi join colocate_t1 on v1 = v4 left join colocate_t2_1 on v4 = v8");
+        sqls.add("select * from colocate_t0 right anti join colocate_t1 on v1 = v4 left join colocate_t2_1 on v4 = v8");
+        sqls.add("select * from colocate_t0 right join colocate_t1 on v1 = v4 and v2 = v5 left semi join colocate_t2_1 " +
+                "on v4 = v8 and v6 = v9");
+
+
+        return sqls.stream().map(e -> Arguments.of(e));
+    }
+
+    private static Stream<Arguments> otherJoinTypeColocateTwiceSqls() {
+        List<String> sqls = Lists.newArrayList();
+        sqls.add("select * from colocate_t0 left join colocate_t1 on v1 = v4 left join colocate_t2_1 on v1 = v7");
+        sqls.add("select * from colocate_t0 left join colocate_t1 on v1 = v4 right join colocate_t2_1 on v1 = v7");
+        sqls.add("select * from colocate_t0 left semi join colocate_t1 on v1 = v4 join colocate_t2_1 on v1 = v7");
+        sqls.add("select * from colocate_t0 left anti join colocate_t1 on v1 = v4 join colocate_t2_1 on v1 = v7");
+        sqls.add("select * from colocate_t0 left semi join colocate_t1 on v1 = v4 and v5 = v6 left join " +
+                "colocate_t2_1 on v1 = v7 and v3 = v8");
+        sqls.add("select * from colocate_t0 full outer join colocate_t1 on v1 = v4 and v5 > v6 left join " +
+                "colocate_t2_1 on v1 = v7 and v3 = v8");
+
+        sqls.add("select * from colocate_t0 right join colocate_t1 on v1 = v4 left join colocate_t2_1 on v4 = v7");
+        sqls.add("select * from colocate_t0 right join colocate_t1 on v1 = v4 right join colocate_t2_1 on v4 = v7");
+        sqls.add("select * from colocate_t0 right semi join colocate_t1 on v1 = v4 join colocate_t2_1 on v4 = v7");
+        sqls.add("select * from colocate_t0 right anti join colocate_t1 on v1 = v4 join colocate_t2_1 on v4 = v7");
+        sqls.add("select * from colocate_t0 right semi join colocate_t1 on v1 = v4 and v5 = v6 left join " +
+                "colocate_t2_1 on v4 = v7 and v5 = v8");
+
         return sqls.stream().map(e -> Arguments.of(e));
     }
 

@@ -89,6 +89,10 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         return indexId;
     }
 
+    public void setIndexIdForRestore(long indexId) {
+        this.indexId = indexId;
+    }
+
     public KeysType getKeysType() {
         return keysType;
     }
@@ -127,6 +131,14 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         } else {
             return defineStmt.originStmt;
         }
+    }
+
+    public void setDefineStmt(OriginStatement stmt) {
+        this.defineStmt = stmt;
+    }
+
+    public OriginStatement getDefineStmt() {
+        return this.defineStmt;
     }
 
     // The column names of the materialized view are all lowercase, but the column names may be uppercase

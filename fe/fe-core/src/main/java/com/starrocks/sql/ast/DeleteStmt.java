@@ -21,45 +21,42 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.CompoundPredicate.Operator;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.IsNullPredicate;
-import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
 
 import java.util.List;
 
 public class DeleteStmt extends DmlStmt {
     private final TableName tblName;
     private final PartitionNames partitionNames;
+    private final List<Relation> usingRelations;
     private final Expr wherePredicate;
+    private final List<CTERelation> commonTableExpressions;
 
     // fields for new planer, primary key table
     private Table table;
     private QueryStatement queryStatement;
 
     // fields for old planer, non-primary key table
-    private final List<Predicate> deleteConditions;
+    private List<Predicate> deleteConditions;
     // Each deleteStmt corresponds to a DeleteJob.
     // The JobID is generated here for easy correlation when cancel Delete
     private long jobId = -1;
 
     public DeleteStmt(TableName tableName, PartitionNames partitionNames, Expr wherePredicate) {
+        this(tableName, partitionNames, null, wherePredicate, null);
+    }
+
+    public DeleteStmt(TableName tableName, PartitionNames partitionNames, List<Relation> usingRelations, Expr wherePredicate,
+                      List<CTERelation> commonTableExpressions) {
         this.tblName = tableName;
         this.partitionNames = partitionNames;
+        this.usingRelations = usingRelations;
         this.wherePredicate = wherePredicate;
+        this.commonTableExpressions = commonTableExpressions;
         this.deleteConditions = Lists.newLinkedList();
     }
 
@@ -80,105 +77,34 @@ public class DeleteStmt extends DmlStmt {
         return wherePredicate;
     }
 
-    public List<String> getPartitionNames() {
+    public List<CTERelation> getCommonTableExpressions() {
+        return commonTableExpressions;
+    }
+
+    public List<String> getPartitionNamesList() {
         return partitionNames == null ? Lists.newArrayList() : partitionNames.getPartitionNames();
+    }
+
+    public PartitionNames getPartitionNames() {
+        return partitionNames;
+    }
+
+    public List<Relation> getUsingRelations() {
+        return usingRelations;
     }
 
     public List<Predicate> getDeleteConditions() {
         return deleteConditions;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        if (tblName == null) {
-            throw new AnalysisException("Table is not set");
-        }
-
-        tblName.analyze(analyzer);
-
-        if (partitionNames != null) {
-            partitionNames.analyze(analyzer);
-            if (partitionNames.isTemp()) {
-                throw new AnalysisException("Do not support deleting temp partitions");
-            }
-        }
-
-        if (wherePredicate == null) {
-            throw new AnalysisException("Where clause is not set");
-        }
-
-        // analyze predicate
-        analyzePredicate(wherePredicate);
+    public void setDeleteConditions(List<Predicate> deleteConditions) {
+        this.deleteConditions = deleteConditions;
     }
 
-    private void analyzePredicate(Expr predicate) throws AnalysisException {
-        if (predicate instanceof BinaryPredicate) {
-            BinaryPredicate binaryPredicate = (BinaryPredicate) predicate;
-            Expr leftExpr = binaryPredicate.getChild(0);
-            if (!(leftExpr instanceof SlotRef)) {
-                throw new AnalysisException("Left expr of binary predicate should be column name");
-            }
-            Expr rightExpr = binaryPredicate.getChild(1);
-            if (!(rightExpr instanceof LiteralExpr)) {
-                throw new AnalysisException("Right expr of binary predicate should be value");
-            }
-            deleteConditions.add(binaryPredicate);
-        } else if (predicate instanceof CompoundPredicate) {
-            CompoundPredicate compoundPredicate = (CompoundPredicate) predicate;
-            if (compoundPredicate.getOp() != Operator.AND) {
-                throw new AnalysisException("Compound predicate's op should be AND");
-            }
-
-            analyzePredicate(compoundPredicate.getChild(0));
-            analyzePredicate(compoundPredicate.getChild(1));
-        } else if (predicate instanceof IsNullPredicate) {
-            IsNullPredicate isNullPredicate = (IsNullPredicate) predicate;
-            Expr leftExpr = isNullPredicate.getChild(0);
-            if (!(leftExpr instanceof SlotRef)) {
-                throw new AnalysisException("Left expr of is_null predicate should be column name");
-            }
-            deleteConditions.add(isNullPredicate);
-        } else if (predicate instanceof InPredicate) {
-            InPredicate inPredicate = (InPredicate) predicate;
-            Expr leftExpr = inPredicate.getChild(0);
-            if (!(leftExpr instanceof SlotRef)) {
-                throw new AnalysisException("Left expr of binary predicate should be column name");
-            }
-            int inElementNum = inPredicate.getInElementNum();
-            int maxAllowedInElementNumOfDelete = Config.max_allowed_in_element_num_of_delete;
-            if (inElementNum > maxAllowedInElementNumOfDelete) {
-                throw new AnalysisException("Element num of predicate should not be more than " +
-                        maxAllowedInElementNumOfDelete);
-            }
-            for (int i = 1; i <= inElementNum; i++) {
-                Expr expr = inPredicate.getChild(i);
-                if (!(expr instanceof LiteralExpr)) {
-                    throw new AnalysisException("Child of in predicate should be value");
-                }
-            }
-            deleteConditions.add(inPredicate);
-        } else {
-            throw new AnalysisException("Where clause only supports compound predicate, binary predicate, " +
-                    "is_null predicate and in predicate");
-        }
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder();
-        sb.append("DELETE FROM ").append(tblName.toSql());
-        if (partitionNames != null) {
-            sb.append(" PARTITION (");
-            sb.append(Joiner.on(", ").join(partitionNames.getPartitionNames()));
-            sb.append(")");
-        }
-        sb.append(" WHERE ").append(wherePredicate.toSql());
-        return sb.toString();
-    }
-
-    public boolean supportNewPlanner() {
-        // table must present if analyzed by new analyzer
-        return table != null;
+    public boolean shouldHandledByDeleteHandler() {
+        // table must present if analyzed and is a delele for primary key table, so it is executed by new
+        // planner&execution engine, otherwise(non-pk table) it is handled by DeleteHandler
+        return table == null;
     }
 
     public void setTable(Table table) {

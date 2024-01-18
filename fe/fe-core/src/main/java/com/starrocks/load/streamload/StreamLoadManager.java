@@ -425,6 +425,10 @@ public class StreamLoadManager {
         return (long) idToStreamLoadTask.size() + (long) dbToLabelToStreamLoadTask.size();
     }
 
+    public long getStreamLoadTaskCount() {
+        return idToStreamLoadTask.size();
+    }
+
     public static StreamLoadManager loadStreamLoadManager(DataInput in) throws IOException {
         int size = in.readInt();
         long currentMs = System.currentTimeMillis();

@@ -72,6 +72,7 @@ public:
     virtual Status init(SchemaScannerParam* param, ObjectPool* pool);
     // Start to work
     virtual Status start(RuntimeState* state);
+    // Must only return one row at most each time
     virtual Status get_next(vectorized::ChunkPtr* chunk, bool* eos);
     // factory function
     static std::unique_ptr<SchemaScanner> create(TSchemaTableType::type type);

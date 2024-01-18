@@ -113,7 +113,7 @@ TEST_F(JsonFunctionsTest, get_json_string_casting) {
     ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 
-    ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns);
+    ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns).value();
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
@@ -149,7 +149,7 @@ TEST_F(JsonFunctionsTest, get_json_string_array) {
     ASSERT_TRUE(JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 
-    ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns);
+    ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns).value();
 
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
@@ -185,7 +185,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
                 JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 
-        ColumnPtr result = JsonFunctions::get_json_double(ctx.get(), columns);
+        ColumnPtr result = JsonFunctions::get_json_double(ctx.get(), columns).value();
 
         auto v = ColumnHelper::as_column<NullableColumn>(result);
 
@@ -220,7 +220,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
                 JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 
-        ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns);
+        ColumnPtr result = JsonFunctions::get_json_string(ctx.get(), columns).value();
 
         auto v = ColumnHelper::as_column<NullableColumn>(result);
 
@@ -255,7 +255,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
                 JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 
-        ColumnPtr result = JsonFunctions::get_json_int(ctx.get(), columns);
+        ColumnPtr result = JsonFunctions::get_json_int(ctx.get(), columns).value();
 
         auto v = ColumnHelper::as_column<NullableColumn>(result);
 
@@ -290,7 +290,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
                 JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                         .ok());
 
-        ColumnPtr result = JsonFunctions::get_json_int(ctx.get(), columns);
+        ColumnPtr result = JsonFunctions::get_json_int(ctx.get(), columns).value();
 
         auto v = ColumnHelper::as_column<NullableColumn>(result);
 
@@ -343,7 +343,7 @@ TEST_P(JsonQueryTestFixture, json_query) {
     ctx.get()->impl()->set_constant_columns(columns);
     JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
 
-    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns);
+    ColumnPtr result = JsonFunctions::json_query(ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
 
     StripWhiteSpace(&param_result);
@@ -475,7 +475,7 @@ TEST_P(JsonExistTestFixture, json_exists) {
         return;
     }
 
-    ColumnPtr result = JsonFunctions::json_exists(ctx.get(), columns);
+    ColumnPtr result = JsonFunctions::json_exists(ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
 
     if (param_exist) {
@@ -531,7 +531,7 @@ TEST_P(JsonParseTestFixture, json_parse) {
     Columns columns{ints};
     ctx.get()->impl()->set_constant_columns(columns);
 
-    ColumnPtr result = JsonFunctions::parse_json(ctx.get(), columns);
+    ColumnPtr result = JsonFunctions::parse_json(ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
 
     Datum datum = result->get(0);
@@ -602,9 +602,9 @@ TEST_P(JsonArrayTestFixture, json_array) {
 
     ColumnPtr result;
     if (param_json.empty()) {
-        result = JsonFunctions::json_array_empty(ctx.get(), columns);
+        result = JsonFunctions::json_array_empty(ctx.get(), columns).value();
     } else {
-        result = JsonFunctions::json_array(ctx.get(), columns);
+        result = JsonFunctions::json_array(ctx.get(), columns).value();
     }
     ASSERT_TRUE(!!result);
 
@@ -649,9 +649,9 @@ TEST_P(JsonObjectTestFixture, json_object) {
 
     ColumnPtr result;
     if (param_json.empty()) {
-        result = JsonFunctions::json_object_empty(ctx.get(), columns);
+        result = JsonFunctions::json_object_empty(ctx.get(), columns).value();
     } else {
-        result = JsonFunctions::json_object(ctx.get(), columns);
+        result = JsonFunctions::json_object(ctx.get(), columns).value();
     }
     ASSERT_TRUE(!!result);
 
@@ -739,7 +739,7 @@ TEST_P(JsonLengthTestFixture, json_length_test) {
     Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
     ASSERT_OK(st);
 
-    ColumnPtr result = JsonFunctions::json_length(ctx.get(), columns);
+    ColumnPtr result = JsonFunctions::json_length(ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
     EXPECT_EQ(expect_length, result->get(0).get_int32());
 
@@ -788,7 +788,7 @@ TEST_P(JsonKeysTestFixture, json_keys) {
     Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
     ASSERT_OK(st);
 
-    ColumnPtr result = JsonFunctions::json_keys(ctx.get(), columns);
+    ColumnPtr result = JsonFunctions::json_keys(ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
 
     if (param_result == "NULL") {
@@ -873,7 +873,7 @@ TEST_P(GetJsonXXXTestFixture, get_json_int) {
 
     int expected = std::get<2>(GetParam());
 
-    ColumnPtr result = JsonFunctions::get_native_json_int(_ctx.get(), columns);
+    ColumnPtr result = JsonFunctions::get_native_json_int(_ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
 
     ASSERT_EQ(1, result->size());
@@ -896,7 +896,7 @@ TEST_P(GetJsonXXXTestFixture, get_json_string) {
     std::string param_result = std::get<3>(GetParam());
     StripWhiteSpace(&param_result);
 
-    ColumnPtr result = JsonFunctions::get_native_json_string(_ctx.get(), columns);
+    ColumnPtr result = JsonFunctions::get_native_json_string(_ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
 
     ASSERT_EQ(1, result->size());
@@ -919,7 +919,7 @@ TEST_P(GetJsonXXXTestFixture, get_json_double) {
 
     double expected = std::get<4>(GetParam());
 
-    ColumnPtr result = JsonFunctions::get_native_json_double(_ctx.get(), columns);
+    ColumnPtr result = JsonFunctions::get_native_json_double(_ctx.get(), columns).value();
     ASSERT_TRUE(!!result);
     ASSERT_EQ(1, result->size());
 

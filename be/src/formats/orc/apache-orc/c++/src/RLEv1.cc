@@ -187,24 +187,25 @@ void RleDecoderV1::readHeader() {
     }
 }
 
+void RleDecoderV1::reset() {
+    remainingValues = 0;
+    value = 0;
+    bufferStart = nullptr;
+    bufferEnd = nullptr;
+    delta = 0;
+    repeating = false;
+}
+
 RleDecoderV1::RleDecoderV1(std::unique_ptr<SeekableInputStream> input, bool hasSigned, ReaderMetrics* _metrics)
-        : RleDecoder(_metrics),
-          inputStream(std::move(input)),
-          isSigned(hasSigned),
-          remainingValues(0),
-          value(0),
-          bufferStart(nullptr),
-          bufferEnd(bufferStart),
-          delta(0),
-          repeating(false) {}
+        : RleDecoder(_metrics), inputStream(std::move(input)), isSigned(hasSigned) {
+    reset();
+}
 
 void RleDecoderV1::seek(PositionProvider& location) {
     // move the input stream
     inputStream->seek(location);
-    // force a re-read from the stream
-    bufferEnd = bufferStart;
-    // read a new header
-    readHeader();
+    // reset the decoder status and lazily call readHeader()
+    reset();
     // skip ahead the given number of records
     skip(location.next());
 }

@@ -238,6 +238,7 @@ public class OperationType {
     public static final short OP_UPDATE_TASK_RUN = 10082;
     public static final short OP_DROP_TASK_RUNS = 10083;
     public static final short OP_UPDATE_TASK_RUN_STATE = 10084;
+    public static final short OP_ALTER_TASK = 10085;
 
     // materialized view 10091 ~ 10100
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
@@ -246,6 +247,7 @@ public class OperationType {
     public static final short OP_CREATE_MATERIALIZED_VIEW = 10094;
     public static final short OP_CREATE_INSERT_OVERWRITE = 10095;
     public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10096;
+    public static final short OP_ALTER_MATERIALIZED_VIEW_STATUS = 10097;
 
     // manage system node info 10101 ~ 10120
     public static final short OP_UPDATE_FRONTEND = 10101;
@@ -282,6 +284,10 @@ public class OperationType {
 
     // stream load
     public static final short OP_CREATE_STREAM_LOAD_TASK = 11020;
+<<<<<<< HEAD
+=======
+    public static final short OP_ALTER_TABLE_PROPERTIES = 11101;
+>>>>>>> 2.5.18
 
     // constraint properties
     public static final short OP_MODIFY_TABLE_CONSTRAINT_PROPERTY = 11130;

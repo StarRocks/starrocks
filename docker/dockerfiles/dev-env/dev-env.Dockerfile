@@ -22,7 +22,11 @@ ARG commit_id
 # build for which linux distro: centos7|ubuntu
 ARG distro=ubuntu
 
+<<<<<<< HEAD
 FROM starrocks/toolchains-${distro}:20230324 as base
+=======
+FROM starrocks/toolchains-${distro}:main-20230517 as base
+>>>>>>> 2.5.18
 ENV STARROCKS_THIRDPARTY=/var/local/thirdparty
 
 WORKDIR /root

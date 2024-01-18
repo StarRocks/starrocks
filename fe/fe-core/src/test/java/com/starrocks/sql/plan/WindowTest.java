@@ -266,6 +266,22 @@ public class WindowTest extends PlanTestBase {
                 "  |  partition by: 1: v1\n" +
                 "  |  order by: 2: v2 ASC\n" +
                 "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT RO");
+<<<<<<< HEAD
+=======
+    }
+
+    @Test
+    public void testStatisticWindowFunction() throws Exception {
+        String sql = "select CORR(t1e,t1f) over (partition by t1a order by t1b) from test_all_type";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+
+        sql = "select CORR(t1e,t1f) over (partition by t1a order by t1b " +
+                "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) from test_all_type";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
+>>>>>>> 2.5.18
     }
 
     @Test
@@ -730,7 +746,10 @@ public class WindowTest extends PlanTestBase {
         }
     }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 2.5.18
     @Test
     public void testWindowWithHaving() throws Exception {
         String sql =
@@ -742,4 +761,65 @@ public class WindowTest extends PlanTestBase {
         expectedEx.expectMessage("HAVING clause cannot contain window function");
         String plan = getFragmentPlan(sql);
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testHashBasedWindowTest() throws Exception {
+        {
+            String sql = "select sum(v1) over ([hash] partition by v1,v2 )," +
+                    "sum(v1/v3) over ([hash] partition by v1,v2 ) " +
+                    "from t0";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:ANALYTIC\n" +
+                    "  |  functions: [, sum(1: v1), ], [, sum(CAST(1: v1 AS DOUBLE) / CAST(3: v3 AS DOUBLE)), ]\n" +
+                    "  |  partition by: 1: v1, 2: v2\n" +
+                    "  |  useHashBasedPartition");
+        }
+        {
+            String sql = "select sum(v1) over ( partition by v1,v2 )," +
+                    "sum(v1/v3) over ([hash] partition by v1,v2 ) " +
+                    "from t0";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  4:ANALYTIC\n" +
+                    "  |  functions: [, sum(1: v1), ]\n" +
+                    "  |  partition by: 1: v1, 2: v2");
+            assertContains(plan, "  1:ANALYTIC\n" +
+                    "  |  functions: [, sum(CAST(1: v1 AS DOUBLE) / CAST(3: v3 AS DOUBLE)), ]\n" +
+                    "  |  partition by: 1: v1, 2: v2\n" +
+                    "  |  useHashBasedPartition");
+        }
+        {
+            String sql = "select sum(v1) over ([hash] partition by v1 )," +
+                    "sum(v1/v3) over ([hash] partition by v1,v2 ) " +
+                    "from t0";
+            String plan = getFragmentPlan(sql);
+            assertContains(plan, "  3:ANALYTIC\n" +
+                    "  |  functions: [, sum(1: v1), ]\n" +
+                    "  |  partition by: 1: v1\n" +
+                    "  |  useHashBasedPartition");
+            assertContains(plan, "  1:ANALYTIC\n" +
+                    "  |  functions: [, sum(CAST(1: v1 AS DOUBLE) / CAST(3: v3 AS DOUBLE)), ]\n" +
+                    "  |  partition by: 1: v1, 2: v2\n" +
+                    "  |  useHashBasedPartition");
+        }
+    }
+
+    @Test
+    public void testWindowColumnReuse() throws Exception {
+        String sql = "select *, row_number() over(partition by concat(v1, '_', v2) " +
+                "order by cast(v3 as bigint)) from t0";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "  1:Project\n" +
+                "  |  output columns:\n" +
+                "  |  3 <-> [3: v3, BIGINT, true]\n" +
+                "  |  4 <-> [1: v1, BIGINT, true]\n" +
+                "  |  5 <-> [2: v2, BIGINT, true]\n" +
+                "  |  6 <-> clone([3: v3, BIGINT, true])\n" +
+                "  |  7 <-> concat[(cast([1: v1, BIGINT, true] as VARCHAR), '_', " +
+                "cast([2: v2, BIGINT, true] as VARCHAR)); args: VARCHAR; result: VARCHAR; " +
+                "args nullable: true; result nullable: true]\n" +
+                "  |  cardinality: 1");
+    }
+>>>>>>> 2.5.18
 }

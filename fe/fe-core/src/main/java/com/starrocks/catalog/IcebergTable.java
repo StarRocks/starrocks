@@ -147,7 +147,10 @@ public class IcebergTable extends Table {
     }
 
     public IcebergCatalogType getCatalogType() {
-        return IcebergCatalogType.valueOf(icebergProperties.get(ICEBERG_CATALOG_TYPE));
+        if (icebergProperties.containsKey(ICEBERG_CATALOG_TYPE)) {
+            return IcebergCatalogType.valueOf(icebergProperties.get(ICEBERG_CATALOG_TYPE));
+        }
+        return IcebergCatalogType.valueOf(icebergProperties.get(ICEBERG_CATALOG_LEGACY));
     }
 
     public String getCatalogImpl() {

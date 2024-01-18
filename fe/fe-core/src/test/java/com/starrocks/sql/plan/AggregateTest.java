@@ -486,7 +486,7 @@ public class AggregateTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  2:Project\n" +
                 "  |  <slot 13> : 13: bitmap_union_count\n" +
-                "  |  <slot 14> : 13: bitmap_union_count\n" +
+                "  |  <slot 14> : clone(13: bitmap_union_count)\n" +
                 "  |  \n" +
                 "  1:AGGREGATE (update finalize)\n" +
                 "  |  output: bitmap_union_count(5: b1)");
@@ -1707,5 +1707,42 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "percentile_union[([14: percentile_union, PERCENTILE, true]); args: PERCENTILE; " +
                 "result: PERCENTILE; args nullable: true;");
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testRemoveExchange() throws Exception {
+        int oldValue = connectContext.getSessionVariable().getNewPlannerAggStage();
+        connectContext.getSessionVariable().setNewPlanerAggStage(1);
+        String sql = "select sum(v1) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  1:AGGREGATE (update finalize)");
+
+        sql = "select sum(v1 + v2) from t0 group by v3";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "RESULT SINK\n" +
+                "\n" +
+                "  3:Project\n" +
+                "  |  <slot 5> : 5: sum\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(4: expr)");
+        connectContext.getSessionVariable().setNewPlanerAggStage(oldValue);
+    }
+
+    @Test
+    public void testOrderByWithAgg() throws Exception {
+        String sql = "select round(count(t1e) * 100.0 / min(t1f), 4) as potential_customer_rate, " +
+                "min(t1f) as t1f from test_all_type_not_null " +
+                "group by t1a, t1b " +
+                "order by round(count(t1e) * 100.0 / min(t1f) / min(t1f), 4), min(t1f), abs(t1f)";
+
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        assertCContains(plan, "1:AGGREGATE (update finalize)\n" +
+                        "  |  output: count(5: t1e), min(6: t1f)\n" +
+                        "  |  group by: 1: t1a, 2: t1b",
+                "order by: <slot 14> 14: round ASC, <slot 12> 12: min ASC, <slot 15> 15: abs ASC");
     }
 }

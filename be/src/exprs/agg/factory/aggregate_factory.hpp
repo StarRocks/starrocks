@@ -11,11 +11,13 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/any_value.h"
 #include "exprs/agg/avg.h"
+#include "exprs/agg/bitmap_agg.h"
 #include "exprs/agg/bitmap_intersect.h"
 #include "exprs/agg/bitmap_union.h"
 #include "exprs/agg/bitmap_union_count.h"
 #include "exprs/agg/bitmap_union_int.h"
 #include "exprs/agg/count.h"
+#include "exprs/agg/covariance.h"
 #include "exprs/agg/distinct.h"
 #include "exprs/agg/exchange_perf.h"
 #include "exprs/agg/group_concat.h"
@@ -61,6 +63,9 @@ public:
     }
 
     static AggregateFunctionPtr MakeBitmapUnionAggregateFunction();
+
+    template <PrimitiveType LT>
+    static AggregateFunctionPtr MakeBitmapAggAggregateFunction();
 
     static AggregateFunctionPtr MakeBitmapIntersectAggregateFunction();
 
@@ -121,6 +126,12 @@ public:
 
     template <PrimitiveType PT, bool is_sample>
     static AggregateFunctionPtr MakeStddevAggregateFunction();
+
+    template <PrimitiveType PT, bool is_sample>
+    static AggregateFunctionPtr MakeCovarianceAggregateFunction();
+
+    template <PrimitiveType PT>
+    static AggregateFunctionPtr MakeCorelationAggregateFunction();
 
     template <PrimitiveType PT>
     static auto MakeSumDistinctAggregateFunction();
@@ -276,6 +287,16 @@ AggregateFunctionPtr AggregateFactory::MakeStddevAggregateFunction() {
     return std::make_shared<StddevAggregateFunction<PT, is_sample>>();
 }
 
+template <PrimitiveType PT, bool is_sample>
+AggregateFunctionPtr AggregateFactory::MakeCovarianceAggregateFunction() {
+    return std::make_shared<CorVarianceAggregateFunction<PT, is_sample>>();
+}
+
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakeCorelationAggregateFunction() {
+    return std::make_shared<CorelationAggregateFunction<PT>>();
+}
+
 template <PrimitiveType PT>
 auto AggregateFactory::MakeSumDistinctAggregateFunction() {
     return std::make_shared<DistinctAggregateFunction<PT, AggDistinctType::SUM>>();
@@ -311,4 +332,13 @@ AggregateFunctionPtr AggregateFactory::MakePercentileDiscAggregateFunction() {
     return std::make_shared<PercentileDiscAggregateFunction<PT>>();
 }
 
+<<<<<<< HEAD
 } // namespace starrocks::vectorized
+=======
+template <PrimitiveType LT>
+AggregateFunctionPtr AggregateFactory::MakeBitmapAggAggregateFunction() {
+    return std::make_shared<BitmapAggAggregateFunction<LT>>();
+}
+
+} // namespace starrocks::vectorized
+>>>>>>> 2.5.18

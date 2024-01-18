@@ -35,16 +35,16 @@
 
 namespace starrocks::vectorized {
 
-ColumnPtr UtilityFunctions::version(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> UtilityFunctions::version(FunctionContext* context, const Columns& columns) {
     return ColumnHelper::create_const_column<TYPE_VARCHAR>("5.1.0", 1);
 }
 
-ColumnPtr UtilityFunctions::current_version(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> UtilityFunctions::current_version(FunctionContext* context, const Columns& columns) {
     static std::string version = std::string(STARROCKS_VERSION) + " " + STARROCKS_COMMIT_HASH;
     return ColumnHelper::create_const_column<TYPE_VARCHAR>(version, 1);
 }
 
-ColumnPtr UtilityFunctions::sleep(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> UtilityFunctions::sleep(FunctionContext* context, const Columns& columns) {
     ColumnViewer<TYPE_INT> data_column(columns[0]);
 
     auto size = columns[0]->size();
@@ -63,7 +63,7 @@ ColumnPtr UtilityFunctions::sleep(FunctionContext* context, const Columns& colum
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-ColumnPtr UtilityFunctions::last_query_id(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> UtilityFunctions::last_query_id(FunctionContext* context, const Columns& columns) {
     starrocks::RuntimeState* state = context->impl()->state();
     const std::string& id = state->last_query_id();
     if (!id.empty()) {
@@ -81,10 +81,10 @@ ColumnPtr UtilityFunctions::last_query_id(FunctionContext* context, const Column
 // The next 16 bits are random value.
 // The next 16 bits are thread id.
 // The next 32 bits are increasement value.
-ColumnPtr UtilityFunctions::uuid(FunctionContext* ctx, const Columns& columns) {
+StatusOr<ColumnPtr> UtilityFunctions::uuid(FunctionContext* ctx, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns.back());
 
-    auto col = UtilityFunctions::uuid_numeric(ctx, columns);
+    ASSIGN_OR_RETURN(auto col, UtilityFunctions::uuid_numeric(ctx, columns));
     auto& uuid_data = down_cast<Int128Column*>(col.get())->get_data();
 
     auto res = BinaryColumn::create();
@@ -179,7 +179,7 @@ int16_t get_uniq_tid() {
     return uniq_tid;
 }
 
-ColumnPtr UtilityFunctions::uuid_numeric(FunctionContext*, const Columns& columns) {
+StatusOr<ColumnPtr> UtilityFunctions::uuid_numeric(FunctionContext*, const Columns& columns) {
     int32_t num_rows = ColumnHelper::get_const_value<TYPE_INT>(columns.back());
     auto result = Int128Column::create(num_rows);
 
@@ -208,7 +208,7 @@ ColumnPtr UtilityFunctions::uuid_numeric(FunctionContext*, const Columns& column
     return result;
 }
 
-ColumnPtr UtilityFunctions::assert_true(FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> UtilityFunctions::assert_true(FunctionContext* context, const Columns& columns) {
     auto column = columns[0];
     const auto size = column->size();
 
@@ -236,7 +236,7 @@ ColumnPtr UtilityFunctions::assert_true(FunctionContext* context, const Columns&
     return ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, size);
 }
 
-ColumnPtr UtilityFunctions::host_name(starrocks_udf::FunctionContext* context, const Columns& columns) {
+StatusOr<ColumnPtr> UtilityFunctions::host_name(starrocks_udf::FunctionContext* context, const Columns& columns) {
     std::string host_name;
     auto status = get_hostname(&host_name);
     if (status.ok()) {

@@ -3,6 +3,10 @@
 package com.starrocks.sql.optimizer.base;
 
 import com.google.common.base.Preconditions;
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Lists;
+>>>>>>> 2.5.18
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -26,7 +30,10 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.logical.MockOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+<<<<<<< HEAD
 import jersey.repackaged.com.google.common.collect.Lists;
+=======
+>>>>>>> 2.5.18
 
 import java.util.ArrayList;
 import java.util.Arrays;

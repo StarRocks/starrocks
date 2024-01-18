@@ -397,8 +397,24 @@ void RuntimeProfile::copy_all_info_strings_from(RuntimeProfile* src_profile) {
     }
 
     std::lock_guard<std::mutex> l(src_profile->_info_strings_lock);
-    for (auto& [key, value] : src_profile->_info_strings) {
-        add_info_string(key, value);
+    for (const auto& [key, value] : src_profile->_info_strings) {
+        const std::string* exist_ptr = get_info_string(key);
+        if (exist_ptr == nullptr) {
+            add_info_string(key, value);
+        } else if (value != *exist_ptr) {
+            std::string original_key = key;
+            if (size_t pos; (pos = key.find("__DUP(")) != std::string::npos) {
+                original_key = key.substr(0, pos);
+            }
+            size_t i = 0;
+            while (true) {
+                const std::string indexed_key = strings::Substitute("$0__DUP($1)", original_key, i++);
+                if (get_info_string(indexed_key) == nullptr) {
+                    add_info_string(indexed_key, value);
+                    break;
+                }
+            }
+        }
     }
 }
 
@@ -772,6 +788,13 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
 
     // all metrics will be merged into the first profile
     auto* profile0 = profiles[0];
+
+    // Merge into string, if contents are different, only the last will be preserved;
+    {
+        for (size_t i = 1; i < profiles.size(); i++) {
+            profile0->copy_all_info_strings_from(profiles[i]);
+        }
+    }
 
     // Merge counters
     {

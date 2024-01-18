@@ -584,6 +584,8 @@ void FragmentMgr::report_fragments_with_same_host(
             Status executor_status = executor->status();
             if (!executor_status.ok()) {
                 reported[i] = true;
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                        fragment_exec_state->fragment_instance_id());
                 continue;
             }
 
@@ -647,6 +649,8 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
 
             Status executor_status = executor->status();
             if (!executor_status.ok()) {
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                        fragment_exec_state->fragment_instance_id());
                 continue;
             }
 
@@ -658,6 +662,8 @@ void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_ne
                 std::stringstream ss;
                 ss << "couldn't get a client for " << fragment_exec_state->coord_addr();
                 LOG(WARNING) << ss.str();
+                starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(
+                        fragment_exec_state->fragment_instance_id());
                 fragment_exec_state->exec_env()->frontend_client_cache()->close_connections(
                         fragment_exec_state->coord_addr());
                 continue;
@@ -874,6 +880,9 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     query_options.query_timeout = params.query_timeout;
     query_options.mem_limit = params.mem_limit;
     query_options.query_type = TQueryType::EXTERNAL;
+    // For spark sql / flink sql, we dont use page cache.
+    query_options.use_page_cache = false;
+    query_options.use_column_pool = false;
     exec_fragment_params.__set_query_options(query_options);
     VLOG_ROW << "external exec_plan_fragment params is "
              << apache::thrift::ThriftDebugString(exec_fragment_params).c_str();

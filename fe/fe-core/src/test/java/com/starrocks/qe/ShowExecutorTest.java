@@ -103,7 +103,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME;
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TIME;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
 import static com.starrocks.thrift.TStorageMedium.SSD;
 
@@ -199,6 +199,14 @@ public class ShowExecutorTest {
                 minTimes = 0;
                 result = "testMv";
 
+                mv.getBaseTableInfos();
+                minTimes = 0;
+                result = baseTableInfo;
+
+                mv.getBaseSchema();
+                minTimes = 0;
+                result = Lists.newArrayList(column1, column2);
+
                 mv.getType();
                 minTimes = 0;
                 result = TableType.MATERIALIZED_VIEW;
@@ -216,6 +224,10 @@ public class ShowExecutorTest {
                 result = 10L;
 
                 mv.getComment();
+                minTimes = 0;
+                result = "TEST MATERIALIZED VIEW";
+
+                mv.getDisplayComment();
                 minTimes = 0;
                 result = "TEST MATERIALIZED VIEW";
 
@@ -246,7 +258,7 @@ public class ShowExecutorTest {
                 mv.getTableProperty();
                 minTimes = 0;
                 result = new TableProperty(
-                        Collections.singletonMap(PROPERTIES_STORAGE_COLDOWN_TIME, "100"));
+                        Collections.singletonMap(PROPERTIES_STORAGE_COOLDOWN_TIME, "100"));
             }
         };
 
@@ -883,7 +895,7 @@ public class ShowExecutorTest {
     }
 
     private void verifyShowMaterializedViewResult(ShowResultSet resultSet) throws AnalysisException, DdlException {
-        String expectedSqlText = "CREATE MATERIALIZED VIEW `testMv`\n" +
+        String expectedSqlText = "CREATE MATERIALIZED VIEW `testMv` (`col1`, `col2`)\n" +
                 "COMMENT \"TEST MATERIALIZED VIEW\"\n" +
                 "PARTITION BY (`col1`)\n" +
                 "DISTRIBUTED BY HASH(`col1`) BUCKETS 10 \n" +

@@ -102,6 +102,7 @@ class PushDownPredicateJoinTypeTest extends PlanTestBase {
         sqls.add("select * from t0 left join t1 on v4 = 4");
         sqls.add("select * from t0 full outer join t1 on v1 = 1 and v4 = 4");
         sqls.add("select * from t0 full outer join t1 on v1 < 1 and v4 > 4 and v2 > v5");
+        sqls.add("select * from t0 left join t1 on t0.v1 = t1.v4 and t0.v1 > 1");
         return sqls.stream().map(e -> Arguments.of(e));
     }
 

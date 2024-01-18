@@ -60,9 +60,9 @@ public class RangePartitionInfo extends PartitionInfo {
     @SerializedName(value = "partitionColumns")
     private List<Column> partitionColumns = Lists.newArrayList();
     // formal partition id -> partition range
-    private Map<Long, Range<PartitionKey>> idToRange = Maps.newHashMap();
+    protected Map<Long, Range<PartitionKey>> idToRange = Maps.newConcurrentMap();
     // temp partition id -> partition range
-    private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newHashMap();
+    private Map<Long, Range<PartitionKey>> idToTempRange = Maps.newConcurrentMap();
 
     // partitionId -> serialized Range<PartitionKey>
     // because Range<PartitionKey> and PartitionKey can not be serialized by gson
@@ -84,6 +84,14 @@ public class RangePartitionInfo extends PartitionInfo {
     public RangePartitionInfo(List<Column> partitionColumns) {
         super(PartitionType.RANGE);
         this.partitionColumns = partitionColumns;
+        this.isMultiColumnPartition = partitionColumns.size() > 1;
+    }
+
+    public RangePartitionInfo(RangePartitionInfo other) {
+        super(other.type);
+        this.partitionColumns = Lists.newArrayList(other.partitionColumns);
+        this.idToRange.putAll(other.idToRange);
+        this.idToTempRange.putAll(other.idToTempRange);
         this.isMultiColumnPartition = partitionColumns.size() > 1;
     }
 
@@ -192,7 +200,7 @@ public class RangePartitionInfo extends PartitionInfo {
     public Range<PartitionKey> handleNewSinglePartitionDesc(SingleRangePartitionDesc desc,
                                                             long partitionId, boolean isTemp) throws DdlException {
         Preconditions.checkArgument(desc.isAnalyzed());
-        Range<PartitionKey> range = null;
+        Range<PartitionKey> range;
         try {
             range = checkAndCreateRange(desc, isTemp);
             setRangeInternal(partitionId, isTemp, range);
@@ -515,6 +523,16 @@ public class RangePartitionInfo extends PartitionInfo {
         }
         sb.append(")");
         return sb.toString();
+    }
+
+    @Override
+    protected Object clone() {
+        RangePartitionInfo info = (RangePartitionInfo) super.clone();
+        info.partitionColumns = Lists.newArrayList(this.partitionColumns);
+        info.idToRange.putAll(this.idToRange);
+        info.idToTempRange.putAll(this.idToTempRange);
+        info.isMultiColumnPartition = partitionColumns.size() > 1;
+        return info;
     }
 }
 

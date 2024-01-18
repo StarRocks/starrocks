@@ -42,21 +42,43 @@ under the License.
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
         <jprotobuf.version>2.4.12</jprotobuf.version>
-        <log4j.version>2.17.1</log4j.version>
-        <jackson.version>2.13.4</jackson.version>
-        <spark.version>2.4.6</spark.version>
+        <log4j.version>2.19.0</log4j.version>
+        <jackson.version>2.15.2</jackson.version>
+        <spark.version>3.4.1</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.10.1</parquet.version>
+<<<<<<< HEAD
         <hadoop.version>2.7.2-TBDS-5.1.3.0</hadoop.version>
         <skip.plugin>false</skip.plugin>
         <hudi.version>0.10.1</hudi.version>
         <hive-apache.version>2.2.0-TBDS-5.1.3.0</hive-apache.version>
+=======
+        <hadoop.version>3.3.6</hadoop.version>
+        <skip.plugin>false</skip.plugin>
+        <hudi.version>0.12.2</hudi.version>
+        <hive-apache.version>3.1.2-13</hive-apache.version>
+>>>>>>> 2.5.18
         <dlf-metastore-client.version>0.2.14</dlf-metastore-client.version>
         <sonar.organization>starrocks</sonar.organization>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
     </properties>
 
     <profiles>
+        <profile>
+            <id>spark2</id>
+            <properties>
+                <spark.version>2.4.6</spark.version>
+            </properties>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+        </profile>
+        <profile>
+            <id>spark3</id>
+            <properties>
+                <spark.version>3.3.1</spark.version>
+            </properties>
+        </profile>
         <!-- for custom internal repository -->
         <profile>
             <id>custom-env</id>
@@ -213,7 +235,7 @@ under the License.
             <dependency>
                 <groupId>com.google.guava</groupId>
                 <artifactId>guava</artifactId>
-                <version>30.1.1-jre</version>
+                <version>32.0.1-jre</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-core -->
@@ -234,7 +256,11 @@ under the License.
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-databind</artifactId>
+<<<<<<< HEAD
                 <version>${jackson.version}.2</version>
+=======
+                <version>${jackson.version}</version>
+>>>>>>> 2.5.18
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.dataformat/jackson-dataformat-yaml -->
@@ -249,13 +275,6 @@ under the License.
                 <groupId>com.fasterxml.jackson.module</groupId>
                 <artifactId>jackson-module-jaxb-annotations</artifactId>
                 <version>${jackson.version}</version>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/org.codehaus.jackson/jackson-mapper-asl -->
-            <dependency>
-                <groupId>org.codehaus.jackson</groupId>
-                <artifactId>jackson-mapper-asl</artifactId>
-                <version>1.9.13-cloudera.2</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/net.sourceforge.czt.dev/java-cup -->
@@ -324,7 +343,11 @@ under the License.
             <dependency>
                 <groupId>org.json</groupId>
                 <artifactId>json</artifactId>
+<<<<<<< HEAD
                 <version>20230227</version>
+=======
+                <version>20231013</version>
+>>>>>>> 2.5.18
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/junit/junit -->
@@ -381,14 +404,14 @@ under the License.
             <dependency>
                 <groupId>com.squareup.okhttp3</groupId>
                 <artifactId>okhttp</artifactId>
-                <version>4.9.1</version>
+                <version>4.10.0</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.squareup.okio/okio -->
             <dependency>
                 <groupId>com.squareup.okio</groupId>
                 <artifactId>okio</artifactId>
-                <version>2.10.0</version>
+                <version>3.4.0</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/javax.validation/validation-api -->
@@ -416,7 +439,7 @@ under the License.
             <dependency>
                 <groupId>org.jboss.xnio</groupId>
                 <artifactId>xnio-nio</artifactId>
-                <version>3.7.9.Final</version>
+                <version>3.8.10.Final</version>
             </dependency>
 
             <!-- support jdk9 -->
@@ -459,8 +482,12 @@ under the License.
                         <artifactId>slf4j-log4j12</artifactId>
                     </exclusion>
                     <exclusion>
-                        <artifactId>zookeeper</artifactId>
                         <groupId>org.apache.zookeeper</groupId>
+                        <artifactId>zookeeper</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.logging.log4j</groupId>
+                        <artifactId>log4j-slf4j2-impl</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -512,6 +539,10 @@ under the License.
                     <exclusion>
                         <artifactId>zookeeper</artifactId>
                         <groupId>org.apache.zookeeper</groupId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.slf4j</groupId>
+                        <artifactId>slf4j-reload4j</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -580,6 +611,12 @@ under the License.
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-client</artifactId>
                 <version>${hadoop.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.slf4j</groupId>
+                        <artifactId>slf4j-reload4j</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aws -->
@@ -618,11 +655,11 @@ under the License.
                 <scope>import</scope>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/mysql/mysql-connector-java -->
+            <!-- https://mvnrepository.com/artifact/com.mysql/mysql-connector-j -->
             <dependency>
-                <groupId>mysql</groupId>
-                <artifactId>mysql-connector-java</artifactId>
-                <version>8.0.28</version>
+                <groupId>com.mysql</groupId>
+                <artifactId>mysql-connector-j</artifactId>
+                <version>8.0.33</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->

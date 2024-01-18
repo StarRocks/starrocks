@@ -38,7 +38,7 @@ public:
     void set_size(int64_t size) override;
 
 private:
-    bool _is_jfs_file() const;
+    bool _is_hdfs_file() const;
 
     hdfsFS _fs;
     hdfsFile _file;
@@ -99,14 +99,14 @@ void HdfsInputStream::set_size(int64_t value) {
     _file_size = value;
 }
 
-bool HdfsInputStream::_is_jfs_file() const {
-    static const char* kFileSysPrefixJuicefs = "jfs://";
+bool HdfsInputStream::_is_hdfs_file() const {
+    static const char* kFileSysPrefixJuicefs = "hdfs://";
     return strncmp(_file_name.c_str(), kFileSysPrefixJuicefs, strlen(kFileSysPrefixJuicefs)) == 0;
 }
 
 StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_statistics() {
     // `GetReadStatistics` is not supported in juicefs hadoop sdk, and will cause the be crash
-    if (_is_jfs_file()) {
+    if (!_is_hdfs_file()) {
         return nullptr;
     }
 
@@ -339,6 +339,18 @@ Status HdfsFileSystem::list_path(const std::string& dir, std::vector<FileStatus>
         } else {
             dir_size = dir.size() + 1;
         }
+
+        const std::string local_fs("file:/");
+        if (dir.compare(0, local_fs.length(), local_fs) == 0) {
+            std::string mName(fileinfo[i].mName);
+            std::size_t found = mName.rfind("/");
+            if (found == std::string::npos) {
+                return Status::InvalidArgument("parse path fail {}"_format(dir));
+            }
+
+            dir_size = found + 1;
+        }
+
         std::string_view name(fileinfo[i].mName + dir_size);
         bool is_dir = fileinfo[i].mKind == tObjectKind::kObjectKindDirectory;
         int64_t file_size = fileinfo[i].mSize;

@@ -168,6 +168,8 @@ public:
     // should use with migration lock.
     void set_is_migrating(bool is_migrating) { _is_migrating = is_migrating; }
 
+    std::shared_mutex& get_meta_store_lock() { return _meta_store_lock; }
+
     // check tablet is migrating or has been migrated.
     // if tablet is migrating or has been migrated, return true.
     // should use with migration lock.
@@ -183,6 +185,7 @@ public:
 
     // Same as max_continuous_version_from_beginning, only return end version, using a more efficient implementation
     int64_t max_continuous_version() const;
+    int64_t max_readable_version() const;
 
     int64_t last_cumu_compaction_failure_time() { return _last_cumu_compaction_failure_millis; }
     void set_last_cumu_compaction_failure_time(int64_t millis) { _last_cumu_compaction_failure_millis = millis; }
@@ -228,7 +231,7 @@ public:
 
     // updatable tablet specific operations
     TabletUpdates* updates() { return _updates.get(); }
-    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
+    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time = 0);
 
     // if there is _compaction_task running
     // do not do compaction
@@ -261,6 +264,16 @@ public:
 
     void get_basic_info(TabletBasicInfo& info);
 
+<<<<<<< HEAD
+=======
+    void update_max_continuous_version() { _timestamped_version_tracker.update_max_continuous_version(); }
+
+    void set_will_be_force_replaced() { _will_be_force_replaced = true; }
+
+    // verify all rowsets of current(max) version in this tablet
+    Status verify();
+
+>>>>>>> 2.5.18
 protected:
     void on_shutdown() override;
 
@@ -289,6 +302,8 @@ private:
     OnceFlag _init_once;
     // meta store lock is used for prevent 2 threads do checkpoint concurrently
     // it will be used in econ-mode in the future
+    // This lock will be also used for prevent SnapshotLoader::move and checkpoint
+    // concurrently for restoring the tablet.
     std::shared_mutex _meta_store_lock;
     std::mutex _ingest_lock;
     std::mutex _base_lock;
@@ -342,6 +357,11 @@ private:
     std::atomic<int64_t> _cumulative_point{0};
     std::atomic<int32_t> _newly_created_rowset_num{0};
     std::atomic<int64_t> _last_checkpoint_time{0};
+
+    // this variable indicate tablet will be replaced in TabletManger by
+    // another tablet with the same tablet id
+    // currently, it will be used in Restore process
+    bool _will_be_force_replaced = false;
 };
 
 inline bool Tablet::init_succeeded() {

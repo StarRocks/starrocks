@@ -57,6 +57,10 @@ public class JDBCTable extends Table {
         return jdbcTable;
     }
 
+    public String getProperty(String propertyKey) {
+        return properties.get(propertyKey);
+    }
+
     private void validate(Map<String, String> properties) throws DdlException {
         if (properties == null) {
             throw new DdlException("Please set properties of jdbc table, they are: table and resource");
@@ -91,6 +95,15 @@ public class JDBCTable extends Table {
         }
     }
 
+    private static String buildCatalogDriveName(String uri) {
+        // jdbc:postgresql://172.26.194.237:5432/db_pg_select
+        // -> jdbc_postgresql_172.26.194.237_5432_db_pg_select
+        // requirement: it should be used as local path.
+        // and there is no ':' in it to avoid be parsed into non-local filesystem.
+        return uri.replace("//", "")
+                .replace("/", "_")
+                .replace(":", "_");
+    }
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         TJDBCTable tJDBCTable = new TJDBCTable();
@@ -108,7 +121,7 @@ public class JDBCTable extends Table {
             tJDBCTable.setJdbc_passwd(resource.getProperty(JDBCResource.PASSWORD));
         } else {
             String uri = properties.get(JDBCResource.URI);
-            String driverName = uri.replace("//", "").replace("/", "_");
+            String driverName = buildCatalogDriveName(uri);
             tJDBCTable.setJdbc_driver_name(driverName);
             tJDBCTable.setJdbc_driver_url(properties.get(JDBCResource.DRIVER_URL));
             tJDBCTable.setJdbc_driver_checksum(properties.get(JDBCResource.CHECK_SUM));

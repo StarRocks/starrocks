@@ -24,12 +24,14 @@ public class PhysicalWindowOperator extends PhysicalOperator {
     private final List<Ordering> orderByElements;
     private final AnalyticWindow analyticWindow;
     private final List<Ordering> enforceOrderBy;
+    private final boolean useHashBasedPartition;
 
     public PhysicalWindowOperator(Map<ColumnRefOperator, CallOperator> analyticCall,
                                   List<ScalarOperator> partitionExpressions,
                                   List<Ordering> orderByElements,
                                   AnalyticWindow analyticWindow,
                                   List<Ordering> enforceOrderBy,
+                                  boolean useHashBasedPartition,
                                   long limit,
                                   ScalarOperator predicate,
                                   Projection projection) {
@@ -39,7 +41,7 @@ public class PhysicalWindowOperator extends PhysicalOperator {
         this.orderByElements = orderByElements;
         this.analyticWindow = analyticWindow;
         this.enforceOrderBy = enforceOrderBy;
-
+        this.useHashBasedPartition = useHashBasedPartition;
         this.limit = limit;
         this.predicate = predicate;
         this.projection = projection;
@@ -63,6 +65,10 @@ public class PhysicalWindowOperator extends PhysicalOperator {
 
     public List<Ordering> getEnforceOrderBy() {
         return enforceOrderBy;
+    }
+
+    public boolean isUseHashBasedPartition() {
+        return useHashBasedPartition;
     }
 
     @Override
@@ -89,12 +95,14 @@ public class PhysicalWindowOperator extends PhysicalOperator {
         return Objects.equals(analyticCall, that.analyticCall) &&
                 Objects.equals(partitionExpressions, that.partitionExpressions) &&
                 Objects.equals(orderByElements, that.orderByElements) &&
-                Objects.equals(analyticWindow, that.analyticWindow);
+                Objects.equals(analyticWindow, that.analyticWindow) &&
+                Objects.equals(useHashBasedPartition, that.useHashBasedPartition);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), analyticCall);
+        return Objects.hash(super.hashCode(), analyticCall, partitionExpressions, orderByElements, analyticWindow,
+                useHashBasedPartition);
     }
 
     @Override

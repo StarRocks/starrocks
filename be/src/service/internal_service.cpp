@@ -42,6 +42,7 @@
 #include "service/brpc.h"
 #include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
+#include "util/time.h"
 #include "util/uid_util.h"
 
 namespace starrocks {
@@ -94,6 +95,29 @@ template <typename T>
 void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController* cntl_base,
                                                  const PTransmitChunkParams* request, PTransmitChunkResult* response,
                                                  google::protobuf::Closure* done) {
+<<<<<<< HEAD
+=======
+    class WrapClosure : public google::protobuf::Closure {
+    public:
+        WrapClosure(google::protobuf::Closure* done, PTransmitChunkResult* response)
+                : _done(done), _response(response) {}
+        ~WrapClosure() override = default;
+        void Run() override {
+            std::unique_ptr<WrapClosure> self_guard(this);
+            const auto response_timestamp = MonotonicNanos();
+            _response->set_receiver_post_process_time(response_timestamp - _receive_timestamp);
+            if (_done != nullptr) {
+                _done->Run();
+            }
+        }
+
+    private:
+        google::protobuf::Closure* _done;
+        PTransmitChunkResult* _response;
+        const int64_t _receive_timestamp = MonotonicNanos();
+    };
+    google::protobuf::Closure* wrapped_done = new WrapClosure(done, response);
+>>>>>>> 2.5.18
     VLOG_ROW << "transmit data: " << (uint64_t)(request) << " fragment_instance_id=" << print_id(request->finst_id())
              << " node=" << request->node_id() << " begin";
     // NOTE: we should give a default value to response to avoid concurrent risk
@@ -101,8 +125,6 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
     // transmit_data(), which will cause a dirty memory access.
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     auto* req = const_cast<PTransmitChunkParams*>(request);
-    const auto receive_timestamp = GetCurrentTimeNanos();
-    response->set_receive_timestamp(receive_timestamp);
     if (cntl->request_attachment().size() > 0) {
         const butil::IOBuf& io_buf = cntl->request_attachment();
         size_t offset = 0;
@@ -114,15 +136,19 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
     }
     Status st;
     st.to_protobuf(response->mutable_status());
+<<<<<<< HEAD
     st = _exec_env->stream_mgr()->transmit_chunk(*request, &done);
+=======
+    st = _exec_env->stream_mgr()->transmit_chunk(*request, &wrapped_done);
+>>>>>>> 2.5.18
     if (!st.ok()) {
         LOG(WARNING) << "transmit_data failed, message=" << st.get_error_msg()
                      << ", fragment_instance_id=" << print_id(request->finst_id()) << ", node=" << request->node_id();
     }
-    if (done != nullptr) {
+    if (wrapped_done != nullptr) {
         // NOTE: only when done is not null, we can set response status
         st.to_protobuf(response->mutable_status());
-        done->Run();
+        wrapped_done->Run();
     }
 }
 
@@ -159,6 +185,44 @@ void PInternalServiceImplBase<T>::transmit_chunk_via_http(google::protobuf::RpcC
         LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.get_error_msg();
         return;
     }
+<<<<<<< HEAD
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::transmit_chunk_via_http(google::protobuf::RpcController* cntl_base,
+                                                          const PHttpRequest* request, PTransmitChunkResult* response,
+                                                          google::protobuf::Closure* done) {
+    auto params = std::make_shared<PTransmitChunkParams>();
+    auto get_params = [&]() -> Status {
+        auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+        butil::IOBuf& iobuf = cntl->request_attachment();
+        // deserialize PTransmitChunkParams
+        size_t params_size = 0;
+        iobuf.cutn(&params_size, sizeof(params_size));
+        butil::IOBuf params_from;
+        iobuf.cutn(&params_from, params_size);
+        butil::IOBufAsZeroCopyInputStream wrapper(params_from);
+        params->ParseFromZeroCopyStream(&wrapper);
+        // the left size is from chunks' data
+        size_t attachment_size = 0;
+        iobuf.cutn(&attachment_size, sizeof(attachment_size));
+        if (attachment_size != iobuf.size()) {
+            Status st = Status::InternalError(
+                    fmt::format("{} != {} during deserialization via http", attachment_size, iobuf.size()));
+            return st;
+        }
+        return Status::OK();
+    };
+    // may throw std::bad_alloc exception.
+    Status st = get_params();
+    if (!st.ok()) {
+        st.to_protobuf(response->mutable_status());
+        done->Run();
+        LOG(WARNING) << "transmit_data via http rpc failed, message=" << st.get_error_msg();
+        return;
+    }
+=======
+>>>>>>> 2.5.18
     this->transmit_chunk(cntl_base, params.get(), response, done);
 }
 

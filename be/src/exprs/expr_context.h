@@ -116,11 +116,10 @@ public:
 
     std::string get_error_msg() const;
 
-    // vector query engine
-    StatusOr<ColumnPtr> evaluate(vectorized::Chunk* chunk);
-    StatusOr<ColumnPtr> evaluate_with_filter(vectorized::Chunk* chunk, uint8_t* filter);
-
+    StatusOr<ColumnPtr> evaluate(vectorized::Chunk* chunk, uint8_t* filter = nullptr);
     StatusOr<ColumnPtr> evaluate(Expr* expr, vectorized::Chunk* chunk, uint8_t* filter = nullptr);
+
+    bool error_if_overflow() const;
 
 private:
     friend class Expr;

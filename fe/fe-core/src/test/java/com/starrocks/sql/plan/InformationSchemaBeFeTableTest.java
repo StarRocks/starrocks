@@ -15,6 +15,10 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.SchemaTable;
+<<<<<<< HEAD
+=======
+import com.starrocks.pseudocluster.PseudoBackend;
+>>>>>>> 2.5.18
 import com.starrocks.pseudocluster.PseudoCluster;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -60,6 +64,51 @@ public class InformationSchemaBeFeTableTest {
     }
 
     @Test
+<<<<<<< HEAD
+=======
+    public void testOnlyScanTargetedBE() throws Exception {
+        Connection connection = PseudoCluster.getInstance().getQueryConnection();
+        Statement stmt = connection.createStatement();
+        try {
+            for (int i = 0; i < 3; i++) {
+                long beId = 10001 + i;
+                PseudoBackend be = PseudoCluster.getInstance().getBackend(beId);
+                long oldCnt = be.getNumSchemaScan();
+                Assert.assertTrue(stmt.execute("select * from information_schema.be_tablets where be_id = " + beId));
+                long newCnt = be.getNumSchemaScan();
+                Assert.assertEquals(1, newCnt - oldCnt);
+            }
+        } finally {
+            stmt.close();
+            connection.close();
+        }
+    }
+
+    @Test
+    public void testBeSchemaTableAgg() throws Exception {
+        Connection connection = PseudoCluster.getInstance().getQueryConnection();
+        Statement stmt = connection.createStatement();
+        try {
+            // https://github.com/StarRocks/starrocks/issues/23306
+            // verify aggregation behavior is correct
+            Assert.assertTrue(stmt.execute(
+                    "explain select table_id, count(*) as cnt from information_schema.be_tablets group by table_id"));
+            int numExchange = 0;
+            while (stmt.getResultSet().next()) {
+                String line = stmt.getResultSet().getString(1);
+                if (line.contains(":EXCHANGE")) {
+                    numExchange++;
+                }
+            }
+            Assert.assertEquals(2, numExchange);
+        } finally {
+            stmt.close();
+            connection.close();
+        }
+    }
+
+    @Test
+>>>>>>> 2.5.18
     public void testUpdateBeConfig() throws Exception {
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();

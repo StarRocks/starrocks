@@ -1,8 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
 #include "exec/query_cache/ticket_checker.h"
+
+#include <mutex>
+
 namespace starrocks::query_cache {
 void TicketChecker::enter(TicketIdType id, bool is_last) {
+    std::lock_guard<SpinLock> require_lock(_lock);
     auto [it, _] = _tickets.try_emplace(id, id, 0);
     Ticket& ticket = it->second;
     ticket.data += 1L;
@@ -10,6 +14,7 @@ void TicketChecker::enter(TicketIdType id, bool is_last) {
 }
 
 bool TicketChecker::leave(TicketIdType id) {
+    std::lock_guard<SpinLock> require_lock(_lock);
     auto it = _tickets.find(id);
     DCHECK(it != _tickets.end());
     Ticket& ticket = it->second;
@@ -21,6 +26,7 @@ bool TicketChecker::leave(TicketIdType id) {
 }
 
 bool TicketChecker::are_all_ready(TicketIdType id) {
+    std::lock_guard<SpinLock> require_lock(_lock);
     auto it = _tickets.find(id);
     DCHECK(it != _tickets.end());
     Ticket& ticket = it->second;

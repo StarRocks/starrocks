@@ -7,6 +7,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.IntLiteral;
@@ -36,7 +37,10 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
+<<<<<<< HEAD
 import org.spark_project.guava.collect.Sets;
+=======
+>>>>>>> 2.5.18
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;

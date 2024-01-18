@@ -52,4 +52,37 @@ select * from tab1;
 500	500	500	500	500
 600	600	600	600	600
 700	700	700	700	700
+<<<<<<< HEAD
+=======
+-- !result
+
+-- name: test_alter_pk_reorder_column_type
+CREATE TABLE `test_alter_pk_reorder_column_type` (
+  `k1` date NOT NULL COMMENT "",
+  `v1` datetime NOT NULL COMMENT "",
+  `v2` varchar(20) NOT NULL COMMENT "",
+  `v3` varchar(20) NOT NULL COMMENT "",
+  `v4` double NOT NULL COMMENT "",
+  `v5` float NOT NULL COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`k1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`k1`) BUCKETS 3
+ORDER BY(`v2`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+ALTER TABLE test_alter_pk_reorder_column_type ORDER BY(v3, v4);
+-- result:
+E: (1064, 'Unexpected exception: Sort key column[v4] type not supported: DOUBLE')
+-- !result
+ALTER TABLE test_alter_pk_reorder_column_type ORDER BY(v3, v5);
+-- result:
+E: (1064, 'Unexpected exception: Sort key column[v5] type not supported: FLOAT')
+-- !result
+ALTER TABLE test_alter_pk_reorder_column_type ORDER BY(v3);
+-- result:
+>>>>>>> 2.5.18
 -- !result

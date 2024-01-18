@@ -9,9 +9,11 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryRelation;
@@ -117,6 +119,58 @@ public class OptimizerTraceUtil {
     public static void log(ConnectContext ctx, String format, Object... object) {
         if (ctx.getSessionVariable().isEnableOptimizerTraceLog()) {
             log(ctx, String.format(format, object));
+        }
+    }
+
+    public static void logMVPrepare(String format, Object... object) {
+        logMVPrepare(ConnectContext.get(), null, format, object);
+    }
+
+    public static void logMVPrepare(ConnectContext ctx, String format, Object... object) {
+        logMVPrepare(ctx, null, format, object);
+    }
+
+    public static void logMVPrepare(ConnectContext ctx, MaterializedView mv,
+                                    String format, Object... object) {
+        if (ctx.getSessionVariable().isEnableMVOptimizerTraceLog()) {
+            LOG.info("[MV TRACE] [PREPARE {}] {}", ctx.getQueryId(), String.format(format, object));
+        }
+        // Only record trace when mv is not null.
+        if (mv != null) {
+            PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer(mv.getName());
+            if (tracer != null) {
+                tracer.log(String.format(format, object));
+            }
+        }
+    }
+
+    public static void logMVRewrite(MvRewriteContext mvRewriteContext, String format, Object... object) {
+        MaterializationContext mvContext = mvRewriteContext.getMaterializationContext();
+        if (mvContext.getOptimizerContext().getSessionVariable().isEnableMVOptimizerTraceLog()) {
+            // QueryID-Rule-MVName log
+            LOG.info("[MV TRACE] [REWRITE {} {} {}] {}",
+                    mvContext.getOptimizerContext().getTraceInfo().getQueryId(),
+                    mvRewriteContext.getRule().type().name(),
+                    mvContext.getMv().getName(),
+                    String.format(format, object));
+        }
+
+        // Trace log if needed.
+        PlannerProfile.LogTracer tracer = PlannerProfile.getLogTracer(mvContext.getMv().getName());
+        if (tracer != null) {
+            tracer.log(String.format("[%s] %s",   mvRewriteContext.getRule().type().name(),
+                    String.format(format, object)));
+        }
+    }
+
+    public static void logMVRewrite(OptimizerContext optimizerContext, Rule rule,
+                                     String format, Object... object) {
+        if (optimizerContext.getSessionVariable().isEnableMVOptimizerTraceLog()) {
+            // QueryID-Rule log
+            LOG.info("[MV TRACE] [REWRITE {} {}] {}",
+                    optimizerContext.getTraceInfo().getQueryId(),
+                    rule.type().name(),
+                    String.format(format, object));
         }
     }
 

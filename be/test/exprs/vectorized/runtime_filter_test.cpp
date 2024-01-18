@@ -114,7 +114,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilter) {
     JoinRuntimeFilter* rf = &bf;
     bf.init(100);
     for (int i = 0; i <= 200; i += 17) {
-        bf.insert(&i);
+        bf.insert(i);
     }
     EXPECT_EQ(bf.min_value(), 0);
     EXPECT_EQ(bf.max_value(), 187);
@@ -123,7 +123,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilter) {
         EXPECT_FALSE(bf.test_data(i + 1));
     }
     EXPECT_FALSE(rf->has_null());
-    bf.insert(nullptr);
+    bf.insert_null();
     EXPECT_TRUE(rf->has_null());
     EXPECT_EQ(bf.min_value(), 0);
     EXPECT_EQ(bf.max_value(), 187);
@@ -158,7 +158,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterSlice) {
     }
     bf.init(100);
     for (auto& s : values) {
-        bf.insert(&s);
+        bf.insert(s);
     }
     EXPECT_EQ(bf.min_value(), values[0]);
     EXPECT_EQ(bf.max_value(), values[values.size() - 1]);
@@ -176,7 +176,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterSerialize) {
     JoinRuntimeFilter* rf0 = &bf0;
     bf0.init(100);
     for (int i = 0; i <= 200; i += 17) {
-        bf0.insert(&i);
+        bf0.insert(i);
     }
 
     size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf0);
@@ -195,7 +195,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterSerialize2) {
     JoinRuntimeFilter* rf0 = &bf0;
     bf0.init(100);
     for (int i = 0; i <= 200; i += 17) {
-        bf0.insert(&i);
+        bf0.insert(i);
     }
     EXPECT_EQ(bf0.min_value(), 0);
     EXPECT_EQ(bf0.max_value(), 187);
@@ -209,7 +209,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterSerialize2) {
     }
     bf1.init(200);
     for (auto& s : values) {
-        bf1.insert(&s);
+        bf1.insert(s);
     }
     EXPECT_EQ(bf1.min_value(), values[0]);
     EXPECT_EQ(bf1.max_value(), values[values.size() - 1]);
@@ -238,7 +238,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterMerge) {
     JoinRuntimeFilter* rf0 = &bf0;
     bf0.init(100);
     for (int i = 0; i <= 200; i += 17) {
-        bf0.insert(&i);
+        bf0.insert(i);
     }
     EXPECT_EQ(bf0.min_value(), 0);
     EXPECT_EQ(bf0.max_value(), 187);
@@ -247,7 +247,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterMerge) {
     JoinRuntimeFilter* rf1 = &bf1;
     bf1.init(100);
     for (int i = 1; i <= 200; i += 17) {
-        bf1.insert(&i);
+        bf1.insert(i);
     }
     EXPECT_EQ(bf1.min_value(), 1);
     EXPECT_EQ(bf1.max_value(), 188);
@@ -276,7 +276,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterMerge2) {
         }
         bf0.init(100);
         for (auto& s : values) {
-            bf0.insert(&s);
+            bf0.insert(s);
         }
         // bb - dd
         EXPECT_EQ(bf0.min_value(), values[0]);
@@ -294,7 +294,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterMerge2) {
         }
         bf1.init(100);
         for (auto& s : values) {
-            bf1.insert(&s);
+            bf1.insert(s);
         }
         // aa - dc
         EXPECT_EQ(bf1.min_value(), values[0]);
@@ -319,7 +319,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterMerge3) {
         }
         bf0.init(100);
         for (auto& s : values) {
-            bf0.insert(&s);
+            bf0.insert(s);
         }
 
         size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf0);
@@ -344,7 +344,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterMerge3) {
         }
         bf1.init(100);
         for (auto& s : values) {
-            bf1.insert(&s);
+            bf1.insert(s);
         }
 
         size_t max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf1);
@@ -390,7 +390,7 @@ void test_grf_helper_template(size_t num_rows, size_t num_partitions, const Part
 
     for (auto i = 0; i < num_rows; ++i) {
         auto slice = column->get_slice(i);
-        bfs[hash_values[i]].insert(&slice);
+        bfs[hash_values[i]].insert(slice);
     }
 
     std::vector<std::string> serialized_rfs(num_partitions);
@@ -588,7 +588,7 @@ TEST_F(RuntimeFilterTest, TestGlobalRuntimeFilterMinMax) {
         local.init(10);
         for (int j = 0; j < 4; j++) {
             int value = (i + 1) * 10 + j;
-            local.insert(&value);
+            local.insert(value);
         }
         global->concat(&local);
     }
@@ -666,7 +666,7 @@ void TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::type join_mode
         for (auto j = 0; j < num_rows; ++j) {
             auto ele = column->get(j).get_int32();
             auto pp = expected_hash_values[j] + (i * num_partitions);
-            bfs[pp].insert(&ele);
+            bfs[pp].insert(ele);
         }
         for (auto p = 0; p < num_partitions; ++p) {
             auto pp = p + (i * num_partitions);

@@ -34,8 +34,14 @@ Status FbCacheLib::init(const CacheOptions& options) {
         config.enableNvmCache(nvmConfig);
     }
 
+    Cache::MMConfig mm_config;
+    mm_config.lruInsertionPointSpec = options.lru_insertion_point;
     _cache = std::make_unique<Cache>(config);
+<<<<<<< HEAD
     _default_pool = _cache->addPool("default pool", _cache->getCacheMemoryStats().cacheSize);
+=======
+    _default_pool = _cache->addPool("default pool", _cache->getCacheMemoryStats().cacheSize, {}, mm_config);
+>>>>>>> 2.5.18
     _meta_path = options.meta_path;
     return Status::OK();
 }
@@ -58,6 +64,10 @@ StatusOr<size_t> FbCacheLib::read_cache(const std::string& key, char* value, siz
     auto handle = _cache->find(key);
     if (!handle) {
         return Status::NotFound("not found cachelib item");
+    }
+    // to check if cached.
+    if (value == nullptr) {
+        return 0;
     }
     DCHECK((off + size) <= handle->getSize());
     std::memcpy(value, (char*)handle->getMemory() + off, size);

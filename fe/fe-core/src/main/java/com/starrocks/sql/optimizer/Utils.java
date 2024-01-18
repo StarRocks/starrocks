@@ -30,6 +30,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.iceberg.expressions.Expression;
@@ -43,13 +45,17 @@ import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+
+import static java.util.function.Function.identity;
 
 public class Utils {
     private static final Logger LOG = LogManager.getLogger(Utils.class);
@@ -385,6 +391,16 @@ public class Utils {
         return gid;
     }
 
+    public static ColumnRefOperator findSmallestColumnRefFromTable(Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                                                   Table table) {
+        Set<Column> baseSchema = new HashSet<>(table.getBaseSchema());
+        List<ColumnRefOperator> visibleColumnRefs = colRefToColumnMetaMap.entrySet().stream()
+                .filter(e -> baseSchema.contains(e.getValue()))
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+        return findSmallestColumnRef(visibleColumnRefs);
+    }
+
     public static ColumnRefOperator findSmallestColumnRef(List<ColumnRefOperator> columnRefOperatorList) {
         if (CollectionUtils.isEmpty(columnRefOperatorList)) {
             return null;
@@ -504,5 +520,25 @@ public class Utils {
         }
 
         root.getChildren().forEach(child -> collect(child, clazz, output));
+    }
+
+    public static boolean canEliminateNull(Set<ColumnRefOperator> nullOutputColumnOps, ScalarOperator expression) {
+        Map<ColumnRefOperator, ScalarOperator> m = nullOutputColumnOps.stream()
+                .map(op -> new ColumnRefOperator(op.getId(), op.getType(), op.getName(), true))
+                .collect(Collectors.toMap(identity(), col -> ConstantOperator.createNull(col.getType())));
+
+        for (ScalarOperator e : Utils.extractConjuncts(expression)) {
+            ScalarOperator nullEval = new ReplaceColumnRefRewriter(m).rewrite(e);
+
+            ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
+            // Call the ScalarOperatorRewriter function to perform constant folding
+            nullEval = scalarRewriter.rewrite(nullEval, ScalarOperatorRewriter.DEFAULT_REWRITE_RULES);
+            if (nullEval.isConstantRef() && ((ConstantOperator) nullEval).isNull()) {
+                return true;
+            } else if (nullEval.equals(ConstantOperator.createBoolean(false))) {
+                return true;
+            }
+        }
+        return false;
     }
 }

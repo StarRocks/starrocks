@@ -30,6 +30,8 @@ class Tablet;
 class TabletBasicInfo;
 class TTabletInfo;
 
+using vectorized::Column;
+
 namespace vectorized {
 class ChunkIterator;
 class CompactionState;
@@ -103,6 +105,8 @@ public:
     // get latest version's version
     int64_t max_version() const;
 
+    int64_t max_readable_version() const;
+
     // get total number of committed and pending rowsets
     size_t version_count() const;
 
@@ -111,9 +115,7 @@ public:
 
     Status get_rowsets_total_stats(const std::vector<uint32_t>& rowsets, size_t* total_rows, size_t* total_dels);
 
-    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
-
-    Status save_meta();
+    Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time);
 
     // should only called by UpdateManager's apply thread
     void do_apply();
@@ -151,6 +153,9 @@ public:
 
     // perform compaction with specified rowsets, this may be a manual compaction invoked by tools or data fixing jobs
     Status compaction(MemTracker* mem_tracker, const vector<uint32_t>& input_rowset_ids);
+    // picks rowsets whose size is below rowset_size_threshold for compaction
+    Status get_rowsets_for_compaction(int64_t rowset_size_threshold, std::vector<uint32_t>& rowset_ids,
+                                      size_t& total_bytes);
 
     // vertical compaction introduced a bug that may generate rowset with lots of small segment files
     // this method go through all rowsets and identify them for further repair
@@ -192,7 +197,8 @@ public:
     Status convert_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
                         vectorized::ChunkChanger* chunk_changer);
 
-    Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version);
+    Status reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
+                        vectorized::ChunkChanger* chunk_changer);
 
     Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false);
 
@@ -253,16 +259,11 @@ public:
                              std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
                              vector<std::unique_ptr<vectorized::Column>>* columns);
 
-    /*
-    Status prepare_partial_update_states(Tablet* tablet, const std::vector<ColumnUniquePtr>& upserts,
-                                         EditVersion* read_version, uint32_t* next_rowset_id,
-                                         std::vector<std::vector<uint64_t>*>* rss_rowids);
-    */
-    Status prepare_partial_update_states(Tablet* tablet, const ColumnUniquePtr& upserts, EditVersion* read_version,
-                                         std::vector<uint64_t>* rss_rowids);
+    Status get_rss_rowids_by_pk(Tablet* tablet, const Column& keys, EditVersion* read_version,
+                                std::vector<uint64_t>* rss_rowids, int64_t timeout_ms = 0);
 
-    Status prepare_partial_update_states_unlock(Tablet* tablet, const ColumnUniquePtr& upserts,
-                                                EditVersion* read_version, std::vector<uint64_t>* rss_rowids);
+    Status get_rss_rowids_by_pk_unlock(Tablet* tablet, const Column& keys, EditVersion* read_version,
+                                       std::vector<uint64_t>* rss_rowids);
 
     Status get_missing_version_ranges(std::vector<int64_t>& missing_version_ranges);
 
@@ -283,6 +284,18 @@ public:
 
     std::shared_ptr<std::unordered_map<uint32_t, RowsetSharedPtr>> get_rowset_map() const;
 
+<<<<<<< HEAD
+=======
+    Status get_apply_version_and_rowsets(int64_t* version, std::vector<RowsetSharedPtr>* rowsets,
+                                         std::vector<uint32_t>* rowset_ids);
+
+    Status get_rowset_and_segment_idx_by_rssid(uint32_t rssid, RowsetSharedPtr* rowset, uint32_t* segment_idx);
+
+    double get_pk_index_write_amp_score();
+
+    Status pk_index_major_compaction();
+
+>>>>>>> 2.5.18
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -297,6 +310,7 @@ private:
         size_t num_rows = 0;
         size_t num_dels = 0;
         size_t byte_size = 0;
+        size_t row_size = 0;
         int64_t compaction_score = 0;
         std::string to_string() const;
     };
@@ -354,11 +368,21 @@ private:
 
     std::string _debug_version_info(bool lock) const;
 
+    std::string _debug_compaction_stats(const std::vector<uint32_t>& input_rowsets, const uint32_t output_rowset);
+
     void _print_rowsets(std::vector<uint32_t>& rowsets, std::string* dst, bool abbr) const;
 
     void _set_error(const string& msg);
 
-    Status _load_from_pb(const TabletUpdatesPB& updates);
+    Status _load_meta_and_log(const TabletUpdatesPB& tablet_updates_pb);
+
+    Status _load_pending_rowsets();
+
+    Status _load_rowsets_and_check_consistency(std::set<uint32_t>& unapplied_rowsets);
+
+    Status _purge_versions_to_fix_rowset_missing_inconsistency();
+
+    Status _load_from_pb(const TabletUpdatesPB& tablet_updates_pb);
 
     // thread-safe
     void _remove_unused_rowsets(bool drop_tablet = false);
@@ -370,8 +394,7 @@ private:
 
     void _update_total_stats(const std::vector<uint32_t>& rowsets, size_t* row_count_before, size_t* row_count_after);
 
-    Status _convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet,
-                                     const std::vector<vectorized::ChunkIteratorPtr>& seg_iterators,
+    Status _convert_from_base_rowset(const std::shared_ptr<Tablet>& base_tablet, const ChunkIteratorPtr& seg_iterator,
                                      vectorized::ChunkChanger* chunk_changer,
                                      const std::unique_ptr<RowsetWriter>& rowset_writer);
 
@@ -381,6 +404,8 @@ private:
     void stop_apply(bool apply_stopped) { _apply_stopped = apply_stopped; }
 
     void check_for_apply() { _check_for_apply(); }
+
+    std::timed_mutex* get_index_lock() { return &_index_lock; }
 
 private:
     Tablet& _tablet;
@@ -403,7 +428,7 @@ private:
     // used for async apply, make sure at most 1 thread is doing applying
     mutable std::mutex _apply_running_lock;
     // make sure at most 1 thread is read or write primary index
-    mutable std::mutex _index_lock;
+    mutable std::timed_mutex _index_lock;
     // apply process is running currently
     bool _apply_running = false;
 
@@ -417,7 +442,6 @@ private:
     int64_t _last_compaction_time_ms = 0;
     std::atomic<int64_t> _last_compaction_success_millis{0};
     std::atomic<int64_t> _last_compaction_failure_millis{0};
-    int64_t _compaction_cost_seek = 32 * 1024 * 1024; // 32MB
 
     mutable std::mutex _rowset_stats_lock;
     // maintain current version(applied version) rowsets' stats

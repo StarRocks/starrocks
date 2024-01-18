@@ -13,8 +13,8 @@ public:
 
     // Decompose |uri| and set into corresponding fields.
     // Returns true on success, false otherwise.
-    bool parse(const char* uri);
-    bool parse(const std::string& uri) { return parse(uri.c_str()); }
+    bool parse(const char* uri, const size_t size);
+    bool parse(const std::string& uri) { return parse(uri.c_str(), uri.size()); }
 
     const std::string& scheme() const { return _scheme; }
 

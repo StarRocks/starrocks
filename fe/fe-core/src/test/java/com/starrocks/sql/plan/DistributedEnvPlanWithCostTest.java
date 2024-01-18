@@ -6,7 +6,6 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.planner.AggregationNode;
-import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -1398,43 +1397,81 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testAggExecuteInOneTablet() throws Exception {
         String sql;
         String plan;
-        ExecPlan execPlan;
-        OlapScanNode olapScanNode;
 
         // dates_n only contains one tablet.
         sql = "select count(d_datekey), d_date from dates_n group by d_date";
-        execPlan = getExecPlan(sql);
-        olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-        Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
-        plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: count(1: d_datekey)\n" +
-                "  |  group by: 2: d_date\n" +
-                "  |  \n" +
-                "  0:OlapScanNode");
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "LocalShuffleColumns");
+        assertContains(plan, "  1:AGGREGATE (update finalize)");
+        assertContains(plan, "  0:OlapScanNode");
 
         // dates_n only contains one tablet.
         sql = "select count(d_date), d_datekey from dates_n group by d_datekey";
-        execPlan = getExecPlan(sql);
-        olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-        Assert.assertEquals(0, olapScanNode.getBucketExprs().size());
-        plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: count(2: d_date)\n" +
-                "  |  group by: 1: d_datekey\n" +
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "LocalShuffleColumns");
+        assertContains(plan, "  1:AGGREGATE (update finalize)");
+        assertContains(plan, "  0:OlapScanNode");
+
+        // dates_n only contains one tablet.
+        //       HashJoin(Colocate)
+        //      /               \
+        // OlapScanNode       BlockingAgg
+        //                       |
+        //                    OlapScanNode
+        sql = "WITH w1 as (SELECT count(d_date) as cnt, d_datekey FROM dates_n group by d_datekey) " +
+                "SELECT * from dates_n join [colocate] w1 using(d_datekey)";
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "LocalShuffleColumns");
+        assertContains(plan, "  3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (COLOCATE)\n" +
+                "  |  colocate: true\n" +
+                "  |  equal join conjunct: [19: d_datekey, INT, true] = [36: d_datekey, INT, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (36: d_datekey), remote = false\n" +
+                "  |  cardinality: 2300\n" +
                 "  |  \n" +
-                "  0:OlapScanNode");
+                "  |----2:AGGREGATE (update finalize)");
 
         // lineorder_new_l contains more than one tablet.
         sql = "select count(P_TYPE), LO_ORDERKEY from lineorder_new_l group by LO_ORDERKEY";
-        execPlan = getExecPlan(sql);
-        olapScanNode = (OlapScanNode) execPlan.getScanNodes().get(0);
-        Assert.assertEquals(1, olapScanNode.getBucketExprs().size());
-        plan = execPlan.getExplainString(TExplainLevel.NORMAL);
-        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: count(36: P_TYPE)\n" +
-                "  |  group by: 1: LO_ORDERKEY\n" +
+        plan = getVerboseExplain(sql);
+        assertNotContains(plan, "     LocalShuffleColumns:\n" +
+                "     - 1: LO_ORDERKEY");
+        assertContains(plan, "  1:AGGREGATE (update finalize)");
+        assertContains(plan, "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testValidateJoinReorderPlan() throws Exception {
+        String sql = "select  \n" +
+                "  ref_0.N_NAME as c0, \n" +
+                "  case when ref_3.C_NATIONKEY > ref_3.C_ACCTBAL then ref_1.O_ORDERPRIORITY else " +
+                "ref_1.O_SHIPPRIORITY end as c1\n" +
+                "from \n" +
+                "  nation as ref_0 inner join nation n1 on ref_0.N_NAME = n1.N_NAME" +
+                "  join nation n2 on ref_0.N_NAME = n2.N_NAME join nation n3 on ref_0.N_NAME = n3.N_NAME" +
+                "  join nation n4 on ref_0.N_NAME = n4.N_NAME" +
+                "            inner join orders as ref_1\n" +
+                "            on (ref_0.N_REGIONKEY = ref_1.O_CUSTKEY )\n" +
+                "          left join t2 as ref_2\n" +
+                "          on (ref_0.N_NATIONKEY = ref_2.v8 )\n" +
+                "        inner join customer as ref_3\n" +
+                "        on (ref_1.O_ORDERPRIORITY = ref_3.C_NAME )\n" +
+                "      inner join supplier as ref_4\n" +
+                "      on (ref_1.O_CLERK = ref_4.S_PHONE )\n" +
+                "    left join supplier as ref_5\n" +
+                "    on (ref_2.v9 = ref_5.S_SUPPKEY )\n" +
+                "where cast(coalesce(ref_3.C_MKTSEGMENT, ref_0.N_NAME) as VARCHAR) = ref_5.S_ADDRESS";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "39:Project\n" +
+                "  |  <slot 2> : 2: N_NAME\n" +
+                "  |  <slot 64> : if(CAST(42: C_NATIONKEY AS DOUBLE) > 44: C_ACCTBAL, 31: O_ORDERPRIORITY, " +
+                "CAST(33: O_SHIPPRIORITY AS VARCHAR(15)))\n" +
                 "  |  \n" +
-                "  0:OlapScanNode");
+                "  38:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 65: cast = 38: v9\n" +
+                "  |  equal join conjunct: 58: S_ADDRESS = 66: coalesce");
     }
 }

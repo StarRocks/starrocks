@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.connector.hive;
 
@@ -9,13 +21,17 @@ import com.starrocks.catalog.HivePartitionKey;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.common.Config;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import mockit.Expectations;
+import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -28,7 +44,7 @@ public class CachingHiveMetastoreTest {
     private HiveMetaClient client;
     private HiveMetastore metastore;
     private ExecutorService executor;
-    private long expireAfterWriteSec = 10;
+    private long expireAfterWriteSec = 30;
     private long refreshAfterWriteSec = -1;
 
     @Before
@@ -90,6 +106,99 @@ public class CachingHiveMetastoreTest {
         Assert.assertEquals(ScalarType.INT, hiveTable.getPartitionColumns().get(0).getType());
         Assert.assertEquals(ScalarType.INT, hiveTable.getBaseSchema().get(0).getType());
         Assert.assertEquals("hive_catalog", hiveTable.getCatalogName());
+    }
+
+    @Test
+    public void testRefreshTable() {
+        new Expectations(metastore) {
+            {
+                metastore.getTable(anyString, "notExistTbl");
+                minTimes = 0;
+                Throwable targetException = new NoSuchObjectException("no such obj");
+                Throwable e = new InvocationTargetException(targetException);
+                result = new StarRocksConnectorException("table not exist", e);
+            }
+        };
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        try {
+            cachingHiveMetastore.refreshTable("db1", "notExistTbl", true);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e instanceof StarRocksConnectorException);
+            Assert.assertTrue(e.getMessage().contains("invalidated cache"));
+        }
+
+        try {
+            cachingHiveMetastore.refreshTable("db1", "tbl1", true);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testRefreshTableSync() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        Assert.assertFalse(cachingHiveMetastore.tableNameLockMap.containsKey(
+                HiveTableName.of("db1", "tbl1")));
+        try {
+            cachingHiveMetastore.refreshTable("db1", "tbl1", true);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        Assert.assertTrue(cachingHiveMetastore.tableNameLockMap.containsKey(
+                HiveTableName.of("db1", "tbl1")));
+
+        try {
+            cachingHiveMetastore.refreshTable("db1", "tbl1", true);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+
+        Assert.assertEquals(1, cachingHiveMetastore.tableNameLockMap.size());
+    }
+
+    @Test
+    public void testRefreshTableBackground() throws InterruptedException {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        Assert.assertFalse(cachingHiveMetastore.tableNameLockMap.containsKey(
+                HiveTableName.of("db1", "tbl1")));
+        try {
+            // mock query table tbl1
+            List<String> partitionNames = cachingHiveMetastore.getPartitionKeys("db1", "tbl1");
+            cachingHiveMetastore.getPartitionsByNames("db1",
+                    "tbl1", partitionNames);
+            // put table tbl1 in table cache
+            cachingHiveMetastore.refreshTable("db1", "tbl1", true);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        Assert.assertTrue(cachingHiveMetastore.isTablePresent(HiveTableName.of("db1", "tbl1")));
+
+        try {
+            cachingHiveMetastore.refreshTableBackground("db1", "tbl1", true);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+        // not skip refresh table, table cache still exist
+        Assert.assertTrue(cachingHiveMetastore.isTablePresent(HiveTableName.of("db1", "tbl1")));
+        // sleep 1s, background refresh table will be skipped
+        Thread.sleep(1000);
+        long oldValue = Config.background_refresh_metadata_time_secs_since_last_access_secs;
+        // not refresh table, just skip refresh table
+        Config.background_refresh_metadata_time_secs_since_last_access_secs = 0;
+
+        try {
+            cachingHiveMetastore.refreshTableBackground("db1", "tbl1", true);
+        } catch (Exception e) {
+            Assert.fail();
+        } finally {
+            Config.background_refresh_metadata_time_secs_since_last_access_secs = oldValue;
+        }
+        // table cache will be removed because of skip refresh table
+        Assert.assertFalse(cachingHiveMetastore.isTablePresent(HiveTableName.of("db1", "tbl1")));
     }
 
     @Test

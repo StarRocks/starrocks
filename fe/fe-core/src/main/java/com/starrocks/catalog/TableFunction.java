@@ -69,6 +69,12 @@ public class TableFunction extends Function {
                 new TableFunction(new FunctionName("json_each"), Lists.newArrayList("key", "value"),
                         Lists.newArrayList(Type.JSON), Lists.newArrayList(Type.VARCHAR, Type.JSON));
         functionSet.addBuiltin(jsonEachFunction);
+
+        for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
+            TableFunction func = new TableFunction(new FunctionName("subdivide_bitmap"), Lists.newArrayList("subdivide_bitmap"),
+                    Lists.newArrayList(Type.BITMAP, type), Lists.newArrayList(Type.BITMAP));
+            functionSet.addBuiltin(func);
+        }
     }
 
     public List<Type> getTableFnReturnTypes() {

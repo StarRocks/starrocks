@@ -745,7 +745,24 @@ int64_t Tablet::max_continuous_version() const {
     } else {
         std::shared_lock rdlock(_meta_lock);
         int64_t v = _timestamped_version_tracker.get_max_continuous_version();
-        DCHECK_EQ(v, _max_continuous_version_from_beginning_unlocked().second);
+        if (tablet_state() == TABLET_RUNNING) {
+            // only check when tablet in running state
+            DCHECK_EQ(v, _max_continuous_version_from_beginning_unlocked().second);
+        }
+        return v;
+    }
+}
+
+int64_t Tablet::max_readable_version() const {
+    if (_updates != nullptr) {
+        return _updates->max_readable_version();
+    } else {
+        std::shared_lock rdlock(_meta_lock);
+        int64_t v = _timestamped_version_tracker.get_max_continuous_version();
+        if (tablet_state() == TABLET_RUNNING) {
+            // only check when tablet in running state
+            DCHECK_EQ(v, _max_continuous_version_from_beginning_unlocked().second);
+        }
         return v;
     }
 }
@@ -971,6 +988,9 @@ void Tablet::get_compaction_status(std::string* json_result) {
 
 void Tablet::do_tablet_meta_checkpoint() {
     std::unique_lock store_lock(_meta_store_lock);
+    if (_will_be_force_replaced) {
+        return;
+    }
     if (_newly_created_rowset_num == 0) {
         return;
     }
@@ -1094,6 +1114,7 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
             // and perform state modification operations.
         }
         tablet_info->__set_version(max_version);
+        tablet_info->__set_max_readable_version(max_version);
         // TODO: support getting minReadableVersion
         tablet_info->__set_min_readable_version(_timestamped_version_tracker.get_min_readable_version());
         tablet_info->__set_version_count(_tablet_meta->version_count());
@@ -1125,9 +1146,9 @@ void Tablet::generate_tablet_meta_copy_unlocked(const TabletMetaSharedPtr& new_t
     new_tablet_meta->init_from_pb(&tablet_meta_pb);
 }
 
-Status Tablet::rowset_commit(int64_t version, const RowsetSharedPtr& rowset) {
+Status Tablet::rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time) {
     CHECK(_updates) << "updates should exists";
-    return _updates->rowset_commit(version, rowset);
+    return _updates->rowset_commit(version, rowset, wait_time);
 }
 
 void Tablet::on_shutdown() {
@@ -1274,6 +1295,28 @@ void Tablet::get_basic_info(TabletBasicInfo& info) {
     }
 }
 
+<<<<<<< HEAD
+=======
+Status Tablet::verify() {
+    int64_t version = max_continuous_version();
+    std::vector<RowsetSharedPtr> rowsets;
+    {
+        std::shared_lock l(get_header_lock());
+        capture_consistent_rowsets(Version(0, version), &rowsets);
+        Rowset::acquire_readers(rowsets);
+    }
+    DeferOp defer([&rowsets]() { Rowset::release_readers(rowsets); });
+    for (auto& rowset : rowsets) {
+        auto st = rowset->verify();
+        if (!st.ok()) {
+            return st.clone_and_append(strings::Substitute("tablet:$0 version:$1 rowset:$2", tablet_id(), version,
+                                                           rowset->rowset_id().to_string()));
+        }
+    }
+    return Status::OK();
+}
+
+>>>>>>> 2.5.18
 std::string Tablet::schema_debug_string() const {
     return _tablet_meta->tablet_schema().debug_string();
 }

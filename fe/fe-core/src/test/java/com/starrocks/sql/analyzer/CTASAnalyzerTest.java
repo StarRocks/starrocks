@@ -11,6 +11,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
@@ -321,6 +322,7 @@ public class CTASAnalyzerTest {
                 "c_2_8, c_2_9, c_2_10, c_2_11, c_2_12, c_2_14, c_2_15";
         CreateTableAsSelectStmt createTableStmt =
                 (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(ctasSql, ctx);
+        createTableStmt.getCreateTableStmt().getProperties().put("replication_num", "1");
         createTableStmt.createTable(ctx);
 
         String ctasSql2 = "CREATE TABLE v2 as select NULL from t2";
@@ -377,7 +379,7 @@ public class CTASAnalyzerTest {
 
         Map<String, String> properties2 = createTableStmt2.getCreateTableStmt().getProperties();
         Assert.assertTrue(properties2.containsKey("replication_num"));
-        Assert.assertEquals(properties2.get("replication_num"), "1");
+        Assert.assertEquals(properties2.get("replication_num"), "3");
     }
 
     @Test
@@ -463,4 +465,22 @@ public class CTASAnalyzerTest {
             starRocksAssert.dropTable("emps");
         }
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCTASDefaultLimit() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String sql = "create table ctas_limit as select * from test_notnull t1;";
+        try {
+            ctx.getSessionVariable().setSqlSelectLimit(10);
+            CreateTableAsSelectStmt ctasStmt =
+                    (CreateTableAsSelectStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            QueryStatement query = ctasStmt.getQueryStatement();
+            Assert.assertFalse(query.getQueryRelation().hasLimit());
+        } finally {
+            ctx.getSessionVariable().setSqlSelectLimit(SessionVariable.DEFAULT_SELECT_LIMIT);
+        }
+    }
+>>>>>>> 2.5.18
 }

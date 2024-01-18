@@ -11,6 +11,7 @@
 #include "exprs/expr_context.h"
 #include "fs/fs_hdfs.h"
 #include "io/cache_input_stream.h"
+#include "io/shared_buffered_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
@@ -18,6 +19,7 @@
 namespace starrocks::parquet {
 class FileReader;
 }
+
 namespace starrocks::vectorized {
 
 class RuntimeFilterProbeCollector;
@@ -49,10 +51,6 @@ struct HdfsScanStats {
     int64_t group_dict_decode_ns = 0;
     // late materialization
     int64_t skip_read_rows = 0;
-
-    int64_t get_cpu_time_ns() const {
-        return expr_filter_ns + column_convert_ns + column_read_ns + reader_init_ns - io_ns;
-    }
 };
 
 class HdfsParquetProfile;
@@ -80,6 +78,16 @@ struct HdfsScanProfile {
     RuntimeProfile::Counter* block_cache_write_timer = nullptr;
     RuntimeProfile::Counter* block_cache_write_fail_counter = nullptr;
     RuntimeProfile::Counter* block_cache_write_fail_bytes = nullptr;
+<<<<<<< HEAD
+=======
+
+    RuntimeProfile::Counter* shared_buffered_shared_io_count = nullptr;
+    RuntimeProfile::Counter* shared_buffered_shared_io_bytes = nullptr;
+    RuntimeProfile::Counter* shared_buffered_shared_io_timer = nullptr;
+    RuntimeProfile::Counter* shared_buffered_direct_io_count = nullptr;
+    RuntimeProfile::Counter* shared_buffered_direct_io_bytes = nullptr;
+    RuntimeProfile::Counter* shared_buffered_direct_io_timer = nullptr;
+>>>>>>> 2.5.18
 };
 
 struct HdfsScannerParams {
@@ -103,6 +111,8 @@ struct HdfsScannerParams {
     std::string path;
     // The file size. -1 means unknown.
     int64_t file_size = -1;
+
+    int64_t modification_time = 0;
 
     const TupleDescriptor* tuple_desc = nullptr;
 
@@ -229,7 +239,9 @@ public:
     int64_t num_bytes_read() const { return _stats.bytes_read; }
     int64_t raw_rows_read() const { return _stats.raw_rows_read; }
     int64_t num_rows_read() const { return _stats.num_rows_read; }
-    int64_t cpu_time_spent() const { return _stats.get_cpu_time_ns(); }
+    int64_t cpu_time_spent() const { return _total_running_time - _stats.io_ns; }
+    int64_t io_time_spent() const { return _stats.io_ns; }
+    int64_t estimated_mem_usage() const;
     void set_keep_priority(bool v) { _keep_priority = v; }
     bool keep_priority() const { return _keep_priority; }
     void update_counter();
@@ -289,6 +301,8 @@ protected:
     // by default it's no compression.
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
     std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
+    int64_t _total_running_time = 0;
+    std::shared_ptr<io::SharedBufferedInputStream> _shared_buffered_input_stream = nullptr;
 };
 
 } // namespace starrocks::vectorized

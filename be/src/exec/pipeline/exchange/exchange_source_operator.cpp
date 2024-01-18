@@ -10,8 +10,9 @@
 
 namespace starrocks::pipeline {
 Status ExchangeSourceOperator::prepare(RuntimeState* state) {
-    SourceOperator::prepare(state);
-    _stream_recvr = static_cast<ExchangeSourceOperatorFactory*>(_factory)->create_stream_recvr(state, _unique_metrics);
+    RETURN_IF_ERROR(SourceOperator::prepare(state));
+    _stream_recvr = static_cast<ExchangeSourceOperatorFactory*>(_factory)->create_stream_recvr(state);
+    _stream_recvr->bind_profile(_driver_sequence, _unique_metrics);
     return Status::OK();
 }
 
@@ -38,16 +39,15 @@ StatusOr<vectorized::ChunkPtr> ExchangeSourceOperator::pull_chunk(RuntimeState* 
     return std::move(chunk);
 }
 
-std::shared_ptr<DataStreamRecvr> ExchangeSourceOperatorFactory::create_stream_recvr(
-        RuntimeState* state, const std::shared_ptr<RuntimeProfile>& profile) {
+std::shared_ptr<DataStreamRecvr> ExchangeSourceOperatorFactory::create_stream_recvr(RuntimeState* state) {
     if (_stream_recvr != nullptr) {
         return _stream_recvr;
     }
     auto query_statistic_recv = state->query_recv();
     _stream_recvr = state->exec_env()->stream_mgr()->create_recvr(
             state, _row_desc, state->fragment_instance_id(), _plan_node_id, _num_sender,
-            config::exchg_node_buffer_size_bytes, profile, false, query_statistic_recv, true, _degree_of_parallelism,
-            false);
+            config::exchg_node_buffer_size_bytes, false, query_statistic_recv, true, _degree_of_parallelism, false);
+
     return _stream_recvr;
 }
 

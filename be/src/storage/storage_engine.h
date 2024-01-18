@@ -61,6 +61,7 @@ class MemTableFlushExecutor;
 class Tablet;
 class UpdateManager;
 class CompactionManager;
+class PublishVersionManager;
 class SegmentFlushExecutor;
 class SegmentReplicateExecutor;
 
@@ -92,8 +93,14 @@ public:
     Status get_all_data_dir_info(std::vector<DataDirInfo>* data_dir_infos, bool need_update);
 
     std::vector<string> get_store_paths();
+<<<<<<< HEAD
     // get root path for creating tablet. The returned vector of root path should be random,
     // for avoiding that all the tablet would be deployed one disk.
+=======
+    // Get root path vector for creating tablet. The returned vector is sorted by the disk usage in asc order,
+    // then the front portion of the vector excluding paths which have high disk usage is shuffled to avoid
+    // the newly created tablet is distributed on only on specific path.
+>>>>>>> 2.5.18
     std::vector<DataDir*> get_stores_for_create_tablet(TStorageMedium::type storage_medium);
     DataDir* get_store(const std::string& path);
     DataDir* get_store(int64_t path_hash);
@@ -159,6 +166,8 @@ public:
 
     CompactionManager* compaction_manager() { return _compaction_manager.get(); }
 
+    PublishVersionManager* publish_version_manager() { return _publish_version_manager.get(); }
+
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
@@ -193,9 +202,17 @@ public:
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>>
     get_executed_repair_compaction_tasks();
 
+    void submit_manual_compaction_task(int64_t tablet_id, int64_t rowset_size_threshold);
+    std::string get_manual_compaction_status();
+
     void do_manual_compact(bool force_compact);
 
     void increase_update_compaction_thread(const int num_threads_per_disk);
+
+    void wake_finish_publish_vesion_thread() {
+        std::unique_lock<std::mutex> wl(_finish_publish_version_mutex);
+        _finish_publish_version_cv.notify_one();
+    }
 
 protected:
     static StorageEngine* _s_instance;
@@ -243,12 +260,21 @@ private:
     void* _update_compaction_thread_callback(void* arg, DataDir* data_dir);
     // repair compaction function
     void* _repair_compaction_thread_callback(void* arg);
+    // manual compaction function
+    void* _manual_compaction_thread_callback(void* arg);
+    // pk index major compaction function
+    void* _pk_index_major_compaction_thread_callback(void* arg);
+
+    bool _check_and_run_manual_compaction_task();
 
     // garbage sweep thread process function. clear snapshot and trash folder
     void* _garbage_sweeper_thread_callback(void* arg);
 
     // delete tablet with io error process function
     void* _disk_stat_monitor_thread_callback(void* arg);
+
+    // finish publish version process function
+    void* _finish_publish_version_thread_callback(void* arg);
 
     // clean file descriptors cache
     void* _fd_cache_clean_callback(void* arg);
@@ -272,29 +298,6 @@ private:
     size_t _compaction_check_one_round();
 
 private:
-    struct CompactionCandidate {
-        CompactionCandidate(uint32_t nicumulative_compaction_, int64_t tablet_id_, uint32_t index_)
-                : nice(nicumulative_compaction_), tablet_id(tablet_id_), disk_index(index_) {}
-        uint32_t nice;
-        int64_t tablet_id;
-        uint32_t disk_index = -1;
-    };
-
-    // In descending order
-    struct CompactionCandidateComparator {
-        bool operator()(const CompactionCandidate& a, const CompactionCandidate& b) { return a.nice > b.nice; }
-    };
-
-    struct CompactionDiskStat {
-        CompactionDiskStat(std::string path, uint32_t index, bool used)
-                : storage_path(std::move(path)), disk_index(index), task_running(0), task_remaining(0), is_used(used) {}
-        const std::string storage_path;
-        const uint32_t disk_index;
-        uint32_t task_running;
-        uint32_t task_remaining;
-        bool is_used;
-    };
-
     EngineOptions _options;
     std::mutex _store_lock;
     std::map<std::string, DataDir*> _store_map;
@@ -315,6 +318,8 @@ private:
     std::thread _garbage_sweeper_thread;
     // thread to monitor disk stat
     std::thread _disk_stat_monitor_thread;
+    // thread to check finish publish version task
+    std::thread _finish_publish_version_thread;
     // threads to run base compaction
     std::vector<std::thread> _base_compaction_threads;
     // threads to check cumulative
@@ -326,6 +331,9 @@ private:
     std::mutex _repair_compaction_tasks_lock;
     std::vector<std::pair<int64_t, std::vector<uint32_t>>> _repair_compaction_tasks;
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>> _executed_repair_compaction_tasks;
+    std::vector<std::thread> _manual_compaction_threads;
+    // thread to run pk index major compaction
+    std::thread _pk_index_major_compaction_thread;
     // threads to clean all file descriptor not actively in use
     std::thread _fd_cache_clean_thread;
     std::thread _adjust_cache_thread;
@@ -341,6 +349,9 @@ private:
 
     std::mutex _trash_sweeper_mutex;
     std::condition_variable _trash_sweeper_cv;
+
+    std::mutex _finish_publish_version_mutex;
+    std::condition_variable _finish_publish_version_cv;
 
     // For tablet and disk-stat report
     std::mutex _report_mtx;
@@ -366,6 +377,8 @@ private:
     std::unique_ptr<UpdateManager> _update_manager;
 
     std::unique_ptr<CompactionManager> _compaction_manager;
+
+    std::unique_ptr<PublishVersionManager> _publish_version_manager;
 
     HeartbeatFlags* _heartbeat_flags = nullptr;
 

@@ -37,7 +37,8 @@ struct TabletPublishVersionTask {
 };
 
 void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentTaskRequest& publish_version_task,
-                              TFinishTaskRequest& finish_task, std::unordered_set<DataDir*>& affected_dirs) {
+                              TFinishTaskRequest& finish_task, std::unordered_set<DataDir*>& affected_dirs,
+                              uint32_t wait_time) {
     int64_t start_ts = MonotonicMillis();
     auto& publish_version_req = publish_version_task.task_req;
     int64_t transaction_id = publish_version_req.transaction_id;
@@ -47,6 +48,7 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
     span->SetAttribute("txn_id", transaction_id);
     auto scoped = trace::Scope(span);
 
+    bool enable_sync_publish = publish_version_req.enable_sync_publish;
     size_t num_partition = publish_version_req.partition_version_infos.size();
     size_t num_active_tablet = 0;
     std::vector<std::map<TabletInfo, RowsetSharedPtr>> partitions(num_partition);
@@ -59,6 +61,7 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
     span->SetAttribute("num_tablet", num_active_tablet);
     std::vector<TabletPublishVersionTask> tablet_tasks(num_active_tablet);
     size_t tablet_idx = 0;
+
     for (size_t i = 0; i < publish_version_req.partition_version_infos.size(); i++) {
         for (auto& itr : partitions[i]) {
             auto& task = tablet_tasks[tablet_idx++];
@@ -100,7 +103,7 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
                     affected_dirs.insert(tablet->data_dir());
                 }
                 task.st = StorageEngine::instance()->txn_manager()->publish_txn(task.partition_id, tablet, task.txn_id,
-                                                                                task.version, task.rowset);
+                                                                                task.version, task.rowset, wait_time);
                 if (!task.st.ok()) {
                     LOG(WARNING) << "Publish txn failed tablet:" << tablet->tablet_id() << " version:" << task.version
                                  << " partition:" << task.partition_id << " txn_id: " << task.txn_id
@@ -137,6 +140,7 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
     finish_task.__isset.tablet_versions = true;
     auto& error_tablet_ids = finish_task.error_tablet_ids;
     auto& tablet_versions = finish_task.tablet_versions;
+    auto& tablet_publish_versions = finish_task.tablet_publish_versions;
     tablet_versions.reserve(tablet_tasks.size());
     for (auto& task : tablet_tasks) {
         if (!task.st.ok()) {
@@ -144,6 +148,10 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
             if (st.ok()) {
                 st = task.st;
             }
+        } else {
+            auto& pair = tablet_publish_versions.emplace_back();
+            pair.__set_tablet_id(task.tablet_id);
+            pair.__set_version(task.version);
         }
     }
     // return tablet and its version which has already finished.
@@ -161,7 +169,8 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
                 LOG(WARNING) << fmt::format("publish_version tablet not found tablet_id: {}, version: {} txn_id: {}",
                                             tablet_info.tablet_id, partition_version.version, transaction_id);
             } else {
-                const int64_t max_continuous_version = tablet->max_continuous_version();
+                const int64_t max_continuous_version =
+                        enable_sync_publish ? tablet->max_continuous_version() : tablet->max_readable_version();
                 if (max_continuous_version > 0) {
                     auto& pair = tablet_versions.emplace_back();
                     pair.__set_tablet_id(tablet_info.tablet_id);

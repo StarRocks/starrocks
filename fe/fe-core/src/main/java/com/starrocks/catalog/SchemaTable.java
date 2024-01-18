@@ -497,6 +497,7 @@ public class SchemaTable extends Table {
                                             .column("DISTRIBUTE_BUCKET", ScalarType.INT)
                                             .column("SORT_KEY", ScalarType.createVarchar(NAME_CHAR_LEN))
                                             .column("PROPERTIES", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
+                                            .column("TABLE_ID", ScalarType.BIGINT)
                                             .build()))
                     .put("be_tablets", new SchemaTable(
                             SystemId.BE_TABLETS_ID,

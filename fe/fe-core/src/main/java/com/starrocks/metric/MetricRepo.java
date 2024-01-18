@@ -28,6 +28,8 @@ import com.google.common.collect.Sets;
 import com.starrocks.alter.Alter;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
@@ -35,6 +37,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
+import com.starrocks.common.util.ProfileManager;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.load.loadv2.LoadManager;
@@ -44,16 +47,21 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadManager;
 import com.starrocks.metric.Metric.MetricType;
 import com.starrocks.metric.Metric.MetricUnit;
-import com.starrocks.monitor.jvm.JvmService;
+import com.starrocks.monitor.jvm.JvmStatCollector;
 import com.starrocks.monitor.jvm.JvmStats;
 import com.starrocks.proto.PKafkaOffsetProxyRequest;
 import com.starrocks.proto.PKafkaOffsetProxyResult;
+import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.task.AgentTaskQueue;
+import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.spark.util.SizeEstimator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -400,6 +408,8 @@ public final class MetricRepo {
         // init system metrics
         initSystemMetrics();
 
+        initMemoryMetrics();
+
         updateMetrics();
         isInit = true;
 
@@ -454,6 +464,221 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(tpcOutSegs);
     }
 
+    public static void initMemoryMetrics() {
+        GaugeMetric<Long> tabletCnt = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of tablets") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentInvertedIndex().getTabletCount();
+            }
+        };
+        tabletCnt.addLabel(new MetricLabel("type", "tablet_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(tabletCnt);
+
+        GaugeMetric<Long> tabletBytes = new GaugeMetric<Long>("memory", MetricUnit.BYTES,
+                "The bytes of tablets") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentInvertedIndex().getTabletCount()
+                        * SizeEstimator.estimate(new LocalTablet());
+            }
+        };
+        tabletBytes.addLabel(new MetricLabel("type", "tablet_bytes"));
+        STARROCKS_METRIC_REGISTER.addMetric(tabletBytes);
+
+        GaugeMetric<Long> replicaCnt = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of replicas") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentInvertedIndex().getReplicaCount();
+            }
+        };
+        replicaCnt.addLabel(new MetricLabel("type", "replica_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(replicaCnt);
+
+        GaugeMetric<Long> replicaBytes = new GaugeMetric<Long>("memory", MetricUnit.BYTES,
+                "The bytes of replicas") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentInvertedIndex().getReplicaCount()
+                        * SizeEstimator.estimate(new Replica());
+            }
+        };
+        replicaBytes.addLabel(new MetricLabel("type", "replica_bytes"));
+        STARROCKS_METRIC_REGISTER.addMetric(replicaBytes);
+
+        GaugeMetric<Long> txnCnt = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of txns") {
+            @Override
+            public Long getValue() {
+                return (long) GlobalStateMgr.getCurrentGlobalTransactionMgr().getFinishedTransactionNum();
+            }
+        };
+        txnCnt.addLabel(new MetricLabel("type", "txn_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(txnCnt);
+
+        GaugeMetric<Long> txnBytes = new GaugeMetric<Long>("memory", MetricUnit.BYTES,
+                "The bytes of txns") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentGlobalTransactionMgr().getFinishedTransactionNum()
+                        * SizeEstimator.estimate(new TransactionState());
+            }
+        };
+        txnBytes.addLabel(new MetricLabel("type", "txn_bytes"));
+        STARROCKS_METRIC_REGISTER.addMetric(txnBytes);
+
+        GaugeMetric<Long> txnCallbackCnt = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of txn callbacks") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().getCallBackCnt();
+            }
+        };
+        txnCallbackCnt.addLabel(new MetricLabel("type", "txn_callback_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(txnCallbackCnt);
+
+        GaugeMetric<Long> deleteJobCnt = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of delete jobs") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getDeleteHandler().getDeleteJobCount();
+            }
+        };
+        deleteJobCnt.addLabel(new MetricLabel("type", "delete_job_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(deleteJobCnt);
+
+        GaugeMetric<Long> deleteJobInfoCnt = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of delete job info") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getDeleteHandler().getDeleteInfoCount();
+            }
+        };
+        deleteJobInfoCnt.addLabel(new MetricLabel("type", "delete_job_info_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(deleteJobInfoCnt);
+
+        GaugeMetric<Long> taskCnt = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of tasks") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getTaskManager().getTaskCount();
+            }
+        };
+        taskCnt.addLabel(new MetricLabel("type", "task_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(taskCnt);
+
+        GaugeMetric<Long> runningTaskRunCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of running task_run") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager().getRunningTaskRunCount();
+            }
+        };
+        runningTaskRunCount.addLabel(new MetricLabel("type", "running_task_run_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(runningTaskRunCount);
+
+        GaugeMetric<Long> pendingTaskRunCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of pending task_run") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager().getPendingTaskRunCount();
+            }
+        };
+        pendingTaskRunCount.addLabel(new MetricLabel("type", "pending_task_run_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(pendingTaskRunCount);
+
+        GaugeMetric<Long> historyTaskRunCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of history task_run") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager().getHistoryTaskRunCount();
+            }
+        };
+        historyTaskRunCount.addLabel(new MetricLabel("type", "history_task_run_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(historyTaskRunCount);
+
+        GaugeMetric<Long> catalogCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of catalogs") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogCount();
+            }
+        };
+        catalogCount.addLabel(new MetricLabel("type", "catalogs_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(catalogCount);
+
+        GaugeMetric<Long> insertOverwriteJobCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of insert overwrite jobs") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getInsertOverwriteJobManager().getJobNum();
+            }
+        };
+        insertOverwriteJobCount.addLabel(new MetricLabel("type", "insert_overwrite_jobs_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(insertOverwriteJobCount);
+
+        GaugeMetric<Long> compactionStatsCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of compaction statistic") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getCompactionManager().getPartitionStatsCount();
+            }
+        };
+        compactionStatsCount.addLabel(new MetricLabel("type", "compaction_stats_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(compactionStatsCount);
+
+        GaugeMetric<Long> streamLoadTaskCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of stream load tasks") {
+            @Override
+            public Long getValue() {
+                return GlobalStateMgr.getCurrentState().getStreamLoadManager().getStreamLoadTaskCount();
+            }
+        };
+        streamLoadTaskCount.addLabel(new MetricLabel("type", "stream_load_task_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(streamLoadTaskCount);
+
+        GaugeMetric<Long> queryDetailCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of cached query details") {
+            @Override
+            public Long getValue() {
+                return QueryDetailQueue.getTotalQueriesCount();
+            }
+        };
+        queryDetailCount.addLabel(new MetricLabel("type", "query_detail_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(queryDetailCount);
+
+        GaugeMetric<Long> queryProfileCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of cached query profile") {
+            @Override
+            public Long getValue() {
+                return ProfileManager.getInstance().getQueryProfileCount();
+            }
+        };
+        queryProfileCount.addLabel(new MetricLabel("type", "query_profile_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(queryProfileCount);
+
+        GaugeMetric<Long> queryCoordinatorCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of running query coordinator") {
+            @Override
+            public Long getValue() {
+                return QeProcessorImpl.INSTANCE.getCoordinatorCount();
+            }
+        };
+        queryCoordinatorCount.addLabel(new MetricLabel("type", "query_coordinator_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(queryCoordinatorCount);
+
+        GaugeMetric<Long> agentTaskCount = new GaugeMetric<Long>("memory", MetricUnit.NOUNIT,
+                "The count of agent task") {
+            @Override
+            public Long getValue() {
+                return (long) AgentTaskQueue.getTaskNum();
+            }
+        };
+        agentTaskCount.addLabel(new MetricLabel("type", "agent_task_count"));
+        STARROCKS_METRIC_REGISTER.addMetric(agentTaskCount);
+    }
+
     // to generate the metrics related to tablets of each backends
     // this metric is reentrant, so that we can add or remove metric along with the backend add or remove
     // at runtime.
@@ -506,8 +731,13 @@ public final class MetricRepo {
     public static void updateRoutineLoadProcessMetrics() {
         List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadManager().getRoutineLoadJobByState(
                 Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE,
+<<<<<<< HEAD
                                 RoutineLoadJob.JobState.PAUSED,
                                 RoutineLoadJob.JobState.RUNNING));
+=======
+                        RoutineLoadJob.JobState.PAUSED,
+                        RoutineLoadJob.JobState.RUNNING));
+>>>>>>> 2.5.18
 
         List<RoutineLoadJob> kafkaJobs = jobs.stream()
                 .filter(job -> (job instanceof KafkaRoutineLoadJob)
@@ -590,8 +820,8 @@ public final class MetricRepo {
         updateMetrics();
 
         // jvm
-        JvmService jvmService = new JvmService();
-        JvmStats jvmStats = jvmService.stats();
+        JvmStatCollector jvmStatCollector = new JvmStatCollector();
+        JvmStats jvmStats = jvmStatCollector.stats();
         visitor.visitJvm(jvmStats);
 
         // starrocks metrics
@@ -638,23 +868,22 @@ public final class MetricRepo {
             if (null == db) {
                 continue;
             }
-            db.readLock();
-            try {
-                for (Table table : db.getTables()) {
-                    TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(table.getId());
-                    for (Metric m : entity.getMetrics()) {
-                        if (minifyTableMetrics && (null == m.getValue() ||
-                                (MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L))) {
-                            continue;
-                        }
-                        m.addLabel(new MetricLabel("db_name", dbName))
-                                .addLabel(new MetricLabel("tbl_name", table.getName()))
-                                .addLabel(new MetricLabel("tbl_id", String.valueOf(table.getId())));
-                        visitor.visit(m);
+
+            // NOTE: avoid holding database lock here, since we only read all tables, and immutable fields of table
+            for (Table table : db.getTables()) {
+                long tableId = table.getId();
+                String tableName = table.getName();
+                TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
+                for (Metric m : entity.getMetrics()) {
+                    if (minifyTableMetrics && (null == m.getValue() ||
+                            (MetricType.COUNTER == m.type && (Long) m.getValue() == 0L))) {
+                        continue;
                     }
+                    m.addLabel(new MetricLabel("db_name", dbName))
+                            .addLabel(new MetricLabel("tbl_name", tableName))
+                            .addLabel(new MetricLabel("tbl_id", String.valueOf(tableId)));
+                    visitor.visit(m);
                 }
-            } finally {
-                db.readUnlock();
             }
         }
     }

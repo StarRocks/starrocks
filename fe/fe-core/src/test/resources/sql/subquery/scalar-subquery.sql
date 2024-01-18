@@ -448,7 +448,7 @@ select t0.v1 from t0 where t0.v2 = (select SUM(v4) from t1) / 2;
 INNER JOIN (join-predicate [9: cast = 10: divide] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[cast(2: v2 as double) IS NOT NULL])
     EXCHANGE BROADCAST
-        PREDICATE divide(cast(7: sum as double), 2.0) IS NOT NULL
+        PREDICATE divide(cast(7: sum as double), 2) IS NOT NULL
             ASSERT LE 1
                 AGGREGATE ([GLOBAL] aggregate [{7: sum=sum(7: sum)}] group by [[]] having [null]
                     EXCHANGE GATHER
@@ -506,7 +506,6 @@ INNER JOIN (join-predicate [2: v2 = 7: v4] post-join-predicate [null])
                                 SCAN (columns[7: v4, 8: v5] predicate[null])
 [end]
 
-/* test PushDownApplyAggFilterRule */
 /* test PushDownApplyAggFilterRule */
 
 [sql]
@@ -602,12 +601,13 @@ RIGHT OUTER JOIN (join-predicate [4: v4 = 2: v2 AND 10: add = 11: add AND 2: v2 
 [sql]
 select v1, (select max(v4 + v5 + v6) from t1 where abs(t0.v2 + t1.v4) = abs(t1.v4) and abs(t0.v2 + t1.v4) = abs(t1.v4) and abs(t0.v2 + t1.v4) = t1.v5) from t0;
 [result]
-LEFT OUTER JOIN (join-predicate [abs(add(2: v2, 4: v4)) = 10: abs AND abs(add(2: v2, 4: v4)) = 11: cast] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2] predicate[null])
-    EXCHANGE BROADCAST
+RIGHT OUTER JOIN (join-predicate [abs(add(2: v2, 4: v4)) = 10: abs AND abs(add(2: v2, 4: v4)) = 11: cast] post-join-predicate [null])
+    EXCHANGE GATHER
         AGGREGATE ([GLOBAL] aggregate [{8: max=max(8: max)}] group by [[4: v4, 10: abs, 11: cast]] having [null]
             AGGREGATE ([LOCAL] aggregate [{8: max=max(7: expr)}] group by [[4: v4, 10: abs, 11: cast]] having [null]
                 SCAN (columns[4: v4, 5: v5, 6: v6] predicate[null])
+    EXCHANGE GATHER
+        SCAN (columns[1: v1, 2: v2] predicate[null])
 [end]
 
 [sql]
@@ -719,7 +719,6 @@ LEFT OUTER JOIN (join-predicate [add(add(1: v1, 4: v4), 9: v9) = if(12: t1c = 1,
 [end]
 
 /* test ScalarApply2JoinRule */
-/* test ScalarApply2JoinRule */
 
 [sql]
 select * from t0 where 1 = (select v5 + 1 from t1 where t0.v2 = t1.v4);
@@ -737,12 +736,13 @@ PREDICATE 8: expr = 1
 select * from t0 where 1 = (select v4 + v5 + v6 from t1 where abs(t0.v2 + t1.v4) = t1.v5);
 [result]
 PREDICATE 8: expr = 1
-    LEFT OUTER JOIN (join-predicate [abs(add(2: v2, 4: v4)) = 9: cast] post-join-predicate [null])
-        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-        EXCHANGE BROADCAST
+    RIGHT OUTER JOIN (join-predicate [abs(add(2: v2, 4: v4)) = 9: cast] post-join-predicate [null])
+        EXCHANGE GATHER
             AGGREGATE ([GLOBAL] aggregate [{10: countRows=count(10: countRows), 11: anyValue=any_value(11: anyValue)}] group by [[4: v4, 9: cast]] having [null]
                 AGGREGATE ([LOCAL] aggregate [{10: countRows=count(1), 11: anyValue=any_value(add(add(4: v4, 5: v5), 6: v6))}] group by [[4: v4, 9: cast]] having [null]
                     SCAN (columns[4: v4, 5: v5, 6: v6] predicate[null])
+        EXCHANGE GATHER
+            SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
 
 [sql]
@@ -787,48 +787,52 @@ PREDICATE 1: v1 = 8: expr
 select * from t0 where v1 = (select v4 + v5 + v6 from t1 where abs(t0.v2 + t1.v4) = t1.v4);
 [result]
 PREDICATE 1: v1 = 8: expr
-    LEFT OUTER JOIN (join-predicate [abs(add(2: v2, 4: v4)) = 9: cast] post-join-predicate [null])
-        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-        EXCHANGE BROADCAST
+    RIGHT OUTER JOIN (join-predicate [abs(add(2: v2, 4: v4)) = 9: cast] post-join-predicate [null])
+        EXCHANGE GATHER
             AGGREGATE ([GLOBAL] aggregate [{10: countRows=count(10: countRows), 11: anyValue=any_value(11: anyValue)}] group by [[4: v4, 9: cast]] having [null]
                 AGGREGATE ([LOCAL] aggregate [{10: countRows=count(1), 11: anyValue=any_value(add(add(4: v4, 5: v5), 6: v6))}] group by [[4: v4, 9: cast]] having [null]
                     SCAN (columns[4: v4, 5: v5, 6: v6] predicate[null])
+        EXCHANGE GATHER
+            SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
 
 [sql]
 select * from t0 where v1 = (select v4 + v5 + v6 from t1 where abs(t0.v2 + t1.v4) = abs(t1.v4));
 [result]
 PREDICATE 1: v1 = 8: expr
-    LEFT OUTER JOIN (join-predicate [abs(add(2: v2, 4: v4)) = 9: abs] post-join-predicate [null])
-        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-        EXCHANGE BROADCAST
+    RIGHT OUTER JOIN (join-predicate [abs(add(2: v2, 4: v4)) = 9: abs] post-join-predicate [null])
+        EXCHANGE GATHER
             AGGREGATE ([GLOBAL] aggregate [{10: countRows=count(10: countRows), 11: anyValue=any_value(11: anyValue)}] group by [[4: v4, 9: abs]] having [null]
                 AGGREGATE ([LOCAL] aggregate [{10: countRows=count(1), 11: anyValue=any_value(add(add(4: v4, 5: v5), 6: v6))}] group by [[4: v4, 9: abs]] having [null]
                     SCAN (columns[4: v4, 5: v5, 6: v6] predicate[null])
+        EXCHANGE GATHER
+            SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
 
 [sql]
 select * from t0 where v1 = (select v4 + v5 + v6 from t1 where abs(t0.v2 + t1.v4) = t1.v5);
 [result]
 PREDICATE 1: v1 = 8: expr
-    LEFT OUTER JOIN (join-predicate [abs(add(2: v2, 4: v4)) = 9: cast] post-join-predicate [null])
-        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-        EXCHANGE BROADCAST
+    RIGHT OUTER JOIN (join-predicate [abs(add(2: v2, 4: v4)) = 9: cast] post-join-predicate [null])
+        EXCHANGE GATHER
             AGGREGATE ([GLOBAL] aggregate [{10: countRows=count(10: countRows), 11: anyValue=any_value(11: anyValue)}] group by [[4: v4, 9: cast]] having [null]
                 AGGREGATE ([LOCAL] aggregate [{10: countRows=count(1), 11: anyValue=any_value(add(add(4: v4, 5: v5), 6: v6))}] group by [[4: v4, 9: cast]] having [null]
                     SCAN (columns[4: v4, 5: v5, 6: v6] predicate[null])
+        EXCHANGE GATHER
+            SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
 
 [sql]
 select * from t0 where case when v1 = (select v4 + v5 + v6 from t1 where abs(t0.v2 + t1.v4) = t1.v5) then true else false end;
 [result]
 PREDICATE if(1: v1 = 8: expr, true, false)
-    LEFT OUTER JOIN (join-predicate [abs(add(2: v2, 4: v4)) = 9: cast] post-join-predicate [null])
-        SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-        EXCHANGE BROADCAST
+    RIGHT OUTER JOIN (join-predicate [abs(add(2: v2, 4: v4)) = 9: cast] post-join-predicate [null])
+        EXCHANGE GATHER
             AGGREGATE ([GLOBAL] aggregate [{10: countRows=count(10: countRows), 11: anyValue=any_value(11: anyValue)}] group by [[4: v4, 9: cast]] having [null]
                 AGGREGATE ([LOCAL] aggregate [{10: countRows=count(1), 11: anyValue=any_value(add(add(4: v4, 5: v5), 6: v6))}] group by [[4: v4, 9: cast]] having [null]
                     SCAN (columns[4: v4, 5: v5, 6: v6] predicate[null])
+        EXCHANGE GATHER
+            SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
 [end]
 
 [sql]
@@ -845,12 +849,13 @@ RIGHT OUTER JOIN (join-predicate [4: v4 = 2: v2 AND 9: add = 13: add AND 2: v2 =
 [sql]
 select v1, (select v4 + v5 + v6 from t1 where abs(t0.v2 + t1.v4) = abs(t1.v4) and abs(t0.v2 + t1.v4) = abs(t1.v4) and abs(t0.v2 + t1.v4) = t1.v5) from t0;
 [result]
-LEFT OUTER JOIN (join-predicate [abs(add(2: v2, 4: v4)) = 9: abs AND abs(add(2: v2, 4: v4)) = 10: cast] post-join-predicate [null])
-    SCAN (columns[1: v1, 2: v2] predicate[null])
-    EXCHANGE BROADCAST
+RIGHT OUTER JOIN (join-predicate [abs(add(2: v2, 4: v4)) = 9: abs AND abs(add(2: v2, 4: v4)) = 10: cast] post-join-predicate [null])
+    EXCHANGE GATHER
         AGGREGATE ([GLOBAL] aggregate [{11: countRows=count(11: countRows), 12: anyValue=any_value(12: anyValue)}] group by [[4: v4, 9: abs, 10: cast]] having [null]
             AGGREGATE ([LOCAL] aggregate [{11: countRows=count(1), 12: anyValue=any_value(add(add(4: v4, 5: v5), 6: v6))}] group by [[4: v4, 9: abs, 10: cast]] having [null]
                 SCAN (columns[4: v4, 5: v5, 6: v6] predicate[null])
+    EXCHANGE GATHER
+        SCAN (columns[1: v1, 2: v2] predicate[null])
 [end]
 
 [sql]

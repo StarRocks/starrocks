@@ -9,9 +9,12 @@ import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Index;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
@@ -42,7 +45,6 @@ import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.common.MetaUtils;
-import edu.umd.cs.findbugs.annotations.CheckForNull;
 
 import java.util.List;
 import java.util.Map;
@@ -64,13 +66,15 @@ public class AlterTableStatementAnalyzer {
         }
         AlterTableClauseAnalyzerVisitor alterTableClauseAnalyzerVisitor = new AlterTableClauseAnalyzerVisitor();
         for (AlterClause alterClause : alterClauseList) {
-            alterTableClauseAnalyzerVisitor.analyze(alterClause, context);
+            alterTableClauseAnalyzerVisitor.analyze(table, alterClause, context);
         }
     }
 
     static class AlterTableClauseAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
+        Table table;
 
-        public void analyze(AlterClause statement, ConnectContext session) {
+        public void analyze(Table table, AlterClause statement, ConnectContext session) {
+            this.table = table;
             visit(statement, session);
         }
 
@@ -99,7 +103,6 @@ public class AlterTableStatementAnalyzer {
 
         @Override
         public Void visitModifyTablePropertiesClause(ModifyTablePropertiesClause clause, ConnectContext context) {
-            @CheckForNull
             Map<String, String> properties = clause.getProperties();
             if (properties.isEmpty()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Properties is not set");
@@ -158,6 +161,9 @@ public class AlterTableStatementAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
                 }
                 properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Short.toString(defaultReplicationNum));
+            } else if (properties.containsKey("default." + PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+                String storageMedium = properties.remove("default." + PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
+                properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM, storageMedium);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
                 clause.setNeedTableStable(false);
                 clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
@@ -224,9 +230,16 @@ public class AlterTableStatementAnalyzer {
                 throw new SemanticException("No column definition in add column clause.");
             }
             try {
+                if (table != null && table.isOlapTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+                    columnDef.setAggregateType(AggregateType.REPLACE);
+                }
                 columnDef.analyze(true);
             } catch (AnalysisException e) {
                 throw new SemanticException("Analyze columnDef error: %s", e.getMessage());
+            }
+
+            if (columnDef.getType().isTime()) {
+                throw new SemanticException("Unsupported data type: TIME");
             }
 
             ColumnPosition colPos = clause.getColPos();
@@ -261,6 +274,9 @@ public class AlterTableStatementAnalyzer {
             }
             for (ColumnDef colDef : columnDefs) {
                 try {
+                    if (table != null && table.isOlapTable() && ((OlapTable) table).getKeysType() == KeysType.PRIMARY_KEYS) {
+                        colDef.setAggregateType(AggregateType.REPLACE);
+                    }
                     colDef.analyze(true);
                 } catch (AnalysisException e) {
                     throw new SemanticException("Analyze columnDef error: %s", e.getMessage());
@@ -298,6 +314,10 @@ public class AlterTableStatementAnalyzer {
                 throw new SemanticException("Analyze columnDef error: %s", e.getMessage());
             }
 
+            if (columnDef.getType().isTime()) {
+                throw new SemanticException("Unsupported data type: TIME");
+            }
+
             ColumnPosition colPos = clause.getColPos();
             if (colPos != null) {
                 try {
@@ -323,11 +343,7 @@ public class AlterTableStatementAnalyzer {
                 throw new SemanticException("New column name is not set");
             }
 
-            try {
-                FeNameFormat.checkColumnName(clause.getNewColName());
-            } catch (AnalysisException e) {
-                throw new SemanticException("Analyze FeNameFormat error: %s", e.getMessage());
-            }
+            FeNameFormat.checkColumnName(clause.getNewColName());
             return null;
         }
 
@@ -355,7 +371,7 @@ public class AlterTableStatementAnalyzer {
             // 1. data property
             DataProperty newDataProperty = null;
             newDataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
-                    DataProperty.getInferredDefaultDataProperty());
+                    DataProperty.getInferredDefaultDataProperty(), false);
             Preconditions.checkNotNull(newDataProperty);
 
             // 2. replication num

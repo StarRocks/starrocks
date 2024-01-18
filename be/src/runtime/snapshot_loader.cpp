@@ -186,7 +186,7 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
             if (!res.ok()) {
                 return res.status();
             }
-            LOG(INFO) << "finished to write file via broker. file: " << local_file_path << ", length: " << *res;
+            LOG(INFO) << "finished to write the file: " << local_file_path << ", length: " << *res;
             RETURN_IF_ERROR(remote_writable_file->close());
             // rename file to end with ".md5sum"
             if (!upload.__isset.use_broker || upload.use_broker) {
@@ -388,7 +388,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
 
             // local_files always keep the updated local files
             local_files.push_back(local_file_name);
-            LOG(INFO) << "finished to download file via broker. file: " << full_local_file << ", length: " << file_len;
+            LOG(INFO) << "finished to download the file: " << full_local_file << ", length: " << file_len;
         } // end for all remote files
 
         // finally, delete local files which are not in remote
@@ -535,6 +535,19 @@ Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const 
         LOG(FATAL) << "only support overwrite now";
     }
 
+    /*
+     * just reset the tablet_schema using the schema in snapshot_meta
+     * 
+     * we do not use tablet_meta copy to avoid the TabletUpdates
+     * inconsistent problem.
+     * 
+     * we also do not use the snapshot_meta to construct a new
+     * tablet to replace the old one here, because it may easy
+     * to forget reset some variable in the snapshot_meta.
+    */
+    tablet->tablet_meta()->reset_tablet_schema_for_restore(snapshot_meta.tablet_meta().schema());
+    tablet->save_meta();
+
     RETURN_IF_ERROR(tablet->updates()->load_snapshot(snapshot_meta, true));
     tablet->updates()->remove_expired_versions(time(nullptr));
     LOG(INFO) << "Loaded snapshot of tablet " << tablet->tablet_id() << ", removing directory " << snapshot_path;
@@ -654,8 +667,13 @@ Status SnapshotLoader::move(const std::string& snapshot_path, const TabletShared
     // snapshot loader not need to change tablet uid
     // fixme: there is no header now and can not call load_one_tablet here
     // reload header
-    status = StorageEngine::instance()->tablet_manager()->load_tablet_from_dir(store, tablet_id, schema_hash,
-                                                                               tablet_path, true);
+    {
+        std::unique_lock l(tablet->get_meta_store_lock());
+        // prevet the concurrent issue with tablet meta checkpoint
+        tablet->set_will_be_force_replaced();
+        status = StorageEngine::instance()->tablet_manager()->load_tablet_from_dir(store, tablet_id, schema_hash,
+                                                                                   tablet_path, true);
+    }
     if (!status.ok()) {
         LOG(WARNING) << "Fail to reload header of tablet. tablet_id=" << tablet_id << " err=" << status.to_string();
         return status;

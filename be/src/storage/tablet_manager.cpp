@@ -346,8 +346,69 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
 }
 
 Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
-    std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
-    return _drop_tablet_unlocked(tablet_id, flag);
+    TabletSharedPtr dropped_tablet = nullptr;
+    {
+        std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
+        StarRocksMetrics::instance()->drop_tablet_requests_total.increment(1);
+
+        if (flag != kDeleteFiles && flag != kMoveFilesToTrash && flag != kKeepMetaAndFiles) {
+            return Status::InvalidArgument(fmt::format("invalid TabletDropFlag {}", (int)flag));
+        }
+
+        TabletMap& tablet_map = _get_tablet_map(tablet_id);
+        auto it = tablet_map.find(tablet_id);
+        if (it == tablet_map.end()) {
+            LOG(WARNING) << "Fail to drop nonexistent tablet " << tablet_id;
+            return Status::NotFound(strings::Substitute("tablet $0 not fount", tablet_id));
+        }
+
+        LOG(INFO) << "Start to drop tablet " << tablet_id;
+        dropped_tablet = it->second;
+        tablet_map.erase(it);
+        _remove_tablet_from_partition(*dropped_tablet);
+    }
+    if (config::enable_event_based_compaction_framework) {
+        dropped_tablet->stop_compaction();
+        StorageEngine::instance()->compaction_manager()->remove_candidate(dropped_tablet->tablet_id());
+    }
+
+    DroppedTabletInfo drop_info{.tablet = dropped_tablet, .flag = flag};
+
+    if (flag == kDeleteFiles) {
+        {
+            // NOTE: Other threads may save the tablet meta back to storage again after we
+            // have deleted it here, and the tablet will reappear after restarted.
+            // To prevent this, set the tablet state to `SHUTDOWN` first before removing tablet
+            // meta from storage, and assuming that no thread will change the tablet state back
+            // to 'RUNNING' from 'SHUTDOWN'.
+            std::unique_lock l(dropped_tablet->get_header_lock());
+            dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+        }
+
+        // Remove tablet meta from storage, crash the program if failed.
+        if (auto st = _remove_tablet_meta(dropped_tablet); !st.ok()) {
+            LOG(FATAL) << "Fail to remove tablet meta: " << st;
+        }
+
+        // Remove the tablet directory in background to avoid holding the lock of tablet map shard for long.
+        std::unique_lock l(_shutdown_tablets_lock);
+        _shutdown_tablets.emplace(tablet_id, std::move(drop_info));
+    } else if (flag == kMoveFilesToTrash) {
+        {
+            // See comments above
+            std::unique_lock l(dropped_tablet->get_header_lock());
+            dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+            dropped_tablet->save_meta();
+        }
+
+        std::unique_lock l(_shutdown_tablets_lock);
+        _shutdown_tablets.emplace(tablet_id, std::move(drop_info));
+    } else {
+        DCHECK_EQ(kKeepMetaAndFiles, flag);
+    }
+    dropped_tablet->deregister_tablet_from_dir();
+    LOG(INFO) << "Succeed to drop tablet " << tablet_id;
+    return Status::OK();
 }
 
 Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletInfo>& tablet_info_vec) {
@@ -612,6 +673,46 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
     return best_tablet;
 }
 
+// pick tablets to do primary index compaction
+std::vector<TabletAndScore> TabletManager::pick_tablets_to_do_pk_index_major_compaction() {
+    std::vector<TabletAndScore> pick_tablets;
+    // 1. pick valid tablet, which score is larger than 0
+    std::vector<TabletSharedPtr> tablet_ptr_list;
+    for (const auto& tablets_shard : _tablets_shards) {
+        std::shared_lock rlock(tablets_shard.lock);
+        for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+            if (tablet_ptr->keys_type() != PRIMARY_KEYS) {
+                continue;
+            }
+            // A not-ready tablet maybe a newly created tablet under schema-change, skip it
+            if (tablet_ptr->tablet_state() == TABLET_NOTREADY) {
+                continue;
+            }
+
+            tablet_ptr_list.push_back(tablet_ptr);
+        }
+    }
+    for (const auto& tablet_ptr : tablet_ptr_list) {
+        double score = tablet_ptr->updates()->get_pk_index_write_amp_score();
+        if (score <= 0) {
+            // score == 0 means this tablet's pk index doesn't need major compaction
+            continue;
+        }
+
+        pick_tablets.emplace_back(tablet_ptr, score);
+    }
+    // 2. sort tablet by score, by ascending order.
+    std::sort(pick_tablets.begin(), pick_tablets.end(), [](TabletAndScore& a, TabletAndScore& b) {
+        // We try to compact tablet with small write amplification score first,
+        // to improve the total write IO amplification
+        return a.second < b.second;
+    });
+    if (!pick_tablets.empty()) {
+        LOG(INFO) << fmt::format("found {} tablets to do pk index major compaction", pick_tablets.size());
+    }
+    return pick_tablets;
+}
+
 TabletSharedPtr TabletManager::find_best_tablet_to_do_update_compaction(DataDir* data_dir) {
     int64_t highest_score = 0;
     TabletSharedPtr best_tablet;
@@ -723,10 +824,6 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
     }
     auto st = _add_tablet_unlocked(tablet, update_meta, force);
     LOG_IF(WARNING, !st.ok()) << "Fail to add tablet " << tablet->full_name();
-    // no concurrent access here
-    if (config::enable_event_based_compaction_framework) {
-        StorageEngine::instance()->compaction_manager()->update_tablet_async(tablet);
-    }
 
     return st;
 }
@@ -796,13 +893,14 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
 
     StarRocksMetrics::instance()->report_all_tablets_requests_total.increment(1);
 
+    size_t max_tablet_rowset_num = 0;
     for (const auto& tablets_shard : _tablets_shards) {
         std::shared_lock rlock(tablets_shard.lock);
         for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
             TTablet t_tablet;
             TTabletInfo tablet_info;
             tablet_ptr->build_tablet_report_info(&tablet_info);
-
+            max_tablet_rowset_num = std::max(max_tablet_rowset_num, tablet_ptr->version_count());
             // find expired transaction corresponding to this tablet
             TabletInfo tinfo(tablet_id, tablet_ptr->schema_hash(), tablet_ptr->tablet_uid());
             auto find = expire_txn_map.find(tinfo);
@@ -817,7 +915,9 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
             }
         }
     }
-    LOG(INFO) << "Report all " << tablets_info->size() << " tablets info";
+    LOG(INFO) << "Report all " << tablets_info->size()
+              << " tablets info. max_tablet_rowset_num:" << max_tablet_rowset_num;
+    StarRocksMetrics::instance()->max_tablet_rowset_num.set_value(max_tablet_rowset_num);
     return Status::OK();
 }
 

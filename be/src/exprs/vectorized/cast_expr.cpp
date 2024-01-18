@@ -1057,8 +1057,8 @@ template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException
 class VectorizedCastExpr final : public Expr {
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastExpr);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        ColumnPtr column = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
             return ColumnHelper::create_const_null_column(column->size());
         }
@@ -1070,20 +1070,43 @@ public:
         // to double at first, then convert double to JSON
         if constexpr (FromType == TYPE_JSON || ToType == TYPE_JSON) {
             if constexpr (pt_is_decimal<FromType>) {
-                ColumnPtr double_column =
-                        VectorizedUnaryFunction<DecimalTo<true>>::evaluate<FromType, TYPE_DOUBLE>(column);
+                ColumnPtr double_column;
+                if (context != nullptr && context->error_if_overflow()) {
+                    double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<
+                            FromType, TYPE_DOUBLE>(column);
+                } else {
+                    double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<
+                            FromType, TYPE_DOUBLE>(column);
+                }
                 result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(double_column);
             } else {
                 result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(column);
             }
         } else if constexpr (pt_is_decimal<FromType> && pt_is_decimal<ToType>) {
-            return VectorizedUnaryFunction<DecimalToDecimal<true>>::evaluate<FromType, ToType>(
-                    column, to_type.precision, to_type.scale);
+            if (context != nullptr && context->error_if_overflow()) {
+                return VectorizedUnaryFunction<DecimalToDecimal<OverflowMode::REPORT_ERROR>>::evaluate<FromType,
+                                                                                                       ToType>(
+                        column, to_type.precision, to_type.scale);
+            } else {
+                return VectorizedUnaryFunction<DecimalToDecimal<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
+                        column, to_type.precision, to_type.scale);
+            }
         } else if constexpr (pt_is_decimal<FromType>) {
-            return VectorizedUnaryFunction<DecimalTo<true>>::evaluate<FromType, ToType>(column);
+            if (context != nullptr && context->error_if_overflow()) {
+                return VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
+                        column);
+            } else {
+                return VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
+                        column);
+            }
         } else if constexpr (pt_is_decimal<ToType>) {
-            return VectorizedUnaryFunction<DecimalFrom<true>>::evaluate<FromType, ToType>(column, to_type.precision,
-                                                                                          to_type.scale);
+            if (context != nullptr && context->error_if_overflow()) {
+                return VectorizedUnaryFunction<DecimalFrom<OverflowMode::REPORT_ERROR>>::evaluate<FromType, ToType>(
+                        column, to_type.precision, to_type.scale);
+            } else {
+                return VectorizedUnaryFunction<DecimalFrom<OverflowMode::OUTPUT_NULL>>::evaluate<FromType, ToType>(
+                        column, to_type.precision, to_type.scale);
+            }
         } else {
             result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(column);
         }
@@ -1133,8 +1156,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
             return Status::OK();                                                                                \
         }                                                                                                       \
                                                                                                                 \
-        ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {                             \
-            ColumnPtr column = _children[0]->evaluate(context, ptr);                                            \
+        StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {           \
+            ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));                   \
             if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {                   \
                 return ColumnHelper::create_const_null_column(column->size());                                  \
             }                                                                                                   \
@@ -1231,8 +1254,8 @@ template <PrimitiveType Type, bool AllowThrowException>
 class VectorizedCastToStringExpr final : public Expr {
 public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastToStringExpr);
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
-        ColumnPtr column = _children[0]->evaluate(context, ptr);
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override {
+        ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
             return ColumnHelper::create_const_null_column(column->size());
         }
@@ -1244,7 +1267,13 @@ public:
         }
 
         if constexpr (pt_is_decimal<Type>) {
-            return VectorizedUnaryFunction<DecimalTo<true>>::evaluate<Type, TYPE_VARCHAR>(column);
+            if (context != nullptr && context->error_if_overflow()) {
+                return VectorizedUnaryFunction<DecimalTo<OverflowMode::REPORT_ERROR>>::evaluate<Type, TYPE_VARCHAR>(
+                        column);
+            } else {
+                return VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<Type, TYPE_VARCHAR>(
+                        column);
+            }
         }
 
         // must be: TYPE_FLOAT, TYPE_DOUBLE, TYPE_CHAR, TYPE_VARCHAR...
@@ -1320,7 +1349,7 @@ private:
     //    length of char.
     // In SR, behaviors of both cast(string as varchar(n)) and cast(string as char(n)) keep the same: neglect
     // of the length of char/varchar and return input column directly.
-    ColumnPtr _evaluate_string(ExprContext* context, const ColumnPtr& column) { return column; }
+    ColumnPtr _evaluate_string(ExprContext* context, const ColumnPtr& column) { return column->clone(); }
 
     ColumnPtr _evaluate_time(ExprContext* context, const ColumnPtr& column) {
         ColumnViewer<TYPE_TIME> viewer(column);

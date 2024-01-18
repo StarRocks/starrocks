@@ -43,7 +43,14 @@ public class ShowCreateTableStmtTest {
         // create connect context
         ctx = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(ctx);
+<<<<<<< HEAD
 
+=======
+    }
+
+    @Test
+    public void testShowCreateViewUseMV() throws Exception {
+>>>>>>> 2.5.18
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.base\n" +
                         "(\n" +
@@ -60,10 +67,13 @@ public class ShowCreateTableStmtTest {
                         "PROPERTIES('replication_num' = '1');")
                 .withMaterializedView("create materialized view test_mv distributed by hash(k1)" +
                         " as select k1 from base");
+<<<<<<< HEAD
     }
 
     @Test
     public void testShowCreateViewUseMV() throws Exception {
+=======
+>>>>>>> 2.5.18
         String sql = "show create view test_mv";
         ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, showCreateTableStmt);
@@ -91,5 +101,26 @@ public class ShowCreateTableStmtTest {
         ShowCreateTableStmt stmt = new ShowCreateTableStmt(null, ShowCreateTableStmt.CreateTableType.TABLE);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.fail("No Exception throws.");
+    }
+
+    @Test
+    public void testPKShouldShowDefault() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE `test_pk_current_timestamp` (\n" +
+                        "  `id` int(11) NOT NULL COMMENT \"\",\n" +
+                        "  `create_time` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT \"\"\n" +
+                        ") ENGINE=OLAP \n" +
+                        "PRIMARY KEY(`id`)\n" +
+                        "COMMENT \"OLAP\"\n" +
+                        "DISTRIBUTED BY HASH(`id`) BUCKETS 5 \n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\"\n" +
+                        ");");
+        String sql = "show create table test_pk_current_timestamp";
+        ShowCreateTableStmt showCreateTableStmt = (ShowCreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        ShowExecutor executor = new ShowExecutor(ctx, showCreateTableStmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertEquals("test_pk_current_timestamp", resultSet.getResultRows().get(0).get(0));
+        Assert.assertTrue(resultSet.getResultRows().get(0).get(1).contains("datetime NOT NULL DEFAULT CURRENT_TIMESTAMP"));
     }
 }

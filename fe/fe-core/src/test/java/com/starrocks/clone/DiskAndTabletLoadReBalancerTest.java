@@ -167,7 +167,7 @@ public class DiskAndTabletLoadReBalancerTest {
 
         // set Config.balance_load_disk_safe_threshold to 0.9 to trigger tablet balance
         Config.tablet_sched_balance_load_disk_safe_threshold = 0.9;
-        Config.storage_flood_stage_left_capacity_bytes = 1;
+        Config.storage_usage_soft_limit_reserve_bytes = 1;
         tablets = rebalancer.selectAlternativeTablets();
         Assert.assertEquals(2, tablets.size());
         Assert.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId3)));
@@ -316,7 +316,7 @@ public class DiskAndTabletLoadReBalancerTest {
 
         // set Config.balance_load_disk_safe_threshold to 0.9 to trigger tablet balance
         Config.tablet_sched_balance_load_disk_safe_threshold = 0.9;
-        Config.storage_flood_stage_left_capacity_bytes = 1;
+        Config.storage_usage_soft_limit_reserve_bytes = 1;
         tablets = rebalancer.selectAlternativeTablets();
         Assert.assertEquals(0, tablets.size());
     }
@@ -493,7 +493,7 @@ public class DiskAndTabletLoadReBalancerTest {
 
         // set Config.balance_load_disk_safe_threshold to 0.4 to trigger backend disk balance
         Config.tablet_sched_balance_load_disk_safe_threshold = 0.4;
-        Config.storage_flood_stage_left_capacity_bytes = 1;
+        Config.storage_usage_soft_limit_reserve_bytes = 1;
         List<TabletSchedCtx> tablets = rebalancer.selectAlternativeTablets();
         Assert.assertEquals(2, tablets.size());
         Assert.assertTrue(tablets.stream().allMatch(t -> (t.getDestBackendId() == beId1)));

@@ -1,4 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+// Copyright 2021-present StarRocks, Inc. All rights reserved.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 
 package com.starrocks.sql.plan;
 
@@ -11,6 +23,8 @@ import org.junit.Assert;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+
+import static org.junit.Assert.fail;
 
 public class SubqueryTest extends PlanTestBase {
     @Rule
@@ -1166,25 +1180,21 @@ public class SubqueryTest extends PlanTestBase {
 
     @Test
     public void testOnClauseNotSupportedCases() {
-        assertExceptionMessage("select * from t0 " +
+        assertExceptionMsgContains("select * from t0 " +
                         "join t1 on (select v1 from t0 where t0.v2 = t1.v5) = (select v4 from t1 where t0.v2 = t1.v5)",
-                "Not support ON Clause conjunct contains more than one subquery");
+                "unsupported more than one subquery in join on condition");
 
-        assertExceptionMessage("select * from t0 " +
-                        "join t1 on t0.v1 + t1.v4 = (select count(*) from t0)",
-                "Not support ON Clause un-correlated subquery referencing columns of more than one table");
-
-        assertExceptionMessage("select * from t0 " +
+        assertExceptionMsgContains("select * from t0 " +
                         "join t1 on 1 = (select count(*) from t2 where t0.v1 = t2.v7 and t1.v4 = t2.v7)",
-                "Not support ON Clause correlated subquery referencing columns of more than one table");
+                "referencing columns from more than one table");
 
-        assertExceptionMessage("select * from t0 " +
+        assertExceptionMsgContains("select * from t0 " +
                         "join t1 on 1 = (select count(*) from t2 where t0.v1 = t2.v7 and t1.v4 = t2.v7)",
-                "Not support ON Clause correlated subquery referencing columns of more than one table");
+                "referencing columns from more than one table");
 
-        assertExceptionMessage("select * from t0 " +
+        assertExceptionMsgContains("select * from t0 " +
                         "join t1 on t0.v1 in (select t2.v7 from t2 where t1.v5 = t2.v8)",
-                "Not support ON Clause correlated in-subquery referencing columns of more than one table");
+                "referencing columns from more than one table");
     }
 
     @Test
@@ -1770,7 +1780,7 @@ public class SubqueryTest extends PlanTestBase {
     @Test
     public void testNestSubquery() throws Exception {
         String sql = "select * from t0 where exists (select * from t1 where t0.v1 in (select v7 from t2));";
-        assertExceptionMessage(sql, "Unsupported complex nested in-subquery");
+        assertExceptionMsgContains(sql, "Unsupported complex nested in-subquery");
 
         sql = "select * from t0 where exists (select * from t1 where t0.v1 = (select v7 from t2));";
         String plan = getFragmentPlan(sql);
@@ -1857,4 +1867,51 @@ public class SubqueryTest extends PlanTestBase {
         Pair<String, ExecPlan> pair = UtFrameUtils.getPlanAndFragment(connectContext, sql);
         assertContains(pair.first, "CTEAnchor(cteid=2)");
     }
+<<<<<<< HEAD
 }
+=======
+
+    @Test
+    public void testHavingSubqueryNoGroupMode() {
+        String sql = "select v3 from t0 group by v2 having 1 > (select v4 from t1 where t0.v1 = t1.v5)";
+        long sqlMode = connectContext.getSessionVariable().getSqlMode();
+        try {
+            connectContext.getSessionVariable().setSqlMode(0);
+            Assert.assertThrows("must be an aggregate expression or appear in GROUP BY clause", SemanticException.class,
+                    () -> getFragmentPlan(sql));
+        } finally {
+            connectContext.getSessionVariable().setSqlMode(sqlMode);
+        }
+    }
+
+    @Test
+    public void testUnsupportedInSubquery() {
+        String sql = "select * from t0 left join t1 on v1 in (select v7 from t2 where v4 = v8) or v1 < v5;";
+        try {
+            getFragmentPlan(sql);
+            fail("sql should fail");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("referencing columns from more than one table"));
+        }
+
+        sql = "select * from t0 left join t1 on v1 + v4 in (select v7 from t2) or v1 < v5;";
+        try {
+            getFragmentPlan(sql);
+            fail("sql should fail");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("referencing columns from more than one table"));
+        }
+    }
+
+    @Test
+    public void testUnsupportedExistSubquery() {
+        String sql = "select * from t0 left join t1 on exists (select v7 from t2 where v1 = v4) or v1 < v5;";
+        try {
+            getFragmentPlan(sql);
+            fail("sql should fail");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage(), e.getMessage().contains("referencing columns from more than one table"));
+        }
+    }
+}
+>>>>>>> 2.5.18

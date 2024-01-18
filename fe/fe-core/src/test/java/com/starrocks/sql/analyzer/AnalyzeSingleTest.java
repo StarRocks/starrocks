@@ -3,6 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.QueryRelation;
@@ -69,6 +70,21 @@ public class AnalyzeSingleTest {
                 "\"line_delimiter\" = \"\n\", \"max_file_size\" = \"100MB\");");
 
         analyzeSuccess("select v1 as location from t0");
+    }
+
+    @Test
+    public void testIdentifierStartWithDigit() {
+        StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse("select * from a.11b", 0).get(0);
+        Assert.assertEquals("SELECT * FROM a.11b", AstToStringBuilder.toString(statementBase));
+
+        statementBase = com.starrocks.sql.parser.SqlParser.parse("select a.11b.22c, * from a.11b", 0).get(0);
+        Assert.assertEquals("SELECT a.11b.22c, * FROM a.11b", AstToStringBuilder.toString(statementBase));
+
+        statementBase = com.starrocks.sql.parser.SqlParser.parse("select 00a.11b.22c, * from 00a.11b", 0).get(0);
+        Assert.assertEquals("SELECT 00a.11b.22c, * FROM 00a.11b", AstToStringBuilder.toString(statementBase));
+
+        statementBase = com.starrocks.sql.parser.SqlParser.parse("select 11b.* from 11b", 0).get(0);
+        Assert.assertEquals("SELECT 11b.* FROM 11b", AstToStringBuilder.toString(statementBase));
     }
 
     @Test
@@ -310,6 +326,9 @@ public class AnalyzeSingleTest {
                 AstToStringBuilder.toString(statement.getQueryRelation().getOutputExpression().get(0)));
 
         analyzeSuccess("select @@`sql_mode`");
+        analyzeSuccess("select @@SESSION.`sql_mode`");
+        analyzeSuccess("select @@SESSION.sql_mode");
+        analyzeSuccess("select @_123var");
     }
 
     @Test
@@ -606,5 +625,66 @@ public class AnalyzeSingleTest {
                 "Column '`test`.`v`' cannot be resolved");
 
         analyzeFail("create view v as select * from t0,tnotnull", "Duplicate column name 'v1'");
+    }
+
+    @Test
+    public void testRemoveLineSeparator1() {
+        String sql = "#comment\nselect /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* \n" +
+                "from    \n" +
+                "tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                "\tand /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend\" and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\\'';";
+        String res = LogUtil.removeLineSeparator(sql);
+        String expect = "#comment\n" +
+                "select /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* from tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                " and /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend\" and col = \"''```中\t文  \\\"\r\n" +
+                "\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\'';";
+        Assert.assertEquals(expect, res);
+    }
+
+    @Test
+    public void testRemoveLineSeparator2() {
+        String invalidSql = "#comment\nselect /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* from    \n" +
+                "tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                "\tand /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend and col = \"''```中\t文  \\\"\r\n\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\\'';";
+        String res = LogUtil.removeLineSeparator(invalidSql);
+        Assert.assertEquals("#comment\n" +
+                "select /* comment */ /*+SET_VAR(disable_join_reorder=true)*/* from tbl where-- comment\n" +
+                "col = 1 #comment\r\n" +
+                " and /*\n" +
+                "comment\n" +
+                "comment\n" +
+                "*/ col = \"con   tent\n" +
+                "contend and col = \"''```中\t文  \\\"\r\n" +
+                "\\r\\n\\t\\\"英  文\" and `col`= 'abc\"bcd\\'';`", res);
+    }
+
+    @Test
+    public void testRemoveComments() {
+        analyzeFail("select /*+ SET */ v1 from t0");
+        analyzeFail("select /*+   abc*/ v1 from t0");
+
+        analyzeSuccess("select v1 /*+*/ from t0");
+        analyzeSuccess("select v1 /*+\n*/ from t0");
+        analyzeSuccess("select v1 /*+   \n\n*/ from t0");
+        analyzeSuccess("select v1 /**/ from t0");
+        analyzeSuccess("select v1 /*    */ from t0");
+        analyzeSuccess("select v1 /*    a*/ from t0");
+        analyzeSuccess("select v1 /*abc    '中文\n'*/ from t0");
+        analyzeSuccess("select /*+ SET_VAR ('abc' = 'abc')*/ v1  from t0");
     }
 }

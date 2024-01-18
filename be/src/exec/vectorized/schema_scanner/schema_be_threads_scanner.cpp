@@ -48,7 +48,12 @@ Status SchemaBeThreadsScanner::start(RuntimeState* state) {
 
 Status SchemaBeThreadsScanner::fill_chunk(ChunkPtr* chunk) {
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
+<<<<<<< HEAD
     for (; _cur_idx < _infos.size(); _cur_idx++) {
+=======
+    auto end = _cur_idx + 1;
+    for (; _cur_idx < end; _cur_idx++) {
+>>>>>>> 2.5.18
         auto& info = _infos[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
             if (slot_id < 1 || slot_id > 7) {

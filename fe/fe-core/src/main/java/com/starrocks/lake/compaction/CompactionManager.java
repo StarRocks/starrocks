@@ -133,4 +133,8 @@ public class CompactionManager {
         }
         return compactionManager;
     }
+
+    public long getPartitionStatsCount() {
+        return partitionStatisticsHashMap.size();
+    }
 }

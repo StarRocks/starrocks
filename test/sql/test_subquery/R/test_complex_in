@@ -1,0 +1,29 @@
+-- name: test_same_correlation_col_in
+CREATE TABLE `t0` (
+  `v1` bigint(20) NULL COMMENT "",
+  `v2` bigint(20) NULL COMMENT "",
+  `v3` bigint(20) NULL COMMENT "",
+  `v4` largeint NULL COMMENT "",
+  `v5` tinyint NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`v1`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into t0 values (1, 1, 1, null, null), (2, 2, 2, null, null);
+-- result:
+-- !result
+select * from t0 
+where (t0.v2 = 2) or t0.v3 in (select x0.v3 from t0 x0 where t0.v2 = x0.v3);
+-- result:
+2	2	2	None	None
+1	1	1	None	None
+-- !result

@@ -27,6 +27,7 @@ import org.apache.commons.validator.routines.InetAddressValidator;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
 import java.net.Socket;
 import java.net.SocketException;
@@ -83,5 +84,22 @@ public class NetUtils {
             fqdn = host;
         }
         return new Pair<>(ip, fqdn);
+<<<<<<< HEAD
+=======
+    }
+
+    public static boolean checkAccessibleForAllPorts(String host, List<Integer> ports) {
+        boolean accessible = true;
+        int timeout = 1000; // Timeout in milliseconds
+        for (Integer port : ports) {
+            try (Socket socket = new Socket()) {
+                socket.connect(new InetSocketAddress(host, port), timeout);
+            } catch (IOException e) {
+                accessible = false;
+                break;
+            }
+        }
+        return accessible;
+>>>>>>> 2.5.18
     }
 }

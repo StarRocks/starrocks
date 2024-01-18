@@ -10,15 +10,20 @@ import java.util.List;
 public class UpdateStmt extends DmlStmt {
     private final TableName tableName;
     private final List<ColumnAssignment> assignments;
+    private final List<Relation> fromRelations;
     private final Expr wherePredicate;
+    private final List<CTERelation> commonTableExpressions;
 
     private Table table;
     private QueryStatement queryStatement;
 
-    public UpdateStmt(TableName tableName, List<ColumnAssignment> assignments, Expr wherePredicate) {
+    public UpdateStmt(TableName tableName, List<ColumnAssignment> assignments, List<Relation> fromRelations,
+                      Expr wherePredicate, List<CTERelation> commonTableExpressions) {
         this.tableName = tableName;
         this.assignments = assignments;
+        this.fromRelations = fromRelations;
         this.wherePredicate = wherePredicate;
+        this.commonTableExpressions = commonTableExpressions;
     }
 
     @Override
@@ -30,8 +35,16 @@ public class UpdateStmt extends DmlStmt {
         return assignments;
     }
 
+    public List<Relation> getFromRelations() {
+        return fromRelations;
+    }
+
     public Expr getWherePredicate() {
         return wherePredicate;
+    }
+
+    public List<CTERelation> getCommonTableExpressions() {
+        return commonTableExpressions;
     }
 
     public void setTable(Table table) {

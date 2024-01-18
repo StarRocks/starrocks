@@ -116,8 +116,12 @@ std::string get_usage(const std::string& progname) {
     ss << "./meta_tool --operation=show_meta --pb_meta_path=path\n";
     ss << "./meta_tool --operation=show_segment_footer --file=/path/to/segment/file\n";
     ss << "./meta_tool --operation=dump_segment_data --file=/path/to/segment/file\n";
+<<<<<<< HEAD
     ss << "./meta_tool --operation=dump_short_key_index --file=/path/to/segment/file "
           "--key_column_count=2 --file=/path/to/segment/file\n";
+=======
+    ss << "./meta_tool --operation=dump_short_key_index --file=/path/to/segment/file --key_column_count=2\n";
+>>>>>>> 2.5.18
     ss << "./meta_tool --operation=check_table_meta_consistency --root_path=/path/to/storage/path "
           "--table_id=tableid\n";
     ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool --operation=print_lake_metadata\n";
@@ -289,8 +293,8 @@ void list_meta(DataDir* data_dir) {
                st.meta_bytes, st.log_size, st.log_bytes, st.delvec_size, st.delvec_bytes, st.rowset_size,
                st.rowset_bytes, st.pending_rowset_size, st.pending_rowset_bytes);
     }
-    printf("  Total KV: %zu Bytes: %zu Tablets: %zu Error: %zu\n", stats.total_size, stats.total_bytes,
-           stats.tablets.size(), stats.error_size);
+    printf("  Total KV: %zu Bytes: %zu Tablets: %zu (PK: %zu Other: %zu) Error: %zu\n", stats.total_size,
+           stats.total_bytes, stats.tablets.size(), stats.update_tablet_size, stats.tablet_size, stats.error_size);
 }
 
 Status init_data_dir(const std::string& dir, std::unique_ptr<DataDir>* ret, bool read_only = false) {
@@ -583,6 +587,10 @@ private:
     };
 
     Status _init();
+<<<<<<< HEAD
+=======
+    void _convert_column_meta(const ColumnMetaPB& src_col, ColumnPB* dest_col);
+>>>>>>> 2.5.18
     std::shared_ptr<vectorized::Schema> _init_query_schema(const std::shared_ptr<TabletSchema>& tablet_schema);
     std::shared_ptr<TabletSchema> _init_search_schema_from_footer(const SegmentFooterPB& footer);
     void _analyze_short_key_columns(size_t key_column_count, std::vector<ColItem>* cols);
@@ -596,7 +604,10 @@ private:
     SegmentFooterPB _footer;
     MemPool _mem_pool;
     const size_t _max_short_key_size = 36;
+<<<<<<< HEAD
     const size_t _max_varchar_key_size = 20;
+=======
+>>>>>>> 2.5.18
     const size_t _max_short_key_col_cnt = 3;
 };
 
@@ -605,15 +616,35 @@ std::shared_ptr<vectorized::Schema> SegmentDump::_init_query_schema(
     return std::make_shared<vectorized::Schema>(tablet_schema->schema());
 }
 
+<<<<<<< HEAD
+=======
+void SegmentDump::_convert_column_meta(const ColumnMetaPB& src_col, ColumnPB* dest_col) {
+    dest_col->set_unique_id(src_col.unique_id());
+    dest_col->set_type(TabletColumn::get_string_by_field_type((FieldType)(src_col.type())));
+    dest_col->set_is_nullable(src_col.is_nullable());
+    dest_col->set_length(src_col.length());
+
+    const auto& src_child_cols = src_col.children_columns();
+    for (const auto& src_child_col : src_child_cols) {
+        auto* dest_child_col = dest_col->add_children_columns();
+        _convert_column_meta(src_child_col, dest_child_col);
+    }
+}
+
+>>>>>>> 2.5.18
 std::shared_ptr<TabletSchema> SegmentDump::_init_search_schema_from_footer(const SegmentFooterPB& footer) {
     TabletSchemaPB tablet_schema_pb;
     for (int i = 0; i < footer.columns_size(); i++) {
         const auto& src_col = footer.columns(i);
         ColumnPB* dest_col = tablet_schema_pb.add_column();
+<<<<<<< HEAD
         dest_col->set_unique_id(src_col.unique_id());
         dest_col->set_type(type_to_string(scalar_field_type_to_primitive_type((FieldType)(src_col.type()))));
         dest_col->set_is_nullable(src_col.is_nullable());
         dest_col->set_length(src_col.length());
+=======
+        _convert_column_meta(src_col, dest_col);
+>>>>>>> 2.5.18
     }
 
     return std::make_shared<TabletSchema>(tablet_schema_pb);
@@ -654,7 +685,10 @@ Status SegmentDump::_init() {
 
 void SegmentDump::_analyze_short_key_columns(size_t key_column_count, std::vector<ColItem>* cols) {
     size_t start_offset = 1;
+<<<<<<< HEAD
     size_t num_short_key_columns = 0;
+=======
+>>>>>>> 2.5.18
     size_t short_key_size = 0;
 
     for (size_t i = 0; i < key_column_count; i++) {
@@ -664,7 +698,10 @@ void SegmentDump::_analyze_short_key_columns(size_t key_column_count, std::vecto
             if (short_key_size + col.length() > _max_short_key_size) {
                 break;
             }
+<<<<<<< HEAD
             num_short_key_columns++;
+=======
+>>>>>>> 2.5.18
             short_key_size += col.length();
 
             ColItem item;
@@ -675,6 +712,7 @@ void SegmentDump::_analyze_short_key_columns(size_t key_column_count, std::vecto
 
             start_offset += item.type->size() + 1;
         } else {
+<<<<<<< HEAD
             num_short_key_columns++;
 
             ColItem item;
@@ -685,6 +723,14 @@ void SegmentDump::_analyze_short_key_columns(size_t key_column_count, std::vecto
 
             start_offset += item.type->size() + 1;
 
+=======
+            ColItem item;
+            item.type = get_type_info(logical_type);
+            item.offset = start_offset;
+            item.size = 0;
+            cols->emplace_back(item);
+
+>>>>>>> 2.5.18
             break;
         }
     }
@@ -692,12 +738,25 @@ void SegmentDump::_analyze_short_key_columns(size_t key_column_count, std::vecto
 
 Status SegmentDump::_output_short_key_string(const std::vector<ColItem>& cols, size_t idx, Slice& key,
                                              std::string* result) {
+<<<<<<< HEAD
     Slice convert_key = {key.data + cols[idx].offset, cols[idx].size};
 
     size_t num_short_key_columns = cols.size();
     const KeyCoder* coder = get_key_coder(cols[idx].type->type());
     uint8_t* tmp_mem = _mem_pool.allocate(cols[idx].size);
     coder->decode_ascending(&convert_key, cols[idx].size, tmp_mem, &_mem_pool);
+=======
+    size_t item_size = cols[idx].size;
+    if (item_size == 0) {
+        item_size = key.size - cols[idx].offset;
+    }
+    Slice convert_key = {key.data + cols[idx].offset, item_size};
+
+    size_t num_short_key_columns = cols.size();
+    const KeyCoder* coder = get_key_coder(cols[idx].type->type());
+    uint8_t* tmp_mem = _mem_pool.allocate(item_size);
+    coder->decode_ascending(&convert_key, item_size, tmp_mem, &_mem_pool);
+>>>>>>> 2.5.18
 
     auto logical_type = cols[idx].type->type();
 
@@ -812,6 +871,10 @@ Status SegmentDump::dump_segment_data() {
             std::cout << "ROW: (" << row << "): " << chunk->debug_row(i) << std::endl;
             row++;
         }
+<<<<<<< HEAD
+=======
+        chunk->reset();
+>>>>>>> 2.5.18
     } while (true);
 
     return Status::OK();

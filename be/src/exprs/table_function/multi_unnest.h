@@ -17,7 +17,7 @@ namespace starrocks::vectorized {
  */
 class MultiUnnest final : public TableFunction {
 public:
-    std::pair<Columns, ColumnPtr> process(TableFunctionState* state, bool* eos) const override {
+    std::pair<Columns, UInt32Column::Ptr> process(TableFunctionState* state, bool* eos) const override {
         *eos = true;
         if (state->get_columns().empty()) {
             return {};

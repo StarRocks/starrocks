@@ -17,7 +17,7 @@ public:
     ~JavaFunctionCallExpr() override;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new JavaFunctionCallExpr(*this)); }
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, vectorized::Chunk* ptr) override;
     Status prepare(RuntimeState* state, ExprContext* context) override;
     Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
     void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;

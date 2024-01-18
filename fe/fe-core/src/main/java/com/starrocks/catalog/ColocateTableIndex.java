@@ -33,6 +33,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.common.util.LogUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.TablePropertyInfo;
@@ -127,7 +128,7 @@ public class ColocateTableIndex implements Writable {
     // the colocate group is unstable
     private Set<GroupId> unstableGroups = Sets.newHashSet();
 
-    private transient ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+    private final transient ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public ColocateTableIndex() {
 
@@ -154,7 +155,7 @@ public class ColocateTableIndex implements Writable {
     public GroupId addTableToGroup(long dbId, OlapTable tbl, String groupName, GroupId assignedGroupId) {
         writeLock();
         try {
-            GroupId groupId = null;
+            GroupId groupId;
             String fullGroupName = dbId + "_" + groupName;
 
             if (groupName2Id.containsKey(fullGroupName)) {
@@ -168,6 +169,13 @@ public class ColocateTableIndex implements Writable {
                     groupId = new GroupId(dbId, GlobalStateMgr.getCurrentState().getNextId());
                 }
                 HashDistributionInfo distributionInfo = (HashDistributionInfo) tbl.getDefaultDistributionInfo();
+                if (!(tbl instanceof ExternalOlapTable)) {
+                    // Colocate table should keep the same bucket number across the partitions
+                    if (distributionInfo.getBucketNum() == 0) {
+                        int bucketNum = CatalogUtils.calBucketNumAccordingToBackends();
+                        distributionInfo.setBucketNum(bucketNum);
+                    }
+                }
                 ColocateGroupSchema groupSchema = new ColocateGroupSchema(groupId,
                         distributionInfo.getDistributionColumns(), distributionInfo.getBucketNum(),
                         tbl.getDefaultReplicationNum());
@@ -185,7 +193,11 @@ public class ColocateTableIndex implements Writable {
     public void addBackendsPerBucketSeq(GroupId groupId, List<List<Long>> backendsPerBucketSeq) {
         writeLock();
         try {
-            group2BackendsPerBucketSeq.put(groupId, backendsPerBucketSeq);
+            List<List<Long>> previous = group2BackendsPerBucketSeq.put(groupId, backendsPerBucketSeq);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Colocate group {} changed bucket seq from {} to {}, caller stack: {}",
+                        groupId, previous, backendsPerBucketSeq, LogUtil.getCurrentStackTraceToList());
+            }
         } finally {
             writeUnlock();
         }
@@ -559,7 +571,7 @@ public class ColocateTableIndex implements Writable {
                 info.add(String.valueOf(groupSchema.getBucketsNum()));
                 info.add(String.valueOf(groupSchema.getReplicationNum()));
                 List<String> cols = groupSchema.getDistributionColTypes().stream().map(
-                        e -> e.toSql()).collect(Collectors.toList());
+                        Type::toSql).collect(Collectors.toList());
                 info.add(Joiner.on(", ").join(cols));
                 info.add(String.valueOf(!unstableGroups.contains(groupId)));
                 infos.add(info);
@@ -775,7 +787,13 @@ public class ColocateTableIndex implements Writable {
     private List<GroupId> getOtherGroupsWithSameOrigNameUnlocked(String origName, long dbId) {
         List<GroupId> groupIds = new ArrayList<>();
         for (Map.Entry<String, GroupId> entry : groupName2Id.entrySet()) {
+<<<<<<< HEAD
             if (entry.getKey().split("_")[1].equals(origName) &&
+=======
+            // Get existed group original name
+            String existedGroupOrigName = entry.getKey().split("_", 2)[1];
+            if (existedGroupOrigName.equals(origName) &&
+>>>>>>> 2.5.18
                     entry.getValue().dbId != dbId) {
                 groupIds.add(entry.getValue());
             }
@@ -938,6 +956,7 @@ public class ColocateTableIndex implements Writable {
             TablePropertyInfo info = new TablePropertyInfo(table.getId(), groupId, properties);
             GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColocate(info);
         }
+        table.lastSchemaUpdateTime.set(System.nanoTime());
         LOG.info("finished modify table's colocation property. table: {}, is replay: {}",
                 table.getName(), isReplay);
     }

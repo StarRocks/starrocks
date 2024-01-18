@@ -75,6 +75,10 @@ public abstract class DistributionInfo implements Writable {
         throw new NotImplementedException();
     }
 
+    public DistributionInfo copy() {
+        throw new NotImplementedException();
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, type.name());

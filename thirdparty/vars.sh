@@ -161,10 +161,10 @@ SIMDJSON_SOURCE=simdjson-2.2.0
 SIMDJSON_MD5SUM="9bd0ced53281484d8842a9429065943d"
 
 # curl
-CURL_DOWNLOAD="https://curl.se/download/curl-7.79.0.tar.gz"
-CURL_NAME=curl-7.79.0.tar.gz
-CURL_SOURCE=curl-7.79.0
-CURL_MD5SUM="b40e4dc4bbc9e109c330556cd58c8ec8"
+CURL_DOWNLOAD="https://curl.se/download/curl-8.4.0.tar.gz"
+CURL_NAME=curl-8.4.0.tar.gz
+CURL_SOURCE=curl-8.4.0
+CURL_MD5SUM="533e8a3b1228d5945a6a512537bea4c7"
 
 # RE2
 RE2_DOWNLOAD="https://github.com/google/re2/archive/2017-05-01.tar.gz"
@@ -300,10 +300,10 @@ JINDOSDK_SOURCE="jindosdk-4.6.2"
 JINDOSDK_MD5SUM="7288ffb8f2fbdde6b907d15041a0f79c"
 
 # aws-sdk-cpp
-AWS_SDK_CPP_DOWNLOAD="https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.9.179.tar.gz"
-AWS_SDK_CPP_NAME="aws-sdk-cpp-1.9.179.tar.gz"
-AWS_SDK_CPP_SOURCE="aws-sdk-cpp-1.9.179"
-AWS_SDK_CPP_MD5SUM="3a4e2703eaeeded588814ee9e61a3342"
+AWS_SDK_CPP_DOWNLOAD="https://github.com/aws/aws-sdk-cpp/archive/refs/tags/1.10.36.tar.gz"
+AWS_SDK_CPP_NAME="aws-sdk-cpp-1.10.36.tar.gz"
+AWS_SDK_CPP_SOURCE="aws-sdk-cpp-1.10.36"
+AWS_SDK_CPP_MD5SUM="8fed635c5ac98b448bc1a98cf7c97c70"
 
 # velocypack: A fast and compact format for serialization and storage
 VPACK_DOWNLOAD="https://github.com/arangodb/velocypack/archive/refs/tags/XYZ1.0.tar.gz"
@@ -357,4 +357,8 @@ LZO2_MD5SUM="39d3f3f9c55c87b1e5d6888e1420f4b5"
 TP_ARCHIVES="LIBEVENT OPENSSL THRIFT PROTOBUF GFLAGS GLOG GTEST RAPIDJSON SIMDJSON SNAPPY GPERFTOOLS ZLIB LZ4 BZIP CURL \
             RE2 BOOST LEVELDB BRPC ROCKSDB LIBRDKAFKA PULSAR FLATBUFFERS ARROW BROTLI ZSTD S2 BITSHUFFLE CROARINGBITMAP \
             JEMALLOC CCTZ FMT RYU BREAK_PAD HADOOP JDK RAGEL HYPERSCAN MARIADB JINDOSDK AWS_SDK_CPP VPACK OPENTELEMETRY \
+<<<<<<< HEAD
             BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE BROKER_THIRDPARTY_JARS LZO2"
+=======
+            BENCHMARK FAST_FLOAT CACHELIB STREAMVBYTE BROKER_THIRDPARTY_JARS LZO2 ASYNC_PROFILER"
+>>>>>>> 2.5.18

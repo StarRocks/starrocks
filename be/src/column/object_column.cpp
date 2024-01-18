@@ -56,6 +56,12 @@ void ObjectColumn<T>::append(T&& object) {
 }
 
 template <typename T>
+void ObjectColumn<T>::append(const T& object) {
+    _pool.emplace_back(object);
+    _cache_ok = false;
+}
+
+template <typename T>
 void ObjectColumn<T>::remove_first_n_values(size_t count) {
     size_t remain_size = _pool.size() - count;
     for (size_t i = 0; i < remain_size; ++i) {
@@ -96,6 +102,7 @@ void ObjectColumn<T>::append_selective(const starrocks::vectorized::Column& src,
         append(obj_col.get_object(indexes[from + j]));
     }
 }
+<<<<<<< HEAD
 
 template <typename T>
 void ObjectColumn<T>::append_selective_shallow_copy(const starrocks::vectorized::Column& src, const uint32_t* indexes,
@@ -124,6 +131,14 @@ void ObjectColumn<T>::append_value_multiple_times(const starrocks::vectorized::C
         for (uint32_t i = 0; i < size; i++) {
             append(obj_col.get_object(index));
         }
+=======
+
+template <typename T>
+void ObjectColumn<T>::append_value_multiple_times(const vectorized::Column& src, uint32_t index, uint32_t size) {
+    const auto& obj_col = down_cast<const ObjectColumn<T>&>(src);
+    for (uint32_t i = 0; i < size; i++) {
+        append(obj_col.get_object(index));
+>>>>>>> 2.5.18
     }
 }
 
