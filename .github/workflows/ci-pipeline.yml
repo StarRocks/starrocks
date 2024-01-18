@@ -1,4 +1,4 @@
-name: CI PIPELINE
+name: CI PIPELINE - CLOUD
 
 on:
   pull_request_target:
