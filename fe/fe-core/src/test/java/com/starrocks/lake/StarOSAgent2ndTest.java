@@ -213,11 +213,7 @@ public class StarOSAgent2ndTest {
         Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
 
         Assert.assertEquals(2, starosAgent.getPrimaryComputeNodeIdByShard(shardId));
-        try {
-            starosAgent.getPrimaryComputeNodeIdByShard(shardId);
-            Assert.fail("no exception");
-        } catch (UserException e) {
-            Assert.assertEquals(InternalErrorCode.REPLICA_FEW_ERR, e.getErrorCode());
-        }
+        UserException exception = Assert.assertThrows(UserException.class, () -> starosAgent.getPrimaryComputeNodeIdByShard(shardId));
+        Assert.assertEquals(InternalErrorCode.REPLICA_FEW_ERR, exception.getErrorCode());
     }
 }
