@@ -25,7 +25,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-public class MemBasedTaskRunHistory implements ITaskRunHistory {
+public class MemBasedTaskRunHistory implements TaskRunHistory {
     // Thread-Safe history map: QueryId -> TaskRunStatus
     // The same task-id may contain multi history task run status, so use query_id instead.
     private final Map<String, TaskRunStatus> historyTaskRunMap =
@@ -69,6 +69,7 @@ public class MemBasedTaskRunHistory implements ITaskRunHistory {
         return historyRunStatus;
     }
 
+    @Override
     public void forceGC() {
         List<TaskRunStatus> allHistory = getAllHistory();
         int startIndex = Math.min(allHistory.size(), Config.task_runs_max_history_number);

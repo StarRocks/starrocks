@@ -27,6 +27,8 @@ import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.history.MemBasedTaskRunHistory;
+import com.starrocks.scheduler.history.TableBasedTaskRunHistory;
+import com.starrocks.scheduler.history.TaskRunHistory;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
@@ -54,7 +56,9 @@ public class TaskRunManager implements MemoryTrackable {
     private final Map<Long, TaskRun> runningTaskRunMap = Maps.newConcurrentMap();
 
     // include SUCCESS/FAILED/CANCEL taskRun
-    private final MemBasedTaskRunHistory taskRunHistory = new MemBasedTaskRunHistory();
+    @Deprecated
+    private final TaskRunHistory memBasedTaskRunHistory = new MemBasedTaskRunHistory();
+    private final TaskRunHistory tableBasedTaskRunHistory = new TableBasedTaskRunHistory();
 
     // Use to execute actual TaskRun
     private final TaskRunExecutor taskRunExecutor = new TaskRunExecutor();
@@ -197,7 +201,7 @@ public class TaskRunManager implements MemoryTrackable {
             if (future.isDone()) {
                 runningIterator.remove();
                 LOG.info("Task run is done from state RUNNING to {}, {}", taskRun.getStatus().getState(), taskRun);
-                taskRunHistory.addHistory(taskRun.getStatus());
+                getTaskRunHistory().addHistory(taskRun.getStatus());
                 TaskRunStatusChange statusChange = new TaskRunStatusChange(taskRun.getTaskId(), taskRun.getStatus(),
                         Constants.TaskRunState.RUNNING, taskRun.getStatus().getState());
                 GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
@@ -288,8 +292,8 @@ public class TaskRunManager implements MemoryTrackable {
         return runningTaskRunMap;
     }
 
-    public MemBasedTaskRunHistory getTaskRunHistory() {
-        return taskRunHistory;
+    public TaskRunHistory getTaskRunHistory() {
+        return Config.use_table_based_task_run_history ? tableBasedTaskRunHistory : memBasedTaskRunHistory;
     }
 
     public long getPendingTaskRunCount() {
@@ -317,7 +321,7 @@ public class TaskRunManager implements MemoryTrackable {
     }
 
     public long getHistoryTaskRunCount() {
-        return taskRunHistory.getTaskRunCount();
+        return getTaskRunHistory().getTaskRunCount();
     }
 
     @Override

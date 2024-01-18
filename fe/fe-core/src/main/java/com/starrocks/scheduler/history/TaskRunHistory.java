@@ -21,7 +21,7 @@ import java.util.List;
 /**
  * Record the history of all task-runs
  */
-public interface ITaskRunHistory {
+public interface TaskRunHistory {
 
     void addHistory(TaskRunStatus status);
 
@@ -33,6 +33,8 @@ public interface ITaskRunHistory {
      * @return removed TaskRunId in the history
      */
     List<String> gc();
+
+    void forceGC();
 
     List<TaskRunStatus> getAllHistory();
 

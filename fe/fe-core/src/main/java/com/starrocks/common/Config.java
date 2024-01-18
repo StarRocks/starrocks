@@ -1088,6 +1088,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static int max_task_runs_threads_num = 512;
 
+    @ConfField(mutable = true, comment = "Use the table-based task-run-history storage")
+    public static boolean use_table_based_task_run_history = false;
+
     /**
      * Default timeout of export jobs.
      */

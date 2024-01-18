@@ -20,6 +20,7 @@ import com.google.gson.JsonParser;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TResultBatch;
 import io.netty.buffer.ByteBuf;
@@ -37,7 +38,7 @@ import java.util.List;
  * History storage that leverage a regular starrocks table to store the data.
  * By default, using the time-based garbage collection strategy, which keep 7days' history
  */
-public class TableBasedTaskRunHistory implements ITaskRunHistory {
+public class TableBasedTaskRunHistory implements TaskRunHistory {
 
     private final static String DATABASE_NAME = StatsConstants.STATISTICS_DB_NAME;
     private final static String TABLE_NAME = "task_run_history";
@@ -63,7 +64,7 @@ public class TableBasedTaskRunHistory implements ITaskRunHistory {
                     ")" +
 
                     // properties
-                    "DUPLICATE KEY (task_id, create_time) " +
+                    "PRIMARY KEY (task_id, task_run_id) " +
                     "PARTITION BY RANGE(create_time) " +
                     "DISTRIBUTED BY HASH(id) BUCKETS 8 " +
                     "PROPERTIES(" +
@@ -95,6 +96,11 @@ public class TableBasedTaskRunHistory implements ITaskRunHistory {
 
     @Override
     public void addHistory(TaskRunStatus status) {
+        // Only leader node needs to persist the history
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            return;
+        }
+
         String createTime =
                 Strings.quote(DateUtils.formatTimeStampInMill(status.getCreateTime(), ZoneId.systemDefault()));
         String finishTime =
@@ -127,6 +133,11 @@ public class TableBasedTaskRunHistory implements ITaskRunHistory {
     public List<String> gc() {
         // TableBasedHistory could do the gc by itself
         return Lists.newArrayList();
+    }
+
+    @Override
+    public void forceGC() {
+        // TODO
     }
 
     // TODO: don't return all history, which is very expensive
