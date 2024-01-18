@@ -426,7 +426,7 @@ protected:
         using CppType = typename CppTypeTraits<type>::CppType;
         auto col = ChunkHelper::column_from_field_type(type, true);
         CppType value = 0;
-        size_t count = 2 * 1024 * 1024 / sizeof(CppType);
+        size_t count = 2 * 1024 / sizeof(CppType);
         col->reserve(count);
         for (size_t i = 0; i < count; ++i) {
             (void)col->append_numbers(&value, sizeof(CppType));
@@ -495,7 +495,7 @@ protected:
     }
 
     ColumnPtr date_values(int null_ratio) {
-        size_t count = 4 * 1024 * 1024 / sizeof(DateValue);
+        size_t count = 4 * 1024 / sizeof(DateValue);
         auto col = ChunkHelper::column_from_field_type(TYPE_DATE, true);
         DateValue value = DateValue::create(2020, 10, 1);
         for (size_t i = 0; i < count; i++) {
