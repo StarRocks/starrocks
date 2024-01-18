@@ -75,9 +75,7 @@ public:
         return Status::NotSupported("unsupport to call as_input_stream");
     }
 
-    // virtual StatusOr<Slice> get_serialized_data() const;
     StatusOr<Slice> get_next_serialized_data();
-    // StatusOr<Slice> get_next_serialized_data();
     size_t get_serialized_data_size() const;
     virtual void reset() = 0;
 
