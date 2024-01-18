@@ -230,7 +230,7 @@ public class StatementPlanner {
             long planStartTime = OptimisticVersion.generate();
             if (!isSchemaValid) {
                 reAnalyzeStmt(queryStmt, dbs, session);
-                colNames = query.getColumnOutputNames();
+                colNames = queryStmt.getQueryRelation().getColumnOutputNames();
             }
 
             LogicalPlan logicalPlan;
