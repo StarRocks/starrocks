@@ -16,7 +16,7 @@ import Curl from '../assets/quick-start/_curl.mdx'
 
 本教程涵盖以下内容：
 
-- 使用 Docker Compose 部署部署 StarRocks 存算分离集群以及 MinIO 作为对象存储。
+- 使用 Docker Compose 部署 StarRocks 存算分离集群以及 MinIO 作为对象存储。
 - 导入数据集，并在导入过程中进行基本的数据转换。
 - 查询分析数据。
 
@@ -46,11 +46,11 @@ import Curl from '../assets/quick-start/_curl.mdx'
 
 ### FE
 
-FE 节点负责元数据管理、客户端连接管理、查询计划和查询调度。每个 FE 在其内存中存储和维护完整的元数据副本，这确保了每个 FE 都能提供无差别的服务。
+FE 节点负责元数据管理、客户端连接管理、查询计划和查询调度。每个 FE 在其内存中存储和维护完整的元数据副本，确保每个 FE 都能提供无差别的服务。
 
 ### CN
 
-CN 节点负责在**存算分离**或**存算一体**集群中负责执行查询。
+CN 节点在**存算分离**或**存算一体**集群中负责执行查询。
 
 ### BE
 
@@ -111,7 +111,7 @@ minio          25 seconds ago   Up 24 seconds             0.0.0.0:9000-9001->900
 
 ## 生成 MinIO 认证凭证
 
-为了允许 StarRocks 访问 MinIO，您需要生成一个 **访问密钥**。
+要访问 MinIO，您需要生成一个 **访问密钥**。
 
 ### 打开 MinIO Web UI
 
@@ -221,7 +221,7 @@ DESC STORAGE VOLUME shared\G
 ```
 
 :::tip
-`\G` 表示将查询结果进行按列打印。如果您的 SQL 客户端不支持垂直格式输出，则需要将 `\G` 替换为 `;`。
+`\G` 表示将查询结果按列打印。如果您的 SQL 客户端不支持垂直格式输出，则需要将 `\G` 替换为 `;`。
 :::
 
 返回：
@@ -250,9 +250,9 @@ IsDefault: true
 
 ## 导入数据集
 
-StarRocks 有多种数据导入方法。本教程使用 curl 命令发起 Stream Load 任务导入数据。
+StarRocks 提供多种数据导入方法。本教程使用 curl 命令发起 Stream Load 任务导入数据。
 
-Stream Load 使用的 curl 命令虽然看起来复杂，但本教程在最后部分提供了详细解释。当前，建议您先运行该命令并导入数据，然后在教程结束后了解有关数据导入的详细内容。
+Stream Load 使用的 curl 命令虽然看起来复杂，但本教程在最后部分提供了详细解释。建议您先运行该命令导入数据，然后在教程结束后了解有关数据导入的详细内容。
 
 ### 导入纽约市交通事故数据
 
@@ -419,7 +419,7 @@ aws_s3_use_aws_sdk_default_behavior=false
 # highlight-end
 ```
 
-这些参数的具体解释如下：
+参数的具体解释如下：
 
 #### `run_mode=shared_data`
 
@@ -435,7 +435,7 @@ MinIO 端点，包括端口号。
 
 #### `aws_s3_use_instance_profile=false`
 
-是否使用 Instance Profile 作为凭证。因为您需要使用访问密钥连接 MinIO ，需要该项设置为 false。
+是否使用 Instance Profile 作为凭证。因为您需要使用访问密钥连接 MinIO，需要该项设置为 false。
 
 #### `cloud_native_storage_type=S3`
 
