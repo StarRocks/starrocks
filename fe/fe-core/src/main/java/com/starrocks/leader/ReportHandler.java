@@ -1356,7 +1356,7 @@ public class ReportHandler extends Daemon {
                 TabletStatus status =
                         tablet.getColocateHealthStatus(visibleVersion, replicationNum, backendsSet);
                 if (status == TabletStatus.HEALTHY) {
-                    throw new MetaNotFoundException("colocate tablet [" + tableId + "] is healthy");
+                    throw new MetaNotFoundException("colocate tablet [" + tabletId + "] is healthy");
                 } else {
                     return;
                 }
