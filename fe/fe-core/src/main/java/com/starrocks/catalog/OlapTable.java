@@ -505,7 +505,7 @@ public class OlapTable extends Table {
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
             Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
-            expressionRangePartitionInfo.renameTableName(newName);
+            expressionRangePartitionInfo.renameTableName("", newName);
         }
     }
 
@@ -858,9 +858,7 @@ public class OlapTable extends Table {
                 continue;
             }
             MaterializedView mv = (MaterializedView) mvTable;
-            if (mv.isActive()) {
-                continue;
-            }
+            // Do this no matter whether mv is active or not to restore version map for mv rewrite.
             mv.doAfterRestore(db, mvRestoreContext);
         }
         return Status.OK;
@@ -2942,6 +2940,8 @@ public class OlapTable extends Table {
                                     batchTaskMap.put(backendId, batchTask);
                                 }
                                 batchTask.addTask(dropTask);
+                                LOG.info("delete tablet[{}] from backend[{}] because table {}-{} is dropped",
+                                        tabletId, backendId, table.getId(), table.getName());
                             } // end for replicas
                         } // end for tablets
                     }

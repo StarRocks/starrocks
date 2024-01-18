@@ -10,7 +10,7 @@ jobs:
     name: CLOSE PR
     runs-on: ubuntu-latest
     if: >
-      ${{ github.event.issue.pull_request }} &&
+      contains(github.event.issue.pull_request.html_url, 'pull') &&
       (contains(github.event.comment.body, '@Mergify close') ||
       contains(github.event.comment.body, '@Mergifyio close'))
 

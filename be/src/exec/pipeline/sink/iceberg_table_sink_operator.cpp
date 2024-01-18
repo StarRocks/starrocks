@@ -308,6 +308,10 @@ void calculate_column_stats(const std::shared_ptr<::parquet::FileMetaData>& meta
 
 void IcebergTableSinkOperator::add_iceberg_commit_info(starrocks::parquet::AsyncFileWriter* writer,
                                                        RuntimeState* state) {
+    if (writer->metadata() == nullptr) {
+        return;
+    }
+
     TIcebergColumnStats iceberg_column_stats;
     calculate_column_stats(writer->metadata(), iceberg_column_stats);
 

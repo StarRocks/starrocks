@@ -43,6 +43,7 @@
 #include "storage/replication_utils.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
+#include "storage/segment_stream_converter.h"
 #include "storage/snapshot_manager.h"
 #include "storage/tablet_updates.h"
 #include "util/defer_op.h"
@@ -222,6 +223,7 @@ StatusOr<TxnLogPtr> ReplicationTxnManager::replicate_remote_snapshot(const TRepl
                                                                      const TabletMetadataPtr& tablet_metadata) {
     auto txn_log = std::make_shared<TxnLog>();
     std::unordered_map<std::string, std::string> filename_map;
+    const TabletSchemaPB* source_schema_pb = nullptr;
 
     if (!is_primary_key(*tablet_metadata)) { // None-pk table
         std::string remote_header_file_name = std::to_string(request.src_tablet_id) + ".hdr";
@@ -244,6 +246,9 @@ StatusOr<TxnLogPtr> ReplicationTxnManager::replicate_remote_snapshot(const TRepl
             auto* op_write = txn_log->mutable_op_replication()->add_op_writes();
             RETURN_IF_ERROR(convert_rowset_meta(*rowset_meta, request.transaction_id, op_write, &filename_map));
         }
+        // None-pk table always has tablet schema in tablet meta
+        tablet_meta.tablet_schema_ptr()->to_schema_pb(txn_log->mutable_op_replication()->mutable_source_schema());
+        source_schema_pb = &txn_log->op_replication().source_schema();
     } else { // Pk table
         std::string snapshot_meta_file_name = "meta";
         ASSIGN_OR_RETURN(auto snapshot_meta_content,
@@ -281,19 +286,47 @@ StatusOr<TxnLogPtr> ReplicationTxnManager::replicate_remote_snapshot(const TRepl
             delvec_data.set_version(delvec.version());
             delvec.save_to(delvec_data.mutable_data());
         }
+
+        if (snapshot_meta.tablet_meta().has_schema()) {
+            // Try to get source schema from tablet meta, only full snapshot has tablet meta
+            txn_log->mutable_op_replication()->mutable_source_schema()->CopyFrom(snapshot_meta.tablet_meta().schema());
+            source_schema_pb = &txn_log->op_replication().source_schema();
+        } else if (!rowset_metas.empty() && rowset_metas.front().has_tablet_schema()) {
+            // Try to get source schema from rowset meta, rowset meta has schema if light schema change enabled in source cluster
+            txn_log->mutable_op_replication()->mutable_source_schema()->CopyFrom(
+                    TabletMeta::rowset_meta_pb_with_max_rowset_version(rowset_metas).tablet_schema());
+            source_schema_pb = &txn_log->op_replication().source_schema();
+        } else {
+            // Get source schema from previous saved in tablet meta
+            source_schema_pb = &tablet_metadata->source_schema();
+        }
     }
+
+    std::unordered_map<uint32_t, uint32_t> column_unique_id_map;
+    ReplicationUtils::calc_column_unique_id_map(source_schema_pb->column(), tablet_metadata->schema().column(),
+                                                &column_unique_id_map);
+
+    auto file_converters = [&](const std::string& file_name,
+                               uint64_t file_size) -> StatusOr<std::unique_ptr<FileStreamConverter>> {
+        auto iter = filename_map.find(file_name);
+        if (iter == filename_map.end()) {
+            return nullptr;
+        }
+
+        auto segment_location = _tablet_manager->segment_location(request.tablet_id, iter->second);
+        WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+        ASSIGN_OR_RETURN(auto output_file, fs::new_writable_file(opts, segment_location));
+
+        if (is_segment(file_name) && !column_unique_id_map.empty()) {
+            return std::make_unique<SegmentStreamConverter>(file_name, file_size, std::move(output_file),
+                                                            &column_unique_id_map);
+        }
+        return std::make_unique<FileStreamConverter>(file_name, file_size, std::move(output_file));
+    };
 
     RETURN_IF_ERROR(ReplicationUtils::download_remote_snapshot(
             src_snapshot_info.backend.host, src_snapshot_info.backend.http_port, request.src_token,
-            src_snapshot_info.snapshot_path, request.src_tablet_id, request.src_schema_hash, nullptr,
-            _tablet_manager->location_provider()->segment_root_location(request.tablet_id) + '/',
-            [filename_map = std::move(filename_map)](const std::string& filename) {
-                auto iter = filename_map.find(filename);
-                if (iter == filename_map.end()) {
-                    return std::string();
-                }
-                return iter->second;
-            }));
+            src_snapshot_info.snapshot_path, request.src_tablet_id, request.src_schema_hash, file_converters));
 
     txn_log->set_tablet_id(request.tablet_id);
     txn_log->set_txn_id(request.transaction_id);
