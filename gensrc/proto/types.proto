@@ -109,7 +109,7 @@ enum TxnTypePB {
  }
 
  enum ReplicationTxnStatePB {
-     TXN_INVALID = 0;
+     TXN_PREPARED = 0;
      TXN_SNAPSHOTED = 1;
      TXN_REPLICATED = 2;
      TXN_PUBLISHED = 3;
