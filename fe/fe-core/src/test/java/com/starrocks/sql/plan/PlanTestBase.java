@@ -18,6 +18,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
@@ -27,14 +28,22 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.utframe.StarRocksAssert;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.collections4.ListUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 
 import java.util.List;
 
 public class PlanTestBase extends PlanTestNoneDBBase {
+    private static final Logger LOG = LogManager.getLogger(PlanTestBase.class);
+
     // use a unique dir so that it won't be conflict with other unit test which
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -1077,5 +1086,22 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 }
             }
         };
+    }
+
+    public static void cleanupEphemeralMVs(StarRocksAssert starRocksAssert, long startTime) throws Exception {
+        String currentDb = starRocksAssert.getCtx().getDatabase();
+        if (StringUtils.isNotEmpty(currentDb)) {
+            Database testDb = GlobalStateMgr.getCurrentState().getDb(currentDb);
+            for (MaterializedView mv : ListUtils.emptyIfNull(testDb.getMaterializedViews())) {
+                if (startTime > 0 && mv.getCreateTime() > startTime) {
+                    starRocksAssert.dropMaterializedView(mv.getName());
+                    LOG.warn("cleanup mv after test case: {}", mv.getName());
+                }
+            }
+            if (CollectionUtils.isNotEmpty(testDb.getMaterializedViews())) {
+                LOG.warn("database [{}] still contains {} materialized views",
+                        testDb.getFullName(), testDb.getMaterializedViews().size());
+            }
+        }
     }
 }

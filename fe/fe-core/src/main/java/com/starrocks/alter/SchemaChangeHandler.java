@@ -45,6 +45,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.ColumnPosition;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.binlog.BinlogConfig;
@@ -1380,6 +1381,20 @@ public class SchemaChangeHandler extends AlterHandler {
                                             rollupCol.getDefineExpr().toSql()));
                                 }
                             }
+                        }
+                    }
+                }
+                if (meta.getWhereClause() != null) {
+                    Expr whereExpr = meta.getWhereClause();
+                    List<SlotRef> whereSlots = new ArrayList<>();
+                    whereExpr.collect(SlotRef.class, whereSlots);
+                    for (SlotRef refColumn : whereSlots) {
+                        if (modifiedColumns.contains(refColumn.getColumnName())) {
+                            throw new DdlException(String.format("Can not drop/modify the column %s, " +
+                                            "because the column is used in the related rollup %s " +
+                                            "with the where expr:%s, please drop the rollup index first.",
+                                    refColumn.getColumn().getName(), olapTable.getIndexNameById(meta.getIndexId()),
+                                    meta.getWhereClause().toSql()));
                         }
                     }
                 }
