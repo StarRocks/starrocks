@@ -139,7 +139,7 @@ public class MetricsAction extends RestBaseAction {
         if (Strings.isNullOrEmpty(collectMode)) {
             return false;
         }
-        return SUPPORTED_COLLECT_METRIC_MODES.stream().allMatch(m -> m.equalsIgnoreCase(collectMode));
+        return SUPPORTED_COLLECT_METRIC_MODES.stream().anyMatch(m -> m.equalsIgnoreCase(collectMode));
     }
 
     private boolean isCollectTableOrMVMetricsMinifiedMode(String collectMode) {
