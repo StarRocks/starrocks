@@ -12,6 +12,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.StatsConstants;
@@ -472,8 +473,8 @@ public class QueryCacheTest {
         testHelper(queryList);
     }
 
-    private void testGroupByPermutation(List<String> aggFunctions, List<String> whereClauses, List<String> groupColumns)
-            throws Exception {
+    private void testGroupByPermutation(List<String> aggFunctions, List<String> whereClauses,
+                                        List<String> groupColumns) throws Exception {
         List<String> selections = permuteList(aggFunctions);
         List<String> groupBys = permuteList(groupColumns);
         List<String> queryList = selections.stream()
@@ -1042,7 +1043,8 @@ public class QueryCacheTest {
     }
 
     @Test
-    public void testInPredicateDecomposition() throws AnalysisException {
+    public void testInPredicateDecomposition()
+            throws AnalysisException {
         String q1 = "select sum(v1) from t1 where ts in ('2022-01-03 00:00:00')";
         Optional<PlanFragment> optFrag = getCachedFragment(q1);
         Assert.assertTrue(optFrag.isPresent());
@@ -1142,7 +1144,7 @@ public class QueryCacheTest {
 
     @Test
     public void testQueryOnAggTableWithGroupByOrHavingClauseDependsOnAggColumn() {
-        String[] queries = new String[] {
+        String[] queries = new String[]{
                 "select v1, count(v2) from t7 group by v1",
                 "select count(v2) from t7 where concat('abc', cast(v1 + 10 as varchar)) like '%bc10'",
                 "select ts, count(v2) from t7 where v1 > 3 group by ts",
@@ -1167,7 +1169,7 @@ public class QueryCacheTest {
             Assert.assertFalse(optFrag.get().getCacheParam().isCan_use_multiversion());
         }
 
-        String[] negativeQueries = new String[] {
+        String[] negativeQueries = new String[]{
                 "select ts, count(v2) from t7 group by ts",
                 "select count(v2) from t7 where date_trunc('day', ts) = '2022-01-13'",
                 "select ts, count(v2) from t7 where c1 like 'abc%' group by ts",
@@ -1207,5 +1209,21 @@ public class QueryCacheTest {
         Optional<PlanFragment> frag1 = getCachedFragment(sql1);
         Assert.assertTrue(frag0.isPresent() && frag1.isPresent());
         Assert.assertNotEquals(frag0.get().getCacheParam().digest, frag1.get().getCacheParam().digest);
+    }
+
+    @Test
+    public void testDisableCacheWhenFragmentWithLocalShuffle() throws Exception {
+        String sql = "/*Q01*/ SELECT COUNT(*) FROM hits";
+        Pair<String, ExecPlan> planAndFragment = UtFrameUtils.getPlanAndFragment(ctx, sql);
+        ExecPlan execPlan = planAndFragment.second;
+        Assert.assertTrue(execPlan.getFragments().stream().anyMatch(frag -> frag.getCacheParam() != null));
+        List<PlanFragment> fragments = execPlan.getFragments().stream().map(frag -> {
+            frag.setCacheParam(null);
+            frag.setWithLocalShuffleIfTrue(true);
+            FragmentNormalizer normalizer = new FragmentNormalizer(execPlan, frag);
+            normalizer.normalize();
+            return frag;
+        }).collect(Collectors.toList());
+        Assert.assertTrue(fragments.stream().noneMatch(frag -> frag.getCacheParam() != null));
     }
 }
