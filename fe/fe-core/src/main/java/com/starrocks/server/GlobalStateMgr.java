@@ -1469,9 +1469,6 @@ public class GlobalStateMgr {
         }
 
         replicationMgr.start();
-
-        // The memory tracker should be placed at the end
-        memoryUsageTracker.start();
     }
 
     // start threads that should run on all FE
@@ -1501,6 +1498,9 @@ public class GlobalStateMgr {
         lockChecker.start();
 
         refreshDictionaryCacheTaskDaemon.start();
+
+        // The memory tracker should be placed at the end
+        memoryUsageTracker.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {

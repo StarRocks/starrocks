@@ -34,7 +34,7 @@ public class MemoryUsageTracker extends FrontendDaemon {
 
     private static final Logger LOG = LogManager.getLogger(MemoryUsageTracker.class);
 
-    // Used to save references to memory objects that need to be counted.
+    // Used to save references to metadata submodules which need to be tracked memory on.
     // If the object needs to be counted, it first needs to be added to this collection.
     private static final Map<String, Map<String, MemoryTrackable>> REFERENCE = Maps.newConcurrentMap();
 
@@ -48,31 +48,29 @@ public class MemoryUsageTracker extends FrontendDaemon {
     private void initMemoryTracker() {
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
 
-        addReference("Load", currentState.getLoadMgr());
-        addReference("Load", currentState.getRoutineLoadMgr());
-        addReference("Load", currentState.getStreamLoadMgr());
+        registerMemoryReference("Load", currentState.getLoadMgr());
+        registerMemoryReference("Load", currentState.getRoutineLoadMgr());
+        registerMemoryReference("Load", currentState.getStreamLoadMgr());
 
-        addReference("Export", currentState.getExportMgr());
-        addReference("Delete", currentState.getDeleteMgr());
-        addReference("Transaction", currentState.getGlobalTransactionMgr());
-        addReference("Backup", currentState.getBackupHandler());
-        addReference("Task", currentState.getTaskManager());
-        addReference("Task", currentState.getTaskManager().getTaskRunManager());
-        addReference("Tablet", currentState.getTabletInvertedIndex());
-        addReference("Profile", ProfileManager.getInstance());
-        addReference("Partition", new PartitionMemoryTracker());
-        addReference("ExternalCache", new PartitionMemoryTracker());
+        registerMemoryReference("Export", currentState.getExportMgr());
+        registerMemoryReference("Delete", currentState.getDeleteMgr());
+        registerMemoryReference("Transaction", currentState.getGlobalTransactionMgr());
+        registerMemoryReference("Backup", currentState.getBackupHandler());
+        registerMemoryReference("Task", currentState.getTaskManager());
+        registerMemoryReference("Task", currentState.getTaskManager().getTaskRunManager());
+        registerMemoryReference("Tablet", currentState.getTabletInvertedIndex());
+        registerMemoryReference("Profile", ProfileManager.getInstance());
+        registerMemoryReference("Partition", new PartitionMemoryTracker());
 
         QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
         if (qeProcessor instanceof QeProcessorImpl) {
-            addReference("Coordinator", (QeProcessorImpl) qeProcessor);
+            registerMemoryReference("Coordinator", (QeProcessorImpl) qeProcessor);
         }
 
         IDictManager dictManager = IDictManager.getInstance();
         if (dictManager instanceof CacheDictManager) {
-            addReference("Dict", (CacheDictManager) dictManager);
+            registerMemoryReference("Dict", (CacheDictManager) dictManager);
         }
-
 
         LOG.info("Memory usage tracker init success");
 
@@ -84,12 +82,9 @@ public class MemoryUsageTracker extends FrontendDaemon {
         REFERENCE.get(moduleName).put(object.getClass().getSimpleName(), object);
     }
 
-    private void addReference(String moduleName, MemoryTrackable object) {
-        Map<String, MemoryTrackable> statMap = REFERENCE.computeIfAbsent(moduleName, k -> new HashMap<>());
-        statMap.put(object.getClass().getSimpleName(), object);
-    }
-
-    public static void trackerMemory() {
+    public static void trackMemory() {
+        long startTime;
+        long endTime;
         for (Map.Entry<String, Map<String, MemoryTrackable>> entry : REFERENCE.entrySet()) {
             String moduleName = entry.getKey();
             Map<String, MemoryTrackable> statMap = entry.getValue();
@@ -99,12 +94,15 @@ public class MemoryUsageTracker extends FrontendDaemon {
             for (Map.Entry<String, MemoryTrackable> statEntry : statMap.entrySet()) {
                 String className = statEntry.getKey();
                 MemoryTrackable tracker = statEntry.getValue();
+                startTime = System.currentTimeMillis();
                 long currentEstimateSize = tracker.estimateSize();
                 long currentEstimateCount = tracker.estimateCount();
+                endTime = System.currentTimeMillis();
                 estimateSize += currentEstimateSize;
                 estimateCount += currentEstimateCount;
-                LOG.info("Module {} - {} estimated {} of memory and {} object used",
-                        moduleName, className, new ByteSizeValue(currentEstimateSize), currentEstimateCount);
+                LOG.info("({}ms) Module {} - {} estimated {} of memory and {} object used",
+                        endTime - startTime, moduleName, className,
+                        new ByteSizeValue(currentEstimateSize), currentEstimateCount);
             }
             memoryStat.setCurrentConsumption(estimateSize);
             memoryStat.setObjectCount(estimateCount);
@@ -124,8 +122,8 @@ public class MemoryUsageTracker extends FrontendDaemon {
             initMemoryTracker();
         }
         setInterval(Config.memory_tracker_interval_seconds * 1000L);
-        if (Config.enable_memory_tracker) {
-            trackerMemory();
+        if (Config.memory_tracker_enable) {
+            trackMemory();
         }
     }
 }
