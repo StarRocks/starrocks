@@ -110,6 +110,8 @@ protected:
     virtual bool is_buffer_full() const = 0;
     virtual void set_buffer_finished() = 0;
 
+    virtual int compute_priority() const;
+
     // This method is only invoked when current morsel is reached eof
     // and all cached chunk of this morsel has benn read out
     [[nodiscard]] virtual Status _pickup_morsel(RuntimeState* state, int chunk_source_index);

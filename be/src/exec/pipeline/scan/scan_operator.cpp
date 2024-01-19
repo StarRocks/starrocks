@@ -366,6 +366,10 @@ void ScanOperator::_finish_chunk_source_task(RuntimeState* state, int chunk_sour
     }
 }
 
+int ScanOperator::compute_priority() const {
+    return OlapScanNode::compute_priority(_submit_task_counter->value());
+}
+
 Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_index) {
     ChunkBufferTokenPtr buffer_token;
     if (buffer_token = pin_chunk(1); buffer_token == nullptr) {
@@ -384,7 +388,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
     workgroup::ScanTask task;
     task.workgroup = _workgroup.get();
     // TODO: consider more factors, such as scan bytes and i/o time.
-    task.priority = OlapScanNode::compute_priority(_submit_task_counter->value());
+    // task.priority = OlapScanNode::compute_priority(_submit_task_counter->value());
+    task.priority = compute_priority();
     task.task_group = down_cast<const ScanOperatorFactory*>(_factory)->scan_task_group();
     task.peak_scan_task_queue_size_counter = _peak_scan_task_queue_size_counter;
     const auto io_task_start_nano = MonotonicNanos();

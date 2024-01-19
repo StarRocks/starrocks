@@ -77,6 +77,8 @@ protected:
     bool is_buffer_full() const override;
     void set_buffer_finished() override;
 
+    int compute_priority() const override;
+
 private:
     OlapScanContextPtr _ctx;
 };

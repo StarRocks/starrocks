@@ -86,6 +86,8 @@ public:
 
     int estimated_max_concurrent_chunks() const;
 
+    int get_priority() const { return _olap_scan_node.__isset.priority ? _olap_scan_node.priority : 0; }
+
     static StatusOr<TabletSharedPtr> get_tablet(const TInternalScanRange* scan_range);
     static int compute_priority(int32_t num_submitted_tasks);
 

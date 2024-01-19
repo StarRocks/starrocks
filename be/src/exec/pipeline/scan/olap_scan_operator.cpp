@@ -18,6 +18,7 @@
 #include "exec/olap_scan_node.h"
 #include "exec/pipeline/scan/olap_chunk_source.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
+#include "exec/pipeline/scan/scan_operator.h"
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -160,6 +161,14 @@ bool OlapScanOperator::is_buffer_full() const {
 
 void OlapScanOperator::set_buffer_finished() {
     _ctx->get_chunk_buffer().set_finished(_driver_sequence);
+}
+
+int OlapScanOperator::compute_priority() const {
+    int priority = _ctx->scan_node()->get_priority();
+    if (priority > 0) {
+        return priority;
+    }
+    return ScanOperator::compute_priority();
 }
 
 } // namespace starrocks::pipeline
