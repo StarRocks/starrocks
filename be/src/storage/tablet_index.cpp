@@ -60,6 +60,7 @@ Status TabletIndex::init_from_pb(const TabletIndexPB& index) {
             FILL_INDEX_INTERNAL(index_properties)
             FILL_INDEX_INTERNAL(search_properties)
             FILL_INDEX_INTERNAL(extra_properties)
+            LOG(INFO) << "ngram bf init_from_pb:" << serialized_prop_stream;
         } else {
             LOG(WARNING) << "parse json from serialized_prop_stream error, content is '" << serialized_prop_stream
                          << "'";

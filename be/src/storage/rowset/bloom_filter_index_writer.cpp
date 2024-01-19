@@ -216,16 +216,25 @@ public:
             std::vector<size_t> index;
             size_t slice_gram_num = get_utf8_index(*cur_slice, &index);
 
-            for (size_t j = 0; j + gram_num < slice_gram_num; j++) {
+            size_t j;
+            for (j = 0; j + gram_num <= slice_gram_num; j++) {
                 // find next ngram
-                size_t cur_ngram_length = index[j + gram_num] - index[j];
+                size_t cur_ngram_length = j + gram_num < slice_gram_num ? index[j + gram_num] - index[j]
+                                                                        : cur_slice->get_size() - index[j];
                 Slice cur_ngram = Slice(cur_slice->data + index[j], cur_ngram_length);
 
                 // add this ngram into set
                 if (_values.find(unaligned_load<CppType>(&cur_ngram)) == _values.end()) {
-                    _values.insert(get_value<TYPE_CHAR>(&cur_ngram, this->_typeinfo, &this->_pool));
+                    _values.insert(get_value<TYPE_VARCHAR>(&cur_ngram, this->_typeinfo, &this->_pool));
                 }
             }
+
+            std::string str;
+            for (auto& iter : _values) {
+                str += iter.to_string();
+                str += ", ";
+            }
+            LOG(INFO) << "ngram add values:[ " << str << "]";
 
             // move to next row
             ++cur_slice;
