@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedScanColumnRule;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class ScalarOperatorRewriter {
     public static final List<ScalarOperatorRewriteRule> DEFAULT_TYPE_CAST_RULE = Lists.newArrayList(
@@ -49,6 +50,7 @@ public class ScalarOperatorRewriter {
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule()
     );
+<<<<<<< HEAD
 
     public static final List<ScalarOperatorRewriteRule> MV_SCALAR_REWRITE_RULES = Lists.newArrayList(
             // required
@@ -61,6 +63,11 @@ public class ScalarOperatorRewriter {
             new ExtractCommonPredicateRule(),
             new ArithmeticCommutativeRule()
     );
+=======
+    public static final List<ScalarOperatorRewriteRule> MV_SCALAR_REWRITE_RULES = DEFAULT_REWRITE_SCAN_PREDICATE_RULES.stream()
+            .map(rule -> rule instanceof NormalizePredicateRule ? new MvNormalizePredicateRule() : rule)
+            .collect(Collectors.toList());
+>>>>>>> d4f029d32b ([BugFix] Fix mv rewrite unknown error for query with IsNullPredicate (#39075))
 
     private final ScalarOperatorRewriteContext context;
 
