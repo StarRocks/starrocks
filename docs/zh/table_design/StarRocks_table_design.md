@@ -2,20 +2,11 @@
 displayed_sidebar: "Chinese"
 ---
 
-<<<<<<< HEAD
 # 理解 StarRocks 表设计
 
 ## 列式存储
 
 ![列式存储](../assets/3.1-1.png)
-=======
-# 表概览
-
-import Replicanum from '../assets/commonMarkdown/replicanum.md'
-
-表是数据存储单元。理解 StarRocks 中的表结构，以及如何设计合理的表结构，有利于优化数据组织，提高查询效率。相比于传统的数据库，StarRocks 会以列的方式存储 JSON、ARRAY 等复杂的半结构化数据，保证高效查询。
-本文由浅入深介绍表结构。
->>>>>>> aa3898db51 ([Doc]delete-the-property-of-one-replica (#39422))
 
 StarRocks 中的表由行和列构成。每行数据对应用户一条记录，每列数据具有相同的数据类型。所有数据行的列数相同，可以动态增删列。在 StarRocks 中，一张表的列可以分为维度列（也称为 Key 列）和指标列（也称为 Value 列）。维度列用于分组和排序，指标列的值可以通过聚合函数 [sum](../sql-reference/sql-functions/aggregate-functions/sum.md)、[count](../sql-reference/sql-functions/aggregate-functions/count.md)、[min](../sql-reference/sql-functions/aggregate-functions/min.md)、[max](../sql-reference/sql-functions/aggregate-functions/max.md)、[hll_union_agg](../sql-reference/sql-functions/aggregate-functions/hll_union_agg.md) 和 [bitmap_union](../sql-reference/sql-functions/bitmap-functions/bitmap_union.md) 等累加起来。
 
@@ -33,15 +24,11 @@ StarRocks 表设计原理如下图所示。
 
 一张表中的数据组织主要由三部分构成：
 
-<<<<<<< HEAD
 - 前缀索引
 
   表中每 1024 行数据构成一个逻辑数据块 (Data Block)。每个逻辑数据块在前缀索引表中存储一个索引项，索引项的内容为数据块中第一行数据的维度列所构成的前缀，长度不超过 36 字节。前缀索引是一种稀疏索引。使用表中某行数据的维度列所构成的前缀查找前缀索引表，可以确定该行数据所在逻辑数据块的起始行号。
 
 - 列级数据块
-=======
-<Replicanum />
->>>>>>> aa3898db51 ([Doc]delete-the-property-of-one-replica (#39422))
 
   表中每列数据都按 64 KB 分块存储。数据块作为一个单位单独编码、压缩，也作为 I/O 单位，整体写回设备或者读出。
 
