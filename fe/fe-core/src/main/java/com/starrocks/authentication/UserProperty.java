@@ -25,7 +25,7 @@ import java.util.List;
 
 public class UserProperty {
     @SerializedName(value = "m")
-    private long maxConn = 100;
+    private long maxConn = 1000;
 
     private static final String PROP_MAX_USER_CONNECTIONS = "max_user_connections";
 
