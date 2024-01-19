@@ -731,10 +731,12 @@ public class AlterJobMgr {
         db.dropTable(newTblName);
 
         // rename new table name to origin table name and add it to database
+        newTbl.setId(origTblId);
         newTbl.checkAndSetName(origTblName, false);
         db.registerTableUnlocked(newTbl);
 
         // rename origin table name to new table name and add it to database
+        origTable.setId(newTblId);
         origTable.checkAndSetName(newTblName, false);
         db.registerTableUnlocked(origTable);
 
