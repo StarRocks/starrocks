@@ -21,7 +21,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -91,8 +91,8 @@ public class HostBlacklist {
         LOG.warn("add black list: " + hostId + ", at: " + de.disconnectTime);
     }
 
-    public boolean contains(long backendId) {
-        return hostBlacklist.containsKey(backendId);
+    public boolean contains(long nodeId) {
+        return hostBlacklist.containsKey(nodeId);
     }
 
     public boolean remove(Long hostId) {
@@ -153,14 +153,14 @@ public class HostBlacklist {
         }
     }
 
-    private List<DisconnectEvent> getHistories(Set<Long> backendIds) {
-        if (backendIds == null || backendIds.isEmpty()) {
+    private List<DisconnectEvent> getHistories(Set<Long> nodeIds) {
+        if (nodeIds == null || nodeIds.isEmpty()) {
             return Collections.emptyList();
         }
 
         rwLock.readLock().lock();
         try {
-            return eventHistory.stream().filter(f -> backendIds.contains(f.hostId)).collect(Collectors.toList());
+            return eventHistory.stream().filter(f -> nodeIds.contains(f.hostId)).collect(Collectors.toList());
         } finally {
             rwLock.readLock().unlock();
         }
@@ -171,43 +171,43 @@ public class HostBlacklist {
 
         SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
 
-        List<Long> offlineBackends = Lists.newArrayList();
-        Set<Long> reconnectBackends = Sets.newHashSet();
+        List<Long> offlineNode = Lists.newArrayList();
+        Set<Long> reconnectNode = Sets.newHashSet();
 
         for (Map.Entry<Long, DisconnectEvent> entry : hostBlacklist.entrySet()) {
-            Long backendId = entry.getKey();
-            // 1. If the backend is null, means that the backend has been removed.
-            // 2. check the all ports of the backend
-            Backend backend = clusterInfoService.getBackend(backendId);
-            if (backend == null) {
-                offlineBackends.add(backendId);
-            } else if (clusterInfoService.checkBackendAvailable(backendId) &&
+            Long nodeId = entry.getKey();
+            // 1. If the node is null, means that the node has been removed.
+            // 2. check the all ports of the node
+            ComputeNode node = clusterInfoService.getBackendOrComputeNode(nodeId);
+            if (node == null) {
+                offlineNode.add(nodeId);
+            } else if (clusterInfoService.checkNodeAvailable(node) &&
                     entry.getValue().type == DisconnectEvent.TYPE_AUTO) {
-                String host = backend.getHost();
+                String host = node.getHost();
                 List<Integer> ports = Lists.newArrayList();
-                Collections.addAll(ports, backend.getBePort(), backend.getBrpcPort(), backend.getHttpPort());
+                Collections.addAll(ports, node.getBePort(), node.getBrpcPort(), node.getHttpPort());
                 if (NetUtils.checkAccessibleForAllPorts(host, ports)) {
-                    reconnectBackends.add(backendId);
+                    reconnectNode.add(nodeId);
                 }
             }
         }
 
-        // remove backends.
-        for (Long backendId : offlineBackends) {
-            remove(backendId);
-            LOG.warn("backendID {} is offline, remove backendID {} from blacklist", backendId, backendId);
+        // remove nodes.
+        for (Long nodeId : offlineNode) {
+            remove(nodeId);
+            LOG.warn("nodeID {} is offline, remove nodeID {} from blacklist", nodeId, nodeId);
         }
 
         // update the retry times.
-        List<DisconnectEvent> histories = getHistories(reconnectBackends);
-        for (Long backendId : reconnectBackends) {
-            long count = histories.stream().filter(f -> f.hostId == backendId).count();
+        List<DisconnectEvent> histories = getHistories(reconnectNode);
+        for (Long nodeId : reconnectNode) {
+            long count = histories.stream().filter(f -> f.hostId == nodeId).count();
             if (count < Config.black_host_connect_failures_within_time) {
-                remove(backendId);
-                LOG.warn("remove backendID {} from blacklist", backendId);
+                remove(nodeId);
+                LOG.warn("remove nodeID {} from blacklist", nodeId);
             } else {
-                LOG.warn("backendID {} more than {} disconnections with in the last {}s, will remain in the blacklist",
-                        backendId, Config.black_host_connect_failures_within_time, Config.black_host_history_sec);
+                LOG.warn("nodeID {} more than {} disconnections with in the last {}s, will remain in the blacklist",
+                        nodeId, Config.black_host_connect_failures_within_time, Config.black_host_history_sec);
             }
         }
     }
