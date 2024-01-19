@@ -59,20 +59,22 @@ class TableBasedTaskRunHistoryTest {
 
     @Test
     public void testCRUD(@Mocked RepoExecutor repo) {
-        new Expectations() {{
-            repo.executeDML(
-                    "INSERT INTO _statistics_.task_run_history (task_id, task_run_id, task_name, create_time, " +
-                            "finish_time, expire_time, history_content_json) VALUES(0, 'aaa', 't1', " +
-                            "'1970-01-01 08:00:00', '1970-01-01 08:00:00', '1970-01-01 08:00:00', " +
-                            "'{\"startTaskRunId\":\"aaa\",\"taskId\":0,\"taskName\":\"t1\",\"createTime\":0," +
-                            "\"finishTime\":0,\"processStartTime\":0,\"state\":\"PENDING\",\"progress\":0," +
-                            "\"errorCode\":0,\"expireTime\":0,\"priority\":0,\"mergeRedundant\":false," +
-                            "\"source\":\"CTAS\",\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":" +
-                            "[],\"refBasePartitionsToRefreshMap\":{},\"basePartitionsToRefreshMap\":{}," +
-                            "\"executeOption\":{\"priority\":0,\"isMergeRedundant\":false,\"isManual\":false," +
-                            "\"isSync\":false,\"isReplay\":false}}}')");
+        new Expectations() {
+            {
+                repo.executeDML(
+                        "INSERT INTO _statistics_.task_run_history (task_id, task_run_id, task_name, create_time, " +
+                                "finish_time, expire_time, history_content_json) VALUES(0, 'aaa', 't1', " +
+                                "'1970-01-01 08:00:00', '1970-01-01 08:00:00', '1970-01-01 08:00:00', " +
+                                "'{\"startTaskRunId\":\"aaa\",\"taskId\":0,\"taskName\":\"t1\",\"createTime\":0," +
+                                "\"finishTime\":0,\"processStartTime\":0,\"state\":\"PENDING\",\"progress\":0," +
+                                "\"errorCode\":0,\"expireTime\":0,\"priority\":0,\"mergeRedundant\":false," +
+                                "\"source\":\"CTAS\",\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":" +
+                                "[],\"refBasePartitionsToRefreshMap\":{},\"basePartitionsToRefreshMap\":{}," +
+                                "\"executeOption\":{\"priority\":0,\"isMergeRedundant\":false,\"isManual\":false," +
+                                "\"isSync\":false,\"isReplay\":false}}}')");
 
-        }};
+            }
+        };
 
         TableBasedTaskRunHistory history = new TableBasedTaskRunHistory();
         TaskRunStatus status = new TaskRunStatus();
@@ -81,33 +83,41 @@ class TableBasedTaskRunHistoryTest {
         history.addHistory(status);
 
         // getTaskByName
-        new Expectations() {{
-            repo.executeDQL("SELECT history_content_json " +
-                    "FROM _statistics_.task_run_history WHERE task_name = 't1'");
-        }};
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json " +
+                        "FROM _statistics_.task_run_history WHERE task_name = 't1'");
+            }
+        };
         history.getTaskByName("t1");
 
         // getTask
-        new Expectations() {{
-            repo.executeDQL("SELECT history_content_json " +
-                    "FROM _statistics_.task_run_history WHERE task_run_id = 't1'");
-        }};
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json " +
+                        "FROM _statistics_.task_run_history WHERE task_run_id = 't1'");
+            }
+        };
         history.getTask("t1");
 
         // getAllHistory
-        new Expectations() {{
-            repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history");
-        }};
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history");
+            }
+        };
         history.getAllHistory();
 
         // getTaskRunCount
         TResultBatch batch = new TResultBatch();
         batch.setRows(Lists.newArrayList(ByteBuffer.wrap("[123]".getBytes())));
         List<TResultBatch> resultBatch = Lists.newArrayList(batch);
-        new Expectations() {{
-            repo.executeDQL("SELECT count(*) as cnt FROM _statistics_.task_run_history");
-            result = resultBatch;
-        }};
+        new Expectations() {
+            {
+                repo.executeDQL("SELECT count(*) as cnt FROM _statistics_.task_run_history");
+                result = resultBatch;
+            }
+        };
         assertEquals(123, history.getTaskRunCount());
     }
 
@@ -120,26 +130,30 @@ class TableBasedTaskRunHistoryTest {
         assertEquals(TableBasedTaskRunHistory.TABLE_REPLICAS, keeper.getTableReplicas());
 
         // database not exists
-        new Expectations() {{
-            keeper.checkDatabaseExists();
-            result = false;
-        }};
+        new Expectations() {
+            {
+                keeper.checkDatabaseExists();
+                result = false;
+            }
+        };
         keeper.run();
         assertFalse(keeper.isDatabaseExisted());
 
         // create table
         keeper.setDatabaseExisted(true);
-        new Expectations() {{
-            repo.executeDDL(
-                    "CREATE TABLE IF NOT EXISTS _statistics_.task_run_history (task_id bigint NOT NULL, " +
-                            "task_run_id string NOT NULL, create_time datetime NOT NULL, task_name string NOT NULL, " +
-                            "finish_time datetime NOT NULL, expire_time datetime NOT NULL, " +
-                            "history_content_json JSON NOT NULL)PRIMARY KEY (task_id, task_run_id, create_time) " +
-                            "PARTITION BY RANGE(create_time)() DISTRIBUTED BY HASH(task_id) BUCKETS 8 " +
-                            "PROPERTIES('replication_num' = '1','dynamic_partition.time_unit' = 'DAY', " +
-                            "'dynamic_partition.start' = '-7', 'dynamic_partition.end' = '3', " +
-                            "'dynamic_partition.prefix' = 'p' ) ");
-        }};
+        new Expectations() {
+            {
+                repo.executeDDL(
+                        "CREATE TABLE IF NOT EXISTS _statistics_.task_run_history (task_id bigint NOT NULL, " +
+                                "task_run_id string NOT NULL, create_time datetime NOT NULL, task_name string NOT NULL, " +
+                                "finish_time datetime NOT NULL, expire_time datetime NOT NULL, " +
+                                "history_content_json JSON NOT NULL)PRIMARY KEY (task_id, task_run_id, create_time) " +
+                                "PARTITION BY RANGE(create_time)() DISTRIBUTED BY HASH(task_id) BUCKETS 8 " +
+                                "PROPERTIES('replication_num' = '1','dynamic_partition.time_unit' = 'DAY', " +
+                                "'dynamic_partition.start' = '-7', 'dynamic_partition.end' = '3', " +
+                                "'dynamic_partition.prefix' = 'p' ) ");
+            }
+        };
         keeper.run();
         assertTrue(keeper.isTableExisted());
         assertFalse(keeper.isTableCorrected());

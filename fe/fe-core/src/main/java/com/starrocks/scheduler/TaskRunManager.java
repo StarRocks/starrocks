@@ -336,7 +336,7 @@ public class TaskRunManager implements MemoryTrackable {
 
         return ImmutableMap.of("PendingTaskRun", validPendingCount,
                 "RunningTaskRun", (long) runningTaskRunMap.size(),
-                "HistoryTaskRun", taskRunHistory.getTaskRunCount());
+                "HistoryTaskRun", getTaskRunHistory().getTaskRunCount());
     }
   
     /**

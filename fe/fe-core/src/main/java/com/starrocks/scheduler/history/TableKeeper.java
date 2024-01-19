@@ -83,7 +83,7 @@ public class TableKeeper {
     }
 
     public boolean correctTable() {
-        int numBackends = GlobalStateMgr.getCurrentSystemInfo().getTotalBackendNumber();
+        int numBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber();
         int replica = GlobalStateMgr.getCurrentState()
                 .mayGetDb(databaseName)
                 .flatMap(db -> db.mayGetTable(tableName))
