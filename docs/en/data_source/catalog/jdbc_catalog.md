@@ -12,6 +12,10 @@ Also, you can directly transform and load data from JDBC data sources by using [
 
 JDBC catalogs currently support MySQL and PostgreSQL.
 
+:::note
+The JDBC catalog was designed to help with importing data into StarRocks NOT to perform queries against external systems as a normal operation.   Although you can query and use functions like JOIN, it is not performant.   A more performant solution would be to import the data into StarRocks. 
+:::
+
 ## Prerequisites
 
 - The FEs and BEs in your StarRocks cluster can download the JDBC driver from the download URL specified by the `driver_url` parameter.
