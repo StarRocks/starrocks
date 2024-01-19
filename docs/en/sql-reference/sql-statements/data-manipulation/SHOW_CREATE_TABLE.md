@@ -12,7 +12,7 @@ Returns the CREATE TABLE statement that was used to create a given table.
 
 Since v3.0, you can use the SHOW CREATE TABLE statement to view the CREATE TABLE statements of the tables that are managed by an external catalog and are stored in Apache Hive™, Apache Iceberg, Apache Hudi, or Delta Lake.
 
-Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [Determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
+Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../../../table_design/Data_distribution.md#set-the-number-of-buckets).
 
 - If you specified the number of buckets when creating a table, the output of SHOW CREATE TABLE will display the number of buckets.
 - If you did not specify the number of buckets when creating a table, the output of SHOW CREATE TABLE will not display the number of buckets. You can run [SHOW PARTITIONS](SHOW_PARTITIONS.md) to view the number of buckets for each partition.
