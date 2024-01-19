@@ -31,21 +31,14 @@ alter_clause1[, alter_clause2, ...]
 `alter_clause` is classified into six operations: partition, rollup, schema change, rename, index, swap, comment, and compact.
 
 - rename: renames a table, rollup index, or partition. **Note that column names cannot be modified.**
-<<<<<<< HEAD
-- comment: modifies the table comment (supported from **v3.1 onwards**).
-=======
 - comment: modifies the table comment (supported from **v3.1 onwards**). Currently, column comments cannot be modified.
 - partition: modifies partition properties, drops a partition, or adds a partition.
 - bucket: modifies the bucketing method and number of buckets.
 - column: adds, drops, or reorders columns, or modifies column type.
 - rollup index: creates or drops a rollup index.
 - bitmap index: modifies index (only Bitmap index can be modified).
->>>>>>> c82343698e ([Doc] Fix feedback in alter table (#39560))
 - swap: atomic exchange of two tables.
-- partition: modifies partition properties, drops a partition, or adds a partition.
 - schema change: adds, drops, or reorders columns, or modifies column type.
-- rollup: creates or drops a rollup index.
-- index: modifies index (only Bitmap index can be modified).
 - compact: performs manual compaction to merge versions of loaded data (supported from **v3.1 onwards**).
 
 :::note
