@@ -470,6 +470,7 @@ Status ExecEnv::init_mem_tracker() {
     _clone_mem_tracker = regist_tracker(-1, "clone", process_mem_tracker());
     int64_t consistency_mem_limit = calc_max_consistency_memory(process_mem_tracker()->limit());
     _consistency_mem_tracker = regist_tracker(consistency_mem_limit, "consistency", process_mem_tracker());
+    _datacache_mem_tracker = regist_tracker(-1, "datacache", _process_mem_tracker.get());
     _replication_mem_tracker = regist_tracker(-1, "replication", _process_mem_tracker.get());
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);

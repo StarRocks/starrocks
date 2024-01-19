@@ -159,6 +159,9 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
         } else if (iter->second == "consistency") {
             start_mem_tracker = ExecEnv::GetInstance()->consistency_mem_tracker();
             cur_level = 2;
+        } else if (iter->second == "datacache") {
+            start_mem_tracker = ExecEnv::GetInstance()->datacache_mem_tracker();
+            cur_level = 2;
         } else {
             start_mem_tracker = mem_tracker;
             cur_level = 1;

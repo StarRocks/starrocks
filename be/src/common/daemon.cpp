@@ -41,6 +41,7 @@
 #include <gperftools/malloc_extension.h>
 #endif
 
+#include "block_cache/block_cache.h"
 #include "column/column_helper.h"
 #include "column/column_pool.h"
 #include "common/config.h"
@@ -150,6 +151,7 @@ void gc_memory(void* arg_this) {
  * 3. max io util of all disks
  * 4. max network send bytes rate
  * 5. max network receive bytes rate
+ * 6. datacache memory usage
  */
 void calculate_metrics(void* arg_this) {
     int64_t last_ts = -1L;
@@ -206,18 +208,29 @@ void calculate_metrics(void* arg_this) {
                                                                                 &lst_net_receive_bytes);
         }
 
+        // update datacache mem_tracker
+        auto datacache_mem_tracker = ExecEnv::GetInstance()->datacache_mem_tracker();
+        int64_t datacache_mem_bytes = 0;
+        BlockCache* block_cache = BlockCache::instance();
+        if (block_cache->is_initialized()) {
+            auto datacache_metrics = block_cache->cache_metrics();
+            datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
+        }
+        datacache_mem_tracker->set(datacache_mem_bytes);
+
         auto* mem_metrics = StarRocksMetrics::instance()->system_metrics()->memory_metrics();
 
         LOG(INFO) << fmt::format(
                 "Current memory statistics: process({}), query_pool({}), load({}), "
                 "metadata({}), compaction({}), schema_change({}), column_pool({}), "
-                "page_cache({}), update({}), chunk_allocator({}), clone({}), consistency({})",
+                "page_cache({}), update({}), chunk_allocator({}), clone({}), consistency({}), "
+                "datacache({})",
                 mem_metrics->process_mem_bytes.value(), mem_metrics->query_mem_bytes.value(),
                 mem_metrics->load_mem_bytes.value(), mem_metrics->metadata_mem_bytes.value(),
                 mem_metrics->compaction_mem_bytes.value(), mem_metrics->schema_change_mem_bytes.value(),
                 mem_metrics->column_pool_mem_bytes.value(), mem_metrics->storage_page_cache_mem_bytes.value(),
                 mem_metrics->update_mem_bytes.value(), mem_metrics->chunk_allocator_mem_bytes.value(),
-                mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value());
+                mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value(), datacache_mem_bytes);
 
         nap_sleep(15, [daemon] { return daemon->stopped(); });
     }
