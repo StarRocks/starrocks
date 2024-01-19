@@ -81,11 +81,11 @@ public class TableBasedTaskRunHistory implements TaskRunHistory {
             "create_time, finish_time, expire_time, " +
             "history_content_json) " +
             "VALUES({1}, {2}, {3}, {4}, {5}, {6}, {7})";
-    private static final String SELECT_BY_TASK_NAME = "SELECT " + COLUMN_LIST + " FROM " + TABLE_FULL_NAME +
-            " WHERE task_name = {0}";
-    private static final String SELECT_BY_TASK_RUN_ID = "SELECT " + COLUMN_LIST + " FROM " + TABLE_FULL_NAME +
-            " WHERE task_run_id = {0}";
-    private static final String SELECT_ALL = "SELECT " + COLUMN_LIST + " FROM " + TABLE_FULL_NAME;
+    private static final String SELECT_BY_TASK_NAME =
+            "SELECT history_content_json FROM " + TABLE_FULL_NAME + " WHERE task_name = {0}";
+    private static final String SELECT_BY_TASK_RUN_ID =
+            "SELECT history_content_json FROM " + TABLE_FULL_NAME + " WHERE task_run_id = {0}";
+    private static final String SELECT_ALL = "SELECT history_content_json FROM " + TABLE_FULL_NAME;
     private static final String COUNT_TASK_RUNS = "SELECT count(*) as cnt FROM " + TABLE_FULL_NAME;
 
     public static TableKeeper createKeeper() {

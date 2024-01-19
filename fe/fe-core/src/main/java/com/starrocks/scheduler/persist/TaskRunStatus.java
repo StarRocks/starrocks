@@ -391,13 +391,26 @@ public class TaskRunStatus implements Writable {
         return GsonUtils.GSON.fromJson(json, TaskRunStatus.class);
     }
 
+    static class TaskRunStatusJSONRecord {
+        /**
+         * Only one item in the array, like:
+         * { data: [ {TaskRunStatus} ] }
+         */
+        @SerializedName("data")
+        public List<TaskRunStatus> data;
+
+        public static TaskRunStatusJSONRecord fromJson(String json) {
+            return GsonUtils.GSON.fromJson(json, TaskRunStatusJSONRecord.class);
+        }
+    }
+
     public static List<TaskRunStatus> fromResultBatch(List<TResultBatch> batches) {
         List<TaskRunStatus> res = new ArrayList<>();
         for (TResultBatch batch : ListUtils.emptyIfNull(batches)) {
             for (ByteBuffer buffer : batch.getRows()) {
                 ByteBuf copied = Unpooled.copiedBuffer(buffer);
                 String jsonString = copied.toString(Charset.defaultCharset());
-                res.add(TaskRunStatus.fromJson(jsonString));
+                res.addAll(ListUtils.emptyIfNull(TaskRunStatusJSONRecord.fromJson(jsonString).data));
             }
         }
         return res;

@@ -82,22 +82,21 @@ class TableBasedTaskRunHistoryTest {
 
         // getTaskByName
         new Expectations() {{
-            repo.executeDQL("SELECT task_id, task_run_id, task_name, create_time, finish_time, expire_time, " +
-                    "history_content_json  FROM _statistics_.task_run_history WHERE task_name = 't1'");
+            repo.executeDQL("SELECT history_content_json " +
+                    "FROM _statistics_.task_run_history WHERE task_name = 't1'");
         }};
         history.getTaskByName("t1");
 
         // getTask
         new Expectations() {{
-            repo.executeDQL("SELECT task_id, task_run_id, task_name, create_time, finish_time, expire_time, " +
-                    "history_content_json  FROM _statistics_.task_run_history WHERE task_run_id = 't1'");
+            repo.executeDQL("SELECT history_content_json " +
+                    "FROM _statistics_.task_run_history WHERE task_run_id = 't1'");
         }};
         history.getTask("t1");
 
         // getAllHistory
         new Expectations() {{
-            repo.executeDQL("SELECT task_id, task_run_id, task_name, create_time, finish_time, expire_time, " +
-                    "history_content_json  FROM _statistics_.task_run_history");
+            repo.executeDQL("SELECT history_content_json FROM _statistics_.task_run_history");
         }};
         history.getAllHistory();
 
