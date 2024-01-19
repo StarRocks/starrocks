@@ -3443,6 +3443,7 @@ void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
     }
     int64_t total_row = 0;
     int64_t total_size = 0;
+    int64_t total_segment_num = 0;
     {
         std::lock_guard lg(_rowset_stats_lock);
         for (uint32_t rowsetid : rowsets) {
@@ -3451,11 +3452,13 @@ void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
                 // TODO(cbl): also report num deletes
                 total_row += itr->second->num_rows;
                 total_size += itr->second->byte_size;
+                total_segment_num += itr->second->num_segments;
             }
         }
     }
     info.num_row = total_row;
     info.data_size = total_size;
+    info.num_segment = total_segment_num;
     auto& index_cache = StorageEngine::instance()->update_manager()->index_cache();
     auto index_entry = index_cache.get(_tablet.tablet_id());
     if (index_entry != nullptr) {

@@ -36,6 +36,12 @@ SchemaScanner::ColumnDesc SchemaBeTabletsScanner::_s_columns[] = {
         {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},    {"TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
         {"DATA_DIR", TYPE_VARCHAR, sizeof(StringValue), false}, {"SHARD_ID", TYPE_BIGINT, sizeof(int64_t), false},
         {"SCHEMA_HASH", TYPE_BIGINT, sizeof(int64_t), false},
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_be_tablets_scanner.cpp
+=======
+        {"INDEX_DISK", TYPE_BIGINT, sizeof(int64_t), false},
+        {"MEDIUM_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"NUM_SEGMENT", TYPE_BIGINT, sizeof(int64_t), false},
+>>>>>>> 37ba377645 ([Feature]Support show segment_num in be_tablets (#38621)):be/src/exec/schema_scanner/schema_be_tablets_scanner.cpp
 };
 
 SchemaBeTabletsScanner::SchemaBeTabletsScanner()
@@ -183,6 +189,24 @@ Status SchemaBeTabletsScanner::fill_chunk(vectorized::ChunkPtr* chunk) {
                 fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.schema_hash);
                 break;
             }
+<<<<<<< HEAD:be/src/exec/vectorized/schema_scanner/schema_be_tablets_scanner.cpp
+=======
+            case 18: {
+                // INDEX_DISK
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.index_disk_usage);
+                break;
+            }
+            case 19: {
+                // medium type
+                Slice medium_type = Slice(medium_type_to_string(info.medium_type));
+                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&medium_type);
+                break;
+            }
+            case 20: {
+                // NUM_SEGMENT
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_segment);
+            }
+>>>>>>> 37ba377645 ([Feature]Support show segment_num in be_tablets (#38621)):be/src/exec/schema_scanner/schema_be_tablets_scanner.cpp
             default:
                 break;
             }
