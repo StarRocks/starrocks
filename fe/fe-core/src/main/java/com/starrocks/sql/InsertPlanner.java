@@ -15,6 +15,7 @@
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Stopwatch;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
@@ -34,6 +35,14 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.UserException;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
+import com.starrocks.meta.lock.Locker;
+import com.starrocks.planner.BlackHoleTableSink;
+>>>>>>> 180b0a303c ([Enhancement] optimize dblock for insert-select statement  (#39141))
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
@@ -53,6 +62,8 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -92,6 +103,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
@@ -101,8 +113,19 @@ public class InsertPlanner {
     public static boolean enableSingleReplicationShuffle = false;
     private boolean shuffleServiceEnable = false;
     private boolean forceReplicatedStorage = false;
+    private Map<String, Database> dbs;
+    private boolean useOptimisticLock;
 
     private static final Logger LOG = LogManager.getLogger(InsertPlanner.class);
+
+    public InsertPlanner() {
+        this.useOptimisticLock = false;
+    }
+
+    public InsertPlanner(Map<String, Database> dbs, boolean optimisticLock) {
+        this.dbs = dbs;
+        this.useOptimisticLock = optimisticLock;
+    }
 
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
@@ -151,6 +174,7 @@ public class InsertPlanner {
             session.getSessionVariable().setEnableLocalShuffleAgg(false);
             session.getSessionVariable().setEnableMaterializedViewRewrite(enableMVRewrite);
 
+<<<<<<< HEAD
             Optimizer optimizer = new Optimizer();
             PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
 
@@ -175,6 +199,15 @@ public class InsertPlanner {
                         optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
                         queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
             }
+=======
+            ExecPlan execPlan =
+                    useOptimisticLock ?
+                            buildExecPlanWithRetry(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
+                                    queryRelation, targetTable) :
+                            buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory,
+                                    queryRelation,
+                                    targetTable);
+>>>>>>> 180b0a303c ([Enhancement] optimize dblock for insert-select statement  (#39141))
 
             DescriptorTable descriptorTable = execPlan.getDescTbl();
             TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
@@ -255,7 +288,8 @@ public class InsertPlanner {
                     sinkFragment.setPipelineDop(1);
                 } else {
                     if (ConnectContext.get().getSessionVariable().getEnableAdaptiveSinkDop()) {
-                        sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
+                        sinkFragment.setPipelineDop(
+                                ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism());
                     } else {
                         sinkFragment
                                 .setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
@@ -278,6 +312,72 @@ public class InsertPlanner {
         }
     }
 
+    /**
+     * The workhorse of InsertPlanner, which may takes a lot of time, so we would release the lock during planning
+     */
+    private ExecPlan buildExecPlanWithRetry(InsertStmt insertStmt, ConnectContext session,
+                                            List<ColumnRefOperator> outputColumns,
+                                            LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
+                                            QueryRelation queryRelation, Table targetTable) {
+        boolean isSchemaValid = true;
+        Set<OlapTable> olapTables = StatementPlanner.collectOriginalOlapTables(insertStmt, dbs);
+        Locker locker = new Locker();
+        Stopwatch watch = Stopwatch.createStarted();
+
+        for (int i = 0; i < Config.max_query_retry_time; i++) {
+            long planStartTime = OptimisticVersion.generate();
+            if (!isSchemaValid) {
+                olapTables = StatementPlanner.reAnalyzeStmt(insertStmt, dbs, session);
+            }
+
+            // Release the lock during planning, and reacquire the lock before validating
+            StatementPlanner.unLock(locker, dbs);
+            ExecPlan plan;
+            try {
+                plan = buildExecPlan(insertStmt, session, outputColumns, logicalPlan, columnRefFactory, queryRelation,
+                        targetTable);
+            } finally {
+                StatementPlanner.lock(locker, dbs);
+            }
+            isSchemaValid =
+                    olapTables.stream().allMatch(t -> OptimisticVersion.validateTableUpdate(t, planStartTime));
+            if (isSchemaValid) {
+                return plan;
+            }
+        }
+        throw new StarRocksPlannerException(String.format("failed to generate plan for the statement after %dms",
+                watch.elapsed(TimeUnit.MILLISECONDS)), ErrorType.INTERNAL_ERROR);
+    }
+
+    private ExecPlan buildExecPlan(InsertStmt insertStmt, ConnectContext session, List<ColumnRefOperator> outputColumns,
+                                   LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
+                                   QueryRelation queryRelation, Table targetTable) {
+        Optimizer optimizer = new Optimizer();
+        PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns,
+                session.getSessionVariable());
+        OptExpression optimizedPlan;
+
+        try (Timer ignore2 = Tracers.watchScope("Optimizer")) {
+            optimizedPlan = optimizer.optimize(
+                    session,
+                    logicalPlan.getRoot(),
+                    requiredPropertySet,
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
+        }
+
+        //8. Build fragment exec plan
+        boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
+                || targetTable instanceof MysqlTable);
+        ExecPlan execPlan;
+        try (Timer ignore3 = Tracers.watchScope("PlanBuilder")) {
+            execPlan = PlanFragmentBuilder.createPhysicalPlan(
+                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
+                    queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
+        }
+        return execPlan;
+    }
+
     private void castLiteralToTargetColumnsType(InsertStmt insertStatement) {
         Preconditions.checkState(insertStatement.getQueryStatement().getQueryRelation() instanceof ValuesRelation,
                 "must values");
@@ -291,8 +391,8 @@ public class InsertPlanner {
                 for (List<Expr> row : values.getRows()) {
                     if (isAutoIncrement && row.get(columnIdx).getType() == Type.NULL) {
                         throw new SemanticException(" `NULL` value is not supported for an AUTO_INCREMENT column: " +
-                                                     targetColumn.getName() + " You can use `default` for an" +
-                                                     " AUTO INCREMENT column");
+                                targetColumn.getName() + " You can use `default` for an" +
+                                " AUTO INCREMENT column");
                     }
                     if (row.get(columnIdx) instanceof DefaultValueExpr) {
                         if (isAutoIncrement) {
@@ -309,9 +409,10 @@ public class InsertPlanner {
                 if (idx != -1) {
                     for (List<Expr> row : values.getRows()) {
                         if (isAutoIncrement && row.get(idx).getType() == Type.NULL) {
-                            throw new SemanticException(" `NULL` value is not supported for an AUTO_INCREMENT column: " +
-                                                        targetColumn.getName() + " You can use `default` for an" +
-                                                        " AUTO INCREMENT column");
+                            throw new SemanticException(
+                                    " `NULL` value is not supported for an AUTO_INCREMENT column: " +
+                                            targetColumn.getName() + " You can use `default` for an" +
+                                            " AUTO INCREMENT column");
                         }
                         if (row.get(idx) instanceof DefaultValueExpr) {
                             if (isAutoIncrement) {
@@ -374,6 +475,63 @@ public class InsertPlanner {
         return logicalPlan.getRootBuilder().withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
     }
 
+<<<<<<< HEAD
+=======
+    private OptExprBuilder fillGeneratedColumns(ColumnRefFactory columnRefFactory, InsertStmt insertStatement,
+                                                List<ColumnRefOperator> outputColumns, OptExprBuilder root,
+                                                ConnectContext session) {
+        List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
+        Set<Column> baseSchema = Sets.newHashSet(insertStatement.getTargetTable().getBaseSchema());
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+
+        for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
+            Column targetColumn = fullSchema.get(columnIdx);
+
+            if (targetColumn.isGeneratedColumn()) {
+                // If fe restart and Insert INTO is executed, the re-analyze is needed.
+                Expr expr = targetColumn.generatedColumnExpr();
+                ExpressionAnalyzer.analyzeExpression(expr,
+                        new AnalyzeState(), new Scope(RelationId.anonymous(), new RelationFields(
+                                insertStatement.getTargetTable().getBaseSchema().stream()
+                                        .map(col -> new Field(col.getName(),
+                                                col.getType(), insertStatement.getTableName(), null))
+                                        .collect(Collectors.toList()))), session);
+
+                List<SlotRef> slots = new ArrayList<>();
+                expr.collect(SlotRef.class, slots);
+
+                ExpressionMapping expressionMapping =
+                        new ExpressionMapping(new Scope(RelationId.anonymous(), new RelationFields()),
+                                Lists.newArrayList());
+
+                for (SlotRef slot : slots) {
+                    String originName = slot.getColumnName();
+
+                    Optional<Column> optOriginColumn = fullSchema.stream()
+                            .filter(c -> c.nameEquals(originName, false)).findFirst();
+                    Column originColumn = optOriginColumn.get();
+                    ColumnRefOperator originColRefOp = outputColumns.get(fullSchema.indexOf(originColumn));
+
+                    expressionMapping.put(slot, originColRefOp);
+                }
+
+                ScalarOperator scalarOperator =
+                        SqlToScalarOperatorTranslator.translate(expr, expressionMapping, columnRefFactory);
+
+                ColumnRefOperator columnRefOperator =
+                        columnRefFactory.create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+                outputColumns.add(columnRefOperator);
+                columnRefMap.put(columnRefOperator, scalarOperator);
+            } else if (baseSchema.contains(fullSchema.get(columnIdx))) {
+                ColumnRefOperator columnRefOperator = outputColumns.get(columnIdx);
+                columnRefMap.put(columnRefOperator, columnRefOperator);
+            }
+        }
+
+        return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
+    }
+
+>>>>>>> 180b0a303c ([Enhancement] optimize dblock for insert-select statement  (#39141))
     private OptExprBuilder fillShadowColumns(ColumnRefFactory columnRefFactory, InsertStmt insertStatement,
                                              List<ColumnRefOperator> outputColumns, OptExprBuilder root,
                                              ConnectContext session) {
@@ -423,6 +581,7 @@ public class InsertPlanner {
                     }
                     String targetIndexMetaName = targetIndexMeta == null ? "" :
                             targetOlapTable.getIndexNameById(targetIndexMeta.getIndexId());
+<<<<<<< HEAD
                     // NOTE: In SR >= 3.1, synchronous-materialized view supports complex expressions and where expressions,
                     // which will generate defined expr for each aggregate function. But when downgrades to < 3.1 version,
                     // replay routine in the older version will generate null for defined expr.
@@ -436,6 +595,12 @@ public class InsertPlanner {
                             + " of target table:" + insertStatement.getTargetTable().getName() +
                             ". This materialized view may be created from >=3.1 version \n" +
                             "which is not compatible with lower version, please drop it and insert it again.");
+=======
+                    throw new SemanticException(
+                            "The define expr of shadow column " + targetColumn.getName() + " is null, " +
+                                    "please check the associated materialized view " + targetIndexMetaName
+                                    + " of target table:" + insertStatement.getTargetTable().getName());
+>>>>>>> 180b0a303c ([Enhancement] optimize dblock for insert-select statement  (#39141))
                 }
 
                 String originName = targetColumn.getRefColumn().getColumnName();
@@ -528,7 +693,61 @@ public class InsertPlanner {
             return new PhysicalPropertySet(distributionProperty);
         }
 
+<<<<<<< HEAD
         if (!(insertStmt.getTargetTable() instanceof OlapTable)) {
+=======
+        Table targetTable = insertStmt.getTargetTable();
+        if (targetTable instanceof IcebergTable) {
+            IcebergTable icebergTable = (IcebergTable) targetTable;
+            SortOrder sortOrder = icebergTable.getNativeTable().sortOrder();
+
+            if (sortOrder.isUnsorted()) {
+                return new PhysicalPropertySet();
+            } else {
+                List<SortField> sortFields = sortOrder.fields();
+                List<Ordering> orderings = new ArrayList<>();
+                List<Integer> sortKeyIndexes = icebergTable.getSortKeyIndexes();
+                for (int index : sortKeyIndexes) {
+                    ColumnRefOperator columnRef = outputColumns.get(index);
+                    SortField sortField = sortFields.get(sortKeyIndexes.indexOf(index));
+                    boolean isAsc = sortField.direction() == SortDirection.ASC;
+                    boolean isNullFirst = sortField.nullOrder() == NullOrder.NULLS_FIRST;
+                    Ordering ordering = new Ordering(columnRef, isAsc, isNullFirst);
+                    orderings.add(ordering);
+                }
+                SortProperty sortProperty = SortProperty.createProperty(orderings);
+                return new PhysicalPropertySet(sortProperty);
+            }
+        }
+
+        if (targetTable instanceof TableFunctionTable) {
+            TableFunctionTable table = (TableFunctionTable) targetTable;
+            if (table.isWriteSingleFile()) {
+                return new PhysicalPropertySet(DistributionProperty
+                        .createProperty(new GatherDistributionSpec()));
+            }
+
+            if (session.isEnableConnectorSinkGlobalShuffle()) {
+                // use random shuffle for unpartitioned table
+                if (table.getPartitionColumnNames().isEmpty()) {
+                    return new PhysicalPropertySet(DistributionProperty
+                            .createProperty(new RoundRobinDistributionSpec()));
+                } else { // use hash shuffle for partitioned table
+                    List<Integer> partitionColumnIDs = table.getPartitionColumnIDs().stream()
+                            .map(x -> outputColumns.get(x).getId()).collect(Collectors.toList());
+                    HashDistributionDesc desc = new HashDistributionDesc(partitionColumnIDs,
+                            HashDistributionDesc.SourceType.SHUFFLE_AGG);
+                    return new PhysicalPropertySet(DistributionProperty
+                            .createProperty(DistributionSpec.createHashDistributionSpec(desc)));
+                }
+            }
+
+            // no global shuffle
+            return PhysicalPropertySet.EMPTY;
+        }
+
+        if (!(targetTable instanceof OlapTable)) {
+>>>>>>> 180b0a303c ([Enhancement] optimize dblock for insert-select statement  (#39141))
             return new PhysicalPropertySet();
         }
 
@@ -573,4 +792,97 @@ public class InsertPlanner {
 
         return new PhysicalPropertySet(property);
     }
+<<<<<<< HEAD
+=======
+
+    private OptExprBuilder fillKeyPartitionsColumn(ColumnRefFactory columnRefFactory,
+                                                   InsertStmt insertStatement, List<ColumnRefOperator> outputColumns,
+                                                   OptExprBuilder root) {
+        Table targetTable = insertStatement.getTargetTable();
+        LogicalProjectOperator projectOperator = (LogicalProjectOperator) root.getRoot().getOp();
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = projectOperator.getColumnRefMap();
+        List<String> partitionColNames = insertStatement.getTargetPartitionNames().getPartitionColNames();
+        List<Expr> partitionColValues = insertStatement.getTargetPartitionNames().getPartitionColValues();
+        List<String> tablePartitionColumnNames = targetTable.getPartitionColumnNames();
+
+        for (Column column : targetTable.getFullSchema()) {
+            String columnName = column.getName();
+            if (tablePartitionColumnNames.contains(columnName)) {
+                int index = partitionColNames.indexOf(columnName);
+                LiteralExpr expr = (LiteralExpr) partitionColValues.get(index);
+                ScalarOperator scalarOperator =
+                        ConstantOperator.createObject(expr.getRealObjectValue(), column.getType());
+                ColumnRefOperator col = columnRefFactory
+                        .create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
+                outputColumns.add(col);
+                columnRefMap.put(col, scalarOperator);
+            }
+        }
+        return root.withNewRoot(new LogicalProjectOperator(new HashMap<>(columnRefMap)));
+    }
+
+    private boolean needToSkip(InsertStmt stmt, int columnIdx) {
+        Table targetTable = stmt.getTargetTable();
+        boolean skip = false;
+        if (stmt.isSpecifyKeyPartition()) {
+            if (targetTable.isIcebergTable()) {
+                return ((IcebergTable) targetTable).partitionColumnIndexes().contains(columnIdx);
+            } else if (targetTable.isHiveTable()) {
+                return columnIdx >= targetTable.getFullSchema().size() - targetTable.getPartitionColumnNames().size();
+            }
+        }
+
+        return skip;
+    }
+
+    private boolean isKeyPartitionStaticInsert(InsertStmt insertStmt, QueryRelation queryRelation) {
+        if (!(queryRelation instanceof SelectRelation)) {
+            return false;
+        }
+
+        Table targetTable = insertStmt.getTargetTable();
+        if (!(targetTable.isHiveTable() || targetTable.isIcebergTable())) {
+            return false;
+        }
+
+        if (targetTable.isUnPartitioned()) {
+            return false;
+        }
+
+        if (insertStmt.isSpecifyKeyPartition()) {
+            return true;
+        }
+
+        SelectRelation selectRelation = (SelectRelation) queryRelation;
+        List<SelectListItem> listItems = selectRelation.getSelectList().getItems();
+
+        for (SelectListItem item : listItems) {
+            if (item.isStar()) {
+                return false;
+            }
+        }
+
+        List<String> targetColumnNames;
+        if (insertStmt.getTargetColumnNames() == null) {
+            targetColumnNames = targetTable.getColumns().stream()
+                    .map(Column::getName).collect(Collectors.toList());
+        } else {
+            targetColumnNames = Lists.newArrayList(insertStmt.getTargetColumnNames());
+        }
+
+        for (int i = 0; i < targetColumnNames.size(); i++) {
+            String columnName = targetColumnNames.get(i);
+            if (targetTable.getPartitionColumnNames().contains(columnName)) {
+                Expr expr = listItems.get(i).getExpr();
+                if (expr instanceof NullLiteral) {
+                    throw new SemanticException("partition value can't be null");
+                }
+                if (!expr.isConstant()) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+>>>>>>> 180b0a303c ([Enhancement] optimize dblock for insert-select statement  (#39141))
 }
