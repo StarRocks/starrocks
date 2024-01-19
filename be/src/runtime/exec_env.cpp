@@ -581,10 +581,6 @@ void ExecEnv::stop() {
         _automatic_partition_pool->shutdown();
     }
 
-    if (_query_rpc_pool) {
-        _query_rpc_pool->shutdown();
-    }
-
     if (_load_rpc_pool) {
         _load_rpc_pool->shutdown();
     }
