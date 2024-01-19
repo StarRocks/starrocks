@@ -157,7 +157,6 @@ public class MetricsAction extends RestBaseAction {
             UserIdentity currentUser = null;
             try {
                 ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
-                // check current user need admin root to collect table/mv level metrics.
                 currentUser = checkPassword(authInfo);
                 checkUserOwnsAdminRole(currentUser);
             } catch (AccessDeniedException e) {
