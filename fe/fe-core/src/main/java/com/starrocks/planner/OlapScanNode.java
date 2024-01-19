@@ -934,6 +934,7 @@ public class OlapScanNode extends ScanNode {
             }
 
             msg.olap_scan_node.setUse_pk_index(usePkIndex);
+            msg.olap_scan_node.setPriority(priority);
         }
     }
 

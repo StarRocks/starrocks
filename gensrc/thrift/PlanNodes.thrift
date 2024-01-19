@@ -522,6 +522,8 @@ struct TOlapScanNode {
   // order by hint for scan
   33: optional bool output_asc_hint
   34: optional bool partition_order_hint
+
+  35: optional i32 priority
 }
 
 struct TJDBCScanNode {

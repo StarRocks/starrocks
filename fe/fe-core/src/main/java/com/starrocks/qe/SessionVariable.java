@@ -449,6 +449,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_STRICT_ORDER_BY = "enable_strict_order_by";
 
+    public static final String SCAN_PRIORITY_RATIO = "scan_priority_ratio";
+
     // Flag to control whether to proxy follower's query statement to leader/follower.
     public enum FollowerQueryForwardMode {
         DEFAULT,    // proxy queries by the follower's replay progress (default)
@@ -1258,6 +1260,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_HYPERSCAN_VEC)
     private boolean enableHyperscanVec = true;
+
+    @VarAttr(name = SCAN_PRIORITY_RATIO)
+    private int scanPriorityRatio = 0;
+
+    public int getScanPriorityRatio() {
+        return scanPriorityRatio;
+    }
 
     public void setEnableArrayLowCardinalityOptimize(boolean enableArrayLowCardinalityOptimize) {
         this.enableArrayLowCardinalityOptimize = enableArrayLowCardinalityOptimize;

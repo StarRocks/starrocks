@@ -388,6 +388,15 @@ public class PlanFragmentBuilder {
         }
 
         public PlanFragment translate(OptExpression optExpression, ExecPlan context) {
+            // left-deep-collect
+            int ratio = context.getConnectContext().getSessionVariable().getScanPriorityRatio();
+            if (ratio > 0) {
+                List<Operator> scanOperator = Lists.newArrayList();
+                Utils.extractOperator(optExpression, scanOperator, p -> p instanceof PhysicalScanOperator);
+                for (int i = 0; i < scanOperator.size(); i++) {
+                    context.getScanPriorities().put(scanOperator.get(i), i * ratio + 1000);
+                }
+            }
             return visit(optExpression, context);
         }
 
@@ -824,6 +833,7 @@ public class PlanFragmentBuilder {
                     map(entry -> entry.first).collect(Collectors.toSet()));
 
             scanNode.setUsePkIndex(node.isUsePkIndex());
+            scanNode.setPriority(context.getScanPriorities().get(node));
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);

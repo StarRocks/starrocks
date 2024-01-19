@@ -58,10 +58,19 @@ public abstract class ScanNode extends PlanNode {
     protected String sortColumn = null;
     protected List<ColumnAccessPath> columnAccessPaths;
     protected ScanOptimzeOption scanOptimzeOption;
+    protected int priority = 0;
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
         this.desc = desc;
+    }
+
+    public int getPriority() {
+        return priority;
+    }
+
+    public void setPriority(int priority) {
+        this.priority = priority;
     }
 
     public void setColumnFilters(Map<String, PartitionColumnFilter> columnFilters) {

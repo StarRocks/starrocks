@@ -28,6 +28,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.thrift.TExplainLevel;
 
@@ -54,6 +55,7 @@ public class ExecPlan {
     private final IdGenerator<PlanNodeId> nodeIdGenerator = PlanNodeId.createGenerator();
     private final IdGenerator<PlanFragmentId> fragmentIdGenerator = PlanFragmentId.createGenerator();
     private final Map<Integer, OptExpression> optExpressions = Maps.newHashMap();
+    private final Map<Operator, Integer> scanPriorities = Maps.newHashMap();
 
     private volatile ProfilingExecPlan profilingPlan;
 
@@ -80,6 +82,10 @@ public class ExecPlan {
 
     public List<ScanNode> getScanNodes() {
         return scanNodes;
+    }
+
+    public Map<Operator, Integer> getScanPriorities() {
+        return scanPriorities;
     }
 
     public List<Expr> getOutputExprs() {
