@@ -170,6 +170,14 @@ public class AnalyzeUtilTest {
         Assert.assertEquals("[db1.t0]", m.keySet().toString());
         Assert.assertEquals("[[*]]", m.values().toString());
 
+        // select count(*), count(*) FunctionCallExpr children are null, handle this problem in
+        // com.starrocks.sql.analyzer.AuthorizerStmtVisitor.checkCanSelectFromColumns
+        sql = "select count(*) from db1.t0";
+        statementBase = analyzeSuccess(sql);
+        m = AnalyzerUtils.collectAllSelectTableColumns(statementBase);
+        Assert.assertEquals("[]", m.keySet().toString());
+        Assert.assertEquals("[]", m.values().toString());
+
         // multi table select *
         sql = "select * from db1.t0,db2.t0,test.t0";
         statementBase = analyzeSuccess(sql);

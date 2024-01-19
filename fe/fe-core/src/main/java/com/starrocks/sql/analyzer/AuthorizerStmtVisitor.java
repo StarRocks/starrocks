@@ -205,6 +205,8 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.HashSet;
@@ -214,6 +216,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
+
+    private static final Logger LOG = LogManager.getLogger(AuthorizerStmtVisitor.class);
 
     public AuthorizerStmtVisitor() {
     }
@@ -398,22 +402,39 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
     private void checkCanSelectFromColumns(ConnectContext context, Map<TableName, Set<String>> allTouchedTableColumns,
                                            Map<TableName, Relation> allTouchedTables) throws AccessDeniedException {
+        HashSet<TableName> usedTables = new HashSet<>(allTouchedTables.keySet());
+        HashSet<TableName> usedColOfTables = new HashSet<>(allTouchedTableColumns.keySet());
+        usedTables.removeAll(usedColOfTables);
+        if (!usedTables.isEmpty()) {
+            String warnMsg = String.format("The usage columns information of some actually used tables " +
+                    "has not been successfully collected! tables: %s", usedTables);
+            throw new AccessDeniedException(warnMsg);
+//            LOG.warn(warnMsg);
+//            // used `*` to fill these tables column privileges
+//            for (TableName usedTable : usedTables) {
+//                Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+//                        usedTable, Collections.singleton("*"), PrivilegeType.SELECT);
+//            }
+        }
+
         for (Map.Entry<TableName, Set<String>> tableColumns : allTouchedTableColumns.entrySet()) {
             TableName tableName = tableColumns.getKey();
             Set<String> columns = tableColumns.getValue();
             Relation relation = allTouchedTables.get(tableName);
-            Table table;
-            if (relation instanceof TableRelation) {
-                table = ((TableRelation) relation).getTable();
+            if (relation == null) {
+                String warnMsg = String.format("Some used columns of tables were incorrectly collected! table: %s",
+                        tableName);
+                throw new AccessDeniedException(warnMsg);
             } else {
-                table = ((ViewRelation) relation).getView();
-            }
-            if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
-                Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.OPERATE);
-            } else {
-                Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        tableName, columns, PrivilegeType.SELECT);
+                Table table = relation instanceof TableRelation ? ((TableRelation) relation).getTable() :
+                        ((ViewRelation) relation).getView();
+                if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
+                    Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            PrivilegeType.OPERATE);
+                } else {
+                    Authorizer.checkColumnsAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            tableName, columns, PrivilegeType.SELECT);
+                }
             }
         }
     }

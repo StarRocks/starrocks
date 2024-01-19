@@ -511,24 +511,29 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitTableFunction(TableFunctionRelation node, Void context) {
+            // TableFunctionRelation is also a subquery
             ctes.add(node.getAlias());
             node.getChildExpressions().forEach(this::visit);
             return super.visitTableFunction(node, context);
         }
 
+        /** treat {@link NormalizedTableFunctionRelation} as JoinRelation **/
         @Override
         public Void visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void context) {
             return super.visitJoin(node, context);
         }
 
         private void visitTableAndView(TableName alias, TableName realName, boolean createByPolicyRewritten) {
+            // `select ... from t1 t2` TableRelation's name is t1, alias is t2
+            // but in SlotRef, tblName would be table's alias instead of name.
+            // So in last stage, should find slotRef's realTableName
             if (alias != null) {
                 aliasMap.put(alias.getTbl(), realName);
             }
             if (!createByPolicyRewritten) {
                 realTableAndViews.add(realName);
             } else {
-                // policy rewritten node should be ignored
+                // policy rewritten node should be invisible for user (treated as cte)
                 ctes.add(realName);
             }
         }
@@ -546,9 +551,10 @@ public class AnalyzerUtils {
             return null;
         }
 
-        // handle 'select * from a,b,c' situation
+        // find all TableRelations or ViewRelations in 'select * from ...'
         private void fillStarRelation(Relation relation, Set<TableName> starRelationNames) {
             if (relation instanceof TableRelation || relation instanceof ViewRelation) {
+                // except virtual relation like FileTableFunctionRelation
                 if (!(relation instanceof FileTableFunctionRelation)) {
                     starRelationNames.add(relation.getResolveTableName());
                 }
@@ -590,7 +596,8 @@ public class AnalyzerUtils {
         public Void visitSlot(SlotRef slotRef, Void context) {
             // filter _LAMBDA_TABLE && alias SlotRef
             if (!slotRef.isFromLambda() && slotRef.getTblNameWithoutAnalyzed() != null) {
-                // when used columnName for Struct type, it would like c2.c2_sub1 instead of c2
+                // when used `slotRef.getColumnName()`, it would like c2.c2_sub1 instead of c2 for struct data type
+                // so finally use `slotRef.getLabel()`
                 put(slotRef.getTblNameWithoutAnalyzed(), slotRef.getLabel().replace("`", ""));
             }
             return null;
