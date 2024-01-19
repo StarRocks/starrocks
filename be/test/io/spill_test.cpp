@@ -401,6 +401,7 @@ TEST_F(SpillTest, unsorted_process) {
             input.emplace_back(chunk->clone_unique());
             ASSERT_OK(mem_table->append(std::move(chunk)));
         }
+        ASSERT_OK(mem_table->done());
         //
         workgroup::YieldContext yield_ctx;
         do {

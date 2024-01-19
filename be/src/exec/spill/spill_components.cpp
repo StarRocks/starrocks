@@ -591,6 +591,7 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
                 TRACE_SPILL_LOG << fmt::format("skip to flush small partition: {}", partition->debug_string());
                 return Status::OK();
             }
+            RETURN_IF_ERROR(mem_table->done());
             return this->spill_partition(yield_ctx, spill_ctx, partition);
         };
 
