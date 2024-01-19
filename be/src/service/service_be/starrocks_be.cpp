@@ -298,22 +298,21 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     }
 #endif
 
-    http_server.reset();
-    brpc_server.reset();
-    thrift_server.reset();
-
     exec_env->destroy();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
 
     delete storage_engine;
 
     http_server->join();
+    http_server.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": http server exit successfully";
 
     brpc_server->Join();
+    brpc_server.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": brpc server exit successfully";
 
     thrift_server->join();
+    thrift_server.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": thrift server exit successfully";
 
     // Unbind with MemTracker
