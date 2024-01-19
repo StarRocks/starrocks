@@ -85,7 +85,7 @@ CREATE DATABASE IF NOT EXISTS mydatabase;
 USE mydatabase;
 ```
 
-通过如下语句手动创建主键模型表 `table1`，包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户姓名和用户得分，主键为 `id` 列，如下所示：
+通过如下语句手动创建主键表 `table1`，包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户姓名和用户得分，主键为 `id` 列，如下所示：
 
 ```SQL
 CREATE TABLE `table1`
@@ -163,7 +163,7 @@ CREATE DATABASE IF NOT EXISTS mydatabase;
 USE mydatabase;
 ```
 
-通过如下语句手动创建主键模型表 `table2`，包含 `id` 和 `city` 两列，分别代表城市 ID 和城市名称，主键为 `id` 列，如下所示：
+通过如下语句手动创建主键表 `table2`，包含 `id` 和 `city` 两列，分别代表城市 ID 和城市名称，主键为 `id` 列，如下所示：
 
 ```SQL
 CREATE TABLE `table2`
@@ -347,7 +347,7 @@ CREATE DATABASE IF NOT EXISTS mydatabase;
 USE mydatabase;
 ```
 
-通过如下语句手动创建主键模型表 `mytable`，包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户姓名和用户得分，主键为 `id` 列，如下所示：
+通过如下语句手动创建主键表 `mytable`，包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户姓名和用户得分，主键为 `id` 列，如下所示：
 
 ```SQL
 DROP TABLE IF EXISTS `mytable`

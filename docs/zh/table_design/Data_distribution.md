@@ -773,7 +773,7 @@ DISTRIBUTED BY HASH(site_id,city_code);
     ALTER TABLE t DISTRIBUTED BY RANDOM;
     ```
 
-- 如果表为主键模型表，当业务的查询模式有较大变化，经常需要用到表中另外几个列作为条件列时，则可以调整排序键。如下：
+- 如果表为主键表，当业务的查询模式有较大变化，经常需要用到表中另外几个列作为条件列时，则可以调整排序键。如下：
 
     ```SQL
     ALTER TABLE t ORDER BY k2, k1;

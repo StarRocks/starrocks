@@ -12,13 +12,13 @@ displayed_sidebar: "Chinese"
 
 在明细表中，排序列就是通过 `DUPLICATE KEY` 关键字指定的列。
 
-在聚合模型中，排序列就是通过 `AGGREGATE KEY` 关键字指定的列。
+在聚合表中，排序列就是通过 `AGGREGATE KEY` 关键字指定的列。
 
-在更新模型中，排序列就是通过 `UNIQUE KEY` 关键字指定的列。
+在更新表中，排序列就是通过 `UNIQUE KEY` 关键字指定的列。
 
-自 3.0 版本起，主键模型解耦了主键列和排序列，排序列通过 `ORDER BY` 关键字指定，主键列通过 `PRIMARY KEY` 关键字指定。
+自 3.0 版本起，主键表解耦了主键列和排序列，排序列通过 `ORDER BY` 关键字指定，主键列通过 `PRIMARY KEY` 关键字指定。
 
-在明细表、聚合模型、更新模型中定义排序列时，需要注意以下几点：
+在明细表、聚合表、更新表中定义排序列时，需要注意以下几点：
 
 - 排序列必须从定义的第一列开始、并且是连续的。
 
@@ -61,9 +61,9 @@ DISTRIBUTED BY HASH(site_id);
 >
 > 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [确定分桶数量](./Data_distribution.md#确定分桶数量)。
 
-### 聚合模型
+### 聚合表
 
-创建一个名为 `site_access_aggregate` 的聚合模型表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
+创建一个名为 `site_access_aggregate` 的聚合表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
 
 建表语句如下：
 
@@ -81,11 +81,11 @@ DISTRIBUTED BY HASH(site_id);
 
 >**注意**
 >
-> 聚合模型表中，如果某列未指定 `agg_type`，则该列为 Key 列；如果某列指定了 `agg_type`，则该列为 Value 列。参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。上述示例指定排序列为 `site_id` 和 `city_code`，因此必须给 `user_id` 和 `pv` 列分别指定 `agg_type`。
+> 聚合表中，如果某列未指定 `agg_type`，则该列为 Key 列；如果某列指定了 `agg_type`，则该列为 Value 列。参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。上述示例指定排序列为 `site_id` 和 `city_code`，因此必须给 `user_id` 和 `pv` 列分别指定 `agg_type`。
 
-### 更新模型
+### 更新表
 
-创建一个名为 `site_access_unique` 的更新模型表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
+创建一个名为 `site_access_unique` 的更新表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
 
 建表语句如下：
 
@@ -101,9 +101,9 @@ UNIQUE KEY(site_id, city_code)
 DISTRIBUTED BY HASH(site_id);
 ```
 
-### 主键模型
+### 主键表
 
-创建一个名为 `site_access_primary` 的主键模型表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 为主键列，`site_id` 和 `city_code` 为排序列。
+创建一个名为 `site_access_primary` 的主键表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 为主键列，`site_id` 和 `city_code` 为排序列。
 
 建表语句如下：
 

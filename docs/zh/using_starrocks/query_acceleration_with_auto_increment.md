@@ -41,7 +41,7 @@ displayed_sidebar: "Chinese"
 - **解决方案二**
 
   分两个操作导入数据：首先，将订单数据导入目标表；然后，通过 UPDATE 语句（技术上其实也是目标表 Join 字典表），将字典表中的映射关系更新至目标表的 INTEGER 列。<br />
-  这里的更新操作要求目标表必须为主键模型表。
+  这里的更新操作要求目标表必须为主键表。
 
 ### 解决方案一：使用 External Catalog 外部表 + INSERT INTO 数据
 
@@ -88,7 +88,7 @@ displayed_sidebar: "Chinese"
 
 **阶段一：创建全局字典，并且导入 Hive 表中的订单编号列值，从而构建 STRING 和 INTEGER 值之间的映射关系。**
 
-1. 创建一个主键模型表作为全局字典。定义主键也就是 key 列为 `order_uuid`（ STRING 类型），value 列为 `order_id_int`（ BIGINT 类型）并且为自增列。
+1. 创建一个主键表作为全局字典。定义主键也就是 key 列为 `order_uuid`（ STRING 类型），value 列为 `order_id_int`（ BIGINT 类型）并且为自增列。
 
     ```SQL
     CREATE TABLE dict (
@@ -101,7 +101,7 @@ displayed_sidebar: "Chinese"
     ```
 
 2. 将 Hive 表 `source_table` 中第一批数据的 `order_uuid` 值（STRING 类型）插入到字典表 `dict`的主键 `order_uuid`（STRING 类型）中，则字典表的自增列 `order_id_int` （BIGINT 类型）会自动为每个 `order_uuid` 生成一个表内全局唯一的 ID，如此就建立 STRING 和 BIGINT 值之间的映射关系。
-   值得注意的是，插入时需要使用 Left Join 子句和 WHERE 条件 `WHERE dict.order_uuid IS NULL`，以确保插入的 `order_uuid` 值原先并不存在于字典表中。如果向字典表中重复插入已存在的 `order_uuid` 值，则该 `order_uuid` 值映射为 BIGINT 值`order_id_int`会变化。因为字典表为主键模型的表，INSERT INTO 相同的主键后会覆盖字典表中原先已存在的行，同时对应自增列的值也会变化（注意 INSERT INTO 目前还不支持部分列更新）。
+   值得注意的是，插入时需要使用 Left Join 子句和 WHERE 条件 `WHERE dict.order_uuid IS NULL`，以确保插入的 `order_uuid` 值原先并不存在于字典表中。如果向字典表中重复插入已存在的 `order_uuid` 值，则该 `order_uuid` 值映射为 BIGINT 值`order_id_int`会变化。因为字典表为主键表，INSERT INTO 相同的主键后会覆盖字典表中原先已存在的行，同时对应自增列的值也会变化（注意 INSERT INTO 目前还不支持部分列更新）。
 
       ```SQL
       INSERT INTO dict (order_uuid)
@@ -199,7 +199,7 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table GROUP BY id ORDER BY id;
 
 您还可以[使用 bitmap 函数加速计算精确去重](#使用-bitmap-函数加速计算精确去重)。
 
-### 解决方案二：使用导入 + UPDATE 数据（主键模型表）
+### 解决方案二：使用导入 + UPDATE 数据（主键表）
 
 #### 业务场景
 
@@ -232,13 +232,13 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table GROUP BY id ORDER BY id;
 
 **流程图**
 
-需要先导入订单数据至目标表，再把字典表的映射关系更新至目标表的 INTEGER 列（更新操作要求目标表必须为主键模型表）。
+需要先导入订单数据至目标表，再把字典表的映射关系更新至目标表的 INTEGER 列（更新操作要求目标表必须为主键表）。
 
 ![loading](../assets/loading.png)
 
 **阶段一：创建全局字典表，并且导入 CSV 文件中的订单编号列值，从而构建 STRING 和 INTEGER 值之间的映射关系。**
 
-1. 创建一个主键模型表作为全局字典，定义主键也就是 key 列为 `order_uuid` （ STRING 类型），value 列为 `order_id_int`（ BIGINT 类型）并且为自增列。
+1. 创建一个主键表作为全局字典，定义主键也就是 key 列为 `order_uuid` （ STRING 类型），value 列为 `order_id_int`（ BIGINT 类型）并且为自增列。
 
       ```SQL
       CREATE TABLE dict (
@@ -268,11 +268,11 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table GROUP BY id ORDER BY id;
 
 **阶段二：创建目标表并导入 CSV 文件的订单数据。**
 
-需要注意在本解决方案中，目标表必须为主键模型。因为只有主键模型表支持带有 Join 的 UPDATE 命令。
+需要注意在本解决方案中，目标表必须为主键表。因为只有主键表支持带有 Join 的 UPDATE 命令。
 
-1. 创建一个**主键模型表** `dest_table_pk`，包含 CSV 文件的所有列。 并且您还需要定义一个 INTEGER 类型的 `order_id_int` 列，与 STRING 类型的 `order_id_int` 列进行映射。后续会基于 `order_id_int` 列进行查询分析。
+1. 创建一个**主键表** `dest_table_pk`，包含 CSV 文件的所有列。 并且您还需要定义一个 INTEGER 类型的 `order_id_int` 列，与 STRING 类型的 `order_id_int` 列进行映射。后续会基于 `order_id_int` 列进行查询分析。
 
-   并且值得注意的是，为了将所有导入的数据到存在主键模型表中，您还需要定义一个自增列 `implicit_auto_id` 为主键，作为每一条数据的唯一标识，以确保保留所有数据。（如果实际订单业务表中已经存在其他主键，则直接使用即可，不再需要创建 `implicit_auto_id`）。
+   并且值得注意的是，为了将所有导入的数据到存在主键表中，您还需要定义一个自增列 `implicit_auto_id` 为主键，作为每一条数据的唯一标识，以确保保留所有数据。（如果实际订单业务表中已经存在其他主键，则直接使用即可，不再需要创建 `implicit_auto_id`）。
 
       ```SQL
       CREATE TABLE dest_table_pk (
@@ -282,7 +282,7 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table GROUP BY id ORDER BY id;
           order_id_int BIGINT NULL, -- 该列记录 BIGINT 类型订单编号，与前一列相互映射，后续用于精确去重计数和 Join
           batch int comment 'used to distinguish different batch loading'
       )
-      PRIMARY KEY (implicit_auto_id)  -- 必须为主键模型表
+      PRIMARY KEY (implicit_auto_id)  -- 必须为主键表
       DISTRIBUTED BY HASH (implicit_auto_id)
       PROPERTIES("replicated_storage" = "true");
       ```
@@ -356,7 +356,7 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table_pk GROUP BY id ORDER BY id
 
 为了进一步加速计算，在构建全局字典后，您可以将字典表 INTEGER 列值直接插入到一个 bitmap 列中。后续对该 bitmap 列使用 bitmap 函数来精确去重计数。
 
-1. 首先创建一个**聚合模型表**，包含两列。聚合列为 BITMAP 类型的 `order_id_bitmap`，并且指定聚合函数为 `bitmap_union()`，定义另一列为 BIGINT 类型的 `id`。该表已**不包含**原始 STRING 列了（否则每个 bitmap 中只有一个值，无法起到加速效果）。
+1. 首先创建一个**聚合表**，包含两列。聚合列为 BITMAP 类型的 `order_id_bitmap`，并且指定聚合函数为 `bitmap_union()`，定义另一列为 BIGINT 类型的 `id`。该表已**不包含**原始 STRING 列了（否则每个 bitmap 中只有一个值，无法起到加速效果）。
 
       ```SQL
       CREATE TABLE dest_table_bitmap (
@@ -368,7 +368,7 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table_pk GROUP BY id ORDER BY id
       ```
 
 2. 根据所使用的解决方案，选择插入数据的方式。
-   - 如果是使用**解决方案一**，则需要向聚合模型表 `dest_table_bitmap` 的 `id` 列插入 `hive_catalog.hive_db.``source_table` 表 `id` 列的数据；向聚合模型表的 `order_id_bitmap` 列插入字典表 `dict` INTEGER 列 `order_id_int` 列的数据（经过函数 `to_bitmap` 处理后的值）。
+   - 如果是使用**解决方案一**，则需要向聚合表 `dest_table_bitmap` 的 `id` 列插入 `hive_catalog.hive_db.``source_table` 表 `id` 列的数据；向聚合表的 `order_id_bitmap` 列插入字典表 `dict` INTEGER 列 `order_id_int` 列的数据（经过函数 `to_bitmap` 处理后的值）。
 
         ```SQL
         INSERT INTO dest_table_bitmap (id, order_id_bitmap)
@@ -378,7 +378,7 @@ SELECT id, COUNT(DISTINCT order_uuid) FROM dest_table_pk GROUP BY id ORDER BY id
         WHERE src.batch = 1; -- 用来模拟导入的一批批数据，导入第二批数据时指定为 2
         ```
 
-   - 如果是使用**解决方案二**，则需要向聚合模型表 `dest_table_bitmap` 的 `id` 列插入表 `dest_table_pk` 的列 `id` 的数据；向聚合模型表的 `order_id_bitmap` 列插入字典表 `dict` INTEGER 列 `order_id_int` 列的数据（经过函数 `to_bitmap` 处理后的值）。
+   - 如果是使用**解决方案二**，则需要向聚合表 `dest_table_bitmap` 的 `id` 列插入表 `dest_table_pk` 的列 `id` 的数据；向聚合表的 `order_id_bitmap` 列插入字典表 `dict` INTEGER 列 `order_id_int` 列的数据（经过函数 `to_bitmap` 处理后的值）。
 
         ```SQL
         INSERT INTO dest_table_bitmap (id, order_id_bitmap)

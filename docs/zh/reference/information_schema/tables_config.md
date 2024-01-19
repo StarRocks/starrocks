@@ -14,7 +14,7 @@ displayed_sidebar: "Chinese"
 | TABLE_NAME       | 表名。                                                       |
 | TABLE_ENGINE     | 表的引擎类型。                                               |
 | TABLE_MODEL      | 表的类型。 有效值：`DUP_KEYS`、`AGG_KEYS`、`UNQ_KEYS` 和 `PRI_KEYS`。 |
-| PRIMARY_KEY      | 主键模型或更新模型表的主键。如果该表不是主键模型或更新模型表，则返回空字符串。 |
+| PRIMARY_KEY      | 主键表或更新表的唯一约束键。如果该表不是主键表或更新表，则返回空字符串。 |
 | PARTITION_KEY    | 表的分区键。                                                 |
 | DISTRIBUTE_KEY   | 表的分桶键。                                                 |
 | DISTRIBUTE_TYPE  | 表的分桶方式。                                               |
