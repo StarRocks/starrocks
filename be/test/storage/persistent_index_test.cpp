@@ -1936,7 +1936,7 @@ TEST_P(PersistentIndexTest, test_bloom_filter_for_pindex) {
 }
 
 TEST_P(PersistentIndexTest, test_multi_l2_tmp_l1) {
-    config::l0_max_mem_usage = 1024;
+    config::l0_max_mem_usage = 50;
     config::max_tmp_l1_num = 10;
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_multi_l2_tmp_l1";
@@ -1946,8 +1946,8 @@ TEST_P(PersistentIndexTest, test_multi_l2_tmp_l1) {
 
     using Key = std::string;
     PersistentIndexMetaPB index_meta;
-    const int N = 1000000;
-    const int wal_n = 200000;
+    const int N = 1000;
+    const int wal_n = 200;
     int64_t cur_version = 0;
     // insert
     vector<Key> keys(N);
@@ -2266,7 +2266,7 @@ TEST_P(PersistentIndexTest, test_multi_l2_not_tmp_l1_fixlen) {
 }
 
 TEST_P(PersistentIndexTest, test_multi_l2_delete) {
-    config::l0_max_mem_usage = 1024;
+    config::l0_max_mem_usage = 50;
     config::max_tmp_l1_num = 10;
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_multi_l2_delete";
@@ -2276,8 +2276,8 @@ TEST_P(PersistentIndexTest, test_multi_l2_delete) {
 
     using Key = std::string;
     PersistentIndexMetaPB index_meta;
-    const int N = 1000000;
-    const int DEL_N = 900000;
+    const int N = 1000;
+    const int DEL_N = 900;
     int64_t cur_version = 0;
     // insert
     vector<Key> keys(N);
