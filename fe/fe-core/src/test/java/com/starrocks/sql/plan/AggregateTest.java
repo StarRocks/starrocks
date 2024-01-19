@@ -33,6 +33,13 @@ public class AggregateTest extends PlanTestBase {
     public ExpectedException expectedException = ExpectedException.none();
 
     @Test
+    public void test() throws Exception {
+        String sql = "select count(distinct v1, v2) from (select * from t0 limit 2) t";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+    }
+
+    @Test
     public void testHaving() throws Exception {
         String sql = "select v2 from t0 group by v2 having v2 > 0";
         String plan = getFragmentPlan(sql);
@@ -1530,6 +1537,7 @@ public class AggregateTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(4);
         String sql = "select count(distinct L_PARTKEY) from lineitem group by 1.0001";
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         // check four phase aggregate
         assertContains(plan, "  8:AGGREGATE (merge finalize)\n" +
                 "  |  output: count(19: count)\n" +

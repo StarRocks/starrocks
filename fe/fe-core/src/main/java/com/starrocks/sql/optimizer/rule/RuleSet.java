@@ -146,9 +146,10 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaSca
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
-import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
+import com.starrocks.sql.optimizer.rule.transformation.SplitMultiPhaseAggBaseRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
+import com.starrocks.sql.optimizer.rule.transformation.SplitTwoPhaseAggBaseRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyJoinRule;
@@ -428,7 +429,8 @@ public class RuleSet {
 
     public RuleSet() {
         // Add common transform rule
-        transformRules.add(SplitAggregateRule.getInstance());
+        transformRules.add(SplitTwoPhaseAggBaseRule.getInstance());
+        transformRules.add(SplitMultiPhaseAggBaseRule.getInstance());
         transformRules.add(GroupByCountDistinctDataSkewEliminateRule.getInstance());
         transformRules.add(SplitTopNRule.getInstance());
     }

@@ -138,7 +138,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
                 .filter(CallOperator::isDistinct).collect(Collectors.toList());
-        boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getChildren().size() > 1);
+        boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getDistinctChildren().size() > 1);
         if (hasMultiColumns && distinctAggOperatorList.size() > 1) {
             return true;
         }

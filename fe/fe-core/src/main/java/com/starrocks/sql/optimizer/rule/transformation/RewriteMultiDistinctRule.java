@@ -65,7 +65,7 @@ public class RewriteMultiDistinctRule extends TransformationRule {
         List<CallOperator> distinctAggOperatorList = agg.getAggregations().values().stream()
                 .filter(CallOperator::isDistinct).collect(Collectors.toList());
 
-        boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getChildren().size() > 1);
+        boolean hasMultiColumns = distinctAggOperatorList.stream().anyMatch(f -> f.getDistinctChildren().size() > 1);
         return (distinctAggOperatorList.size() > 1 || agg.getAggregations().values().stream()
                 .anyMatch(call -> call.isDistinct() && call.getFnName().equals(FunctionSet.AVG))) && !hasMultiColumns;
     }
@@ -79,13 +79,15 @@ public class RewriteMultiDistinctRule extends TransformationRule {
                 .entrySet()) {
             CallOperator oldFunctionCall = aggregation.getValue();
             if (oldFunctionCall.isDistinct()) {
-                CallOperator newAggOperator = oldFunctionCall;
+                CallOperator newAggOperator;
                 if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.COUNT)) {
                     newAggOperator = buildMultiCountDistinct(oldFunctionCall);
                 } else if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.SUM)) {
                     newAggOperator = buildMultiSumDistinct(oldFunctionCall);
                 } else if (oldFunctionCall.getFnName().equals(FunctionSet.ARRAY_AGG)) {
                     newAggOperator = buildArrayAggDistinct(oldFunctionCall);
+                } else {
+                    return Lists.newArrayList();
                 }
                 newAggMap.put(aggregation.getKey(), newAggOperator);
             } else {
