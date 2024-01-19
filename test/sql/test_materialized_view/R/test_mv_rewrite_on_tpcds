@@ -1,0 +1,88 @@
+-- name: test_TPCDS_query94
+function: prepare_data("tpcds", "${db[0]}")
+set materialized_view_rewrite_mode='force';
+
+DROP MATERIALIZED VIEW IF EXISTS __mv__ta0008;
+
+CREATE MATERIALIZED VIEW __mv__ta0008 (_ca0005, _ca0006, _ca0007)
+REFRESH ASYNC START("2023-12-01 10:00:00") EVERY(INTERVAL 1 DAY)
+PROPERTIES (
+  "replicated_storage" = "true",
+  "replication_num" = "1",
+  "storage_medium" = "HDD"
+)
+AS
+SELECT
+  (count(DISTINCT _ta0002.ws_order_number)) AS _ca0005
+  ,(sum(_ta0002.ws_ext_ship_cost)) AS _ca0006
+  ,(sum(_ta0002.ws_net_profit)) AS _ca0007
+FROM
+  (
+    SELECT
+      web_sales.ws_order_number
+      ,web_sales.ws_net_profit
+      ,web_sales.ws_ext_ship_cost
+    FROM
+      web_sales
+      INNER JOIN
+      date_dim
+      ON (web_sales.ws_ship_date_sk = date_dim.d_date_sk)
+      INNER JOIN
+      customer_address
+      ON (web_sales.ws_ship_addr_sk = customer_address.ca_address_sk)
+      INNER JOIN
+      web_site
+      ON (web_sales.ws_web_site_sk = web_site.web_site_sk)
+      LEFT SEMI JOIN
+      (
+        SELECT
+          web_sales.ws_order_number
+          ,web_sales.ws_warehouse_sk
+        FROM
+          web_sales
+      ) _ta0000
+      ON (web_sales.ws_order_number = _ta0000.ws_order_number)
+         AND (web_sales.ws_warehouse_sk != _ta0000.ws_warehouse_sk)
+      LEFT ANTI JOIN
+      web_returns
+      ON (web_sales.ws_order_number = web_returns.wr_order_number)
+    WHERE
+      (date_dim.d_date <= "1999-04-02")
+      AND (web_site.web_company_name = "pri")
+      AND (customer_address.ca_state = "IL")
+      AND ("1999-02-01" <= date_dim.d_date)
+      AND (web_sales.ws_ship_date_sk IS NOT NULL)
+  ) _ta0002;
+
+REFRESH MATERIALIZED VIEW __mv__ta0008 WITH SYNC MODE;
+
+EXPLAIN logical
+select  
+   count(distinct ws_order_number) as "order count"
+  ,sum(ws_ext_ship_cost) as "total shipping cost"
+  ,sum(ws_net_profit) as "total net profit"
+from
+   web_sales ws1
+  ,date_dim
+  ,customer_address
+  ,web_site
+where
+    d_date between '1999-2-01' and 
+           date_add(cast('1999-2-01' as date), 60)
+and ws1.ws_ship_date_sk = d_date_sk
+and ws1.ws_ship_addr_sk = ca_address_sk
+and ca_state = 'IL'
+and ws1.ws_web_site_sk = web_site_sk
+and web_company_name = 'pri'
+and exists (select *
+            from web_sales ws2
+            where ws1.ws_order_number = ws2.ws_order_number
+              and ws1.ws_warehouse_sk <> ws2.ws_warehouse_sk)
+and not exists(select *
+               from web_returns wr1
+               where ws1.ws_order_number = wr1.wr_order_number)
+order by count(distinct ws_order_number)
+limit 100;
+-- result:
+[REGEX].*__mv__ta0008.*
+-- !result
