@@ -4,7 +4,13 @@ displayed_sidebar: "English"
 
 # Understand table design
 
+<<<<<<< HEAD
 ## Columnar storage
+=======
+import Replicanum from '../assets/commonMarkdown/replicanum.md'
+
+Tables are units of data storage. Understanding the table structure in StarRocks and how to design an efficient table structure helps optimize data organization and enhance query efficiency. Also, compared to traditional databases, StarRocks can store complex semi-structured data such as JSON, ARRAY, in a columnar manner to improve query performance.
+>>>>>>> aa3898db51 ([Doc]delete-the-property-of-one-replica (#39422))
 
 ![Columnar Storage](../assets/3.1-1.png)
 
@@ -20,6 +26,7 @@ StarRocks uses prefix indexes and per-column indexes to quickly locate the start
 
 The following figure shows how the StarRocks table design works to accelerate queries on a table in StarRocks.
 
+<<<<<<< HEAD
 ![Indexing Overview](../assets/3.1-2.png)
 
 The data of a table in StarRocks is organized into the following three parts:
@@ -27,6 +34,9 @@ The data of a table in StarRocks is organized into the following three parts:
 - Prefix index
   
   StarRocks stores the data of every 1024 rows as a data block, for which an entry is maintained in the prefix index table. The content of the prefix index entry for each data block is the prefix composed of the dimension columns for the starting row in the data block and cannot exceed 36 bytes in length. The prefix index is a sparse index. When you query a row, StarRocks searches the prefix index table to retrieve the prefix that is composed of the dimension columns for the row. Then, StarRocks can quickly locate the sequence number of the starting row in the data block taken by the row of interest.
+=======
+<Replicanum />
+>>>>>>> aa3898db51 ([Doc]delete-the-property-of-one-replica (#39422))
 
 - Per-column data block
   
