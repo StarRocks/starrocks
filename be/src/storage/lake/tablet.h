@@ -27,7 +27,8 @@
 
 namespace starrocks {
 class TabletSchema;
-}
+class ThreadPool;
+} // namespace starrocks
 
 namespace starrocks {
 class Schema;
@@ -85,7 +86,8 @@ public:
     // `segment_max_rows` is used in vertical writer
     // NOTE: This method may update the version hint
     StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
-                                                       uint32_t max_rows_per_segment = 0);
+                                                       uint32_t max_rows_per_segment = 0,
+                                                       ThreadPool* flush_pool = nullptr);
 
     // NOTE: This method may update the version hint
     StatusOr<std::shared_ptr<const TabletSchema>> get_schema();
