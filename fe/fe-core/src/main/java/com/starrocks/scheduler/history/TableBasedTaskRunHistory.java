@@ -14,7 +14,6 @@
 
 package com.starrocks.scheduler.history;
 
-import com.google.common.collect.Lists;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonParser;
 import com.starrocks.common.FeConstants;
@@ -129,9 +128,8 @@ public class TableBasedTaskRunHistory implements TaskRunHistory {
     }
 
     @Override
-    public List<String> gc() {
+    public void gc() {
         // TableBasedHistory could do the gc by itself
-        return Lists.newArrayList();
     }
 
     @Override

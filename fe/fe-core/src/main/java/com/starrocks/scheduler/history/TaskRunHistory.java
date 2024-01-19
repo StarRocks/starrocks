@@ -32,7 +32,7 @@ public interface TaskRunHistory {
     /**
      * @return removed TaskRunId in the history
      */
-    List<String> gc();
+    void gc();
 
     void forceGC();
 

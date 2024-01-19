@@ -893,8 +893,7 @@ public class TaskManager implements MemoryTrackable {
             return;
         }
         try {
-            List<String> historyToDelete = taskRunManager.getTaskRunHistory().gc();
-            LOG.info("remove run history:{}", historyToDelete);
+            taskRunManager.getTaskRunHistory().gc();
         } finally {
             taskRunManager.taskRunUnlock();
         }

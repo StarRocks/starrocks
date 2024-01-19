@@ -18,6 +18,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -26,6 +28,9 @@ import java.util.List;
 import java.util.Map;
 
 public class MemBasedTaskRunHistory implements TaskRunHistory {
+
+    private static final Logger LOG = LogManager.getLogger(MemBasedTaskRunHistory.class);
+
     // Thread-Safe history map: QueryId -> TaskRunStatus
     // The same task-id may contain multi history task run status, so use query_id instead.
     private final Map<String, TaskRunStatus> historyTaskRunMap =
@@ -78,7 +83,7 @@ public class MemBasedTaskRunHistory implements TaskRunHistory {
     }
 
     @Override
-    public List<String> gc() {
+    public void gc() {
         // only SUCCESS and FAILED in taskRunHistory
         long currentTimeMs = System.currentTimeMillis();
         List<TaskRunStatus> taskRunHistory = getAllHistory();
@@ -93,7 +98,7 @@ public class MemBasedTaskRunHistory implements TaskRunHistory {
                 iterator.remove();
             }
         }
-        return historyToDelete;
+        LOG.info("[GC] remove run history:{}", historyToDelete);
     }
 
     @Override
