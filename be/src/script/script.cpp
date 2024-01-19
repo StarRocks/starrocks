@@ -187,6 +187,7 @@ void bind_exec_env(ForeignModule& m) {
         cls.funcStaticExt<&get_file_write_history>("get_file_write_history");
         cls.funcStaticExt<&unix_seconds>("unix_seconds");
         cls.funcStaticExt<&list_stack_trace_of_long_wait_mutex>("list_stack_trace_of_long_wait_mutex");
+<<<<<<< HEAD
         REG_METHOD(ExecEnv, process_mem_tracker);
         REG_METHOD(ExecEnv, query_pool_mem_tracker);
         REG_METHOD(ExecEnv, load_mem_tracker);
@@ -197,6 +198,45 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(ExecEnv, compaction_mem_tracker);
         REG_METHOD(ExecEnv, update_mem_tracker);
         REG_METHOD(ExecEnv, clone_mem_tracker);
+=======
+    }
+    {
+        auto& cls = m.klass<GlobalEnv>("GlobalEnv");
+        REG_STATIC_METHOD(GlobalEnv, GetInstance);
+
+        // level 0
+        REG_METHOD(GlobalEnv, process_mem_tracker);
+
+        // level 1
+        REG_METHOD(GlobalEnv, query_pool_mem_tracker);
+        REG_METHOD(GlobalEnv, load_mem_tracker);
+        REG_METHOD(GlobalEnv, metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, compaction_mem_tracker);
+        REG_METHOD(GlobalEnv, schema_change_mem_tracker);
+        REG_METHOD(GlobalEnv, column_pool_mem_tracker);
+        REG_METHOD(GlobalEnv, page_cache_mem_tracker);
+        REG_METHOD(GlobalEnv, update_mem_tracker);
+        REG_METHOD(GlobalEnv, chunk_allocator_mem_tracker);
+        REG_METHOD(GlobalEnv, clone_mem_tracker);
+        REG_METHOD(GlobalEnv, consistency_mem_tracker);
+        REG_METHOD(GlobalEnv, connector_scan_pool_mem_tracker);
+        REG_METHOD(GlobalEnv, datacache_mem_tracker);
+
+        // level 2
+        REG_METHOD(GlobalEnv, tablet_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, rowset_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, segment_metadata_mem_tracker);
+        REG_METHOD(GlobalEnv, column_metadata_mem_tracker);
+
+        // level 3
+        REG_METHOD(GlobalEnv, tablet_schema_mem_tracker);
+        REG_METHOD(GlobalEnv, column_zonemap_index_mem_tracker);
+        REG_METHOD(GlobalEnv, ordinal_index_mem_tracker);
+        REG_METHOD(GlobalEnv, bitmap_index_mem_tracker);
+        REG_METHOD(GlobalEnv, bloom_filter_index_mem_tracker);
+        REG_METHOD(GlobalEnv, segment_zonemap_mem_tracker);
+        REG_METHOD(GlobalEnv, short_key_index_mem_tracker);
+>>>>>>> 729b4edd95 ([Enhancement] Add datacache memory tracker to trace the datacache memory usage. (#38884))
     }
     {
         auto& cls = m.klass<HeapProf>("HeapProf");

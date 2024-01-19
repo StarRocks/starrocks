@@ -50,6 +50,13 @@ public:
 
     size_t block_size() const { return _block_size; }
 
+<<<<<<< HEAD
+=======
+    bool is_initialized() { return _initialized.load(std::memory_order_relaxed); }
+
+    static const size_t MAX_BLOCK_SIZE;
+
+>>>>>>> 729b4edd95 ([Enhancement] Add datacache memory tracker to trace the datacache memory usage. (#38884))
 private:
 #ifndef BE_TEST
     BlockCache() = default;
@@ -57,6 +64,7 @@ private:
 
     size_t _block_size = 0;
     std::unique_ptr<KvCache> _kv_cache;
+    std::atomic<bool> _initialized = false;
 };
 
 } // namespace starrocks

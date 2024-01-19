@@ -163,7 +163,145 @@ bool ExecEnv::is_init() {
     return _is_init;
 }
 
+<<<<<<< HEAD
 Status ExecEnv::_init(const std::vector<StorePath>& store_paths, bool as_cn) {
+=======
+Status GlobalEnv::init() {
+    RETURN_IF_ERROR(_init_mem_tracker());
+    _is_init = true;
+    return Status::OK();
+}
+
+Status GlobalEnv::_init_mem_tracker() {
+    int64_t bytes_limit = 0;
+    std::stringstream ss;
+    // --mem_limit="" means no memory limit
+    bytes_limit = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
+    // use 90% of mem_limit as the soft mem limit of BE
+    bytes_limit = bytes_limit * 0.9;
+    if (bytes_limit <= 0) {
+        ss << "Failed to parse mem limit from '" + config::mem_limit + "'.";
+        return Status::InternalError(ss.str());
+    }
+
+    if (bytes_limit > MemInfo::physical_mem()) {
+        LOG(WARNING) << "Memory limit " << PrettyPrinter::print(bytes_limit, TUnit::BYTES)
+                     << " exceeds physical memory of " << PrettyPrinter::print(MemInfo::physical_mem(), TUnit::BYTES)
+                     << ". Using physical memory instead";
+        bytes_limit = MemInfo::physical_mem();
+    }
+
+    if (bytes_limit <= 0) {
+        ss << "Invalid mem limit: " << bytes_limit;
+        return Status::InternalError(ss.str());
+    }
+
+    _process_mem_tracker = regist_tracker(MemTracker::PROCESS, bytes_limit, "process");
+    int64_t query_pool_mem_limit =
+            calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
+    _query_pool_mem_tracker =
+            regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit, "query_pool", this->process_mem_tracker());
+    _connector_scan_pool_mem_tracker =
+            regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit * config::connector_scan_use_query_mem_ratio,
+                           "query_pool/connector_scan", nullptr);
+
+    int64_t load_mem_limit = calc_max_load_memory(_process_mem_tracker->limit());
+    _load_mem_tracker = regist_tracker(MemTracker::LOAD, load_mem_limit, "load", process_mem_tracker());
+
+    // Metadata statistics memory statistics do not use new mem statistics framework with hook
+    _metadata_mem_tracker = regist_tracker(-1, "metadata", nullptr);
+
+    _tablet_metadata_mem_tracker = regist_tracker(-1, "tablet_metadata", _metadata_mem_tracker.get());
+    _rowset_metadata_mem_tracker = regist_tracker(-1, "rowset_metadata", _metadata_mem_tracker.get());
+    _segment_metadata_mem_tracker = regist_tracker(-1, "segment_metadata", _metadata_mem_tracker.get());
+    _column_metadata_mem_tracker = regist_tracker(-1, "column_metadata", _metadata_mem_tracker.get());
+
+    _tablet_schema_mem_tracker = regist_tracker(-1, "tablet_schema", _tablet_metadata_mem_tracker.get());
+    _segment_zonemap_mem_tracker = regist_tracker(-1, "segment_zonemap", _segment_metadata_mem_tracker.get());
+    _short_key_index_mem_tracker = regist_tracker(-1, "short_key_index", _segment_metadata_mem_tracker.get());
+    _column_zonemap_index_mem_tracker = regist_tracker(-1, "column_zonemap_index", _column_metadata_mem_tracker.get());
+    _ordinal_index_mem_tracker = regist_tracker(-1, "ordinal_index", _column_metadata_mem_tracker.get());
+    _bitmap_index_mem_tracker = regist_tracker(-1, "bitmap_index", _column_metadata_mem_tracker.get());
+    _bloom_filter_index_mem_tracker = regist_tracker(-1, "bloom_filter_index", _column_metadata_mem_tracker.get());
+
+    int64_t compaction_mem_limit = calc_max_compaction_memory(_process_mem_tracker->limit());
+    _compaction_mem_tracker = regist_tracker(compaction_mem_limit, "compaction", _process_mem_tracker.get());
+    _schema_change_mem_tracker = regist_tracker(-1, "schema_change", _process_mem_tracker.get());
+    _column_pool_mem_tracker = regist_tracker(-1, "column_pool", _process_mem_tracker.get());
+    _page_cache_mem_tracker = regist_tracker(-1, "page_cache", _process_mem_tracker.get());
+    int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
+    _update_mem_tracker = regist_tracker(bytes_limit * update_mem_percent / 100, "update", nullptr);
+    _chunk_allocator_mem_tracker = regist_tracker(-1, "chunk_allocator", _process_mem_tracker.get());
+    _clone_mem_tracker = regist_tracker(-1, "clone", _process_mem_tracker.get());
+    int64_t consistency_mem_limit = calc_max_consistency_memory(_process_mem_tracker->limit());
+    _consistency_mem_tracker = regist_tracker(consistency_mem_limit, "consistency", _process_mem_tracker.get());
+    _datacache_mem_tracker = regist_tracker(-1, "datacache", _process_mem_tracker.get());
+    _replication_mem_tracker = regist_tracker(-1, "replication", _process_mem_tracker.get());
+
+    MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
+
+    SetMemTrackerForColumnPool op(_column_pool_mem_tracker);
+    ForEach<ColumnPoolList>(op);
+    _init_storage_page_cache(); // TODO: move to StorageEngine
+    return Status::OK();
+}
+
+void GlobalEnv::_reset_tracker() {
+    for (auto iter = _mem_trackers.rbegin(); iter != _mem_trackers.rend(); ++iter) {
+        iter->reset();
+    }
+}
+
+void GlobalEnv::_init_storage_page_cache() {
+    int64_t storage_cache_limit = get_storage_page_cache_size();
+    storage_cache_limit = check_storage_page_cache_size(storage_cache_limit);
+    StoragePageCache::create_global_cache(page_cache_mem_tracker(), storage_cache_limit);
+}
+
+int64_t GlobalEnv::get_storage_page_cache_size() {
+    std::lock_guard<std::mutex> l(*config::get_mstring_conf_lock());
+    int64_t mem_limit = MemInfo::physical_mem();
+    if (process_mem_tracker()->has_limit()) {
+        mem_limit = process_mem_tracker()->limit();
+    }
+    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit, mem_limit);
+}
+
+int64_t GlobalEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
+    if (storage_cache_limit > MemInfo::physical_mem()) {
+        LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
+                     << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
+    }
+    if (!config::disable_storage_page_cache) {
+        if (storage_cache_limit < kcacheMinSize) {
+            LOG(WARNING) << "Storage cache limit is too small, use default size.";
+            storage_cache_limit = kcacheMinSize;
+        }
+        LOG(INFO) << "Set storage page cache size " << storage_cache_limit;
+    }
+    return storage_cache_limit;
+}
+
+template <class... Args>
+std::shared_ptr<MemTracker> GlobalEnv::regist_tracker(Args&&... args) {
+    auto mem_tracker = std::make_shared<MemTracker>(std::forward<Args>(args)...);
+    _mem_trackers.emplace_back(mem_tracker);
+    return mem_tracker;
+}
+
+int64_t GlobalEnv::calc_max_query_memory(int64_t process_mem_limit, int64_t percent) {
+    if (process_mem_limit <= 0) {
+        // -1 means no limit
+        return -1;
+    }
+    if (percent < 0 || percent > 100) {
+        percent = 90;
+    }
+    return process_mem_limit * percent / 100;
+}
+
+Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
+>>>>>>> 729b4edd95 ([Enhancement] Add datacache memory tracker to trace the datacache memory usage. (#38884))
     _store_paths = store_paths;
     _external_scan_context_mgr = new ExternalScanContextMgr(this);
     _metrics = StarRocksMetrics::instance()->metrics();
