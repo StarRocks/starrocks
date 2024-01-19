@@ -141,14 +141,15 @@ After StarRocks is integrating with Apache Ranger, you can achieve the following
    ...
    ```
 
-7. Add the configuration `access_control = ranger` to all FE configuration files.
+7. Copy [`ranger-starrocks-audit.xml`](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-audit.xml) and [`ranger-hive-audit.xml`](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml) to the `fe/conf` folder.
+8. Add the configuration `access_control = ranger` to all FE configuration files.
 
    ```SQL
    vim fe.conf
    access_control=ranger 
    ```
 
-8. Restart all FE machines.
+9. Restart all FE machines.
 
    ```SQL
    -- Switch to the FE folder. 
