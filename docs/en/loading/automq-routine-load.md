@@ -1,14 +1,9 @@
 # Continuously load data from AutoMQ Kafka.md
 
-<<<<<<< HEAD
-[AutoMQ for Kafka](https://docs.automq.com/zh/docs/automq-s3kafka/YUzOwI7AgiNIgDk1GJAcu6Uanog) is a cloud-native version of Kafka redesigned for cloud environments.
-=======
-# AutoMQ Kafka
-
 import Replicanum from '../assets/commonMarkdown/replicanum.md'
 
 [AutoMQ for Kafka](https://docs.automq.com/docs/automq-s3kafka/YUzOwI7AgiNIgDk1GJAcu6Uanog) is a cloud-native version of Kafka redesigned for cloud environments.
->>>>>>> aa3898db51 ([Doc]delete-the-property-of-one-replica (#39422))
+
 AutoMQ Kafka is [open source](https://github.com/AutoMQ/automq-for-kafka) and fully compatible with the Kafka protocol, fully leveraging cloud benefits.
 Compared to self-managed Apache Kafka, AutoMQ Kafka, with its cloud-native architecture, offers features like capacity auto scaling, self-balancing of network traffic, move partition in seconds. These features contribute to a significantly lower Total Cost of Ownership (TCO) for users.
 
