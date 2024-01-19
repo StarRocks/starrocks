@@ -16,7 +16,11 @@ The following fields are provided in `load_tracking_logs`:
 | TRACKING_LOG  | Errors (if any) of the load job.           |
 
 :::tip
-To query the `load_tracking_logs` you will need to filter on either a `JOB_ID` or a `LABEL`. You can retrieve labels from `information_schema.loads`.
+To query the view `load_tracking_logs` you will need to filter on either a `JOB_ID` or a `LABEL`.
+
+You can retrieve the `JOB_ID` or `LABEL` of a load job from the view `information_schema.loads`.
+
+Example:
 
 ```sql
 SELECT * from information_schema.load_tracking_logs WHERE label ='user_behavior'\G
