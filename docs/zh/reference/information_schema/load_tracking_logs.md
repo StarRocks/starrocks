@@ -18,7 +18,7 @@ displayed_sidebar: "Chinese"
 :::tip
 查询 `load_tracking_logs` 视图时，您需要根据 `JOB_ID` 或 `LABEL` 进行过滤。
 
-您可以通过 `information_schema.loads` 视图中查询已有的 `JOB_ID` 和 `LABEL` 。
+您可以通过 `information_schema.loads` 视图查询已有的 `JOB_ID` 和 `LABEL` 。
 
 示例：
 
