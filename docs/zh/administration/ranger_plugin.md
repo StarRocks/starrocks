@@ -143,16 +143,16 @@ StarRocks 集成 Apache Ranger 后可以实现以下权限控制方式：
    ...
    ```
 
-7. 在 `fe/conf` 文件夹内拷贝 [`ranger-starrocks-audit.xml`](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-audit.xml), [`ranger-hive-audit.xml`](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml)。
+7. 在 `fe/conf` 文件夹内拷贝 [`ranger-starrocks-audit.xml`](https://github.com/StarRocks/ranger/blob/master/plugin-starrocks/conf/ranger-starrocks-audit.xml) 和 [`ranger-hive-audit.xml`](https://github.com/StarRocks/ranger/blob/master/hive-agent/conf/ranger-hive-audit.xml) 文件。
 
-9. 修改所有 FE 的配置文件，添加 `access_control=ranger`。
+8. 修改所有 FE 的配置文件，添加 `access_control=ranger`。
 
    ```SQL
    vim fe.conf
    access_control=ranger 
    ```
 
-10. 重启所有 FE。
+9. 重启所有 FE。
 
    ```SQL
    -- 回到 FE 文件夹内
