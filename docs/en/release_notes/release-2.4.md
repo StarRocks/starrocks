@@ -219,7 +219,7 @@ Release date: October 20, 2022
 
 - Histograms are added to CBO statistics. Full statistics collection is further optimized. For more information, see [Gather CBO statistics](https://docs.starrocks.io/docs/using_starrocks/Cost_based_optimizer/).
 
-- Adaptive multi-threading is enabled for tablet scanning to reduce the dependency of scanning performance on the tablet number. As a result, you can set the number of buckets more easily. For more information, see [set the number of buckets](https://docs.starrocks.io/docs/2.4/table_design/Data_distribution/#determine-the-number-of-tablets).
+- Adaptive multi-threading is enabled for tablet scanning to reduce the dependency of scanning performance on the tablet number. As a result, you can set the number of buckets more easily. For more information, see [Determine the number of buckets](https://docs.starrocks.io/docs/2.4/table_design/Data_distribution/#determine-the-number-of-tablets).
 
 - Supports querying compressed TXT files in Apache Hive.
 

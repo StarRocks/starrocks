@@ -256,7 +256,7 @@ Release date: June 13, 2023
 ### Improvements
 
 - Predicates in a UNION query can be pushed down after the query is rewritten by an asynchronous materialized view. [#23312](https://github.com/StarRocks/starrocks/pull/23312)
-- Optimized the [auto tablet distribution policy](https://docs.starrocks.io/docs/3.0/table_design/Data_distribution#set-the-number-of-buckets) for tables. [#24543](https://github.com/StarRocks/starrocks/pull/24543)
+- Optimized the [auto tablet distribution policy](https://docs.starrocks.io/docs/3.0/table_design/Data_distribution#determine-the-number-of-buckets) for tables. [#24543](https://github.com/StarRocks/starrocks/pull/24543)
 - Removed the dependency of NetworkTime on system clocks, which fixes incorrect NetworkTime caused by inconsistent system clocks across servers. [#24858](https://github.com/StarRocks/starrocks/pull/24858)
 
 ### Bug Fixes
