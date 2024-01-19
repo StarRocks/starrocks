@@ -268,6 +268,11 @@ statement
     | showSqlBlackListStatement
     | showWhiteListStatement
 
+    // Backend BlackList
+    | addBackendBlackListStatement
+    | delBackendBlackListStatement
+    | showBackendBlackListStatement
+
     // Data Cache management statement
     | createDataCacheRuleStatement
     | showDataCacheRulesStatement
@@ -1959,6 +1964,20 @@ showSqlBlackListStatement
 
 showWhiteListStatement
     : SHOW WHITELIST
+    ;
+
+// ------------------------------------ backend BlackList Statement ---------------------------------------------------
+
+addBackendBlackListStatement
+    : ADD BACKEND BLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+delBackendBlackListStatement
+    : DELETE BACKEND BLACKLIST INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+showBackendBlackListStatement
+    : SHOW BACKEND BLACKLIST
     ;
 
 // -------------------------------------- DataCache Management Statement --------------------------------------------
