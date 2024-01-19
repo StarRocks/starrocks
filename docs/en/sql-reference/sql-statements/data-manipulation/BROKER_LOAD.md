@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+toc_max_heading_level: 4
 ---
 
 # BROKER LOAD
@@ -8,7 +9,7 @@ import InsertPrivNote from '../../../assets/commonMarkdown/insertPrivNote.md'
 
 ## Description
 
-StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards. For more information about the background information, principles, supported data file formats, how to perform single-table loads and multi-table loads, and how to view job results, see [Load data from HDFS](../../../loading/hdfs_load.md) and [Load data from cloud storage](../../../loading/cloud_storage_load.md).
+StarRocks provides the MySQL-based loading method Broker Load. After you submit a load job, StarRocks asynchronously runs the job. You can use `SELECT * FROM information_schema.loads` to query the job result. This feature is supported from v3.1 onwards.
 
 <InsertPrivNote />
 
@@ -68,6 +69,8 @@ INTO TABLE <table_name>
 [WHERE predicate]
 ```
 
+#### Common parameters
+
 `data_desc` must include the following parameters:
 
 - `file_path`
@@ -104,7 +107,9 @@ INTO TABLE <table_name>
 
   Specifies the name of the destination StarRocks table.
 
-`data_desc` can also optionally include the following parameters:
+#### CSV, Parquet, and ORC parameters
+
+`data_desc` can also optionally include the following parameters for CSV, Parquet, and ORC formatted data:
 
 - `NEGATIVE`
 
@@ -141,7 +146,7 @@ INTO TABLE <table_name>
 
 - `FORMAT AS`
 
-  Specifies the format of the data file. Valid values: `CSV`, `Parquet`, and `ORC`. By default, if you do not specify this parameter, StarRocks determines the data file format based on the filename extension **.csv**, **.parquet**, or **.orc** specified in the `file_path` parameter.
+  Specifies the format of the data file. Valid values: `CSV`, `Parquet`, `ORC`, and `JSON`. By default, if you do not specify this parameter, StarRocks determines the data file format based on the filename extension **.csv**, **.parquet**, or **.orc** specified in the `file_path` parameter.
 
 - `format_type_options`
 
@@ -198,6 +203,16 @@ INTO TABLE <table_name>
 - `WHERE`
 
   Specifies the conditions based on which you want to filter the source data. StarRocks loads only the source data that meets the filter conditions specified in the WHERE clause.
+
+#### JSON parameters
+
+| Parameter         | Required | Description                                                  |
+| ----------------- | -------- | ------------------------------------------------------------ |
+| jsonpaths         | No       | The names of the keys that you want to load from the JSON data file. You need to specify this parameter only when you load JSON data by using the matched mode. The value of this parameter is in JSON format. See [Configure column mapping for JSON data loading](#configure-column-mapping-for-json-data-loading).           |
+| strip_outer_array | No       | Specifies whether to strip the outermost array structure. Valid values: `true` and `false`. Default value: `false`.<br/>In real-world business scenarios, the JSON data may have an outermost array structure as indicated by a pair of square brackets `[]`. In this situation, we recommend that you set this parameter to `true`, so StarRocks removes the outermost square brackets `[]` and loads each inner array as a separate data record. If you set this parameter to `false`, StarRocks parses the entire JSON data file into one array and loads the array as a single data record.<br/>For example, the JSON data is `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`. If you set this parameter to `true`,  `{"category" : 1, "author" : 2}` and `{"category" : 3, "author" : 4}` are parsed into separate data records that are loaded into separate StarRocks table rows. |
+| json_root         | No       | The root element of the JSON data that you want to load from the JSON data file. You need to specify this parameter only when you load JSON data by using the matched mode. The value of this parameter is a valid JsonPath string. By default, the value of this parameter is empty, indicating that all data of the JSON data file will be loaded. |
+
+When you load JSON data, also note that the size per JSON object cannot exceed 4 GB. If an individual JSON object in the JSON data file exceeds 4 GB in size, an error "This parser can't support a document that big." is reported.
 
 ### WITH BROKER
 
@@ -641,6 +656,8 @@ The following parameters are supported:
 
 ## Column mapping
 
+### Configure column mapping for CSV data loading
+
 If the columns of the data file can be mapped one on one in sequence to the columns of the StarRocks table, you do not need to configure the column mapping between the data file and the StarRocks table.
 
 If the columns of the data file cannot be mapped one on one in sequence to the columns of the StarRocks table, you need to use the `columns` parameter to configure the column mapping between the data file and the StarRocks table. This includes the following two use cases:
@@ -659,6 +676,19 @@ If the columns of the data file cannot be mapped one on one in sequence to the c
   - The StarRocks table consists of three columns, which are `year`, `month`, and `day` in sequence. The data file consists of only one column that accommodates date and time values in `yyyy-mm-dd hh:mm:ss` format. In this case, you can specify `"columns: col, year = year(col), month=month(col), day=day(col)"`, in which `col` is the temporary name of the data file column and the functions `year = year(col)`, `month=month(col)`, and `day=day(col)` are used to extract data from the data file column `col` and loads the data into the mapping StarRocks table columns. For example, `year = year(col)` is used to extract the `yyyy` data from the data file column `col` and loads the data into the StarRocks table column `year`.
 
 For detailed examples, see [Configure column mapping](#configure-column-mapping).
+
+### Configure column mapping for JSON data loading
+
+If the keys of the JSON document have the same names as the columns of the StarRocks table, you can load the JSON-formatted data by using the simple mode. In simple mode, you do not need to specify the `jsonpaths` parameter. This mode requires that the JSON-formatted data must be an object as indicated by curly brackets `{}`, such as `{"category": 1, "author": 2, "price": "3"}`. In this example, `category`, `author`, and `price` are key names, and these keys can be mapped one on one by name to the columns `category`, `author`, and `price` of the StarRocks table.
+
+If the keys of the JSON document have different names than the columns of the StarRocks table, you can load the JSON-formatted data by using the matched mode. In matched mode, you need to use the `jsonpaths` and `COLUMNS` parameters to specify the column mapping between the JSON document and the StarRocks table:
+
+- In the `jsonpaths` parameter, specify the JSON keys in the sequence as how they are arranged in the JSON document.
+- In the `COLUMNS` parameter, specify the mapping between the JSON keys and the StarRocks table columns:
+  - The column names specified in the `COLUMNS` parameter are mapped one on one in sequence to the JSON keys.
+  - The column names specified in the `COLUMNS` parameter are mapped one on one by name to the StarRocks table columns.
+
+<!-- For examples about loading JSON-formatted data by using the matched mode, see [Load JSON data using matched mode](#load-json-data-using-matched-mode). -->
 
 ## Related configuration items
 

@@ -281,13 +281,18 @@ REJECTED_RECORD_PATH: NULL
 
 作为一种异步的导入方式，Broker Load 负责建立与 HDFS 的连接、拉取数据、并将数据存储到 StarRocks 中。
 
-当前支持 Parquet、ORC、及 CSV 三种文件格式。
+当前支持以下文件格式：
+
+- Parquet
+- ORC
+- CSV
+- JSON（自 3.2 版本起支持）
 
 ### Broker Load 优势
 
 - Broker Load 在后台运行，客户端不需要保持连接也能确保导入作业不中断。
 - Broker Load 作业默认超时时间为 4 小时，适合导入数据较大、导入运行时间较长的场景。
-- 除 Parquet 和 ORC 文件格式，Broker Load 还支持 CSV 文件格式。
+- 除 Parquet 和 ORC 文件格式，Broker Load 还支持 CSV 文件格式和 JSON 文件格式（JSON 文件格式自 3.2 版本起支持）。
 
 ### 工作原理
 

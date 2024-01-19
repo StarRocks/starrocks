@@ -1,12 +1,13 @@
 ---
 displayed_sidebar: "Chinese"
+toc_max_heading_level: 4
 ---
 
 # BROKER LOAD
 
 ## 功能
 
-Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您可以使用 `SELECT * FROM information_schema.loads` 来查看 Broker Load 作业的结果，该功能自 3.1 版本起支持。有关 Broker Load 的背景信息、基本原理、支持的数据文件格式、如何执行单表导入 (Single-Table Load) 和多表导入 (Multi-Table Load) 操作、以及如何查看导入作业的结果等信息，请参见[从 HDFS 导入](../../../loading/hdfs_load.md)和[从云存储导入](../../../loading/cloud_storage_load.md)。
+Broker Load 是一种基于 MySQL 协议的异步导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您可以使用 `SELECT * FROM information_schema.loads` 来查看 Broker Load 作业的结果，该功能自 3.1 版本起支持。
 
 > **注意**
 >
@@ -68,6 +69,8 @@ INTO TABLE <table_name>
 [WHERE predicate]
 ```
 
+#### 公共参数
+
 `data_desc` 中的必选参数如下：
 
 - `file_path`
@@ -103,7 +106,9 @@ INTO TABLE <table_name>
 
   用于指定目标 StarRocks 表的名称。
 
-`data_desc` 中的可选参数如下：
+#### CSV、Parquet、ORC 适用可选参数
+
+`data_desc` 中适用于 CSV、Parquet、ORC 格式的可选参数如下：
 
 - `NEGATIVE`
 
@@ -140,7 +145,7 @@ INTO TABLE <table_name>
 
 - `FORMAT AS`
 
-  用于指定源数据文件的格式。取值包括 `CSV`、`Parquet` 和 `ORC`。如果不指定该参数，则默认通过 `file_path` 参数中指定的文件扩展名（**.csv**、**.parquet**、和 **.orc**）来判断文件格式。
+  用于指定源数据文件的格式。取值包括 `CSV`、`Parquet`、`ORC` 和 `JSON`。如果不指定该参数，则默认通过 `file_path` 参数中指定的文件扩展名（**.csv**、**.parquet**、和 **.orc**）来判断文件格式。
 
 - `format_type_options`
 
@@ -197,6 +202,16 @@ INTO TABLE <table_name>
 - `WHERE`
 
   用于指定过滤条件，对做完转换的数据进行过滤。只有符合 WHERE 子句中指定的过滤条件的数据才会导入到 StarRocks 表中。
+
+#### JSON 适用参数
+
+| **参数名称**      | **是否必选** | **参数说明**                                                 |
+| ----------------- | ------------ | ------------------------------------------------------------ |
+| jsonpaths         | 否           | 用于指定待导入的字段的名称。仅在使用匹配模式导入 JSON 数据时需要指定该参数。参数取值为 JSON 格式。参见[导入 JSON 数据时配置列映射关系](#导入-json-数据时配置列映射关系).     |
+| strip_outer_array | 否           | 用于指定是否裁剪最外层的数组结构。取值范围：`true` 和 `false`。默认值：`false`。真实业务场景中，待导入的 JSON 数据可能在最外层有一对表示数组结构的中括号 `[]`。这种情况下，一般建议您指定该参数取值为 `true`，这样 StarRocks 会剪裁掉外层的中括号 `[]`，并把中括号 `[]` 里的每个内层数组都作为一行单独的数据导入。如果您指定该参数取值为 `false`，则 StarRocks 会把整个 JSON 数据文件解析成一个数组，并作为一行数据导入。例如，待导入的 JSON 数据为 `[ {"category" : 1, "author" : 2}, {"category" : 3, "author" : 4} ]`，如果指定该参数取值为 `true`，则 StarRocks 会把 `{"category" : 1, "author" : 2}` 和 `{"category" : 3, "author" : 4}` 解析成两行数据，并导入到目标 StarRocks 表中对应的数据行。 |
+| json_root         | 否           | 用于指定待导入 JSON 数据的根元素。仅在使用匹配模式导入 JSON 数据时需要指定该参数。参数取值为合法的 JsonPath 字符串。默认值为空，表示会导入整个 JSON 数据文件的数据。 |
+
+另外，导入 JSON 格式的数据时，需要注意单个 JSON 对象的大小不能超过 4 GB。如果 JSON 文件中单个 JSON 对象的大小超过 4 GB，会提示 "This parser can't support a document that big." 错误。
 
 ### WITH BROKER
 
@@ -701,6 +716,8 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 ## 列映射
 
+### 导入 CSV 数据时配置列映射关系
+
 如果源数据文件中的列与目标表中的列按顺序一一对应，您不需要指定列映射和转换关系。
 
 如果源数据文件中的列与目标表中的列不能按顺序一一对应，包括数量或顺序不一致，则必须通过 `COLUMNS` 参数来指定列映射和转换关系。一般包括如下两种场景：
@@ -715,6 +732,19 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
   - 目标表中有三列，按顺序依次为 `year`、`month` 和 `day`。源数据文件中只有一个包含时间数据的列，格式为 `yyyy-mm-dd hh:mm:ss`。这种情况下，可以指定 `COLUMNS (col, year = year(col), month=month(col), day=day(col))`。其中，`col` 是源数据文件中所包含的列的临时命名，`year = year(col)`、`month=month(col)` 和 `day=day(col)` 用于指定从 `col` 列提取对应的数据并落入目标表中对应的列，如 `year = year(col)` 表示通过 `year` 函数提取源数据文件中 `col` 列的 `yyyy` 部分的数据并落入目标表中的 `year` 列。
 
 有关操作示例，参见[设置列映射关系](#设置列映射关系)。
+
+### 导入 JSON 数据时配置列映射关系
+
+如果 JSON 文件中的 Key 名与目标表中的列名一致，您可以使用简单模式来导入数据。简单模式下，不需要设置 `jsonpaths` 参数，这种模式要求 JSON 数据是大括号 {} 表示的对象类型，例如 `{"category": 1, "author": 2, "price": "3"}` 中，`category`、`author`、`price` 是 Key 的名称，按名称直接对应目标 表中的 `category`、`author`、`price` 三列。
+
+如果 JSON 文件中的 Key 名与目标表中的列名不一致，则需要使用匹配模式来导入数据。匹配模式下，需要通过 `jsonpaths` 和 `COLUMNS` 两个参数来指定 JSON 文件中的 Key 和目标表中的列之间的映射和转换关系：
+
+- `jsonpaths` 参数中按照 JSON 文件中 Key 的顺序一一指定待导入的 Key。
+- `COLUMNS` 参数中指定 JSON 文件中的 Key 与目标表中的列之间的映射关系和数据转换关系。
+  - `COLUMNS` 参数中指定的列名与 `jsonpaths` 参数中指定的 Key 按顺序保持一一对应。
+  - `COLUMNS` 参数中指定的列名与目标表中的列按名称保持一一对应。
+
+<!-- 有关使用匹配模式导入 JSON 数据的示例，参见[使用匹配模式导入数据](#使用匹配模式导入数据)。-->
 
 ## 相关配置项
 
