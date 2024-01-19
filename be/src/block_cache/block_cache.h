@@ -66,6 +66,8 @@ public:
 
     size_t block_size() const { return _block_size; }
 
+    bool is_initialized() { return _initialized.load(std::memory_order_relaxed); }
+
     static const size_t MAX_BLOCK_SIZE;
 
 private:
@@ -75,6 +77,7 @@ private:
 
     size_t _block_size = 0;
     std::unique_ptr<KvCache> _kv_cache;
+    std::atomic<bool> _initialized = false;
 };
 
 } // namespace starrocks
