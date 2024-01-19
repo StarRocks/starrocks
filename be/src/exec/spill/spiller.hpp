@@ -143,8 +143,8 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
     if (captured_mem_table == nullptr) {
         return Status::OK();
     }
-
     RETURN_IF_ERROR(captured_mem_table->done());
+
     _running_flush_tasks++;
     // TODO: handle spill queue
     auto task = [this, state, guard = guard, mem_table = std::move(captured_mem_table),
@@ -156,6 +156,9 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
         DCHECK_GT(_running_flush_tasks, 0);
         DCHECK(has_pending_data());
         //
+        if (!yield_ctx.task_context_data.has_value()) {
+            yield_ctx.task_context_data = std::make_shared<FlushContext>();
+        }
         auto defer = CancelableDefer([&]() {
             {
                 std::lock_guard _(_mutex);
@@ -169,9 +172,15 @@ Status RawSpillerWriter::flush(RuntimeState* state, TaskExecutor&& executor, Mem
             return Status::OK();
         }
 
-        int yield = false;
-        _spiller->update_spilled_task_status(yieldable_flush_task(yield_ctx, state, mem_table, &yield));
-        if (yield) {
+        yield_ctx.time_spent_ns = 0;
+        yield_ctx.need_yield = false;
+
+        if (!yield_ctx.task_context_data.has_value()) {
+            yield_ctx.task_context_data = std::make_shared<FlushContext>();
+        }
+        _spiller->update_spilled_task_status(yieldable_flush_task(yield_ctx, state, mem_table));
+        if (yield_ctx.need_yield) {
+            COUNTER_UPDATE(_spiller->metrics().flush_task_yield_times, 1);
             defer.cancel();
         }
 
@@ -219,12 +228,15 @@ Status SpillerReader::trigger_restore(RuntimeState* state, TaskExecutor&& execut
                 });
                 Status res;
                 SerdeContext serd_ctx;
-                int yield = false;
+
+                yield_ctx.time_spent_ns = 0;
+                yield_ctx.need_yield = false;
 
                 YieldableRestoreTask task(_stream);
-                res = task.do_read(yield_ctx, serd_ctx, &yield);
+                res = task.do_read(yield_ctx, serd_ctx);
 
-                if (yield) {
+                if (yield_ctx.need_yield) {
+                    COUNTER_UPDATE(_spiller->metrics().restore_task_yield_times, 1);
                     defer.cancel();
                 }
 
@@ -311,10 +323,16 @@ Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
         if (_spiller->is_cancel() || !_spiller->task_status().ok()) {
             return Status::OK();
         }
-        int yield = false;
+        yield_ctx.time_spent_ns = 0;
+        yield_ctx.need_yield = false;
+        if (!yield_ctx.task_context_data.has_value()) {
+            yield_ctx.task_context_data = std::make_shared<PartitionedFlushContext>();
+        }
         _spiller->update_spilled_task_status(
-                yieldable_flush_task(yield_ctx, splitting_partitions, spilling_partitions, &yield));
-        if (yield) {
+                yieldable_flush_task(yield_ctx, splitting_partitions, spilling_partitions));
+
+        if (yield_ctx.need_yield) {
+            COUNTER_UPDATE(_spiller->metrics().flush_task_yield_times, 1);
             defer.cancel();
         }
         return Status::OK();

@@ -68,56 +68,48 @@ void RawSpillerWriter::prepare(RuntimeState* state) {
 }
 
 Status RawSpillerWriter::yieldable_flush_task(workgroup::YieldContext& yield_ctx, RuntimeState* state,
-                                              const MemTablePtr& mem_table, int* yield) {
+                                              const MemTablePtr& mem_table) {
     if (state->is_cancelled()) {
         return Status::OK();
     }
-    const auto& serde = _spiller->serde();
-
-    auto block_st = get_block_from_ctx([&]() -> StatusOr<BlockPtr> {
-        if (!yield_ctx.task_context_data.has_value()) {
-            spill::AcquireBlockOptions opts{.query_id = state->query_id(),
-                                            .plan_node_id = options().plan_node_id,
-                                            .name = options().name,
-                                            .direct_io = state->spill_enable_direct_io()};
-            ASSIGN_OR_RETURN(auto block, _spiller->block_manager()->acquire_block(opts));
-            COUNTER_UPDATE(_spiller->metrics().block_count, 1);
-            yield_ctx.task_context_data = FlushContext{block};
-        }
-        auto flush_ctx = std::any_cast<FlushContext>(yield_ctx.task_context_data);
-        return flush_ctx.block;
-    });
-    ASSIGN_OR_RETURN(auto block, std::move(block_st));
-
-    // TODO: reuse io context
-    SerdeContext spill_ctx;
-    int64_t time_spent_ns = 0;
+    DCHECK(yield_ctx.task_context_data.has_value()) << "flush context must be set";
     yield_ctx.total_yield_point_cnt = 1;
-    {
-        TRY_CATCH_ALLOC_SCOPE_START()
-        // flush all pending result to spilled files
-        size_t num_rows_flushed = 0;
-        RETURN_IF_ERROR_EXCEPT_YIELD(mem_table->flush([&](const auto& chunk) {
-            SCOPED_RAW_TIMER(&time_spent_ns);
-            num_rows_flushed += chunk->num_rows();
-            RETURN_IF_ERROR(serde->serialize_to_block(spill_ctx, chunk, block));
-            RETURN_IF_NEED_YIELD(yield_ctx.wg, yield, time_spent_ns);
-            return Status::OK();
-        }));
-        TRACE_SPILL_LOG << "spill flush rows:" << num_rows_flushed << ",spiller:" << this;
-        RETURN_IF_YIELD(yield);
-        TRY_CATCH_ALLOC_SCOPE_END();
-    }
 
-    // be careful close method return a not ok status
-    // then release the pending memory
+    auto flush_ctx = std::any_cast<FlushContextPtr>(yield_ctx.task_context_data);
+    if (flush_ctx->block == nullptr) {
+        RETURN_IF_ERROR(mem_table->finalize(yield_ctx));
+        RETURN_IF_YIELD(yield_ctx.need_yield);
+
+        spill::AcquireBlockOptions opts;
+        opts.query_id = state->query_id();
+        opts.plan_node_id = _spiller->options().plan_node_id;
+        opts.name = _spiller->options().name;
+        opts.block_size = mem_table->get_serialized_data_size();
+
+        ASSIGN_OR_RETURN(auto block, _spiller->block_manager()->acquire_block(opts));
+        TRACE_SPILL_LOG << fmt::format("allocate block [{}]", block->debug_string());
+        flush_ctx->block = block;
+    }
+    auto block = flush_ctx->block;
+
     // flush
     {
         SCOPED_TIMER(_spiller->metrics().write_io_timer);
+        do {
+            auto st = mem_table->get_next_serialized_data();
+            if (st.status().is_end_of_file()) {
+                break;
+            }
+            auto data = st.value();
+            RETURN_IF_ERROR(block->append({data}));
+            RETURN_OK_IF_NEED_YIELD(yield_ctx.wg, &yield_ctx.need_yield, yield_ctx.time_spent_ns);
+        } while (true);
+
         RETURN_IF_ERROR(block->flush());
     }
+    TRACE_SPILL_LOG << fmt::format("flush block[{}]", block->debug_string());
     RETURN_IF_ERROR(_spiller->block_manager()->release_block(block));
-
+    mem_table->reset();
     {
         std::lock_guard<std::mutex> l(_mutex);
         _block_group.append(std::move(block));
@@ -305,10 +297,11 @@ Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush
             continue;
         }
         if (mem_table->is_full()) {
+            RETURN_IF_ERROR(mem_table->done());
             partition->in_mem = false;
             partition->mem_size = 0;
             partitions_need_flush.emplace_back(partition);
-        } else {
+        } else if (mem_table->mem_usage() > 0) {
             partitions_can_flush.emplace_back(partition);
         }
     }
@@ -328,6 +321,8 @@ Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush
         size_t in_mem_bytes = 0;
         for (auto partition : partitions_can_flush) {
             if (in_mem_bytes + partition->bytes > options().spill_mem_table_bytes_size) {
+                const auto& mem_table = partition->spill_writer->mem_table();
+                RETURN_IF_ERROR(mem_table->done());
                 partition->in_mem = false;
                 partition->mem_size = 0;
                 partitions_need_flush.emplace_back(partition);
@@ -347,7 +342,9 @@ Status PartitionedSpillerWriter::_choose_partitions_to_flush(bool is_final_flush
                   });
         size_t accumulate_spill_bytes = 0;
         for (auto partition : partitions_can_flush) {
-            accumulate_spill_bytes += partition->spill_writer->mem_table()->mem_usage();
+            const auto& mem_table = partition->spill_writer->mem_table();
+            RETURN_IF_ERROR(mem_table->done());
+            accumulate_spill_bytes += mem_table->mem_usage();
             partition->in_mem = false;
             partition->mem_size = 0;
             partitions_need_flush.emplace_back(partition);
@@ -396,40 +393,58 @@ void PartitionedSpillerWriter::shuffle(std::vector<uint32_t>& dst, const SpillHa
     }
 }
 
-// provider maybe yield. this function should be reentrant
-template <class ChunkProvider>
-Status PartitionedSpillerWriter::spill_partition(SerdeContext& ctx, SpilledPartition* partition,
-                                                 ChunkProvider&& provider) {
-    auto& serde = _spiller->serde();
-
+Status PartitionedSpillerWriter::spill_partition(workgroup::YieldContext& yield_ctx, SerdeContext& ctx,
+                                                 SpilledPartition* partition) {
+    auto mem_table = partition->spill_writer->mem_table();
+    auto mem_table_mem_usage = mem_table->mem_usage();
     if (partition->spill_writer->block() == nullptr) {
+        {
+            RETURN_IF_ERROR(mem_table->finalize(yield_ctx));
+            RETURN_IF_YIELD(yield_ctx.need_yield);
+        }
         spill::AcquireBlockOptions opts;
         opts.query_id = _runtime_state->query_id();
         opts.plan_node_id = options().plan_node_id;
         opts.name = options().name;
         opts.direct_io = _runtime_state->spill_enable_direct_io();
+        opts.block_size = mem_table->get_serialized_data_size();
         ASSIGN_OR_RETURN(auto block, _spiller->block_manager()->acquire_block(opts));
+        COUNTER_UPDATE(_spiller->metrics().block_count, 1);
+        {
+            std::lock_guard<std::mutex> l(_mutex);
+            partition->spill_writer->block() = block;
+        }
+    }
+    auto block = partition->spill_writer->block();
+
+    partition->bytes += mem_table_mem_usage;
+    TRACE_SPILL_LOG << fmt::format("spill partition[{}], mem_table_size[{}] bytes[{}] rows[{}]",
+                                   partition->debug_string(), mem_table->get_serialized_data_size(),
+                                   mem_table->mem_usage(), mem_table->num_rows());
+
+    {
+        do {
+            auto res = mem_table->get_next_serialized_data();
+            if (res.status().is_end_of_file()) {
+                break;
+            }
+            auto data = res.value();
+            RETURN_IF_ERROR(block->append({data}));
+        } while (true);
+        RETURN_IF_ERROR(block->flush());
+    }
+
+    {
         std::lock_guard<std::mutex> l(_mutex);
         partition->spill_writer->block_group().append(block);
-        partition->spill_writer->block() = block;
+        TRACE_SPILL_LOG << fmt::format("add block to partition[{}], block[{}], num_rows[{}]", partition->partition_id,
+                                       block->debug_string(), mem_table->num_rows());
     }
 
-    auto& block = partition->spill_writer->block();
-    DCHECK(block != nullptr);
-
-    auto consumer = [&](const auto& chunk) {
-        partition->bytes += chunk->memory_usage();
-        RETURN_IF_ERROR(serde->serialize_to_block(ctx, chunk, block));
-        return Status::OK();
-    };
-
-    RETURN_IF_ERROR(provider(consumer));
-
-    if (partition->spill_writer->block()->size() > options().spill_mem_table_bytes_size) {
-        RETURN_IF_ERROR(block->flush());
-        RETURN_IF_ERROR(_spiller->block_manager()->release_block(block));
-        block.reset();
-    }
+    RETURN_IF_ERROR(_spiller->block_manager()->release_block(block));
+    partition->spill_writer->reset_block();
+    mem_table->reset();
+    TRACE_SPILL_LOG << fmt::format("spill partition[{}] done ", partition->debug_string());
     return Status::OK();
 }
 
@@ -485,48 +500,28 @@ struct YieldableConsumerAdaptor {
     }
 };
 
-struct DoSpillPartition {
-public:
-    DoSpillPartition(SerdeContext& spill_ctx_, SpilledPartition* partition_, PartitionedSpillerWriter* writer_)
-            : spill_ctx(spill_ctx_), partition(partition_), writer(writer_) {}
-
-    Status operator()(const ChunkPtr& chunk) {
-        return writer->spill_partition(spill_ctx, partition, [&](auto& consumer) {
-            RETURN_IF_ERROR(consumer(chunk));
-            partition->num_rows += chunk->num_rows();
-            return Status::OK();
-        });
-    }
-
-private:
-    SerdeContext& spill_ctx;
-    SpilledPartition* partition;
-    PartitionedSpillerWriter* writer;
-};
-
 Status PartitionedSpillerWriter::_spill_input_partitions(workgroup::YieldContext& yield_ctx, SerdeContext& context,
-                                                         const std::vector<SpilledPartition*>& spilling_partitions,
-                                                         int64_t* time_spent_ns, int* yield) {
+                                                         const std::vector<SpilledPartition*>& spilling_partitions) {
     SCOPED_TIMER(_spiller->metrics().flush_timer);
     auto& flush_ctx = std::any_cast<PartitionedFlushContextPtr>(yield_ctx.task_context_data)->spill_stage_ctx;
-    for (; flush_ctx.processing_idx < spilling_partitions.size(); ++flush_ctx.processing_idx) {
+    for (; flush_ctx.processing_idx < spilling_partitions.size();) {
         auto partition = spilling_partitions[flush_ctx.processing_idx];
-        RETURN_IF_ERROR(spill_partition(context, partition, [&](auto& consumer) {
-            YieldableConsumerAdaptor adaptor(yield_ctx, time_spent_ns, yield, consumer);
-            auto& mem_table = partition->spill_writer->mem_table();
-            RETURN_IF_ERROR_EXCEPT_YIELD(mem_table->flush(adaptor));
-            COUNTER_SET(_spiller->metrics().partition_writer_peak_memory_usage, mem_consumption());
-            RETURN_IF_YIELD(yield);
-            return Status::OK();
-        }));
-        RETURN_IF_YIELD(yield);
+        TRACE_SPILL_LOG << fmt::format("spill input partition[{}], processing idx[{}]", partition->debug_string(),
+                                       flush_ctx.processing_idx);
+        {
+            SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
+            RETURN_IF_ERROR(spill_partition(yield_ctx, context, partition));
+            RETURN_IF_YIELD(yield_ctx.need_yield);
+            ++flush_ctx.processing_idx;
+            // check time
+            RETURN_OK_IF_NEED_YIELD(yield_ctx.wg, &yield_ctx.need_yield, yield_ctx.time_spent_ns);
+        }
     }
     return Status::OK();
 }
 
 Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext& yield_ctx, SerdeContext& context,
-                                                         const std::vector<SpilledPartition*>& splitting_partitions,
-                                                         int64_t* time_spent_ns, int* yield) {
+                                                         const std::vector<SpilledPartition*>& splitting_partitions) {
     SCOPED_TIMER(_spiller->metrics().split_partition_timer);
     auto& flush_ctx = std::any_cast<PartitionedFlushContextPtr>(yield_ctx.task_context_data)->split_stage_ctx;
     for (; flush_ctx.spliting_idx < splitting_partitions.size(); flush_ctx.spliting_idx++) {
@@ -557,8 +552,8 @@ Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext
         }
 
         auto st = _split_partition(yield_ctx, context, flush_ctx.reader.get(), partition, flush_ctx.left.get(),
-                                   flush_ctx.right.get(), time_spent_ns, yield);
-        RETURN_IF_YIELD(yield);
+                                   flush_ctx.right.get());
+        RETURN_IF_YIELD(yield_ctx.need_yield);
         RETURN_IF(!st.is_ok_or_eof(), st);
         DCHECK_EQ(flush_ctx.left->num_rows + flush_ctx.right->num_rows, partition->num_rows);
 
@@ -579,110 +574,116 @@ Status PartitionedSpillerWriter::_split_input_partitions(workgroup::YieldContext
 
 Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield_ctx, SerdeContext& spill_ctx,
                                                   SpillerReader* reader, SpilledPartition* partition,
-                                                  SpilledPartition* left_partition, SpilledPartition* right_partition,
-                                                  int64_t* time_spent_ns, int* yield) {
+                                                  SpilledPartition* left_partition, SpilledPartition* right_partition) {
     size_t current_level = partition->level;
+    auto left_mem_table = left_partition->spill_writer->mem_table();
+    auto right_mem_table = right_partition->spill_writer->mem_table();
 
-    DoSpillPartition spill_left_partition(spill_ctx, left_partition, this);
-    DoSpillPartition spill_right_partition(spill_ctx, right_partition, this);
-
-    AccumulateWriter left_accumulate_writer(spill_left_partition, _runtime_state->chunk_size());
-    AccumulateWriter right_accumulate_writer(spill_right_partition, _runtime_state->chunk_size());
-
-    auto defer = DeferOp([&]() {
-        WARN_IF_ERROR(left_accumulate_writer.flush(), "AccumulateWriter flush error");
-        WARN_IF_ERROR(right_accumulate_writer.flush(), "AccumulateWriter flush error");
-    });
-
-    TRY_CATCH_ALLOC_SCOPE_START()
-    while (true) {
-        {
-            SCOPED_RAW_TIMER(time_spent_ns);
-            RETURN_IF_ERROR(reader->trigger_restore(_runtime_state, SyncTaskExecutor{}, EmptyMemGuard{}));
-            if (!reader->has_output_data()) {
-                break;
+    TRACE_SPILL_LOG << fmt::format(
+            "split partition [{}] to [{}] and [{}], left_mem_table_rows[{}], right_mem_table_rows[{}]",
+            partition->debug_string(), left_partition->debug_string(), right_partition->debug_string(),
+            left_mem_table->num_rows(), right_mem_table->num_rows());
+    Status st;
+    {
+        auto flush_partition = [this, &spill_ctx, &yield_ctx](SpilledPartition* partition) -> Status {
+            auto mem_table = partition->spill_writer->mem_table();
+            if (mem_table->mem_usage() < _spiller->options().spill_mem_table_bytes_size) {
+                TRACE_SPILL_LOG << fmt::format("skip to flush small partition: {}", partition->debug_string());
+                return Status::OK();
             }
-            ASSIGN_OR_RETURN(auto chunk, reader->restore(_runtime_state, SyncTaskExecutor{}, EmptyMemGuard{}));
-            if (chunk->is_empty()) {
-                continue;
-            }
-            auto hash_column = down_cast<SpillHashColumn*>(chunk->columns().back().get());
-            const auto& hash_data = hash_column->get_data();
-            // hash data
-            std::vector<uint32_t> shuffle_result;
-            shuffle_result.resize(hash_data.size());
-            size_t left_channel_size = 0;
-            for (size_t i = 0; i < hash_data.size(); ++i) {
-                shuffle_result[i] = hash_data[i] >> current_level & 0x01;
-                left_channel_size += !shuffle_result[i];
-            }
-            size_t left_cursor = 0;
-            size_t right_cursor = left_channel_size;
-            std::vector<uint32_t> selection(hash_data.size());
-            for (size_t i = 0; i < hash_data.size(); ++i) {
-                if (shuffle_result[i] == 0) {
-                    selection[left_cursor++] = i;
-                } else {
-                    selection[right_cursor++] = i;
+            RETURN_IF_ERROR(mem_table->done());
+            return this->spill_partition(yield_ctx, spill_ctx, partition);
+        };
+
+        auto defer = DeferOp([&]() {
+            RETURN_IF(st = flush_partition(left_partition); !st.ok(), (void)0);
+            RETURN_IF(yield_ctx.need_yield, (void)0);
+            RETURN_IF(st = flush_partition(right_partition); !st.ok(), (void)0);
+            RETURN_IF(yield_ctx.need_yield, (void)0);
+        });
+        TRY_CATCH_ALLOC_SCOPE_START()
+        while (true) {
+            {
+                SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
+                RETURN_IF_ERROR(reader->trigger_restore(_runtime_state, SyncTaskExecutor{}, EmptyMemGuard{}));
+                if (!reader->has_output_data()) {
+                    break;
                 }
-            }
+                ASSIGN_OR_RETURN(auto chunk, reader->restore(_runtime_state, SyncTaskExecutor{}, EmptyMemGuard{}));
+                if (chunk->is_empty()) {
+                    continue;
+                }
+                auto hash_column = down_cast<SpillHashColumn*>(chunk->columns().back().get());
+                const auto& hash_data = hash_column->get_data();
+                // hash data
+                std::vector<uint32_t> shuffle_result;
+                shuffle_result.resize(hash_data.size());
+                size_t left_channel_size = 0;
+                for (size_t i = 0; i < hash_data.size(); ++i) {
+                    shuffle_result[i] = hash_data[i] >> current_level & 0x01;
+                    left_channel_size += !shuffle_result[i];
+                }
+                size_t left_cursor = 0;
+                size_t right_cursor = left_channel_size;
+                std::vector<uint32_t> selection(hash_data.size());
+                for (size_t i = 0; i < hash_data.size(); ++i) {
+                    if (shuffle_result[i] == 0) {
+                        selection[left_cursor++] = i;
+                    } else {
+                        selection[right_cursor++] = i;
+                    }
+                }
 
 #ifndef NDEBUG
-            for (size_t i = 0; i < left_cursor; i++) {
-                DCHECK_EQ(hash_data[selection[i]] & left_partition->mask(),
-                          left_partition->partition_id & left_partition->mask());
-            }
+                for (size_t i = 0; i < left_cursor; i++) {
+                    DCHECK_EQ(hash_data[selection[i]] & left_partition->mask(),
+                              left_partition->partition_id & left_partition->mask());
+                }
 
-            for (size_t i = left_cursor; i < right_cursor; i++) {
-                DCHECK_EQ(hash_data[selection[i]] & right_partition->mask(),
-                          right_partition->partition_id & right_partition->mask());
-            }
+                for (size_t i = left_cursor; i < right_cursor; i++) {
+                    DCHECK_EQ(hash_data[selection[i]] & right_partition->mask(),
+                              right_partition->partition_id & right_partition->mask());
+                }
 #endif
 
-            if (left_channel_size > 0) {
-                ChunkPtr left_chunk = chunk->clone_empty();
-                left_chunk->append_selective(*chunk, selection.data(), 0, left_channel_size);
-                RETURN_IF_ERROR(left_accumulate_writer.write(left_chunk));
+                if (left_channel_size > 0) {
+                    left_partition->num_rows += left_channel_size;
+                    RETURN_IF_ERROR(left_mem_table->append_selective(*chunk, selection.data(), 0, left_channel_size));
+                }
+                if (hash_data.size() != left_channel_size) {
+                    right_partition->num_rows += hash_data.size() - left_channel_size;
+                    RETURN_IF_ERROR(right_mem_table->append_selective(*chunk, selection.data(), left_channel_size,
+                                                                      hash_data.size() - left_channel_size));
+                }
             }
-            if (hash_data.size() != left_channel_size) {
-                ChunkPtr right_chunk = chunk->clone_empty();
-                right_chunk->append_selective(*chunk, selection.data(), left_channel_size,
-                                              hash_data.size() - left_channel_size);
-                RETURN_IF_ERROR(right_accumulate_writer.write(right_chunk));
-            }
+            BREAK_IF_YIELD(yield_ctx.wg, &yield_ctx.need_yield, yield_ctx.time_spent_ns);
         }
-        BREAK_IF_YIELD(yield_ctx.wg, yield, *time_spent_ns);
+        TRY_CATCH_ALLOC_SCOPE_END()
     }
-    TRY_CATCH_ALLOC_SCOPE_END()
     // TODO: add restore rows check
-    return Status::OK();
+    return st;
 }
 
 Status PartitionedSpillerWriter::yieldable_flush_task(workgroup::YieldContext& ctx,
                                                       const std::vector<SpilledPartition*>& splitting_partitions,
-                                                      const std::vector<SpilledPartition*>& spilling_partitions,
-                                                      int* yield) {
+                                                      const std::vector<SpilledPartition*>& spilling_partitions) {
     enum PartitionWriterStage { SPILL = 0, SPLIT = 1, FINISH = 2 };
 
     ctx.total_yield_point_cnt = FINISH;
-    // init task context
-    if (!ctx.task_context_data.has_value()) {
-        ctx.task_context_data = std::make_shared<PartitionedFlushContext>();
-    }
+    DCHECK(ctx.task_context_data.has_value()) << "spill flush context must be set";
 
     // partition memory usage
     // now we partitioned sorted spill
     SerdeContext spill_ctx;
-    int64_t time_spent_ns = 0;
     switch (ctx.yield_point) {
     case SPILL:
-        RETURN_IF_ERROR(_spill_input_partitions(ctx, spill_ctx, spilling_partitions, &time_spent_ns, yield));
-        RETURN_IF_YIELD(yield);
+        RETURN_IF_ERROR(_spill_input_partitions(ctx, spill_ctx, spilling_partitions));
+        RETURN_IF_YIELD(ctx.need_yield);
         TO_NEXT_STAGE(ctx.yield_point);
         [[fallthrough]];
     case SPLIT:
-        RETURN_IF_ERROR(_split_input_partitions(ctx, spill_ctx, splitting_partitions, &time_spent_ns, yield));
-        RETURN_IF_YIELD(yield);
+        RETURN_IF_ERROR(_split_input_partitions(ctx, spill_ctx, splitting_partitions));
+        RETURN_IF_YIELD(ctx.need_yield);
         TO_NEXT_STAGE(ctx.yield_point);
         [[fallthrough]];
     default: {

@@ -57,6 +57,10 @@ struct YieldContext {
     size_t yield_point{};
     size_t total_yield_point_cnt{};
     const workgroup::WorkGroup* wg = nullptr;
+    // used to record the runtime information of a single call in order to decide whether to trigger yield.
+    // It needs to be reset every time when the task is executed.
+    int64_t time_spent_ns = 0;
+    bool need_yield = false;
 };
 
 struct ScanTask {

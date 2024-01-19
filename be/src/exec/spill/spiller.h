@@ -99,6 +99,10 @@ public:
     RuntimeProfile::HighWaterMarkCounter* peak_flush_io_task_count = nullptr;
     RuntimeProfile::Counter* restore_io_task_count = nullptr;
     RuntimeProfile::HighWaterMarkCounter* peak_restore_io_task_count = nullptr;
+
+    RuntimeProfile::Counter* mem_table_finalize_timer = nullptr;
+    RuntimeProfile::Counter* flush_task_yield_times = nullptr;
+    RuntimeProfile::Counter* restore_task_yield_times = nullptr;
 };
 
 // major spill interfaces

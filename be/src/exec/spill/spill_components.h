@@ -164,6 +164,8 @@ public:
 
     BlockPtr& block() { return _block; }
 
+    void reset_block() { _block = nullptr; }
+
     BlockGroup& block_group() { return _block_group; }
 
     Status acquire_stream(std::shared_ptr<SpillInputStream>* stream) override;
@@ -174,13 +176,13 @@ public:
 
     void get_spill_partitions(std::vector<const SpillPartitionInfo*>* partitions) override {}
 
-    Status yieldable_flush_task(workgroup::YieldContext& ctx, RuntimeState* state, const MemTablePtr& mem_table,
-                                int* yield);
+    Status yieldable_flush_task(workgroup::YieldContext& ctx, RuntimeState* state, const MemTablePtr& mem_table);
 
 public:
     struct FlushContext {
         BlockPtr block;
     };
+    using FlushContextPtr = std::shared_ptr<FlushContext>;
 
 private:
     template <class Provider>
@@ -210,8 +212,8 @@ struct SpilledPartition : public SpillPartitionInfo {
     }
 
     std::string debug_string() {
-        return fmt::format("[id={},bytes={},mem_size={},in_mem={},is_spliting={}]", partition_id, bytes, mem_size,
-                           in_mem, is_spliting);
+        return fmt::format("[id={},bytes={},mem_size={},num_rows={},in_mem={},is_spliting={}]", partition_id, bytes,
+                           mem_size, num_rows, in_mem, is_spliting);
     }
 
     bool is_spliting = false;
@@ -291,8 +293,7 @@ public:
 
     const auto& level_to_partitions() { return _level_to_partitions; }
 
-    template <class ChunkProvider>
-    Status spill_partition(SerdeContext& context, SpilledPartition* partition, ChunkProvider&& provider);
+    Status spill_partition(workgroup::YieldContext& ctx, SerdeContext& context, SpilledPartition* partition);
 
     int64_t mem_consumption() const { return _mem_tracker->consumption(); }
 
@@ -329,7 +330,7 @@ public:
 
     Status yieldable_flush_task(workgroup::YieldContext& ctx,
                                 const std::vector<SpilledPartition*>& splitting_partitions,
-                                const std::vector<SpilledPartition*>& spilling_partitions, int* yield);
+                                const std::vector<SpilledPartition*>& spilling_partitions);
 
 private:
     void _init_with_partition_nums(RuntimeState* state, int num_partitions);
@@ -337,12 +338,10 @@ private:
     void _prepare_partitions(RuntimeState* state);
 
     Status _spill_input_partitions(workgroup::YieldContext& ctx, SerdeContext& context,
-                                   const std::vector<SpilledPartition*>& spilling_partitions, int64_t* time_spent_ns,
-                                   int* yield);
+                                   const std::vector<SpilledPartition*>& spilling_partitions);
 
     Status _split_input_partitions(workgroup::YieldContext& ctx, SerdeContext& context,
-                                   const std::vector<SpilledPartition*>& splitting_partitions, int64_t* time_spent_ns,
-                                   int* yield);
+                                   const std::vector<SpilledPartition*>& splitting_partitions);
 
     // split partition by hash
     // hash-based partitioning can have significant degradation in the case of heavily skewed data.
@@ -352,7 +351,7 @@ private:
     // 2. If our input is ordered, we can use some sorting-based algorithm to split the partition. This way the probe side can do full streaming of the data
     Status _split_partition(workgroup::YieldContext& ctx, SerdeContext& context, SpillerReader* reader,
                             SpilledPartition* partition, SpilledPartition* left_partition,
-                            SpilledPartition* right_partition, int64_t* time_spent_ns, int* yield);
+                            SpilledPartition* right_partition);
 
     void _add_partition(SpilledPartitionPtr&& partition);
     void _remove_partition(const SpilledPartition* partition);
