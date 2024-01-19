@@ -170,11 +170,11 @@ public class DeleteHandlerTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                GlobalStateMgr.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 minTimes = 0;
                 result = invertedIndex;
 
-                GlobalStateMgr.getCurrentGlobalTransactionMgr();
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 minTimes = 0;
                 result = globalTransactionMgr;
 
@@ -185,7 +185,7 @@ public class DeleteHandlerTest {
                 minTimes = 0;
                 result = true;
 
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
 

@@ -206,7 +206,7 @@ public class SimpleScheduler {
     }
 
     public static void updateBlocklist() {
-        SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
 
         List<Long> removedNodes = new ArrayList<>();
         Map<Long, Integer> retryingNodes = new HashMap<>();

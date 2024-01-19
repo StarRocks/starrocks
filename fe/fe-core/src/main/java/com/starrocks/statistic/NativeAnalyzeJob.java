@@ -195,7 +195,7 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
     @Override
     public void run(ConnectContext statsConnectContext, StatisticExecutor statisticExecutor) {
         setStatus(StatsConstants.ScheduleStatus.RUNNING);
-        GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithoutLog(this);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithoutLog(this);
         List<StatisticsCollectJob> statisticsCollectJobList =
                 StatisticsCollectJobFactory.buildStatisticsCollectJob(this);
 
@@ -205,14 +205,14 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
                     statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumns(),
                     statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(), LocalDateTime.now());
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
-            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
             statisticExecutor.collectStatistics(statsConnectContext, statsJob, analyzeStatus, true);
             if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.FAILED)) {
                 setStatus(StatsConstants.ScheduleStatus.FAILED);
                 setWorkTime(LocalDateTime.now());
                 setReason(analyzeStatus.getReason());
-                GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(this);
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithLog(this);
                 hasFailedCollectJob = true;
                 break;
             }
@@ -221,7 +221,7 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
         if (!hasFailedCollectJob) {
             setStatus(StatsConstants.ScheduleStatus.PENDING);
             setWorkTime(LocalDateTime.now());
-            GlobalStateMgr.getCurrentAnalyzeMgr().updateAnalyzeJobWithLog(this);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithLog(this);
         }
     }
 

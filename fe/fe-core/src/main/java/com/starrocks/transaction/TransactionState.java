@@ -414,7 +414,7 @@ public class TransactionState implements Writable {
         TabletCommitInfo info = new TabletCommitInfo(tabletId, backendId);
         if (this.tabletCommitInfos == null) {
             if (LOG.isDebugEnabled()) {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
                 // if tabletCommitInfos is null, skip this check and return true
                 LOG.debug("tabletCommitInfos is null in TransactionState, tablet {} backend {} txn {}",
                         tabletId, backend != null ? backend.toString() : "", transactionId);
@@ -425,7 +425,7 @@ public class TransactionState implements Writable {
             // Skip check when replica is CLONE, ALTER or SCHEMA CHANGE
             // We handle version missing in finishTask when change state to NORMAL
             if (LOG.isDebugEnabled()) {
-                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+                Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
                 LOG.debug("skip tabletCommitInfos check because tablet {} backend {} is in state {}",
                         tabletId, backend != null ? backend.toString() : "", state);
             }
@@ -545,7 +545,7 @@ public class TransactionState implements Writable {
             throws TransactionException {
         // callback will pass to afterStateTransform since it may be deleted from
         // GlobalTransactionMgr between beforeStateTransform and afterStateTransform
-        TxnStateChangeCallback callback = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+        TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .getCallbackFactory().getCallback(callbackId);
         // before status changed
         if (callback != null) {
@@ -573,9 +573,9 @@ public class TransactionState implements Writable {
         return callback;
     }
 
-    public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated) throws UserException {
+    public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated) {
         // after status changed
-        TxnStateChangeCallback callback = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+        TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .getCallbackFactory().getCallback(callbackId);
         if (callback != null) {
             if (Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
@@ -608,7 +608,7 @@ public class TransactionState implements Writable {
 
     public void replaySetTransactionStatus() {
         TxnStateChangeCallback callback =
-                GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().getCallback(
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().getCallback(
                         callbackId);
         if (callback != null) {
             if (transactionStatus == TransactionStatus.ABORTED) {
@@ -817,7 +817,7 @@ public class TransactionState implements Writable {
         if (publishBackends.isEmpty()) {
             // note: tasks are sent to all backends including dead ones, or else
             // transaction manager will treat it as success
-            List<Long> allBackends = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(false);
+            List<Long> allBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
             if (!allBackends.isEmpty()) {
                 publishBackends = Sets.newHashSet();
                 publishBackends.addAll(allBackends);

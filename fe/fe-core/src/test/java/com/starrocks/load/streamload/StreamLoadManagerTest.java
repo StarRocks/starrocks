@@ -98,11 +98,11 @@ public class StreamLoadManagerTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                GlobalStateMgr.getCurrentGlobalTransactionMgr();
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                 minTimes = 0;
                 result = globalTransactionMgr;
 
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
 

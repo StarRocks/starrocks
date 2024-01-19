@@ -54,10 +54,10 @@ public class StatisticsCalcUtils {
         List<String> columns = new ArrayList<>(colRefToColumnMetaMap.values())
                 .stream().map(Column::getName).collect(Collectors.toList());
         List<ColumnStatistic> columnStatisticList =
-                GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
+                GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistics(table, columns);
 
         Map<String, Histogram> histogramStatistics =
-                GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columns);
+                GlobalStateMgr.getCurrentState().getStatisticStorage().getHistogramStatistics(table, columns);
 
         for (int i = 0; i < requiredColumnRefs.size(); ++i) {
             ColumnStatistic columnStatistic;
@@ -99,9 +99,9 @@ public class StatisticsCalcUtils {
             long rowCount = 0;
 
             BasicStatsMeta basicStatsMeta =
-                    GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
+                    GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
             StatsConstants.AnalyzeType analyzeType = basicStatsMeta == null ? null : basicStatsMeta.getType();
-            LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentTabletStatMgr().getLastWorkTimestamp();
+            LocalDateTime lastWorkTimestamp = GlobalStateMgr.getCurrentState().getTabletStatMgr().getLastWorkTimestamp();
             if (StatsConstants.AnalyzeType.FULL == analyzeType) {
 
                 // The basicStatsMeta.getUpdateRows() interface can get the number of
@@ -114,7 +114,7 @@ public class StatisticsCalcUtils {
                 long deltaRows = deltaRows(table, basicStatsMeta.getUpdateRows());
                 for (Partition partition : selectedPartitions) {
                     long partitionRowCount;
-                    TableStatistic tableStatistic = GlobalStateMgr.getCurrentStatisticStorage()
+                    TableStatistic tableStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
                             .getTableStatistic(table.getId(), partition.getId());
                     LocalDateTime updateDatetime = StatisticUtils.getPartitionLastUpdateTime(partition);
                     if (tableStatistic.equals(TableStatistic.unknown())) {
@@ -175,7 +175,7 @@ public class StatisticsCalcUtils {
         long tblRowCount = 0L;
         for (Partition partition : table.getPartitions()) {
             long partitionRowCount;
-            TableStatistic tableStatistic = GlobalStateMgr.getCurrentStatisticStorage()
+            TableStatistic tableStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
                     .getTableStatistic(table.getId(), partition.getId());
             if (tableStatistic.equals(TableStatistic.unknown())) {
                 partitionRowCount = partition.getRowCount();

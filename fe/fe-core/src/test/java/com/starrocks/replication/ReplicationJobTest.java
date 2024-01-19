@@ -98,16 +98,16 @@ public class ReplicationJobTest {
         srcPartition.updateVersionForRestore(partition.getCommittedVersion() + 100);
 
         job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
-                GlobalStateMgr.getCurrentSystemInfo());
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
     }
 
     @Test
     public void testJobId() {
         ReplicationJob jobWithoutId = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
-                GlobalStateMgr.getCurrentSystemInfo());
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         Assert.assertFalse(jobWithoutId.getJobId().isEmpty());
         ReplicationJob jobWithId = new ReplicationJob("fake_id", "test_token", db.getId(), table, srcTable,
-                GlobalStateMgr.getCurrentSystemInfo());
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         Assert.assertEquals("fake_id", jobWithId.getJobId());
     }
 
@@ -350,7 +350,7 @@ public class ReplicationJobTest {
 
             tabletInfo.replica_replication_infos = new ArrayList<TReplicaReplicationInfo>();
             TReplicaReplicationInfo replicaInfo = new TReplicaReplicationInfo();
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackends().iterator().next();
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().iterator().next();
             replicaInfo.src_backend = new TBackend(backend.getHost(), backend.getBePort(), backend.getHttpPort());
             tabletInfo.replica_replication_infos.add(replicaInfo);
         }

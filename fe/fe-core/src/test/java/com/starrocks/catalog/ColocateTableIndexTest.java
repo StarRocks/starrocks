@@ -91,7 +91,7 @@ public class ColocateTableIndexTest {
                 "PROPERTIES(\"colocate_with\"=\"group1\", \"replication_num\" = \"1\");\n";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-        List<List<String>> infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
+        List<List<String>> infos = GlobalStateMgr.getCurrentState().getColocateTableIndex().getInfos();
         // group1->table1To1
         Assert.assertEquals(1, infos.size());
         Map<String, List<String>> map = groupByName(infos);
@@ -108,7 +108,7 @@ public class ColocateTableIndexTest {
         createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         // group1 -> table1To1, table1To2
-        infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
+        infos = GlobalStateMgr.getCurrentState().getColocateTableIndex().getInfos();
         Assert.assertEquals(1, infos.size());
         map = groupByName(infos);
         Table table1To2 = GlobalStateMgr.getCurrentState().getDb("db1").getTable("table1_2");
@@ -129,7 +129,7 @@ public class ColocateTableIndexTest {
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         // group1 -> table1_1, table1_2
         // group2 -> table2_l
-        infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
+        infos = GlobalStateMgr.getCurrentState().getColocateTableIndex().getInfos();
         Assert.assertEquals(2, infos.size());
         map = groupByName(infos);
         Assert.assertEquals(String.format("%d, %d", table1To1.getId(), table1To2.getId()), map.get("group1").get(2));
@@ -143,7 +143,7 @@ public class ColocateTableIndexTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         // group1 -> table1_1*, table1_2
         // group2 -> table2_l
-        infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
+        infos = GlobalStateMgr.getCurrentState().getColocateTableIndex().getInfos();
         map = groupByName(infos);
         Assert.assertEquals(2, infos.size());
         Assert.assertEquals(String.format("%d*, %d", table1To1.getId(), table1To2.getId()), map.get("group1").get(2));
@@ -156,7 +156,7 @@ public class ColocateTableIndexTest {
         GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         // group1 -> table1_1*, table1_2*
         // group2 -> table2_l
-        infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
+        infos = GlobalStateMgr.getCurrentState().getColocateTableIndex().getInfos();
         map = groupByName(infos);
         Assert.assertEquals(2, infos.size());
         Assert.assertEquals(String.format("%d*, %d*", table1To1.getId(), table1To2.getId()), map.get("group1").get(2));
@@ -175,7 +175,7 @@ public class ColocateTableIndexTest {
         GlobalStateMgr.getCurrentState().getMetadata().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
         // group1 -> table1_1*, table1_2*
         // group2 -> table2_l*
-        infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
+        infos = GlobalStateMgr.getCurrentState().getColocateTableIndex().getInfos();
         map = groupByName(infos);
         Assert.assertEquals(2, infos.size());
         Assert.assertEquals(String.format("%d*, %d*", table1To1.getId(), table1To2.getId()), map.get("group1").get(2));
@@ -198,7 +198,7 @@ public class ColocateTableIndexTest {
         sql = "DROP DATABASE db2;";
         dropDbStmt = (DropDbStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getMetadata().dropDb(dropDbStmt.getDbName(), dropDbStmt.isForceDrop());
-        infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
+        infos = GlobalStateMgr.getCurrentState().getColocateTableIndex().getInfos();
         map = groupByName(infos);
         LOG.info("after create & drop db2: {}", infos);
         Assert.assertEquals(3, infos.size());
@@ -214,7 +214,7 @@ public class ColocateTableIndexTest {
 
     @Test
     public void testCleanUp() throws Exception {
-        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
 
         // create goodDb
@@ -231,7 +231,7 @@ public class ColocateTableIndexTest {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         OlapTable table = (OlapTable) goodDb.getTable("goodTable");
-        ColocateTableIndex.GroupId goodGroup = GlobalStateMgr.getCurrentColocateIndex().getGroup(table.getId());
+        ColocateTableIndex.GroupId goodGroup = GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(table.getId());
 
 
         // create a bad db
@@ -246,13 +246,13 @@ public class ColocateTableIndexTest {
         colocateTableIndex.addTableToGroup(
                 goodDb.getId(), table, "badGroupOfBadTable", new ColocateTableIndex.GroupId(goodDb.getId(), 4004), false);
 
-        Map<String, List<String>> map = groupByName(GlobalStateMgr.getCurrentColocateIndex().getInfos());
+        Map<String, List<String>> map = groupByName(GlobalStateMgr.getCurrentState().getColocateTableIndex().getInfos());
         Assert.assertTrue(map.containsKey("goodGroup"));
         Assert.assertTrue(map.containsKey("badGroupOfBadDb"));
         Assert.assertTrue(map.containsKey("badGroupOfBadTable"));
 
         colocateTableIndex.cleanupInvalidDbOrTable(GlobalStateMgr.getCurrentState());
-        map = groupByName(GlobalStateMgr.getCurrentColocateIndex().getInfos());
+        map = groupByName(GlobalStateMgr.getCurrentState().getColocateTableIndex().getInfos());
 
         Assert.assertTrue(map.containsKey("goodGroup"));
         Assert.assertFalse(map.containsKey("badGroupOfBadDb"));
@@ -265,7 +265,7 @@ public class ColocateTableIndexTest {
 
         new MockUp<GlobalStateMgr>() {
             @Mock
-            public StarOSAgent getCurrentStarOSAgent() {
+            public StarOSAgent getStarOSAgent() {
                 return starOSAgent;
             }
         };
@@ -313,7 +313,7 @@ public class ColocateTableIndexTest {
 
     @Test
     public void testSaveLoadJsonFormatImage() throws Exception {
-        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
 
         // create goodDb

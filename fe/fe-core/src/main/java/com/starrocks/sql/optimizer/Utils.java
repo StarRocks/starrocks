@@ -398,12 +398,12 @@ public class Utils {
                                         .map(Column::getName)
                                         .collect(Collectors.toList());
                         List<ColumnStatistic> keyColumnStatisticList =
-                                GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, keyColumnNames);
+                                GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistics(table, keyColumnNames);
                         return keyColumnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
                     }
                 }
                 List<ColumnStatistic> columnStatisticList =
-                        GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, colNames);
+                        GlobalStateMgr.getCurrentState().getStatisticStorage().getColumnStatistics(table, colNames);
                 return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
             } else if (operator instanceof LogicalHiveScanOperator || operator instanceof LogicalHudiScanOperator) {
                 if (ConnectContext.get().getSessionVariable().enableHiveColumnStats()) {

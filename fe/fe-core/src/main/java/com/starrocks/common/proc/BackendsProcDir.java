@@ -104,7 +104,7 @@ public class BackendsProcDir implements ProcDirInterface {
 
     // get backends of cluster
     public static List<List<String>> getClusterBackendInfos() {
-        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<List<String>> backendInfos = new LinkedList<>();
         List<Long> backendIds = clusterInfoService.getBackendIds(false);
         if (backendIds == null) {
@@ -121,7 +121,7 @@ public class BackendsProcDir implements ProcDirInterface {
             }
 
             watch.start();
-            long tabletNum = GlobalStateMgr.getCurrentInvertedIndex().getTabletNumByBackendId(backendId);
+            long tabletNum = GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletNumByBackendId(backendId);
             watch.stop();
             List<Comparable> backendInfo = Lists.newArrayList();
             backendInfo.add(String.valueOf(backendId));
@@ -216,7 +216,7 @@ public class BackendsProcDir implements ProcDirInterface {
 
             if (RunMode.isSharedDataMode()) {
                 backendInfo.add(String.valueOf(backend.getStarletPort()));
-                long workerId = GlobalStateMgr.getCurrentStarOSAgent().getWorkerIdByBackendId(backendId);
+                long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(backendId);
                 backendInfo.add(String.valueOf(workerId));
             }
 

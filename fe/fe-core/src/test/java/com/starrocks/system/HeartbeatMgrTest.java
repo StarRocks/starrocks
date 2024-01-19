@@ -75,7 +75,7 @@ public class HeartbeatMgrTest {
     public void setUp() {
         new Expectations() {
             {
-                globalStateMgr.getSelfNode();
+                globalStateMgr.getNodeMgr().getSelfNode();
                 minTimes = 0;
                 result = Pair.create("192.168.1.3", 9010); // not self
 

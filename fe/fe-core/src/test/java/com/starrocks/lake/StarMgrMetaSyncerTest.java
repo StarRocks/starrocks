@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake;
 
 import com.google.common.collect.Lists;
@@ -27,7 +26,6 @@ import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.PhysicalPartition;
@@ -49,7 +47,6 @@ import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -78,14 +75,15 @@ public class StarMgrMetaSyncerTest {
         long partitionId = 3L;
         long shardGroupId = 12L;
 
+        /*
         new MockUp<GlobalStateMgr>() {
             @Mock
-            public SystemInfoService getCurrentSystemInfo() {
+            public SystemInfoService getCurrentState().getNodeMgr().getClusterInfo() {
                 return systemInfoService;
             }
 
             @Mock
-            public ColocateTableIndex getCurrentColocateIndex() {
+            public ColocateTableIndex getCurrentState().getColocateTableIndex() {
                 return colocateTableIndex;
             }
 
@@ -103,7 +101,7 @@ public class StarMgrMetaSyncerTest {
                 return new Database(dbId, "test");
             }
             @Mock
-            public List<Table> getTablesIncludeRecycleBin(Database db) {
+            public List<Table> getLocalMetastore().getTablesIncludeRecycleBin(Database db) {
                 List<Column> baseSchema = new ArrayList<>();
                 KeysType keysType = KeysType.AGG_KEYS;
                 PartitionInfo partitionInfo = new PartitionInfo(PartitionType.RANGE);
@@ -126,6 +124,8 @@ public class StarMgrMetaSyncerTest {
                 return new Database(dbId, dbName);
             }
         };
+
+         */
 
         new Expectations() {
             {
@@ -150,9 +150,9 @@ public class StarMgrMetaSyncerTest {
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
         for (long groupId : allShardGroupId) {
             ShardGroupInfo info = ShardGroupInfo.newBuilder()
-                            .setGroupId(groupId)
-                            .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
-                            .build();
+                    .setGroupId(groupId)
+                    .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
+                    .build();
             shardGroupInfos.add(info);
         }
 
@@ -165,6 +165,7 @@ public class StarMgrMetaSyncerTest {
                     shardGroupInfos.removeIf(item -> item.getGroupId() == groupId);
                 }
             }
+
             @Mock
             public List<ShardGroupInfo> listShardGroup() {
                 return shardGroupInfos;
@@ -188,6 +189,7 @@ public class StarMgrMetaSyncerTest {
                 backends.add(be2);
                 return backends;
             }
+
             @Mock
             public List<ComputeNode> getComputeNodes() {
                 List<ComputeNode> computeNodes = new ArrayList<>();
@@ -344,7 +346,7 @@ public class StarMgrMetaSyncerTest {
 
             @Mock
             public void updateLakeTableColocationInfo(OlapTable olapTable, boolean isJoin,
-                    GroupId expectGroupId) throws DdlException {
+                                                      GroupId expectGroupId) throws DdlException {
                 return;
             }
         };

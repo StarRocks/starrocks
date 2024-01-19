@@ -315,7 +315,7 @@ public class SimpleSchedulerTest {
         SimpleScheduler.addToBlocklist(10003L);
         new Expectations() {
             {
-                globalStateMgr.getCurrentSystemInfo();
+                globalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 times = 2;
 

@@ -117,7 +117,6 @@ public class SparkLoadPendingTask extends LoadTask {
                                 Map<FileGroupAggKey, List<BrokerFileGroup>> aggKeyToBrokerFileGroups,
                                 SparkResource resource, BrokerDesc brokerDesc) {
         super(loadTaskCallback, TaskType.PENDING, LoadPriority.NORMAL_VALUE);
-        this.retryTime = 3;
         this.attachment = new SparkPendingTaskAttachment(signature);
         this.aggKeyToBrokerFileGroups = aggKeyToBrokerFileGroups;
         this.resource = resource;
@@ -191,7 +190,7 @@ public class SparkLoadPendingTask extends LoadTask {
                     tables.put(tableId, etlTable);
 
                     // add table indexes to transaction state
-                    TransactionState txnState = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                    TransactionState txnState = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                             .getTransactionState(dbId, transactionId);
                     if (txnState == null) {
                         throw new LoadException("txn does not exist. id: " + transactionId);

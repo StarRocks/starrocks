@@ -305,13 +305,14 @@ public class DppConfig implements Writable {
     }
 
     public String getApplicationsPath() {
-        return String.format("%s/%d/%s/%s", starrocksPath, GlobalStateMgr.getCurrentState().getClusterId(),
+        return String.format("%s/%d/%s/%s", starrocksPath, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(),
                 APPLICATIONS_PATH,
                 FeConstants.DPP_VERSION);
     }
 
     public String getOutputPath() {
-        return String.format("%s/%d/%s", starrocksPath, GlobalStateMgr.getCurrentState().getClusterId(), OUTPUT_PATH);
+        return String.format("%s/%d/%s", starrocksPath, GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(),
+                OUTPUT_PATH);
     }
 
     public static String getHttpPortKey() {

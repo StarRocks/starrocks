@@ -671,7 +671,7 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             return false;
         }
 
-        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         if (colocateIndex.isColocateTable(getId())) {
             boolean isGroupUnstable = colocateIndex.isGroupUnstable(colocateIndex.getGroup(getId()));
             if (!isLocalBalance || isGroupUnstable) {

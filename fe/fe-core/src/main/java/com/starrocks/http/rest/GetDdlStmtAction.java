@@ -49,6 +49,7 @@ import com.starrocks.meta.lock.Locker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 import org.apache.logging.log4j.LogManager;
@@ -106,7 +107,7 @@ public class GetDdlStmtAction extends RestBaseAction {
                 throw new DdlException("Table[" + tableName + "] does not exist");
             }
 
-            GlobalStateMgr.getDdlStmt(table, createTableStmt, addPartitionStmt, createRollupStmt, true,
+            AstToStringBuilder.getDdlStmt(table, createTableStmt, addPartitionStmt, createRollupStmt, true,
                     false /* show password */);
 
         } finally {

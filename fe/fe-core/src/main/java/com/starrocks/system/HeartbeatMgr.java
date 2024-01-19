@@ -98,7 +98,7 @@ public class HeartbeatMgr extends FrontendDaemon {
         tMasterInfo.setHttp_port(Config.http_port);
         long flags = HeartbeatFlags.getHeartbeatFlags();
         tMasterInfo.setHeartbeat_flags(flags);
-        tMasterInfo.setMin_active_txn_id(GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnId());
+        tMasterInfo.setMin_active_txn_id(GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getMinActiveTxnId());
         MASTER_INFO.set(tMasterInfo);
     }
 
@@ -109,7 +109,8 @@ public class HeartbeatMgr extends FrontendDaemon {
      */
     @Override
     protected void runAfterCatalogReady() {
-        ImmutableMap<Long, Backend> idToBackendRef = GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        ImmutableMap<Long, Backend> idToBackendRef =
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend();
         if (idToBackendRef == null) {
             return;
         }
@@ -124,21 +125,22 @@ public class HeartbeatMgr extends FrontendDaemon {
         }
 
         // send compute node heartbeat
-        for (ComputeNode computeNode : GlobalStateMgr.getCurrentSystemInfo().getIdComputeNode().values()) {
+        for (ComputeNode computeNode : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdComputeNode()
+                .values()) {
             BackendHeartbeatHandler handler = new BackendHeartbeatHandler(computeNode);
             hbResponses.add(executor.submit(handler));
         }
 
         // send frontend heartbeat
-        List<Frontend> frontends = GlobalStateMgr.getCurrentState().getFrontends(null);
+        List<Frontend> frontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(null);
         String masterFeNodeName = "";
         for (Frontend frontend : frontends) {
             if (frontend.getHost().equals(MASTER_INFO.get().getNetwork_address().getHostname())) {
                 masterFeNodeName = frontend.getNodeName();
             }
             FrontendHeartbeatHandler handler = new FrontendHeartbeatHandler(frontend,
-                    GlobalStateMgr.getCurrentState().getClusterId(),
-                    GlobalStateMgr.getCurrentState().getToken());
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterId(),
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getToken());
             hbResponses.add(executor.submit(handler));
         }
 
@@ -204,9 +206,11 @@ public class HeartbeatMgr extends FrontendDaemon {
             }
             case BACKEND: {
                 BackendHbResponse hbResponse = (BackendHbResponse) response;
-                ComputeNode computeNode = GlobalStateMgr.getCurrentSystemInfo().getBackend(hbResponse.getBeId());
+                ComputeNode computeNode =
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(hbResponse.getBeId());
                 if (computeNode == null) {
-                    computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNode(hbResponse.getBeId());
+                    computeNode =
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNode(hbResponse.getBeId());
                 }
                 if (computeNode != null) {
                     boolean isChanged = computeNode.handleHbResponse(hbResponse, isReplay);
@@ -222,13 +226,13 @@ public class HeartbeatMgr extends FrontendDaemon {
                             // addWorker
                             int starletPort = computeNode.getStarletPort();
                             if (starletPort != 0) {
-                                Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().
+                                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().
                                         getDefaultWarehouse();
                                 long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
                                 String workerAddr = computeNode.getHost() + ":" + starletPort;
 
-                                GlobalStateMgr.getCurrentStarOSAgent().
-                                            addWorker(computeNode.getId(), workerAddr, workerGroupId);
+                                GlobalStateMgr.getCurrentState().getStarOSAgent().
+                                        addWorker(computeNode.getId(), workerAddr, workerGroupId);
                             }
                         }
                     }
@@ -278,7 +282,8 @@ public class HeartbeatMgr extends FrontendDaemon {
                 long flags = HeartbeatFlags.getHeartbeatFlags();
                 copiedMasterInfo.setHeartbeat_flags(flags);
                 copiedMasterInfo.setBackend_id(computeNodeId);
-                copiedMasterInfo.setMin_active_txn_id(GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnId());
+                copiedMasterInfo.setMin_active_txn_id(
+                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getMinActiveTxnId());
                 copiedMasterInfo.setRun_mode(RunMode.toTRunMode(RunMode.getCurrentRunMode()));
                 if (computeNode instanceof Backend) {
                     copiedMasterInfo.setDisabled_disks(((Backend) computeNode).getDisabledDisks());
@@ -354,7 +359,7 @@ public class HeartbeatMgr extends FrontendDaemon {
 
         @Override
         public HeartbeatResponse call() {
-            if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getSelfNode().first)) {
+            if (fe.getHost().equals(GlobalStateMgr.getCurrentState().getNodeMgr().getSelfNode().first)) {
                 // heartbeat to self
                 if (GlobalStateMgr.getCurrentState().isReady()) {
                     return new FrontendHbResponse(fe.getNodeName(), Config.query_port, Config.rpc_port,

@@ -90,7 +90,7 @@ public class ColocateMetaService {
     private static final String GROUP_ID = "group_id";
     private static final String DB_ID = "db_id";
 
-    private static ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentColocateIndex();
+    private static ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
 
     private static GroupId checkAndGetGroupId(BaseRequest request) throws DdlException {
         long grpId = Long.valueOf(request.getSingleParameter(GROUP_ID).trim());
@@ -142,7 +142,7 @@ public class ColocateMetaService {
                 throws DdlException {
             response.setContentType("application/json");
             RestResult result = new RestResult();
-            result.addResultEntry("colocate_meta", GlobalStateMgr.getCurrentColocateIndex());
+            result.addResultEntry("colocate_meta", GlobalStateMgr.getCurrentState().getColocateTableIndex());
             sendResult(request, response, result);
         }
     }
@@ -262,7 +262,7 @@ public class ColocateMetaService {
                 isJoin = false;
             }
 
-            Database db = GlobalStateMgr.getCurrentState().getDbIncludeRecycleBin(groupId.dbId);
+            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIncludeRecycleBin(groupId.dbId);
             if (db == null) {
                 response.appendContent("Non-exist db");
                 writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
@@ -271,7 +271,7 @@ public class ColocateMetaService {
             Locker locker = new Locker();
             locker.lockDatabase(db, LockType.WRITE);
             try {
-                OlapTable table = (OlapTable) globalStateMgr.getCurrentState().getTableIncludeRecycleBin(db, tableId);
+                OlapTable table = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
                 if (table == null) {
                     response.appendContent("Non-exist table");
                     writeResponse(request, response, HttpResponseStatus.BAD_REQUEST);
@@ -315,14 +315,14 @@ public class ColocateMetaService {
             List<List<Long>> backendsPerBucketSeq = new Gson().fromJson(meta, type);
             LOG.info("get buckets sequence: {}", backendsPerBucketSeq);
 
-            ColocateGroupSchema groupSchema = GlobalStateMgr.getCurrentColocateIndex().getGroupSchema(groupId);
+            ColocateGroupSchema groupSchema = GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroupSchema(groupId);
             if (backendsPerBucketSeq.size() != groupSchema.getBucketsNum()) {
                 throw new DdlException("Invalid bucket num. expected: " + groupSchema.getBucketsNum() + ", actual: "
                         + backendsPerBucketSeq.size());
             }
 
             List<Long> clusterBackendIds =
-                    GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true);
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true);
             //check the Backend id
             for (List<Long> backendIds : backendsPerBucketSeq) {
                 if (backendIds.size() != groupSchema.getReplicationNum()) {

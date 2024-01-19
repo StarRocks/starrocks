@@ -191,14 +191,15 @@ public class ReportHandler extends Daemon {
         String host = tBackend.getHost();
         int bePort = tBackend.getBe_port();
         long beId;
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, bePort);
+        Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendWithBePort(host, bePort);
         if (backend != null) {
             beId = backend.getId();
         } else {
             ComputeNode computeNode = null;
             // Compute node only reports resource usage.
             if (request.isSetResource_usage()) {
-                computeNode = GlobalStateMgr.getCurrentSystemInfo().getComputeNodeWithBePort(host, bePort);
+                computeNode =
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeWithBePort(host, bePort);
             }
 
             if (computeNode != null) {
@@ -415,7 +416,7 @@ public class ReportHandler extends Daemon {
 
         // storage medium map
         HashMap<Long, TStorageMedium> storageMediumMap =
-                GlobalStateMgr.getCurrentState().getPartitionIdToStorageMediumMap();
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getPartitionIdToStorageMediumMap();
 
         // db id -> tablet id
         ListMultimap<Long, Long> tabletSyncMap = ArrayListMultimap.create();
@@ -440,7 +441,7 @@ public class ReportHandler extends Daemon {
         Set<Pair<Long, Integer>> tabletWithoutPartitionId = Sets.newHashSet();
 
         // 1. do the diff. find out (intersection) / (be - meta) / (meta - be)
-        GlobalStateMgr.getCurrentInvertedIndex().tabletReport(backendId, backendTablets, storageMediumMap,
+        GlobalStateMgr.getCurrentState().getTabletInvertedIndex().tabletReport(backendId, backendTablets, storageMediumMap,
                 tabletSyncMap,
                 tabletDeleteFromMeta,
                 foundTabletsWithValidSchema,
@@ -489,7 +490,7 @@ public class ReportHandler extends Daemon {
         // 13. send primary index cache expire sec to be
         handleSetPrimaryIndexCacheExpireSec(backendId, backendTablets);
 
-        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
+        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         Backend reportBackend = currentSystemInfo.getBackend(backendId);
         if (reportBackend != null) {
             BackendStatus backendStatus = reportBackend.getBackendStatus();
@@ -550,7 +551,7 @@ public class ReportHandler extends Daemon {
     private static void diskReport(long backendId, Map<String, TDisk> backendDisks) {
         LOG.debug("begin to handle disk report from backend {}", backendId);
         long start = System.currentTimeMillis();
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+        Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
         if (backend == null) {
             LOG.warn("backend doesn't exist. id: " + backendId);
             return;
@@ -567,7 +568,7 @@ public class ReportHandler extends Daemon {
     private static void workgroupReport(long backendId, List<TWorkGroup> workGroups) {
         LOG.debug("begin to handle workgroup report from backend{}", backendId);
         long start = System.currentTimeMillis();
-        Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+        Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
         if (backend == null) {
             LOG.warn("backend does't exist. id: " + backendId);
         }
@@ -584,7 +585,7 @@ public class ReportHandler extends Daemon {
     private static void resourceUsageReport(long backendId, TResourceUsage usage) {
         LOG.debug("begin to handle resource usage report from backend {}", backendId);
         long start = System.currentTimeMillis();
-        GlobalStateMgr.getCurrentSystemInfo().updateResourceUsage(
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().updateResourceUsage(
                 backendId, usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes(),
                 usage.getCpu_used_permille(), usage.isSetGroup_usages() ? usage.getGroup_usages() : null);
         LOG.debug("finished to handle resource usage report from backend {}, cost: {} ms",
@@ -593,16 +594,16 @@ public class ReportHandler extends Daemon {
 
     private static void datacacheMetricsReport(long backendId, TDataCacheMetrics metrics) {
         LOG.debug("begin to handle datacache metrics report from backend {}", backendId);
-        GlobalStateMgr.getCurrentSystemInfo()
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
                 .updateDataCacheMetrics(backendId, DataCacheMetrics.buildFromThrift(metrics));
     }
 
     private static void sync(Map<Long, TTablet> backendTablets, ListMultimap<Long, Long> tabletSyncMap,
                              long backendId, long backendReportVersion) {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         for (Long dbId : tabletSyncMap.keySet()) {
-            Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
+            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
             if (db == null) {
                 continue;
             }
@@ -627,13 +628,15 @@ public class ReportHandler extends Daemon {
                         }
                         long tabletId = tabletIds.get(i);
                         long tableId = tabletMeta.getTableId();
-                        OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
+                        OlapTable olapTable =
+                                (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
                         if (olapTable == null) {
                             continue;
                         }
 
                         long partitionId = tabletMeta.getPartitionId();
-                        Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(olapTable, partitionId);
+                        Partition partition =
+                                globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTable, partitionId);
                         if (partition == null) {
                             continue;
                         }
@@ -746,13 +749,13 @@ public class ReportHandler extends Daemon {
     private static void deleteFromMeta(ListMultimap<Long, Long> tabletDeleteFromMeta, long backendId,
                                        long backendReportVersion) {
         AgentBatchTask createReplicaBatchTask = new AgentBatchTask();
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         final long MAX_DB_WLOCK_HOLDING_TIME_MS = 1000L;
         List<Long> deleteTablets = new ArrayList<>();
         DB_TRAVERSE:
         for (Long dbId : tabletDeleteFromMeta.keySet()) {
-            Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
+            Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
             if (db == null) {
                 continue;
             }
@@ -770,7 +773,7 @@ public class ReportHandler extends Daemon {
                     long currentTime = System.currentTimeMillis();
                     if (currentTime - lockStartTime > MAX_DB_WLOCK_HOLDING_TIME_MS) {
                         locker.unLockDatabase(db, LockType.WRITE);
-                        db = globalStateMgr.getDbIncludeRecycleBin(dbId);
+                        db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
                         if (db == null) {
                             continue DB_TRAVERSE;
                         }
@@ -784,19 +787,20 @@ public class ReportHandler extends Daemon {
                     }
                     long tabletId = tabletIds.get(i);
                     long tableId = tabletMeta.getTableId();
-                    OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
+                    OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
                     if (olapTable == null) {
                         continue;
                     }
 
                     long partitionId = tabletMeta.getPartitionId();
-                    Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(olapTable, partitionId);
+                    Partition partition =
+                            globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTable, partitionId);
                     if (partition == null) {
                         continue;
                     }
 
                     short replicationNum =
-                            globalStateMgr.getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
+                            globalStateMgr.getLocalMetastore().getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(),
                                     partition.getId());
                     if (replicationNum == (short) -1) {
                         continue;
@@ -824,7 +828,7 @@ public class ReportHandler extends Daemon {
                     }
 
                     long currentBackendReportVersion =
-                            GlobalStateMgr.getCurrentSystemInfo().getBackendReportVersion(backendId);
+                            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendReportVersion(backendId);
                     if (backendReportVersion < currentBackendReportVersion) {
                         continue;
                     }
@@ -969,7 +973,7 @@ public class ReportHandler extends Daemon {
         int addToMetaCounter = 0;
         int maxTaskSendPerBe = Config.max_agent_tasks_send_per_be;
         AgentBatchTask batchTask = new AgentBatchTask();
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (Long tabletId : backendTablets.keySet()) {
             TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
             if (tabletMeta == null && maxTaskSendPerBe > 0) {
@@ -1069,7 +1073,7 @@ public class ReportHandler extends Daemon {
             return true;
         }
 
-        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentSystemInfo();
+        final SystemInfoService currentSystemInfo = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<Backend> backends = currentSystemInfo.getBackends();
         long maxLastSuccessReportTabletsTime = -1L;
 
@@ -1117,7 +1121,7 @@ public class ReportHandler extends Daemon {
 
     protected static void handleMigration(ListMultimap<TStorageMedium, Long> tabletMetaMigrationMap,
                                           long backendId) {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         AgentBatchTask batchTask = new AgentBatchTask();
 
         OUTER:
@@ -1210,7 +1214,7 @@ public class ReportHandler extends Daemon {
         LOG.warn("find {} tablets on backend {} which is bad or misses versions that need clone or force recovery",
                 tabletRecoveryMap.size(), backendId);
 
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         BackendTabletsInfo backendTabletsInfo = new BackendTabletsInfo(backendId);
         backendTabletsInfo.setBad(true);
         for (Long dbId : tabletRecoveryMap.keySet()) {
@@ -1296,7 +1300,7 @@ public class ReportHandler extends Daemon {
         // <tablet id, tablet schema hash, tablet in memory>
         List<Triple<Long, Integer, Boolean>> tabletToInMemory = Lists.newArrayList();
 
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (TTablet backendTablet : backendTablets.values()) {
             for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
                 if (!tabletInfo.isSetIs_in_memory()) {
@@ -1357,7 +1361,7 @@ public class ReportHandler extends Daemon {
     private static void handleSetTabletEnablePersistentIndex(long backendId, Map<Long, TTablet> backendTablets) {
         List<Triple<Long, Integer, Boolean>> tabletToEnablePersistentIndex = Lists.newArrayList();
 
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (TTablet backendTablet : backendTablets.values()) {
             for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
                 if (!tabletInfo.isSetEnable_persistent_index()) {
@@ -1404,7 +1408,6 @@ public class ReportHandler extends Daemon {
         }
     }
 
-
     public static void testHandleSetPrimaryIndexCacheExpireSec(long backendId, Map<Long, TTablet> backendTablets) {
         handleSetPrimaryIndexCacheExpireSec(backendId, backendTablets);
     }
@@ -1412,7 +1415,7 @@ public class ReportHandler extends Daemon {
     private static void handleSetPrimaryIndexCacheExpireSec(long backendId, Map<Long, TTablet> backendTablets) {
         List<Triple<Long, Integer, Integer>> tabletToPrimaryCacheExpireSec = Lists.newArrayList();
 
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (TTablet backendTablet : backendTablets.values()) {
             for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
                 if (!tabletInfo.isSetPrimary_index_cache_expire_sec()) {
@@ -1462,7 +1465,7 @@ public class ReportHandler extends Daemon {
     private static void handleSetTabletBinlogConfig(long backendId, Map<Long, TTablet> backendTablets) {
         List<Triple<Long, Integer, BinlogConfig>> tabletToBinlogConfig = Lists.newArrayList();
 
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (TTablet backendTablet : backendTablets.values()) {
             for (TTabletInfo tabletInfo : backendTablet.tablet_infos) {
                 if (!tabletInfo.isSetBinlog_config_version()) {
@@ -1541,8 +1544,8 @@ public class ReportHandler extends Daemon {
 
     private static void addReplica(long tabletId, TTabletInfo backendTabletInfo, long backendId)
             throws MetaNotFoundException {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
 
         TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
@@ -1557,24 +1560,25 @@ public class ReportHandler extends Daemon {
         long dataSize = backendTabletInfo.getData_size();
         long rowCount = backendTabletInfo.getRow_count();
 
-        Database db = globalStateMgr.getDbIncludeRecycleBin(dbId);
+        Database db = globalStateMgr.getLocalMetastore().getDbIncludeRecycleBin(dbId);
         if (db == null) {
             throw new MetaNotFoundException("db[" + dbId + "] does not exist");
         }
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.WRITE);
         try {
-            OlapTable olapTable = (OlapTable) globalStateMgr.getTableIncludeRecycleBin(db, tableId);
+            OlapTable olapTable = (OlapTable) globalStateMgr.getLocalMetastore().getTableIncludeRecycleBin(db, tableId);
             if (olapTable == null) {
                 throw new MetaNotFoundException("table[" + tableId + "] does not exist");
             }
 
-            Partition partition = globalStateMgr.getPartitionIncludeRecycleBin(olapTable, partitionId);
+            Partition partition = globalStateMgr.getLocalMetastore().getPartitionIncludeRecycleBin(olapTable, partitionId);
             if (partition == null) {
                 throw new MetaNotFoundException("partition[" + partitionId + "] does not exist");
             }
             short replicationNum =
-                    globalStateMgr.getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getId());
+                    globalStateMgr.getLocalMetastore()
+                            .getReplicationNumIncludeRecycleBin(olapTable.getPartitionInfo(), partition.getId());
             if (replicationNum == (short) -1) {
                 throw new MetaNotFoundException("invalid replication number of partition [" + partitionId + "]");
             }
@@ -1607,7 +1611,7 @@ public class ReportHandler extends Daemon {
             // colocate table will delete Replica in meta when balancing,
             // but we need to rely on MetaNotFoundException to decide whether delete the tablet in backend.
             // delete tablet from backend if colocate tablet is healthy.
-            ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
+            ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
             if (colocateTableIndex.isColocateTable(olapTable.getId())) {
                 ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(tableId);
                 Preconditions.checkState(groupId != null);

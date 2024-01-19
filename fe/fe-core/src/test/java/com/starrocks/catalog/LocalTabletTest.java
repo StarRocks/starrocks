@@ -72,7 +72,7 @@ public class LocalTabletTest {
         invertedIndex = new TabletInvertedIndex();
         new Expectations(globalStateMgr) {
             {
-                GlobalStateMgr.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 minTimes = 0;
                 result = invertedIndex;
 
@@ -92,7 +92,7 @@ public class LocalTabletTest {
         tablet.addReplica(replica2);
         tablet.addReplica(replica3);
 
-        infoService = GlobalStateMgr.getCurrentSystemInfo();
+        infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         infoService.addBackend(new Backend(10001L, "host1", 9050));
         infoService.addBackend(new Backend(10002L, "host2", 9050));
 

@@ -44,7 +44,7 @@ public class SafeModeChecker extends FrontendDaemon {
 
     @VisibleForTesting
     protected boolean checkInternal() {
-        List<Backend> backendList = GlobalStateMgr.getCurrentSystemInfo().getBackends();
+        List<Backend> backendList = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends();
         for (Backend be : backendList) {
             // We assume that the cluster is always in balance, once we find that
             // the left space of one disk less than min(0.9 * disk_capacity, 50GB),

@@ -99,7 +99,8 @@ public class ReplicationMgrTest {
         partition.updateVersionForRestore(10);
         srcPartition.updateVersionForRestore(partition.getCommittedVersion() + 100);
 
-        job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable, GlobalStateMgr.getCurrentSystemInfo());
+        job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         replicationMgr = new ReplicationMgr();
         replicationMgr.addReplicationJob(job);
     }
@@ -355,7 +356,7 @@ public class ReplicationMgrTest {
 
             tabletInfo.replica_replication_infos = new ArrayList<TReplicaReplicationInfo>();
             TReplicaReplicationInfo replicaInfo = new TReplicaReplicationInfo();
-            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackends().iterator().next();
+            Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().iterator().next();
             replicaInfo.src_backend = new TBackend(backend.getHost(), backend.getBePort(), backend.getHttpPort());
             tabletInfo.replica_replication_infos.add(replicaInfo);
         }

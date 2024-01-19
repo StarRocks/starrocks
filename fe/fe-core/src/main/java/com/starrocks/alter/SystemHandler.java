@@ -114,8 +114,8 @@ public class SystemHandler extends AlterHandler {
 
     // check all decommissioned backends, if there is no tablet on that backend, drop it.
     private void runAlterJobV2() {
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         // check if decommission is finished
         for (Long beId : systemInfoService.getBackendIds(false)) {
             Backend backend = systemInfoService.getBackend(beId);
@@ -150,15 +150,15 @@ public class SystemHandler extends AlterHandler {
         if (alterClause instanceof AddBackendClause) {
             // add backend
             AddBackendClause addBackendClause = (AddBackendClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().addBackends(addBackendClause.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(addBackendClause.getHostPortPairs());
         } else if (alterClause instanceof ModifyBackendAddressClause) {
             // update Backend Address
             ModifyBackendAddressClause modifyBackendAddressClause = (ModifyBackendAddressClause) alterClause;
-            return GlobalStateMgr.getCurrentSystemInfo().modifyBackendHost(modifyBackendAddressClause);
+            return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().modifyBackendHost(modifyBackendAddressClause);
         } else if (alterClause instanceof DropBackendClause) {
             // drop backend
             DropBackendClause dropBackendClause = (DropBackendClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().dropBackends(dropBackendClause);
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().dropBackends(dropBackendClause);
         } else if (alterClause instanceof DecommissionBackendClause) {
             // decommission
             DecommissionBackendClause decommissionBackendClause = (DecommissionBackendClause) alterClause;
@@ -202,10 +202,12 @@ public class SystemHandler extends AlterHandler {
             GlobalStateMgr.getCurrentState().getLoadInstance().setLoadErrorHubInfo(clause.getProperties());
         } else if (alterClause instanceof AddComputeNodeClause) {
             AddComputeNodeClause addComputeNodeClause = (AddComputeNodeClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().addComputeNodes(addComputeNodeClause.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .addComputeNodes(addComputeNodeClause.getHostPortPairs());
         } else if (alterClause instanceof DropComputeNodeClause) {
             DropComputeNodeClause dropComputeNodeClause = (DropComputeNodeClause) alterClause;
-            GlobalStateMgr.getCurrentSystemInfo().dropComputeNodes(dropComputeNodeClause.getHostPortPairs());
+            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                    .dropComputeNodes(dropComputeNodeClause.getHostPortPairs());
         } else if (alterClause instanceof CreateImageClause) {
             GlobalStateMgr.getCurrentState().triggerNewImage();
         } else if (alterClause instanceof CleanTabletSchedQClause) {
@@ -229,7 +231,7 @@ public class SystemHandler extends AlterHandler {
      */
     public static List<Backend> checkDecommission(List<Pair<String, Integer>> hostPortPairs)
             throws DdlException {
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         List<Backend> decommissionBackends = Lists.newArrayList();
         Set<Long> decommissionIds = new HashSet<>();
 
@@ -313,7 +315,7 @@ public class SystemHandler extends AlterHandler {
     public synchronized void cancel(CancelStmt stmt) throws DdlException {
         CancelAlterSystemStmt cancelAlterSystemStmt = (CancelAlterSystemStmt) stmt;
 
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         // check if backends is under decommission
         List<Backend> backends = Lists.newArrayList();
         List<Pair<String, Integer>> hostPortPairs = cancelAlterSystemStmt.getHostPortPairs();

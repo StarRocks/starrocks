@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.alter;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -79,8 +78,8 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
                 properties.put(LakeTablet.PROPERTY_KEY_INDEX_ID, Long.toString(shadowIndexId));
                 List<Long> shadowTabletIds =
                         createShards(originTablets.size(), table.getPartitionFilePathInfo(partitionId),
-                                     table.getPartitionFileCacheInfo(partitionId), shardGroupId,
-                                     originTabletIds, properties);
+                                table.getPartitionFileCacheInfo(partitionId), shardGroupId,
+                                originTabletIds, properties);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
@@ -106,9 +105,10 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
     @VisibleForTesting
     public static List<Long> createShards(int shardCount, FilePathInfo pathInfo, FileCacheInfo cacheInfo,
                                           long groupId, List<Long> matchShardIds, Map<String, String> properties)
-        throws DdlException {
-        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds,
-                properties);
+            throws DdlException {
+        return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                .createShards(shardCount, pathInfo, cacheInfo, groupId, matchShardIds,
+                        properties);
     }
 
 }

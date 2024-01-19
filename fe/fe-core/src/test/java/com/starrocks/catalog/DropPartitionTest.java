@@ -120,7 +120,7 @@ public class DropPartitionTest {
                         Lists.newArrayList(10004L, 10005L, 10006L),
                         Lists.newArrayList(10007L, 10008L, 10009L));
                 agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+                result = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
             }
         };
 
@@ -168,7 +168,7 @@ public class DropPartitionTest {
 
     private static void dropPartition(String sql) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
     @Test

@@ -160,7 +160,7 @@ public class RestoreJobPrimaryKeyTest {
                 minTimes = 0;
                 result = editLog;
 
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
             }

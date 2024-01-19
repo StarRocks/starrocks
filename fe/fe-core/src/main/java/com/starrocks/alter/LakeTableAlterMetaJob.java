@@ -116,7 +116,7 @@ public class LakeTableAlterMetaJob extends AlterJobV2 {
 
         if (this.watershedTxnId == -1) {
             this.watershedTxnId =
-                    GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().getNextTransactionId();
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         }
 

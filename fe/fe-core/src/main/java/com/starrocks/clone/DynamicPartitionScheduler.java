@@ -653,7 +653,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
     }
 
     private void initDynamicPartitionTable() {
-        for (Long dbId : GlobalStateMgr.getCurrentState().getDbIds()) {
+        for (Long dbId : GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds()) {
             Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
             if (db == null) {
                 continue;

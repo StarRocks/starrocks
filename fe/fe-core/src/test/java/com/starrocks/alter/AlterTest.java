@@ -286,20 +286,20 @@ public class AlterTest {
     private static void createMaterializedView(String sql) throws Exception {
         CreateMaterializedViewStatement createMaterializedViewStatement =
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createMaterializedView(createMaterializedViewStatement);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStatement);
     }
 
     private static void dropMaterializedView(String sql) throws Exception {
         DropMaterializedViewStmt dropMaterializedViewStmt =
                 (DropMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().dropMaterializedView(dropMaterializedViewStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropMaterializedView(dropMaterializedViewStmt);
     }
 
     private static void alterMaterializedView(String sql, boolean expectedException) throws Exception {
         AlterMaterializedViewStmt alterMaterializedViewStmt =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().alterMaterializedView(alterMaterializedViewStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(alterMaterializedViewStmt);
             if (expectedException) {
                 Assert.fail();
             }
@@ -346,7 +346,7 @@ public class AlterTest {
     private static void alterTableWithNewParser(String sql, boolean expectedException) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
             if (expectedException) {
                 Assert.fail();
             }
@@ -361,7 +361,7 @@ public class AlterTest {
     private static void alterTableWithNewParserAndExceptionMsg(String sql, String msg) throws Exception {
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
-            GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
         } catch (Exception e) {
             Assert.assertEquals(msg, e.getMessage());
         }
@@ -1180,7 +1180,7 @@ public class AlterTest {
         s3FsBuilder.setBucket("test-bucket");
         s3FsBuilder.setRegion("test-region");
         s3FsBuilder.setCredential(AwsCredentialInfo.newBuilder()
-                        .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()));
+                .setDefaultCredential(AwsDefaultCredentialInfo.newBuilder().build()));
         S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
 
         fsBuilder.setFsType(FileStoreType.S3);
@@ -1204,7 +1204,7 @@ public class AlterTest {
                         Lists.newArrayList(20004L, 20005L, 20006L),
                         Lists.newArrayList(20007L, 20008L, 20009L));
                 agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+                result = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
             }
         };
 
@@ -1314,7 +1314,7 @@ public class AlterTest {
                         Lists.newArrayList(30013L, 30014L, 30015L),
                         Lists.newArrayList(30016L, 30017L, 30018L));
                 agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+                result = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
             }
         };
 
@@ -2067,7 +2067,7 @@ public class AlterTest {
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         String stmt = "alter table modify_bucket set (\"dynamic_partition.buckets\" = \"10\");\n";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
     @Test
@@ -2305,7 +2305,7 @@ public class AlterTest {
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
                         Lists.newArrayList(30004L, 30005L, 30006L));
                 agent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
-                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+                result = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(true).get(0);
             }
         };
 
@@ -2602,7 +2602,6 @@ public class AlterTest {
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         Database db = GlobalStateMgr.getCurrentState().getDb("test2");
 
-
         String sql = "alter table test2.site_access add TEMPORARY partitions " +
                 "START (\"2023-03-27\") END (\"2023-03-30\") EVERY (INTERVAL 1 day);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
@@ -2740,7 +2739,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE t_recharge_detail DROP PARTITION p2 force;";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
     @Test(expected = DdlException.class)
@@ -2748,7 +2747,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE site_access_date_trunc ADD PARTITION p20210101 VALUES [(\"2021-01-01\"), (\"2021-01-02\"));";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
     @Test(expected = AnalysisException.class)
@@ -2757,7 +2756,7 @@ public class AlterTest {
         String sql = "ALTER TABLE site_access_time_slice\n" +
                 "ADD PARTITIONS START (\"2022-05-01\") END (\"2022-05-03\") EVERY (INTERVAL 1 day)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
     @Test(expected = AnalysisException.class)
@@ -2766,7 +2765,7 @@ public class AlterTest {
         String sql = "ALTER TABLE site_access_date_trunc\n" +
                 "ADD PARTITIONS START (\"2022-05-01\") END (\"2022-05-03\") EVERY (INTERVAL 2 day)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
     @Test
@@ -2796,19 +2795,20 @@ public class AlterTest {
         String sql = "ALTER MATERIALIZED VIEW mv2\n" +
                 "set (\"resource_group\" =\"\" )";
         AlterMaterializedViewStmt alterTableStmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterMaterializedView(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(alterTableStmt);
         Assert.assertEquals("", mv.getTableProperty().getResourceGroup());
         sql = "ALTER MATERIALIZED VIEW mv2\n" +
                 "set (\"resource_group\" =\"not_exist_rg\" )";
         AlterMaterializedViewStmt alterTableStmt2 =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertThrows("resource_group not_exist_rg does not exist.",
-                SemanticException.class, () -> GlobalStateMgr.getCurrentState().alterMaterializedView(alterTableStmt2));
+                SemanticException.class,
+                () -> GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(alterTableStmt2));
         sql = "ALTER MATERIALIZED VIEW mv2\n" +
                 "set (\"resource_group\" =\"mv_rg\" )";
         AlterMaterializedViewStmt alterTableStmt3 =
                 (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterMaterializedView(alterTableStmt3);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterMaterializedView(alterTableStmt3);
         Assert.assertEquals("mv_rg", mv.getTableProperty().getResourceGroup());
     }
 
@@ -2831,7 +2831,7 @@ public class AlterTest {
         ConnectContext ctx = starRocksAssert.getCtx();
         String sql = "ALTER TABLE t2 ADD PARTITIONS START (\"2021-01-04\") END (\"2021-01-06\") EVERY (INTERVAL 1 DAY);";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(alterTableStmt);
     }
 
 }

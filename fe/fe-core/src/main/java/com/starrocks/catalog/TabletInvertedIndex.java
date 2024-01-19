@@ -144,7 +144,7 @@ public class TabletInvertedIndex {
         }
 
         int backendStorageTypeCnt = -1;
-        Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
+        Backend be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(backendId);
         if (be != null) {
             backendStorageTypeCnt = be.getAvailableBackendStorageTypeCnt();
         }
@@ -232,7 +232,7 @@ public class TabletInvertedIndex {
                             if (backendTabletInfo.isSetTransaction_ids()) {
                                 List<Long> transactionIds = backendTabletInfo.getTransaction_ids();
                                 GlobalTransactionMgr transactionMgr =
-                                        GlobalStateMgr.getCurrentGlobalTransactionMgr();
+                                        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
                                 for (Long transactionId : transactionIds) {
                                     TransactionState transactionState =
                                             transactionMgr.getTransactionState(tabletMeta.getDbId(), transactionId);
@@ -341,12 +341,12 @@ public class TabletInvertedIndex {
      */
     public void checkTabletMetaConsistency() {
         LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
-        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentRecycleBin();
+        CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
 
         Set<Long> invalidTablets = new HashSet<>();
         // backend id -> <num of currently existed tablet, num of tablet in recycle bin>
         Map<Long, Pair<Long, Long>> backendTabletNumReport = new HashMap<>();
-        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getBackendIds();
+        List<Long> backendIds = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds();
 
         long startTime = System.currentTimeMillis();
         long scannedTabletCount = 0;

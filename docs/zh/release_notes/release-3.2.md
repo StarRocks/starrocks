@@ -112,7 +112,7 @@ displayed_sidebar: "Chinese"
 - hash 函数：xx_hash3_64
 - 聚合函数：approx_top_k
 - 窗口函数：cume_dist、percent_rank、session_number
-- 工具函数：dict_mapping、get_query_profile、is_role_in_session
+- 工具函数：get_query_profile、is_role_in_session
 
 #### 权限
 

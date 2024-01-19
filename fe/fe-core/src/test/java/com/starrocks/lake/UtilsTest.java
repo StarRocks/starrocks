@@ -17,6 +17,7 @@ package com.starrocks.lake;
 
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.system.SystemInfoService;
 import mockit.Mock;
 import mockit.MockUp;
@@ -30,6 +31,9 @@ public class UtilsTest {
     GlobalStateMgr globalStateMgr;
 
     @Mocked
+    NodeMgr nodeMgr;
+
+    @Mocked
     SystemInfoService systemInfoService;
 
     @Test
@@ -37,7 +41,14 @@ public class UtilsTest {
 
         new MockUp<GlobalStateMgr>() {
             @Mock
-            public SystemInfoService getCurrentSystemInfo() {
+            public NodeMgr getNodeMgr() {
+                return nodeMgr;
+            }
+        };
+
+        new MockUp<NodeMgr>() {
+            @Mock
+            public SystemInfoService getClusterInfo() {
                 return systemInfoService;
             }
         };

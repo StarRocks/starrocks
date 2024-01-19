@@ -193,7 +193,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     @Before
     public void setUp() {
         super.setUp();
-        GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().clear();
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().clear();
     }
 
     @Test
@@ -317,7 +317,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 StatsConstants.AnalyzeType.SAMPLE,
                 LocalDateTime.of(2020, 1, 1, 1, 1, 1), Maps.newHashMap());
         basicStatsMeta.increaseUpdateRows(10000000L);
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta);
 
         List<StatisticsCollectJob> jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
@@ -338,7 +338,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         BasicStatsMeta basicStatsMeta2 = new BasicStatsMeta(db.getId(), olapTable.getId(), null,
                 StatsConstants.AnalyzeType.SAMPLE,
                 LocalDateTime.of(2022, 1, 1, 1, 1, 1), Maps.newHashMap());
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(basicStatsMeta2);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta2);
 
         List<StatisticsCollectJob> jobs2 = StatisticsCollectJobFactory.buildStatisticsCollectJob(
                 new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
@@ -610,7 +610,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 StatsConstants.ScheduleStatus.PENDING,
                 LocalDateTime.MIN);
         // do not have stats meta, need to collect
-        GlobalStateMgr.getCurrentAnalyzeMgr().
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().
                 removeExternalBasicStatsMeta("hive0", "partitioned_db", "t1");
         List<StatisticsCollectJob> statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
         Assert.assertEquals(1, statsJobs.size());
@@ -1050,7 +1050,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         // collect 1st
         BasicStatsMeta execMeta = new BasicStatsMeta(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL, LocalDateTime.now(), Maps.newHashMap());
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(execMeta);
 
         new MockUp<StatisticUtils>() {
             @Mock
@@ -1089,7 +1089,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 StatsConstants.AnalyzeType.FULL,
                 now.minusSeconds(Config.statistic_auto_collect_large_table_interval).minusHours(1),
                 Maps.newHashMap());
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta1);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(execMeta1);
 
         new Expectations(execMeta1) {
             {
@@ -1114,7 +1114,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 StatsConstants.AnalyzeType.FULL,
                 now.minusHours(1),
                 Maps.newHashMap());
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta2);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(execMeta2);
 
         new Expectations(execMeta2) {
             {
@@ -1153,7 +1153,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 StatsConstants.AnalyzeType.FULL,
                 now.minusSeconds(Config.statistic_auto_collect_large_table_interval).minusHours(1),
                 Maps.newHashMap());
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta1);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(execMeta1);
 
         new Expectations(execMeta1) {
             {
@@ -1179,7 +1179,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 StatsConstants.AnalyzeType.FULL,
                 now.minusSeconds(50),
                 Maps.newHashMap());
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta2);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(execMeta2);
 
         Config.statistic_auto_collect_small_table_interval = 100;
         jobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
@@ -1213,7 +1213,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 StatsConstants.AnalyzeType.FULL,
                 now.minusSeconds(Config.statistic_auto_collect_large_table_interval).minusHours(1),
                 Maps.newHashMap());
-        GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(execMeta);
 
         NativeAnalyzeJob job = new NativeAnalyzeJob(db.getId(), t0StatsTableId, null,
                 StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
@@ -1237,7 +1237,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
 
         {
             // healthy = 0.7
-            GlobalStateMgr.getCurrentAnalyzeMgr().addBasicStatsMeta(execMeta);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(execMeta);
 
             new Expectations(execMeta) {
                 {

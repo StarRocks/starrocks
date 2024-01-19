@@ -981,7 +981,7 @@ public class FrontendServiceImplTest {
         Table table = db.getTable("site_access_day");
         UUID uuid = UUID.randomUUID();
         TUniqueId requestId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
-        long transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
+        long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
                 Lists.newArrayList(table.getId()), "1jdc689-xd232", requestId,
                 new TxnCoordinator(TxnSourceType.BE, "1.1.1.1"),
                 TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, 600);

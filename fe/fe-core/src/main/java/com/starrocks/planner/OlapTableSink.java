@@ -176,7 +176,7 @@ public class OlapTableSink extends DataSink {
         tSink.setMiss_auto_increment_column(missAutoIncrementColumn);
         tSink.setAuto_increment_slot_id(autoIncrementSlotId);
         TransactionState txnState =
-                GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                         .getTransactionState(dbId, txnId);
         if (txnState != null) {
             tSink.setTxn_trace_parent(txnState.getTraceParent());
@@ -645,8 +645,7 @@ public class OlapTableSink extends DataSink {
         // replica -> path hash
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
         Map<Long, Long> bePrimaryMap = new HashMap<>();
-        SystemInfoService infoService = GlobalStateMgr.getCurrentState()
-                .getOrCreateSystemInfo(clusterId);
+        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getOrCreateSystemInfo(clusterId);
         if (partitionParam.getPartitions() == null) {
             return locationParam;
         }
@@ -661,7 +660,7 @@ public class OlapTableSink extends DataSink {
                 for (int idx = 0; idx < index.getTablets().size(); ++idx) {
                     Tablet tablet = index.getTablets().get(idx);
                     if (table.isCloudNativeTableOrMaterializedView()) {
-                        Warehouse warehouse = GlobalStateMgr.getCurrentWarehouseMgr().getDefaultWarehouse();
+                        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getDefaultWarehouse();
                         long workerGroupId = warehouse.getAnyAvailableCluster().getWorkerGroupId();
                         locationParam.addToTablets(new TTabletLocation(tablet.getId(),
                                 Lists.newArrayList(((LakeTablet) tablet).getPrimaryComputeNodeId(workerGroupId))));
@@ -705,7 +704,8 @@ public class OlapTableSink extends DataSink {
 
         // check if disk capacity reach limit
         // this is for load process, so use high water mark to check
-        Status st = GlobalStateMgr.getCurrentSystemInfo().checkExceedDiskCapacityLimit(allBePathsMap, true);
+        Status st = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
+                .checkExceedDiskCapacityLimit(allBePathsMap, true);
         if (!st.ok()) {
             throw new DdlException(st.getErrorMsg());
         }

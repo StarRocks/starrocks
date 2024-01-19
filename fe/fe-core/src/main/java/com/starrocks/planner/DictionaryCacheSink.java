@@ -129,7 +129,7 @@ public class DictionaryCacheSink extends DataSink {
     }
 
     private TOlapTableSchemaParam buildTSchema() {
-        Database db = GlobalStateMgr.getCurrentState().getFullNameToDb().get(dictionary.getDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getFullNameToDb().get(dictionary.getDbName());
         String queryableObject = dictionary.getQueryableObject();
         Table tbl = db.getTable(queryableObject);
         Preconditions.checkNotNull(tbl);

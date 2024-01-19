@@ -112,7 +112,7 @@ public class AccessTestUtil {
         Column column = new Column();
         baseSchema.add(column);
         OlapTable table = new OlapTable(30000, "testTbl", baseSchema,
-                KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, globalStateMgr.getClusterId(),
+                KeysType.AGG_KEYS, new SinglePartitionInfo(), distributionInfo, globalStateMgr.getNodeMgr().getClusterId(),
                 null);
         table.setIndexMeta(baseIndex.getId(), "testTbl", baseSchema, 0, 1, (short) 1,
                 TStorageType.COLUMN, KeysType.AGG_KEYS);
@@ -248,7 +248,7 @@ public class AccessTestUtil {
                     minTimes = 0;
                     result = new Database();
 
-                    globalStateMgr.getDbNames();
+                    globalStateMgr.getLocalMetastore().listDbNames();
                     minTimes = 0;
                     result = Lists.newArrayList("testDb");
 

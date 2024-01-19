@@ -140,7 +140,7 @@ public class TempPartitionTest {
     }
 
     private long getPartitionIdByTabletId(long tabletId) {
-        TabletInvertedIndex index = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex index = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         TabletMeta tabletMeta = index.getTabletMeta(tabletId);
         if (tabletMeta == null) {
             return -1;
@@ -171,7 +171,7 @@ public class TempPartitionTest {
     }
 
     private void checkTabletExists(Collection<Long> tabletIds, boolean checkExist) {
-        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (Long tabletId : tabletIds) {
             if (checkExist) {
                 Assert.assertNotNull(invertedIndex.getTabletMeta(tabletId));
@@ -506,7 +506,7 @@ public class TempPartitionTest {
 
         String truncateStr = "truncate table db2.tbl2 partition (p3);";
         TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateStr, ctx);
-        GlobalStateMgr.getCurrentState().truncateTable(truncateTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt);
         checkShowPartitionsResultNum("db2.tbl2", true, 1);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
         checkPartitionExist(tbl2, "tp1", false, true);
@@ -589,7 +589,7 @@ public class TempPartitionTest {
 
         truncateStr = "truncate table db2.tbl2";
         truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateStr, ctx);
-        GlobalStateMgr.getCurrentState().truncateTable(truncateTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
         checkShowPartitionsResultNum("db2.tbl2", true, 0);
 
@@ -697,7 +697,7 @@ public class TempPartitionTest {
         // now base range is [min, 10), [10, 15), [15, 25), [25, 30) -> p1,tp1,tp2,tp3
         stmtStr = "truncate table db3.tbl3";
         TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
-        GlobalStateMgr.getCurrentState().truncateTable(truncateTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt);
         // 2. add temp ranges: [10, 31), and replace the [10, 15), [15, 25), [25, 30)
         stmtStr = "alter table db3.tbl3 add temporary partition tp4 values [('10'), ('31'))";
         alterTableWithNewAnalyzer(stmtStr, false);
@@ -714,7 +714,7 @@ public class TempPartitionTest {
         // now base range is [min, 10), [10, 30) -> p1,tp4
         stmtStr = "truncate table db3.tbl3";
         truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
-        GlobalStateMgr.getCurrentState().truncateTable(truncateTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt);
         // 3. add temp partition tp5 [50, 60) and replace partition tp4
         stmtStr = "alter table db3.tbl3 add temporary partition tp5 values [('50'), ('60'))";
         alterTableWithNewAnalyzer(stmtStr, false);

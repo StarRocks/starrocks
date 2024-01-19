@@ -202,17 +202,17 @@ public abstract class TestWithFeService {
 
     private void updateReplicaPathHash() {
         com.google.common.collect.Table<Long, Long, Replica> replicaMetaTable =
-                GlobalStateMgr.getCurrentInvertedIndex()
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex()
                         .getReplicaMetaTable();
         for (com.google.common.collect.Table.Cell<Long, Long, Replica> cell : replicaMetaTable.cellSet()) {
             long beId = cell.getColumnKey();
-            Backend be = GlobalStateMgr.getCurrentSystemInfo().getBackend(beId);
+            Backend be = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(beId);
             if (be == null) {
                 continue;
             }
             Replica replica = cell.getValue();
             TabletMeta tabletMeta =
-                    GlobalStateMgr.getCurrentInvertedIndex().getTabletMeta(cell.getRowKey());
+                    GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletMeta(cell.getRowKey());
             ImmutableMap<String, DiskInfo> diskMap = be.getDisks();
             for (DiskInfo diskInfo : diskMap.values()) {
                 if (diskInfo.getStorageMedium() == tabletMeta.getStorageMedium()) {

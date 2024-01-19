@@ -89,7 +89,7 @@ public class DatabaseTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                globalStateMgr.getClusterId();
+                globalStateMgr.getNodeMgr().getClusterId();
                 minTimes = 0;
                 result = 1;
             }

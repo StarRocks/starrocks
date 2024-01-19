@@ -146,6 +146,7 @@ import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
@@ -713,7 +714,7 @@ public class ShowExecutor {
         ShowResourceGroupUsageStmt showStmt = (ShowResourceGroupUsageStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
 
-        GlobalStateMgr.getCurrentSystemInfo().backendAndComputeNodeStream()
+        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().backendAndComputeNodeStream()
                 .flatMap(worker -> worker.getResourceGroupUsages().stream()
                         .map(usage -> new ShowResourceGroupUsageStmt.ShowItem(worker, usage)))
                 .filter(item -> showStmt.getGroupName() == null ||
@@ -1197,7 +1198,7 @@ public class ShowExecutor {
             }
 
             List<String> createTableStmt = Lists.newArrayList();
-            GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true /* hide password */);
+            AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true /* hide password */);
             if (createTableStmt.isEmpty()) {
                 resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
                 return;
@@ -1860,7 +1861,7 @@ public class ShowExecutor {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         if (showStmt.isShowSingleTablet()) {
             long tabletId = showStmt.getTabletId();
-            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
+            TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
             TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletId);
             Long dbId = tabletMeta != null ? tabletMeta.getDbId() : TabletInvertedIndex.NOT_EXIST_VALUE;
             String dbName = null;
@@ -2124,7 +2125,7 @@ public class ShowExecutor {
         List<Database> dbs = Lists.newArrayList();
 
         if (filterDb == null) {
-            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
+            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().entrySet()) {
                 dbs.add(entry.getValue());
             }
         } else {
@@ -2170,7 +2171,7 @@ public class ShowExecutor {
         List<Database> dbs = Lists.newArrayList();
 
         if (filterDb == null) {
-            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getIdToDb().entrySet()) {
+            for (Map.Entry<Long, Database> entry : GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().entrySet()) {
                 dbs.add(entry.getValue());
             }
         } else {
@@ -2456,13 +2457,13 @@ public class ShowExecutor {
         MetaUtils.checkDbNullAndReport(db, showStmt.getDbName());
 
         long txnId = showStmt.getTxnId();
-        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentGlobalTransactionMgr();
+        GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         resultSet = new ShowResultSet(showStmt.getMetaData(), transactionMgr.getSingleTranInfo(db.getId(), txnId));
     }
 
     private void handleShowPlugins() {
         ShowPluginsStmt pluginsStmt = (ShowPluginsStmt) stmt;
-        List<List<String>> rows = GlobalStateMgr.getCurrentPluginMgr().getPluginShowInfos();
+        List<List<String>> rows = GlobalStateMgr.getCurrentState().getPluginMgr().getPluginShowInfos();
         resultSet = new ShowResultSet(pluginsStmt.getMetaData(), rows);
     }
 
@@ -2799,7 +2800,7 @@ public class ShowExecutor {
         ShowFailPointStatement showStmt = ((ShowFailPointStatement) stmt);
         // send request and build resultSet
         PListFailPointRequest request = new PListFailPointRequest();
-        SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
+        SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
         PatternMatcher matcher = null;
         if (showStmt.getPattern() != null) {
             matcher = PatternMatcher.createMysqlPattern(showStmt.getPattern(),

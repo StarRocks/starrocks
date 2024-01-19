@@ -94,7 +94,7 @@ public class BDBHATest {
         NodeMgr nodeMgr = new NodeMgr();
         nodeMgr.load(reader);
         reader.close();
-        Assert.assertEquals(GlobalStateMgr.getCurrentState().getRemovedFrontendNames().size(), 1);
+        Assert.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getRemovedFrontendNames().size(), 1);
         Assert.assertEquals(GlobalStateMgr.getCurrentState().getNodeMgr().getHelperNodes().size(), 2);
     }
 }

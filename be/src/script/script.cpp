@@ -222,6 +222,7 @@ void bind_exec_env(ForeignModule& m) {
         REG_METHOD(GlobalEnv, clone_mem_tracker);
         REG_METHOD(GlobalEnv, consistency_mem_tracker);
         REG_METHOD(GlobalEnv, connector_scan_pool_mem_tracker);
+        REG_METHOD(GlobalEnv, datacache_mem_tracker);
 
         // level 2
         REG_METHOD(GlobalEnv, tablet_metadata_mem_tracker);

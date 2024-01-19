@@ -325,7 +325,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private void submitTask(long beId, TRoutineLoadTask tTask) throws LoadException {
         // TODO: need to refactor after be split into cn + dn
-        ComputeNode node = GlobalStateMgr.getCurrentSystemInfo().getBackendOrComputeNode(beId);
+        ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(beId);
         if (node == null) {
             throw new LoadException("failed to send tasks to backend " + beId + " because not exist");
         }

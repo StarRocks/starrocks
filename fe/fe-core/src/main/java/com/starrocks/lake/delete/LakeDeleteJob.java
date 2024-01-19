@@ -86,7 +86,7 @@ public class LakeDeleteJob extends DeleteJob {
         } catch (Throwable t) {
             LOG.warn("error occurred during delete process", t);
             // if transaction has been begun, need to abort it
-            if (GlobalStateMgr.getCurrentGlobalTransactionMgr()
+            if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                     .getTransactionState(db.getId(), getTransactionId()) != null) {
                 cancel(DeleteMgr.CancelType.UNKNOWN, t.getMessage());
             }
@@ -103,7 +103,7 @@ public class LakeDeleteJob extends DeleteJob {
         try {
             List<Future<DeleteDataResponse>> responseList = Lists.newArrayListWithCapacity(
                     beToTablets.size());
-            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
+            SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
                 // TODO: need to refactor after be split into cn + dn
                 ComputeNode backend = systemInfoService.getBackendOrComputeNode(entry.getKey());
@@ -194,7 +194,7 @@ public class LakeDeleteJob extends DeleteJob {
             }
         }
 
-        return GlobalStateMgr.getCurrentGlobalTransactionMgr()
+        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .commitAndPublishTransaction(db, getTransactionId(), tabletCommitInfos, Collections.emptyList(),
                         timeoutMs);
     }

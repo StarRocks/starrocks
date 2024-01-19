@@ -158,11 +158,11 @@ public class StatisticUtils {
                 db.getId(), table.getId(), null, analyzeType,
                 StatsConstants.ScheduleType.ONCE, StatsConstants.buildInitStatsProp(), LocalDateTime.now());
         analyzeStatus.setStatus(StatsConstants.ScheduleStatus.PENDING);
-        GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
         Future<?> future;
         try {
-            future = GlobalStateMgr.getCurrentAnalyzeMgr().getAnalyzeTaskThreadPool()
+            future = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool()
                     .submit(() -> {
                         StatisticExecutor statisticExecutor = new StatisticExecutor();
                         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
@@ -462,20 +462,20 @@ public class StatisticUtils {
     }
 
     public static void dropStatisticsAfterDropTable(Table table) {
-        GlobalStateMgr.getCurrentAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
-        GlobalStateMgr.getCurrentAnalyzeMgr().dropExternalBasicStatsData(table.getUUID());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalBasicStatsData(table.getUUID());
 
         if (table.isHiveTable() || table.isHudiTable()) {
             HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
-            GlobalStateMgr.getCurrentAnalyzeMgr().removeExternalBasicStatsMeta(hiveMetaStoreTable.getCatalogName(),
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(hiveMetaStoreTable.getCatalogName(),
                     hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName());
-            GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeJob(hiveMetaStoreTable.getCatalogName(),
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(hiveMetaStoreTable.getCatalogName(),
                     hiveMetaStoreTable.getDbName(), hiveMetaStoreTable.getTableName());
         } else if (table.isIcebergTable()) {
             IcebergTable icebergTable = (IcebergTable) table;
-            GlobalStateMgr.getCurrentAnalyzeMgr().removeExternalBasicStatsMeta(icebergTable.getCatalogName(),
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(icebergTable.getCatalogName(),
                     icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
-            GlobalStateMgr.getCurrentAnalyzeMgr().dropAnalyzeJob(icebergTable.getCatalogName(),
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeJob(icebergTable.getCatalogName(),
                     icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
         } else {
             LOG.warn("drop statistics after drop table, table type is not supported, table type: {}",
@@ -483,6 +483,6 @@ public class StatisticUtils {
         }
 
         List<String> columns = table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList());
-        GlobalStateMgr.getCurrentStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
+        GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
     }
 }

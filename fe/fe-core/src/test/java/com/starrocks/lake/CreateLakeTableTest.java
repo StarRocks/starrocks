@@ -80,7 +80,7 @@ public class CreateLakeTableTest {
 
     private String getDefaultStorageVolumeFullPath() {
         StorageVolume sv = GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getDefaultStorageVolume();
-        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentStarOSAgent();
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
         FileStoreInfo fsInfo = sv.toFileStoreInfo();
         String serviceId = "";
         try {

@@ -191,7 +191,7 @@ public class DeleteMgr implements Writable {
             } catch (Throwable t) {
                 LOG.warn("error occurred during delete process", t);
                 // if transaction has been begun, need to abort it
-                if (GlobalStateMgr.getCurrentGlobalTransactionMgr().getTransactionState(db.getId(), transactionId) !=
+                if (GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionState(db.getId(), transactionId) !=
                         null) {
                     cancelJob(deleteJob, CancelType.UNKNOWN, t.getMessage());
                 }
@@ -269,7 +269,7 @@ public class DeleteMgr implements Writable {
         long jobId = GlobalStateMgr.getCurrentState().getNextId();
         stmt.setJobId(jobId);
         // begin txn here and generate txn id
-        long transactionId = GlobalStateMgr.getCurrentGlobalTransactionMgr().beginTransaction(db.getId(),
+        long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
                 Lists.newArrayList(olapTable.getId()), label, null,
                 new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
                 TransactionState.LoadJobSourceType.DELETE, jobId, Config.stream_load_default_timeout_second);
@@ -288,7 +288,7 @@ public class DeleteMgr implements Writable {
         idToDeleteJob.put(deleteJob.getTransactionId(), deleteJob);
 
         // add transaction callback
-        GlobalStateMgr.getCurrentGlobalTransactionMgr().getCallbackFactory().addCallback(deleteJob);
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().addCallback(deleteJob);
 
         return deleteJob;
     }

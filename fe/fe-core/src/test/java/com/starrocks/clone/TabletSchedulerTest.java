@@ -86,11 +86,11 @@ public class TabletSchedulerTest {
                 result = globalStateMgr;
                 minTimes = 0;
 
-                GlobalStateMgr.getCurrentSystemInfo();
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
                 result = systemInfoService;
                 minTimes = 0;
 
-                GlobalStateMgr.getCurrentInvertedIndex();
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
                 result = tabletInvertedIndex;
                 minTimes = 0;
             }

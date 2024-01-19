@@ -120,11 +120,11 @@ public class GlobalStateMgrTest {
     @Test
     public void testReplayUpdateFrontend() throws Exception {
         GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-        List<Frontend> frontends = globalStateMgr.getFrontends(null);
+        List<Frontend> frontends = globalStateMgr.getNodeMgr().getFrontends(null);
         Frontend fe = frontends.get(0);
         fe.updateHostAndEditLogPort("testHost", 1000);
         globalStateMgr.getNodeMgr().replayUpdateFrontend(fe);
-        List<Frontend> updatedFrontends = globalStateMgr.getFrontends(null);
+        List<Frontend> updatedFrontends = globalStateMgr.getNodeMgr().getFrontends(null);
         Frontend updatedfFe = updatedFrontends.get(0);
         Assert.assertEquals("testHost", updatedfFe.getHost());
         Assert.assertTrue(updatedfFe.getEditLogPort() == 1000);
@@ -170,7 +170,7 @@ public class GlobalStateMgrTest {
         BDBHA ha = new BDBHA(env, "testNode");
         globalStateMgr.setHaProtocol(ha);
         globalStateMgr.setEditLog(editLog);
-        List<Frontend> frontends = globalStateMgr.getFrontends(null);
+        List<Frontend> frontends = globalStateMgr.getNodeMgr().getFrontends(null);
         Frontend fe = frontends.get(0);
         ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause(fe.getHost(), "sandbox-fqdn");
         globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
