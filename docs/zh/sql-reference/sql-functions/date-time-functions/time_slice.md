@@ -22,7 +22,7 @@ DATETIME time_slice(DATETIME dt, INTERVAL N type[, boundary])
 
 - `INTERVAL N type`：时间粒度周期，例如 `interval 5 second` 表示时间粒度为 5 秒。
   - `N` 是 INT 类型的时间粒度周期的长度。
-  - `type` 是时间粒度周期的单位，取值可以是 YEAR，QUARTER，MONTH，WEEK，DAY，HOUR，MINUTE，SECOND。
+  - `type` 是时间粒度周期的单位，取值可以是 YEAR，QUARTER，MONTH，WEEK，DAY，HOUR，MINUTE，SECOND，MILLISECOND（3.1.7 及以后），MICROSECOND（3.1.7 及以后）。
 
 - `boundary`：可选，用于指定返回时间周期的起始时刻 (`FLOOR`) 还是结束时刻 (`CEIL`)。取值范围：FLOOR，CEIL。如果不指定，默认为 `FLOOR`。该参数从 2.5 版本开始支持。
 
@@ -40,7 +40,6 @@ DATETIME time_slice(DATETIME dt, INTERVAL N type[, boundary])
 
 ```Plaintext
 select * from test_all_type_select order by id_int;
-
 +------------+---------------------+--------+
 | id_date    | id_datetime         | id_int |
 +------------+---------------------+--------+
@@ -53,13 +52,12 @@ select * from test_all_type_select order by id_int;
 5 rows in set (0.06 sec)
 ```
 
-示例一：将给定的 DATETIME 时间 `id_datetime` 转化为以 5 秒为时间粒度周期的起始时刻 （不指定 `boundary` 参数，默认为 `FLOOR`）。
+示例一：将给定的 DATETIME 时间 `id_datetime` 转化为以 5 秒为时间粒度周期的起始时刻（不指定 `boundary` 参数，默认为 `FLOOR`）。
 
 ```Plaintext
 select time_slice(id_datetime, interval 5 second)
 from test_all_type_select
 order by id_int;
-
 +---------------------------------------------------+
 | time_slice(id_datetime, INTERVAL 5 second, floor) |
 +---------------------------------------------------+
@@ -72,13 +70,12 @@ order by id_int;
 5 rows in set (0.16 sec)
 ```
 
-示例二：将给定的 DATETIME 时间 `id_datetime` 转化为以 5 天为时间粒度周期的起始时刻（设置`boundary` 为 `FLOOR`）。
+示例二：将给定的 DATETIME 时间 `id_datetime` 转化为以 5 天为时间粒度周期的起始时刻（设置 `boundary` 为 `FLOOR`）。
 
 ```Plaintext
 select time_slice(id_datetime, interval 5 day, FLOOR)
 from test_all_type_select
 order by id_int;
-
 +------------------------------------------------+
 | time_slice(id_datetime, INTERVAL 5 day, floor) |
 +------------------------------------------------+
@@ -97,7 +94,6 @@ order by id_int;
 select time_slice(id_datetime, interval 5 day, CEIL)
 from test_all_type_select
 order by id_int;
-
 +-----------------------------------------------+
 | time_slice(id_datetime, INTERVAL 5 day, ceil) |
 +-----------------------------------------------+
@@ -107,5 +103,38 @@ order by id_int;
 | 1751-03-23 00:00:00                           |
 | 1861-09-17 00:00:00                           |
 +-----------------------------------------------+
-5 rows in set (0.12 sec)
+```
+
+示例四：将给定的 DATETIME 时间 `id_datetime` 转化为以 1 毫秒为时间粒度周期的结束时刻。
+
+```Plaintext
+select id_datetime, time_slice(id_datetime, interval 1 millisecond, CEIL)
+from test_all_type_select
+order by id_int;
++---------------------+-------------------------------------------------------+
+| id_datetime         | time_slice(id_datetime, INTERVAL 1 millisecond, ceil) |
++---------------------+-------------------------------------------------------+
+| 1691-12-23 04:01:09 | 1691-12-23 04:01:09.001000                            |
+| 2169-12-18 15:44:31 | 2169-12-18 15:44:31.001000                            |
+| 1840-11-23 13:09:50 | 1840-11-23 13:09:50.001000                            |
+| 1751-03-21 00:19:04 | 1751-03-21 00:19:04.001000                            |
+| 1861-09-12 13:28:18 | 1861-09-12 13:28:18.001000                            |
++---------------------+-------------------------------------------------------+
+```
+
+示例五：将给定的 DATETIME 时间 `id_datetime` 转化为以 1 微秒为时间粒度周期的结束时刻。
+
+```Plaintext
+select id_datetime, time_slice(id_datetime, interval 1 microsecond, CEIL)
+from test_all_type_select
+order by id_int;
++---------------------+-------------------------------------------------------+
+| id_datetime         | time_slice(id_datetime, INTERVAL 1 microsecond, ceil) |
++---------------------+-------------------------------------------------------+
+| 1691-12-23 04:01:09 | 1691-12-23 04:01:09.000001                            |
+| 2169-12-18 15:44:31 | 2169-12-18 15:44:31.000001                            |
+| 1840-11-23 13:09:50 | 1840-11-23 13:09:50.000001                            |
+| 1751-03-21 00:19:04 | 1751-03-21 00:19:04.000001                            |
+| 1861-09-12 13:28:18 | 1861-09-12 13:28:18.000001                            |
++---------------------+-------------------------------------------------------+
 ```

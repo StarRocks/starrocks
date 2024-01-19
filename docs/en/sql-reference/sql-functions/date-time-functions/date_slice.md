@@ -21,7 +21,7 @@ DATE date_slice(DATE dt, INTERVAL N type[, boundary])
 - `dt`: the time to convert, DATE.
 - `INTERVAL N type`: the time granularity, for example, `interval 5 day`.
   - `N` is the length of time interval. It must be an INT value.
-  - `type` is the unit, which can be YEAR, QUARTER, MONTH, WEEK, DAY.  If `type` is set to HOUR, MINUTE, or SECOND for a DATE value, an error is returned.
+  - `type` is the unit, which can be YEAR, QUARTER, MONTH, WEEK, DAY, HOUR, MINUTE, SECOND. If `type` is set to HOUR, MINUTE, or SECOND for a DATE value, an error is returned.
 - `boundary`: optional. It is used to specify whether to return the beginning (`FLOOR`) or end (`CEIL`) of the time interval. Valid values: FLOOR, CEIL. If this parameter is not specified, `FLOOR` is the default.
 
 ## Return value

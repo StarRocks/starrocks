@@ -1,37 +1,37 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: "Chinese"
 ---
 
 # count_if
 
-## Description
+## 功能
 
-Returns the number of records that meet the specified condition or `0` if no records satisfy the condition.
+计算满足指定条件（即条件表达试的结果为 `true`）的记录数。
 
-This function does not support `DISTINCT`, for example `count_if(DISTINCT x)`.
+该函数不支持 `DISTINCT`，举例：`count_if(DISTINCT x)`。
 
-This function is internally transformed to `COUNT` + `IF`:
+该函数会内部转化为 `COUNT` + `IF`:
 
-- Before: `COUNT_IF(x)`
-- After: `COUNT(IF(x, 1, NULL))`
+- 转化前：`COUNT_IF(x)`  
+- 转化后：`COUNT(IF(x, 1, NULL))`
 
-## Syntax
+## 语法
 
 ```Haskell
 COUNT_IF(condition)
 ```
 
-## Parameters
+## 参数说明
 
-`condition`: the condition that should evaluate to a BOOLEAN value. You can specify multiple count_if conditions in one SELECT statement.
+`condition`: 条件表达式。可以在一条语句中指定多个 count_if 条件。
 
-## Return value
+## 返回值说明
 
-Returns a numeric value. If no records can be found, `0` is returned. This function ignores NULL values.
+返回一个整数数值。如果没有匹配的记录，返回 0。该函数忽略 NULL 值。
 
-## Examples
+## 示例
 
-Suppose there is a table named `test_count_if`.
+假设有表 `test_count_if`。
 
 ```Plain
 CREATE TABLE `test_count_if` (
@@ -73,7 +73,7 @@ SELECT * FROM test_count_if;
 +------+------+---------------------+------+
 ```
 
-Example 1: Count the number of rows in table `test_count_if` where `v2` is null.
+示例一：计算表中 `v2` 列的值为 NULL 的行数。
 
 ```Plain
 select count_if(v2 is null) from test_count_if;
@@ -84,7 +84,7 @@ select count_if(v2 is null) from test_count_if;
 +----------------------+
 ```
 
-Example 2: Count the number of rows where `v1 >= v2 or v4 = 1`
+示例二：计算满足条件 `v1 >= v2 or v4 = 1` 的行数。
 
 ```Plain
 select count_if(v1 >= v2 or v4 = 1)from test_count_if;
@@ -95,10 +95,11 @@ select count_if(v1 >= v2 or v4 = 1)from test_count_if;
 +----------------------------------+
 ```
 
-Example 3: Specify multiple conditions.
+示例三：指定多个 count_if 条件。
 
 ```Plain
-select count_if(v1 >= v2), count_if(v1 >= v2 or v4 = 1), count_if(v1 >= v2 and v4 = 1) from test_count_if;
+select count_if(v1 >= v2), count_if(v1 >= v2 or v4 = 1), count_if(v1 >= v2 and v4 = 1)
+from test_count_if;
 +--------------------+----------------------------------+-----------------------------------+
 | count_if(v1 >= v2) | count_if((v1 >= v2) OR (v4 = 1)) | count_if((v1 >= v2) AND (v4 = 1)) |
 +--------------------+----------------------------------+-----------------------------------+
