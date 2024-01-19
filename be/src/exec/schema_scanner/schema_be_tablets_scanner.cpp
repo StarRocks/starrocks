@@ -45,7 +45,7 @@ SchemaScanner::ColumnDesc SchemaBeTabletsScanner::_s_columns[] = {
         {"SCHEMA_HASH", TYPE_BIGINT, sizeof(int64_t), false},
         {"INDEX_DISK", TYPE_BIGINT, sizeof(int64_t), false},
         {"MEDIUM_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-
+        {"NUM_SEGMENT", TYPE_BIGINT, sizeof(int64_t), false},
 };
 
 SchemaBeTabletsScanner::SchemaBeTabletsScanner()
@@ -217,6 +217,10 @@ Status SchemaBeTabletsScanner::fill_chunk(ChunkPtr* chunk) {
                 Slice medium_type = Slice(medium_type_to_string(info.medium_type));
                 fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&medium_type);
                 break;
+            }
+            case 20: {
+                // NUM_SEGMENT
+                fill_column_with_slot<TYPE_BIGINT>(column.get(), (void*)&info.num_segment);
             }
             default:
                 break;
