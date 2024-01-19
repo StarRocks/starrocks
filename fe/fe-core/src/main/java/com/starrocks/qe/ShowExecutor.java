@@ -164,6 +164,7 @@ import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowAuthorStmt;
+import com.starrocks.sql.ast.ShowBackendBlackListStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
@@ -420,12 +421,19 @@ public class ShowExecutor {
             handleShowFailPoint();
         } else if (stmt instanceof ShowDictionaryStmt) {
             handleShowDictionary();
+        } else if (stmt instanceof ShowBackendBlackListStmt) {
+            handleBackendBlackList();
         } else {
             handleEmpty();
         }
 
         List<List<String>> rows = doPredicate(stmt, stmt.getMetaData(), resultSet.getResultRows());
         return new ShowResultSet(resultSet.getMetaData(), rows);
+    }
+
+    private void handleBackendBlackList() {
+        List<List<String>> rows = SimpleScheduler.getHostBlacklist().getShowData();
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
     private void handleShowAuthentication() {
