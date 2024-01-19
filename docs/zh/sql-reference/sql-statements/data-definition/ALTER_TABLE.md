@@ -33,12 +33,8 @@ alter_clause1[, alter_clause2, ...]
 其中 **alter_clause** 分为 partition、rollup、schema change、rename、index、swap、comment、compact 操作，不同操作的应用场景为：
 
 - rename: 修改表名，rollup index 名称，修改 partition 名称，**注意列名不支持修改**。
-<<<<<<< HEAD
 - swap: 原子替换两张表。
-- comment: 修改已有表的注释。**从 3.1 版本开始支持。**
-=======
 - comment: 修改表的注释。**从 3.1 版本开始支持。** 当前还不支持修改列注释。
->>>>>>> c82343698e ([Doc] Fix feedback in alter table (#39560))
 - partition: 修改分区属性，删除分区，增加分区。
 - schema change: 增加列，删除列，调整列顺序，修改列类型。
 - rollup: 创建或删除 rollup index。
