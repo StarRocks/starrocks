@@ -470,34 +470,34 @@ public class SimpleSchedulerTest {
                 result = systemInfoService;
 
                 // backend 10001 will be removed
-                systemInfoService.getBackend(10001L);
+                systemInfoService.getBackendOrComputeNode(10001L);
                 result = null;
 
                 // backend 10002 will be removed
-                Backend backend2 = new Backend();
+                ComputeNode backend2 = new ComputeNode();
                 backend2.setAlive(true);
                 backend2.setHost("host10002");
                 backend2.setBrpcPort(10002);
                 backend2.setHttpPort(10012);
-                systemInfoService.getBackend(10002L);
+                systemInfoService.getBackendOrComputeNode(10002L);
                 result = backend2;
 
-                systemInfoService.checkBackendAvailable(10002L);
+                systemInfoService.checkNodeAvailable(backend2);
                 result = true;
 
                 NetUtils.checkAccessibleForAllPorts((String) any, (List<Integer>) any);
                 result = true;
 
                 // backend 10003, which is not available
-                Backend backend3 = new Backend();
+                ComputeNode backend3 = new ComputeNode();
                 backend3.setAlive(true);
                 backend3.setHost("host10003");
                 backend3.setBrpcPort(10003);
                 backend3.setHttpPort(10013);
-                systemInfoService.getBackend(10003L);
+                systemInfoService.getBackendOrComputeNode(10003L);
                 result = backend3;
 
-                systemInfoService.checkBackendAvailable(10003L);
+                systemInfoService.checkNodeAvailable(backend3);
                 result = true;
             }
         };
@@ -528,15 +528,15 @@ public class SimpleSchedulerTest {
                 result = systemInfoService;
 
                 // backend 10003, which is not available
-                Backend backend3 = new Backend();
+                ComputeNode backend3 = new ComputeNode();
                 backend3.setAlive(true);
                 backend3.setHost("host10003");
                 backend3.setBrpcPort(10003);
                 backend3.setHttpPort(10013);
-                systemInfoService.getBackend(10003L);
+                systemInfoService.getBackendOrComputeNode(10003L);
                 result = backend3;
 
-                systemInfoService.checkBackendAvailable(10003L);
+                systemInfoService.checkNodeAvailable(backend3);
                 result = true;
             }
         };
