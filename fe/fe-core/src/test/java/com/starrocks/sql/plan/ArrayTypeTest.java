@@ -113,7 +113,7 @@ public class ArrayTypeTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, " array_concat(CAST(ARRAY<tinyint(4)>[1] AS ARRAY<VARCHAR>), " +
                 "CAST(ARRAY<tinyint(4)>[2] AS ARRAY<VARCHAR>), CAST(ARRAY<tinyint(4)>[1,2] AS ARRAY<VARCHAR>), " +
-                "ARRAY<varchar>['a'], ARRAY<varchar>['b'], CAST(ARRAY<decimal32(2, 1)>[1.1] AS ARRAY<VARCHAR>))");
+                "ARRAY<varchar>['a'], ARRAY<varchar>['b'], CAST(ARRAY<DECIMAL32(2,1)>[1.1] AS ARRAY<VARCHAR>))");
     }
 
     @Test
