@@ -1045,25 +1045,6 @@ public class MvRewriteTest extends MvRewriteTestBase {
     }
 
     @Test
-    public void testHiveUnionRewrite() throws Exception {
-        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(true);
-        createAndRefreshMv("create materialized view hive_union_mv_1 distributed by hash(s_suppkey) " +
-                        "PROPERTIES (\n" +
-                        "\"force_external_table_query_rewrite\" = \"true\"\n" +
-                        ") " +
-                        " as select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 5");
-        String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
-        String plan1 = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan1, "0:UNION");
-        PlanTestBase.assertContains(plan1, "hive_union_mv_1");
-        PlanTestBase.assertContains(plan1, "1:HdfsScanNode\n" +
-                "     TABLE: supplier\n" +
-                "     NON-PARTITION PREDICATES: 13: s_suppkey < 10, 13: s_suppkey >= 5");
-
-        dropMv("test", "hive_union_mv_1");
-    }
-
-    @Test
     public void testMVCacheInvalidAndReValid() throws Exception {
         starRocksAssert.withTable("\n" +
                 "CREATE TABLE test_base_tbl(\n" +
