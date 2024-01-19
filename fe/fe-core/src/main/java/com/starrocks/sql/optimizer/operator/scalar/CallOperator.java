@@ -49,7 +49,7 @@ public class CallOperator extends ScalarOperator {
     // The flag for distinct function
     private boolean isDistinct;
 
-    // The flag for remove distinct agg func because add extra agg steps in SplitWithDistinctAggRule
+    // The flag for remove distinct agg func because add extra agg steps in SplitMultiPhaseAggRule
     private boolean removedDistinct;
 
     // Ignore nulls.
@@ -135,25 +135,10 @@ public class CallOperator extends ScalarOperator {
                     // skip the separator argument
                     continue;
                 }
-                ScalarOperator child = arguments.get(i);
-                if (child.isConstantRef() || child.isColumnRef())  {
-                    res.add(child);
-                } else if (child instanceof CastOperator && child.getChild(0).isColumnRef()) {
-                    res.add(child.getChild(0));
-                } else {
-                    throw new IllegalArgumentException("children of callOperator: " + this
-                            + " should be a column or cast column expr.");
-                }
+                res.add(arguments.get(i));
             }
         } else {
-            for (ScalarOperator child : arguments) {
-                if (child.isConstantRef() || child.isColumnRef()) {
-                    res.add(child);
-                } else {
-                    throw new IllegalArgumentException("children of callOperator: " + this
-                            + " should be a column or cast column expr.");
-                }
-            }
+            res = arguments;
         }
         return res;
     }

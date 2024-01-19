@@ -19,7 +19,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
-import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
@@ -28,6 +27,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -58,15 +58,15 @@ import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficie
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.SMALL_SCALE_ROWS_LIMIT;
 
-public class SplitMultiPhaseAggBaseRule extends SplitAggregateBaseRule {
+public class SplitMultiPhaseAggRule extends SplitAggregateRule {
 
-    private SplitMultiPhaseAggBaseRule() {
-        super(RuleType.TF_SPLIT_DISTINCT_AGGREGATE);
+    private SplitMultiPhaseAggRule() {
+        super(RuleType.TF_SPLIT_MULTI_PHASE_AGGREGATE);
     }
 
-    private static final SplitMultiPhaseAggBaseRule INSTANCE = new SplitMultiPhaseAggBaseRule();
+    private static final SplitMultiPhaseAggRule INSTANCE = new SplitMultiPhaseAggRule();
 
-    public static SplitMultiPhaseAggBaseRule getInstance() {
+    public static SplitMultiPhaseAggRule getInstance() {
         return INSTANCE;
     }
 
@@ -84,6 +84,10 @@ public class SplitMultiPhaseAggBaseRule extends SplitAggregateBaseRule {
             return false;
         }
 
+        if (!Utils.couldGenerateMultiStageAggregate(input.getLogicalProperty(), input.getOp(), input.inputAt(0).getOp())) {
+            return false;
+        }
+
         return agg.getType().isGlobal() && !agg.isSplit() && agg.getDistinctColumnDataSkew() == null;
     }
 
@@ -91,7 +95,7 @@ public class SplitMultiPhaseAggBaseRule extends SplitAggregateBaseRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator aggOp = input.getOp().cast();
-        Optional<List<ColumnRefOperator>> distinctCols = extractCommonDistinctCols(aggOp.getAggregations().values());
+        Optional<List<ColumnRefOperator>> distinctCols = Utils.extractCommonDistinctCols(aggOp.getAggregations().values());
         if (distinctCols.isEmpty()) {
             throw new StarRocksPlannerException("The query contains multiple distinct agg functions, " +
                     "each can't have multi columns.", ErrorType.USER_ERROR);
@@ -378,12 +382,6 @@ public class SplitMultiPhaseAggBaseRule extends SplitAggregateBaseRule {
             newAggregationMap.put(column, callOperator);
         }
         return newAggregationMap;
-    }
-
-    private Type getIntermediateType(CallOperator aggregation) {
-        AggregateFunction af = (AggregateFunction) aggregation.getFunction();
-        Preconditions.checkState(af != null);
-        return af.getIntermediateType() == null ? af.getReturnType() : af.getIntermediateType();
     }
 
     /**

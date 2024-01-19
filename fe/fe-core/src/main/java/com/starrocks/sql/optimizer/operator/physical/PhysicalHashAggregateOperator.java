@@ -119,7 +119,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return partitionByColumns;
     }
 
-    public boolean hasRemoveDistinctFunc() {
+    public boolean hasRemovedDistinctFunc() {
         return aggregations.values().stream().anyMatch(CallOperator::isRemovedDistinct);
     }
 
@@ -140,7 +140,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public String getNeededPreaggregationMode() {
         String mode = ConnectContext.get().getSessionVariable().getStreamingPreaggregationMode();
-        if (canUseStreamingPreAgg() && (type.isDistinctLocal() || hasRemoveDistinctFunc())) {
+        if (canUseStreamingPreAgg() && (type.isDistinctLocal() || hasRemovedDistinctFunc())) {
             mode = SessionVariableConstants.FORCE_PREAGGREGATION;
         }
         return mode;

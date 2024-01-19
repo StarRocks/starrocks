@@ -86,6 +86,8 @@ public class RewriteMultiDistinctRule extends TransformationRule {
                     newAggOperator = buildMultiSumDistinct(oldFunctionCall);
                 } else if (oldFunctionCall.getFnName().equals(FunctionSet.ARRAY_AGG)) {
                     newAggOperator = buildArrayAggDistinct(oldFunctionCall);
+                } else if (oldFunctionCall.getFnName().equalsIgnoreCase(FunctionSet.AVG)) {
+                    newAggOperator = oldFunctionCall;
                 } else {
                     return Lists.newArrayList();
                 }

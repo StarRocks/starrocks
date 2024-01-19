@@ -17,6 +17,7 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
@@ -49,15 +50,15 @@ import static com.starrocks.qe.SessionVariableConstants.AggregationStage.TWO_STA
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT;
 
-public class SplitTwoPhaseAggBaseRule extends SplitAggregateBaseRule {
+public class SplitTwoPhaseAggRule extends SplitAggregateRule {
 
-    private SplitTwoPhaseAggBaseRule() {
-        super(RuleType.TF_SPLIT_WITHOUT_DISTINCT_AGGREGATE);
+    private SplitTwoPhaseAggRule() {
+        super(RuleType.TF_SPLIT_TWO_PHASE_AGGREGATE);
     }
 
-    private static final SplitTwoPhaseAggBaseRule INSTANCE = new SplitTwoPhaseAggBaseRule();
+    private static final SplitTwoPhaseAggRule INSTANCE = new SplitTwoPhaseAggRule();
 
-    public static SplitTwoPhaseAggBaseRule getInstance() {
+    public static SplitTwoPhaseAggRule getInstance() {
         return INSTANCE;
     }
 
@@ -82,7 +83,7 @@ public class SplitTwoPhaseAggBaseRule extends SplitAggregateBaseRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
 
         LogicalAggregationOperator aggOp = input.getOp().cast();
-        Optional<List<ColumnRefOperator>> distinctCols = extractCommonDistinctCols(aggOp.getAggregations().values());
+        Optional<List<ColumnRefOperator>> distinctCols = Utils.extractCommonDistinctCols(aggOp.getAggregations().values());
         if (distinctCols.isEmpty()) {
             throw new StarRocksPlannerException("The query contains multiple distinct agg functions, " +
                     "each can't have multi columns.", ErrorType.USER_ERROR);
@@ -145,11 +146,22 @@ public class SplitTwoPhaseAggBaseRule extends SplitAggregateBaseRule {
 
         // 1. multiple cols distinct is not support two stage aggregate
         // 2. array type col is not support two stage aggregate
-        // 3. group_concat distinct with columnRef is not support two stage aggregate
-        if (distinctColumns.size() > 1 || distinctColumns.get(0).getType().isArrayType() ||
-                operator.getAggregations().values().stream()
-                        .anyMatch(e -> e.getFnName().equals(FunctionSet.GROUP_CONCAT))) {
+        if (distinctColumns.size() > 1 || distinctColumns.get(0).getType().isArrayType()) {
             return false;
+        }
+
+        // 3. group_concat distinct with columnRef is not support two stage aggregate
+        // 4. array_agg with order by clause is not support two stage aggregate
+        for (CallOperator aggCall : operator.getAggregations().values()) {
+            String fnName = aggCall.getFnName();
+            if (FunctionSet.GROUP_CONCAT.equalsIgnoreCase(fnName)) {
+                return false;
+            } else if (FunctionSet.ARRAY_AGG.equalsIgnoreCase(fnName)) {
+                AggregateFunction aggregateFunction = (AggregateFunction) aggCall.getFunction();
+                if (CollectionUtils.isNotEmpty(aggregateFunction.getIsAscOrder())) {
+                    return false;
+                }
+            }
         }
         return true;
     }

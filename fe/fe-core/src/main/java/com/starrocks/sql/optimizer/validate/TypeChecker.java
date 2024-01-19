@@ -86,7 +86,7 @@ public class TypeChecker implements PlanValidator.Checker {
         @Override
         public Void visitLogicalAggregate(OptExpression optExpression, Void context) {
             LogicalAggregationOperator operator = (LogicalAggregationOperator) optExpression.getOp();
-            checkAggCall(operator.getAggregations(), operator.getType(), operator.isSplit());
+            checkAggCall(operator.getAggregations(), operator.getType(), operator.isSplit(), operator.hasRemoveDistinctFunc());
             visit(optExpression, context);
             return null;
         }
@@ -103,7 +103,7 @@ public class TypeChecker implements PlanValidator.Checker {
         @Override
         public Void visitPhysicalHashAggregate(OptExpression optExpression, Void context) {
             PhysicalHashAggregateOperator operator = (PhysicalHashAggregateOperator) optExpression.getOp();
-            checkAggCall(operator.getAggregations(), operator.getType(), operator.isSplit());
+            checkAggCall(operator.getAggregations(), operator.getType(), operator.isSplit(), operator.hasRemovedDistinctFunc());
             visit(optExpression, context);
             return null;
         }
@@ -145,22 +145,23 @@ public class TypeChecker implements PlanValidator.Checker {
         }
 
 
-        private void checkAggCall(Map<ColumnRefOperator, CallOperator> aggregations, AggType aggType, boolean isSplit) {
-            int index = -1;
+        private void checkAggCall(Map<ColumnRefOperator, CallOperator> aggregations, AggType aggType, boolean isSplit,
+                                  boolean hasRemoveDistinctFunc) {
             for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregations.entrySet()) {
-                index++;
                 ColumnRefOperator outputCol = entry.getKey();
                 CallOperator aggCall = entry.getValue();
                 boolean isMergeAggFn = false;
                 switch (aggType) {
                     case LOCAL:
-                    case GLOBAL:
                         // In 3-phase agg, the global agg should set these not distinct agg callOperator to mergeAggFn.
                         // Sometimes we may further split the top global agg from 3-phase agg into a two phase agg
                         // like local -> distinct global -> global to local -> distinct global -> local -> global.
                         // we also need to set mergeAggFn flag into the second local agg for those not distinct
                         // agg callOperator.
-                        isMergeAggFn = isSplit && !aggCall.isRemovedDistinct();
+                        isMergeAggFn = isSplit && hasRemoveDistinctFunc && !aggCall.isRemovedDistinct();
+                        break;
+                    case GLOBAL:
+                        isMergeAggFn = isSplit && (!hasRemoveDistinctFunc || !aggCall.isRemovedDistinct());
                         break;
                     case DISTINCT_GLOBAL:
                         isMergeAggFn = true;

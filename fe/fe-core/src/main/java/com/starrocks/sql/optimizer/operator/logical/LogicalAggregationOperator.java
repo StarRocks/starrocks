@@ -152,6 +152,10 @@ public class LogicalAggregationOperator extends LogicalOperator {
         return checkGroupByCountDistinct() && hasSkew();
     }
 
+    public boolean hasRemoveDistinctFunc() {
+        return aggregations.values().stream().anyMatch(CallOperator::isRemovedDistinct);
+    }
+
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         if (projection != null) {

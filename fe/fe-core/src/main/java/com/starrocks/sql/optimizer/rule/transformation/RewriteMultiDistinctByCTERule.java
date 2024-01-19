@@ -62,7 +62,7 @@ import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_
 
 /*
  *
- * Optimize multi count distinct aggregate node without group by.
+ * Optimize multi count distinct aggregate node.
  * multi_count_distinct will gather to one instance work, doesn't take advantage of the MPP architecture.
  *
  * e.g:
@@ -127,7 +127,7 @@ public class RewriteMultiDistinctByCTERule extends TransformationRule {
     private final ScalarOperatorRewriter scalarRewriter = new ScalarOperatorRewriter();
 
     public RewriteMultiDistinctByCTERule() {
-        super(RuleType.TF_REWRITE_MULTI_DISTINCT_WITHOUT_GROUP_BY,
+        super(RuleType.TF_REWRITE_MULTI_DISTINCT_BY_CTE,
                 Pattern.create(OperatorType.LOGICAL_AGGR).addChildren(Pattern.create(
                         OperatorType.PATTERN_LEAF)));
     }

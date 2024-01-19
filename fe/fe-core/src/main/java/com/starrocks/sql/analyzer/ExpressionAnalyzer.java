@@ -1194,8 +1194,6 @@ public class ExpressionAnalyzer {
                 }
             }
 
-
-
             node.setFn(fn);
             node.setType(fn.getReturnType());
             FunctionAnalyzer.analyze(node);
@@ -1317,7 +1315,7 @@ public class ExpressionAnalyzer {
                             throw new SemanticException(fnName + " should have output expressions before [ORDER BY]",
                                     node.getPos());
                         }
-                        if (node.getParams().isDistinct() && !node.getChild(1).isConstant()) {
+                        if (node.getParams().isDistinct() && !node.getChild(start - 1).isConstant()) {
                             throw new SemanticException(fnName + " distinct should use constant separator", node.getPos());
                         }
 
