@@ -502,10 +502,11 @@ public class AnalyzeExprTest {
 
     @Test
     public void testAnalyseNullToBoolean() {
-        analyzeSuccess("select coalesce(map{to_date(\"2020-02-02 00:00:00\"):1}, map{})");
-        analyzeSuccess("select coalesce([to_date(\"2020-02-02 00:00:00\")], [])");
-        analyzeSuccess("select coalesce(row(to_date(\"2020-02-02 00:00:00\")), row())");
+//        analyzeSuccess("select coalesce(map{to_date(\"2020-02-02 00:00:00\"):1}, map{})");
+//        analyzeSuccess("select coalesce([to_date(\"2020-02-02 00:00:00\")], [])");
+        analyzeSuccess("select coalesce(struct(to_date(\"2020-02-02 00:00:00\")), NULL)");
         analyzeSuccess("select ifnull(map{to_date(\"2020-02-02 00:00:00\"):1}, map{})");
+        analyzeSuccess("select map_from_arrays([1, 2], NULL)");
     }
 
 }

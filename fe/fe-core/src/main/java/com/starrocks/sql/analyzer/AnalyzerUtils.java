@@ -118,6 +118,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -1201,6 +1202,10 @@ public class AnalyzerUtils {
             }
         }
         return null;
+    }
+
+    public static Type[] replaceNullTypes2Booleans(Type[] types) {
+        return Arrays.stream(types).map(type -> replaceNullType2Boolean(type)).toArray(Type[]::new);
     }
 
     public static Type replaceNullType2Boolean(Type type) {

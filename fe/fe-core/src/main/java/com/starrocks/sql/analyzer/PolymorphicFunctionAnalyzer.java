@@ -68,6 +68,7 @@ public class PolymorphicFunctionAnalyzer {
         return newFn;
     }
 
+    // only works for null into array[null]/map{null:null}/struct(null)
     private static Type[] resolveArgTypes(Function fn, Type[] inputArgTypes) {
         // Use inputArgTypes length, because function may be a variable arguments
         Type[] resolvedTypes = Arrays.copyOf(inputArgTypes, inputArgTypes.length);
@@ -84,24 +85,24 @@ public class PolymorphicFunctionAnalyzer {
                 continue;
             }
 
-            // Need to make input be a valid complex type if the input is Type NULL
+            // for complex type, change NULL into Array[NULL]/Map[NULL:NULL]/Struct(NULL)
             if (declType instanceof AnyArrayType) {
-                resolvedTypes[i] = inputType.isNull() ? new ArrayType(Type.BOOLEAN) : inputType;
+                resolvedTypes[i] = inputType.isNull() ? new ArrayType(inputType) : inputType;
             } else if (declType instanceof AnyMapType) {
-                resolvedTypes[i] = inputType.isNull() ? new MapType(Type.BOOLEAN, Type.BOOLEAN) : inputType;
+                resolvedTypes[i] = inputType.isNull() ? new MapType(inputType, inputType) : inputType;
             } else if (declType instanceof AnyStructType) {
-                resolvedTypes[i] = inputType.isNull() ? new StructType(Lists.newArrayList(Type.BOOLEAN)) : inputType;
+                resolvedTypes[i] = inputType.isNull() ? new StructType(Lists.newArrayList(inputType)) : inputType;
             } else {
                 resolvedTypes[i] = inputType;
             }
 
-            resolvedTypes[i] = replaceNullType2Boolean(resolvedTypes[i]);
         }
         return resolvedTypes;
     }
 
     private static Function resolveByReplacingInputs(Function fn, Type[] inputArgTypes) {
         Type[] resolvedArgTypes = resolveArgTypes(fn, inputArgTypes);
+        resolvedArgTypes = AnalyzerUtils.replaceNullTypes2Booleans(resolvedArgTypes);
         if (fn instanceof ScalarFunction) {
             return newScalarFunction((ScalarFunction) fn, Arrays.asList(resolvedArgTypes), fn.getReturnType());
         }
@@ -211,14 +212,14 @@ public class PolymorphicFunctionAnalyzer {
         if (deduce == null) {
             return null;
         }
-        // Apply deduce logic first,then replace null to boolean
-        // because null type can have common super type with all types but boolean can't
-        Type[] resolvedArgTypes = Arrays.copyOf(inputArgTypes, inputArgTypes.length);
+
+        Type[] resolvedArgTypes = resolveArgTypes(fn, inputArgTypes);
         Type newRetType = deduce.apply(resolvedArgTypes);
-        // then replace null to boolean
-        resolvedArgTypes =
-                Arrays.stream(resolvedArgTypes).map(arg -> replaceNullType2Boolean(arg)).toArray(Type[]::new);
+
+        // change null type into boolean type
+        resolvedArgTypes = AnalyzerUtils.replaceNullTypes2Booleans(resolvedArgTypes);
         newRetType = replaceNullType2Boolean(newRetType);
+
         if (fn instanceof ScalarFunction) {
             return newScalarFunction((ScalarFunction) fn, Arrays.asList(resolvedArgTypes), newRetType);
         }
