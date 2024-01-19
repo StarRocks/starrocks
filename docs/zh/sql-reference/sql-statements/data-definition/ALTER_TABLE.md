@@ -88,9 +88,7 @@ ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
 
 :::tip
-
 当前还不支持修改列注释。
-
 :::
 
 ### 操作 partition 相关语法
