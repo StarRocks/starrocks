@@ -1,0 +1,28 @@
+-- name: test_show_column
+create database test_show1;
+create database test_show2;
+use test_show1;
+CREATE TABLE site_access(
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+DISTRIBUTED BY HASH(site_id)
+PROPERTIES (
+  "replication_num" = "1"
+);
+use test_show2;
+CREATE TABLE site_access(
+    event_day DATE,
+    site_id INT DEFAULT '10',
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT '',
+    pv BIGINT SUM DEFAULT '0'
+)
+DISTRIBUTED BY HASH(site_id)
+PROPERTIES (
+  "replication_num" = "1"
+);
+show columns from site_access where Field='pv';
