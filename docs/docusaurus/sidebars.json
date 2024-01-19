@@ -656,7 +656,7 @@
     },
     {
       "type": "category",
-      "label": " 项目协助",
+      "label": "技术支持",
       "link": {"type": "doc", "id": "project_help/project_help"},
       "items": ["project_help/slack"]
     },

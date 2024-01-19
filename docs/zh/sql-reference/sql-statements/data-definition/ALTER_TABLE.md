@@ -17,9 +17,9 @@ displayed_sidebar: "Chinese"
 - [修改 Bitmap 索引](#bitmap-index-修改)
 - [手动执行 compaction 合并表数据](#手动-compaction31-版本起)
 
-> **注意**
->
-> 该操作需要有对应表的 ALTER 权限。
+:::tip
+该操作需要有对应表的 ALTER 权限。
+:::
 
 ## 语法
 
@@ -34,7 +34,7 @@ alter_clause1[, alter_clause2, ...]
 
 - rename: 修改表名，rollup index 名称，修改 partition 名称，**注意列名不支持修改**。
 - swap: 原子替换两张表。
-- comment: 修改已有表的注释。**从 3.1 版本开始支持。**
+- comment: 修改表的注释。**从 3.1 版本开始支持。** 当前还不支持修改列注释。
 - partition: 修改分区属性，删除分区，增加分区。
 - schema change: 增加列，删除列，调整列顺序，修改列类型。
 - rollup: 创建或删除 rollup index。
@@ -83,6 +83,10 @@ RENAME PARTITION <old_partition_name> <new_partition_name>;
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
+
+:::tip
+当前还不支持修改列注释。
+:::
 
 ### 操作 partition 相关语法
 
