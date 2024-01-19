@@ -198,7 +198,7 @@ displayed_sidebar: "Chinese"
 
 - 优化 Compaction 的性能，支持导入 10000 列的数据。
 - 优化 StarRocks 首次 Scan 和 Page Cache 的性能。通过降低随机 I/O ，提升 StarRocks 首次 Scan 的性能，如果首次 Scan 的磁盘为 SATA 盘，则性能提升尤为明显。另外，StarRocks 的 Page Cache 支持直接存放原始数据，无需经过 Bitshuffle 编码。因此读取 StarRocks 的 Page Cache 时无需额外解码，提高缓存命中率，进而大大提升查询效率。
-- 支持主键表（Primary Key Model）变更表结构（Schema Change），您可以执行 `ALTER TABLE` 增删和修改索引。
+- 支持主键表变更表结构（Schema Change），您可以执行 `ALTER TABLE` 增删和修改索引。
 - 优化 JSON 导入性能，并去除了 JSON 导入中单个 JSON 文件不超过 100MB 大小的限制。
 - 优化 Bitmap Index 性能。
 - 优化通过外表方式读取 Hive 数据的性能，支持 Hive 的存储格式为 CSV。
