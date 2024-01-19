@@ -340,6 +340,8 @@ private:
     int64_t t_expr_pred_time = 0;
 
     int64_t t_read_time = 0;
+
+    int64_t t_inverted_search_time = 0;
 };
 
 SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema, SegmentReadOptions options)
@@ -1870,7 +1872,11 @@ Status SegmentIterator::_apply_inverted_index() {
         std::string_view sv_c = fieldPtr->name();
         std::string column_name = {sv_c.begin(), sv_c.end()};
         for (const ColumnPredicate* pred : pred_list) {
+            int64_t t_begin_search = MonotonicNanos();
             Status res = pred->seek_inverted_index(column_name, _inverted_index_iterators[cid], &row_bitmap);
+            int64_t t_end_search = MonotonicNanos();
+
+            t_inverted_search_time += (t_end_search - t_begin_search);
             if (res.ok()) {
                 erased_preds.emplace_back(pred);
             }
@@ -2021,7 +2027,8 @@ void SegmentIterator::close() {
               << "decode dict time: " << _opts.stats->decode_dict_ns << " "
               << "segment read time: " << t_read_time << " "
               << "segment seek column time: " << _opts.stats->block_seek_ns << " "
-              << "segment read column time: " << _opts.stats->block_fetch_ns;
+              << "segment read column time: " << _opts.stats->block_fetch_ns << " "
+              << "segment inverted search time" << t_inverted_search_time;
 
 }
 
