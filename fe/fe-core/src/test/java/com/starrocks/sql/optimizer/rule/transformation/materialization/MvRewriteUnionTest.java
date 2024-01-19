@@ -27,11 +27,14 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
 import java.util.List;
 import java.util.Set;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class MvRewriteUnionTest extends MvRewriteTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -61,12 +64,10 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                         "\"replication_num\" = \"1\"\n" +
                         ");");
 
-        cluster.runSql("test", "insert into emps2 values(1, 1, \"emp_name1\", 100);");
-        cluster.runSql("test", "insert into emps2 values(2, 1, \"emp_name1\", 120);");
-        cluster.runSql("test", "insert into emps2 values(3, 1, \"emp_name1\", 150);");
-        cluster.runSql("test", "insert into depts2 values(1, \"dept_name1\")");
-        cluster.runSql("test", "insert into depts2 values(2, \"dept_name2\")");
-        cluster.runSql("test", "insert into depts2 values(3, \"dept_name3\")");
+        executeInsertSql(connectContext, "insert into emps2 values(1, 1, \"emp_name1\", 100),(2, 1, \"emp_name1\", 120)," +
+                "(3, 1, \"emp_name1\", 150);");
+        executeInsertSql(connectContext, "insert into depts2 values(1, \"dept_name1\"),(2, \"dept_name2\")," +
+                "(3, \"dept_name3\")");
 
         starRocksAssert.withTable("CREATE TABLE `test_all_type2` (\n" +
                 "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
@@ -95,16 +96,12 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"" +
                 ");");
-        cluster.runSql("test", "insert into t02 values(1, 2, 3)");
-        cluster.runSql("test", "insert into test_all_type2 values(" +
+        executeInsertSql(connectContext, "insert into t02 values(1, 2, 3)");
+        executeInsertSql(connectContext, "insert into test_all_type2 values(" +
                 "\"value1\", 1, 2, 3, 4.0, 5.0, 6, \"2022-11-11 10:00:01\", \"2022-11-11\", 10.12)");
 
-        cluster.runSql("test", "insert into test_base_part values(1, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(100, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(200, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(1000, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(2000, 1, 2, 3)");
-        cluster.runSql("test", "insert into test_base_part values(2500, 1, 2, 3)");
+        executeInsertSql(connectContext, "insert into test_base_part values(1, 1, 2, 3),(100, 1, 2, 3),(200, 1, 2, 3)," +
+                "(1000, 1, 2, 3),(2000, 1, 2, 3),(2500, 1, 2, 3)");
 
 
         Table emps2 = getTable("test", "emps2");
@@ -314,10 +311,10 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                 "                PARTITION `p6` VALUES LESS THAN ('18')\n" +
                 "                )\n" +
                 "                DISTRIBUTED BY HASH(k1) properties('replication_num'='1');");
-        cluster.runSql("test", "insert into multi_mv_table values (1,1,1),(2,1,1),(3,1,1),\n" +
-                "                                      (4,1,1),(5,1,1),(6,1,1),\n" +
-                "                                      (7,1,1),(8,1,1),(9,1,1),\n" +
-                "                                      (10,1,1),(11,1,1);");
+        executeInsertSql(connectContext, "insert into multi_mv_table values (1,1,1),(2,1,1),(3,1,1),\n" +
+                "(4,1,1),(5,1,1),(6,1,1),\n" +
+                "(7,1,1),(8,1,1),(9,1,1),\n" +
+                "(10,1,1),(11,1,1);");
         createAndRefreshMv("CREATE MATERIALIZED VIEW multi_mv_1" +
                 " DISTRIBUTED BY HASH(k1) AS SELECT k1,v1,v2 from multi_mv_table where k1>1;");
         createAndRefreshMv("CREATE MATERIALIZED VIEW multi_mv_2" +
