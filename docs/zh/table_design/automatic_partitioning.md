@@ -4,6 +4,8 @@ displayed_sidebar: "Chinese"
 
 # 自动创建分区
 
+import Replicanum from '../assets/commonMarkdown/replicanum.md'
+
 本文介绍如何创建支持自动建分区的表、相关使用说明和限制。
 
 ## 功能介绍
@@ -53,11 +55,10 @@ CREATE TABLE site_access (
 )
 DUPLICATE KEY(event_day, site_id, city_code, user_name)
 PARTITION BY date_trunc('day', event_day)
-DISTRIBUTED BY HASH(event_day, site_id)
-PROPERTIES(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(event_day, site_id);
 ```
+
+<Replicanum />
 
 导入如下两行数据，则 StarRocks 会根据导入数据自动创建两个分区 `p20230226`、`p20230227`，范围分别为 [2023-02-26 00:00:00,2023-02-27 00:00:00)、[2023-02-27 00:00:00,2023-02-28 00:00:00)。
 
@@ -80,7 +81,7 @@ SHOW PARTITIONS FROM site_access\G
                    Range: [types: [DATETIME]; keys: [2023-02-26 00:00:00]; ..types: [DATETIME]; keys: [2023-02-27 00:00:00]; )
          DistributionKey: event_day, site_id
                  Buckets: 6
-          ReplicationNum: 1
+          ReplicationNum: 3
            StorageMedium: HDD
             CooldownTime: 9999-12-31 23:59:59
 LastConsistencyCheckTime: NULL
@@ -98,7 +99,7 @@ LastConsistencyCheckTime: NULL
                    Range: [types: [DATETIME]; keys: [2023-02-27 00:00:00]; ..types: [DATETIME]; keys: [2023-02-28 00:00:00]; )
          DistributionKey: event_day, site_id
                  Buckets: 6
-          ReplicationNum: 1
+          ReplicationNum: 3
            StorageMedium: HDD
             CooldownTime: 9999-12-31 23:59:59
 LastConsistencyCheckTime: NULL
@@ -123,11 +124,10 @@ PARTITION BY date_trunc('month', event_day)(
     START ("2022-06-01") END ("2022-12-01") EVERY (INTERVAL 1 month)
 )
 DISTRIBUTED BY HASH(event_day, site_id)
-PROPERTIES(
-    "partition_live_number" = "3",
-    "replication_num" = "1"
-);
+PROPERTIES("partition_live_number" = "3");
 ```
+
+<Replicanum />
 
 示例三：使用 time_slice 函数创建一张支持自动创建分区的表，分区粒度为七天，分区列为 `event_day`。
 
@@ -141,9 +141,10 @@ CREATE TABLE site_access(
 )
 DUPLICATE KEY(event_day, site_id, city_code, user_name)
 PARTITION BY time_slice(event_day, INTERVAL 7 day)
-DISTRIBUTED BY HASH(event_day, site_id)
-PROPERTIES("replication_num" = "1");
+DISTRIBUTED BY HASH(event_day, site_id);
 ```
+
+<Replicanum />
 
 ## 使用说明
 

@@ -4,6 +4,8 @@ displayed_sidebar: "English"
 
 # Automatic partitioning
 
+import Replicanum from '../assets/commonMarkdown/replicanum.md'
+
 This topic describes how to create a table that supports automatic partitioning. This topic also describes the usage notes and limits of automatic partitioning.
 
 ## Introduction
@@ -51,11 +53,10 @@ CREATE TABLE site_access (
 )
 DUPLICATE KEY(event_day, site_id, city_code, user_name)
 PARTITION BY date_trunc('day', event_day)
-DISTRIBUTED BY HASH(event_day, site_id)
-PROPERTIES(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(event_day, site_id);
 ```
+
+<Replicanum />
 
 When the following two data rows are inserted, StarRocks automatically creates two partitions, `p20230226` and `p20230227`, whose ranges are [2023-02-26 00:00:00, 2023-02-27 00:00:00) and [2023-02-27 00:00:00, 2023-02-28 00:00:00) respectively.
 
@@ -78,7 +79,7 @@ SHOW PARTITIONS FROM site_access\G
                    Range: [types: [DATETIME]; keys: [2023-02-26 00:00:00]; ..types: [DATETIME]; keys: [2023-02-27 00:00:00]; )
          DistributionKey: event_day, site_id
                  Buckets: 6
-          ReplicationNum: 1
+          ReplicationNum: 3
            StorageMedium: HDD
             CooldownTime: 9999-12-31 23:59:59
 LastConsistencyCheckTime: NULL
@@ -96,7 +97,7 @@ LastConsistencyCheckTime: NULL
                    Range: [types: [DATETIME]; keys: [2023-02-27 00:00:00]; ..types: [DATETIME]; keys: [2023-02-28 00:00:00]; )
          DistributionKey: event_day, site_id
                  Buckets: 6
-          ReplicationNum: 1
+          ReplicationNum: 3
            StorageMedium: HDD
             CooldownTime: 9999-12-31 23:59:59
 LastConsistencyCheckTime: NULL
@@ -121,11 +122,10 @@ PARTITION BY date_trunc('month', event_day)(
     START ("2022-06-01") END ("2022-12-01") EVERY (INTERVAL 1 month)
 )
 DISTRIBUTED BY HASH(event_day, site_id)
-PROPERTIES(
-    "partition_live_number" = "3",
-    "replication_num" = "1"
-);
+PROPERTIES("partition_live_number" = "3");
 ```
+
+<Replicanum />
 
 Example 3: Use the `time_slice` function to create a table that supports automatic partitioning. Set the partition granularity to 7 days and the partition column to `event_day`.
 
@@ -139,9 +139,10 @@ CREATE TABLE site_access(
 )
 DUPLICATE KEY(event_day, site_id, city_code, user_name)
 PARTITION BY time_slice(event_day, INTERVAL 7 day)
-DISTRIBUTED BY HASH(event_day, site_id)
-PROPERTIES("replication_num" = "1");
+DISTRIBUTED BY HASH(event_day, site_id);
 ```
+
+<Replicanum />
 
 ## Usage notes
 
