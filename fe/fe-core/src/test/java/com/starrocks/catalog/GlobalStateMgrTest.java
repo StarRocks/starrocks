@@ -123,7 +123,7 @@ public class GlobalStateMgrTest {
         List<Frontend> frontends = globalStateMgr.getFrontends(null);
         Frontend fe = frontends.get(0);
         fe.updateHostAndEditLogPort("testHost", 1000);
-        globalStateMgr.replayUpdateFrontend(fe);
+        globalStateMgr.getNodeMgr().replayUpdateFrontend(fe);
         List<Frontend> updatedFrontends = globalStateMgr.getFrontends(null);
         Frontend updatedfFe = updatedFrontends.get(0);
         Assert.assertEquals("testHost", updatedfFe.getHost());
@@ -173,7 +173,7 @@ public class GlobalStateMgrTest {
         List<Frontend> frontends = globalStateMgr.getFrontends(null);
         Frontend fe = frontends.get(0);
         ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause(fe.getHost(), "sandbox-fqdn");
-        globalStateMgr.modifyFrontendHost(clause);
+        globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
     }
 
     @Test(expected = DdlException.class)
@@ -181,7 +181,7 @@ public class GlobalStateMgrTest {
         GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
         ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test", "sandbox-fqdn");
         // this case will occur [frontend does not exist] exception
-        globalStateMgr.modifyFrontendHost(clause);
+        globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
     }
 
     @Test(expected = DdlException.class)
@@ -189,12 +189,12 @@ public class GlobalStateMgrTest {
         GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
         ModifyFrontendAddressClause clause = new ModifyFrontendAddressClause("test-address", "sandbox-fqdn");
         // this case will occur [can not modify current master node] exception
-        globalStateMgr.modifyFrontendHost(clause);
+        globalStateMgr.getNodeMgr().modifyFrontendHost(clause);
     }
 
     @Test(expected = DdlException.class)
     public void testAddRepeatedFe() throws Exception {
         GlobalStateMgr globalStateMgr = mockGlobalStateMgr();
-        globalStateMgr.addFrontend(FrontendNodeType.FOLLOWER, "127.0.0.1", 1000);
+        globalStateMgr.getNodeMgr().addFrontend(FrontendNodeType.FOLLOWER, "127.0.0.1", 1000);
     }
 }

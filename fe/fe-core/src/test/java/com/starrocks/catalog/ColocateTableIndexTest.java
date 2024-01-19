@@ -140,7 +140,7 @@ public class ColocateTableIndexTest {
         // drop db1.table1_1
         sql = "DROP TABLE db1.table1_1;";
         DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         // group1 -> table1_1*, table1_2
         // group2 -> table2_l
         infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();
@@ -153,7 +153,7 @@ public class ColocateTableIndexTest {
         // drop db1.table1_2
         sql = "DROP TABLE db1.table1_2;";
         dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         // group1 -> table1_1*, table1_2*
         // group2 -> table2_l
         infos = GlobalStateMgr.getCurrentColocateIndex().getInfos();

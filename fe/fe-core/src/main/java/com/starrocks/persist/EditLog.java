@@ -84,6 +84,7 @@ import com.starrocks.plugin.PluginInfo;
 import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.privilege.UserPrivilegeCollectionV2;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.qe.VariableMgr;
 import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
@@ -197,18 +198,18 @@ public class EditLog {
                     DatabaseInfo dbInfo = (DatabaseInfo) journal.getData();
                     String dbName = dbInfo.getDbName();
                     LOG.info("Begin to unprotect alter db info {}", dbName);
-                    globalStateMgr.replayAlterDatabaseQuota(dbName, dbInfo.getQuota(), dbInfo.getQuotaType());
+                    globalStateMgr.getLocalMetastore().replayAlterDatabaseQuota(dbName, dbInfo.getQuota(), dbInfo.getQuotaType());
                     break;
                 }
                 case OperationType.OP_ERASE_DB: {
                     Text dbId = (Text) journal.getData();
-                    globalStateMgr.replayEraseDatabase(Long.parseLong(dbId.toString()));
+                    globalStateMgr.getLocalMetastore().replayEraseDatabase(Long.parseLong(dbId.toString()));
                     break;
                 }
                 case OperationType.OP_RECOVER_DB:
                 case OperationType.OP_RECOVER_DB_V2: {
                     RecoverInfo info = (RecoverInfo) journal.getData();
-                    globalStateMgr.replayRecoverDatabase(info);
+                    globalStateMgr.getLocalMetastore().replayRecoverDatabase(info);
                     break;
                 }
                 case OperationType.OP_RENAME_DB:
@@ -216,7 +217,7 @@ public class EditLog {
                     DatabaseInfo dbInfo = (DatabaseInfo) journal.getData();
                     String dbName = dbInfo.getDbName();
                     LOG.info("Begin to unprotect rename db {}", dbName);
-                    globalStateMgr.replayRenameDatabase(dbName, dbInfo.getNewDbName());
+                    globalStateMgr.getLocalMetastore().replayRenameDatabase(dbName, dbInfo.getNewDbName());
                     break;
                 }
                 case OperationType.OP_CREATE_TABLE:
@@ -231,7 +232,7 @@ public class EditLog {
                         LOG.info("Begin to unprotect create table. db = "
                                 + info.getDbName() + " table = " + info.getTable().getId());
                     }
-                    globalStateMgr.replayCreateTable(info);
+                    globalStateMgr.getLocalMetastore().replayCreateTable(info);
                     break;
                 }
                 case OperationType.OP_DROP_TABLE:
@@ -244,7 +245,7 @@ public class EditLog {
                     }
                     LOG.info("Begin to unprotect drop table. db = "
                             + db.getOriginName() + " table = " + info.getTableId());
-                    globalStateMgr.replayDropTable(db, info.getTableId(), info.isForceDrop());
+                    globalStateMgr.getLocalMetastore().replayDropTable(db, info.getTableId(), info.isForceDrop());
                     break;
                 }
                 case OperationType.OP_CREATE_MATERIALIZED_VIEW: {
@@ -252,7 +253,7 @@ public class EditLog {
                     LOG.info("Begin to unprotect create materialized view. db = " + info.getDbName()
                             + " create materialized view = " + info.getTable().getId()
                             + " tableName = " + info.getTable().getName());
-                    globalStateMgr.replayCreateTable(info);
+                    globalStateMgr.getLocalMetastore().replayCreateTable(info);
                     break;
                 }
                 case OperationType.OP_ADD_PARTITION_V2: {
@@ -260,7 +261,7 @@ public class EditLog {
                     LOG.info("Begin to unprotect add partition. db = " + info.getDbId()
                             + " table = " + info.getTableId()
                             + " partitionName = " + info.getPartition().getName());
-                    globalStateMgr.replayAddPartition(info);
+                    globalStateMgr.getLocalMetastore().replayAddPartition(info);
                     break;
                 }
                 case OperationType.OP_ADD_PARTITION: {
@@ -268,27 +269,27 @@ public class EditLog {
                     LOG.info("Begin to unprotect add partition. db = " + info.getDbId()
                             + " table = " + info.getTableId()
                             + " partitionName = " + info.getPartition().getName());
-                    globalStateMgr.replayAddPartition(info);
+                    globalStateMgr.getLocalMetastore().replayAddPartition(info);
                     break;
                 }
                 case OperationType.OP_ADD_PARTITIONS: {
                     AddPartitionsInfo infos = (AddPartitionsInfo) journal.getData();
                     for (PartitionPersistInfo info : infos.getAddPartitionInfos()) {
-                        globalStateMgr.replayAddPartition(info);
+                        globalStateMgr.getLocalMetastore().replayAddPartition(info);
                     }
                     break;
                 }
                 case OperationType.OP_ADD_PARTITIONS_V2: {
                     AddPartitionsInfoV2 infos = (AddPartitionsInfoV2) journal.getData();
                     for (PartitionPersistInfoV2 info : infos.getAddPartitionInfos()) {
-                        globalStateMgr.replayAddPartition(info);
+                        globalStateMgr.getLocalMetastore().replayAddPartition(info);
                     }
                     break;
                 }
                 case OperationType.OP_ADD_SUB_PARTITIONS_V2: {
                     AddSubPartitionsInfoV2 infos = (AddSubPartitionsInfoV2) journal.getData();
                     for (PhysicalPartitionPersistInfoV2 info : infos.getAddSubPartitionInfos()) {
-                        globalStateMgr.replayAddSubPartition(info);
+                        globalStateMgr.getLocalMetastore().replayAddSubPartition(info);
                     }
                     break;
                 }
@@ -317,12 +318,12 @@ public class EditLog {
                 }
                 case OperationType.OP_ERASE_TABLE: {
                     Text tableId = (Text) journal.getData();
-                    globalStateMgr.replayEraseTable(Long.parseLong(tableId.toString()));
+                    globalStateMgr.getLocalMetastore().replayEraseTable(Long.parseLong(tableId.toString()));
                     break;
                 }
                 case OperationType.OP_ERASE_MULTI_TABLES: {
                     MultiEraseTableInfo multiEraseTableInfo = (MultiEraseTableInfo) journal.getData();
-                    globalStateMgr.replayEraseMultiTables(multiEraseTableInfo);
+                    globalStateMgr.getLocalMetastore().replayEraseMultiTables(multiEraseTableInfo);
                     break;
                 }
                 case OperationType.OP_ERASE_PARTITION: {
@@ -333,7 +334,7 @@ public class EditLog {
                 case OperationType.OP_RECOVER_TABLE:
                 case OperationType.OP_RECOVER_TABLE_V2: {
                     RecoverInfo info = (RecoverInfo) journal.getData();
-                    globalStateMgr.replayRecoverTable(info);
+                    globalStateMgr.getLocalMetastore().replayRecoverTable(info);
                     break;
                 }
                 case OperationType.OP_RECOVER_PARTITION:
@@ -469,24 +470,24 @@ public class EditLog {
                 case OperationType.OP_ADD_REPLICA:
                 case OperationType.OP_ADD_REPLICA_V2: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
-                    globalStateMgr.replayAddReplica(info);
+                    globalStateMgr.getLocalMetastore().replayAddReplica(info);
                     break;
                 }
                 case OperationType.OP_UPDATE_REPLICA:
                 case OperationType.OP_UPDATE_REPLICA_V2: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
-                    globalStateMgr.replayUpdateReplica(info);
+                    globalStateMgr.getLocalMetastore().replayUpdateReplica(info);
                     break;
                 }
                 case OperationType.OP_DELETE_REPLICA:
                 case OperationType.OP_DELETE_REPLICA_V2: {
                     ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
-                    globalStateMgr.replayDeleteReplica(info);
+                    globalStateMgr.getLocalMetastore().replayDeleteReplica(info);
                     break;
                 }
                 case OperationType.OP_BATCH_DELETE_REPLICA_BATCH: {
                     BatchDeleteReplicaInfo info = (BatchDeleteReplicaInfo) journal.getData();
-                    globalStateMgr.replayBatchDeleteReplica(info);
+                    globalStateMgr.getLocalMetastore().replayBatchDeleteReplica(info);
                     break;
                 }
                 case OperationType.OP_ADD_COMPUTE_NODE: {
@@ -522,13 +523,13 @@ public class EditLog {
                 case OperationType.OP_ADD_FRONTEND:
                 case OperationType.OP_ADD_FRONTEND_V2: {
                     Frontend fe = (Frontend) journal.getData();
-                    globalStateMgr.replayAddFrontend(fe);
+                    globalStateMgr.getNodeMgr().replayAddFrontend(fe);
                     break;
                 }
                 case OperationType.OP_REMOVE_FRONTEND:
                 case OperationType.OP_REMOVE_FRONTEND_V2: {
                     Frontend fe = (Frontend) journal.getData();
-                    globalStateMgr.replayDropFrontend(fe);
+                    globalStateMgr.getNodeMgr().replayDropFrontend(fe);
                     if (fe.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeName())) {
                         throw new JournalInconsistentException("current fe " + fe + " is removed. will exit");
                     }
@@ -537,7 +538,7 @@ public class EditLog {
                 case OperationType.OP_UPDATE_FRONTEND:
                 case OperationType.OP_UPDATE_FRONTEND_V2: {
                     Frontend fe = (Frontend) journal.getData();
-                    globalStateMgr.replayUpdateFrontend(fe);
+                    globalStateMgr.getNodeMgr().replayUpdateFrontend(fe);
                     break;
                 }
                 case OperationType.OP_CREATE_USER:
@@ -579,11 +580,6 @@ public class EditLog {
                                 + ", current version is " + FeConstants.STARROCKS_META_VERSION);
                     }
                     MetaContext.get().setStarRocksMetaVersion(metaVersion.getStarRocksVersion());
-                    break;
-                }
-                case OperationType.OP_GLOBAL_VARIABLE: {
-                    SessionVariable variable = (SessionVariable) journal.getData();
-                    globalStateMgr.replayGlobalVariable(variable);
                     break;
                 }
                 case OperationType.OP_CREATE_CLUSTER: {
@@ -911,7 +907,7 @@ public class EditLog {
                 }
                 case OperationType.OP_GLOBAL_VARIABLE_V2: {
                     GlobalVarPersistInfo info = (GlobalVarPersistInfo) journal.getData();
-                    globalStateMgr.replayGlobalVariableV2(info);
+                    VariableMgr.replayGlobalVariableV2(info);
                     break;
                 }
                 case OperationType.OP_SWAP_TABLE: {

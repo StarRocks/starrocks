@@ -156,7 +156,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     "");
 
             Analyzer.analyze(stmt, context);
-            GlobalStateMgr.getCurrentState().createTable(stmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
             LOG.warn("Failed to create sample statistics, " + e.getMessage());
             return false;
@@ -188,7 +188,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     "");
 
             Analyzer.analyze(stmt, context);
-            GlobalStateMgr.getCurrentState().createTable(stmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
             LOG.warn("Failed to create full statistics table, " + e.getMessage());
             return false;
@@ -219,7 +219,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     "");
 
             Analyzer.analyze(stmt, context);
-            GlobalStateMgr.getCurrentState().createTable(stmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
             LOG.warn("Failed to create histogram statistics table, " + e.getMessage());
             return false;
@@ -257,7 +257,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
                     "");
 
             Analyzer.analyze(stmt, context);
-            GlobalStateMgr.getCurrentState().createTable(stmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
         } catch (UserException e) {
             LOG.warn("Failed to create full statistics table, " + e.getMessage());
             return false;
@@ -288,7 +288,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
                 new TableName(StatsConstants.STATISTICS_DB_NAME, tableName), true);
 
         try {
-            GlobalStateMgr.getCurrentState().dropTable(stmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(stmt);
         } catch (DdlException e) {
             LOG.warn("Failed to drop table" + e.getMessage());
             return false;

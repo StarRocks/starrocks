@@ -280,7 +280,7 @@ public class StarRocksAssert {
                     createTableStmtCopied = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(
                             createTableStmt.getOrigStmt().originStmt, ctx);
                 }
-                GlobalStateMgr.getCurrentState().createTable(createTableStmtCopied);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmtCopied);
                 break;
             } catch (Exception e) {
                 if (retryTime == MAX_RETRY_TIME - 1) {
@@ -464,7 +464,7 @@ public class StarRocksAssert {
 
     public StarRocksAssert withView(String sql) throws Exception {
         CreateViewStmt createTableStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-        GlobalStateMgr.getCurrentState().createView(createTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createTableStmt);
         return this;
     }
 
@@ -486,7 +486,7 @@ public class StarRocksAssert {
     public StarRocksAssert dropView(String viewName) throws Exception {
         DropTableStmt dropViewStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop view " + viewName + ";", ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropViewStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropViewStmt);
         return this;
     }
 
@@ -529,7 +529,7 @@ public class StarRocksAssert {
     public StarRocksAssert dropTable(String tableName) throws Exception {
         DropTableStmt dropTableStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop table " + tableName + ";", ctx);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
         return this;
     }
 

@@ -196,7 +196,7 @@ public class HeartbeatMgr extends FrontendDaemon {
         switch (response.getType()) {
             case FRONTEND: {
                 FrontendHbResponse hbResponse = (FrontendHbResponse) response;
-                Frontend fe = GlobalStateMgr.getCurrentState().getFeByName(hbResponse.getName());
+                Frontend fe = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByName(hbResponse.getName());
                 if (fe != null) {
                     return fe.handleHbResponse(hbResponse, isReplay);
                 }

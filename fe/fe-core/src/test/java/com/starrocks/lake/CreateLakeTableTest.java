@@ -62,7 +62,7 @@ public class CreateLakeTableTest {
 
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
     }
 
     private void checkLakeTable(String dbName, String tableName) {

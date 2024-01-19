@@ -1242,7 +1242,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TMasterOpResult forward(TMasterOpRequest params) throws TException {
         TNetworkAddress clientAddr = getClientAddr();
         if (clientAddr != null) {
-            Frontend fe = GlobalStateMgr.getCurrentState().getFeByHost(clientAddr.getHostname());
+            Frontend fe = GlobalStateMgr.getCurrentState().getNodeMgr().getFeByHost(clientAddr.getHostname());
             if (fe == null) {
                 LOG.warn("reject request from invalid host. client: {}", clientAddr);
                 throw new TException("request from invalid host was rejected.");
@@ -2098,7 +2098,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 locker.unLockDatabase(db, LockType.READ);
             }
             if (mutablePartitions.size() <= 1) {
-                GlobalStateMgr.getCurrentState().addSubPartitions(db, olapTable.getName(), partition, 1);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .addSubPartitions(db, olapTable.getName(), partition, 1);
             }
             p.setImmutable(true);
         }
@@ -2336,7 +2337,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
 
         try {
-            state.addPartitions(db, olapTable.getName(), addPartitionClause);
+            state.getLocalMetastore().addPartitions(db, olapTable.getName(), addPartitionClause);
         } catch (Exception e) {
             LOG.warn(e);
             errorStatus.setError_msgs(Lists.newArrayList(

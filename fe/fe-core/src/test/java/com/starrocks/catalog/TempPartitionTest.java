@@ -465,7 +465,7 @@ public class TempPartitionTest {
 
         String recoverStr = "recover partition p1 from db2.tbl2;";
         RecoverPartitionStmt recoverStmt = (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverStr, ctx);
-        GlobalStateMgr.getCurrentState().recoverPartition(recoverStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().recoverPartition(recoverStmt);
         checkShowPartitionsResultNum("db2.tbl2", true, 3);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
 

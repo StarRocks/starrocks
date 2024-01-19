@@ -176,21 +176,23 @@ public class SystemHandler extends AlterHandler {
 
         } else if (alterClause instanceof AddObserverClause) {
             AddObserverClause clause = (AddObserverClause) alterClause;
-            GlobalStateMgr.getCurrentState().addFrontend(FrontendNodeType.OBSERVER, clause.getHost(), clause.getPort());
+            GlobalStateMgr.getCurrentState().getNodeMgr()
+                    .addFrontend(FrontendNodeType.OBSERVER, clause.getHost(), clause.getPort());
         } else if (alterClause instanceof DropObserverClause) {
             DropObserverClause clause = (DropObserverClause) alterClause;
-            GlobalStateMgr.getCurrentState()
+            GlobalStateMgr.getCurrentState().getNodeMgr()
                     .dropFrontend(FrontendNodeType.OBSERVER, clause.getHost(), clause.getPort());
         } else if (alterClause instanceof AddFollowerClause) {
             AddFollowerClause clause = (AddFollowerClause) alterClause;
-            GlobalStateMgr.getCurrentState().addFrontend(FrontendNodeType.FOLLOWER, clause.getHost(), clause.getPort());
+            GlobalStateMgr.getCurrentState().getNodeMgr()
+                    .addFrontend(FrontendNodeType.FOLLOWER, clause.getHost(), clause.getPort());
         } else if (alterClause instanceof ModifyFrontendAddressClause) {
             // update Frontend Address
             ModifyFrontendAddressClause modifyFrontendAddressClause = (ModifyFrontendAddressClause) alterClause;
-            GlobalStateMgr.getCurrentState().modifyFrontendHost(modifyFrontendAddressClause);
+            GlobalStateMgr.getCurrentState().getNodeMgr().modifyFrontendHost(modifyFrontendAddressClause);
         } else if (alterClause instanceof DropFollowerClause) {
             DropFollowerClause clause = (DropFollowerClause) alterClause;
-            GlobalStateMgr.getCurrentState()
+            GlobalStateMgr.getCurrentState().getNodeMgr()
                     .dropFrontend(FrontendNodeType.FOLLOWER, clause.getHost(), clause.getPort());
         } else if (alterClause instanceof ModifyBrokerClause) {
             ModifyBrokerClause clause = (ModifyBrokerClause) alterClause;

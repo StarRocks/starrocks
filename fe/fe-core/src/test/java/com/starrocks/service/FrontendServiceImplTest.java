@@ -291,9 +291,9 @@ public class FrontendServiceImplTest {
         String dropSQL2 = "drop table if exists site_access_2";
         try {
             DropTableStmt dropTableStmt = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL, ctx);
-            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
             DropTableStmt dropTableStmt2 = (DropTableStmt) UtFrameUtils.parseStmtWithNewParser(dropSQL2, ctx);
-            GlobalStateMgr.getCurrentState().dropTable(dropTableStmt2);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt2);
         } catch (Exception ex) {
 
         }

@@ -569,7 +569,7 @@ public class AlterJobMgr {
                             .startsWith(ExpressionRangePartitionInfo.SHADOW_PARTITION_PREFIX)) {
                         throw new DdlException("Deletion of shadow partitions is not allowed");
                     }
-                    GlobalStateMgr.getCurrentState().dropPartition(db, olapTable, dropPartitionClause);
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, olapTable, dropPartitionClause);
                 } else if (alterClause instanceof ReplacePartitionClause) {
                     ReplacePartitionClause replacePartitionClause = (ReplacePartitionClause) alterClause;
                     List<String> partitionNames = replacePartitionClause.getPartitionNames();
@@ -629,7 +629,8 @@ public class AlterJobMgr {
                 if (!((AddPartitionClause) alterClause).isTempPartition()) {
                     DynamicPartitionUtil.checkAlterAllowed((OlapTable) db.getTable(tableName));
                 }
-                GlobalStateMgr.getCurrentState().addPartitions(db, tableName, (AddPartitionClause) alterClause);
+                GlobalStateMgr.getCurrentState().getLocalMetastore()
+                        .addPartitions(db, tableName, (AddPartitionClause) alterClause);
             } else if (alterClause instanceof TruncatePartitionClause) {
                 // This logic is used to adapt mysql syntax.
                 // ALTER TABLE test TRUNCATE PARTITION p1;

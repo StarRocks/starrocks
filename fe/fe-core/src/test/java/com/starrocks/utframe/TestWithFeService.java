@@ -189,7 +189,7 @@ public abstract class TestWithFeService {
     public void dropTable(String table, boolean force) throws Exception {
         DropTableStmt dropTableStmt = (DropTableStmt) parseAndAnalyzeStmt(
                 "drop table " + table + (force ? " force" : "") + ";", connectContext);
-        GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropTable(dropTableStmt);
     }
 
     public void createTables(String... sqls) throws Exception {

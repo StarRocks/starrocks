@@ -189,27 +189,19 @@ import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
-import com.starrocks.persist.BatchDeleteReplicaInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.ColumnRenameInfo;
-import com.starrocks.persist.CreateTableInfo;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
-import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.persist.ImageHeader;
 import com.starrocks.persist.ImpersonatePrivInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
-import com.starrocks.persist.MultiEraseTableInfo;
 import com.starrocks.persist.OperationType;
-import com.starrocks.persist.PartitionPersistInfo;
-import com.starrocks.persist.PartitionPersistInfoV2;
-import com.starrocks.persist.PhysicalPartitionPersistInfoV2;
 import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
-import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.TableInfo;
@@ -244,13 +236,9 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.mv.MVJobExecutor;
 import com.starrocks.scheduler.mv.MaterializedViewMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
-import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
-import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
-import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableCommentClause;
@@ -263,19 +251,11 @@ import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
-import com.starrocks.sql.ast.CreateTableLikeStmt;
-import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
-import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
-import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.sql.ast.PartitionRenameClause;
-import com.starrocks.sql.ast.RecoverDbStmt;
-import com.starrocks.sql.ast.RecoverPartitionStmt;
-import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RestoreStmt;
@@ -298,7 +278,6 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.PortConnectivityChecker;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.task.PriorityLeaderTaskExecutor;
 import com.starrocks.thrift.TCompressionType;
@@ -1781,14 +1760,6 @@ public class GlobalStateMgr {
         Text.writeString(dos, GsonUtils.GSON.toJson(header));
     }
 
-    public void replayGlobalVariable(SessionVariable variable) throws IOException, DdlException {
-        VariableMgr.replayGlobalVariable(variable);
-    }
-
-    public void replayGlobalVariableV2(GlobalVarPersistInfo info) throws IOException, DdlException {
-        VariableMgr.replayGlobalVariableV2(info);
-    }
-
     public void createLabelCleaner() {
         labelCleaner = new FrontendDaemon("LoadLabelCleaner", Config.label_clean_interval_second * 1000L) {
             @Override
@@ -2064,99 +2035,6 @@ public class GlobalStateMgr {
                 editLog.logTimestamp(stamp);
             }
         };
-    }
-
-    public void addFrontend(FrontendNodeType role, String host, int editLogPort) throws DdlException {
-        nodeMgr.addFrontend(role, host, editLogPort);
-    }
-
-    public void modifyFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException {
-        nodeMgr.modifyFrontendHost(modifyFrontendAddressClause);
-    }
-
-    public void dropFrontend(FrontendNodeType role, String host, int port) throws DdlException {
-        nodeMgr.dropFrontend(role, host, port);
-    }
-
-    public Frontend checkFeExist(String host, int port) {
-        return nodeMgr.checkFeExist(host, port);
-    }
-
-    public Frontend getFeByHost(String host) {
-        return nodeMgr.getFeByHost(host);
-    }
-
-    public Frontend getFeByName(String name) {
-        return nodeMgr.getFeByName(name);
-    }
-
-    public int getFollowerCnt() {
-        return nodeMgr.getFollowerCnt();
-    }
-
-    public void recoverDatabase(RecoverDbStmt recoverStmt) throws DdlException {
-        localMetastore.recoverDatabase(recoverStmt);
-    }
-
-    public void recoverTable(RecoverTableStmt recoverStmt) throws DdlException {
-        localMetastore.recoverTable(recoverStmt);
-    }
-
-    public void recoverPartition(RecoverPartitionStmt recoverStmt) throws DdlException {
-        localMetastore.recoverPartition(recoverStmt);
-    }
-
-    public void replayEraseDatabase(long dbId) {
-        localMetastore.replayEraseDatabase(dbId);
-    }
-
-    public void replayRecoverDatabase(RecoverInfo info) {
-        localMetastore.replayRecoverDatabase(info);
-    }
-
-    public void alterDatabaseQuota(AlterDatabaseQuotaStmt stmt) throws DdlException {
-        localMetastore.alterDatabaseQuota(stmt);
-    }
-
-    public void replayAlterDatabaseQuota(String dbName, long quota, QuotaType quotaType) {
-        localMetastore.replayAlterDatabaseQuota(dbName, quota, quotaType);
-    }
-
-    public void renameDatabase(AlterDatabaseRenameStatement stmt) throws DdlException {
-        localMetastore.renameDatabase(stmt);
-    }
-
-    public void replayRenameDatabase(String dbName, String newDbName) {
-        localMetastore.replayRenameDatabase(dbName, newDbName);
-    }
-
-    public boolean createTable(CreateTableStmt stmt) throws DdlException {
-        return localMetastore.createTable(stmt);
-    }
-
-    public void createTableLike(CreateTableLikeStmt stmt) throws DdlException {
-        localMetastore.createTable(stmt.getCreateTableStmt());
-    }
-
-    public void addSubPartitions(Database db, String tableName, Partition partition, int num) throws DdlException {
-        localMetastore.addSubPartitions(db, tableName, partition, num);
-    }
-
-    public void replayAddSubPartition(PhysicalPartitionPersistInfoV2 info) throws DdlException {
-        localMetastore.replayAddSubPartition(info);
-    }
-
-    public void addPartitions(Database db, String tableName, AddPartitionClause addPartitionClause)
-            throws DdlException, AnalysisException {
-        localMetastore.addPartitions(db, tableName, addPartitionClause);
-    }
-
-    public void replayAddPartition(PartitionPersistInfo info) throws DdlException {
-        localMetastore.replayAddPartition(info);
-    }
-
-    public void replayAddPartition(PartitionPersistInfoV2 info) throws DdlException {
-        localMetastore.replayAddPartition(info);
     }
 
     public void dropPartition(Database db, OlapTable olapTable, DropPartitionClause clause) throws DdlException {
@@ -2711,63 +2589,6 @@ public class GlobalStateMgr {
         if (!Strings.isNullOrEmpty(table.getComment())) {
             sb.append("\nCOMMENT \"").append(table.getDisplayComment()).append("\"");
         }
-    }
-
-    public void replayCreateTable(CreateTableInfo info) {
-        localMetastore.replayCreateTable(info);
-    }
-
-    // Drop table
-    public void dropTable(DropTableStmt stmt) throws DdlException {
-        localMetastore.dropTable(stmt);
-    }
-
-    public void sendDropTabletTasks(HashMap<Long, AgentBatchTask> batchTaskMap) {
-        localMetastore.sendDropTabletTasks(batchTaskMap);
-    }
-
-    public void replayDropTable(Database db, long tableId, boolean isForceDrop) {
-        localMetastore.replayDropTable(db, tableId, isForceDrop);
-    }
-
-    public void replayEraseTable(long tableId) throws DdlException {
-        localMetastore.replayEraseTable(tableId);
-    }
-
-    public void replayEraseMultiTables(MultiEraseTableInfo multiEraseTableInfo) throws DdlException {
-        localMetastore.replayEraseMultiTables(multiEraseTableInfo);
-    }
-
-    public void replayRecoverTable(RecoverInfo info) {
-        localMetastore.replayRecoverTable(info);
-    }
-
-    public void replayAddReplica(ReplicaPersistInfo info) {
-        localMetastore.replayAddReplica(info);
-    }
-
-    public void replayUpdateReplica(ReplicaPersistInfo info) {
-        localMetastore.replayUpdateReplica(info);
-    }
-
-    public void replayDeleteReplica(ReplicaPersistInfo info) {
-        localMetastore.replayDeleteReplica(info);
-    }
-
-    public void replayBatchDeleteReplica(BatchDeleteReplicaInfo info) {
-        localMetastore.replayBatchDeleteReplica(info);
-    }
-
-    public void replayAddFrontend(Frontend fe) {
-        nodeMgr.replayAddFrontend(fe);
-    }
-
-    public void replayUpdateFrontend(Frontend frontend) {
-        nodeMgr.replayUpdateFrontend(frontend);
-    }
-
-    public void replayDropFrontend(Frontend frontend) {
-        nodeMgr.replayDropFrontend(frontend);
     }
 
     public int getClusterId() {
@@ -3365,10 +3186,6 @@ public class GlobalStateMgr {
     @VisibleForTesting
     public void clear() {
         localMetastore.clear();
-    }
-
-    public void createView(CreateViewStmt stmt) throws DdlException {
-        localMetastore.createView(stmt);
     }
 
     public void triggerNewImage() {
