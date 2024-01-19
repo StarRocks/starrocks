@@ -138,7 +138,8 @@ public class StreamLoadPlanner {
             if (negative) {
                 throw new DdlException("Primary key table does not support negative load");
             }
-            if (destTable.hasRowStorageType() && streamLoadInfo.getPartialUpdateMode() != TPartialUpdateMode.ROW_MODE) {
+            if (destTable.hasRowStorageType() && streamLoadInfo.isPartialUpdate() &&
+                    streamLoadInfo.getPartialUpdateMode() != TPartialUpdateMode.ROW_MODE) {
                 throw new DdlException("column with row table only support row mode partial update");
             }
         } else {
