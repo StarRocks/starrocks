@@ -561,22 +561,75 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap> {
     void compute_agg_states(size_t chunk_size, const Columns& key_columns, MemPool* pool, Func&& allocate_func,
                             Buffer<AggDataPtr>* agg_states) {
         slice_sizes.assign(_chunk_size, 0);
+        // Assign not_founds vector when needs compute not founds
 
         uint32_t cur_max_one_row_size = get_max_serialize_size(key_columns);
         if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
+            size_t batch_allocate_size = (size_t)cur_max_one_row_size * _chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING;
+            // too large, process by rows
+            if(batch_allocate_size > std::numeric_limits<int32_t>::max()) {
+                max_one_row_size = 0;
+                mem_pool->clear();
+                buffer = mem_pool->allocate(cur_max_one_row_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                return compute_agg_states_by_rows<Func>(
+                        chunk_size, key_columns, pool, std::move(allocate_func), agg_states, nullptr,
+                        cur_max_one_row_size);
+            }
             max_one_row_size = cur_max_one_row_size;
             mem_pool->clear();
             // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
             // from accessing out-of-bound memory.
-            buffer = mem_pool->allocate(max_one_row_size * _chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+            buffer = mem_pool->allocate(batch_allocate_size);
         }
+        // process by cols
+        return compute_agg_states_by_cols<Func>(
+                chunk_size, key_columns, pool, std::move(allocate_func), agg_states, nullptr, cur_max_one_row_size);
+    }
 
-        for (const auto& key_column : key_columns) {
-            key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_one_row_size);
+    // Elements queried in HashMap will be added to HashMap,
+    // elements that cannot be queried are not processed,
+    // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
+    template <typename Func>
+    void compute_agg_states(size_t chunk_size, const Columns& key_columns, Func&& allocate_func,
+                            Buffer<AggDataPtr>* agg_states, std::vector<uint8_t>* not_founds) {
+        slice_sizes.assign(_chunk_size, 0);
+        // Assign not_founds vector when needs compute not founds
+
+        uint32_t cur_max_one_row_size = get_max_serialize_size(key_columns);
+        if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
+            size_t batch_allocate_size = (size_t)cur_max_one_row_size * _chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING;
+            // too large, process by rows
+            if(batch_allocate_size > std::numeric_limits<int32_t>::max()) {
+                max_one_row_size = 0;
+                mem_pool->clear();
+                buffer = mem_pool->allocate(cur_max_one_row_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                return compute_agg_states_by_rows<Func>(
+                        chunk_size, key_columns, mem_pool.get(), std::move(allocate_func), agg_states, not_founds,
+                        cur_max_one_row_size);
+            }
+            max_one_row_size = cur_max_one_row_size;
+            mem_pool->clear();
+            // reserved extra SLICE_MEMEQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
+            // from accessing out-of-bound memory.
+            buffer = mem_pool->allocate(batch_allocate_size);
         }
+        // process by cols
+        return compute_agg_states_by_cols<Func>(
+                chunk_size, key_columns, mem_pool.get(), std::move(allocate_func), agg_states, not_founds, cur_max_one_row_size);
+    }
 
-        for (size_t i = 0; i < chunk_size; ++i) {
-            Slice key = {buffer + i * max_one_row_size, slice_sizes[i]};
+    template <typename Func> // true false  bool allocate_and_compute_state, bool compute_not_founds
+    void compute_agg_states_by_rows(size_t chunk_size, const Columns& key_columns, MemPool* pool,
+                                    Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
+                                    std::vector<uint8_t>* not_founds, size_t max_serialize_each_row) {
+        for(size_t i = 0; i < chunk_size; ++i) {
+            auto serialize_cursor = buffer;
+            for (const auto& key_column : key_columns) {
+                serialize_cursor += key_column->serialize(i, serialize_cursor);
+            }
+            DCHECK(serialize_cursor <= buffer + max_serialize_each_row);
+            size_t serialize_size = serialize_cursor - buffer;
+            Slice key = {buffer, serialize_size};
             auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
                 // we must persist the slice before insert
                 uint8_t* pos = pool->allocate(key.size);
@@ -589,33 +642,34 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap> {
         }
     }
 
-    // Elements queried in HashMap will be added to HashMap,
-    // elements that cannot be queried are not processed,
-    // and are mainly used in the first stage of two-stage aggregation when aggr reduction is low
     template <typename Func>
-    void compute_agg_states(size_t chunk_size, const Columns& key_columns, Func&& allocate_func,
-                            Buffer<AggDataPtr>* agg_states, std::vector<uint8_t>* not_founds) {
-        slice_sizes.assign(_chunk_size, 0);
-
+    void compute_agg_states_by_cols(size_t chunk_size, const Columns& key_columns, MemPool* pool,
+                                    Func&& allocate_func, Buffer<AggDataPtr>* agg_states,
+                                    std::vector<uint8_t>* not_founds, size_t max_serialize_each_row) {
         uint32_t cur_max_one_row_size = get_max_serialize_size(key_columns);
         if (UNLIKELY(cur_max_one_row_size > max_one_row_size)) {
             max_one_row_size = cur_max_one_row_size;
             mem_pool->clear();
-            buffer = mem_pool->allocate(max_one_row_size * _chunk_size);
+            // reserved extra SLICE_MEMQUAL_OVERFLOW_PADDING bytes to prevent SIMD instructions
+            // from accessing out-of-bound memory.
+            buffer = mem_pool->allocate(max_one_row_size * _chunk_size + SLICE_MEMEQUAL_OVERFLOW_PADDING);
         }
 
         for (const auto& key_column : key_columns) {
             key_column->serialize_batch(buffer, slice_sizes, chunk_size, max_one_row_size);
         }
 
-        not_founds->assign(chunk_size, 0);
-        for (size_t i = 0; i < chunk_size; ++i) {
+        for(size_t i = 0; i < chunk_size; ++i) {
             Slice key = {buffer + i * max_one_row_size, slice_sizes[i]};
-            if (auto iter = this->hash_map.find(key); iter != this->hash_map.end()) {
-                (*agg_states)[i] = iter->second;
-            } else {
-                (*not_founds)[i] = 1;
-            }
+            auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
+                // we must persist the slice before insert
+                uint8_t* pos = pool->allocate(key.size);
+                strings::memcpy_inlined(pos, key.data, key.size);
+                Slice pk{pos, key.size};
+                AggDataPtr pv = allocate_func(pk);
+                ctor(pk, pv);
+            });
+            (*agg_states)[i] = iter->second;
         }
     }
 
