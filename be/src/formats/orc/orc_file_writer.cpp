@@ -56,6 +56,7 @@ std::future<pipeline::FileWriter::CommitResult> ORCFileWriter::commit() {
     std::future<CommitResult> future = promise->get_future();
 
     auto task = [writer = _writer, p = promise] {
+        // TODO: make sure previous io tasks have been done
         try {
             writer->close();
         } catch (const std::exception& e) {
