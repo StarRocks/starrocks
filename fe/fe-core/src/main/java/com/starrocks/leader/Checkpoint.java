@@ -174,7 +174,7 @@ public class Checkpoint extends LeaderDaemon {
                 deleteVersion = Math.min(minOtherNodesJournalId, checkpointVersion);
             }
             journal.deleteJournals(deleteVersion + 1);
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_IMAGE_PUSH.increase(1L);
             }
             LOG.info("journals <= {} with prefix [{}] are deleted. image version {}, other nodes min version {}",
@@ -203,7 +203,7 @@ public class Checkpoint extends LeaderDaemon {
             globalStateMgr.clearExpiredJobs();
             globalStateMgr.saveImage();
             replayedJournalId = globalStateMgr.getReplayedJournalId();
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_IMAGE_WRITE.increase(1L);
             }
             GlobalStateMgr.getServingState().setImageJournalId(checkPointVersion);
