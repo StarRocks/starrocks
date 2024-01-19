@@ -26,6 +26,7 @@ import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
@@ -53,8 +54,10 @@ public class StreamLoadManagerTest {
     @Mocked
     private EditLog editLog;
 
+    private SystemInfoService systemInfoService;
     private GlobalTransactionMgr globalTransactionMgr;
     private Database db;
+    private NodeMgr nodeMgr;
 
     @Before
     public void setUp() {
@@ -91,7 +94,6 @@ public class StreamLoadManagerTest {
         };
 
         globalTransactionMgr.addDatabaseTransactionMgr(db.getId());
-        SystemInfoService systemInfoService = new SystemInfoService();
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentState();
@@ -102,17 +104,31 @@ public class StreamLoadManagerTest {
                 minTimes = 0;
                 result = globalTransactionMgr;
 
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                nodeMgr = new NodeMgr();
+                globalStateMgr.getNodeMgr();
                 minTimes = 0;
-                result = systemInfoService;
-
-                systemInfoService.getBackendIds(true);
-                minTimes = 0;
-                result = Lists.newArrayList();
+                result = nodeMgr;
 
                 GlobalStateMgr.getCurrentState().getNextId();
                 minTimes = 0;
                 result = 1001L;
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                systemInfoService = new SystemInfoService();
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+            }
+        };
+
+        new Expectations(systemInfoService) {
+            {
+                systemInfoService.getBackendIds(true);
+                minTimes = 0;
+                result = Lists.newArrayList();
             }
         };
     }

@@ -45,6 +45,8 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AddBackendClause;
 import com.starrocks.sql.ast.AlterSystemStmt;
@@ -77,8 +79,12 @@ public class SystemInfoServiceTest {
     private EditLog editLog;
     @Mocked
     private GlobalStateMgr globalStateMgr;
+
+    private LocalMetastore localMetastore;
+    private NodeMgr nodeMgr;
     private SystemInfoService systemInfoService;
     private TabletInvertedIndex invertedIndex;
+
     @Mocked
     private Database db;
 
@@ -119,10 +125,6 @@ public class SystemInfoServiceTest {
                 minTimes = 0;
                 result = db;
 
-                globalStateMgr.getLocalMetastore().getCluster();
-                minTimes = 0;
-                result = new Cluster("cluster", 1);
-
                 globalStateMgr.clear();
                 minTimes = 0;
 
@@ -130,15 +132,37 @@ public class SystemInfoServiceTest {
                 minTimes = 0;
                 result = globalStateMgr;
 
-                systemInfoService = new SystemInfoService();
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                localMetastore = new LocalMetastore(globalStateMgr, null, null);
+                globalStateMgr.getLocalMetastore();
                 minTimes = 0;
-                result = systemInfoService;
+                result = localMetastore;
+
+                nodeMgr = new NodeMgr();
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
 
                 invertedIndex = new TabletInvertedIndex();
-                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+                globalStateMgr.getTabletInvertedIndex();
                 minTimes = 0;
                 result = invertedIndex;
+            }
+        };
+
+        new Expectations(localMetastore) {
+            {
+                localMetastore.getCluster();
+                minTimes = 0;
+                result = new Cluster("cluster", 1);
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                systemInfoService = new SystemInfoService();
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
             }
         };
 

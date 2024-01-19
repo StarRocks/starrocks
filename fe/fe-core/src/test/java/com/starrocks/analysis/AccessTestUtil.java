@@ -55,6 +55,7 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
@@ -247,10 +248,6 @@ public class AccessTestUtil {
                     globalStateMgr.getDb(anyString);
                     minTimes = 0;
                     result = new Database();
-
-                    globalStateMgr.getLocalMetastore().listDbNames();
-                    minTimes = 0;
-                    result = Lists.newArrayList("testDb");
 
                     globalStateMgr.getDb("emptyCluster");
                     minTimes = 0;

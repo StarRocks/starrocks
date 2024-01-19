@@ -159,10 +159,6 @@ public class RestoreJobPrimaryKeyTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
-
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                minTimes = 0;
-                result = systemInfoService;
             }
         };
 

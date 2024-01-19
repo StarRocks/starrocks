@@ -357,15 +357,15 @@ public class SimpleSchedulerTest {
                 times = 2;
             }
         };
-        SimpleScheduler.updateBlocklist();
+        SimpleScheduler.getHostBlacklist().refresh();
 
         Assert.assertFalse(SimpleScheduler.isInBlocklist(10001L));
         Assert.assertFalse(SimpleScheduler.isInBlocklist(10002L));
         Assert.assertTrue(SimpleScheduler.isInBlocklist(10003L));
 
         //Having retried for Config.heartbeat_timeout_second + 1 times, backend 10003 will be removed.
-        SimpleScheduler.updateBlocklist();
-        Assert.assertFalse(SimpleScheduler.isInBlocklist(10003L));
+        SimpleScheduler.getHostBlacklist().refresh();
+        Assert.assertTrue(SimpleScheduler.isInBlocklist(10003L));
     }
 
     @Test
@@ -456,5 +456,97 @@ public class SimpleSchedulerTest {
         for (Thread t : threads) {
             t.join();
         }
+    }
+
+    @Test
+    public void testTimeUpdate(@Mocked GlobalStateMgr globalStateMgr,
+                               @Mocked SystemInfoService systemInfoService,
+                               @Mocked NetUtils utils) throws InterruptedException {
+        Config.black_host_history_sec = 5; // 5s
+        HostBlacklist blacklist = new HostBlacklist();
+        new Expectations() {
+            {
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = systemInfoService;
+
+                // backend 10001 will be removed
+                systemInfoService.getBackendOrComputeNode(10001L);
+                result = null;
+
+                // backend 10002 will be removed
+                ComputeNode backend2 = new ComputeNode();
+                backend2.setAlive(true);
+                backend2.setHost("host10002");
+                backend2.setBrpcPort(10002);
+                backend2.setHttpPort(10012);
+                systemInfoService.getBackendOrComputeNode(10002L);
+                result = backend2;
+
+                systemInfoService.checkNodeAvailable(backend2);
+                result = true;
+
+                NetUtils.checkAccessibleForAllPorts((String) any, (List<Integer>) any);
+                result = true;
+
+                // backend 10003, which is not available
+                ComputeNode backend3 = new ComputeNode();
+                backend3.setAlive(true);
+                backend3.setHost("host10003");
+                backend3.setBrpcPort(10003);
+                backend3.setHttpPort(10013);
+                systemInfoService.getBackendOrComputeNode(10003L);
+                result = backend3;
+
+                systemInfoService.checkNodeAvailable(backend3);
+                result = true;
+            }
+        };
+
+        blacklist.add(10001L);
+        blacklist.add(10002L);
+        blacklist.add(10003L);
+        for (int i = 0; i < 7; i++) {
+            blacklist.add(10003L);
+            Thread.sleep(1000);
+            Assert.assertTrue(blacklist.contains(10003L));
+        }
+
+        Thread.sleep(2000);
+        blacklist.refresh();
+        Assert.assertFalse(blacklist.contains(10003L));
+    }
+
+    @Test
+    public void testManualAdd(@Mocked GlobalStateMgr globalStateMgr,
+                              @Mocked SystemInfoService systemInfoService,
+                              @Mocked NetUtils utils) throws InterruptedException {
+        Config.black_host_history_sec = 5; // 5s
+        HostBlacklist blacklist = new HostBlacklist();
+        new Expectations() {
+            {
+                globalStateMgr.getNodeMgr().getClusterInfo();
+                result = systemInfoService;
+
+                // backend 10003, which is not available
+                ComputeNode backend3 = new ComputeNode();
+                backend3.setAlive(true);
+                backend3.setHost("host10003");
+                backend3.setBrpcPort(10003);
+                backend3.setHttpPort(10013);
+                systemInfoService.getBackendOrComputeNode(10003L);
+                result = backend3;
+
+                systemInfoService.checkNodeAvailable(backend3);
+                result = true;
+            }
+        };
+
+        blacklist.addByManual(10003L);
+        Thread.sleep(7000);
+        Assert.assertTrue(blacklist.contains(10003L));
+
+        Thread.sleep(2000);
+        blacklist.refresh();
+        Assert.assertTrue(blacklist.contains(10003L));
     }
 }

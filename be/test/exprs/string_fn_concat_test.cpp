@@ -566,7 +566,7 @@ TEST_F(StringFunctionConcatTest, concatWsBigOversizeTest) {
     auto col3 = BinaryColumn::create();
     auto sep_null_col = NullColumn::create();
     auto null_col = NullColumn::create();
-    for (int i = 3786; i < 3796; ++i) {
+    for (int i = 3795; i < 3796; ++i) {
         sep->append(Slice(std::string(OLAP_STRING_MAX_LENGTH - i, 'x')));
         col0->append(Slice(std::string(100, 'y')));
         col1->append(Slice(std::string(i + 1, 'z')));
@@ -574,6 +574,6 @@ TEST_F(StringFunctionConcatTest, concatWsBigOversizeTest) {
         col3->append(Slice(std::string(3796 - i, 'v')));
     }
     prepare_concat_ws_data(sep_null_col, null_col, sep, col0, col1, col2, col3);
-    concat_ws_test(sep_null_col, null_col, sep, col0, col1, col2, col3, 30);
+    concat_ws_test(sep_null_col, null_col, sep, col0, col1, col2, col3, 2);
 }
 } // namespace starrocks

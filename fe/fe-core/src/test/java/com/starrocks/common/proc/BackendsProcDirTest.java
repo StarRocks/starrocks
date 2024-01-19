@@ -38,6 +38,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
@@ -60,6 +61,9 @@ public class BackendsProcDirTest {
     @Mocked
     private EditLog editLog;
 
+    @Mocked
+    private NodeMgr nodeMgr;
+
     @Before
     public void setUp() {
         b1 = new Backend(1000, "host1", 10000);
@@ -69,6 +73,10 @@ public class BackendsProcDirTest {
 
         new Expectations() {
             {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+
                 editLog.logAddBackend((Backend) any);
                 minTimes = 0;
 
@@ -109,19 +117,19 @@ public class BackendsProcDirTest {
 
         new Expectations(globalStateMgr) {
             {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
-                GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+                globalStateMgr.getTabletInvertedIndex();
                 minTimes = 0;
                 result = tabletInvertedIndex;
 
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
             }
@@ -193,7 +201,7 @@ public class BackendsProcDirTest {
         Assert.assertTrue(result instanceof BaseProcResult);
     }
 
-    @Test    
+    @Test
     public void testIPTitle() {
         Assert.assertTrue(BackendsProcDir.TITLE_NAMES.get(1).equals("IP"));
     }

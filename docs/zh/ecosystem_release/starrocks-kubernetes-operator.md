@@ -17,8 +17,7 @@ StarRocks 提供的 Operator 用于在 Kubernetes 环境中部署 StarRocks 集�
 
 **源码下载地址：**
 
-- [starrocks-kubernetes-operator](https://github.com/StarRocks/starrocks-kubernetes-operator)
-- [kube-starrocks Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator/tree/main/helm-charts/charts/kube-starrocks)
+[starrocks-kubernetes-operator and kube-starrocks Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator)
 
 **资源下载地址:**
 

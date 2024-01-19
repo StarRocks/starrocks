@@ -184,14 +184,6 @@ public class DeleteHandlerTest {
                 AgentTaskQueue.addTask((AgentTask) any);
                 minTimes = 0;
                 result = true;
-
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-                minTimes = 0;
-                result = systemInfoService;
-
-                systemInfoService.getBackendIds(true);
-                minTimes = 0;
-                result = Lists.newArrayList();
             }
         };
     }

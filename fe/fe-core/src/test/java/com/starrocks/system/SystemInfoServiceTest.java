@@ -12,13 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.system;
 
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.ModifyBackendAddressClause;
@@ -153,18 +153,28 @@ public class SystemInfoServiceTest {
         Backend be = new Backend(10001, "newHost", 1000);
         service.addBackend(be);
 
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
+
         new Expectations() {
             {
                 service.getBackendWithHeartbeatPort("newHost", 1000);
                 minTimes = 0;
                 result = be;
 
-                globalStateMgr.getLocalMetastore().getCluster();
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
+            }
+        };
+
+        new Expectations(localMetastore) {
+            {
+                localMetastore.getCluster();
                 minTimes = 0;
                 result = new Cluster("cluster", 1);
             }
         };
-        
+
         service.addBackend(be);
         be.setStarletPort(1001);
         service.dropBackend("newHost", 1000, false);
@@ -184,13 +194,22 @@ public class SystemInfoServiceTest {
         Backend be = new Backend(10001, "newHost", 1000);
         be.setStarletPort(1001);
 
+        LocalMetastore localMetastore = new LocalMetastore(globalStateMgr, null, null);
         new Expectations() {
             {
                 service.getBackendWithHeartbeatPort("newHost", 1000);
                 minTimes = 0;
                 result = be;
 
-                globalStateMgr.getLocalMetastore().getCluster();
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
+            }
+        };
+
+        new Expectations(localMetastore) {
+            {
+                localMetastore.getCluster();
                 minTimes = 0;
                 result = new Cluster("cluster", 1);
             }
@@ -201,7 +220,6 @@ public class SystemInfoServiceTest {
         Backend beIP = service.getBackendWithHeartbeatPort("newHost", 1000);
         Assert.assertTrue(beIP == null);
     }
-
 
     @Mocked
     InetAddress addr;
