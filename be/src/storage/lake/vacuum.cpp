@@ -39,6 +39,22 @@
 
 namespace starrocks::lake {
 
+namespace {
+static void cache_deleter(const CacheKey& key, void* value) {
+    // nothing to do
+}
+
+static bool cache_has_tablet_id(TabletManager* tablet_mgr, int64_t tablet_id) {
+    auto cache = tablet_mgr->deleted_tablet_id_cache();
+    auto handle = cache->lookup(CacheKey(std::to_string(tablet_id)));
+    if (handle != nullptr) {
+        cache->release(handle);
+        return true;
+    }
+    return false;
+}
+} // namespace
+
 static int get_num_delete_file_queued_tasks(void*) {
 #ifndef BE_TEST
     auto tp = ExecEnv::GetInstance()->delete_file_thread_pool();
@@ -597,17 +613,43 @@ Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_di
         }
     }
 
-    return deleter.finish();
+    auto ret = deleter.finish();
+    if (ret.ok()) {
+        auto deleted_id_cache = tablet_mgr->deleted_tablet_id_cache();
+        for (auto id : tablet_ids) {
+            static int kValueMark = 1;
+            auto h = deleted_id_cache->insert(CacheKey(std::to_string(id)), &kValueMark, 1, cache_deleter);
+            if (h != nullptr) {
+                deleted_id_cache->release(h);
+            }
+        }
+    }
+    return ret;
 }
 
 void delete_tablets(TabletManager* tablet_mgr, const DeleteTabletRequest& request, DeleteTabletResponse* response) {
     DCHECK(tablet_mgr != nullptr);
     DCHECK(request.tablet_ids_size() > 0);
     DCHECK(response != nullptr);
-    std::vector<int64_t> tablet_ids(request.tablet_ids().begin(), request.tablet_ids().end());
-    std::sort(tablet_ids.begin(), tablet_ids.end());
-    auto root_dir = tablet_mgr->tablet_root_location(tablet_ids[0]);
-    auto st = delete_tablets_impl(tablet_mgr, root_dir, tablet_ids);
+
+    std::vector<int64_t> tablet_ids;
+    for (auto tablet_id : request.tablet_ids()) {
+        if (!cache_has_tablet_id(tablet_mgr, tablet_id)) {
+            tablet_ids.push_back(tablet_id);
+        } else if (config::lake_print_delete_log) {
+            LOG(INFO) << "tablet:" << tablet_id << " already deleted, skip it";
+        }
+    }
+
+    auto st = Status::OK();
+    if (!tablet_ids.empty()) {
+        std::sort(tablet_ids.begin(), tablet_ids.end());
+        auto root_dir = tablet_mgr->tablet_root_location(tablet_ids[0]);
+        st.update(delete_tablets_impl(tablet_mgr, root_dir, tablet_ids));
+        if (st.ok() && config::lake_print_delete_log) {
+            LOG(INFO) << "Deleted tablets: " << fmt::format("{}", fmt::join(tablet_ids, ", "));
+        }
+    }
     st.to_protobuf(response->mutable_status());
 }
 

@@ -28,6 +28,7 @@
 #include "storage/options.h"
 
 namespace starrocks {
+class Cache;
 struct FileInfo;
 class Segment;
 class TabletSchemaPB;
@@ -147,6 +148,8 @@ public:
     // The return value will never be null.
     Metacache* metacache() { return _metacache.get(); }
 
+    Cache* deleted_tablet_id_cache() { return _deleted_tablet_id_cache.get(); }
+
     StatusOr<int64_t> get_tablet_data_size(int64_t tablet_id, int64_t* version_hint);
 
     int64_t in_writing_data_size(int64_t tablet_id);
@@ -183,6 +186,8 @@ private:
 
     LocationProvider* _location_provider;
     std::unique_ptr<Metacache> _metacache;
+    // cache recent deleted tablet ids
+    std::unique_ptr<Cache> _deleted_tablet_id_cache;
     std::unique_ptr<CompactionScheduler> _compaction_scheduler;
     UpdateManager* _update_mgr;
 

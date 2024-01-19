@@ -45,6 +45,7 @@ public:
     void SetUp() override {
         clear_and_init_test_dir();
         config::lake_vacuum_min_batch_delete_size = GetParam().min_batch_size;
+        _tablet_mgr->deleted_tablet_id_cache()->prune();
     }
 
     void TearDown() override {
@@ -84,6 +85,26 @@ protected:
         std::string error;
         CHECK(json2pb::JsonToProtoMessage(json, message.get(), &error)) << error;
         return message;
+    }
+
+    bool lookup_deleted_cache(int64_t tablet_id) {
+        auto cache = _tablet_mgr->deleted_tablet_id_cache();
+        auto h = cache->lookup(CacheKey(std::to_string(tablet_id)));
+        if (h != nullptr) {
+            cache->release(h);
+        }
+        return h != nullptr;
+    }
+
+    static void noop(const CacheKey& key, void* value) {
+        // do nothing
+    }
+
+    void fill_deleted_cache(int64_t tablet_id) {
+        auto cache = _tablet_mgr->deleted_tablet_id_cache();
+        auto h = cache->insert(CacheKey(std::to_string(tablet_id)), (void*)0, 1, LakeVacuumTest::noop);
+        EXPECT_NE(h, nullptr);
+        cache->release(h);
     }
 };
 
@@ -666,6 +687,11 @@ TEST_P(LakeVacuumTest, test_delete_tablets_01) {
         }
         )DEL")));
 
+    // no cache at all before the running
+    EXPECT_FALSE(lookup_deleted_cache(700));
+    EXPECT_FALSE(lookup_deleted_cache(701));
+    EXPECT_FALSE(lookup_deleted_cache(702));
+
     DeleteTabletRequest request;
     DeleteTabletResponse response;
     request.add_tablet_ids(700);
@@ -679,6 +705,10 @@ TEST_P(LakeVacuumTest, test_delete_tablets_01) {
     EXPECT_FALSE(file_exist(tablet_metadata_filename(701, 3)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(702, 2)));
     EXPECT_TRUE(file_exist(tablet_metadata_filename(702, 3)));
+
+    EXPECT_TRUE(lookup_deleted_cache(700));
+    EXPECT_TRUE(lookup_deleted_cache(701));
+    EXPECT_FALSE(lookup_deleted_cache(702));
 }
 
 // NOLINTNEXTLINE
@@ -787,7 +817,7 @@ TEST_P(LakeVacuumTest, test_delete_tablets_02) {
         EXPECT_FALSE(file_exist("00000000000459e4_3d9c9edb-a69d-4a06-9093-a9f557e4c3b0.dat"));
         EXPECT_FALSE(file_exist("00000000000459e3_9ae981b3-7d4b-49e9-9723-d7f752686154.delvec"));
     }
-    {
+    { // duplicate deletion of the same tablet, still fine.
         DeleteTabletRequest request;
         DeleteTabletResponse response;
         request.add_tablet_ids(800);
@@ -896,6 +926,51 @@ TEST_P(LakeVacuumTest, test_delete_tablets_03) {
         // Referenced in the txn log of tablet id 901 and txn id 5000
         EXPECT_TRUE(file_exist("00000000004259e4_47dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
     }
+}
+
+TEST_P(LakeVacuumTest, test_delete_tablets_cache_hit) {
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 700,
+        "version": 2
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 701,
+        "version": 2
+        }
+        )DEL")));
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 702,
+        "version": 2
+        }
+        )DEL")));
+
+    fill_deleted_cache(700);
+
+    EXPECT_TRUE(lookup_deleted_cache(700));
+    EXPECT_FALSE(lookup_deleted_cache(701));
+    EXPECT_FALSE(lookup_deleted_cache(702));
+
+    DeleteTabletRequest request;
+    DeleteTabletResponse response;
+    request.add_tablet_ids(700);
+    request.add_tablet_ids(701);
+    delete_tablets(_tablet_mgr.get(), request, &response);
+    EXPECT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code());
+    // not deleted, because of delete_tablet_id cache hit
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(700, 2)));
+    // deleted
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(701, 2)));
+    // not deleted, not in the delete request
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(702, 2)));
+
+    EXPECT_TRUE(lookup_deleted_cache(700));
+    EXPECT_TRUE(lookup_deleted_cache(701));
+    EXPECT_FALSE(lookup_deleted_cache(702));
 }
 
 // NOLINTNEXTLINE
@@ -1326,6 +1401,7 @@ TEST(LakeVacuumTest2, test_delete_files_retry2) {
         attempts++;
         SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
         SyncPoint::GetInstance()->DisableProcessing();
+        fs::delete_file("test_vacuum_delete_files_retry2.txt");
     });
 
     auto future2 = delete_files_callable({"test_vacuum_delete_files_retry2.txt"});
@@ -1357,6 +1433,7 @@ TEST(LakeVacuumTest2, test_delete_files_retry3) {
         attempts++;
         SyncPoint::GetInstance()->ClearCallBack("PosixFileSystem::delete_file");
         SyncPoint::GetInstance()->DisableProcessing();
+        fs::delete_file("test_vacuum_delete_files_retry3.txt");
     });
 
     auto future = delete_files_callable({"test_vacuum_delete_files_retry3.txt"});

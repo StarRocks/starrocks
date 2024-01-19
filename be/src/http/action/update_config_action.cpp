@@ -150,6 +150,11 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             auto tablet_mgr = _exec_env->lake_tablet_manager();
             if (tablet_mgr != nullptr) tablet_mgr->update_metacache_limit(config::lake_metadata_cache_limit);
         });
+        _config_callback.emplace("lake_deleted_tablet_id_cache_limit", [&]() {
+            auto tablet_mgr = _exec_env->lake_tablet_manager();
+            if (tablet_mgr != nullptr)
+                tablet_mgr->deleted_tablet_id_cache()->set_capacity(config::lake_deleted_tablet_id_cache_limit);
+        });
 #ifdef USE_STAROS
         _config_callback.emplace("starlet_use_star_cache", [&]() { update_staros_starcache(); });
 #endif

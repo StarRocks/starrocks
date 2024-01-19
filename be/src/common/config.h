@@ -919,6 +919,7 @@ CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
+CONF_mInt64(lake_deleted_tablet_id_cache_limit, "536870912"); // 512MB, around 20mi cache items
 CONF_mBool(lake_print_delete_log, "true");
 CONF_mBool(lake_compaction_check_txn_log_first, "false");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
