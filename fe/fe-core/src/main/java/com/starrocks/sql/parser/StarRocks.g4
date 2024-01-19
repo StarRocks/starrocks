@@ -617,12 +617,19 @@ columnNameWithComment
 // ------------------------------------------- Task Statement ----------------------------------------------------------
 
 submitTaskStatement
-    : SUBMIT TASK qualifiedName? properties?
+    : SUBMIT TASK qualifiedName?
+        ( properties?
+          | taskScheduleDesc?
+        )
     AS (createTableAsSelectStatement | insertStatement )
     ;
 
 dropTaskStatement
     : DROP TASK qualifiedName FORCE?
+    ;
+
+taskScheduleDesc
+    : SCHEDULE (START '(' string ')')? EVERY '(' interval ')'
     ;
 
 // ------------------------------------------- Materialized View Statement ---------------------------------------------

@@ -102,6 +102,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -1421,11 +1422,50 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return result;
     }
 
+    private TaskSchedule parseTaskSchedule(StarRocksParser.TaskScheduleDescContext scheduleDesc) {
+        LocalDateTime startTime = null;
+        boolean defineStartTime = false;
+
+        var desc = context.taskScheduleDesc();
+        TaskSchedule schedule = null;
+        if (desc.START() != null) {
+            NodePosition timePos = createPos(context.string());
+            StringLiteral stringLiteral = (StringLiteral) visit(desc.string());
+            DateTimeFormatter dateTimeFormatter = null;
+            try {
+                dateTimeFormatter = DateUtils.probeFormat(stringLiteral.getStringValue());
+                LocalDateTime tempStartTime = DateUtils.
+                        parseStringWithDefaultHSM(stringLiteral.getStringValue(), dateTimeFormatter);
+                startTime = tempStartTime;
+                defineStartTime = true;
+            } catch (AnalysisException e) {
+                throw new ParsingException(PARSER_ERROR_MSG.invalidDateFormat(stringLiteral.getStringValue()),
+                        timePos);
+            }
+        }
+
+        if (context.interval() != null) {
+            intervalLiteral = (IntervalLiteral) visit(context.interval());
+            if (!(intervalLiteral.getValue() instanceof IntLiteral)) {
+                String exprSql = intervalLiteral.getValue().toSql();
+                throw new ParsingException(PARSER_ERROR_MSG.unsupportedExprWithInfo(exprSql, "INTERVAL"),
+                        createPos(context.interval()));
+            }
+        }
+        return schedule;
+    }
+
     @Override
     public ParseNode visitSubmitTaskStatement(StarRocksParser.SubmitTaskStatementContext context) {
         QualifiedName qualifiedName = null;
         if (context.qualifiedName() != null) {
             qualifiedName = getQualifiedName(context.qualifiedName());
+        }
+
+        // schedule
+        TaskSchedule schedule = null;
+        if (context.taskScheduleDesc() != null) {
+            schedule = parseTaskSchedule(context.taskScheduleDesc());
         }
 
         // properties
@@ -1454,9 +1494,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             taskName = qualifiedNameToTaskName(qualifiedName);
         }
         if (createTableAsSelectStmt != null) {
-            return new SubmitTaskStmt(taskName, properties, startIndex, createTableAsSelectStmt, pos);
+            return new SubmitTaskStmt(taskName, properties, startIndex, schedule, createTableAsSelectStmt, pos);
         } else {
-            return new SubmitTaskStmt(taskName, properties, startIndex, insertStmt, pos);
+            return new SubmitTaskStmt(taskName, properties, startIndex, schedule, insertStmt, pos);
         }
     }
 
