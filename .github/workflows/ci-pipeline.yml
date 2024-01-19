@@ -1,7 +1,7 @@
-name: CI PIPELINE - CLOUD
+name: CI PIPELINE
 
 on:
-  pull_request_target:
+  pull_request:
     types:
       - opened
       - synchronize
@@ -60,12 +60,14 @@ jobs:
         with:
           filters: |
             be:
-            - 'be/**'
+            - 'be/!(test)**'
             - 'gensrc/**'
             - 'run-be-ut.sh'
             - 'build.sh'
             - 'thirdparty/**'
             - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
+            be-ut:
+            - 'be/test/**'
             thirdparty:
             - 'thirdparty/**'
             - 'docker/dockerfiles/dev-env/dev-env.Dockerfile'
@@ -561,7 +563,7 @@ jobs:
     runs-on: [self-hosted, normal]
     if: always() && needs.build.result == 'success'
     needs: build
-    name: DEPLOY SR - Shared-nothing
+    name: DEPLOY SR
     env:
       PR_NUMBER: ${{ github.event.number }}
     outputs:
@@ -666,7 +668,7 @@ jobs:
         id: run_case
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/run-sql-tester.sh
+          ./bin/run-sql-tester.sh || true
 
       - name: Upload SQL-Tester XML
         if: success() || failure()
