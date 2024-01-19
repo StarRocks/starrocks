@@ -125,8 +125,6 @@ private:
 
     bool _contains_deleted_row(uint32_t page_index) const;
 
-    bool _skip_fill_data_cache() const { return !_opts.fill_data_cache; }
-
     ColumnReader* _reader;
 
     // 1. The _page represents current page.
