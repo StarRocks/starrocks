@@ -690,6 +690,7 @@ public class CoordinatorPreprocessor {
                             hostSet.add(e.second);
                             recordUsedBackend(e.second, e.first);
                         });
+                        maxParallelism = hostSet.size() * fragment.getParallelExecNum();
                     }
                 }
 
