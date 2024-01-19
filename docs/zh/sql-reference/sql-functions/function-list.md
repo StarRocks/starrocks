@@ -415,10 +415,6 @@ StarRocks 提供了丰富的函数，方便您在日常数据查询和分析时�
 |  [like](./like-predicate-functions/like.md) | 判断字符串是否**模糊匹配**给定的模式 `pattern`。 |
 |  [regexp](./like-predicate-functions/regexp.md) | 判断字符串是否匹配给定的正则表达式 `pattern`。 |
 |  [regexp_extract](./like-predicate-functions/regexp_extract.md) | 对字符串进行正则匹配，抽取符合 pattern 的第 pos 个匹配部分，需要 pattern 完全匹配 str 中的某部分，才能返回 pattern 部分中需匹配部分，如果没有匹配就返回空字符串。 |
-<<<<<<< HEAD
-=======
-|  [regexp_extract_all](./like-predicate-functions/regexp_extract_all.md) | 从 `str` 中提取与正则表达式 `pattern` 相匹配的子字符串并返回一个字符串数组。字符串必须匹配 `pos` 指定的正则分组。 |
->>>>>>> e0a42cf6fc ([Doc] Update 3.1.7 date trunc/adddate/time_slice interval, add days_add, count_if (#39397))
 |  [regexp_replace](./like-predicate-functions/regexp_replace.md) | 对字符串进行正则匹配，将命中 pattern 的部分使用 repl 来进行替换。 |
 
 ## 条件函数
