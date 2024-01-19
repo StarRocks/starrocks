@@ -214,7 +214,8 @@ public class KafkaUtil {
                     try {
                         result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
                     } catch (Exception e) {
-                        LOG.warn("failed to send proxy request to " + address + " err " + e.getMessage());
+                        LOG.warn("Error occurred during interaction between BE and Kafka broker. BE address " 
+                                    + address + " err " + e.getMessage());
                         // Jprotobuf-rpc-socket throws an ExecutionException when an exception occurs.
                         // We use the error message to identify the type of exception.
                         if (e.getMessage().contains("Ocurrs time out")) {
@@ -230,9 +231,9 @@ public class KafkaUtil {
                     }
                     TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
                     if (code != TStatusCode.OK) {
-                        LOG.warn("failed to send proxy request to " + address + " err " + result.status.errorMsgs);
-                        throw new UserException(
-                                "failed to send proxy request to " + address + " err " + result.status.errorMsgs);
+                        LOG.warn("Error occurred during interaction between BE and Kafka broker. BE address " 
+                                    + address + " err " + result.status.errorMsgs);
+                        throw new UserException(result.status.errorMsgs.toString());
                     } else {
                         return result;
                     }
@@ -242,10 +243,11 @@ public class KafkaUtil {
                 Thread.currentThread().interrupt();
                 throw new LoadException("got interrupted exception when sending proxy request to " + address);
             } catch (Exception e) {
-                LOG.warn("failed to send proxy request to " + address + " err " + e.getMessage());
-                throw new LoadException("failed to send proxy request to " + address + " err " + e.getMessage());
+                LOG.warn("Error occurred during interaction between BE and Kafka broker. BE address " 
+                                    + address + " err " + e.getMessage());
+                throw new LoadException("Error occurred during interaction between BE and Kafka broker. BE address " 
+                                    + address + " err " + e.getMessage());
             }
         }
     }
 }
-

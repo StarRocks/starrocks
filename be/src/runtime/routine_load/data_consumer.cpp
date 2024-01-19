@@ -182,7 +182,8 @@ Status KafkaDataConsumer::assign_topic_partitions(const std::map<int32_t, int64_
     RdKafka::ErrorCode err = _k_consumer->assign(topic_partitions);
     if (err) {
         LOG(WARNING) << "failed to assign topic partitions: " << ctx->brief(true) << ", err: " << RdKafka::err2str(err);
-        return Status::InternalError("failed to assign topic partitions");
+        std::string error_msg = "failed to assign topic partitions. " + _k_event_cb.get_error_msg();
+        return Status::InternalError(error_msg);
     }
 
     return Status::OK();
@@ -241,6 +242,7 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
             std::stringstream ss;
             ss << msg->errstr() << ", partition " << msg->partition() << " offset " << msg->offset() << " has no data";
             LOG(WARNING) << "kafka consume failed: " << _id << ", msg: " << ss.str();
+            ss << ". " << _k_event_cb.get_error_msg();
             st = Status::InternalError(ss.str());
             break;
         }
@@ -266,7 +268,8 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
         default:
             LOG(WARNING) << "kafka consume failed: " << _id << ", msg: " << msg->errstr();
             done = true;
-            st = Status::InternalError(msg->errstr());
+            std::string error_msg = msg->errstr() + ". " + _k_event_cb.get_error_msg();
+            st = Status::InternalError(error_msg);
             break;
         }
 
@@ -304,7 +307,10 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
         if (err != RdKafka::ERR_NO_ERROR) {
             LOG(WARNING) << "failed to query watermark offset of topic: " << _topic << " partition: " << p_id
                          << ", err: " << RdKafka::err2str(err);
-            return Status::InternalError("failed to query watermark offset, err: " + RdKafka::err2str(err));
+            std::stringstream ss;
+            ss << "failed to query watermark offset, err: " << RdKafka::err2str(err);
+            ss << ". " << _k_event_cb.get_error_msg();
+            return Status::InternalError(ss.str());
         }
         beginning_offsets->push_back(beginning_offset);
         latest_offsets->push_back(latest_offset);
@@ -339,7 +345,7 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
         std::stringstream ss;
         ss << "failed to get partition meta: " << RdKafka::err2str(err);
         LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str());
+        return Status::InternalError(ss.str() + ". " + _k_event_cb.get_error_msg());
     }
     auto meta_deleter = [metadata]() { delete metadata; };
     DeferOp delete_meta([meta_deleter] { return meta_deleter(); });
@@ -358,7 +364,7 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
                 ss << ", try again";
             }
             LOG(WARNING) << ss.str();
-            return Status::InternalError(ss.str());
+            return Status::InternalError(ss.str() + ". " + _k_event_cb.get_error_msg());
         }
 
         RdKafka::TopicMetadata::PartitionMetadataIterator ip;
@@ -368,7 +374,7 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
     }
 
     if (partition_ids->empty()) {
-        return Status::InternalError("no partition in this topic");
+        return Status::InternalError("no partition in this topic. " + _k_event_cb.get_error_msg());
     }
 
     return Status::OK();
@@ -390,6 +396,7 @@ Status KafkaDataConsumer::reset() {
     _cancelled = false;
     _k_consumer->unassign();
     _non_eof_partition_count = 0;
+    _k_event_cb.reset_error_msg();
     return Status::OK();
 }
 
@@ -398,6 +405,7 @@ Status KafkaDataConsumer::commit(std::vector<RdKafka::TopicPartition*>& offset) 
     if (err != RdKafka::ERR_NO_ERROR) {
         std::stringstream ss;
         ss << "failed to commit kafka offset : " << RdKafka::err2str(err);
+        ss << ". " << _k_event_cb.get_error_msg();
         return Status::InternalError(ss.str());
     }
     return Status::OK();

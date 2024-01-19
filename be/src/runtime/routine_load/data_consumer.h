@@ -93,13 +93,18 @@ public:
         switch (event.type()) {
         case RdKafka::Event::EVENT_ERROR:
             LOG(INFO) << "kafka error: " << RdKafka::err2str(event.err()) << ", event: " << event.str();
+            log_event_msg(event);
             break;
+
         case RdKafka::Event::EVENT_STATS:
             LOG(INFO) << "kafka stats: " << event.str();
             break;
 
         case RdKafka::Event::EVENT_LOG:
             LOG(INFO) << "kafka log-" << event.severity() << "-" << event.fac().c_str() << ", event: " << event.str();
+            if (event.severity() >= RdKafka::Event::EVENT_SEVERITY_ERROR) {
+                log_event_msg(event);
+            }
             break;
 
         case RdKafka::Event::EVENT_THROTTLE:
@@ -113,6 +118,22 @@ public:
             break;
         }
     }
+
+    std::string get_error_msg() { return _error_msg; }
+
+    void reset_error_msg() { _error_msg.clear(); }
+
+private:
+    void log_event_msg(const RdKafka::Event& event) {
+        if (_error_msg.size() < _event_error_msg_max_length && event.str().size() > 0) {
+            std::string error_msg = "event_error: " + event.str() + ". ";
+            // Just like: event_error: xxxxx. event_error: xxxxx. event_error: xxx
+            _error_msg = _error_msg + error_msg.substr(0, _event_error_msg_max_length - _error_msg.size());
+        }
+    }
+
+    std::string _error_msg;
+    const static size_t _event_error_msg_max_length = 1024;
 };
 
 class KafkaDataConsumer : public DataConsumer {
