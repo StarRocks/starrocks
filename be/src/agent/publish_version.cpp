@@ -70,14 +70,8 @@ void run_publish_version_task(ThreadPoolToken* token, const TPublishVersionReque
     if (is_replication_txn) {
         std::vector<std::vector<TTabletId>> partitions(num_partition);
         for (size_t i = 0; i < publish_version_req.partition_version_infos.size(); i++) {
-            Status st = StorageEngine::instance()->replication_txn_manager()->get_txn_related_tablets(
+            StorageEngine::instance()->replication_txn_manager()->get_txn_related_tablets(
                     transaction_id, publish_version_req.partition_version_infos[i].partition_id, &partitions[i]);
-            if (!st.ok()) {
-                LOG(WARNING) << "failed to publish version for replication txn, get_txn_related_tablets failed: " << st
-                             << ", txn_id: " << transaction_id
-                             << ", partition_id: " << publish_version_req.partition_version_infos[i].partition_id;
-                return;
-            }
             num_active_tablet += partitions[i].size();
         }
 

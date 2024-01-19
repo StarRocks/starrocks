@@ -84,7 +84,7 @@ public:
         status = StorageEngine::instance()->tablet_manager()->delete_shutdown_tablet(_src_tablet_id);
         EXPECT_TRUE(status.ok()) << status;
         status = fs::remove_all(config::storage_root_path);
-        EXPECT_TRUE(status.ok()) << status;
+        EXPECT_TRUE(status.ok() || status.is_not_found()) << status;
     }
 
     TCreateTabletReq get_create_tablet_req(int64_t tablet_id, int64_t version, int32_t schema_hash,

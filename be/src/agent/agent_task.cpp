@@ -175,6 +175,10 @@ void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& age
                 StorageEngine::instance()->txn_manager()->get_tablet_related_txns(
                         drop_tablet_req.tablet_id, drop_tablet_req.schema_hash, dropped_tablet->tablet_uid(),
                         &partition_id, &transaction_ids);
+                if (transaction_ids.empty()) {
+                    StorageEngine::instance()->replication_txn_manager()->get_tablet_related_txns(
+                            drop_tablet_req.tablet_id, &transaction_ids);
+                }
             }
             if (!transaction_ids.empty()) {
                 std::stringstream ss;

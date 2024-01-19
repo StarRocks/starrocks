@@ -97,7 +97,7 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
         *incremental_snapshot = true;
         status = make_remote_snapshot(request, &missed_versions, nullptr, &src_backend, src_snapshot_path);
         if (!status.ok()) {
-            LOG(INFO) << "Fail to make incremental snapshot: " << status << ". switch to fully snapshot"
+            LOG(INFO) << "Failed to make incremental snapshot: " << status << ". switch to fully snapshot"
                       << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
                       << ", src_tablet_id: " << request.src_tablet_id
                       << ", visible_version: " << request.visible_version
@@ -108,7 +108,7 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
     }
 
     if (!status.ok()) {
-        LOG(WARNING) << "Fail to make remote snapshot: " << status << ", txn_id: " << request.transaction_id
+        LOG(WARNING) << "Failed to make remote snapshot: " << status << ", txn_id: " << request.transaction_id
                      << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
                      << ", visible_version: " << request.visible_version
                      << ", snapshot_version: " << request.src_visible_version;
@@ -163,7 +163,7 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
 
         if (!status_or.ok()) {
             status = status_or.status();
-            LOG(WARNING) << "Fail to download snapshot from " << src_snapshot_info.backend.host << ":"
+            LOG(WARNING) << "Failed to download snapshot from " << src_snapshot_info.backend.host << ":"
                          << src_snapshot_info.backend.http_port << ":" << src_snapshot_info.snapshot_path << ", "
                          << status << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
                          << ", src_tablet_id: " << request.src_tablet_id
@@ -235,7 +235,7 @@ StatusOr<TxnLogPtr> ReplicationTxnManager::replicate_remote_snapshot(const TRepl
         TabletMeta tablet_meta;
         auto status = tablet_meta.create_from_memory(header_file_content);
         if (!status.ok()) {
-            LOG(WARNING) << "Fail to parse remote snapshot header file: " << remote_header_file_name
+            LOG(WARNING) << "Failed to parse remote snapshot header file: " << remote_header_file_name
                          << ", content: " << header_file_content << ", " << status;
             return status;
         }
@@ -261,7 +261,7 @@ StatusOr<TxnLogPtr> ReplicationTxnManager::replicate_remote_snapshot(const TRepl
         SnapshotMeta snapshot_meta;
         auto status = snapshot_meta.parse_from_file(memory_file.get());
         if (!status.ok()) {
-            LOG(WARNING) << "Fail to parse remote snapshot meta file: " << snapshot_meta_file_name
+            LOG(WARNING) << "Failed to parse remote snapshot meta file: " << snapshot_meta_file_name
                          << ", content: " << snapshot_meta_content << ", " << status;
             return status;
         }
