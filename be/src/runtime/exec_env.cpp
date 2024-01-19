@@ -434,7 +434,9 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     }
 
     _broker_mgr = new BrokerMgr(this);
+#ifndef BE_TEST
     _bfd_parser = BfdParser::create();
+#endif
     _load_channel_mgr = new LoadChannelMgr();
     _load_stream_mgr = new LoadStreamMgr();
     _brpc_stub_cache = new BrpcStubCache();
