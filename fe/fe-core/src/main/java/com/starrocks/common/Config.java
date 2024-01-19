@@ -1577,6 +1577,12 @@ public class Config extends ConfigBase {
     public static boolean enable_starrocks_external_table_auth_check = true;
 
     /**
+     * If set to true, the granularity of auth check extends to the column level
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_column_level_auth_check = false;
+
+    /**
      * The authentication_chain configuration specifies the sequence of security integrations
      * that will be used to authenticate a user. Each security integration in the chain will be
      * tried in the order they are defined until one of them successfully authenticates the user.
