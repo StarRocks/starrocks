@@ -24,6 +24,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.MvNormalizePredicateRule;
@@ -148,5 +149,18 @@ public class ScalarOperatorRewriterTest {
 
             Assert.assertEquals("2: b < 101: b", result.toString());
         }
+    }
+
+    @Test
+    public void testNormalizeIsNull() {
+        ColumnRefOperator column1 = new ColumnRefOperator(0, Type.INT, "test0", false);
+        IsNullPredicateOperator isnotNull = new IsNullPredicateOperator(true, column1);
+        ScalarOperator rewritten = new ScalarOperatorRewriter()
+                .rewrite(isnotNull, ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
+        Assert.assertEquals(ConstantOperator.TRUE, rewritten);
+
+        ScalarOperator rewritten2 = new ScalarOperatorRewriter()
+                .rewrite(isnotNull, ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
+        Assert.assertEquals(ConstantOperator.TRUE, rewritten2);
     }
 }
