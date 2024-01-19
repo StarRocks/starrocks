@@ -1540,12 +1540,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * Post actions after restore. Rebuild the materialized view by using table name instead of table ids
      * because the table ids have changed since the restore.
      *
-     * @param db : the new database after restore.
      * @return : rebuild status, ok if success other error status.
      */
     @Override
-    public Status doAfterRestore(Database db, MvRestoreContext mvRestoreContext) throws DdlException {
-        super.doAfterRestore(db, mvRestoreContext);
+    public Status doAfterRestore(MvRestoreContext mvRestoreContext) throws DdlException {
+        super.doAfterRestore(mvRestoreContext);
 
         if (baseTableInfos == null) {
             setInactiveAndReason("base mv is not active: base info is null");
@@ -1553,6 +1552,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     String.format("Materialized view %s's base info is not found", this.name));
         }
 
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            return new Status(Status.ErrCode.NOT_FOUND,
+                    String.format("Materialized view %s's db %s is not found", this.name, this.dbId));
+        }
         List<BaseTableInfo> newBaseTableInfos = Lists.newArrayList();
 
         boolean isSetInactive = false;
