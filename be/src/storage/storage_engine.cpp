@@ -238,6 +238,8 @@ Status StorageEngine::_open(const EngineOptions& options) {
         return _segment_replicate_executor->get_thread_pool()->num_queued_tasks();
     });
 
+    RETURN_IF_ERROR_WITH_WARN(_replication_txn_manager->init(dirs), "init ReplicationTxnManager failed");
+
     return Status::OK();
 }
 
