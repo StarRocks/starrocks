@@ -33,6 +33,7 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UpdateStmt;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -95,7 +96,12 @@ public class StatementPlanner {
             if (stmt instanceof QueryStatement) {
                 return planQuery(stmt, resultSinkType, session, false);
             } else if (stmt instanceof InsertStmt) {
-                return new InsertPlanner().plan((InsertStmt) stmt, session);
+                InsertStmt insertStmt = (InsertStmt) stmt;
+                boolean isSelect = !(insertStmt.getQueryStatement().getQueryRelation() instanceof ValuesRelation);
+                boolean isLeader = GlobalStateMgr.getCurrentState().isLeader();
+                boolean useOptimisticLock = isOnlyOlapTableQueries && isSelect && isLeader &&
+                        !session.getSessionVariable().isCboUseDBLock();
+                return new InsertPlanner(dbs, useOptimisticLock).plan((InsertStmt) stmt, session);
             } else if (stmt instanceof UpdateStmt) {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
@@ -181,9 +187,10 @@ public class StatementPlanner {
         // only collect once to save the original olapTable info
         Set<OlapTable> olapTables = collectOriginalOlapTables(queryStmt, dbs);
         for (int i = 0; i < Config.max_query_retry_time; ++i) {
-            long planStartTime = System.nanoTime();
+            long planStartTime = OptimisticVersion.generate();
             if (!isSchemaValid) {
-                colNames = reAnalyzeStmt(queryStmt, dbs, session);
+                reAnalyzeStmt(queryStmt, dbs, session);
+                colNames = queryStmt.getQueryRelation().getColumnOutputNames();
             }
 
             LogicalPlan logicalPlan;
@@ -216,7 +223,7 @@ public class StatementPlanner {
                  */
                 // For only olap table queries, we need to lock db here.
                 // Because we need to ensure multi partition visible versions are consistent.
-                long buildFragmentStartTime = System.nanoTime();
+                long buildFragmentStartTime = OptimisticVersion.generate();
                 ExecPlan plan = PlanFragmentBuilder.createPhysicalPlan(
                         optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory, colNames,
                         resultSinkType,
@@ -244,7 +251,7 @@ public class StatementPlanner {
         return null;
     }
 
-    private static Set<OlapTable> collectOriginalOlapTables(QueryStatement queryStmt, Map<String, Database> dbs) {
+    public static Set<OlapTable> collectOriginalOlapTables(StatementBase queryStmt, Map<String, Database> dbs) {
         Set<OlapTable> olapTables = Sets.newHashSet();
         try {
             // Need lock to avoid olap table metas ConcurrentModificationException
@@ -256,13 +263,15 @@ public class StatementPlanner {
         }
     }
 
-    public static List<String> reAnalyzeStmt(QueryStatement queryStmt, Map<String, Database> dbs, ConnectContext session) {
+    public static Set<OlapTable> reAnalyzeStmt(StatementBase queryStmt, Map<String, Database> dbs,
+                                               ConnectContext session) {
         try {
             lock(dbs);
             Analyzer.analyze(queryStmt, session);
-            // only copy olap table
-            AnalyzerUtils.copyOlapTable(queryStmt, Sets.newHashSet());
-            return queryStmt.getQueryRelation().getColumnOutputNames();
+            // only copy the latest olap table
+            Set<OlapTable> copiedTables = Sets.newHashSet();
+            AnalyzerUtils.copyOlapTable(queryStmt, copiedTables);
+            return copiedTables;
         } finally {
             unLock(dbs);
         }
