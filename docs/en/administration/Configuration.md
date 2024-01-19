@@ -1748,6 +1748,24 @@ BE dynamic parameters are as follows.
 - **Default:** 0.5
 - **Description:** The maximum proportion of data that a compaction can merge for a Primary Key table in a shared-data cluster. We recommend shrinking this value if a single tablet becomes excessively large. This parameter is supported from v3.1.5 onwards.
 
+#### create_tablet_worker_count
+
+- **Default**: 3
+- **Unit**: N/A
+- **Description**: The number of threads used to create a tablet. This configuration is changed to dynamic from v3.1.7 onwards.
+
+#### number_tablet_writer_threads
+
+- **Default**: 16
+- **Unit**: N/A
+- **Description**: The number of threads used for Stream Load. This configuration is changed to dynamic from v3.1.7 onwards.
+
+#### pipeline_connector_scan_thread_num_per_cpu
+
+- **Default**: 8
+- **Unit**: N/A
+- **Description**: The number of scan threads assigned to Pipeline Connector per CPU core in the BE node. This configuration is changed to dynamic from v3.1.7 onwards.
+
 ### Configure BE static parameters
 
 You can only set the static parameters of a BE by changing them in the corresponding configuration file **be.conf**, and restart the BE to allow the changes to take effect.
@@ -1813,12 +1831,6 @@ BE static parameters are as follows.
 - **Default**: 1
 - **Unit**: N/A
 - **Description**: The thread count of the BE heartbeat service.
-
-#### create_tablet_worker_count
-
-- **Default**: 3
-- **Unit**: N/A
-- **Description**: The number of threads used to create a tablet.
 
 #### drop_tablet_worker_count
 
@@ -2062,12 +2074,6 @@ BE static parameters are as follows.
 - **Default**: 4
 - **Unit**: Hour
 - **Description**: The reservation time for the files produced by small-scale loadings.
-
-#### number_tablet_writer_threads
-
-- **Default**: 16
-- **Unit**: N/A
-- **Description**: The number of threads used for Stream Load.
 
 #### streaming_load_rpc_max_alive_time_sec
 

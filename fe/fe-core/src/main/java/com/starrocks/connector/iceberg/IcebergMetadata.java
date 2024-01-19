@@ -328,6 +328,8 @@ public class IcebergMetadata implements ConnectorMetadata {
                         return ImmutableList.of(partition);
                     }
                 }
+                // for empty table, use -1 as last updated time
+                return ImmutableList.of(new Partition(-1));
             } catch (IOException e) {
                 throw new StarRocksConnectorException("Failed to get partitions for table: " + table.getName(), e);
             }
