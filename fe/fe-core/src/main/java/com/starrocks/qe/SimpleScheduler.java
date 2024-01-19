@@ -81,7 +81,7 @@ public class SimpleScheduler {
 
         ComputeNode node = computeNodes.get(nodeId);
         if (node != null && node.isAlive() && !HOST_BLACKLIST.contains(nodeId)) {
-            backendIdRef.setRef(nodeId);
+            nodeIdRef.setRef(nodeId);
             return new TNetworkAddress(node.getHost(), node.getBePort());
         } else {
             for (TScanRangeLocation location : locations) {
