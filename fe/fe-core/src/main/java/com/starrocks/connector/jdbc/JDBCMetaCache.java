@@ -17,6 +17,7 @@ package com.starrocks.connector.jdbc;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.starrocks.catalog.JDBCResource;
 import com.starrocks.common.Config;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
@@ -30,9 +31,6 @@ public class JDBCMetaCache<K, V> {
     private boolean enableCache = false;
     private Cache<K, V> metaCache;
     private long currentExpireSec;
-
-    private final String jdbcMetaCacheEnable = "jdbc_meta_cache_enable";
-    private final String jdbcMetaCacheExpireSec = "jdbc_meta_cache_expire_sec";
 
 
     public JDBCMetaCache(Map<String, String> properties, Boolean permanent) {
@@ -49,7 +47,7 @@ public class JDBCMetaCache<K, V> {
 
     private boolean checkEnableCache(Map<String, String> properties) {
         // The priority of jdbc_meta_cache_enable from properties is higher than that from Config
-        String enableFromProperties = properties.get(jdbcMetaCacheEnable);
+        String enableFromProperties = properties.get(JDBCResource.JDBC_META_CACHE_ENABLE);
         if (enableFromProperties != null) {
             return this.enableCache = Boolean.parseBoolean(enableFromProperties);
         } else {
@@ -58,7 +56,7 @@ public class JDBCMetaCache<K, V> {
     }
 
     private void initializeExpireSec(Map<String, String> properties) {
-        String expireSec = properties.get(jdbcMetaCacheExpireSec);
+        String expireSec = properties.get(JDBCResource.JDBC_META_CACHE_EXPIRESEC);
         if (expireSec != null) {
             this.currentExpireSec = Long.parseLong(expireSec);
         } else {
