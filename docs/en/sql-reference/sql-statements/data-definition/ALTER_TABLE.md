@@ -44,7 +44,7 @@ alter_clause1[, alter_clause2, ...]
 :::note
 
 - Schema change, rollup, and partition operations cannot be performed in one ALTER TABLE statement.
-- Schema change and rollup are asynchronous operations. A success message is return immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
+- Schema change and rollup are asynchronous operations. A success message is returned immediately after the task is submitted. You can run the [SHOW ALTER TABLE](../data-manipulation/SHOW_ALTER.md) command to check the progress.
 - Partition, rename, swap, and index are synchronous operations, and a command return indicates that the execution is finished.
 :::
 
