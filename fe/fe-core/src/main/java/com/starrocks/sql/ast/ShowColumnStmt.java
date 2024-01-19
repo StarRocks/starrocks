@@ -16,9 +16,13 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Strings;
+import com.starrocks.analysis.BinaryPredicate;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ExprSubstitutionMap;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
@@ -161,7 +165,9 @@ public class ShowColumnStmt extends ShowStmt {
         }
 
         where = where.substitute(aliasMap);
-
+        where = new CompoundPredicate(CompoundPredicate.Operator.AND, where,
+                new BinaryPredicate(BinaryType.EQ, new SlotRef(TABLE_NAME, "TABLE_SCHEMA"),
+                        new StringLiteral(tableName.getDb())));
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
                 where, null, null), this.origStmt);
     }
