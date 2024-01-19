@@ -88,7 +88,6 @@ public:
     static void create_new_dictionary_cache(starrocks::DictionaryCacheManager* dictionary_cache_manager, int64_t dict,
                                             int64_t txn_id, TabletSharedPtr tablet,
                                             const std::vector<TColumn>* tcolumns = nullptr) {
-        sleep(30);
         auto schema = ChunkHelper::convert_schema(tablet->thread_safe_get_tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, 0);
         for (size_t i = 0; i < chunk->num_columns(); ++i) {
