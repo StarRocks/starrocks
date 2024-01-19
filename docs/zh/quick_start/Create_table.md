@@ -114,13 +114,13 @@ StarRocks 表中支持多种字段类型，除以上示例中已经列举的字�
 
 #### 表类型
 
-`DUPLICATE` 关键字表示当前表为明细表，`KEY` 中的列表示当前表的排序列。StarRocks 支持多种表类型，分别为 [明细表](../table_design/table_types/duplicate_key_table.md)，[聚合表](../table_design/table_types/aggregate_table.md)，[更新表](../table_design/table_types/unique_key_table.md)，[主键表](../table_design/table_types/primary_key_table.md)。不同模型的适用于多种业务场景，合理选择可优化查询效率。
+`DUPLICATE` 关键字表示当前表为明细表，`KEY` 中的列表示当前表的排序列。StarRocks 支持多种表类型，分别为 [明细表](../table_design/table_types/duplicate_key_table.md)，[聚合表](../table_design/table_types/aggregate_table.md)，[更新表](../table_design/table_types/unique_key_table.md)，[主键表](../table_design/table_types/primary_key_table.md)。不同类型的表适用于多种业务场景，合理选择可优化查询效率。
 
 #### 索引
 
 StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [排序键](../table_design/Sort_key.md)。支持的索引类型有 [Bitmap 索引](../using_starrocks/Bitmap_index.md)，[Bloomfilter 索引](../using_starrocks/Bloomfilter_index.md) 等。
 
-> 注意：索引创建对表模型和列有要求，详细说明见对应索引介绍章节。
+> 注意：索引创建对表类型和列有要求，详细说明见对应索引介绍章节。
 
 #### ENGINE 类型
 

@@ -23,7 +23,7 @@ displayed_sidebar: "Chinese"
 - 主键表 [SHOW DATA](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_DATA/) 的结果中新增包括 **.cols** 文件（部分列更新和生成列相关的文件）和持久化索引文件的文件大小信息。[#34898](https://github.com/StarRocks/starrocks/pull/34898)
 - 优化主键表全部 Rowset 进行 Compaction 时的持久化索引更新性能，降低 I/O 负载。 [#36819](https://github.com/StarRocks/starrocks/pull/36819)
 - WHERE 子句中 LIKE 运算符右侧字符串中不包括 `%` 或者 `_` 时，LIKE 运算符会转换成 `=` 运算符。[#37515](https://github.com/StarRocks/starrocks/pull/37515)
-- 优化主键表 Compaction Score 的取值逻辑，使其和其他模型的表的取值范围看起来更一致。[#36534](https://github.com/StarRocks/starrocks/pull/36534)
+- 优化主键表 Compaction Score 的取值逻辑，使其和其他类型的表的取值范围看起来更一致。[#36534](https://github.com/StarRocks/starrocks/pull/36534)
 - [SHOW ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SHOW_ROUTINE_LOAD/) 返回结果中增加时间戳进度信息，展示各个分区当前消费消息的时间戳。[#36222](https://github.com/StarRocks/starrocks/pull/36222)
 - 优化 Bitmap 相关的某些操作的性能，主要包括：
   - 优化 Nested Loop Join 性能。[#340804](https://github.com/StarRocks/starrocks/pull/34804)  [#35003](https://github.com/StarRocks/starrocks/pull/35003)
@@ -361,8 +361,8 @@ displayed_sidebar: "Chinese"
 **存储与导入**
 
 - 数据导入提供了更丰富的 CSV 格式参数，包括 `skip_header`、`trim_space`、`enclose` 和 `escape`。参见 [STREAM LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/STREAM_LOAD/)、[BROKER LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/BROKER_LOAD/) 和 [ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD/)。
-- [Primary Key 模型表](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)解耦了主键和排序键，支持通过 `ORDER BY` 单独指定排序键。
-- 优化 Primary Key 模型表在大数据导入、部分列更新、以及开启持久化索引等场景的内存占用。 [#12068](https://github.com/StarRocks/starrocks/pull/12068) [#14187](https://github.com/StarRocks/starrocks/pull/14187) [#15729](https://github.com/StarRocks/starrocks/pull/15729)
+- [主键表](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)解耦了主键和排序键，支持通过 `ORDER BY` 单独指定排序键。
+- 优化主键表在大数据导入、部分列更新、以及开启持久化索引等场景的内存占用。 [#12068](https://github.com/StarRocks/starrocks/pull/12068) [#14187](https://github.com/StarRocks/starrocks/pull/14187) [#15729](https://github.com/StarRocks/starrocks/pull/15729)
 - 提供异步 ETL 命令接口，支持创建异步 INSERT 任务。更多信息，参考[INSERT](https://docs.starrocks.io/zh/docs/loading/InsertInto/) 和 [SUBMIT TASK](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SUBMIT_TASK/)。 ([#20609](https://github.com/StarRocks/starrocks/issues/20609))
 
 **物化视图**

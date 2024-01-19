@@ -12,7 +12,7 @@ displayed_sidebar: "Chinese"
 
 * 实现Global Runtime Filter，可以支持对shuffle join实现Runtime filter。
 * 默认开启CBO Planner，完善了colocate join / bucket shuffle / 统计信息等功能。[参考文档](https://docs.starrocks.io/zh/docs/using_starrocks/Cost_based_optimizer/)
-* [实验功能] 发布主键表（Primary Key）：为更好地支持实时/频繁更新功能，StarRocks新增了一种表的类型: 主键表。该模型支持Stream Load、Broker Load、Routine Load，同时提供了基于Flink-cdc的MySQL数据的秒级同步工具。[参考文档](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)
+* [实验功能] 发布主键表（Primary Key）：为更好地支持实时/频繁更新功能，StarRocks新增了一种表的类型: 主键表。该类型的表支持Stream Load、Broker Load、Routine Load，同时提供了基于Flink-cdc的MySQL数据的秒级同步工具。[参考文档](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)
 * [实验功能] 新增外表写入功能。支持将数据通过外表方式写入另一个StarRocks集群的表中，以解决读写分离需求，提供更好的资源隔离。[参考文档](https://docs.starrocks.io/zh/docs/data_source/External_table/)
 
 ### Improvement

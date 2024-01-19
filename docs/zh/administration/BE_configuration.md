@@ -222,7 +222,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### update_compaction_check_interval_seconds
 
-- 含义：Primary key 模型 Update compaction 的检查间隔。
+- 含义：主键表 Update compaction 的检查间隔。
 - 单位：秒
 - 默认值：60
 

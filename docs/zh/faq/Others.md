@@ -61,7 +61,7 @@ ALTER DATABASE example_db SET DATA QUOTA 10T;
 
 ## StarRocks 支持通过 UPSERT 语法实现部分字段更新吗？
 
-StarRocks 2.2 及以上版本可以通过主键 (Primary Key) 模型实现部分字段更新。StarRocks 1.9 及以上版本可以通过主键 (Primary Key) 模型实现全部字段更新。更多信息，参见 StarRocks 2.2 版本的[主键表](../table_design/table_types/primary_key_table.md)。
+StarRocks 2.2 及以上版本可以通过主键表实现部分字段更新。StarRocks 1.9 及以上版本可以通过主键表实现全部字段更新。更多信息，参见 StarRocks 2.2 版本的[主键表](../table_design/table_types/primary_key_table.md)。
 
 ## 如何使用原子替换表和原子替换分区功能？
 

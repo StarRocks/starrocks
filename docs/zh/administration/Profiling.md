@@ -12,11 +12,11 @@ displayed_sidebar: "Chinese"
 
 ### 选择表类型
 
-StarRocks 支持四种表类型：主键表 (PRIMARY KEY)，聚合表 (AGGREGATE KEY)，更新表 (UNIQUE KEY)，以及明细表 (DUPLICATE KEY)。四种模型中数据都是依据 KEY 进行排序。
+StarRocks 支持四种表类型：主键表 (PRIMARY KEY)，聚合表 (AGGREGATE KEY)，更新表 (UNIQUE KEY)，以及明细表 (DUPLICATE KEY)。四种类型的表中数据都是依据 KEY 进行排序。
 
-* **AGGREGATE KEY 模型**
+* **聚合表**
 
-    AGGREGATE KEY 相同时，新旧记录被聚合，目前支持的聚合函数有 SUM，MIN，MAX，以及 REPLACE。AGGREGATE KEY 模型可以提前聚合数据，适合报表和多维分析业务。
+    聚合表中，如果新写入的记录的 Key 列与表中的旧记录相同时，新旧记录被聚合，目前支持的聚合函数有 SUM，MIN，MAX，以及 REPLACE。聚合表可以提前聚合数据，适合报表和多维分析业务。
 
     ```sql
     CREATE TABLE site_visit
@@ -30,9 +30,9 @@ StarRocks 支持四种表类型：主键表 (PRIMARY KEY)，聚合表 (AGGREGATE
     DISTRIBUTED BY HASH(siteid);
     ```
 
-* **UNIQUE KEY 模型**
+* **更新表 (UNIQUE KEY)**
 
-    UNIQUE KEY 相同时，新记录覆盖旧记录。目前 UNIQUE KEY 的实现与 AGGREGATE KEY 的 REPLACE 聚合方法一样，二者本质上可以认为相同。UNIQUE KEY 模型适用于有更新的分析业务。
+    更新表中，如果新写入的记录的 Key 列与表中的旧记录相同时，则新记录会覆盖旧记录。目前 UNIQUE KEY 的实现与 AGGREGATE KEY 的 REPLACE 聚合方法一样，二者本质上可以认为相同。更新表适用于有更新的分析业务。
 
     ```sql
     CREATE TABLE sales_order
@@ -46,9 +46,9 @@ StarRocks 支持四种表类型：主键表 (PRIMARY KEY)，聚合表 (AGGREGATE
     DISTRIBUTED BY HASH(orderid);
     ```
 
-* **DUPLICATE KEY 模型**
+* **明细表 (DUPLICATE KEY)**
 
-    DUPLICATE KEY 只用于排序，相同 DUPLICATE KEY 的记录会同时存在。DUPLICATE KEY 模型适用于数据无需提前聚合的分析业务。
+    明细表只用于排序，相同 DUPLICATE KEY 的记录会同时存在。明细表适用于数据无需提前聚合的分析业务。
 
     ```sql
     CREATE TABLE session_data
@@ -66,9 +66,9 @@ StarRocks 支持四种表类型：主键表 (PRIMARY KEY)，聚合表 (AGGREGATE
     DISTRIBUTED BY HASH(sessionid, visitorid);
     ```
 
-* **PRIMARY KEY 模型**
+* **主键表 (PRIMARY KEY)**
 
-    PRIMARY KEY 模型保证同一个主键下仅存在一条记录。相对于更新表，主键表在查询时不需要执行聚合操作，并且支持谓词和索引下推，能够在支持实时和频繁更新等场景的同时，提供高效查询。
+    主键表保证同一个主键下仅存在一条记录。相对于更新表，主键表在查询时不需要执行聚合操作，并且支持谓词和索引下推，能够在支持实时和频繁更新等场景的同时，提供高效查询。
 
     ```sql
     CREATE TABLE orders (
