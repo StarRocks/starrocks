@@ -244,7 +244,8 @@ public class LoadPlanner {
         OlapTable olapDestTable = (OlapTable) destTable;
         List<Column> destColumns = Lists.newArrayList();
         if (isPrimaryKey && partialUpdate) {
-            if (((OlapTable) destTable).hasRowStorageType() && partialUpdateMode != TPartialUpdateMode.ROW_MODE) {
+            if (((OlapTable) destTable).hasRowStorageType() && partialUpdate &&
+                    partialUpdateMode != TPartialUpdateMode.ROW_MODE) {
                 throw new DdlException("column with row table only support row mode partial update");
             }
             if (this.etlJobType == EtlJobType.BROKER) {

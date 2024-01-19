@@ -1449,7 +1449,7 @@ public class RestoreJob extends AbstractJob {
                     if (tbl instanceof OlapTable) {
                         OlapTable olapTable = (OlapTable) tbl;
                         try {
-                            olapTable.doAfterRestore(db, mvRestoreContext);
+                            olapTable.doAfterRestore(mvRestoreContext);
                         } catch (Exception e) {
                             // no throw exceptions
                             LOG.warn(String.format("rebuild olap table %s failed: ", olapTable.getName()), e);

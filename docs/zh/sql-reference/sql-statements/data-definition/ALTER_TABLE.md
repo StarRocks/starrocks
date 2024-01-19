@@ -19,9 +19,9 @@ displayed_sidebar: "Chinese"
 - [对表进行原子替换](#swap-将两个表原子替换)
 - [手动执行 compaction 合并表数据](#手动-compaction31-版本起)
 
-> **注意**
->
-> 该操作需要有对应表的 ALTER 权限。
+:::tip
+该操作需要有对应表的 ALTER 权限。
+:::
 
 ## 语法
 
@@ -35,7 +35,7 @@ alter_clause1[, alter_clause2, ...]
 其中 **alter_clause** 分为 rename、comment、partition、bucket、column、rollup index、bitmap index、table property、swap、compaction 相关修改操作：
 
 - rename: 修改表名，rollup index 名称，修改 partition 名称，**注意列名不支持修改**。
-- comment: 修改已有表的注释。**从 3.1 版本开始支持。**
+- comment: 修改表的注释。**从 3.1 版本开始支持。** 当前还不支持修改列注释。
 - partition: 修改分区属性，删除分区，增加分区。
 - bucket：修改分桶方式和分桶数量。
 - column: 增加列，删除列，调整列顺序，修改列类型。
@@ -86,6 +86,10 @@ RENAME PARTITION <old_partition_name> <new_partition_name>;
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name> COMMENT = "<new table comment>";
 ```
+
+:::tip
+当前还不支持修改列注释。
+:::
 
 ### 操作 partition 相关语法
 

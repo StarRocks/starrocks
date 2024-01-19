@@ -769,11 +769,11 @@
       "type": "category",
       "label": "快速开始",
       "link": {"type": "doc", "id": "quick_start/quick_start"},
-      "items": ["quick_start/deploy_with_docker", "quick_start/Create_table", "quick_start/Import_and_query"]
+      "items": ["quick_start/shared-nothing", "quick_start/shared-data", "quick_start/iceberg"]
     },
     {
       "type": "category",
-      "label": " 项目协助",
+      "label": "技术支持",
       "link": {"type": "doc", "id": "project_help/project_help"},
       "items": ["project_help/slack"]
     },

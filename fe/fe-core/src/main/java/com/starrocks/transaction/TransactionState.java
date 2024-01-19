@@ -573,7 +573,7 @@ public class TransactionState implements Writable {
         return callback;
     }
 
-    public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated) throws UserException {
+    public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated) {
         // after status changed
         TxnStateChangeCallback callback = GlobalStateMgr.getCurrentGlobalTransactionMgr()
                 .getCallbackFactory().getCallback(callbackId);
