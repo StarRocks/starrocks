@@ -46,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TIMEOUT;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
@@ -78,8 +79,10 @@ public class HiveMetaClient {
         if (properties.containsKey(HIVE_METASTORE_URIS)) {
             conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
         }
-        conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
-                String.valueOf(Config.hive_meta_store_timeout_s));
+        String hmsTimeout = properties.containsKey(HIVE_METASTORE_TIMEOUT)
+                ? properties.get(HIVE_METASTORE_TIMEOUT)
+                : String.valueOf(Config.hive_meta_store_timeout_s);
+        conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(), hmsTimeout);
         return new HiveMetaClient(conf);
     }
 
