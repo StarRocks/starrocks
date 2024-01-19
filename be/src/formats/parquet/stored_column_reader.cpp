@@ -468,22 +468,21 @@ Status OptionalStoredColumnReader::_read_records_only(size_t* num_records, Colum
                 return Status::InternalError(
                         fmt::format("def levels need to parsed: {}, def levels parsed: {}", records_to_read, res_def));
             }
-        }
-
-        size_t i = 0;
-        while (i < records_to_read) {
-            size_t j = i;
-            bool is_null = _def_levels[j] < _field->max_def_level();
-            j++;
-            while (j < records_to_read && is_null == (_def_levels[j] < _field->max_def_level())) {
+            size_t i = 0;
+            while (i < records_to_read) {
+                size_t j = i;
+                bool is_null = _def_levels[j] < _field->max_def_level();
                 j++;
+                while (j < records_to_read && is_null == (_def_levels[j] < _field->max_def_level())) {
+                    j++;
+                }
+                if (is_null) {
+                    dst->append_nulls(j - i);
+                } else {
+                    RETURN_IF_ERROR(_reader->decode_values(j - i, content_type, dst));
+                }
+                i = j;
             }
-            if (is_null) {
-                dst->append_nulls(j - i);
-            } else {
-                RETURN_IF_ERROR(_reader->decode_values(j - i, content_type, dst));
-            }
-            i = j;
         }
 
         _num_values_left_in_cur_page -= records_to_read;
