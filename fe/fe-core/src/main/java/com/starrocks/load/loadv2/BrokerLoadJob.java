@@ -335,8 +335,7 @@ public class BrokerLoadJob extends BulkLoadJob {
     }
 
     @Override
-    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason)
-            throws UserException {
+    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
         if (!txnOperated) {
             return;
         }
