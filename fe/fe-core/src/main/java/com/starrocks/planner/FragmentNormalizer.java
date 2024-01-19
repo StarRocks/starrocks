@@ -195,6 +195,11 @@ public class FragmentNormalizer {
 
     public void normalize() {
         try {
+            // Fragments with local shuffle interpolation violate per-tablet computation of
+            // query cache. so turn down cache
+            if (fragment.isWithLocalShuffle()) {
+                setUncacheable(true);
+            }
             PlanNode topmostPlanNode = findMaximumNormalizableSubTree(fragment.getPlanRoot());
             if (!(topmostPlanNode instanceof AggregationNode) || selectedRangeMap.isEmpty()) {
                 return;
