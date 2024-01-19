@@ -1,1 +1,129 @@
-//TODO
+-- name: test_column_with_row_partial_update
+create database test_column_with_row_partial_update;
+-- result:
+[]
+-- !result
+use test_column_with_row_partial_update;
+-- result:
+[]
+-- !result
+DROP TABLE IF EXISTS tab1;
+-- result:
+[]
+-- !result
+DROP TABLE IF EXISTS tab2;
+-- result:
+[]
+-- !result
+CREATE table IF NOT EXISTS tab1 (
+          k1 INTEGER,
+          k2 VARCHAR(50),
+          v1 INTEGER,
+          v2 INTEGER,
+          v3 INTEGER,
+          v4 varchar(50),
+          v5 varchar(50)
+    )
+    ENGINE=OLAP
+    PRIMARY KEY(`k1`,`k2`)
+    DISTRIBUTED BY HASH(`k1`) BUCKETS 10
+    PROPERTIES (
+        "replication_num" = "1",
+        "storage_type" = "column_with_row"
+    );
+-- result:
+[]
+-- !result
+CREATE table IF NOT EXISTS tab2 (
+           k1 INTEGER,
+           v1 INTEGER,
+           v2 INTEGER,
+           v3 INTEGER
+     )
+     ENGINE=OLAP
+     PRIMARY KEY(`k1`)
+     DISTRIBUTED BY HASH(`k1`) BUCKETS 10
+     PROPERTIES (
+         "replication_num" = "1",
+         "storage_type" = "column_with_row"
+     );
+-- result:
+[]
+-- !result
+insert into tab1 values (100, "k2_100", 100, 100, 100, "v4_100", "v5_100");
+-- result:
+[]
+-- !result
+insert into tab1 values (200, "k2_200", 200, 200, 200, "v4_200", "v5_200");
+-- result:
+[]
+-- !result
+insert into tab1 values (300, "k3_300", 300, 300, 300, "v4_300", "v5_300");
+-- result:
+[]
+-- !result
+select * from tab1 order by k1, k2;
+-- result:
+100	k2_100	100	100	100	v4_100	v5_100
+200	k2_200	200	200	200	v4_200	v5_200
+300	k3_300	300	300	300	v4_300	v5_300
+-- !result
+insert into tab2 values (100, 100, 100, 100);
+-- result:
+[]
+-- !result
+insert into tab2 values (200, 200, 200, 200);
+-- result:
+[]
+-- !result
+insert into tab2 values (300, 300, 300, 300);
+-- result:
+[]
+-- !result
+select * from tab2 order by k1;
+-- result:
+100	100	100	100
+200	200	200	200
+300	300	300	300
+-- !result
+update tab1 set v5 = (select sum(tab2.v1) from tab2);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: must specify where clause to prevent full table update.')
+-- !result
+update tab1 set v5 = "v5_400" where k1 = 100;
+-- result:
+[]
+-- !result
+select * from tab1 order by k1, k2;
+-- result:
+100	k2_100	100	100	100	v4_100	v5_400
+200	k2_200	200	200	200	v4_200	v5_200
+300	k3_300	300	300	300	v4_300	v5_300
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H label:cwr_stream_load_partial_update1 -H column_separator:, -H columns:k1,k2,v4,v3 ${url}/api/test_column_with_row_partial_update/tab1/_stream_load
+-- result:
+0
+{
+    "Status": "Fail",
+    "Message": "column with row table only support row mode partial update"
+}
+-- !result
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H partial_update_mode:row -H label:cwr_stream_load_partial_update2 -H column_separator:, -H columns:k1,k2,v4,v3 ${url}/api/test_column_with_row_partial_update/tab1/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+select * from tab1 order by k1, k2;
+-- result:
+100	k2_100	100	100	111	v6_100	v5_400
+200	k2_200	200	200	200	v4_200	v5_200
+300	k3_300	300	300	300	v4_300	v5_300
+400	k2_400	None	None	222	v6_400	None
+-- !result
+drop database test_column_with_row_partial_update force;
+-- result:
+[]
+-- !result

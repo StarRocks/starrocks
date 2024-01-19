@@ -1,3 +1,7 @@
+-- name: test_column_with_row_partial_update
+create database test_column_with_row_partial_update;
+use test_column_with_row_partial_update;
+
 DROP TABLE IF EXISTS tab1;
 DROP TABLE IF EXISTS tab2;
 
@@ -35,11 +39,19 @@ CREATE table IF NOT EXISTS tab2 (
 insert into tab1 values (100, "k2_100", 100, 100, 100, "v4_100", "v5_100");
 insert into tab1 values (200, "k2_200", 200, 200, 200, "v4_200", "v5_200");
 insert into tab1 values (300, "k3_300", 300, 300, 300, "v4_300", "v5_300");
-select * from tab1;
+select * from tab1 order by k1, k2;
 
 insert into tab2 values (100, 100, 100, 100);
 insert into tab2 values (200, 200, 200, 200);
 insert into tab2 values (300, 300, 300, 300);
-select * from tab2;
+select * from tab2 order by k1;
 
 update tab1 set v5 = (select sum(tab2.v1) from tab2);
+update tab1 set v5 = "v5_400" where k1 = 100;
+select * from tab1 order by k1, k2;
+
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H label:cwr_stream_load_partial_update1 -H column_separator:, -H columns:k1,k2,v4,v3 ${url}/api/test_column_with_row_partial_update/tab1/_stream_load
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_partial_update_1.csv -XPUT -H partial_update:true -H partial_update_mode:row -H label:cwr_stream_load_partial_update2 -H column_separator:, -H columns:k1,k2,v4,v3 ${url}/api/test_column_with_row_partial_update/tab1/_stream_load
+select * from tab1 order by k1, k2;
+
+drop database test_column_with_row_partial_update force;
