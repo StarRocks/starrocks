@@ -64,9 +64,9 @@ public class MetricsActionTest {
             MetricsAction.RequestParams params = action.callParseRequestParams(request);
             Assert.assertNotNull(params);
             Assert.assertFalse(params.isCollectMVMetrics());
-            Assert.assertTrue(params.isMinifyMVMetrics());
+            Assert.assertFalse(params.isMinifyMVMetrics());
             Assert.assertFalse(params.isCollectTableMetrics());
-            Assert.assertTrue(params.isMinifyTableMetrics());
+            Assert.assertFalse(params.isMinifyTableMetrics());
         }
 
         // All default, want table_metrics, but no auth
@@ -83,7 +83,7 @@ public class MetricsActionTest {
             Assert.assertNotNull(params);
             // no auth should not access mv metrics
             Assert.assertFalse(params.isCollectMVMetrics());
-            Assert.assertTrue(params.isMinifyMVMetrics());
+            Assert.assertFalse(params.isMinifyMVMetrics());
             // no auth should not access table metrics
             Assert.assertFalse(params.isCollectTableMetrics());
             Assert.assertFalse(params.isMinifyTableMetrics());
@@ -103,7 +103,7 @@ public class MetricsActionTest {
             MetricsAction.RequestParams params = action.callParseRequestParams(request);
             Assert.assertNotNull(params);
             Assert.assertFalse(params.isCollectMVMetrics());
-            Assert.assertTrue(params.isMinifyMVMetrics());
+            Assert.assertFalse(params.isMinifyMVMetrics());
             Assert.assertTrue(params.isCollectTableMetrics());
             Assert.assertFalse(params.isMinifyTableMetrics());
         }
@@ -144,7 +144,7 @@ public class MetricsActionTest {
             Assert.assertFalse(params.isMinifyMVMetrics());
             // no auth should not access table metrics
             Assert.assertFalse(params.isCollectTableMetrics());
-            Assert.assertTrue(params.isMinifyTableMetrics());
+            Assert.assertFalse(params.isMinifyTableMetrics());
         }
 
         // All default, has query parameter, has auth, only with_materialized_view_metrics
@@ -163,7 +163,7 @@ public class MetricsActionTest {
             Assert.assertTrue(params.isCollectMVMetrics());
             Assert.assertFalse(params.isMinifyMVMetrics());
             Assert.assertFalse(params.isCollectTableMetrics());
-            Assert.assertTrue(params.isMinifyTableMetrics());
+            Assert.assertFalse(params.isMinifyTableMetrics());
         }
 
         // All default, has query parameter, has auth, only with_materialized_view_metrics
@@ -182,7 +182,7 @@ public class MetricsActionTest {
             Assert.assertTrue(params.isCollectMVMetrics());
             Assert.assertTrue(params.isMinifyMVMetrics());
             Assert.assertFalse(params.isCollectTableMetrics());
-            Assert.assertTrue(params.isMinifyTableMetrics());
+            Assert.assertFalse(params.isMinifyTableMetrics());
         }
 
         // All default, has query parameter, has auth, both with_table_metrics and with_materialized_view_metrics
