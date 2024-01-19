@@ -37,7 +37,6 @@ public class BeTabletsSystemTable {
                         .column("MAX_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("MIN_VERSION", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("NUM_ROWSET", ScalarType.createType(PrimitiveType.BIGINT))
-                        .column("NUM_SEGMENT", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("NUM_ROW", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("DATA_SIZE", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("INDEX_MEM", ScalarType.createType(PrimitiveType.BIGINT))
@@ -49,6 +48,7 @@ public class BeTabletsSystemTable {
                         .column("SCHEMA_HASH", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("INDEX_DISK", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("MEDIUM_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("NUM_SEGMENT", ScalarType.createType(PrimitiveType.BIGINT))
                         .build(), TSchemaTableType.SCH_BE_TABLETS);
     }
 }
