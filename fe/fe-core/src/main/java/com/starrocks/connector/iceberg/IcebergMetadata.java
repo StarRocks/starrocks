@@ -127,6 +127,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     private final IcebergCatalog icebergCatalog;
     private final IcebergStatisticProvider statisticProvider = new IcebergStatisticProvider();
 
+    private final Map<TableIdentifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<IcebergFilter, List<FileScanTask>> splitTasks = new ConcurrentHashMap<>();
     private final Set<IcebergFilter> scannedTables = new HashSet<>();
@@ -210,12 +211,42 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
+=======
+    public void alterTable(AlterTableStmt stmt) throws UserException {
+        String dbName = stmt.getDbName();
+        String tableName = stmt.getTableName();
+        org.apache.iceberg.Table table = icebergCatalog.getTable(dbName, tableName);
+
+        if (table == null) {
+            throw new StarRocksConnectorException(
+                    "Failed to load iceberg table: " + stmt.getTbl().toString());
+        }
+
+        IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(stmt, table, icebergCatalog);
+        executor.execute();
+
+        synchronized (this) {
+            tables.remove(TableIdentifier.of(dbName, tableName));
+            try {
+                icebergCatalog.refreshTable(dbName, tableName, jobPlanningExecutor);
+            } catch (Exception exception) {
+                LOG.error("Failed to refresh caching iceberg table.");
+                icebergCatalog.invalidateCache(new CachingIcebergCatalog.IcebergTableName(dbName, tableName));
+            }
+            asyncRefreshOthersFeMetadataCache(dbName, tableName);
+        }
+    }
+
+    @Override
+>>>>>>> 61218be218 ([BugFix] add query level iceberg table cache back (#39479))
     public void dropTable(DropTableStmt stmt) {
         Table icebergTable = getTable(stmt.getDbName(), stmt.getTableName());
         if (icebergTable == null) {
             return;
         }
         icebergCatalog.dropTable(stmt.getDbName(), stmt.getTableName(), stmt.isForceDrop());
+        tables.remove(TableIdentifier.of(stmt.getDbName(), stmt.getTableName()));
         StatisticUtils.dropStatisticsAfterDropTable(icebergTable);
         asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
     }
@@ -223,11 +254,21 @@ public class IcebergMetadata implements ConnectorMetadata {
     @Override
     public Table getTable(String dbName, String tblName) {
         TableIdentifier identifier = TableIdentifier.of(dbName, tblName);
+        if (tables.containsKey(identifier)) {
+            return tables.get(identifier);
+        }
 
         try {
             IcebergCatalogType catalogType = icebergCatalog.getIcebergCatalogType();
             org.apache.iceberg.Table icebergTable = icebergCatalog.getTable(dbName, tblName);
+<<<<<<< HEAD
             return IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
+=======
+            Table table = IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
+            table.setComment(icebergTable.properties().getOrDefault(COMMENT, ""));
+            tables.put(identifier, table);
+            return table;
+>>>>>>> 61218be218 ([BugFix] add query level iceberg table cache back (#39479))
 
         } catch (StarRocksConnectorException | NoSuchTableException e) {
             LOG.error("Failed to get iceberg table {}", identifier, e);
@@ -628,6 +669,7 @@ public class IcebergMetadata implements ConnectorMetadata {
             IcebergTable icebergTable = (IcebergTable) table;
             String dbName = icebergTable.getRemoteDbName();
             String tableName = icebergTable.getRemoteTableName();
+            tables.remove(TableIdentifier.of(dbName, tableName));
             try {
                 icebergCatalog.refreshTable(dbName, tableName, jobPlanningExecutor);
             } catch (Exception e) {
@@ -814,6 +856,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     public void clear() {
         splitTasks.clear();
         databases.clear();
+        tables.clear();
         scannedTables.clear();
         IcebergMetricsReporter.remove();
     }

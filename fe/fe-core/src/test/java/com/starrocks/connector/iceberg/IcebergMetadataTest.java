@@ -875,7 +875,8 @@ public class IcebergMetadataTest extends TableTestBase {
         Snapshot snapshotBeforeRefresh = table.getSnapshot().get();
 
         mockedNativeTableA.newAppend().appendFile(FILE_A).commit();
-        Assert.assertEquals(snapshotBeforeRefresh.snapshotId() + 1,
+        // test use query level table cache
+        Assert.assertEquals(snapshotBeforeRefresh.snapshotId(),
                 ((IcebergTable) metadata.getTable("db", "table")).getSnapshot().get().snapshotId());
 
         metadata.refreshTable("db", icebergTable, new ArrayList<>(), true);
