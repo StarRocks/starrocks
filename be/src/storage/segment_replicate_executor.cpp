@@ -145,6 +145,7 @@ void ReplicateChannel::_send_request(SegmentPB* segment, butil::IOBuf& data, boo
     request.set_eos(eos);
     request.set_txn_id(_opt->txn_id);
     request.set_index_id(_opt->index_id);
+    request.set_create_time_us(UnixMicros());
 
     _closure->ref();
     _closure->reset();
@@ -267,7 +268,7 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
             }
             auto rfile = std::move(res.value());
             auto buf = new uint8[segment->data_size()];
-            data.append_user_data(buf, segment->data_size(), [](void* buf) { delete[](uint8*) buf; });
+            data.append_user_data(buf, segment->data_size(), [](void* buf) { delete[] (uint8*)buf; });
             auto st = rfile->read_fully(buf, segment->data_size());
             if (!st.ok()) {
                 LOG(WARNING) << "Failed to read segment " << segment->DebugString() << " by " << debug_string()
@@ -284,7 +285,7 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
             }
             auto rfile = std::move(res.value());
             auto buf = new uint8[segment->delete_data_size()];
-            data.append_user_data(buf, segment->delete_data_size(), [](void* buf) { delete[](uint8*) buf; });
+            data.append_user_data(buf, segment->delete_data_size(), [](void* buf) { delete[] (uint8*)buf; });
             auto st = rfile->read_fully(buf, segment->delete_data_size());
             if (!st.ok()) {
                 LOG(WARNING) << "Failed to read delete file " << segment->DebugString() << " by " << debug_string()
@@ -301,7 +302,7 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
             }
             auto rfile = std::move(res.value());
             auto buf = new uint8[segment->update_data_size()];
-            data.append_user_data(buf, segment->update_data_size(), [](void* buf) { delete[](uint8*) buf; });
+            data.append_user_data(buf, segment->update_data_size(), [](void* buf) { delete[] (uint8*)buf; });
             auto st = rfile->read_fully(buf, segment->update_data_size());
             if (!st.ok()) {
                 LOG(WARNING) << "Failed to read delete file " << segment->DebugString() << " by " << debug_string()

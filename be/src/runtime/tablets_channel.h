@@ -17,6 +17,7 @@
 #include <atomic>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include "column/chunk.h"
 #include "common/status.h"
@@ -44,6 +45,22 @@ class PTabletWriterAddBatchResult;
 class PTabletWriterAddChunkRequest;
 class PTabletWriterAddSegmentRequest;
 class PTabletWriterAddSegmentResult;
+class WriterStat;
+
+struct AddChunkStat {
+    int64_t txn_id;
+    bool eos;
+    int64_t num_tablets;
+    int64_t num_primary_tablets;
+    int64_t num_secondary_tablets;
+    int64_t client_time_us;
+    int64_t receive_time_us;
+    int64_t count_down_latch_time_us;
+    int64_t wait_secondary_time_us;
+    int64_t flush_stale_mem_time_us;
+    int64_t finish_time_us;
+    std::vector<WriterStat> writer_stats;
+};
 
 class TabletsChannel {
 public:
@@ -57,7 +74,7 @@ public:
                                     std::shared_ptr<OlapTableSchemaParam> schema) = 0;
 
     virtual void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                           PTabletWriterAddBatchResult* response) = 0;
+                           PTabletWriterAddBatchResult* response, AddChunkStat* stat = nullptr) = 0;
 
     virtual void cancel() = 0;
 

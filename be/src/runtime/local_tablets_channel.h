@@ -48,8 +48,8 @@ public:
     Status open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                 std::shared_ptr<OlapTableSchemaParam> schema, bool is_incremental) override;
 
-    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                   PTabletWriterAddBatchResult* response) override;
+    void add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response,
+                   AddChunkStat* stat = nullptr) override;
 
     Status incremental_open(const PTabletWriterOpenRequest& params, PTabletWriterOpenResult* result,
                             std::shared_ptr<OlapTableSchemaParam> schema) override;
@@ -108,6 +108,11 @@ private:
             }
         }
 
+        void update_writer_stat(WriterStat* writer_stat) {
+            std::lock_guard l(_response_lock);
+            _stat->writer_stats.push_back(*writer_stat);
+        }
+
         void add_committed_tablet_info(PTabletInfo* tablet_info) {
             DCHECK(_response != nullptr);
             std::lock_guard l(_response_lock);
@@ -143,6 +148,7 @@ private:
         std::unique_ptr<uint32_t[]> _row_indexes;
         std::unique_ptr<uint32_t[]> _channel_row_idx_start_points;
         std::unordered_map<int64_t, std::vector<int64_t>>* _node_id_to_abort_tablets;
+        AddChunkStat* _stat;
     };
 
     class WriteCallback : public AsyncDeltaWriterCallback {
@@ -151,7 +157,8 @@ private:
 
         ~WriteCallback() override = default;
 
-        void run(const Status& st, const CommittedRowsetInfo* info, const FailedRowsetInfo* failed_info) override;
+        void run(const Status& st, const CommittedRowsetInfo* info, const FailedRowsetInfo* failed_info,
+                 WriterStat* writer_stat = nullptr) override;
 
         WriteCallback(const WriteCallback&) = delete;
         void operator=(const WriteCallback&) = delete;

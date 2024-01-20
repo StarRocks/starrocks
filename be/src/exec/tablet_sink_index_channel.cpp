@@ -563,6 +563,8 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
 
     SCOPED_RAW_TIMER(&_actual_consume_ns);
 
+    int64_t create_time_us = UnixMicros();
+    request.set_create_time_us(create_time_us);
     for (int i = 0; i < request.requests_size(); i++) {
         auto req = request.mutable_requests(i);
         if (UNLIKELY(eos)) {
@@ -590,6 +592,7 @@ Status NodeChannel::_send_request(bool eos, bool wait_all_sender_close) {
             auto pchunk = req->mutable_chunk();
             RETURN_IF_ERROR(_serialize_chunk(chunk.get(), pchunk));
         }
+        req->set_create_time_us(create_time_us);
     }
 
     _add_batch_closures[_current_request_index]->ref();

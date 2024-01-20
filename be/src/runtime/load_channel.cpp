@@ -126,7 +126,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
 }
 
 void LoadChannel::_add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                             PTabletWriterAddBatchResult* response) {
+                             PTabletWriterAddBatchResult* response, AddChunkStat* stat) {
     _num_chunk++;
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
     auto channel = get_tablets_channel(request.index_id());
@@ -135,7 +135,43 @@ void LoadChannel::_add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& r
         response->mutable_status()->add_error_msgs("cannot find the tablets channel associated with the index id");
         return;
     }
-    channel->add_chunk(chunk, request, response);
+    channel->add_chunk(chunk, request, response, stat);
+}
+
+std::ostream& operator<<(std::ostream& os, const WriterStat& stat) {
+    os << "[" << stat.tablet_id << ", " << stat.commit << ", " << stat.create_time_us << ", "
+       << (stat.finish_time_us - stat.create_time_us) << ", " << (stat.receive_time_us - stat.create_time_us) << ", "
+       << (stat.write_time_us - stat.receive_time_us) << ", " << (stat.close_time_us - stat.write_time_us) << ", "
+       << (stat.commit_time_us - stat.close_time_us) << "]";
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const AddChunkStat& stat) {
+    os << "AddChunkStat={txn_id: " << stat.txn_id << ", eos: " << stat.eos << ", num_tablets: " << stat.num_tablets
+       << ", num_primary_tablets: " << stat.num_primary_tablets
+       << ", num_secondary_tablets: " << stat.num_secondary_tablets << ", client_time_us: " << stat.client_time_us
+       << ", total_cost_us: " << (stat.finish_time_us - stat.client_time_us)
+       << ", receive_cost_us: " << (stat.receive_time_us - stat.client_time_us)
+       << ", latch_cost_us: " << (stat.count_down_latch_time_us - stat.receive_time_us)
+       << ", wait_secondary_cost_us: " << (stat.wait_secondary_time_us - stat.count_down_latch_time_us)
+       << ", flush_stale_cost_us: " << (stat.flush_stale_mem_time_us - stat.wait_secondary_time_us)
+       << ", response_cost_us: " << (stat.finish_time_us - stat.flush_stale_mem_time_us);
+
+    for (int i = 0; i < stat.writer_stats.size(); i++) {
+        os << ", " << stat.writer_stats[i];
+    }
+    os << "}";
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const std::vector<AddChunkStat>& vec) {
+    for (size_t i = 0; i < vec.size(); ++i) {
+        if (i > 0) {
+            os << ", ";
+        }
+        os << vec[i];
+    }
+    return os;
 }
 
 void LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
@@ -160,6 +196,13 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     }
     faststring uncompressed_buffer;
     std::unique_ptr<Chunk> chunk;
+    int64_t create_time_us = std::numeric_limits<int64_t>::max();
+    if (req.has_create_time_us()) {
+        create_time_us = req.create_time_us();
+    }
+    int64_t receive_time_us = UnixMicros();
+    std::vector<AddChunkStat> add_chunk_stats;
+    add_chunk_stats.reserve(req.requests_size());
     for (int i = 0; i < req.requests_size(); i++) {
         auto& request = req.requests(i);
         VLOG_RPC << "tablet writer add chunk, id=" << print_id(request.id()) << ", index_id=" << request.index_id()
@@ -171,7 +214,8 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
             RETURN_RESPONSE_IF_ERROR(_build_chunk_meta(pchunk), response);
             RETURN_RESPONSE_IF_ERROR(_deserialize_chunk(pchunk, *chunk, &uncompressed_buffer), response);
         }
-        _add_chunk(chunk.get(), request, response);
+        add_chunk_stats.push_back(AddChunkStat());
+        _add_chunk(chunk.get(), request, response, &add_chunk_stats.back());
 
         if (response->status().status_code() != TStatusCode::OK) {
             LOG(WARNING) << "tablet writer add chunk, id=" << print_id(request.id())
@@ -180,6 +224,14 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
                          << " err=" << response->status().error_msgs(0);
             return;
         }
+    }
+    int64_t finish_time_us = UnixMicros();
+    int64_t total_time_us = finish_time_us - create_time_us;
+    if (config::load_add_chunks_slow_us > 0 && total_time_us > config::load_add_chunks_slow_us) {
+        LOG(WARNING) << "Slow add chunks, create_time_us: " << create_time_us
+                     << ", receive_time_us: " << receive_time_us << ", finish_time_us: " << finish_time_us
+                     << ", total_cost_us: " << total_time_us
+                     << ", receive_cost_us: " << (receive_time_us - create_time_us) << ", " << add_chunk_stats;
     }
 }
 

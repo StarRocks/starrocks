@@ -60,6 +60,7 @@ class Controller;
 namespace starrocks {
 
 class Cache;
+class AddChunkStat;
 class TabletsChannel;
 class LoadChannel;
 class LoadChannelMgr;
@@ -117,7 +118,8 @@ public:
     Span get_span() { return _span; }
 
 private:
-    void _add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
+    void _add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response,
+                    AddChunkStat* stat = nullptr);
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
     Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
 

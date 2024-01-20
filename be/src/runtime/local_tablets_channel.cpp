@@ -119,13 +119,22 @@ void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWrite
     req.request = request;
     req.response = response;
     req.done = done;
+    req.receive_time_us = UnixMicros();
 
     delta_writer->write_segment(req);
     closure_guard.release();
 }
 
 void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
-                                    PTabletWriterAddBatchResult* response) {
+                                    PTabletWriterAddBatchResult* response, AddChunkStat* stat) {
+    if (stat != nullptr) {
+        stat->txn_id = request.txn_id();
+        if (request.has_create_time_us()) {
+            stat->client_time_us = request.create_time_us();
+        }
+        stat->receive_time_us = UnixMicros();
+    }
+
     std::shared_lock<bthreads::BThreadSharedMutex> lk(_rw_mtx);
     auto t0 = std::chrono::steady_clock::now();
     int64_t wait_memtable_flush_time_us = 0;
@@ -207,6 +216,9 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     }
 
     auto context = std::move(res).value();
+    if (stat != nullptr) {
+        context->_stat = stat;
+    }
     auto channel_size = chunk != nullptr ? _tablet_id_to_sorted_indexes.size() : 0;
     auto tablet_ids = request.tablet_ids().data();
     auto channel_row_idx_start_points = context->_channel_row_idx_start_points.get(); // May be a nullptr
@@ -219,6 +231,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     std::unordered_map<int64_t, std::vector<int64_t>> node_id_to_abort_tablets;
     context->set_node_id_to_abort_tablets(&node_id_to_abort_tablets);
 
+    int num_primary = 0;
     for (int i = 0; i < channel_size; ++i) {
         size_t from = channel_row_idx_start_points[i];
         size_t size = channel_row_idx_start_points[i + 1] - from;
@@ -229,6 +242,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         auto it = _delta_writers.find(tablet_id);
         DCHECK(it != _delta_writers.end());
         auto& delta_writer = it->second;
+        num_primary += 1;
 
         // back pressure OlapTableSink since there are too many memtables need to flush
         while (delta_writer->get_flush_stats().queueing_memtable_num >= config::max_queueing_memtable_per_tablet) {
@@ -276,18 +290,23 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
     // This will only block the bthread, will not block the pthread
     count_down_latch.wait();
+    if (stat != nullptr) {
+        stat->count_down_latch_time_us = UnixMicros();
+    }
 
     // Abort tablets which primary replica already failed
     if (response->status().status_code() != TStatusCode::OK) {
         _abort_replica_tablets(request, response->status().error_msgs()[0], node_id_to_abort_tablets);
     }
 
+    int num_secondary = 0;
     // We need wait all secondary replica commit before we close the channel
     if (_is_replicated_storage && close_channel && response->status().status_code() == TStatusCode::OK) {
         bool timeout = false;
         for (auto& [tablet_id, delta_writer] : _delta_writers) {
             // Wait util seconary replica commit/abort by primary
             if (delta_writer->replica_state() == Secondary) {
+                num_secondary += 1;
                 int i = 0;
                 do {
                     auto state = delta_writer->get_state();
@@ -319,6 +338,12 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
                 break;
             }
         }
+    }
+    if (stat != nullptr) {
+        stat->num_tablets = _delta_writers.size();
+        stat->num_primary_tablets = num_primary;
+        stat->num_secondary_tablets = num_secondary;
+        stat->wait_secondary_time_us = UnixMicros();
     }
 
     {
@@ -353,6 +378,9 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     // which prevents triggering a flush,
     // we need to proactively perform a flush when memory resources are insufficient.
     _flush_stale_memtables();
+    if (stat != nullptr) {
+        stat->flush_stale_mem_time_us = UnixMicros();
+    }
 
     if (close_channel) {
         _load_channel->remove_tablets_channel(_index_id);
@@ -396,6 +424,9 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
             response->mutable_status()->set_status_code(_status.code());
             response->mutable_status()->add_error_msgs(std::string(_status.message()));
         }
+    }
+    if (stat != nullptr) {
+        stat->finish_time_us = UnixMicros();
     }
 }
 
@@ -855,8 +886,11 @@ Status LocalTabletsChannel::incremental_open(const PTabletWriterOpenRequest& par
 }
 
 void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRowsetInfo* committed_info,
-                                             const FailedRowsetInfo* failed_info) {
+                                             const FailedRowsetInfo* failed_info, WriterStat* writer_stat) {
     _context->update_status(st);
+    if (writer_stat != nullptr) {
+        _context->update_writer_stat(writer_stat);
+    }
     if (failed_info != nullptr) {
         PTabletInfo tablet_info;
         tablet_info.set_tablet_id(failed_info->tablet_id);

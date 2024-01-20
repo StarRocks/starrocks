@@ -38,13 +38,19 @@ class SegmentFlushTask final : public Runnable {
 public:
     SegmentFlushTask(SegmentFlushToken* flush_token, DeltaWriter* writer, brpc::Controller* cntl,
                      const PTabletWriterAddSegmentRequest* request, PTabletWriterAddSegmentResult* response,
-                     google::protobuf::Closure* done)
+                     google::protobuf::Closure* done, int64_t receive_time_us)
             : _flush_token(flush_token),
               _writer(writer),
               _cntl(cntl),
               _request(request),
               _response(response),
-              _done(done) {}
+              _done(done),
+              _client_time_us(std::numeric_limits<int64_t>::max()),
+              _receive_time_us(receive_time_us) {
+        if (request->has_create_time_us()) {
+            _client_time_us = request->create_time_us();
+        }
+    }
 
     // Destructor which will respond to the brpc if run() or release() is not called.
     ~SegmentFlushTask() override {
@@ -64,6 +70,7 @@ public:
     // Run the task if release() is not called which will flush the segment, and respond the brpc
     // BackendInternalServiceImpl<T>::tablet_writer_add_segment.
     void run() override {
+        _execute_time_us = UnixMicros();
         bool expect = false;
         if (!_run_or_released.compare_exchange_strong(expect, true)) {
             return;
@@ -84,12 +91,17 @@ public:
         } else if (!_request->eos()) {
             st = Status::InternalError(fmt::format("request {} has no segment", _request->DebugString()));
         }
+        _write_segment_time_us = UnixMicros();
 
+        _close_time_us = _write_segment_time_us;
+        _commit_time_us = _write_segment_time_us;
         bool eos = _request->eos();
         if (st.ok() && eos) {
             st = _writer->close();
+            _close_time_us = UnixMicros();
             if (st.ok()) {
                 st = _writer->commit();
+                _commit_time_us = UnixMicros();
             }
         }
 
@@ -136,6 +148,20 @@ private:
 
         st.to_protobuf(_response->mutable_status());
         _done->Run();
+        int64_t finish_time_us = UnixMicros();
+        int64_t total_time_us = finish_time_us - _client_time_us;
+        if (config::load_add_segment_slow_us > 0 && total_time_us > config::load_add_segment_slow_us) {
+            LOG(WARNING) << "Slow add segment, txn_id: " << _writer->txn_id()
+                         << ", tablet id: " << _writer->tablet()->tablet_id() << ", eos: " << eos
+                         << ", create_time_us: " << _client_time_us << ", finish_time_us: " << finish_time_us
+                         << ", total_time_cost_us: " << total_time_us
+                         << ", receive_cost_us: " << (_receive_time_us - _client_time_us)
+                         << ", prepare_cost_us: " << (_execute_time_us - _receive_time_us)
+                         << ", write_cost_us: " << (_write_segment_time_us - _execute_time_us)
+                         << ", close_cost_us: " << (_close_time_us - _write_segment_time_us)
+                         << ", commit_cost_us: " << (_commit_time_us - _close_time_us)
+                         << ", response_cost_us: " << (finish_time_us - _commit_time_us);
+        }
     }
 
     void _send_fail_response(Status& st) {
@@ -153,6 +179,12 @@ private:
     const PTabletWriterAddSegmentRequest* _request;
     PTabletWriterAddSegmentResult* _response;
     google::protobuf::Closure* _done;
+    int64_t _client_time_us;
+    int64_t _receive_time_us;
+    int64_t _execute_time_us;
+    int64_t _write_segment_time_us;
+    int64_t _close_time_us;
+    int64_t _commit_time_us;
     // whether run() or release() has been called
     std::atomic<bool> _run_or_released = false;
 };
@@ -162,7 +194,7 @@ SegmentFlushToken::SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool
 
 Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl,
                                  const PTabletWriterAddSegmentRequest* request, PTabletWriterAddSegmentResult* response,
-                                 google::protobuf::Closure* done) {
+                                 google::protobuf::Closure* done, int64_t receive_time_us) {
     ClosureGuard closure_guard(done);
     Status token_st = status();
     if (!token_st.ok()) {
@@ -171,7 +203,7 @@ Status SegmentFlushToken::submit(DeltaWriter* writer, brpc::Controller* cntl,
         return st;
     }
 
-    auto task = std::make_shared<SegmentFlushTask>(this, writer, cntl, request, response, done);
+    auto task = std::make_shared<SegmentFlushTask>(this, writer, cntl, request, response, done, receive_time_us);
     auto submit_st = _flush_token->submit(std::move(task));
     if (submit_st.ok()) {
         closure_guard.release();

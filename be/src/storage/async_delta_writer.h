@@ -121,6 +121,7 @@ private:
         bool abort = false;
         bool abort_with_log = false;
         bool flush_after_write = false;
+        int64_t create_time_us;
     };
 
     static int _execute(void* meta, bthread::TaskIterator<AsyncDeltaWriter::Task>& iter);
@@ -162,6 +163,18 @@ public:
     const PTabletWriterAddSegmentRequest* request;
     PTabletWriterAddSegmentResult* response;
     google::protobuf::Closure* done;
+    int64_t receive_time_us;
+};
+
+struct WriterStat {
+    int64_t tablet_id;
+    bool commit;
+    int64_t create_time_us;
+    int64_t receive_time_us;
+    int64_t write_time_us;
+    int64_t close_time_us;
+    int64_t commit_time_us;
+    int64_t finish_time_us;
 };
 
 class AsyncDeltaWriterCallback {
@@ -171,7 +184,8 @@ public:
     // st != Status::OK means either the writes or the commit failed.
     // st == Status::OK && info != nullptr means commit succeeded.
     // st == Status::OK && info == nullptr means the writes succeeded with no commit.
-    virtual void run(const Status& st, const CommittedRowsetInfo* info, const FailedRowsetInfo* failed_info) = 0;
+    virtual void run(const Status& st, const CommittedRowsetInfo* info, const FailedRowsetInfo* failed_info,
+                     WriterStat* writer_stat = nullptr) = 0;
 };
 
 } // namespace starrocks

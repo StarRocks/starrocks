@@ -228,6 +228,7 @@ message PTabletWriterAddChunkRequest {
     // wait all sender close before rpc returning
     // this is used for automatic partition creation
     optional bool wait_all_sender_close = 11 [default = false];
+    optional int64 create_time_us = 12;
 };
 
 message PTabletWriterAddChunksRequest {
@@ -236,6 +237,7 @@ message PTabletWriterAddChunksRequest {
     // all request's chunk are repeated if true
     // only first request's chunk will be set
     optional bool is_repeated_chunk = 3 [default = false];
+    optional int64 create_time_us = 4;
 }
 
 message PTabletWriterAddBatchResult {
@@ -258,6 +260,7 @@ message PTabletWriterAddSegmentRequest {
     optional bool eos = 5;
     optional int64 num_segments = 6;
     optional SegmentPB segment = 7;
+    optional int64 create_time_us = 8;
 };
 
 message PTabletWriterAddSegmentResult {
@@ -641,7 +644,7 @@ service PInternalService {
     rpc local_tablet_reader_scan_get_next(PTabletReaderScanGetNextRequest) returns (PTabletReaderScanGetNextResult);
 
     rpc execute_command(ExecuteCommandRequestPB) returns (ExecuteCommandResultPB);
-    
+
     rpc update_fail_point_status(PUpdateFailPointStatusRequest) returns (PUpdateFailPointStatusResponse);
     rpc list_fail_point(PListFailPointRequest) returns (PListFailPointResponse);
 

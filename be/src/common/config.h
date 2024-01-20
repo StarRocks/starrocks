@@ -1170,4 +1170,6 @@ CONF_mInt64(lake_local_pk_index_unused_threshold_seconds, "86400"); // 1 day
 
 CONF_mBool(lake_enable_vertical_compaction_fill_data_cache, "false");
 
+CONF_mInt32(load_add_chunks_slow_us, "-1");
+CONF_mInt32(load_add_segment_slow_us, "-1");
 } // namespace starrocks::config

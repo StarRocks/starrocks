@@ -34,6 +34,11 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
     auto writer = static_cast<DeltaWriter*>(meta);
     bool flush_after_write = false;
     for (; iter; ++iter) {
+        WriterStat writer_stat;
+        writer_stat.tablet_id = writer->tablet()->tablet_id();
+        writer_stat.commit = iter->commit_after_write;
+        writer_stat.create_time_us = iter->create_time_us;
+        writer_stat.receive_time_us = UnixMicros();
         Status st;
         if (iter->abort) {
             writer->abort(iter->abort_with_log);
@@ -42,6 +47,9 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
         if (iter->chunk != nullptr && iter->indexes_size > 0) {
             st = writer->write(*iter->chunk, iter->indexes, 0, iter->indexes_size);
         }
+        writer_stat.write_time_us = UnixMicros();
+        writer_stat.close_time_us = writer_stat.write_time_us;
+        writer_stat.commit_time_us = writer_stat.close_time_us;
 
         if (iter->flush_after_write) {
             flush_after_write = true;
@@ -56,21 +64,27 @@ int AsyncDeltaWriter::_execute(void* meta, bthread::TaskIterator<AsyncDeltaWrite
                 iter->write_cb->run(st, nullptr, &failed_info);
                 continue;
             }
+            writer_stat.close_time_us = UnixMicros();
+
             if (st = writer->commit(); !st.ok()) {
                 LOG(WARNING) << "Fail to write or commit. txn_id: " << writer->txn_id()
                              << " tablet_id: " << writer->tablet()->tablet_id() << ": " << st;
                 iter->write_cb->run(st, nullptr, &failed_info);
                 continue;
             }
+            writer_stat.commit_time_us = UnixMicros();
             CommittedRowsetInfo info{.tablet = writer->tablet(),
                                      .rowset = writer->committed_rowset(),
                                      .rowset_writer = writer->committed_rowset_writer(),
                                      .replicate_token = writer->replicate_token()};
-            iter->write_cb->run(st, &info, nullptr);
+            writer_stat.finish_time_us = UnixMicros();
+            iter->write_cb->run(st, &info, nullptr, &writer_stat);
         } else if (st.ok()) {
-            iter->write_cb->run(st, nullptr, nullptr);
+            writer_stat.finish_time_us = UnixMicros();
+            iter->write_cb->run(st, nullptr, nullptr, &writer_stat);
         } else {
-            iter->write_cb->run(st, nullptr, &failed_info);
+            writer_stat.finish_time_us = UnixMicros();
+            iter->write_cb->run(st, nullptr, &failed_info, &writer_stat);
         }
         // Do NOT touch |iter->commit_cb| since here, it may have been deleted.
         LOG_IF(ERROR, !st.ok()) << "Fail to write or commit. txn_id: " << writer->txn_id()
@@ -118,6 +132,7 @@ void AsyncDeltaWriter::write(const AsyncDeltaWriterRequest& req, AsyncDeltaWrite
     task.indexes_size = req.indexes_size;
     task.write_cb = cb;
     task.commit_after_write = req.commit_after_write;
+    task.create_time_us = UnixMicros();
     int r = bthread::execution_queue_execute(_queue_id, task);
     if (r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
@@ -139,7 +154,8 @@ void AsyncDeltaWriter::flush() {
 }
 
 void AsyncDeltaWriter::write_segment(const AsyncDeltaWriterSegmentRequest& req) {
-    auto st = _writer->segment_flush_token()->submit(_writer.get(), req.cntl, req.request, req.response, req.done);
+    auto st = _writer->segment_flush_token()->submit(_writer.get(), req.cntl, req.request, req.response, req.done,
+                                                     req.receive_time_us);
     if (!st.ok()) {
         LOG(WARNING) << "Failed to submit write segment, err=" << st;
     }
@@ -153,6 +169,7 @@ void AsyncDeltaWriter::commit(AsyncDeltaWriterCallback* cb) {
     task.indexes_size = 0;
     task.write_cb = cb;
     task.commit_after_write = true;
+    task.create_time_us = UnixMicros();
     int r = bthread::execution_queue_execute(_queue_id, task);
     if (r != 0) {
         LOG(WARNING) << "Fail to execution_queue_execute: " << r;
