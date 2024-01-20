@@ -225,6 +225,7 @@ public:
 
                 // add this ngram into set
                 if (_values.find(unaligned_load<CppType>(&cur_ngram)) == _values.end()) {
+                    // why deep copy?
                     _values.insert(get_value<TYPE_VARCHAR>(&cur_ngram, this->_typeinfo, &this->_pool));
                 }
             }
