@@ -187,10 +187,10 @@ StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
             std::max(config::update_compaction_result_bytes, compaction_data_size_threshold)) {
             break;
         }
-        // If calc_score is true, we skip `config::lake_pk_compaction_merge_rowset_delta` check,
-        // because `config::lake_pk_compaction_merge_rowset_delta` is only used to limit the number
+        // If calc_score is true, we skip `config::lake_pk_compaction_max_input_rowsets` check,
+        // because `config::lake_pk_compaction_max_input_rowsets` is only used to limit the number
         // of rowsets for real compaction merges
-        if (!calc_score && input_rowsets.size() >= config::lake_pk_compaction_merge_rowset_delta) {
+        if (!calc_score && input_rowsets.size() >= config::lake_pk_compaction_max_input_rowsets) {
             break;
         }
         rowset_queue.pop();
