@@ -123,14 +123,9 @@ public:
     explicit PrimaryCompactionPolicy(TabletPtr tablet) : CompactionPolicy(tablet) {}
     ~PrimaryCompactionPolicy() override = default;
 
-<<<<<<< HEAD
     StatusOr<std::vector<RowsetPtr>> pick_rowsets(int64_t version) override;
-    StatusOr<std::vector<RowsetPtr>> pick_rowsets(TabletMetadataPtr tablet_metadata, std::vector<bool>* has_dels);
-=======
-    StatusOr<std::vector<RowsetPtr>> pick_rowsets() override;
-    StatusOr<std::vector<RowsetPtr>> pick_rowsets(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata,
-                                                  bool calc_score, std::vector<bool>* has_dels);
->>>>>>> cc38db6a56 ([Enhancement] Optimize compaction resource usage for cloud native primary table (#39611))
+    StatusOr<std::vector<RowsetPtr>> pick_rowsets(TabletMetadataPtr tablet_metadata, bool calc_score,
+                                                  std::vector<bool>* has_dels);
 
 private:
     int64_t _get_data_size(const std::shared_ptr<const TabletMetadataPB>& tablet_metadata) {
@@ -142,22 +137,13 @@ private:
     }
 };
 
-<<<<<<< HEAD
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(int64_t version) {
     ASSIGN_OR_RETURN(auto tablet_metadata, _tablet->get_metadata(version));
-    return pick_rowsets(tablet_metadata, nullptr);
+    return pick_rowsets(tablet_metadata, false, nullptr);
 }
 
 StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(TabletMetadataPtr tablet_metadata,
-                                                                       std::vector<bool>* has_dels) {
-=======
-StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets() {
-    return pick_rowsets(_tablet_metadata, false, nullptr);
-}
-
-StatusOr<std::vector<RowsetPtr>> PrimaryCompactionPolicy::pick_rowsets(
-        const std::shared_ptr<const TabletMetadataPB>& tablet_metadata, bool calc_score, std::vector<bool>* has_dels) {
->>>>>>> cc38db6a56 ([Enhancement] Optimize compaction resource usage for cloud native primary table (#39611))
+                                                                       bool calc_score, std::vector<bool>* has_dels) {
     std::vector<RowsetPtr> input_rowsets;
     UpdateManager* mgr = _tablet->update_mgr();
     std::priority_queue<RowsetCandidate> rowset_queue;
@@ -209,12 +195,9 @@ StatusOr<uint32_t> primary_compaction_score_by_policy(TabletManager* tablet_mgr,
     ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(metadata.id()));
     auto policy = std::make_shared<PrimaryCompactionPolicy>(std::make_shared<Tablet>(tablet));
     std::vector<bool> has_dels;
-<<<<<<< HEAD
-    ASSIGN_OR_RETURN(auto pick_rowsets, policy->pick_rowsets(std::make_shared<TabletMetadataPB>(metadata), &has_dels));
+    ASSIGN_OR_RETURN(auto pick_rowsets,
+                     policy->pick_rowsets(std::make_shared<TabletMetadataPB>(metadata), true, &has_dels));
 
-=======
-    ASSIGN_OR_RETURN(auto pick_rowsets, policy.pick_rowsets(metadata, true, &has_dels));
->>>>>>> cc38db6a56 ([Enhancement] Optimize compaction resource usage for cloud native primary table (#39611))
     uint32_t segment_num_score = 0;
     for (int i = 0; i < pick_rowsets.size(); i++) {
         const auto& pick_rowset = pick_rowsets[i];

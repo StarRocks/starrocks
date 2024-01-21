@@ -941,11 +941,7 @@ CONF_mString(lake_vacuum_retry_pattern, "*request rate*");
 CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
 CONF_mBool(enable_primary_key_recover, "false");
-<<<<<<< HEAD
-=======
-CONF_mBool(lake_enable_compaction_async_write, "false");
 CONF_mInt64(lake_pk_compaction_max_input_rowsets, "5");
->>>>>>> cc38db6a56 ([Enhancement] Optimize compaction resource usage for cloud native primary table (#39611))
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
