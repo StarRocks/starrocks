@@ -19,7 +19,11 @@
 #include "column/column_viewer.h"
 #include "column/type_traits.h"
 #include "exprs/binary_function.h"
+#include "exprs/jit/ir_helper.h"
 #include "exprs/unary_function.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/IRBuilder.h"
+#include "llvm/IR/Value.h"
 #include "storage/column_predicate.h"
 #include "types/logical_type.h"
 #include "types/logical_type_infra.h"
@@ -158,6 +162,7 @@ public:
                 LOG(WARNING) << "unsupported cmp op";
                 return Status::InternalError("unsupported cmp op");
             }
+            result.null_flag = b.CreateXor(datums[0].null_flag, datums[1].null_flag);
             return result;
         }
     }
@@ -371,6 +376,44 @@ public:
         }
 
         return builder.build(ColumnHelper::is_all_const(list));
+    }
+    bool is_compilable() const override { return IRHelper::support_jit(Type); }
+
+    StatusOr<LLVMDatum> generate_ir_impl(ExprContext* context, const llvm::Module& module, llvm::IRBuilder<>& b,
+                                         const std::vector<LLVMDatum>& datums) const override {
+        if constexpr (lt_is_decimal<Type>) {
+            // TODO(yueyang): Implement decimal cmp in LLVM IR.
+            return Status::NotSupported("JIT of decimal null eq not support");
+        } else {
+            LLVMDatum result(b);
+            auto* l = datums[0].value;
+            auto* r = datums[1].value;
+            auto* l_null = datums[0].null_flag;
+            auto* r_null = datums[1].null_flag;
+            auto* if_value = b.CreateAnd(IRHelper::bool_to_cond(b, l_null), IRHelper::bool_to_cond(b, r_null));
+            auto* elseif_value = b.CreateXor(IRHelper::bool_to_cond(b, l_null), IRHelper::bool_to_cond(b, r_null));
+            auto* llvm_true = llvm::ConstantInt::get(b.getInt1Ty(), 1);
+            auto* llvm_false = llvm::ConstantInt::get(b.getInt1Ty(), 0);
+            if constexpr (lt_is_float<Type>) {
+                auto* cmp = b.CreateFCmpOEQ(l, r);
+                result.value = b.CreateSelect(if_value, llvm_true, b.CreateSelect(elseif_value, llvm_false, cmp));
+            } else {
+                auto* cmp = b.CreateICmpEQ(l, r);
+                result.value = b.CreateSelect(if_value, llvm_true, b.CreateSelect(elseif_value, llvm_false, cmp));
+            }
+            // always not null
+            return result;
+        }
+    }
+
+    std::string debug_string() const override {
+        std::stringstream out;
+        auto expr_debug_string = Expr::debug_string();
+        out << "VectorizedNullSafeEqPredicate ("
+            << "lhs=" << _children[0]->type().debug_string() << ", rhs=" << _children[1]->type().debug_string()
+            << ", result=" << this->type().debug_string() << ", lhs_is_constant=" << _children[0]->is_constant()
+            << ", rhs_is_constant=" << _children[1]->is_constant() << ", expr (" << expr_debug_string << ") )";
+        return out.str();
     }
 };
 

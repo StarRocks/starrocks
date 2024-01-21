@@ -92,6 +92,9 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
         auto* jit_column = b.CreateLoad(data_type, b.CreateConstInBoundsGEP1_64(data_type, columns_arg, i));
 
         const auto& type = i == args_size ? expr->type() : input_exprs[i]->type();
+        auto tmp = i == args_size ? expr: input_exprs[i];
+        LOG(INFO) << i << " col type = " << logical_type_to_string(type.type) << "  nullable = " << tmp->is_nullable()
+                  << " is const " << tmp->is_constant();
         auto status = IRHelper::logical_to_ir_type(b, type.type);
         if (!status.ok()) {
             return status.status();
@@ -150,14 +153,16 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
         phi->addIncoming(value, non_constant_bb);
 
         datum.value = phi;
+        if (input_exprs[i]->is_constant() && input_exprs[i]->is_nullable()) { // only null
+            datum.null_flag = llvm::ConstantInt::get(b.getInt8Ty(), 1);
+        }
 
-        if (expr->is_constant() || !expr->is_nullable()) {
+        if (input_exprs[i]->is_constant() || !input_exprs[i]->is_nullable()) {
             datums.emplace_back(datum);
             continue;
         }
         if (!input_exprs[i]->is_constant() && input_exprs[i]->is_nullable()) {
             // TODO(Yueyang): check if need to trans null to Int1Ty.
-
             // Pseudo code: auto* is_null_n = nullable_n ? null_flags_n[counter] : false;
             auto* null_bb = llvm::BasicBlock::Create(b.getContext(), "null", func);
             auto* non_null_bb = llvm::BasicBlock::Create(b.getContext(), "non_null", func);
@@ -189,8 +194,14 @@ Status JITFunction::generate_scalar_function_ir(ExprContext* context, llvm::Modu
     // Pseudo code:
     // result_value = datum_a + datum_b + datum_c;
     // result_null_flag = is_null_a | is_null_b | is_null_c;
+#if 1
     ASSIGN_OR_RETURN(auto result, generate_exprs_ir(context, module, b, expr, datums));
-
+#else
+    LLVMDatum result(b);
+    auto* not_null = b.CreateICmpEQ(datums[0].null_flag, llvm::ConstantInt::get(b.getInt8Ty(), 0));
+    auto* is_true = IRHelper::bool_to_cond(b, datums[0].value);
+    result.value = b.CreateAnd(not_null, is_true);
+#endif
     // Pseudo code:
     // values_last[counter] = result_value;
     // null_flags_last[counter] = result_null_flag;
@@ -260,16 +271,20 @@ Status JITFunction::llvm_function(JITScalarFunction jit_function, const Columns&
     jit_columns.reserve(columns.size());
     // Extract data and null_data pointers from columns to generate JIT columns.
     for (const auto& column : columns) {
-        auto data_column = ColumnHelper::get_data_column(column.get());
-        auto datums = reinterpret_cast<const int8_t*>(data_column->raw_data());
-
-        const int8_t* null_flags = nullptr;
-        if (!column->is_constant() && column->is_nullable()) {
-            null_flags = reinterpret_cast<const int8_t*>(
-                    ColumnHelper::as_raw_column<NullableColumn>(column)->null_column()->raw_data());
+        ColumnPtr col = column;
+        if (column->is_constant()) {
+            col = static_cast<ConstColumn*>(column.get())->data_column();
         }
-
+        auto [un_col, un_col_null] = ColumnHelper::unpack_nullable_column(col);
+        auto datums = reinterpret_cast<const int8_t*>(un_col->raw_data());
+        const int8_t* null_flags = nullptr;
+        if (un_col_null != nullptr) {
+            null_flags = reinterpret_cast<const int8_t*>(un_col_null->raw_data());
+        }
         jit_columns.emplace_back(JITColumn{column->is_constant(), datums, null_flags});
+        LOG(INFO) << column->get_name() << "  " << column->debug_string()
+                  << " null = " << ((null_flags == nullptr) ? "0" : un_col_null->debug_string()) << " cast ptr "
+                  << (uint64)null_flags;
     }
 
     // Evaluate.

@@ -172,10 +172,13 @@ public:
     }
 
     static void verify_with_jit(ColumnPtr ptr, Expr* expr, RuntimeState* runtime_state,
-                                const std::function<void(ColumnPtr const&)>& test_func) {
+                                const std::function<void(ColumnPtr const&)>& test_func, bool need_jit = true) {
         // Verify the original result.
         test_func(ptr);
 
+        if (!need_jit) {
+            return;
+        }
         auto jit_engine = JITEngine::get_instance();
         if (!jit_engine->support_jit()) {
             return;
@@ -183,15 +186,16 @@ public:
 
         ObjectPool pool;
         auto* jit_expr = JITExpr::create(&pool, expr);
-        ASSERT_TRUE(jit_expr->is_jit_compiled());
 
         ExprContext exprContext(jit_expr);
         std::vector<ExprContext*> expr_ctxs = {&exprContext};
 
         ASSERT_OK(Expr::prepare(expr_ctxs, runtime_state));
         ASSERT_OK(Expr::open(expr_ctxs, runtime_state));
+        ASSERT_TRUE(jit_expr->is_jit_compiled());
 
-        ptr = expr->evaluate(&exprContext, nullptr);
+
+        ptr = jit_expr->evaluate(&exprContext, nullptr);
         // Verify the result after JIT.
         test_func(ptr);
     }

@@ -94,7 +94,8 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     for (Expr* child : _children) {
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(context, child, ptr);
         if (column->only_null()) { // TODO(Yueyang): remove this when support ifnull expr.
-            return ColumnHelper::align_return_type(column, type(), column->size(), true);
+            //column = ColumnHelper::align_return_type(column, child->type(), column->size(), true);
+            column = ColumnHelper::create_column(child->type(), false, true, column->size());
         }
         args.emplace_back(column);
     }
@@ -108,9 +109,13 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         }
     }
 #endif
+    auto chunk_size = args[0]->size();
+    if (ptr != nullptr) {
+        chunk_size = ptr->num_rows();
+    }
 
     auto result_column =
-            ColumnHelper::create_column(type(), !is_constant() && is_nullable(), is_constant(), ptr->num_rows(), false);
+            ColumnHelper::create_column(type(), !is_constant() && is_nullable(), is_constant(), chunk_size, false);
     args.emplace_back(result_column);
 
     RETURN_IF_ERROR(JITFunction::llvm_function(_jit_function, args));
