@@ -935,6 +935,7 @@ CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
+CONF_mInt64(lake_pk_compaction_max_input_rowsets, "5");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
