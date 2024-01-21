@@ -400,6 +400,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy) {
         version++;
     }
     ASSERT_EQ(kChunkSize * 3, read(version));
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
 
     ASSIGN_OR_ABORT(auto compaction_policy,
@@ -414,6 +415,20 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy) {
 
     config::max_update_compaction_num_singleton_deltas = 1;
     ASSIGN_OR_ABORT(auto input_rowsets3, compaction_policy->pick_rowsets(version));
+=======
+    ASSIGN_OR_ABORT(auto tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata));
+    config::lake_pk_compaction_max_input_rowsets = 1000;
+    ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
+    EXPECT_EQ(3, input_rowsets.size());
+
+    config::lake_pk_compaction_max_input_rowsets = 2;
+    ASSIGN_OR_ABORT(auto input_rowsets2, compaction_policy->pick_rowsets());
+    EXPECT_EQ(2, input_rowsets2.size());
+
+    config::lake_pk_compaction_max_input_rowsets = 1;
+    ASSIGN_OR_ABORT(auto input_rowsets3, compaction_policy->pick_rowsets());
+>>>>>>> cc38db6a56 ([Enhancement] Optimize compaction resource usage for cloud native primary table (#39611))
     EXPECT_EQ(1, input_rowsets3.size());
 }
 
@@ -459,10 +474,17 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
     ASSERT_EQ(kChunkSize * 6, read(version));
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
 
+<<<<<<< HEAD
     config::max_update_compaction_num_singleton_deltas = 4;
     ASSIGN_OR_ABORT(auto compaction_policy,
                     CompactionPolicy::create_compaction_policy(std::make_shared<Tablet>(tablet)));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(version));
+=======
+    config::lake_pk_compaction_max_input_rowsets = 4;
+    ASSIGN_OR_ABORT(auto tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata));
+    ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
+>>>>>>> cc38db6a56 ([Enhancement] Optimize compaction resource usage for cloud native primary table (#39611))
     EXPECT_EQ(4, input_rowsets.size());
 
     // check the rowset order, pick rowset#1 first, because it is empty.
@@ -523,10 +545,17 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
     ASSERT_EQ(kChunkSize * 6, read(version));
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
 
+<<<<<<< HEAD
     config::max_update_compaction_num_singleton_deltas = 4;
     ASSIGN_OR_ABORT(auto compaction_policy,
                     CompactionPolicy::create_compaction_policy(std::make_shared<Tablet>(tablet)));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(version));
+=======
+    config::lake_pk_compaction_max_input_rowsets = 4;
+    ASSIGN_OR_ABORT(auto tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), tablet_metadata));
+    ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
+>>>>>>> cc38db6a56 ([Enhancement] Optimize compaction resource usage for cloud native primary table (#39611))
     EXPECT_EQ(4, input_rowsets.size());
     EXPECT_EQ(1, input_rowsets[0]->num_segments());
     EXPECT_EQ(1, input_rowsets[1]->num_segments());
@@ -570,13 +599,20 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
     ASSIGN_OR_ABORT(auto tablet_meta, tablet.get_metadata(version));
 
+<<<<<<< HEAD
     ASSIGN_OR_ABORT(auto compaction_policy,
                     CompactionPolicy::create_compaction_policy(std::make_shared<Tablet>(tablet)));
     config::max_update_compaction_num_singleton_deltas = 1000;
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(version));
+=======
+    ASSIGN_OR_ABORT(auto compaction_policy, CompactionPolicy::create(_tablet_mgr.get(), tablet_meta));
+    config::lake_pk_compaction_max_input_rowsets = 1000;
+    ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets());
+>>>>>>> cc38db6a56 ([Enhancement] Optimize compaction resource usage for cloud native primary table (#39611))
     EXPECT_EQ(3, input_rowsets.size());
     EXPECT_EQ(3, compaction_score(_tablet_mgr.get(), *tablet_meta));
 
+<<<<<<< HEAD
     config::max_update_compaction_num_singleton_deltas = 2;
     ASSIGN_OR_ABORT(auto input_rowsets2, compaction_policy->pick_rowsets(version));
     EXPECT_EQ(2, input_rowsets2.size());
@@ -587,6 +623,18 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
     EXPECT_EQ(1, input_rowsets3.size());
     EXPECT_EQ(1, compaction_score(_tablet_mgr.get(), *tablet_meta));
     config::max_update_compaction_num_singleton_deltas = 1000;
+=======
+    config::lake_pk_compaction_max_input_rowsets = 2;
+    ASSIGN_OR_ABORT(auto input_rowsets2, compaction_policy->pick_rowsets());
+    EXPECT_EQ(2, input_rowsets2.size());
+    EXPECT_EQ(3, compaction_score(_tablet_mgr.get(), tablet_meta));
+
+    config::lake_pk_compaction_max_input_rowsets = 1;
+    ASSIGN_OR_ABORT(auto input_rowsets3, compaction_policy->pick_rowsets());
+    EXPECT_EQ(1, input_rowsets3.size());
+    EXPECT_EQ(3, compaction_score(_tablet_mgr.get(), tablet_meta));
+    config::lake_pk_compaction_max_input_rowsets = 1000;
+>>>>>>> cc38db6a56 ([Enhancement] Optimize compaction resource usage for cloud native primary table (#39611))
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
