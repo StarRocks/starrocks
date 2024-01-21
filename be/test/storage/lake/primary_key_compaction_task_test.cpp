@@ -404,15 +404,15 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy) {
 
     ASSIGN_OR_ABORT(auto compaction_policy,
                     CompactionPolicy::create_compaction_policy(std::make_shared<Tablet>(tablet)));
-    config::max_update_compaction_num_singleton_deltas = 1000;
+    config::lake_pk_compaction_max_input_rowsets = 1000;
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(version));
     EXPECT_EQ(3, input_rowsets.size());
 
-    config::max_update_compaction_num_singleton_deltas = 2;
+    config::lake_pk_compaction_max_input_rowsets = 2;
     ASSIGN_OR_ABORT(auto input_rowsets2, compaction_policy->pick_rowsets(version));
     EXPECT_EQ(2, input_rowsets2.size());
 
-    config::max_update_compaction_num_singleton_deltas = 1;
+    config::lake_pk_compaction_max_input_rowsets = 1;
     ASSIGN_OR_ABORT(auto input_rowsets3, compaction_policy->pick_rowsets(version));
     EXPECT_EQ(1, input_rowsets3.size());
 }
@@ -459,7 +459,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
     ASSERT_EQ(kChunkSize * 6, read(version));
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
 
-    config::max_update_compaction_num_singleton_deltas = 4;
+    config::lake_pk_compaction_max_input_rowsets = 4;
     ASSIGN_OR_ABORT(auto compaction_policy,
                     CompactionPolicy::create_compaction_policy(std::make_shared<Tablet>(tablet)));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(version));
@@ -523,7 +523,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
     ASSERT_EQ(kChunkSize * 6, read(version));
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_id));
 
-    config::max_update_compaction_num_singleton_deltas = 4;
+    config::lake_pk_compaction_max_input_rowsets = 4;
     ASSIGN_OR_ABORT(auto compaction_policy,
                     CompactionPolicy::create_compaction_policy(std::make_shared<Tablet>(tablet)));
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(version));
@@ -572,21 +572,21 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
 
     ASSIGN_OR_ABORT(auto compaction_policy,
                     CompactionPolicy::create_compaction_policy(std::make_shared<Tablet>(tablet)));
-    config::max_update_compaction_num_singleton_deltas = 1000;
+    config::lake_pk_compaction_max_input_rowsets = 1000;
     ASSIGN_OR_ABORT(auto input_rowsets, compaction_policy->pick_rowsets(version));
     EXPECT_EQ(3, input_rowsets.size());
     EXPECT_EQ(3, compaction_score(_tablet_mgr.get(), *tablet_meta));
 
-    config::max_update_compaction_num_singleton_deltas = 2;
+    config::lake_pk_compaction_max_input_rowsets = 2;
     ASSIGN_OR_ABORT(auto input_rowsets2, compaction_policy->pick_rowsets(version));
     EXPECT_EQ(2, input_rowsets2.size());
-    EXPECT_EQ(2, compaction_score(_tablet_mgr.get(), *tablet_meta));
+    EXPECT_EQ(3, compaction_score(_tablet_mgr.get(), *tablet_meta));
 
-    config::max_update_compaction_num_singleton_deltas = 1;
+    config::lake_pk_compaction_max_input_rowsets = 1;
     ASSIGN_OR_ABORT(auto input_rowsets3, compaction_policy->pick_rowsets(version));
     EXPECT_EQ(1, input_rowsets3.size());
-    EXPECT_EQ(1, compaction_score(_tablet_mgr.get(), *tablet_meta));
-    config::max_update_compaction_num_singleton_deltas = 1000;
+    EXPECT_EQ(3, compaction_score(_tablet_mgr.get(), *tablet_meta));
+    config::lake_pk_compaction_max_input_rowsets = 1000;
 }
 
 TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
