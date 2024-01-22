@@ -114,6 +114,8 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     if (result_column->is_constant() && ptr != nullptr) {
         result_column->resize(ptr->num_rows());
     }
+
+    // TODO(Yueyang): handle nullable produce
     // RETURN_IF_ERROR(result_column->unfold_const_children(_type));
     return result_column;
 }

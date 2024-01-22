@@ -28,6 +28,7 @@
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/binary_function.h"
 #include "exprs/column_ref.h"
@@ -1153,25 +1154,37 @@ public:
 
             if constexpr ((lt_is_integer<FromType> || lt_is_float<FromType>)&&(lt_is_integer<ToType> ||
                                                                                lt_is_float<ToType>)) {
-                if constexpr (std::numeric_limits<RunTimeCppType<ToType>>::max() <
-                              std::numeric_limits<RunTimeCppType<FromType>>::max()) {
+                typedef RunTimeCppType<FromType> FromCppType;
+                typedef RunTimeCppType<ToType> ToCppType;
+                if constexpr (std::numeric_limits<ToCppType>::max() < std::numeric_limits<FromCppType>::max()) {
                     // Check overflow.
-                    ASSIGN_OR_RETURN(auto* from_type, IRHelper::logical_to_ir_type(b, FromType));
-                    auto* max = llvm::ConstantInt::get(from_type, std::numeric_limits<RunTimeCppType<ToType>>::max());
-                    auto* min = llvm::ConstantInt::get(from_type, std::numeric_limits<RunTimeCppType<ToType>>::min());
 
                     llvm::Value* max_overflow = nullptr;
                     llvm::Value* min_overflow = nullptr;
                     if constexpr (lt_is_integer<FromType>) {
+                        RETURN_IF(!l->getType()->isIntegerTy(),
+                                  Status::JitCompileError("Check overflow failed, data type is not integer"));
+
+                        // TODO(Yueyang): fix __int128
+                        auto* max = llvm::ConstantInt::get(l->getType(), std::numeric_limits<ToCppType>::max(), true);
+                        auto* min = llvm::ConstantInt::get(l->getType(), std::numeric_limits<ToCppType>::min(), true);
                         max_overflow = b.CreateICmpSGT(l, max);
                         min_overflow = b.CreateICmpSLT(l, min);
-
                     } else if constexpr (lt_is_float<FromType>) {
+                        RETURN_IF(!l->getType()->isFloatingPointTy(),
+                                  Status::JitCompileError("Check overflow failed, data type is not float point"));
+
+                        llvm::Value* max = llvm::ConstantFP::get(
+                                l->getType(), static_cast<double>(std::numeric_limits<ToCppType>::max()));
+                        llvm::Value* min = llvm::ConstantFP::get(
+                                l->getType(), static_cast<double>(std::numeric_limits<ToCppType>::min()));
                         max_overflow = b.CreateFCmpOGT(l, max);
                         min_overflow = b.CreateFCmpOLT(l, min);
                     }
+
                     auto* is_overflow = b.CreateOr(max_overflow, min_overflow);
-                    b.CreateOr(datum.null_flag, is_overflow);
+                    datum.null_flag = b.CreateSelect(
+                            is_overflow, llvm::ConstantInt::get(datum.null_flag->getType(), 1, false), datum.null_flag);
                 }
             }
 

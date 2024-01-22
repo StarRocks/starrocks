@@ -24,7 +24,7 @@ namespace starrocks {
 
 bool IRHelper::support_jit(const LogicalType& type) {
     return type == TYPE_BOOLEAN || type == TYPE_TINYINT || type == TYPE_SMALLINT || type == TYPE_INT ||
-           type == TYPE_BIGINT || type == TYPE_LARGEINT // Integer types;
+           type == TYPE_BIGINT                          // || type == TYPE_LARGEINT // Integer types;
            || type == TYPE_FLOAT || type == TYPE_DOUBLE // Floating point types;
             ;
 }
@@ -148,13 +148,14 @@ StatusOr<llvm::Value*> IRHelper::cast_to_type(llvm::IRBuilder<>& b, llvm::Value*
         // TODO(Yueyang): check this.
         return b.CreateIntCast(value, logical_to_type, false);
     } else if (from_type == TYPE_BOOLEAN && is_float_type(to_type)) {
-        llvm::Value* integer = b.CreateIntCast(value, b.getInt32Ty(), false);
+        auto* integer = b.CreateIntCast(value, b.getInt32Ty(), false);
         return b.CreateCast(llvm::Instruction::SIToFP, integer, logical_to_type);
     } else if (is_integer_type(from_type) && to_type == TYPE_BOOLEAN) {
-        // TODO(Yueyang): check this type.
-        return b.CreateICmpNE(value, llvm::ConstantInt::get(value->getType(), 0));
+        auto result = b.CreateICmpNE(value, llvm::ConstantInt::get(value->getType(), 0, true));
+        return b.CreateCast(llvm::Instruction::ZExt, result, logical_to_type);
     } else if (is_float_type(from_type) && to_type == TYPE_BOOLEAN) {
-        return b.CreateFCmpUNE(value, llvm::ConstantFP::get(value->getType(), 0));
+        auto result = b.CreateFCmpUNE(value, llvm::ConstantFP::get(value->getType(), 0));
+        return b.CreateCast(llvm::Instruction::ZExt, result, logical_to_type);
     } else if (is_integer_type(from_type) && is_integer_type(to_type)) {
         return b.CreateIntCast(value, logical_to_type, true);
     } else if (is_integer_type(from_type) && is_float_type(to_type)) {

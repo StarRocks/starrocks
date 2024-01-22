@@ -242,20 +242,31 @@ struct ArithmeticBinaryOperator {
             } else {
                 // TODO(Yueyang): avoid 0 div a negative num, make result -0
                 // adjusted_r = r == 0 ? r + 1 : r;
-                r_is_zero = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), 0));
-                auto* sum = b.CreateAdd(r, llvm::ConstantInt::get(r->getType(), 1));
+                bool is_signed;
+                if constexpr (lt_is_boolean<Type>) {
+                    is_signed = false;
+                } else if constexpr (lt_is_integer<Type>) {
+                    is_signed = true;
+                } else {
+                    DCHECK(false) << "Invalid type";
+                }
+
+                r_is_zero = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), 0, is_signed));
+                auto* sum = b.CreateAdd(r, llvm::ConstantInt::get(r->getType(), 1, is_signed));
                 auto* adjusted_r = b.CreateSelect(r_is_zero, sum, r);
                 if constexpr (may_cause_fpe<ResultType> && may_cause_fpe<LType> && may_cause_fpe<RType>) {
                     // fpe = l == signed_minimum<LType> && r == -1;
-                    auto* cond_left = b.CreateICmpEQ(l, llvm::ConstantInt::get(l->getType(), signed_minimum<LType>));
-                    auto* cond_right = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), -1));
+                    auto* cond_left =
+                            b.CreateICmpEQ(l, llvm::ConstantInt::get(l->getType(), signed_minimum<LType>, is_signed));
+                    auto* cond_right = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), -1, is_signed));
                     auto* fpe = b.CreateAnd(cond_left, cond_right);
                     // It is difficult to create an if statement here, so we use ternary expressions as an alternative.
                     // In a ternary expression, the last two expressions are evaluated regardless of the condition.
                     // modify r to prevent overflow.
-                    adjusted_r = b.CreateSelect(fpe, llvm::ConstantInt::get(l->getType(), 1), adjusted_r);
-                    result.value = b.CreateSelect(fpe, llvm::ConstantInt::get(l->getType(), signed_minimum<ResultType>),
-                                                  b.CreateSDiv(l, adjusted_r));
+                    adjusted_r = b.CreateSelect(fpe, llvm::ConstantInt::get(l->getType(), 1, is_signed), adjusted_r);
+                    result.value = b.CreateSelect(
+                            fpe, llvm::ConstantInt::get(l->getType(), signed_minimum<ResultType>, is_signed),
+                            b.CreateSDiv(l, adjusted_r));
                 } else {
                     result.value = b.CreateSDiv(l, adjusted_r);
                 }
@@ -277,21 +288,31 @@ struct ArithmeticBinaryOperator {
             } else {
                 // TODO(Yueyang): avoid 0 mod a negative num, make result -0
                 // adjusted_r = r == 0 ? r + 1 : r;
-                r_is_zero = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), 0));
-                auto* sum = b.CreateAdd(r, llvm::ConstantInt::get(r->getType(), 1));
+                bool is_signed;
+                if constexpr (lt_is_boolean<Type>) {
+                    is_signed = false;
+                } else if constexpr (lt_is_integer<Type>) {
+                    is_signed = true;
+                } else {
+                    DCHECK(false) << "Invalid type";
+                }
+
+                r_is_zero = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), 0, is_signed));
+                auto* sum = b.CreateAdd(r, llvm::ConstantInt::get(r->getType(), 1, is_signed));
                 auto* adjusted_r = b.CreateSelect(r_is_zero, sum, r);
                 llvm::Value* fpe = b.getInt1(false);
                 if constexpr (may_cause_fpe<ResultType> && may_cause_fpe<LType> && may_cause_fpe<RType>) {
                     // fpe = l == signed_minimum<LType> && r == -1;
-                    auto* cond_left = b.CreateICmpEQ(l, llvm::ConstantInt::get(l->getType(), signed_minimum<LType>));
-                    auto* cond_right = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), -1));
+                    auto* cond_left =
+                            b.CreateICmpEQ(l, llvm::ConstantInt::get(l->getType(), signed_minimum<LType>, is_signed));
+                    auto* cond_right = b.CreateICmpEQ(r, llvm::ConstantInt::get(r->getType(), -1, is_signed));
                     fpe = b.CreateAnd(cond_left, cond_right);
                     // It is difficult to create an if statement here, so we use ternary expressions as an alternative.
                     // In a ternary expression, the last two expressions are evaluated regardless of the condition.
                     // modify r to prevent overflow.
-                    adjusted_r = b.CreateSelect(fpe, llvm::ConstantInt::get(l->getType(), 1), adjusted_r);
-                    result.value =
-                            b.CreateSelect(fpe, llvm::ConstantInt::get(l->getType(), 0), b.CreateSRem(l, adjusted_r));
+                    adjusted_r = b.CreateSelect(fpe, llvm::ConstantInt::get(l->getType(), 1, is_signed), adjusted_r);
+                    result.value = b.CreateSelect(fpe, llvm::ConstantInt::get(l->getType(), 0, is_signed),
+                                                  b.CreateSRem(l, adjusted_r));
                 } else {
                     result.value = b.CreateSRem(l, adjusted_r);
                 }

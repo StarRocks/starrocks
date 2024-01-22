@@ -287,6 +287,103 @@ TEST_F(VectorizedCastExprTest, stringLiteralIntCastToBoolean) {
     }
 }
 
+template <LogicalType FromType, LogicalType ToType>
+static void numeric_cast_with_jit(RuntimeState* runtime_state, TExprNode& cast_expr) {
+    ObjectPool pool;
+    typedef RunTimeCppType<FromType> FromCppType;
+    typedef RunTimeCppType<ToType> ToCppType;
+    auto max = std::numeric_limits<FromCppType>::max();
+    auto min = std::numeric_limits<FromCppType>::min();
+    FromCppType data[] = {0,
+                          1,
+                          -1,
+                          max,
+                          min,
+                          static_cast<FromCppType>(max - 1),
+                          static_cast<FromCppType>(min + 1),
+                          static_cast<FromCppType>(max / 2),
+                          static_cast<FromCppType>(min / 2),
+                          static_cast<FromCppType>(max / 2 + 1),
+                          static_cast<FromCppType>(min / 2 - 1)};
+    cast_expr.child_type = to_thrift(FromType);
+    cast_expr.type = gen_type_desc(to_thrift(ToType));
+    if constexpr (std::numeric_limits<ToCppType>::max() < std::numeric_limits<FromCppType>::max()) {
+        cast_expr.is_nullable = true;
+    } else {
+        cast_expr.is_nullable = false;
+    }
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(&pool, cast_expr));
+
+    for (auto& d : data) {
+        cast_expr.type = gen_type_desc(cast_expr.child_type);
+        MockVectorizedExpr<FromType> col1(cast_expr, 1, d);
+        expr->_children.push_back(&col1);
+
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        ExprsTestHelper::verify_result_with_jit(ptr, expr.get(), runtime_state);
+    }
+}
+
+TEST_F(VectorizedCastExprTest, numericJITCast) {
+    numeric_cast_with_jit<TYPE_TINYINT, TYPE_TINYINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_TINYINT, TYPE_SMALLINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_TINYINT, TYPE_INT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_TINYINT, TYPE_BIGINT>(&runtime_state, expr_node);
+    // numeric_cast_with_jit<TYPE_TINYINT, TYPE_LARGEINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_TINYINT, TYPE_FLOAT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_TINYINT, TYPE_DOUBLE>(&runtime_state, expr_node);
+
+    numeric_cast_with_jit<TYPE_SMALLINT, TYPE_TINYINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_SMALLINT, TYPE_SMALLINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_SMALLINT, TYPE_INT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_SMALLINT, TYPE_BIGINT>(&runtime_state, expr_node);
+    // numeric_cast_with_jit<TYPE_SMALLINT, TYPE_LARGEINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_SMALLINT, TYPE_FLOAT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_SMALLINT, TYPE_DOUBLE>(&runtime_state, expr_node);
+
+    numeric_cast_with_jit<TYPE_INT, TYPE_TINYINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_INT, TYPE_SMALLINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_INT, TYPE_INT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_INT, TYPE_BIGINT>(&runtime_state, expr_node);
+    // numeric_cast_with_jit<TYPE_INT, TYPE_LARGEINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_INT, TYPE_FLOAT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_INT, TYPE_DOUBLE>(&runtime_state, expr_node);
+
+    numeric_cast_with_jit<TYPE_BIGINT, TYPE_TINYINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_BIGINT, TYPE_SMALLINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_BIGINT, TYPE_INT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_BIGINT, TYPE_BIGINT>(&runtime_state, expr_node);
+    // numeric_cast_with_jit<TYPE_BIGINT, TYPE_LARGEINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_BIGINT, TYPE_FLOAT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_BIGINT, TYPE_DOUBLE>(&runtime_state, expr_node);
+
+    // numeric_cast_with_jit<TYPE_LARGEINT, TYPE_TINYINT>(&runtime_state, expr_node);
+    // numeric_cast_with_jit<TYPE_LARGEINT, TYPE_SMALLINT>(&runtime_state, expr_node);
+    // numeric_cast_with_jit<TYPE_LARGEINT, TYPE_INT>(&runtime_state, expr_node);
+    // numeric_cast_with_jit<TYPE_LARGEINT, TYPE_BIGINT>(&runtime_state, expr_node);
+    // numeric_cast_with_jit<TYPE_LARGEINT, TYPE_LARGEINT>(&runtime_state, expr_node);
+    // numeric_cast_with_jit<TYPE_LARGEINT, TYPE_FLOAT>(&runtime_state, expr_node);
+    // numeric_cast_with_jit<TYPE_LARGEINT, TYPE_DOUBLE>(&runtime_state, expr_node);
+
+    numeric_cast_with_jit<TYPE_FLOAT, TYPE_TINYINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_FLOAT, TYPE_SMALLINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_FLOAT, TYPE_INT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_FLOAT, TYPE_BIGINT>(&runtime_state, expr_node);
+    // numeric_cast_with_jit<TYPE_FLOAT, TYPE_LARGEINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_FLOAT, TYPE_FLOAT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_FLOAT, TYPE_DOUBLE>(&runtime_state, expr_node);
+
+    numeric_cast_with_jit<TYPE_DOUBLE, TYPE_TINYINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_DOUBLE, TYPE_SMALLINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_DOUBLE, TYPE_INT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_DOUBLE, TYPE_BIGINT>(&runtime_state, expr_node);
+    // numeric_cast_with_jit<TYPE_DOUBLE, TYPE_LARGEINT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_DOUBLE, TYPE_FLOAT>(&runtime_state, expr_node);
+    numeric_cast_with_jit<TYPE_DOUBLE, TYPE_DOUBLE>(&runtime_state, expr_node);
+}
+
 TEST_F(VectorizedCastExprTest, intCastSelfExpr) {
     expr_node.child_type = TPrimitiveType::INT;
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
@@ -413,10 +510,12 @@ TEST_F(VectorizedCastExprTest, intToBigIntCastExpr) {
 TEST_F(VectorizedCastExprTest, NullableBooleanCastExpr) {
     expr_node.child_type = TPrimitiveType::INT;
     expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
+    expr_node.is_nullable = true;
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
-    MockNullVectorizedExpr<TYPE_INT> col1(expr_node, 10, 10);
+    MockNullVectorizedExpr<TYPE_INT> col1(expr_node, 10, -1);
+    expr_node.is_nullable = false;
 
     expr->_children.push_back(&col1);
 
@@ -1380,10 +1479,12 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmapError) {
 TEST_F(VectorizedCastExprTest, BigIntCastToInt) {
     expr_node.child_type = TPrimitiveType::BIGINT;
     expr_node.type = gen_type_desc(TPrimitiveType::INT);
+    expr_node.is_nullable = true;
 
     std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
 
     expr_node.type = gen_type_desc(expr_node.child_type);
+    expr_node.is_nullable = false;
     MockVectorizedExpr<TYPE_BIGINT> col1(expr_node, 10, INT64_MAX);
 
     expr->_children.push_back(&col1);

@@ -16,11 +16,8 @@
 
 #include <glog/logging.h>
 
-#include <cassert>
-#include <iterator>
 #include <memory>
 #include <mutex>
-#include <tuple>
 #include <utility>
 
 #include "common/compiler_util.h"
@@ -28,7 +25,6 @@
 #include "exprs/jit/jit_functions.h"
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/Orc/LLJIT.h"
-#include "llvm/ExecutionEngine/Orc/SimpleRemoteEPC.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Verifier.h"
@@ -37,10 +33,6 @@
 #include "llvm/Support/Error.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/TargetSelect.h"
-#include "llvm/Transforms/InstCombine/InstCombine.h"
-#include "llvm/Transforms/Scalar.h"
-#include "llvm/Transforms/Scalar/GVN.h"
-#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -93,9 +85,8 @@ StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* cont
 
     // TODO(Yueyang): optimize module name.
     auto expr_name = expr->debug_string();
-    JITScalarFunction compiled_function = nullptr;
-    compiled_function = (JITScalarFunction)instance->lookup_function_with_lock(expr_name);
 
+    auto compiled_function = (JITScalarFunction)instance->lookup_function_with_lock(expr_name, false);
     if (compiled_function != nullptr) {
         return compiled_function;
     }
@@ -103,16 +94,21 @@ StatusOr<JITScalarFunction> JITEngine::compile_scalar_function(ExprContext* cont
     auto llvm_context = std::make_unique<llvm::LLVMContext>();
     auto module = std::make_unique<llvm::Module>(expr_name, *llvm_context);
     instance->setup_module(module.get());
+
     // Generate scalar function IR.
     RETURN_IF_ERROR(JITFunction::generate_scalar_function_ir(context, *module, expr));
-    if (llvm::verifyModule(*module)) {
-        return Status::JitCompileError("Failed to generate scalar function IR");
+    std::string error;
+    llvm::raw_string_ostream errs(error);
+    if (llvm::verifyModule(*module, &errs)) {
+        return Status::JitCompileError(
+                fmt::format("Failed to generate scalar function IR, verify failed: {}", errs.str()));
     }
 
     // Optimize module.
     instance->optimize_module(module.get());
-    if (llvm::verifyModule(*module)) {
-        return Status::JitCompileError("Failed to optimize scalar function IR");
+    if (llvm::verifyModule(*module, &errs)) {
+        return Status::JitCompileError(
+                fmt::format("Failed to optimize scalar function IR, verify failed: {}", errs.str()));
     }
 
     // Compile module, return function pointer (maybe nullptr).
@@ -166,7 +162,7 @@ void* JITEngine::compile_module(std::unique_ptr<llvm::Module> module, std::uniqu
                                 const std::string& expr_name) {
     // print_module(*module);
     std::lock_guard<std::mutex> lock(_mutex);
-    auto* func = lookup_function(expr_name);
+    auto* func = lookup_function(expr_name, false);
     // The function has already been compiled.
     if (func != nullptr) {
         return func;
@@ -186,7 +182,7 @@ void* JITEngine::compile_module(std::unique_ptr<llvm::Module> module, std::uniqu
     _resource_tracker_map[expr_name] = std::move(resource_tracker);
     _resource_ref_count_map[expr_name] = 0;
     // Lookup the function in the JIT engine, this will trigger the compilation.
-    return lookup_function(expr_name);
+    return lookup_function(expr_name, true);
 }
 
 Status JITEngine::remove_module(const std::string& expr_name) {
@@ -223,9 +219,13 @@ void JITEngine::print_module(const llvm::Module& module) {
     LOG(INFO) << "JIT: Generated IR:\n" << str;
 }
 
-void* JITEngine::lookup_function(const std::string& expr_name) {
+void* JITEngine::lookup_function(const std::string& expr_name, bool mast_exist) {
     auto addr = _jit->lookup(expr_name);
     if (UNLIKELY(!addr || UNLIKELY(addr->isNull()))) {
+        if (!mast_exist) {
+            return nullptr;
+        }
+
         std::string error_message = "address is null";
         if (!addr) {
             handleAllErrors(addr.takeError(), [&](const llvm::ErrorInfoBase& EIB) { error_message = EIB.message(); });
@@ -237,9 +237,9 @@ void* JITEngine::lookup_function(const std::string& expr_name) {
     return reinterpret_cast<void*>(addr->toPtr<JITScalarFunction>());
 }
 
-void* JITEngine::lookup_function_with_lock(const std::string& expr_name) {
+void* JITEngine::lookup_function_with_lock(const std::string& expr_name, bool mast_exist) {
     std::lock_guard<std::mutex> lock(_mutex);
-    return lookup_function(expr_name);
+    return lookup_function(expr_name, mast_exist);
 }
 
 } // namespace starrocks

@@ -108,9 +108,9 @@ private:
      */
     static void print_module(const llvm::Module& module);
 
-    inline void* lookup_function(const std::string& expr_name);
+    inline void* lookup_function(const std::string& expr_name, bool mast_exist);
 
-    void* lookup_function_with_lock(const std::string& expr_name);
+    void* lookup_function_with_lock(const std::string& expr_name, bool mast_exist);
 
     std::mutex _mutex;
 

@@ -181,14 +181,15 @@ TEST_F(VectorizedArithmeticExprTest, mulExpr) {
     }
 }
 
-// TODO(Yueyang: Implement null)
 TEST_F(VectorizedArithmeticExprTest, nullMulExpr) {
     expr_node.opcode = TExprOpcode::MULTIPLY;
+    expr_node.is_nullable = true;
     std::unique_ptr<Expr> expr(VectorizedArithmeticExprFactory::from_thrift(expr_node));
 
     MockNullVectorizedExpr<TYPE_INT> col1(expr_node, 10, 10);
     MockNullVectorizedExpr<TYPE_INT> col2(expr_node, 10, 2);
     ++col2.flag;
+    expr_node.is_nullable = false;
 
     expr->_children.push_back(&col1);
     expr->_children.push_back(&col2);
@@ -244,8 +245,10 @@ TEST_F(VectorizedArithmeticExprTest, nullMulExpr) {
 
 TEST_F(VectorizedArithmeticExprTest, divExpr) {
     expr_node.opcode = TExprOpcode::DIVIDE;
+    expr_node.is_nullable = true;
     std::unique_ptr<Expr> expr(VectorizedArithmeticExprFactory::from_thrift(expr_node));
 
+    expr_node.is_nullable = false;
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 10);
     MockVectorizedExpr<TYPE_INT> col2(expr_node, 10, 2);
 
@@ -298,8 +301,10 @@ TEST_F(VectorizedArithmeticExprTest, divExpr) {
 
 TEST_F(VectorizedArithmeticExprTest, produceNullModExpr) {
     expr_node.opcode = TExprOpcode::MOD;
+    expr_node.is_nullable = true;
     std::unique_ptr<Expr> expr(VectorizedArithmeticExprFactory::from_thrift(expr_node));
 
+    expr_node.is_nullable = false;
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 10);
     MockVectorizedExpr<TYPE_INT> col2(expr_node, 10, 0);
 
@@ -338,11 +343,13 @@ TEST_F(VectorizedArithmeticExprTest, produceNullModExpr) {
 
 TEST_F(VectorizedArithmeticExprTest, mergeNullDivExpr) {
     expr_node.opcode = TExprOpcode::DIVIDE;
+    expr_node.is_nullable = true;
     std::unique_ptr<Expr> expr(VectorizedArithmeticExprFactory::from_thrift(expr_node));
 
     MockNullVectorizedExpr<TYPE_INT> col1(expr_node, 10, 10);
     MockNullVectorizedExpr<TYPE_INT> col2(expr_node, 10, 2);
     ++col2.flag;
+    expr_node.is_nullable = false;
 
     expr->_children.push_back(&col1);
     expr->_children.push_back(&col2);
@@ -450,8 +457,10 @@ TEST_F(VectorizedArithmeticExprTest, constConstAddExpr) {
 
 TEST_F(VectorizedArithmeticExprTest, produceNullVecotConstModExpr) {
     expr_node.opcode = TExprOpcode::MOD;
+    expr_node.is_nullable = true;
     std::unique_ptr<Expr> expr(VectorizedArithmeticExprFactory::from_thrift(expr_node));
 
+    expr_node.is_nullable = false;
     MockVectorizedExpr<TYPE_INT> col1(expr_node, 10, 10);
     MockConstVectorizedExpr<TYPE_INT> col2(expr_node, 0);
 
@@ -615,42 +624,38 @@ TEST_F(VectorizedArithmeticExprTest, constMod128Expr) {
     {
         ColumnPtr v1 = col1.evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(v1, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
-
-            for (int j = 0; j < ptr->size(); ++j) {
-                ASSERT_FALSE(ptr->is_null(j));
-            }
-        });
+        ASSERT_FALSE(v1->is_nullable());
+        for (int j = 0; j < v1->size(); ++j) {
+            ASSERT_FALSE(v1->is_null(j));
+        }
 
         ColumnPtr v2 = col2.evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(v2, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
-            ASSERT_TRUE(ptr->is_constant());
-            ASSERT_EQ(1, ptr->size());
-        });
+        ASSERT_FALSE(v2->is_nullable());
+        ASSERT_TRUE(v2->is_constant());
+        ASSERT_EQ(1, v2->size());
     }
 
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
-            ASSERT_TRUE(ptr->is_constant());
-            ASSERT_FALSE(ptr->is_numeric());
+        // TODO(Yueyang): support __int128 mod.
+        // ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+        ASSERT_FALSE(ptr->is_nullable());
+        ASSERT_TRUE(ptr->is_constant());
+        ASSERT_FALSE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<ConstColumn>(ptr);
-            ASSERT_EQ(1, v->size());
+        auto v = std::static_pointer_cast<ConstColumn>(ptr);
+        ASSERT_EQ(1, v->size());
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(0, ColumnHelper::cast_to_raw<TYPE_LARGEINT>(v->data_column())->get_data()[j]);
-            }
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_EQ(0, ColumnHelper::cast_to_raw<TYPE_LARGEINT>(v->data_column())->get_data()[j]);
+        }
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_FALSE(v->is_null(j));
-            }
-        });
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_FALSE(v->is_null(j));
+        }
+        // });
     }
 }
 
@@ -670,42 +675,38 @@ TEST_F(VectorizedArithmeticExprTest, constModN128Expr) {
     {
         ColumnPtr v1 = col1.evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(v1, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
-
-            for (int j = 0; j < ptr->size(); ++j) {
-                ASSERT_FALSE(ptr->is_null(j));
-            }
-        });
+        ASSERT_FALSE(v1->is_nullable());
+        for (int j = 0; j < v1->size(); ++j) {
+            ASSERT_FALSE(v1->is_null(j));
+        }
 
         ColumnPtr v2 = col2.evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(v2, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
-            ASSERT_TRUE(ptr->is_constant());
-            ASSERT_EQ(1, ptr->size());
-        });
+        ASSERT_FALSE(v2->is_nullable());
+        ASSERT_TRUE(v2->is_constant());
+        ASSERT_EQ(1, v2->size());
     }
 
     {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
-        ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
-            ASSERT_FALSE(ptr->is_nullable());
-            ASSERT_TRUE(ptr->is_constant());
-            ASSERT_FALSE(ptr->is_numeric());
+        // TODO(Yueyang): support __int128 mod.
+        // ExprsTestHelper::verify_with_jit(ptr, expr.get(), &runtime_state, [](ColumnPtr const& ptr) {
+        ASSERT_FALSE(ptr->is_nullable());
+        ASSERT_TRUE(ptr->is_constant());
+        ASSERT_FALSE(ptr->is_numeric());
 
-            auto v = std::static_pointer_cast<ConstColumn>(ptr);
-            ASSERT_EQ(1, v->size());
+        auto v = std::static_pointer_cast<ConstColumn>(ptr);
+        ASSERT_EQ(1, v->size());
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_EQ(0, ColumnHelper::cast_to_raw<TYPE_LARGEINT>(v->data_column())->get_data()[j]);
-            }
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_EQ(0, ColumnHelper::cast_to_raw<TYPE_LARGEINT>(v->data_column())->get_data()[j]);
+        }
 
-            for (int j = 0; j < v->size(); ++j) {
-                ASSERT_FALSE(v->is_null(j));
-            }
-        });
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_FALSE(v->is_null(j));
+        }
+        // });
     }
 }
 

@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "column/chunk.h"
+#include "column/column_helper.h"
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exprs/array_expr.h"
@@ -190,9 +191,39 @@ public:
         ASSERT_OK(Expr::open(expr_ctxs, runtime_state));
         ASSERT_TRUE(jit_expr->is_jit_compiled());
 
-        ptr = jit_expr->evaluate(&exprContext, nullptr);
+        Chunk chunk;
+        chunk.append_column(ptr, 0);
+        ptr = jit_expr->evaluate(&exprContext, &chunk);
         // Verify the result after JIT.
         test_func(ptr);
+
+        Expr::close(expr_ctxs, runtime_state);
+    }
+
+    static void verify_result_with_jit(const ColumnPtr& ptr, Expr* expr, RuntimeState* runtime_state) {
+        auto jit_engine = JITEngine::get_instance();
+        if (!jit_engine->support_jit()) {
+            return;
+        }
+
+        ObjectPool pool;
+        auto* jit_expr = JITExpr::create(&pool, expr);
+        ExprContext exprContext(jit_expr);
+        std::vector<ExprContext*> expr_ctxs = {&exprContext};
+
+        ASSERT_OK(Expr::prepare(expr_ctxs, runtime_state));
+        ASSERT_OK(Expr::open(expr_ctxs, runtime_state));
+        ASSERT_TRUE(jit_expr->is_jit_compiled());
+
+        Chunk chunk;
+        chunk.append_column(ptr, 0);
+        auto jit_ptr = jit_expr->evaluate(&exprContext, &chunk);
+
+        ASSERT_TRUE(jit_ptr->is_constant() == ptr->is_constant());
+
+        // ASSERT_TRUE(jit_ptr->is_nullable() == ptr->is_nullable());
+        ASSERT_TRUE(jit_ptr->size() == ptr->size());
+        jit_ptr->equals(0, *ptr, jit_ptr->size());
 
         Expr::close(expr_ctxs, runtime_state);
     }
