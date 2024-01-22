@@ -158,7 +158,7 @@ public class TypeChecker implements PlanValidator.Checker {
                         // For example, local agg -> distinct global agg -> exchange with group by keys -> global agg
                         // to
                         // local agg -> distinct global agg -> exchange with group by keys + distinct keys ->
-                        // local -> exchange with group by keys -> global.
+                        // local agg -> exchange with group by keys -> global agg.
                         // The added exchange steps helps us distribute data more evenly across multiple machines.
                         // So we also need to set mergeAggFn flag into the second local agg for those not distinct
                         // agg callOperator.
