@@ -34,6 +34,7 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -72,8 +73,11 @@ public enum ScalarOperatorEvaluator {
 
         ImmutableMap.Builder<FunctionSignature, FunctionInvoker> mapBuilder = new ImmutableMap.Builder<>();
 
+        Class<?> metaFunctions = MetaFunctions.class;
         Class<?> clazz = ScalarOperatorFunctions.class;
-        for (Method method : clazz.getDeclaredMethods()) {
+        for (Method method : ListUtils.union(
+                Lists.newArrayList(clazz.getDeclaredMethods()),
+                Lists.newArrayList(metaFunctions.getDeclaredMethods()))) {
             ConstantFunction annotation = method.getAnnotation(ConstantFunction.class);
             registerFunction(mapBuilder, method, annotation);
 
