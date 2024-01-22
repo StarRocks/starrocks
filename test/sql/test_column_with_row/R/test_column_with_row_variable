@@ -1,4 +1,8 @@
 -- name: test_column_with_row_variable
+ADMIN SET FRONTEND CONFIG ("enable_experimental_rowstore" = "true");
+-- result:
+[]
+-- !result
 DROP TABLE IF EXISTS t1_var;
 -- result:
 []
