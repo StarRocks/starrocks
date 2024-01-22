@@ -215,6 +215,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
                 String storageVolumeId = svm.getStorageVolumeIdOfTable(tableId);
                 metastore.setLakeStorageInfo(table, storageVolumeId, properties);
+                useFastSchemaEvolution = false;
             } else {
                 table = new OlapTable(tableId, tableName, baseSchema, keysType, partitionInfo, distributionInfo, indexes);
             }

@@ -376,7 +376,6 @@ public abstract class ConnectorPartitionTraits {
         }
 
         public List<Column> getPartitionColumns() {
-            // TODO: check partition type
             return ((OlapTable) table).getPartitionInfo().getPartitionColumns();
         }
     }
