@@ -66,11 +66,6 @@ struct DataTypeTraits<TYPE_SMALLINT> {
     static const LogicalType type = TYPE_UNSIGNED_SMALLINT;
 };
 
-template <>
-struct DataTypeTraits<TYPE_UNSIGNED_SMALLINT> {
-    static const LogicalType type = TYPE_UNSIGNED_SMALLINT;
-};
-
 template <LogicalType Type>
 class DictPageBuilder final : public PageBuilder {
     using ValueType = typename CppTypeTraits<Type>::CppType;
