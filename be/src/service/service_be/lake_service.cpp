@@ -198,18 +198,8 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
                 response->mutable_compaction_scores()->insert({tablet_id, score});
             } else {
                 g_publish_version_failed_tasks << 1;
-<<<<<<< HEAD
                 LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                             << " txn_id=" << txns[0] << " version=" << new_version;
-=======
-                if (res.status().is_resource_busy()) {
-                    VLOG(2) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                            << " txn_ids=" << JoinInts(txns, ",") << " version=" << new_version;
-                } else {
-                    LOG(WARNING) << "Fail to publish version: " << res.status() << ". tablet_id=" << tablet_id
-                                 << " txn_ids=" << JoinInts(txns, ",") << " version=" << new_version;
-                }
->>>>>>> 868c9e6d7c ([Enhancement] Fixed some information was missing from the logs (#39679))
+                             << " txn_ids=" << JoinInts(txns, ",") << " version=" << new_version;
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
                 res.status().to_protobuf(response->mutable_status());
