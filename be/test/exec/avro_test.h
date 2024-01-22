@@ -12,14 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package com.starrocks.meta.lock;
+#pragma once
 
-import com.google.common.base.Strings;
+#include "avro.h"
 
-public class LockTimeoutException extends RuntimeException {
+namespace starrocks {
 
-    public LockTimeoutException(String msg) {
-        super(Strings.nullToEmpty(msg));
-    }
+struct AvroHelper {
+    avro_schema_t schema = NULL;
+    avro_value_iface_t* iface = NULL;
+    avro_value_t avro_val;
+    std::string schema_text;
+};
 
-}
+} // namespace starrocks

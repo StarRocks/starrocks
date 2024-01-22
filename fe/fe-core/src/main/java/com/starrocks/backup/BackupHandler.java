@@ -57,8 +57,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
@@ -96,6 +96,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
+
+import static com.starrocks.scheduler.MVActiveChecker.MV_BACKUP_INACTIVE_REASON;
 
 public class BackupHandler extends FrontendDaemon implements Writable {
     private static final Logger LOG = LogManager.getLogger(BackupHandler.class);
@@ -355,8 +357,8 @@ public class BackupHandler extends FrontendDaemon implements Writable {
                 }
                 if (copiedTbl.isMaterializedView()) {
                     MaterializedView copiedMv = (MaterializedView) copiedTbl;
-                    copiedMv.setInactiveAndReason(String.format("Set the materialized view %s inactive in backup and " +
-                            "active it in restore if possible", copiedMv.getName()));
+                    copiedMv.setInactiveAndReason(String.format("Set the materialized view %s inactive because %s",
+                            copiedMv.getName(), MV_BACKUP_INACTIVE_REASON));
                 }
                 backupTbls.add(copiedTbl);
             }

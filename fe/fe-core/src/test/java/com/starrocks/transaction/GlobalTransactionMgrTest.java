@@ -50,6 +50,7 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.KafkaTaskInfo;
@@ -57,7 +58,6 @@ import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadTaskInfo;
-import com.starrocks.meta.lock.LockTimeoutException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -794,7 +794,7 @@ public class GlobalTransactionMgrTest {
         transTablets.add(tabletCommitInfo2);
         transTablets.add(tabletCommitInfo3);
         masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets,
-                        Lists.newArrayList(), null);
+                Lists.newArrayList(), null);
         TransactionState transactionState = fakeEditLog.getTransaction(transactionId);
         assertEquals(TransactionStatus.PREPARED, transactionState.getTransactionStatus());
 
@@ -871,7 +871,7 @@ public class GlobalTransactionMgrTest {
                 .when(dbTransactionMgr)
                 .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
         Assert.assertThrows(CommitRateExceededException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
-                    Collections.emptyList(), Collections.emptyList(), 10, null));
+                Collections.emptyList(), Collections.emptyList(), 10, null));
     }
 
     @Test
@@ -912,6 +912,11 @@ public class GlobalTransactionMgrTest {
             throws UserException {
         Database db = new Database(10L, "db0");
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
+        TransactionState transactionState = new TransactionState();
+        doReturn(transactionState)
+                .when(globalTransactionMgr)
+                .getTransactionState(10L, 1001L);
+
         doThrow(LockTimeoutException.class)
                 .when(globalTransactionMgr)
                 .commitTransaction(10L, 1001L, Collections.emptyList(), Collections.emptyList(), null);

@@ -222,7 +222,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### update_compaction_check_interval_seconds
 
-- 含义：Primary key 模型 Update compaction 的检查间隔。
+- 含义：主键表 Update compaction 的检查间隔。
 - 单位：秒
 - 默认值：60
 
@@ -421,10 +421,37 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：单个 BE 上与 Kafka 交互的线程池大小。当前 Routine Load FE 与 Kafka 的交互需经由 BE 完成，而每个 BE 上实际执行操作的是一个单独的线程池。当 Routine Load 任务较多时，可能会出现线程池线程繁忙的情况，可以调整该配置。
 - 默认值：10
 
+#### lake_enable_vertical_compaction_fill_data_cache
+
+- 含义：存算分离集群下，是否允许 Compaction 任务在执行时缓存数据到本地磁盘上。
+- 默认值：false
+- 引入版本：v3.1.7、v3.2.3
+
+#### compact_threads
+
+- 含义：并发 Compaction 任务的最大线程数。自 v3.1.7，v3.2.2 起变为动态参数。
+- 默认值：4
+- 引入版本：v3.0.0
+
 #### update_compaction_ratio_threshold
 
-- 含义：存算分离集群下主键模型表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
+- 含义：存算分离集群下主键表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
 - 默认值：0.5
+
+#### create_tablet_worker_count
+
+- 含义：创建 Tablet 的线程数。自 v3.1.7 起变为动态参数。
+- 默认值：3
+
+#### number_tablet_writer_threads
+
+- 含义：用于 Stream Load 的线程数。自 v3.1.7 起变为动态参数。
+- 默认值：16
+
+#### pipeline_connector_scan_thread_num_per_cpu
+
+- 含义：BE 节点中每个 CPU 核心分配给 Pipeline Connector 的扫描线程数量。自 v3.1.7 起变为动态参数。
+- 默认值：8
 
 #### max_garbage_sweep_interval
 
@@ -495,11 +522,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：心跳线程数。
 - 默认值：1
-
-#### create_tablet_worker_count
-
-- 含义：创建 tablet 的线程数。
-- 默认值：3
 
 #### drop_tablet_worker_count
 
@@ -680,11 +702,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：小批量导入生成的文件保留的时。
 - 默认值：4
-
-#### number_tablet_writer_threads
-
-- 含义：流式导入的线程数。
-- 默认值：16
 
 #### streaming_load_rpc_max_alive_time_sec
 

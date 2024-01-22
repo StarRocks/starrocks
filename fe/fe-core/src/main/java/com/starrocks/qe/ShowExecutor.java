@@ -101,6 +101,8 @@ import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.credential.CredentialUtil;
 import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.load.DeleteMgr;
@@ -114,8 +116,6 @@ import com.starrocks.load.streamload.StreamLoadFunctionalExprProvider;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ActionSet;
 import com.starrocks.privilege.AuthorizationMgr;
@@ -146,6 +146,7 @@ import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.InformationSchemaDataSource;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AdminShowConfigStmt;
@@ -163,6 +164,7 @@ import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowAuthorStmt;
+import com.starrocks.sql.ast.ShowBackendBlackListStmt;
 import com.starrocks.sql.ast.ShowBackendsStmt;
 import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
@@ -419,12 +421,19 @@ public class ShowExecutor {
             handleShowFailPoint();
         } else if (stmt instanceof ShowDictionaryStmt) {
             handleShowDictionary();
+        } else if (stmt instanceof ShowBackendBlackListStmt) {
+            handleBackendBlackList();
         } else {
             handleEmpty();
         }
 
         List<List<String>> rows = doPredicate(stmt, stmt.getMetaData(), resultSet.getResultRows());
         return new ShowResultSet(resultSet.getMetaData(), rows);
+    }
+
+    private void handleBackendBlackList() {
+        List<List<String>> rows = SimpleScheduler.getHostBlacklist().getShowData();
+        resultSet = new ShowResultSet(stmt.getMetaData(), rows);
     }
 
     private void handleShowAuthentication() {
@@ -1197,7 +1206,7 @@ public class ShowExecutor {
             }
 
             List<String> createTableStmt = Lists.newArrayList();
-            GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true /* hide password */);
+            AstToStringBuilder.getDdlStmt(table, createTableStmt, null, null, false, true /* hide password */);
             if (createTableStmt.isEmpty()) {
                 resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
                 return;

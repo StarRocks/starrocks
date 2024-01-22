@@ -43,9 +43,9 @@ import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
-import com.starrocks.meta.lock.LockTimeoutException;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -245,7 +245,7 @@ public class GlobalTransactionMgr {
 
         LOG.debug("try to pre commit transaction: {}", transactionId);
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.prepareTransaction(transactionId, tabletCommitInfos, tabletFailInfos, txnCommitAttachment);
+        dbTransactionMgr.prepareTransaction(transactionId, tabletCommitInfos, tabletFailInfos, txnCommitAttachment, true);
     }
 
     public void commitPreparedTransaction(long dbId, long transactionId, long timeoutMillis)
@@ -275,7 +275,7 @@ public class GlobalTransactionMgr {
         List<Long> tableIdList = transactionState.getTableIdList();
 
         Locker locker = new Locker();
-        if (!locker.tryLockTables(db, tableIdList, LockType.WRITE, timeoutMillis)) {
+        if (!locker.tryLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE, timeoutMillis)) {
             throw new UserException("get database write lock timeout, database="
                     + db.getFullName() + ", timeoutMillis=" + timeoutMillis);
         }
@@ -399,7 +399,7 @@ public class GlobalTransactionMgr {
         TransactionState transactionState = getTransactionState(db.getId(), transactionId);
         List<Long> tableId = transactionState.getTableIdList();
         Locker locker = new Locker();
-        if (!locker.tryLockTables(db, tableId, LockType.WRITE, timeoutMs)) {
+        if (!locker.tryLockTablesWithIntensiveDbLock(db, tableId, LockType.WRITE, timeoutMs)) {
             throw new LockTimeoutException(
                     "get database write lock timeout, database=" + db.getFullName() + ", timeout=" + timeoutMs + "ms");
         }
@@ -434,7 +434,7 @@ public class GlobalTransactionMgr {
                                  TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.abortTransaction(transactionId, reason, txnCommitAttachment, failedTablets);
+        dbTransactionMgr.abortTransaction(transactionId, true, reason, txnCommitAttachment, failedTablets);
     }
 
     // for http cancel stream load api

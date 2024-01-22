@@ -141,6 +141,8 @@ public class LocalMetaStoreTest {
 
         LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         localMetastore.getPartitionIdToStorageMediumMap();
+        // Clean test.mv1, avoid its refreshment affecting other cases in this testsuite.
+        starRocksAssert.dropMaterializedView("test.mv1");
     }
 
     @Test

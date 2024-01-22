@@ -248,6 +248,7 @@ Status LogBlockManager::open() {
 void LogBlockManager::close() {}
 
 StatusOr<BlockPtr> LogBlockManager::acquire_block(const AcquireBlockOptions& opts) {
+    DCHECK(opts.block_size > 0) << "block size should be larger than 0";
     AcquireDirOptions acquire_dir_opts;
 #ifdef BE_TEST
     ASSIGN_OR_RETURN(auto dir, _dir_mgr->acquire_writable_dir(acquire_dir_opts));

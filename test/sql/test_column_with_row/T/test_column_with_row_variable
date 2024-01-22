@@ -1,0 +1,36 @@
+-- name: test_column_with_row_variable
+--创建行存表
+DROP TABLE IF EXISTS t1_var;
+CREATE TABLE IF NOT EXISTS t1_var(
+    k1 int,
+    k2 int,
+    v1 char(20),
+    v2 varchar(20),
+    v3 DATE NOT NULL COMMENT "YYYY-MM-DD",
+    v4 TINYINT COMMENT "range [-128, 127]"
+)
+PRIMARY KEY (k1, k2)
+distributed by hash(k1, k2)
+PROPERTIES (
+    "replication_num" = "1",
+    "storage_type" = "column_with_row"
+);
+
+--插入
+INSERT INTO t1_var(k1, k2, v1, v2, v3, v4) VALUES
+    (1, 2, 'a2222222', 'a2222222', "2222-12-22", 33),
+    (1, 3, 'b2222222', 'b2222222', "2222-12-22", 34),
+    (1, 4, 'c2222222', 'c2222222', "2222-12-22", 35),
+    (2, 2, 'd2222222', 'd2222222', "2222-12-22", 36),
+    (2, 3, 'd2222222', 'd2222222', "2222-12-22", 37),
+    (3, 3, 'e2222222', 'e2222222', "2222-12-22", 100),
+    (4, 4, 'f2222222', 'f2222222', "2222-12-22", 101);
+--查询
+set enable_short_circuit = true;
+select length(v1), v1, v2, v3, v4 from t1_var where k1 = 3 and k2 = 3;
+select * from t1_var where k1 = 3 and k2 = 3;
+set enable_short_circuit = false;
+--清空
+TRUNCATE TABLE t1_var;
+--drop表
+DROP TABLE t1_var FORCE;

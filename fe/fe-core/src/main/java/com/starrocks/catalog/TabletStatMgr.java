@@ -40,10 +40,10 @@ import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.proto.TabletStatRequest;
 import com.starrocks.proto.TabletStatRequest.TabletInfo;
 import com.starrocks.proto.TabletStatResponse;
@@ -360,7 +360,7 @@ public class TabletStatMgr extends FrontendDaemon {
                     Future<TabletStatResponse> responseFuture = lakeService.getTabletStats(request);
                     responseList.add(responseFuture);
                     LOG.debug("Sent tablet stat collection task to node {} for partition {} of version {}. tablet count={}",
-                                node.getHost(), debugName(), version, entry.getValue().size());
+                            node.getHost(), debugName(), version, entry.getValue().size());
                 } catch (Throwable e) {
                     LOG.warn("Fail to send tablet stat task to host {} for partition {}: {}", node.getHost(), debugName(),
                             e.getMessage());

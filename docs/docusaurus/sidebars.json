@@ -136,8 +136,8 @@
         {
           "type": "category",
           "label": "Catalog",
-          "link": {"type": "doc", "id": "data_source/catalog/catalog_overview"},
-          "items": ["data_source/catalog/default_catalog", "data_source/catalog/hive_catalog", "data_source/catalog/iceberg_catalog", "data_source/catalog/hudi_catalog", "data_source/catalog/deltalake_catalog", "data_source/catalog/jdbc_catalog", "data_source/catalog/elasticsearch_catalog", "data_source/catalog/paimon_catalog", "data_source/catalog/unified_catalog", "data_source/catalog/query_external_data" ]
+          "link": {"type": "doc", "id": "data_source/catalog/catalog_intro"},
+          "items": ["data_source/catalog/catalog_overview", "data_source/catalog/default_catalog", "data_source/catalog/hive_catalog", "data_source/catalog/iceberg_catalog", "data_source/catalog/hudi_catalog", "data_source/catalog/deltalake_catalog", "data_source/catalog/jdbc_catalog", "data_source/catalog/elasticsearch_catalog", "data_source/catalog/paimon_catalog", "data_source/catalog/unified_catalog", "data_source/catalog/query_external_data" ]
         },
         "data_source/External_table",
         "data_source/file_external_table",
@@ -769,11 +769,11 @@
       "type": "category",
       "label": "快速开始",
       "link": {"type": "doc", "id": "quick_start/quick_start"},
-      "items": ["quick_start/deploy_with_docker", "quick_start/Create_table", "quick_start/Import_and_query"]
+      "items": ["quick_start/shared-nothing", "quick_start/shared-data", "quick_start/iceberg"]
     },
     {
       "type": "category",
-      "label": " 项目协助",
+      "label": "技术支持",
       "link": {"type": "doc", "id": "project_help/project_help"},
       "items": ["project_help/slack"]
     },
@@ -816,7 +816,7 @@
         "table_design/StarRocks_table_design",
         {
           "type": "category",
-          "label": "数据模型",
+          "label": "表类型",
           "link": {"type": "doc", "id": "table_design/table_types/table_types"},
           "items": ["table_design/table_types/duplicate_key_table", "table_design/table_types/aggregate_table", "table_design/table_types/unique_key_table", "table_design/table_types/primary_key_table" ]
         },
@@ -891,8 +891,8 @@
         {
           "type": "category",
           "label": "Catalog",
-          "link": {"type": "doc", "id": "data_source/catalog/catalog_overview"},
-          "items": ["data_source/catalog/default_catalog", "data_source/catalog/hive_catalog", "data_source/catalog/iceberg_catalog", "data_source/catalog/hudi_catalog", "data_source/catalog/deltalake_catalog", "data_source/catalog/jdbc_catalog", "data_source/catalog/elasticsearch_catalog", "data_source/catalog/paimon_catalog", "data_source/catalog/unified_catalog", "data_source/catalog/query_external_data" ]
+          "link": {"type": "doc", "id": "data_source/catalog/catalog_intro"},
+          "items": ["data_source/catalog/catalog_overview", "data_source/catalog/default_catalog", "data_source/catalog/hive_catalog", "data_source/catalog/iceberg_catalog", "data_source/catalog/hudi_catalog", "data_source/catalog/deltalake_catalog", "data_source/catalog/jdbc_catalog", "data_source/catalog/elasticsearch_catalog", "data_source/catalog/paimon_catalog", "data_source/catalog/unified_catalog", "data_source/catalog/query_external_data" ]
         },
         "data_source/External_table",
         "data_source/file_external_table",

@@ -122,5 +122,6 @@ This project is used by the following companies. Learn more about their use case
 
 - [Airbnb](https://www.youtube.com/watch?v=AzDxEZuMBwM&ab_channel=StarRocks_labs)
 - [Tencent](https://www.starrocks.io/blog/tencent-unifies-their-gaming-analytics-with-starrocks)
+- [Shopee](https://www.youtube.com/watch?v=FJf6tVFr-20)
 - [Trip.com](https://starrocks.medium.com/trip-com-starrocks-efficiently-supports-high-concurrent-queries-dramatically-reduces-labor-and-1e1921dd6bf8) 
 - [Didi](https://www.starrocks.io/blog/reduced-80-cost-didis-journey-from-multiple-olap-engines-to-starrocks) 

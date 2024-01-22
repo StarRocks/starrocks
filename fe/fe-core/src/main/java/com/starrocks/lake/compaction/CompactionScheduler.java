@@ -29,10 +29,10 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.Daemon;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.proto.CompactRequest;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -397,7 +397,7 @@ public class CompactionScheduler extends Daemon {
                 .getTransactionState(db.getId(), job.getTxnId());
         List<Long> tableIdList = transactionState.getTableIdList();
         Locker locker = new Locker();
-        locker.lockTables(db, tableIdList, LockType.WRITE);
+        locker.lockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
         try {
             waiter = transactionMgr.commitTransaction(db.getId(), job.getTxnId(), commitInfoList,
                     Collections.emptyList(), null);
