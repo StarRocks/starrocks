@@ -82,7 +82,7 @@ public final class MaterializedViewMetricsEntity {
     // the current materialized view's partition count, 0 if the materialized view is not partitioned
     public GaugeMetric<Integer> counterPartitionCount;
 
-    // histogram
+    // histogram(ms)
     // record the materialized view's refresh job duration only if it's refreshed successfully.
     public Histogram histRefreshJobDuration;
 
