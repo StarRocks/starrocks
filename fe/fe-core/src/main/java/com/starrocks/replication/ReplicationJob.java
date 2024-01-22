@@ -778,8 +778,8 @@ public class ReplicationJob implements GsonPostProcessable {
         if (runningTasks.isEmpty() && finishedTasks.size() == taskNum) {
             return true;
         }
-        LOG.info("Replication job running tasks: {}, finished tasks: {}, transaction id: {}",
-                runningTasks.size(), finishedTasks.size(), transactionId);
+        LOG.info("Replication job state: {}, finished tasks: {}/{}, database id: {}, table id: {}, transaction id: {}",
+                state, finishedTasks.size(), taskNum, databaseId, tableId, transactionId);
         return false;
     }
 
