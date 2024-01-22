@@ -245,4 +245,15 @@ public class JDBCMetadataTest {
         }
     }
 
+    @Test
+    public void testCreateHikariDataSource() {
+        properties = new HashMap<>();
+        properties.put(DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
+        properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
+        properties.put(JDBCResource.USER, "root");
+        properties.put(JDBCResource.PASSWORD, "123456");
+        properties.put(JDBCResource.CHECK_SUM, "xxxx");
+        properties.put(JDBCResource.DRIVER_URL, "xxxx");
+        new JDBCMetadata(properties, "catalog");
+    }
 }
