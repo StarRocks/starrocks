@@ -417,6 +417,7 @@ public class AlterTableClauseVisitor extends AstVisitor<Void, ConnectContext> {
             clause.setSourcePartitionIds(partitionIds);
         } else {
             clause.setSourcePartitionIds(olapTable.getPartitions().stream().map(Partition::getId).collect(Collectors.toList()));
+            clause.setTableOptimize(true);
         }
 
 
