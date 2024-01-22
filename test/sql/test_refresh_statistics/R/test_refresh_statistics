@@ -64,7 +64,7 @@ function: assert_table_cardinality('explain select * from test_2', '1\d+')
 -- result:
 None
 -- !result
-[UC]analyze sample table test_2;
+[UC]analyze sample table test_2 with sync mode;
 -- result:
 test_db_f6c267c8957711eea4152207f0c2897f.test_2	sample	status	OK
 -- !result
@@ -74,17 +74,10 @@ None
 -- !result
 insert into test_2 values (1, '2021-01-01', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
 (1, '2021-01-02', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
-(1, '2021-01-03', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
-(1, '2021-01-04', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
-(1, '2021-01-05', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
-(1, '2021-01-06', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
-(1, '2021-01-07', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
-(1, '2021-01-08', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
-(1, '2021-01-09', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1),
-(1, '2021-01-10', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1);
+(1, '2021-01-03', 1, 'a', 'a', 'a', 'a', 'a', 'a', 'a', 'a',1);
 -- result:
 -- !result
-[UC]analyze sample table test_2;
+[UC]analyze sample table test_2 with sync mode;
 -- result:
 test_db_f6c267c8957711eea4152207f0c2897f.test_2	sample	status	OK
 -- !result
