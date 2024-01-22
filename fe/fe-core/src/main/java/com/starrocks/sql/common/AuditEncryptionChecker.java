@@ -125,7 +125,9 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
                 properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY) ||
                 properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN) ||
                 properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY) ||
-                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN)) {
+                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN) ||
+                properties.containsKey(CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY) ||
+                properties.containsKey(CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY)) {
             return true;
         }
         return false;

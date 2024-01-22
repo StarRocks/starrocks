@@ -244,6 +244,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY_ID,
                 (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.GCP_GCS_SERVICE_ACCOUNT_PRIVATE_KEY, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.ALIYUN_OSS_ACCESS_KEY, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.ALIYUN_OSS_SECRET_KEY, (key, value) -> CREDENTIAL_MASK);
     }
 
     public void getProcNodeData(BaseProcResult result) {
