@@ -34,6 +34,14 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/*      project(array_distinct)           project
+ *                |               =>         |
+ *      Aggregation(array_agg)            Aggregation(array_agg_distinct)
+ *
+ * project may have projection use result of array_agg in array_distinct or in an expr like
+ * array_length(array_distinct(array_agg(a))), this rule check all the projection and predicate,
+ *  if all of them use the array_agg's result with array_distinct that we can just do array_agg_distinct.
+ */
 public class ArrayDistinctAfterAggRule extends TransformationRule {
     public ArrayDistinctAfterAggRule() {
         super(RuleType.TF_ARRAY_DISTINCT_AFTER_AGG, Pattern.create(OperatorType.LOGICAL_PROJECT)
