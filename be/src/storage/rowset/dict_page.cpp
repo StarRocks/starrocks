@@ -68,11 +68,11 @@ uint32_t DictPageBuilder<Type>::add(const uint8_t* vals, uint32_t count) {
         }
 
         for (int i = 0; i < count; ++i) {
-            ValueType value = *reinterpret_cast<const ValueType*>(vals + i * SIZE_OF_TYPE);
+            auto& value = *reinterpret_cast<const ValueType*>(vals + i * SIZE_OF_TYPE);
             auto iter = _dictionary.find(value);
             if (iter != _dictionary.end()) {
                 value_code = iter->second;
-            } else if (_dict_builder->add(vals + i * SIZE_OF_TYPE, 1) > 0) {
+            } else if (_dict_builder->add(&value, 1) > 0) {
                 value_code = _dictionary.size();
                 _dictionary.insert_or_assign(value, value_code);
             } else {
