@@ -583,11 +583,13 @@ public class MvUtils {
         return predicate.isPushdown() || predicate.isRedundant();
     }
 
+    // for A inner join B A.a = B.b;
+    // A.a is not null and B.b is not null can be deduced from join.
+    // This function only extracts predicates from inner/semi join and scan node,
+    // which scan node will exclude IsNullPredicateOperator predicates if it's not null
+    // and its column ref is in the join's keys
     public static Set<ScalarOperator> getPredicateForRewrite(OptExpression root) {
         Set<ScalarOperator> result = Sets.newHashSet();
-        // for A inner join B A.a = B.b;
-        // A.a is not null and B.b is not null can be deduced from join
-        // so whether
         OptExpressionVisitor predicateVisitor = new OptExpressionVisitor<Object, ColumnRefSet>() {
             @Override
             public Object visit(OptExpression optExpression, ColumnRefSet context) {
@@ -605,7 +607,7 @@ public class MvUtils {
                     }
                     if (conjunct instanceof IsNullPredicateOperator) {
                         IsNullPredicateOperator isNullPredicateOperator = conjunct.cast();
-                        if (isNullPredicateOperator.isNotNull()
+                        if (isNullPredicateOperator.isNotNull() && context != null
                                 && context.containsAll(isNullPredicateOperator.getUsedColumns())) {
                             // if column ref is join key and column ref is not null can be ignored for inner and semi join
                             continue;
