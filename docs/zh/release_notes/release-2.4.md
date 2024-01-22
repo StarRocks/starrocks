@@ -181,11 +181,7 @@ displayed_sidebar: "Chinese"
 
 ### 新增特性
 
-<<<<<<< HEAD
-- 支持构建异步多表物化视图，实现多表 JOIN 查询加速。异步物化视图支持所有[数据模型](../table_design/table_types/table_types.md)。相关文档，请参见 [物化视图](../using_starrocks/Materialized_view.md)。
-=======
 - 支持构建异步多表物化视图，实现多表 JOIN 查询加速。异步物化视图支持所有[表类型](https://docs.starrocks.io/zh/docs/table_design/table_types/table_types/)。相关文档，请参见 [物化视图](https://docs.starrocks.io/zh/docs/using_starrocks/Materialized_view/)。
->>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 
 - 支持通过 INSERT OVERWRITE 语句批量写入并覆盖数据。相关文档，请参见 [INSERT 导入](../loading/InsertInto.md)。
 
