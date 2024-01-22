@@ -14,7 +14,6 @@
 
 package com.starrocks.http.rest;
 
-import com.staros.exception.StarException;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -28,7 +27,6 @@ import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponse;
-import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.util.CharsetUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -77,19 +75,14 @@ public class StarManagerHttpServiceAction extends RestBaseAction {
             throws DdlException, AccessDeniedException {
         UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
         checkUserOwnsAdminRole(currentUser);
-
-        try {
-            HttpResponse httpResponse = StarMgrServer.getCurrentState().getHttpService().starmgrHttpService(request.getRequest());
-            if (httpResponse instanceof FullHttpResponse) {
-                FullHttpResponse fullResponse = (FullHttpResponse) httpResponse;
-                response.getContent().append(fullResponse.content().toString(CharsetUtil.UTF_8));
-                response.setContentType(httpResponse.headers().get(HttpHeaderNames.CONTENT_TYPE));
-                sendResult(request, response);
-            } else {
-                throw new DdlException("Internal Error");
-            }
-        } catch (StarException e) {
-            writeResponse(request, response, HttpResponseStatus.UNAUTHORIZED);
+        HttpResponse httpResponse = StarMgrServer.getCurrentState().getHttpService().starmgrHttpService(request.getRequest());
+        if (httpResponse instanceof FullHttpResponse) {
+            FullHttpResponse fullResponse = (FullHttpResponse) httpResponse;
+            response.getContent().append(fullResponse.content().toString(CharsetUtil.UTF_8));
+            response.setContentType(httpResponse.headers().get(HttpHeaderNames.CONTENT_TYPE));
+            writeResponse(request, response, httpResponse.status());
+        } else {
+            throw new DdlException("Internal Error");
         }
     }
 }

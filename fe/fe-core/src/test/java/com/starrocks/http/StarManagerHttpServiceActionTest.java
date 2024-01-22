@@ -14,8 +14,6 @@
 
 package com.starrocks.http;
 
-import com.staros.exception.ExceptionCode;
-import com.staros.exception.StarException;
 import com.staros.manager.HttpService;
 import com.staros.manager.StarManager;
 import com.starrocks.common.DdlException;
@@ -28,6 +26,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.staros.StarMgrServer;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaderValues;
@@ -100,6 +99,8 @@ public class StarManagerHttpServiceActionTest {
                     response.headers().set(HttpHeaderNames.CONTENT_LENGTH, response.content().readableBytes());
                     return response;
                 }
+                @Mock
+                void writeResponse(BaseRequest request, BaseResponse response, HttpResponseStatus status) {}
             };
             starManagerHttpServiceAction.executeWithoutPassword(request, response);
         }
@@ -107,33 +108,16 @@ public class StarManagerHttpServiceActionTest {
             new MockUp<HttpService>() {
                 @Mock
                 public HttpResponse starmgrHttpService(HttpRequest request) {
-                    String str = "content";
-                    return new DefaultFullHttpResponse(
+                    HttpResponse response = new DefaultHttpResponse(
                             HttpVersion.HTTP_1_1,
-                            HttpResponseStatus.OK,
-                            Unpooled.wrappedBuffer(str.getBytes()));
+                            HttpResponseStatus.OK);
+                    response.headers().set("Content-Type", "text/plain; charset=UTF-8");
+                    return response;
                 }
             };
-            try {
-                starManagerHttpServiceAction.executeWithoutPassword(request, response);
-            } catch (DdlException e) {
-                Assert.assertEquals(e.getMessage(), "Inernal Error");
-            }
-        }
-        { // StarException error case
-            new MockUp<HttpService>() {
-                @Mock
-                public HttpResponse starmgrHttpService(HttpRequest request) throws StarException {
-                    throw new StarException(ExceptionCode.INVALID_ARGUMENT, "invalid argument");
-                }
-                @Mock
-                void writeResponse(BaseRequest request, BaseResponse response, HttpResponseStatus status) {}
-            };
-            try {
-                starManagerHttpServiceAction.executeWithoutPassword(request, response);
-            } catch (DdlException e) {
-                Assert.assertEquals(e.getMessage(), "Inernal Error");
-            }
+            DdlException ddlException = Assert.assertThrows(DdlException.class, () ->
+                    starManagerHttpServiceAction.executeWithoutPassword(request, response));
+            Assert.assertEquals(ddlException.getMessage(), "Inernal Error");
         }
     }
 }
