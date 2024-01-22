@@ -4,6 +4,41 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 3.1
 
+## 3.1.3
+
+发布日期：2023 年 9 月 25 日
+
+## 新增特性
+
+- 聚合函数 [group_concat](../sql-reference/sql-functions/string-functions/group_concat.md) 支持使用 DISTINCT 关键词和 ORDER BY 子句。[#28778](https://github.com/StarRocks/starrocks/pull/28778)
+- [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md)、[Kafka Connector](../loading/Kafka-connector-starrocks.md)、[Flink Connector](../loading/Flink-connector-starrocks.md) 和 [Spark Connector](../loading/Spark-connector-starrocks.md) 均支持对主键模型表进行部分列更新时启用列模式。[#28288](https://github.com/StarRocks/starrocks/pull/28288)
+- 分区中数据可以随着时间推移自动进行降冷操作（[List 分区方式](../table_design/list_partitioning.md)还不支持）。[#29335](https://github.com/StarRocks/starrocks/pull/29335) [#29393](https://github.com/StarRocks/starrocks/pull/29393)
+
+## 功能优化
+
+执行带有不合法注释的 SQL 命令返回结果与 MySQL 保持一致。[#30210](https://github.com/StarRocks/starrocks/pull/30210)
+
+## 问题修复
+
+修复了如下问题：
+
+- 执行 [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md) 语句时，如果 WHERE 条件中的字段类型是 [BITMAP](../sql-reference/sql-statements/data-types/BITMAP.md) 或 [HLL](../sql-reference/sql-statements/data-types/HLL.md)，则会导致语句执行失败。[#28592](https://github.com/StarRocks/starrocks/pull/28592)
+- 某个 Follower FE 重启后，由于 CpuCores 不同步，导致查询性能受到影响。[#28472](https://github.com/StarRocks/starrocks/pull/28472) [#30434](https://github.com/StarRocks/starrocks/pull/30434)
+- [to_bitmap()](../sql-reference/sql-functions/bitmap-functions/to_bitmap.md) 函数的 Cost 统计计算不正确，导致物化视图改写后选择了错误的执行计划。[#29961](https://github.com/StarRocks/starrocks/pull/29961)
+- 存算分离架构特定场景下，当 Follower FE 重启后，发送到该 Follower FE 的查询会返回错误信息“Backend node not found. Check if any backend node is down”。[#28615](https://github.com/StarRocks/starrocks/pull/28615)
+- [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 过程中持续导入可能会报错“Tablet is in error state”。[#29364](https://github.com/StarRocks/starrocks/pull/29364)
+- 在线修改 FE 动态参数 `max_broker_load_job_concurrency` 不生效。[#29964](https://github.com/StarRocks/starrocks/pull/29964) [#29720](https://github.com/StarRocks/starrocks/pull/29720)
+- 调用 [date_diff()](../sql-reference/sql-functions/date-time-functions/date_diff.md) 函数时，如果函数中指定的时间单位是个常量而日期是非常量，会导致 BE Crash。[#29937](https://github.com/StarRocks/starrocks/issues/29937)
+- 如果 [Hive Catalog](../data_source/catalog/hive_catalog.md) 是多级目录，且数据存储在腾讯云 COS 中，会导致查询结果不正确。[#30363](https://github.com/StarRocks/starrocks/pull/30363)
+- 存算分离架构下，开启数据异步写入后，自动分区不生效。[#29986](https://github.com/StarRocks/starrocks/issues/29986)
+- 通过 [CREATE TABLE LIKE](../sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE.md) 语句创建主键模型表时，会报错`Unexpected exception: Unknown properties: {persistent_index_type=LOCAL}`。[#30255](https://github.com/StarRocks/starrocks/pull/30255)
+- 主键模型表 Restore 之后，BE 重启后元数据发生错误，导致元数据不一致。[#30135](https://github.com/StarRocks/starrocks/pull/30135)
+- 主键模型表导入时，如果 Truncate 操作和查询并发，在有些情况下会报错“java.lang.NullPointerException”。[#30573](https://github.com/StarRocks/starrocks/pull/30573)
+- 物化视图创建语句中包含谓词表达式时，刷新结果不正确。[#29904](https://github.com/StarRocks/starrocks/pull/29904)
+- 升级到 3.1.2 版本后，原来创建的表中 Storage Volume 属性被重置成了 `null`。[#30647](https://github.com/StarRocks/starrocks/pull/30647)
+- Tablet 元数据做 Checkpoint 与 Restore 操作并行时， 会导致某些副本丢失不可查。[#30603](https://github.com/StarRocks/starrocks/pull/30603)
+- 如果表字段为 `NOT NULL` 但没有设置默认值，使用 CloudCanal 导入时会报错“Unsupported dataFormat value is : \N”。[#30799](https://github.com/StarRocks/starrocks/pull/30799)
+
 ## 3.1.2
 
 发布日期：2023 年 8 月 25 日
