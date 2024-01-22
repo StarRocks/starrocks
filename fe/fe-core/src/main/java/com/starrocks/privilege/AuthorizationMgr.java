@@ -235,12 +235,11 @@ public class AuthorizationMgr {
             PrivilegeCollectionV2 collection, ObjectType objectType, List<PrivilegeType> actionList)
             throws PrivilegeException {
         List<PEntryObject> objects = new ArrayList<>();
-        if (ObjectType.TABLE.equals(objectType)) {
+        if (ObjectType.TABLE.equals(objectType) || ObjectType.VIEW.equals(objectType)) {
             objects.add(provider.generateObject(objectType,
                     Lists.newArrayList("*", "*", "*"), globalStateMgr));
             collection.grant(objectType, actionList, objects, false);
-        } else if (ObjectType.VIEW.equals(objectType)
-                || ObjectType.MATERIALIZED_VIEW.equals(objectType)
+        } else if (ObjectType.MATERIALIZED_VIEW.equals(objectType)
                 || ObjectType.DATABASE.equals(objectType)
                 || ObjectType.PIPE.equals(objectType)) {
             objects.add(provider.generateObject(objectType,

@@ -109,20 +109,23 @@ public class NativeAccessController implements AccessController {
     @Override
     public void checkViewAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
+        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
         checkObjectTypeAction(currentUser, roleIds, privilegeType, ObjectType.VIEW,
-                Arrays.asList(tableName.getDb(), tableName.getTbl()));
+                Arrays.asList(catalog, tableName.getDb(), tableName.getTbl()));
     }
 
     @Override
     public void checkAnyActionOnView(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
             throws AccessDeniedException {
+        String catalog = tableName.getCatalog() == null ? InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME : tableName.getCatalog();
         checkAnyActionOnObject(currentUser, roleIds, ObjectType.VIEW,
-                Lists.newArrayList(tableName.getDb(), tableName.getTbl()));
+                Lists.newArrayList(catalog, tableName.getDb(), tableName.getTbl()));
     }
 
     @Override
-    public void checkAnyActionOnAnyView(UserIdentity currentUser, Set<Long> roleIds, String db) throws AccessDeniedException {
-        checkAnyActionOnView(currentUser, roleIds, new TableName(db, "*"));
+    public void checkAnyActionOnAnyView(UserIdentity currentUser, Set<Long> roleIds, String catalog, String db)
+            throws AccessDeniedException {
+        checkAnyActionOnView(currentUser, roleIds, new TableName(catalog, db, "*"));
     }
 
     @Override

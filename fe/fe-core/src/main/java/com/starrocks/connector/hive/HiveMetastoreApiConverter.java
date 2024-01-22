@@ -238,13 +238,28 @@ public class HiveMetastoreApiConverter {
             TrinoViewDefinition trinoViewDefinition = GsonUtils.GSON.fromJson(new String(bytes),
                     TrinoViewDefinition.class);
             hiveViewText = trinoViewDefinition.getOriginalSql();
-            hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
-                    table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition), hiveViewText,
-                    HiveView.Type.Trino);
+            HiveView.Builder builder = HiveView.builder()
+                    .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
+                    .setCatalogName(catalogName)
+                    .setDbName(table.getDbName())
+                    .setViewName(table.getTableName())
+                    .setSchema(toFullSchemasForTrinoView(table, trinoViewDefinition))
+                    .setCreateTime(table.getCreateTime())
+                    .setDefinition(hiveViewText)
+                    .setType(HiveView.Type.Trino);
+            hiveView = builder.build();
         } else {
-            hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
-                    table.getTableName(), toFullSchemasForHiveTable(table), table.getViewExpandedText(),
-                    HiveView.Type.Hive);
+            // for hive view
+            HiveView.Builder builder = HiveView.builder()
+                    .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
+                    .setCatalogName(catalogName)
+                    .setDbName(table.getDbName())
+                    .setViewName(table.getTableName())
+                    .setSchema(toFullSchemasForHiveTable(table))
+                    .setCreateTime(table.getCreateTime())
+                    .setDefinition(table.getViewExpandedText())
+                    .setType(HiveView.Type.Hive);
+            hiveView = builder.build();
         }
 
         try {

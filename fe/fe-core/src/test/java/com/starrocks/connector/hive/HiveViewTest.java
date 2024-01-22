@@ -77,11 +77,20 @@ public class HiveViewTest extends PlanTestBase {
 
     @Test
     public void testHiveViewParseFail() throws Exception {
-        HiveView hiveView = new HiveView(1, "hive0", "test", null, "select\n" +
-                 "    t1b,t1a\n" +
-                 "from\n" +
-                 "    test_all_type\n" +
-                 "    lateral view explode(split(t1a,',')) t1a", HiveView.Type.Hive);
+        String viewDefinition = "select\n" +
+                "    t1b,t1a\n" +
+                "from\n" +
+                "    test_all_type\n" +
+                "    lateral view explode(split(t1a,',')) t1a";
+        HiveView.Builder builder = HiveView.builder()
+                .setId(1)
+                .setCatalogName("hive0")
+                .setDbName("test")
+                .setViewName("hive_view")
+                .setSchema(null)
+                .setDefinition(viewDefinition)
+                .setType(HiveView.Type.Hive);
+        HiveView hiveView = builder.build();
         expectedException.expect(StarRocksPlannerException.class);
         expectedException.expectMessage("Failed to parse view-definition statement of view");
         hiveView.getQueryStatement();

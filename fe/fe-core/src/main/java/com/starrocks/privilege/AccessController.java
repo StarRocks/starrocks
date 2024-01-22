@@ -83,7 +83,7 @@ public interface AccessController {
         throw new AccessDeniedException();
     }
 
-    default void checkAnyActionOnAnyView(UserIdentity currentUser, Set<Long> roleIds, String db)
+    default void checkAnyActionOnAnyView(UserIdentity currentUser, Set<Long> roleIds, String catalog, String db)
             throws AccessDeniedException {
         throw new AccessDeniedException();
     }
