@@ -60,6 +60,11 @@ public class JDBCMetadata implements ConnectorMetadata {
     private HikariDataSource dataSource;
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
+        this(properties, catalogName, null);
+    }
+
+
+    public JDBCMetadata(Map<String, String> properties, String catalogName, HikariDataSource dataSource) {
         this.properties = properties;
         this.catalogName = catalogName;
         try {
@@ -76,6 +81,10 @@ public class JDBCMetadata implements ConnectorMetadata {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
             throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
         }
+        if (dataSource == null) {
+            dataSource = createHikariDataSource();
+        }
+        this.dataSource = dataSource;
         checkAndSetSupportPartitionInformation();
         createMetaAsyncCacheInstances(properties);
     }
@@ -96,7 +105,7 @@ public class JDBCMetadata implements ConnectorMetadata {
         }
     }
 
-    private void configHikariDataSource() {
+    private HikariDataSource createHikariDataSource() {
         HikariConfig config = new HikariConfig();
         config.setJdbcUrl(properties.get(JDBCResource.URI));
         config.setUsername(properties.get(JDBCResource.USER));
@@ -105,7 +114,7 @@ public class JDBCMetadata implements ConnectorMetadata {
         config.setMaximumPoolSize(Config.jdbc_connection_pool_size);
         config.setMinimumIdle(Config.jdbc_minimum_idle_connections);
         config.setIdleTimeout(Config.jdbc_connection_idle_timeout_ms);
-        dataSource = new HikariDataSource(config);
+        return new HikariDataSource(config);
     }
 
     public Connection getConnection() throws SQLException {
