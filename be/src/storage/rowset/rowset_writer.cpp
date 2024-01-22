@@ -1056,6 +1056,20 @@ VerticalRowsetWriter::~VerticalRowsetWriter() {
             auto st = _fs->delete_file(path);
             LOG_IF(WARNING, !(st.ok() || st.is_not_found()))
                     << "Fail to delete file=" << path << ", " << st.to_string();
+            if (_context.tablet_schema != nullptr) {
+                const auto* indexes = _context.tablet_schema->indexes();
+                if (!indexes->empty()) {
+                    for (const auto& index : *indexes) {
+                        if (index.index_type() == GIN) {
+                            std::string index_path = IndexDescriptor::inverted_index_file_path(
+                                    _context.rowset_path_prefix, _context.rowset_id.to_string(), i, index.index_id());
+                            auto index_st = _fs->delete_file(index_path);
+                            LOG_IF(WARNING, !(index_st.ok() || index_st.is_not_found()))
+                                    << "Fail to delete file=" << index_path << ", " << index_st.to_string();
+                        }
+                    }
+                }
+            }
         }
         // if _already_built is false, we need to release rowset_id to avoid rowset_id leak
         StorageEngine::instance()->release_rowset_id(_context.rowset_id);

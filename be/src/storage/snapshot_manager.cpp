@@ -46,6 +46,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "storage/del_vector.h"
+#include "storage/inverted/index_descriptor.hpp"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_id_generator.h"
@@ -716,7 +717,8 @@ StatusOr<SnapshotMeta> SnapshotManager::parse_snapshot_meta(const std::string& f
     return std::move(snapshot_meta);
 }
 
-Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir) {
+Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir,
+                                             const TabletSchemaCSPtr& tablet_schema) {
     for (auto& rowset_meta_pb : snapshot_meta->rowset_metas()) {
         RowsetId old_rowset_id;
         RowsetId new_rowset_id = StorageEngine::instance()->next_rowset_id();
@@ -728,6 +730,31 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
             auto old_path = Rowset::segment_file_path(clone_dir, old_rowset_id, seg_id);
             auto new_path = Rowset::segment_file_path(clone_dir, new_rowset_id, seg_id);
             RETURN_IF_ERROR(FileSystem::Default()->link_file(old_path, new_path));
+            if (tablet_schema != nullptr && !tablet_schema->indexes()->empty()) {
+                int segment_n = seg_id;
+                for (int index_id = 0; index_id < tablet_schema->indexes()->size(); index_id++) {
+                    const auto& index = (*(tablet_schema->indexes()))[index_id];
+                    if (index.index_type() == GIN) {
+                        std::string dst_inverted_link_path = IndexDescriptor::inverted_index_file_path(
+                                clone_dir, new_rowset_id.to_string(), segment_n, index_id);
+                        std::string src_inverted_file_path = IndexDescriptor::inverted_index_file_path(
+                                clone_dir, old_rowset_id.to_string(), segment_n, index_id);
+
+                        RETURN_IF_ERROR(fs::create_directories(dst_inverted_link_path));
+                        std::set<std::string> files;
+                        RETURN_IF_ERROR(fs::list_dirs_files(src_inverted_file_path, nullptr, &files));
+                        for (const auto& file : files) {
+                            auto src_absolute_path = fmt::format("{}/{}", src_inverted_file_path, file);
+                            auto dst_absolute_path = fmt::format("{}/{}", dst_inverted_link_path, file);
+
+                            if (link(src_absolute_path.c_str(), dst_absolute_path.c_str()) != 0) {
+                                PLOG(WARNING) << "Fail to link " << src_absolute_path << " to " << dst_absolute_path;
+                                return Status::RuntimeError("Fail to link index inverted file");
+                            }
+                        }
+                    }
+                }
+            }
         }
         for (int del_id = 0; del_id < rowset_meta_pb.num_delete_files(); del_id++) {
             auto old_path = Rowset::segment_del_file_path(clone_dir, old_rowset_id, del_id);

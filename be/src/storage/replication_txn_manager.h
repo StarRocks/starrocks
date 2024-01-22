@@ -52,7 +52,7 @@ private:
                                              const TReplicateSnapshotRequest& request);
 
     Status convert_snapshot_for_primary(const std::string& tablet_snapshot_path,
-                                        const TReplicateSnapshotRequest& request);
+                                        const TReplicateSnapshotRequest& request, Tablet* tablet);
 
     Status publish_snapshot(Tablet* tablet, const string& snapshot_dir, int64_t snapshot_version,
                             bool incremental_snapshot);

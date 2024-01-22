@@ -1586,7 +1586,8 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     LOG(INFO) << strings::Substitute("create tablet from snapshot tablet:$0 version:$1 path:$2", tablet_id,
                                      snapshot_meta->snapshot_version(), schema_hash_path);
 
-    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(snapshot_meta, schema_hash_path));
+    auto tablet_schema = TabletSchema::create(snapshot_meta->tablet_meta().schema());
+    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(snapshot_meta, schema_hash_path, tablet_schema));
 
     // Set of rowset id collected from rowset meta.
     std::set<uint32_t> set1;

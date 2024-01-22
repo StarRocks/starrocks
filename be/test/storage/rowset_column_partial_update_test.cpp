@@ -285,7 +285,8 @@ static Status full_clone(const TabletSharedPtr& sourcetablet, int64_t clone_vers
     auto snapshot_meta = SnapshotManager::instance()->parse_snapshot_meta(meta_dir + "/meta");
     CHECK(snapshot_meta.ok()) << snapshot_meta.status();
 
-    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&(*snapshot_meta), meta_dir));
+    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&(*snapshot_meta), meta_dir,
+                                                                      sourcetablet->tablet_schema()));
 
     std::set<std::string> files;
     auto st = fs::list_dirs_files(meta_dir, nullptr, &files);

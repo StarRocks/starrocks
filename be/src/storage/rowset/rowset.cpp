@@ -512,11 +512,11 @@ Status Rowset::copy_files_to(KVStore* kvstore, const std::string& dir) {
                         auto src_absolute_path = fmt::format("{}/{}", src_index_path, file);
                         auto dst_absolute_path = fmt::format("{}/{}", dst_index_path, file);
 
-                        if (!fs::copy_file(src_index_path, dst_index_path).ok()) {
-                            LOG(WARNING) << "Error to copy index. src:" << src_index_path << ", dst:" << dst_index_path
-                                         << ", errno=" << std::strerror(Errno::no());
+                        if (!fs::copy_file(src_absolute_path, dst_absolute_path).ok()) {
+                            LOG(WARNING) << "Error to copy index. src:" << src_absolute_path
+                                         << ", dst:" << dst_absolute_path << ", errno=" << std::strerror(Errno::no());
                             return Status::IOError(fmt::format("Error to copy file. src: {}, dst: {}, error:{} ",
-                                                               src_index_path, dst_index_path,
+                                                               src_absolute_path, dst_absolute_path,
                                                                std::strerror(Errno::no())));
                         }
                     }

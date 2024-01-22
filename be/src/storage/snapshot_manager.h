@@ -100,7 +100,8 @@ public:
 
     Status make_snapshot_on_tablet_meta(const TabletSharedPtr& tablet);
 
-    Status assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir);
+    Status assign_new_rowset_id(SnapshotMeta* snapshot_meta, const std::string& clone_dir,
+                                const TabletSchemaCSPtr& tablet_schema);
 
     // this function is only used for ut
     std::string calc_snapshot_id_path(const TabletSharedPtr& tablet, int64_t timeout_s) {

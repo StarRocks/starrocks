@@ -351,7 +351,7 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
     if (tablet->updates() == nullptr) {
         RETURN_IF_ERROR(convert_snapshot_for_none_primary(tablet_snapshot_dir_path, request));
     } else {
-        RETURN_IF_ERROR(convert_snapshot_for_primary(tablet_snapshot_dir_path, request));
+        RETURN_IF_ERROR(convert_snapshot_for_primary(tablet_snapshot_dir_path, request, tablet));
     }
 
     return Status::OK();
@@ -394,7 +394,7 @@ Status ReplicationTxnManager::convert_snapshot_for_none_primary(const std::strin
 }
 
 Status ReplicationTxnManager::convert_snapshot_for_primary(const std::string& tablet_snapshot_path,
-                                                           const TReplicateSnapshotRequest& request) {
+                                                           const TReplicateSnapshotRequest& request, Tablet* tablet) {
     std::string snapshot_meta_file_path = tablet_snapshot_path + "meta";
     ASSIGN_OR_RETURN(auto snapshot_meta, SnapshotManager::instance()->parse_snapshot_meta(snapshot_meta_file_path));
 
@@ -419,7 +419,8 @@ Status ReplicationTxnManager::convert_snapshot_for_primary(const std::string& ta
 
     RETURN_IF_ERROR(snapshot_meta.serialize_to_file(snapshot_meta_file_path));
 
-    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, tablet_snapshot_path));
+    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, tablet_snapshot_path,
+                                                                      tablet->tablet_schema()));
 
     return Status::OK();
 }
