@@ -29,9 +29,10 @@ class ScanExecutor {
 public:
     explicit ScanExecutor(std::unique_ptr<ThreadPool> thread_pool, std::unique_ptr<ScanTaskQueue> task_queue,
                           bool add_metrics = true);
-    virtual ~ScanExecutor();
+    virtual ~ScanExecutor() = default;
 
     void initialize(int32_t num_threads);
+    void close();
     void change_num_threads(int32_t num_threads);
 
     bool submit(ScanTask task);
@@ -43,7 +44,6 @@ private:
     std::unique_ptr<ScanTaskQueue> _task_queue;
     // _thread_pool must be placed after _task_queue, because worker threads in _thread_pool use _task_queue.
     std::unique_ptr<ThreadPool> _thread_pool;
-    std::atomic<int> _next_id = 0;
 };
 
 } // namespace starrocks::workgroup
