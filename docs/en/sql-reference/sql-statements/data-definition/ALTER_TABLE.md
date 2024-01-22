@@ -340,9 +340,9 @@ Syntax:
 
 Note:
 
-1. If you add a value column to an aggregate table, you need to specify `agg_type`.
+1. If you add a value column to an Aggregate table, you need to specify `agg_type`.
 
-2. If you add a key column to a non-aggregate table, you need to specify the KEY keyword.
+2. If you add a key column to a non-Aggregate table, you need to specify the KEY keyword.
 
 3. You cannot add a column that already exists in the base index to the rollup index. (You can create another rollup index if needed.)
 

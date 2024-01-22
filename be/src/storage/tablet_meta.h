@@ -148,6 +148,7 @@ public:
     // disk space occupied by tablet
     size_t tablet_footprint() const;
     size_t version_count() const;
+    size_t segment_count() const;
     Version max_version() const;
 
     TabletState tablet_state() const;
@@ -362,6 +363,14 @@ inline size_t TabletMeta::tablet_footprint() const {
 
 inline size_t TabletMeta::version_count() const {
     return _rs_metas.size();
+}
+
+inline size_t TabletMeta::segment_count() const {
+    size_t num_segments = 0;
+    for (auto rowset_meta : _rs_metas) {
+        num_segments += rowset_meta->num_segments();
+    }
+    return num_segments;
 }
 
 inline TabletState TabletMeta::tablet_state() const {

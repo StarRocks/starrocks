@@ -151,8 +151,7 @@ Status PrimaryKeyDump::_dump_dcg() {
 
 class PrimaryKeyChunkDumper {
 public:
-    PrimaryKeyChunkDumper(PrimaryKeyDump* dump, PrimaryKeyColumnPB* pk_column_pb)
-            : _dump(dump), _pk_column_pb(pk_column_pb) {}
+    PrimaryKeyChunkDumper(PrimaryKeyColumnPB* pk_column_pb) : _pk_column_pb(pk_column_pb) {}
     ~PrimaryKeyChunkDumper() { (void)fs::delete_file(_tmp_file); }
     Status init(const TabletSchemaCSPtr& tablet_schema, const std::string& tablet_path) {
         _tmp_file = tablet_path + "/PrimaryKeyChunkDumper_" + std::to_string(static_cast<int64_t>(pthread_self()));
@@ -180,7 +179,6 @@ public:
     }
 
 private:
-    PrimaryKeyDump* _dump;
     PrimaryKeyColumnPB* _pk_column_pb;
     std::unique_ptr<SegmentWriter> _writer;
     PagePointerPB _page;
@@ -258,7 +256,7 @@ Status PrimaryKeyDump::_dump_segment_keys() {
             }
             PrimaryKeyColumnPB pk_column_pb;
             pk_column_pb.set_segment_id(rowset.second->rowset_meta()->get_rowset_seg_id() + i);
-            PrimaryKeyChunkDumper dumper(this, &pk_column_pb);
+            PrimaryKeyChunkDumper dumper(&pk_column_pb);
             RETURN_IF_ERROR(dumper.init(pkey_tschema, _tablet->schema_hash_path()));
             while (true) {
                 chunk->reset();

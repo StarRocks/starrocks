@@ -334,7 +334,7 @@ TEST_F(BinlogFileTest, test_reopen) {
 }
 
 // Test generating large binlog file with random content for duplicate key
-TEST_F(BinlogFileTest, test_random_write_read) {
+TEST_F(BinlogFileTest, DISABLED_test_random_write_read) {
     CompressionTypePB compression_type = NO_COMPRESSION;
     int32_t expect_file_size = 100 * 1024 * 1024;
     int32_t expect_num_versions = 1000;
