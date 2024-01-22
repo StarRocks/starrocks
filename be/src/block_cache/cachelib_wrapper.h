@@ -52,6 +52,8 @@ public:
 
     std::unordered_map<std::string, double> cache_stats() override;
 
+    const DataCacheMetrics cache_metrics() override;
+
     Status shutdown() override;
 
 private:
