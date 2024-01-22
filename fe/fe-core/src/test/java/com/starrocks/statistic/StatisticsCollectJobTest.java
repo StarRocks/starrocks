@@ -562,7 +562,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
+<<<<<<< HEAD
         Assert.assertEquals(24, jobs.size());
+=======
+        Assert.assertEquals(28, jobs.size());
+>>>>>>> 746278f904 ([BugFix] Fix query trino view which not no contains db name failed (#39606))
     }
 
     @Test

@@ -239,10 +239,19 @@ public class HiveMetastoreApiConverter {
                     TrinoViewDefinition.class);
             hiveViewText = trinoViewDefinition.getOriginalSql();
             hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
+<<<<<<< HEAD
                     table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition), hiveViewText);
         } else {
             hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
                     table.getTableName(), toFullSchemasForHiveTable(table), table.getViewExpandedText());
+=======
+                    table.getDbName(), table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition),
+                    hiveViewText, HiveView.Type.Trino);
+        } else {
+            hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
+                    table.getDbName(), table.getTableName(), toFullSchemasForHiveTable(table),
+                    table.getViewExpandedText(), HiveView.Type.Hive);
+>>>>>>> 746278f904 ([BugFix] Fix query trino view which not no contains db name failed (#39606))
         }
 
         try {
