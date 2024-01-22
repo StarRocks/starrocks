@@ -12,7 +12,7 @@ AutoMQ Kafka [内核开源](https://github.com/AutoMQ/automq-for-kafka)并且100
 ### 准备 StarRocks 以及测试数据
 
 请确保自己已经准备好了可用的 StarRocks 集群。本文为了方便演示过程，参考 [使用 Docker 部署 StarRocks](../quick_start/deploy_with_docker.md) 在一台 Linux 机器上安装了作为 Demo 的 StarRocks 集群。
-创建库和主键模型的测试表:
+创建库和主键表的测试表:
 
 ```sql
 create database automq_db;

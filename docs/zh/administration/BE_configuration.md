@@ -222,7 +222,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### update_compaction_check_interval_seconds
 
-- 含义：Primary key 模型 Update compaction 的检查间隔。
+- 含义：主键表 Update compaction 的检查间隔。
 - 单位：秒
 - 默认值：60
 
@@ -435,7 +435,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### update_compaction_ratio_threshold
 
-- 含义：存算分离集群下主键模型表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
+- 含义：存算分离集群下主键表单次 Compaction 可以合并的最大数据比例。如果单个 Tablet 过大，建议适当调小该配置项取值。自 v3.1.5 起支持。
 - 默认值：0.5
 
 #### create_tablet_worker_count

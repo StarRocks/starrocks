@@ -33,7 +33,7 @@ displayed_sidebar: "Chinese"
 
 ## 业务场景
 
-以商品累计销量实时榜单为例，存储在 MySQL 中的原始订单表，通过 Flink 处理计算出产品销量的实时排行，并实时同步至 StarRocks 的主键模型表中。最终用户可以通过可视化工具连接StarRocks查看到实时刷新的榜单。
+以商品累计销量实时榜单为例，存储在 MySQL 中的原始订单表，通过 Flink 处理计算出产品销量的实时排行，并实时同步至 StarRocks 的主键表中。最终用户可以通过可视化工具连接StarRocks查看到实时刷新的榜单。
 
 ## 准备工作
 
@@ -229,13 +229,13 @@ displayed_sidebar: "Chinese"
         - `output_dir` ：待生成的 SQL 文件的路径。SQL 文件会用于在 StarRocks 集群创建库表， 向 Flink 集群提交 Flink job。默认为 `./result`，不建议修改。
 
 2. 执行如下命令，SMT 会读取 MySQL 中同步对象的库表结构，并且结合配置文件信息，在 **result** 目录生成 SQL 文件，用于  StarRocks 集群创建库表（**starrocks-create.all.sql**）， 用于向 Flink 集群提交同步数据的 flink job（**flink-create.all.sql**）。
-   并且源表不同，则 **starrocks-create.all.sql** 中建表语句默认创建的数据模型不同。
+   并且源表不同，则 **starrocks-create.all.sql** 中建表语句默认创建的表类型不同。
 
-   - 如果源表没有 Primary Key、 Unique Key，则默认创建明细模型。
+   - 如果源表没有 Primary Key、 Unique Key，则默认创建明细表。
    - 如果源表有 Primary Key、 Unique Key，则区分以下几种情况：
-      - 源表是 Hive 表、ClickHouse MergeTree 表，则默认创建明细模型。
-      - 源表是 ClickHouse SummingMergeTree表，则默认创建聚合模型。
-      - 源表为其他类型，则默认创建主键模型。
+      - 源表是 Hive 表、ClickHouse MergeTree 表，则默认创建明细表。
+      - 源表是 ClickHouse SummingMergeTree表，则默认创建聚合表。
+      - 源表为其他类型，则默认创建主键表。
 
     ```Bash
     # 运行 SMT
@@ -248,12 +248,12 @@ displayed_sidebar: "Chinese"
     flink-create.all.sql  starrocks-create.1.sql
     ```
 
-3. 执行如下命令，连接 StarRocks，并执行 SQL 文件 **starrocks-create.all.sql**，用于创建目标库和表。推荐使用 SQL 文件中默认的建表语句，本示例中建表语句默认创建的数据模型为[主键模型](../table_design/table_types/primary_key_table.md)。
+3. 执行如下命令，连接 StarRocks，并执行 SQL 文件 **starrocks-create.all.sql**，用于创建目标库和表。推荐使用 SQL 文件中默认的建表语句，本示例中建表语句默认创建[主键表](../table_design/table_types/primary_key_table.md)。
 
     > **注意**
     >
-    > - 您也可以根据业务需要，修改 SQL 文件中的建表语句，基于其他模型创建目标表。
-    > - 如果您选择基于非主键模型创建目标表，StarRocks 不支持将源表中 DELETE 操作同步至非主键模型的表，请谨慎使用。
+    > - 您也可以根据业务需要，修改 SQL 文件中的建表语句，创建目标表为其他类型的表。
+    > - 如果您选择创建目标表为非主键表，StarRocks 不支持将源表中 DELETE 操作同步至非主键表，请谨慎使用。
 
     ```Bash
     mysql -h <fe_host> -P <fe_query_port> -u user2 -pxxxxxx < starrocks-create.all.sql

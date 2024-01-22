@@ -195,7 +195,7 @@ Release date: February 2, 2023
 The following bugs are fixed:
 
 - When resources are released after a large query finishes, there is a low probability that other queries are slowed down. This issue is more likely to occur if resource groups are enabled or the large query ends unexpectedly. [#16454](https://github.com/StarRocks/starrocks/pull/16454) [#16602](https://github.com/StarRocks/starrocks/pull/16602)
-- For a primary key table, if a replica's metadata version falls behind, StarRocks incrementally clones the missing metadata from other replicas to this replica. In this process, StarRocks pulls a large number of versions of metadata, and if too many versions of metadata accumulate without timely GC, excessive memory may be consumed and consequently the BEs may encounter OOM exceptions. [#15935](https://github.com/StarRocks/starrocks/pull/15935)
+- For a Primary Key table, if a replica's metadata version falls behind, StarRocks incrementally clones the missing metadata from other replicas to this replica. In this process, StarRocks pulls a large number of versions of metadata, and if too many versions of metadata accumulate without timely GC, excessive memory may be consumed and consequently the BEs may encounter OOM exceptions. [#15935](https://github.com/StarRocks/starrocks/pull/15935)
 - If an FE sends an occasional heartbeat to a BE, and the heartbeat connection times out, the FE considers the BE unavailable, leading to transaction failures on the BE. [# 16386](https://github.com/StarRocks/starrocks/pull/16386)
 - When you use a StarRocks external table to load data between StarRocks clusters, if the source StarRocks cluster is in an earlier version and the target StarRocks cluster is in a later version (2.2.8 ~ 2.2.11, 2.3.4 ~ 2.3.7, 2.4.1 or 2.4.2), the data loading fails. [#16173](https://github.com/StarRocks/starrocks/pull/16173)
 - BEs crash when multiple queries run concurrently and memory usage is relatively high. [#16047](https://github.com/StarRocks/starrocks/pull/16047)
@@ -221,7 +221,7 @@ Release date: December 22, 2022
 ### Improvements
 
 - The Pipeline execution engine supports INSERT INTO statements. To enable it, set the FE configuration item `enable_pipeline_load_for_insert` to `true`.  [#14723](https://github.com/StarRocks/starrocks/pull/14723)
-- The memory used by Compaction for the primary key table is reduced. [#13861](https://github.com/StarRocks/starrocks/pull/13861)  [#13862](https://github.com/StarRocks/starrocks/pull/13862)
+- The memory used by Compaction for the Primary Key table is reduced. [#13861](https://github.com/StarRocks/starrocks/pull/13861)  [#13862](https://github.com/StarRocks/starrocks/pull/13862)
 
 ### Behavior Change
 
@@ -233,7 +233,7 @@ The following bugs are fixed:
 
 - BEs may hang up when the resource group feature is enabled and multiple resource groups run queries at the same time. [#14905](https://github.com/StarRocks/starrocks/pull/14905)
 - When you create a materialized view by using CREATE MATERIALIZED VIEW AS SELECT, if the SELECT clause does not use aggregate functions, and uses GROUP BY, for example `CREATE MATERIALIZED VIEW test_view AS SELECT a,b from test group by b,a order by a;`, then the BE nodes all crash. [#13743](https://github.com/StarRocks/starrocks/pull/13743)
-- If you restart the BE immediately after you use INSERT INTO to frequently load data into the primary key table to make data changes, the BE may restart very slowly. [#15128](https://github.com/StarRocks/starrocks/pull/15128)
+- If you restart the BE immediately after you use INSERT INTO to frequently load data into the Primary Key table to make data changes, the BE may restart very slowly. [#15128](https://github.com/StarRocks/starrocks/pull/15128)
 - If only JRE is installed on the environment and JDK is not installed, queries fail after FE restarts. After the bug is fixed, FE cannot restart in that environment and it returns error `JAVA_HOME can not be jre`. To successfully restart FE, you need to install JDK on the environment. [#14332](https://github.com/StarRocks/starrocks/pull/14332)
 - Queries cause BE crashes. [#14221](https://github.com/StarRocks/starrocks/pull/14221)
 - `exec_mem_limit` cannot be set to an expression. [#13647](https://github.com/StarRocks/starrocks/pull/13647)
@@ -245,7 +245,7 @@ The following bugs are fixed:
 - When BEs are highly loaded, the metric for resource groups `starrocks_be_resource_group_running_queries` may be incorrect. [#14043](https://github.com/StarRocks/starrocks/pull/14043)
 - If the query statement uses OUTER JOIN, it may cause the BE node to crash. [#14840](https://github.com/StarRocks/starrocks/pull/14840)
 - After you create an asynchronous materialized view by using StarRocks 2.4, and you roll back it to 2.3, you may find FE fails to start. [#14400](https://github.com/StarRocks/starrocks/pull/14400)
-- When the primary key table uses delete_range, and the performance is not good, it may slow down data reading from RocksDB and cause high CPU usage. [#15130](https://github.com/StarRocks/starrocks/pull/15130)
+- When the Primary Key table uses delete_range, and the performance is not good, it may slow down data reading from RocksDB and cause high CPU usage. [#15130](https://github.com/StarRocks/starrocks/pull/15130)
 
 ## 2.3.5
 

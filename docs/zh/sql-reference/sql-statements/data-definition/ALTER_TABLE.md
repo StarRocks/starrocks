@@ -318,8 +318,8 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 使用说明：
 
-- 聚合模型如果增加 value 列，需要指定 agg_type。
-- 非聚合模型（如 DUPLICATE KEY）如果增加 key 列，需要指定 KEY 关键字。
+- 聚合表如果增加 value 列，需要指定 agg_type。
+- 非聚合表（如 DUPLICATE KEY）如果增加 key 列，需要指定 KEY 关键字。
 - 不能在 rollup index 中增加 base index 中已经存在的列，如有需要，可以重新创建一个 rollup index。
 
 #### 向指定 index 添加多列
@@ -348,8 +348,8 @@ ADD COLUMN column_name column_type [KEY | agg_type] [DEFAULT "default_value"]
 
 注意：
 
-1. 聚合模型如果增加 value 列，需要指定 agg_type。
-2. 非聚合模型如果增加 key 列，需要指定 KEY 关键字。
+1. 聚合表如果增加 value 列，需要指定 agg_type。
+2. 非聚合表如果增加 key 列，需要指定 KEY 关键字。
 3. 不能在 rollup index 中增加 base index 中已经存在的列，如有需要，可以重新创建一个 rollup index。
 
 #### 增加生成列
@@ -392,7 +392,7 @@ MODIFY COLUMN column_name column_type [KEY | agg_type] [NULL | NOT NULL] [DEFAUL
 
 注意：
 
-1. 聚合模型如果修改 value 列，需要指定 agg_type。
+1. 聚合表如果修改 value 列，需要指定 agg_type。
 2. 非聚合类型如果修改 key 列，需要指定 KEY 关键字。
 3. 只能修改列的类型，列的其他属性维持原样（即其他属性需在语句中按照原属性显式的写出，参见示例中 [column](#column) 部分第 8 个例子）。
 4. 分区列不能做任何修改。
@@ -762,7 +762,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
 
 ### Column
 
-1. 向 `example_rollup_index` 的 `col1` 后添加一个 key 列 `new_col`（非聚合模型）。
+1. 向 `example_rollup_index` 的 `col1` 后添加一个 key 列 `new_col`（非聚合表）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -770,7 +770,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     TO example_rollup_index;
     ```
 
-2. 向 `example_rollup_index` 的 `col1` 后添加一个 value 列 `new_col`（非聚合模型）。
+2. 向 `example_rollup_index` 的 `col1` 后添加一个 value 列 `new_col`（非聚合表）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -778,7 +778,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     TO example_rollup_index;
     ```
 
-3. 向 `example_rollup_index` 的 `col1` 后添加一个 key 列 `new_col`（聚合模型）。
+3. 向 `example_rollup_index` 的 `col1` 后添加一个 key 列 `new_col`（聚合表）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -786,7 +786,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     TO example_rollup_index;
     ```
 
-4. 向 `example_rollup_index` 的 `col1` 后添加一个 value 列 `new_col`（SUM 聚合类型）（聚合模型）。
+4. 向 `example_rollup_index` 的 `col1` 后添加一个 value 列 `new_col`（SUM 聚合类型）（聚合表）。
 
     ```sql
     ALTER TABLE example_db.my_table
@@ -794,7 +794,7 @@ ALTER TABLE <tbl_name> BASE COMPACT (<partition1_name>[,<partition2_name>,...])
     TO example_rollup_index;
     ```
 
-5. 向 `example_rollup_index` 添加多列（聚合模型）。
+5. 向 `example_rollup_index` 添加多列（聚合表）。
 
     ```sql
     ALTER TABLE example_db.my_table

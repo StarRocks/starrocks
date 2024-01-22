@@ -106,7 +106,7 @@ StarRocks BE 中的内存分为以下几类。
 | consistency | starrocks_be_consistency_mem_bytes | 定期一致性校验使用的内存。 | consistency_max_memory_limit_percent, consistency_max_memory_limit |
 | schema_change | starrocks_be_schema_change_mem_bytes | Schema Change 任务使用的总内存。 | memory_limitation_per_thread_for_schema_change |
 | clone | starrocks_be_clone_mem_bytes | Tablet Clone 任务使用的总内存。 | |
-| update | starrocks_be_update_mem_bytes | 主键模型使用的总内存。 | |
+| update | starrocks_be_update_mem_bytes | 主键表使用的总内存。 | |
 
 ## 内存相关配置项
 

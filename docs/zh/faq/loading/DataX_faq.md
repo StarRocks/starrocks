@@ -8,7 +8,7 @@ displayed_sidebar: "Chinese"
 
 ## 使用 DataX 导入支持更新数据吗？
 
-当前版本中，主键模型已支持通过 DataX 更新数据。您需要在 JSON 配置文件的 `reader` 部分添加 `_op` 字段配置该功能。
+当前版本中，主键表已支持通过 DataX 更新数据。您需要在 JSON 配置文件的 `reader` 部分添加 `_op` 字段配置该功能。
 
 ## 使用 DataX 同步数据时，如何处理命名中使用的关键字，防止报错？
 
