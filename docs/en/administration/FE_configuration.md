@@ -1456,3 +1456,21 @@ DO NOT change run_mode after the cluster is deployed. Otherwise, the cluster fai
 
 - **Default:** TRUE
 - **Description:** Specifies whether to enable the feature that is used to periodically collect metrics. Valid values: `TRUE` and `FALSE`. `TRUE` specifies to enable this feature, and `FALSE` specifies to disable this feature.
+
+#### jdbc_connection_pool_size
+
+- **Default:** 8
+- **Description:** The maximum capacity of the JDBC Connection Pool when accessing the JDBC Catalog.
+
+
+#### jdbc_minimum_idle_connections
+
+- **Default:** 1
+- **Description:** The minimum number of idle connections in the JDBC Connection Pool when accessing the JDBC Catalog.
+
+
+#### jdbc_connection_idle_timeout_ms
+
+- **Default:** 600000
+- **Description:** When accessing the JDBC Catalog, connections exceeding this time are considered idle. Unit: Millisecond.
+
