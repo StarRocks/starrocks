@@ -76,7 +76,7 @@ DUPLICATE KEY(`c_custkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c_custkey`)
 PROPERTIES (
-"replication_num" = "1",
+"replication_num" = "3",
 "storage_format" = "DEFAULT"
 );
 
@@ -85,7 +85,7 @@ CREATE MATERIALIZED VIEW customer_mv
 DISTRIBUTED BY HASH(c_custkey)
 REFRESH MANUAL
 PROPERTIES (
-    "replication_num" = "1"
+    "replication_num" = "3"
 )
 AS SELECT
               c_custkey, c_phone, c_acctbal, count(1) as c_count, sum(c_acctbal) as c_sum
@@ -118,7 +118,7 @@ COMMENT "MATERIALIZED_VIEW"
 DISTRIBUTED BY HASH(`c_custkey`)
 REFRESH MANUAL
 PROPERTIES (
-"replication_num" = "1",
+"replication_num" = "3",
 "storage_medium" = "HDD"
 )
 AS SELECT `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`, count(1) AS `c_count`, sum(`customer`.`c_acctbal`) AS `c_sum`
@@ -149,7 +149,7 @@ COMMENT "MATERIALIZED_VIEW"
 DISTRIBUTED BY HASH(`c_custkey`)
 REFRESH MANUAL
 PROPERTIES (
-"replication_num" = "1",
+"replication_num" = "3",
 "storage_medium" = "HDD"
 )
 AS SELECT `customer`.`c_custkey`, `customer`.`c_phone`, `customer`.`c_acctbal`, count(1) AS `c_count`, sum(`customer`.`c_acctbal`) AS `c_sum`
