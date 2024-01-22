@@ -54,6 +54,7 @@ public class ShowCreateViewStmtTest {
         Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
+        Config.enable_experimental_rowstore = true;
         UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
