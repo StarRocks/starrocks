@@ -213,4 +213,5 @@ add_library(Storage STATIC
     persistent_index_compaction_manager.cpp
     lake/local_pk_index_manager.cpp
     persistent_index_tablet_loader.cpp
-    lake/lake_local_persistent_index_tablet_loader.cpp)
+    lake/lake_local_persistent_index_tablet_loader.cpp
+    primary_key_dump.cpp)

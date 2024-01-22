@@ -32,6 +32,7 @@ namespace starrocks {
 class Tablet;
 class Schema;
 class Column;
+class PrimaryKeyDump;
 
 class TabletLoader {
 public:
@@ -266,6 +267,8 @@ public:
 
     virtual size_t memory_usage() = 0;
 
+    virtual Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb) = 0;
+
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 
     static std::tuple<size_t, size_t> estimate_nshard_and_npage(const size_t total_kv_pairs_usage);
@@ -390,6 +393,8 @@ public:
 
     static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size, const std::string& path);
 
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb);
+
 private:
     friend class PersistentIndex;
     friend class starrocks::lake::LakeLocalPersistentIndex;
@@ -490,6 +495,8 @@ public:
 
     static StatusOr<std::unique_ptr<ImmutableIndex>> load(std::unique_ptr<RandomAccessFile>&& index_rb,
                                                           bool load_bf_data);
+
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexDumpPB* dump_pb);
 
 private:
     friend class PersistentIndex;
@@ -777,6 +784,8 @@ public:
     Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
 
     void reset_cancel_major_compaction();
+
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
