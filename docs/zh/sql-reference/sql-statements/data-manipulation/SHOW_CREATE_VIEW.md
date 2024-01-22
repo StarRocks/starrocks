@@ -56,13 +56,8 @@ PARTITION BY RANGE(k1)
     PARTITION p1 values less than('2020-02-01'),
     PARTITION p2 values less than('2020-03-01')
 )
-<<<<<<< HEAD
 DISTRIBUTED BY HASH(k2) BUCKETS 3
-PROPERTIES( "replication_num"  = "1");
-=======
-DISTRIBUTED BY HASH(k2)
 PROPERTIES( "replication_num"  = "3");
->>>>>>> 3e4491fd52 ([Doc] Fix replication_num in MV (#39627))
 ```
 
 在表 `base` 上创建视图 `example_view`。
