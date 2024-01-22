@@ -15,7 +15,10 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.OptimizeClause;
 import com.starrocks.sql.parser.NodePosition;
 import org.junit.Assert;
@@ -23,10 +26,13 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class AlterTableClauseVisitorTest extends DDLTestBase {
-
+    private static ConnectContext connectContext;
+    private static AlterTableClauseVisitor clauseAnalyzerVisitor;
 
     @Before
     public void beforeClass() throws Exception {
@@ -60,4 +66,31 @@ public class AlterTableClauseVisitorTest extends DDLTestBase {
 
     }
 
+    @Test
+    public void testVisitModifyTablePropertiesClause() {
+        connectContext = new ConnectContext();
+        clauseAnalyzerVisitor = new AlterTableClauseVisitor();
+        OlapTable table = new OlapTable();
+        clauseAnalyzerVisitor.setTable(table);
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, "true");
+        ModifyTablePropertiesClause alterClause = new ModifyTablePropertiesClause(properties);
+        clauseAnalyzerVisitor.visitModifyTablePropertiesClause(alterClause, connectContext);
+        properties.remove(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE);
+
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, "false");
+        clauseAnalyzerVisitor.visitModifyTablePropertiesClause(alterClause, connectContext);
+        properties.remove(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE);
+
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, "abcd");
+        try {
+            clauseAnalyzerVisitor.visitModifyTablePropertiesClause(alterClause, connectContext);
+            Assert.assertTrue(false);
+        } catch (SemanticException e) {
+            Assert.assertEquals("Getting analyzing error. Detail message: Property datacache.enable must " +
+                    "be bool type(false/true).", e.getMessage());
+        }
+        properties.remove(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE);
+    }
 }
