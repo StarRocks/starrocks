@@ -691,7 +691,7 @@ public class NodeMgr {
      * frontend log is deleted because of checkpoint.
      */
     public void checkCurrentNodeExist() {
-        if (Config.reset_election_group.equals("true")) {
+        if (Config.bdbje_reset_election_group.equals("true")) {
             return;
         }
 

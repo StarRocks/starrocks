@@ -555,10 +555,11 @@ public class Config extends ConfigBase {
      * If true, FE will reset bdbje replication group(that is, to remove all electable nodes' info)
      * and is supposed to start as Leader. After reset, this node will be the only member in the cluster,
      * and the others node should be rejoin to this cluster by `Alter system add/drop follower/observer 'xxx'`;
-     * Use this configuration only when the leader cannot be successfully elected (Because most of the follower data has been damaged).
+     * Use this configuration only when the leader cannot be successfully elected
+     * (Because most of the follower data has been damaged).
      */
     @ConfField
-    public static String reset_election_group = "false";
+    public static String bdbje_reset_election_group = "false";
 
     /**
      * If the bdb data is corrupted, and you want to start the cluster only with image, set this param to true

@@ -925,25 +925,25 @@ public class OperationType {
         Set<Short> allOperations = new HashSet<>();
 
         for (Field field : OperationType.class.getFields()) {
-            if (field.getType() != short.class) {
+            if (!field.getName().startsWith("OP_")) {
                 continue;
             }
             short opType = Short.MIN_VALUE;
             try {
                 opType = (short) field.get(null);
             } catch (IllegalAccessException e) {
-                LOG.error("get value from {} failed, will exit.", field.getName(), e);
+                LOG.fatal("get value from {} failed, will exit.", field.getName(), e);
                 System.exit(-1);
             }
 
             if (opType > OperationType.OP_TYPE_EOF) {
-                LOG.error("OperationType cannot use a value exceeding 20000, " +
+                LOG.fatal("OperationType cannot use a value exceeding 20000, " +
                         "and an error will be reported if it exceeds : {} = {}", field.getName(), opType);
                 System.exit(-1);
             }
 
             if (!allOperations.add(opType)) {
-                LOG.error("Duplicate operation type {} with value {}, will exit.", field.getName(), opType);
+                LOG.fatal("Duplicate operation type {} with value {}, will exit.", field.getName(), opType);
                 System.exit(-1);
             }
 
