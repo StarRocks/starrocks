@@ -266,9 +266,20 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
 
             Map<TableName, Relation> allTablesRelations = AnalyzerUtils.collectAllTableAndViewRelations(statement);
             Map<TableName, Set<String>> allTouchedColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
-            // no need to check COLUMN SELECT privilege when user already has COLUMN INSERT privilege
             if (columnNames != null && allTouchedColumns.containsKey(statement.getTableName())) {
-                allTouchedColumns.get(statement.getTableName()).removeAll(columnNames);
+                // no need to check COLUMN SELECT privilege when user already has COLUMN INSERT privilege
+                Set<String> usedCols = allTouchedColumns.get(statement.getTableName());
+                if (columnNames.contains("*")) {
+                    usedCols.clear();
+                } else {
+                    usedCols.removeAll(columnNames);
+                }
+                if (usedCols.isEmpty()) {
+                    allTouchedColumns.remove(statement.getTableName());
+                    allTablesRelations.remove(statement.getTableName());
+                }
+            } else if (columnNames != null) {
+                allTablesRelations.remove(statement.getTableName());
             }
             checkCanSelectFromColumns(context, allTouchedColumns, allTablesRelations);
         } else {
@@ -331,17 +342,28 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
             Map<TableName, Set<String>> tableColumns = AnalyzerUtils.collectAllSelectTableColumns(statement);
             // no need to check COLUMN SELECT privilege when user already has COLUMN UPDATE privilege
             if (tableColumns.containsKey(statement.getTableName())) {
-                tableColumns.get(statement.getTableName()).removeAll(assignmentColumns);
+                Set<String> usedCols = tableColumns.get(statement.getTableName());
+                if (assignmentColumns.contains("*")) {
+                    usedCols.clear();
+                } else {
+                    usedCols.removeAll(assignmentColumns);
+                }
+                if (usedCols.isEmpty()) {
+                    tableColumns.remove(statement.getTableName());
+                    allTouchedTables.remove(statement.getTableName());
+                }
+            } else {
+                allTouchedTables.remove(statement.getTableName());
             }
             checkCanSelectFromColumns(context, tableColumns, allTouchedTables);
         } else {
             try {
                 Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        statement.getTableName(), PrivilegeType.DELETE);
+                        statement.getTableName(), PrivilegeType.UPDATE);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(statement.getTableName().getCatalog(),
                         context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        PrivilegeType.DELETE.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
+                        PrivilegeType.UPDATE.name(), ObjectType.TABLE.name(), statement.getTableName().getTbl());
             }
             allTouchedTables.remove(statement.getTableName());
             checkSelectTableAction(context, allTouchedTables);

@@ -410,12 +410,10 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitSelect(SelectRelation node, Void context) {
-            List<Expr> outputExpression = node.getOutputExpression();
             Relation relation = node.getRelation();
-            if (relation instanceof TableRelation || relation instanceof ViewRelation) {
-                if (outputExpression.stream().allMatch(expr -> expr instanceof FieldReference)) {
-                    put(relation.getResolveTableName(), "*");
-                }
+            doVisitSelect(node);
+            if (relation instanceof ValuesRelation) {
+                return null;
             }
             if (node.hasWithClause()) {
                 node.getCteRelations().forEach(this::visit);
@@ -435,7 +433,7 @@ public class AnalyzerUtils {
             if (node.getOutputExpression() != null) {
                 if (skipOutputExpr) {
                     node.getOutputExpression().stream()
-                            .filter(expr -> !(expr instanceof SlotRef &&
+                            .filter(expr -> !(expr instanceof SlotRef && ((SlotRef) expr).getQualifiedName() == null &&
                                     ((SlotRef) expr).getTblNameWithoutAnalyzed().equals(updateTableName)))
                             .forEach(this::visit);
                 } else {
@@ -565,15 +563,19 @@ public class AnalyzerUtils {
             }
         }
 
-        @Override
-        public Void visitSelect(SelectRelation node, Void context) {
+        protected void doVisitSelect(SelectRelation node) {
             Relation relation = node.getRelation();
             if (node.getOutputExpression().stream().allMatch(expr -> expr instanceof FieldReference)) {
                 Set<TableName> starRelationNames = Sets.newHashSet();
                 fillStarRelation(relation, starRelationNames);
                 starRelationNames.forEach(name -> put(name, "*"));
             }
-            if (relation instanceof ValuesRelation) {
+        }
+
+        @Override
+        public Void visitSelect(SelectRelation node, Void context) {
+            doVisitSelect(node);
+            if (node.getRelation() instanceof ValuesRelation) {
                 return null;
             }
             return super.visitSelect(node, context);
