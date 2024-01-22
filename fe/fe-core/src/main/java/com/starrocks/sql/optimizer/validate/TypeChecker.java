@@ -154,9 +154,13 @@ public class TypeChecker implements PlanValidator.Checker {
                 switch (aggType) {
                     case LOCAL:
                         // In 3-phase agg, the global agg should set these not distinct agg callOperator to mergeAggFn.
-                        // Sometimes we may further split the top global agg from 3-phase agg into a two phase agg
-                        // like local -> distinct global -> global to local -> distinct global -> local -> global.
-                        // we also need to set mergeAggFn flag into the second local agg for those not distinct
+                        // Sometimes we may further split the top global agg from a 3-phase agg into a two phase agg,
+                        // For example, local agg -> distinct global agg -> exchange with group by keys -> global agg
+                        // to
+                        // local agg -> distinct global agg -> exchange with group by keys + distinct keys ->
+                        // local -> exchange with group by keys -> global.
+                        // The added exchange steps helps us distribute data more evenly across multiple machines.
+                        // So we also need to set mergeAggFn flag into the second local agg for those not distinct
                         // agg callOperator.
                         isMergeAggFn = isSplit && hasRemoveDistinctFunc && !aggCall.isRemovedDistinct();
                         break;
