@@ -60,6 +60,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -1030,6 +1031,20 @@ public class ScalarOperatorFunctions {
         }
         String json = obj.toString();
         return ConstantOperator.createVarchar(json);
+    }
+
+    private static void authOperatorPrivilege() {
+    }
+
+    /**
+     * Return all status about the TaskManager
+     */
+    @ConstantFunction(name = "inspect_task_runs", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectTaskRuns() {
+        ConnectContext connectContext = ConnectContext.get();
+        authOperatorPrivilege();
+        TaskRunManager trm = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
+        return ConstantOperator.createVarchar(trm.inspect());
     }
 
     @ConstantFunction.List(list = {
