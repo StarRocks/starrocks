@@ -52,7 +52,7 @@ displayed_sidebar: "Chinese"
 - 某些图形化界面工具会自动设置 `set_sql_limit` 变量，导致 SQL 语句 ORDER BY LIMIT 被忽略，从而导致返回的数据行数不正确。[#5966](https://github.com/StarRocks/starrocks/issues/5966)
 - 当一个 Colocation Group 中包含的表比较多、导入频率又比较高时，可能会导致该 Colocation Group 无法保持 `stable` 状态，从而导致 JOIN 语句无法使用 Colocate Join。现优化为导入数据时稍微多等一会，这样可以尽量保证导入的 Tablet 副本的完整性。
 - 少数副本由于负载较高、网络延迟等原因导致导入失败，系统会触发副本克隆操作。在这种情况下，会有一定概率引发死锁，从而可能出现进程负载极低、却有大量请求超时的现象。[#5646](https://github.com/StarRocks/starrocks/issues/5646) [#6290](https://github.com/StarRocks/starrocks/issues/6290)
-- 主键模型的表经过表结构变更以后，在数据导入时，可能会报 "duplicate key xxx" 错误。[#5878](https://github.com/StarRocks/starrocks/issues/5878)
+- 主键表经过表结构变更以后，在数据导入时，可能会报 "duplicate key xxx" 错误。[#5878](https://github.com/StarRocks/starrocks/issues/5878)
 - 执行 DROP SCHEMA 语句，会导致直接强制删除数据库，并且删除的数据库不可恢复。[#6201](https://github.com/StarRocks/starrocks/issues/6201)
 
 ## 2.0.5
@@ -83,7 +83,7 @@ displayed_sidebar: "Chinese"
 
 - 在删列、新增分区、并克隆 Tablet 后，新旧 Tablet 的列 Unique ID 可能会不对应，由于系统使用共享的 Tablet Schema，可能导致 BE 停止服务。[#4514](https://github.com/StarRocks/starrocks/issues/4514)
 - 向 StarRocks 外表导入数据时，如果设定的目标 StarRocks 集群的 FE 不是 Leader，则会导致 FE 停止服务。[#4573](https://github.com/StarRocks/starrocks/issues/4573)
-- 明细模型的表同时执行表结构变更、创建物化视图时，可能导致数据查询错误。[#4839](https://github.com/StarRocks/starrocks/issues/4839)
+- 明细表同时执行表结构变更、创建物化视图时，可能导致数据查询错误。[#4839](https://github.com/StarRocks/starrocks/issues/4839)
 - 通过改进为批量 publish version，解决 BE 可能因宕机而导致数据丢失的问题。[#3140](https://github.com/StarRocks/starrocks/issues/3140)
 
 ## 2.0.3
@@ -127,7 +127,7 @@ displayed_sidebar: "Chinese"
 - 修复副本的全局字典不一致而引起查询的问题。 [#2700](https://github.com/StarRocks/starrocks/pull/2700)[#2765](https://github.com/StarRocks/starrocks/pull/2765)
 - 修复数据导入至StarRocks前设置参数`exec_mem_limit`不生效的问题。 [#2693](https://github.com/StarRocks/starrocks/pull/2693)
   > 参数`exec_mem_limit`用于指定数据导入时单个BE节点计算层使用的内存上限。
-- 修复数据导入至StarRocks主键模型时触发OOM的问题。 [#2743](https://github.com/StarRocks/starrocks/pull/2743)[#2777](https://github.com/StarRocks/starrocks/pull/2777)
+- 修复数据导入至StarRocks主键表时触发OOM的问题。 [#2743](https://github.com/StarRocks/starrocks/pull/2743)[#2777](https://github.com/StarRocks/starrocks/pull/2777)
 - 修复StarRocks在查询大数量级的MySQL外部表时的查询卡死问题。 [#2881](https://github.com/StarRocks/starrocks/pull/2881)
 
 ### Behavior Change
@@ -147,7 +147,7 @@ displayed_sidebar: "Chinese"
 - Broker Load支持华为OBS [#1182](https://github.com/StarRocks/starrocks/pull/1182)
 - 支持国密算法sm3
 - 适配ARM类国产CPU：通过鲲鹏架构验证
-- 主键模型（Primary Key）正式发布，该模型支持Stream Load、Broker Load、Routine Load，同时提供了基于Flink-cdc的MySQL数据的秒级同步工具。[参考文档](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)
+- 主键表正式发布，该类型的表支持 Stream Load、Broker Load、Routine Load，同时提供了基于Flink-cdc的MySQL数据的秒级同步工具。[参考文档](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)
 
 ### 功能优化
 

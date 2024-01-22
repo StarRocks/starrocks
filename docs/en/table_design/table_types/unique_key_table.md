@@ -12,7 +12,7 @@ The Unique Key table is suitable for business scenarios in which data needs to b
 
 ## Principle
 
-The Unique Key table can be considered a special Aggregate Key table in which the REPLACE aggregate function is specified for metric columns to return the most recent record among a group of records that have the same primary key.
+The Unique Key table can be considered a special Aggregate table in which the REPLACE aggregate function is specified for metric columns to return the most recent record among a group of records that have the same primary key.
 
 When you load data into a table that uses the Unique Key table, the data is split into multiple batches. Each batch is assigned a version number. Therefore, records with the same primary key may come in multiple versions, of which the most recent version (namely, the record with the largest version number) is retrieved for queries.
 
@@ -53,7 +53,7 @@ DISTRIBUTED BY HASH(order_id);
 > **NOTICE**
 >
 > - When you create a table, you must specify the bucketing column by using the `DISTRIBUTED BY HASH` clause. For detailed information, see [bucketing](../Data_distribution.md#design-partitioning-and-bucketing-rules).
-> - Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../Data_distribution.md#determine-the-number-of-buckets).
+> - Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../Data_distribution.md#set-the-number-of-buckets).
 
 ## Usage notes
 

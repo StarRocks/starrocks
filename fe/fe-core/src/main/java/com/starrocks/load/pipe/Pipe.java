@@ -149,21 +149,19 @@ public class Pipe implements GsonPostProcessable {
             String value = entry.getValue();
             switch (key.toLowerCase()) {
                 case PipeAnalyzer.PROPERTY_POLL_INTERVAL: {
-                    this.pollIntervalSecond = Integer.parseInt(properties.get(PipeAnalyzer.PROPERTY_POLL_INTERVAL));
+                    this.pollIntervalSecond = Integer.parseInt(value);
                     break;
                 }
                 case PipeAnalyzer.PROPERTY_AUTO_INGEST: {
-                    pipeSource.setAutoIngest(
-                            VariableMgr.parseBooleanVariable(properties.get(PipeAnalyzer.PROPERTY_AUTO_INGEST)));
+                    pipeSource.setAutoIngest(VariableMgr.parseBooleanVariable(value));
                     break;
                 }
                 case PipeAnalyzer.PROPERTY_BATCH_SIZE: {
-                    pipeSource.setBatchSize(
-                            ParseUtil.parseDataVolumeStr(properties.get(PipeAnalyzer.PROPERTY_BATCH_SIZE)));
+                    pipeSource.setBatchSize(ParseUtil.parseDataVolumeStr(value));
                     break;
                 }
                 case PipeAnalyzer.PROPERTY_BATCH_FILES: {
-                    pipeSource.setBatchFiles(Integer.parseInt(properties.get(PipeAnalyzer.PROPERTY_BATCH_FILES)));
+                    pipeSource.setBatchFiles(Integer.parseInt(value));
                     break;
                 }
                 case PropertyAnalyzer.PROPERTIES_WAREHOUSE: {

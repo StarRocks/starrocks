@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Lists the pipes stored in a specified database or in the current database in use.
+Lists the pipes stored in a specified database or in the current database in use. This command is supported from v3.2 onwards.
 
 ## Syntax
 
@@ -72,3 +72,11 @@ Switch to the database named `mydatabase` and show the pipe named `user_behavior
 USE mydatabase;
 SHOW PIPES WHERE NAME = 'user_behavior_replica' \G
 ```
+
+## References
+
+- [CREATE PIPE](../data-manipulation/CREATE_PIPE.md)
+- [ALTER PIPE](../data-manipulation/ALTER_PIPE.md)
+- [DROP PIPE](../data-manipulation/DROP_PIPE.md)
+- [SUSPEND or RESUME PIPE](../data-manipulation/SUSPEND_or_RESUME_PIPE.md)
+- [RETRY FILE](../data-manipulation/RETRY_FILE.md)

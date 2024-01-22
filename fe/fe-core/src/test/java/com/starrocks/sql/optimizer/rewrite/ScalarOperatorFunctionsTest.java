@@ -305,6 +305,14 @@ public class ScalarOperatorFunctionsTest {
                 ScalarOperatorFunctions.dateFormat(ConstantOperator.createDate(LocalDateTime.of(2020, 2, 21, 13, 4, 5)),
                         ConstantOperator.createVarchar("asdfafdfsçv")).getVarchar());
 
+        Assert.assertNotEquals("53",
+                ScalarOperatorFunctions.dateFormat(ConstantOperator.createDatetime(LocalDateTime.of(2024, 12, 31, 22, 0, 0)),
+                        ConstantOperator.createVarchar("%v")).getVarchar());
+
+        assertEquals("01",
+                ScalarOperatorFunctions.dateFormat(ConstantOperator.createDatetime(LocalDateTime.of(2024, 12, 31, 22, 0, 0)),
+                        ConstantOperator.createVarchar("%v")).getVarchar());
+
         Assert.assertThrows("%a not supported in date format string", IllegalArgumentException.class, () ->
                 ScalarOperatorFunctions.dateFormat(testDate, ConstantOperator.createVarchar("%a")).getVarchar());
         Assert.assertThrows("%b not supported in date format string", IllegalArgumentException.class, () ->

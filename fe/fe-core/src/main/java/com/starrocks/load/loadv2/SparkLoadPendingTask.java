@@ -117,7 +117,6 @@ public class SparkLoadPendingTask extends LoadTask {
                                 Map<FileGroupAggKey, List<BrokerFileGroup>> aggKeyToBrokerFileGroups,
                                 SparkResource resource, BrokerDesc brokerDesc) {
         super(loadTaskCallback, TaskType.PENDING, LoadPriority.NORMAL_VALUE);
-        this.retryTime = 3;
         this.attachment = new SparkPendingTaskAttachment(signature);
         this.aggKeyToBrokerFileGroups = aggKeyToBrokerFileGroups;
         this.resource = resource;

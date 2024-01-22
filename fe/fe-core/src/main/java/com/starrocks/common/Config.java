@@ -2808,4 +2808,12 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long jdbc_meta_default_cache_expire_sec = 600L;
+
+    // the retention time for host disconnection events
+    @ConfField(mutable = true)
+    public static long black_host_history_sec = 2 * 60; // 2min
+
+    // limit for the number of host disconnections in the last {black_host_history_sec} seconds
+    @ConfField(mutable = true)
+    public static long black_host_connect_failures_within_time = 5;
 }

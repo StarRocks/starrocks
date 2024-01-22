@@ -1063,6 +1063,31 @@ void TabletUpdates::_apply_column_partial_update_commit(const EditVersionInfo& v
     _update_total_stats(version_info.rowsets, nullptr, nullptr);
 }
 
+Status TabletUpdates::primary_index_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb) {
+    auto manager = StorageEngine::instance()->update_manager();
+    std::lock_guard lg(_index_lock);
+    auto index_entry = manager->index_cache().get(_tablet.tablet_id());
+    if (index_entry != nullptr) {
+        auto& index = index_entry->value();
+        // release or remove index entry when function end
+        DeferOp index_defer([&]() { manager->index_cache().release(index_entry); });
+        RETURN_IF_ERROR(index.pk_dump(dump, dump_pb));
+    } else {
+        // If index not in cache, build it from meta.
+        PersistentIndexMetaPB index_meta;
+        auto st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), _tablet.tablet_id(), &index_meta);
+        if (!st.ok()) {
+            LOG(ERROR) << "get persistent index meta failed, st " << st;
+            // keep generate dump file
+            return Status::OK();
+        }
+        PersistentIndex index(_tablet.schema_hash_path());
+        RETURN_IF_ERROR(index.load(index_meta));
+        RETURN_IF_ERROR(index.pk_dump(dump, dump_pb));
+    }
+    return Status::OK();
+}
+
 void TabletUpdates::_apply_rowset_commit(const EditVersionInfo& version_info) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_LOAD, _tablet.tablet_id());
     uint32_t rowset_id = version_info.deltas[0];
@@ -2604,6 +2629,14 @@ Status TabletUpdates::get_rowsets_for_compaction(int64_t rowset_size_threshold, 
     return Status::OK();
 }
 
+Status TabletUpdates::get_rowset_stats(std::map<uint32_t, std::string>* output_rowset_stats) {
+    std::lock_guard lg(_rowset_stats_lock);
+    for (const auto& each : _rowset_stats) {
+        (*output_rowset_stats).emplace(each.first, each.second->to_string());
+    }
+    return Status::OK();
+}
+
 Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>& input_rowset_ids) {
     if (_error) {
         return Status::InternalError(strings::Substitute(
@@ -3010,8 +3043,9 @@ int64_t TabletUpdates::get_average_row_size() {
 }
 
 std::string TabletUpdates::RowsetStats::to_string() const {
-    return strings::Substitute("[seg:$0 row:$1 del:$2 bytes:$3 compaction:$4 partial_update_by_column:$5]",
-                               num_segments, num_rows, num_dels, byte_size, compaction_score, partial_update_by_column);
+    return strings::Substitute("[seg:$0 row:$1 del:$2 bytes:$3 row_size:$4 compaction:$5 partial_update_by_column:$6]",
+                               num_segments, num_rows, num_dels, byte_size, row_size, compaction_score,
+                               partial_update_by_column);
 }
 
 std::string TabletUpdates::debug_string() const {
@@ -4017,6 +4051,7 @@ void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
     }
     int64_t total_row = 0;
     int64_t total_size = 0;
+    int64_t total_segment_num = 0;
     {
         std::lock_guard lg(_rowset_stats_lock);
         for (uint32_t rowsetid : rowsets) {
@@ -4025,11 +4060,13 @@ void TabletUpdates::get_basic_info_extra(TabletBasicInfo& info) {
                 // TODO(cbl): also report num deletes
                 total_row += itr->second->num_rows;
                 total_size += itr->second->byte_size;
+                total_segment_num += itr->second->num_segments;
             }
         }
     }
     info.num_row = total_row;
     info.data_size = total_size;
+    info.num_segment = total_segment_num;
     auto& index_cache = StorageEngine::instance()->update_manager()->index_cache();
     auto index_entry = index_cache.get(_tablet.tablet_id());
     if (index_entry != nullptr) {

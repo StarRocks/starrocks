@@ -207,8 +207,7 @@ public class MVRestoreUpdater {
         baseTableVisibleVersionMap.put(localBaseTable.getId(), versionMap);
     }
 
-    public static boolean restoreBaseTableInfoIfNoRestored(Database restoreDb,
-                                                           MaterializedView mv,
+    public static boolean restoreBaseTableInfoIfNoRestored(MaterializedView mv,
                                                            BaseTableInfo baseTableInfo,
                                                            List<BaseTableInfo> newBaseTableInfos) {
 
@@ -226,7 +225,8 @@ public class MVRestoreUpdater {
                     mv.getName(), remoteDbName, remoteTableName));
             return false;
         }
-        BaseTableInfo newBaseTableInfo = new BaseTableInfo(restoreDb.getId(), restoreDb.getFullName(),
+        // use baseTable's db instead of mv's db to construct baseTableInfo.
+        BaseTableInfo newBaseTableInfo = new BaseTableInfo(baseTableDb.getId(), baseTableDb.getFullName(),
                 baseTable.getName(), baseTable.getId());
         newBaseTableInfos.add(newBaseTableInfo);
         return true;

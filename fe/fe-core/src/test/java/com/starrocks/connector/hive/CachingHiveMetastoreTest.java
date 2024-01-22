@@ -113,6 +113,19 @@ public class CachingHiveMetastoreTest {
     }
 
     @Test
+    public void testGetTransactionalTable() {
+        CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
+                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+        // get insert only table
+        com.starrocks.catalog.Table table = cachingHiveMetastore.getTable("transactional_db", "insert_only");
+        Assert.assertNotNull(table);
+        // get full acid table
+        Assert.assertThrows(StarRocksConnectorException.class, () -> {
+            cachingHiveMetastore.getTable("transactional_db", "full_acid");
+        });
+    }
+
+    @Test
     public void testTableExists() {
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
