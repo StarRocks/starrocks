@@ -22,8 +22,6 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.PartitionUtil;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.utframe.UtFrameUtils;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
