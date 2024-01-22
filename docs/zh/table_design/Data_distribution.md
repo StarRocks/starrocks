@@ -63,7 +63,7 @@ StarRocks 支持单独和组合使用数据分布方式。
         user_name VARCHAR(32) DEFAULT ''
     )
     DUPLICATE KEY (event_day,site_id,pv);
-    -- 没有设置任何分区和分桶方式，默认为 Random 分布（目前仅支持明细模型的表）
+    -- 没有设置任何分区和分桶方式，默认为 Random 分布（目前仅支持明细表）
     ```
 
 - Hash 分布
@@ -94,7 +94,7 @@ StarRocks 支持单独和组合使用数据分布方式。
     DUPLICATE KEY(event_day,site_id,pv)
     -- 设为分区方式为表达式分区，并且使用时间函数的分区表达式（当然您也可以设置分区方式为 Range 分区）
     PARTITION BY date_trunc('day', event_day);
-    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细模型的表）
+    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细表）
     ```
 
 - Range + Hash 分布
@@ -127,7 +127,7 @@ StarRocks 支持单独和组合使用数据分布方式。
     DUPLICATE KEY(id)
     -- 设为分区方式为表达式分区，并且使用列分区表达式（当然您也可以设置分区方式为 List 分区）
     PARTITION BY (city);
-    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细模型的表）
+    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细表）
     ```
 
 - List + Hash 分布
@@ -410,7 +410,7 @@ SHOW PARTITIONS FROM site_access;
 
 **使用限制**
 
-- 仅支持明细模型表。
+- 仅支持明细表。
 - 不支持指定 [Colocation Group](../using_starrocks/Colocate_join.md)。
 - 不支持 [Spark Load](../loading/SparkLoad.md)。
 
@@ -584,7 +584,35 @@ DISTRIBUTED BY HASH(site_id,city_code);
 
 > **注意**
 >
+<<<<<<< HEAD
 > 不支持修改已创建分区的分桶数量。
+=======
+> StarRocks [存算分离模式](../deployment/shared_data/s3.md)暂不支持该特性。
+
+随着业务场景中查询模式和数据量变化，建表时设置的分桶方式和分桶数量，以及排序键可能不再能适应新的业务场景，导致查询性能下降，此时可以通过 `ALTER TABLE` 调整分桶方式和分桶数量，以及排序键，优化数据分布。比如：
+
+- **分区中数据量增多，增加分桶数量**
+
+  当按天分区的分区数据量相比原来变大很多，原本的分桶数量不再合适时，可以加大分桶数量，以让每个 Tablet 的大小一般控制在 1 GB ~ 10 GB。
+
+- **通过调整分桶键，来避免数据倾斜**
+
+  当发现原有分桶键会导致数据倾斜（比如原来的分桶键只有 `k1` 一列），可以设置更合适的列、或者加入更多一些列到分桶键中。如下：
+
+    ```SQL
+    ALTER TABLE t DISTRIBUTED BY HASH(k1, k2) BUCKETS 20;
+    -- 如果是 StarRocks 的版本是 3.1及以上，并且使用的是明细表，则建议直接改成默认分桶设置，即随机分桶并且由 StarRocks 自动设置分桶数量
+    ALTER TABLE t DISTRIBUTED BY RANDOM;
+    ```
+
+- 如果表为主键表，当业务的查询模式有较大变化，经常需要用到表中另外几个列作为条件列时，则可以调整排序键。如下：
+
+    ```SQL
+    ALTER TABLE t ORDER BY k2, k1;
+    ```
+
+更多信息，参见 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md) 。
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 
 ## 最佳实践
 
