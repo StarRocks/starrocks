@@ -77,7 +77,7 @@ SELECT * FROM FILES
 
 ## 相关文档
 
-- [ALTER PIPE](../data-manipulation/CREATE_PIPE.md)
+- [ALTER PIPE](../data-manipulation/ALTER_PIPE.md)
 - [DROP PIPE](../data-manipulation/DROP_PIPE.md)
 - [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
 - [SUSPEND or RESUME PIPE](../data-manipulation/SUSPEND_or_RESUME_PIPE.md)

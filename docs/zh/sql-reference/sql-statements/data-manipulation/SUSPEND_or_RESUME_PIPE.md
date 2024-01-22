@@ -52,7 +52,7 @@ ALTER PIPE user_behavior_replica RESUME;
 ## 相关文档
 
 - [CREATE PIPE](../data-manipulation/CREATE_PIPE.md)
-- [ALTER PIPE](../data-manipulation/CREATE_PIPE.md)
+- [ALTER PIPE](../data-manipulation/ALTER_PIPE.md)
 - [DROP PIPE](../data-manipulation/DROP_PIPE.md)
 - [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
 - [RETRY FILE](../data-manipulation/RETRY_FILE.md)

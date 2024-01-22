@@ -52,7 +52,7 @@ If you use [SHOW PIPES](../../../sql-reference/sql-statements/data-manipulation/
 ## References
 
 - [CREATE PIPE](../data-manipulation/CREATE_PIPE.md)
-- [ALTER PIPE](../data-manipulation/CREATE_PIPE.md)
+- [ALTER PIPE](../data-manipulation/ALTER_PIPE.md)
 - [DROP PIPE](../data-manipulation/DROP_PIPE.md)
 - [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
 - [RETRY FILE](../data-manipulation/RETRY_FILE.md)
