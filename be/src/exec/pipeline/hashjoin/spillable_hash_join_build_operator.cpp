@@ -248,6 +248,7 @@ Status SpillableHashJoinBuildOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->name = "hash-join-build";
     _spill_options->plan_node_id = _plan_node_id;
     _spill_options->encode_level = state->spill_encode_level();
+    _spill_options->wg = state->fragment_ctx()->workgroup();
     // TODO: Our current adaptive dop for non-broadcast functions will also result in a build hash_joiner corresponding to multiple prob hash_join prober.
     //
     _spill_options->read_shared =

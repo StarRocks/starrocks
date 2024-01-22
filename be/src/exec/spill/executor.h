@@ -105,6 +105,18 @@ struct IOTaskExecutor {
             return Status::InternalError("offer task failed");
         }
     }
+
+    Status submit(workgroup::ScanTask io_task) {
+        if (pool->submit(std::move(io_task))) {
+            return Status::OK();
+        } else {
+            return Status::InternalError("offer task failed");
+        }
+    }
+
+    void force_submit(workgroup::ScanTask io_task) {
+        pool->force_submit(std::move(io_task));
+    }
 };
 using IOTaskExecutorPtr = std::shared_ptr<IOTaskExecutor>;
 

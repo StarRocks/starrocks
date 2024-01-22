@@ -293,7 +293,6 @@ StatusOr<ChunkPtr> SpillerReader::sync_restore(RuntimeState* state, MemGuard&& g
         };
         SyncTaskExecutor executor;
         RETURN_IF_ERROR(executor.submit(std::move(restore_task)));
-        // ASSIGN_OR_RETURN(auto chunk, _stream->get_next(_spill_read_ctx));
     }
     return chunk;
 }
