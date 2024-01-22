@@ -993,7 +993,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：FE 节点上 MySQL 服务器的端口。
 - 默认值：9030
 
-#### mysql_service_nio_enabled  
+#### mysql_service_nio_enabled
 
 - 含义：是否开启 MySQL 服务器的异步 I/O 选项。
 - 默认值：TRUE
@@ -1088,7 +1088,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：允许回滚的最大事务数。
 - 默认值：100
 
-#### bdbje_replica_ack_timeout_second  
+#### bdbje_replica_ack_timeout_second
 
 - 含义：FE 所在 StarRocks 集群中，元数据从 Leader FE 写入到多个 Follower FE 时，Leader FE 等待足够多的 Follower FE 发送 ACK 消息的超时时间。当写入的元数据较多时，可能返回 ACK 的时间较长，进而导致等待超时。如果超时，会导致写元数据失败，FE 进程退出，此时可以适当地调大该参数取值。
 - 单位：秒
@@ -1133,7 +1133,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 含义：导入作业的轮询间隔。
 - 单位：秒。
-- 默认值：5  
+- 默认值：5
 
 #### transaction_clean_interval_second
 
@@ -1230,7 +1230,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 #### aws_s3_region
 
-- 含义：需访问的 S3 存储空间的地区，如 `us-west-2`。  
+- 含义：需访问的 S3 存储空间的地区，如 `us-west-2`。
 
 #### aws_s3_endpoint
 
@@ -1349,3 +1349,19 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 - 含义：是否开启定期收集指标 (Metrics) 的功能。取值范围：`TRUE` 和 `FALSE`。`TRUE` 表示开该功能。`FALSE`表示关闭该功能。
 - 默认值：TRUE
+
+#### jdbc_connection_pool_size
+
+- 含义：访问JDBC Catalog, JDBC Connection Pool容量上限
+- 默认值：8
+
+#### jdbc_minimum_idle_connections
+
+- 含义：访问JDBC Catalog, JDBC Connection Pool中处于idle状态的最低数量
+- 默认值：1
+
+#### jdbc_connection_idle_timeout_ms
+
+- 含义：访问JDBC Catalog, 超过这个时间的连接被认为是idle状态
+- 单位：毫秒
+- 默认值：600000
