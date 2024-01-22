@@ -97,9 +97,6 @@ Status ScalarColumnIterator::init(const ColumnIteratorOptions& opts) {
     case TYPE_DATETIME:
         _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_DATETIME>;
         break;
-    case TYPE_DECIMAL:
-        _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_DECIMAL>;
-        break;
     case TYPE_DECIMALV2:
         _init_dict_decoder_func = &ScalarColumnIterator::_do_init_dict_decoder<TYPE_DECIMALV2>;
         break;

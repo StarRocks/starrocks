@@ -55,7 +55,6 @@ public:
         _number_types_supports_dict_encoding.emplace(TYPE_DOUBLE);
         _number_types_supports_dict_encoding.emplace(TYPE_DATE);
         _number_types_supports_dict_encoding.emplace(TYPE_DATETIME);
-        _number_types_supports_dict_encoding.emplace(TYPE_DECIMAL);
         _number_types_supports_dict_encoding.emplace(TYPE_DECIMALV2);
     }
 

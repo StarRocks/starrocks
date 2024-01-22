@@ -936,9 +936,6 @@ inline Status DictColumnWriter::speculate_column_and_set_encoding(const Column& 
     case TYPE_DATETIME:
         detect_encoding = speculate_encoding<TYPE_DATETIME>(column);
         break;
-    case TYPE_DECIMAL:
-        detect_encoding = speculate_encoding<TYPE_DECIMAL>(column);
-        break;
     case TYPE_DECIMALV2:
         detect_encoding = speculate_encoding<TYPE_DECIMALV2>(column);
         break;

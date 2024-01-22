@@ -178,13 +178,6 @@ struct RunTimeTypeTraits<TYPE_DOUBLE> {
 };
 
 template <>
-struct RunTimeTypeTraits<TYPE_DECIMAL> {
-    using CppType = decimal12_t;
-    using ColumnType = FixedLengthColumn<decimal12_t>;
-    using ProxyContainerType = ColumnType::Container;
-};
-
-template <>
 struct RunTimeTypeTraits<TYPE_DECIMALV2> {
     using CppType = DecimalV2Value;
     using ColumnType = DecimalColumn;

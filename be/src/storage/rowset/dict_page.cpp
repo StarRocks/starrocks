@@ -263,7 +263,6 @@ template class DictPageDecoder<TYPE_DATE_V1>;
 template class DictPageDecoder<TYPE_DATE>;
 template class DictPageDecoder<TYPE_DATETIME_V1>;
 template class DictPageDecoder<TYPE_DATETIME>;
-template class DictPageDecoder<TYPE_DECIMAL>;
 template class DictPageDecoder<TYPE_DECIMALV2>;
 
 template class DictPageBuilder<TYPE_SMALLINT>;
@@ -276,7 +275,6 @@ template class DictPageBuilder<TYPE_DATE_V1>;
 template class DictPageBuilder<TYPE_DATE>;
 template class DictPageBuilder<TYPE_DATETIME_V1>;
 template class DictPageBuilder<TYPE_DATETIME>;
-template class DictPageBuilder<TYPE_DECIMAL>;
 template class DictPageBuilder<TYPE_DECIMALV2>;
 
 } // namespace starrocks

@@ -308,7 +308,6 @@ EncodingInfoResolver::EncodingInfoResolver() {
     _add_map<TYPE_DOUBLE, DICT_ENCODING>();
     _add_map<TYPE_DATE, DICT_ENCODING>();
     _add_map<TYPE_DATETIME, DICT_ENCODING>();
-    _add_map<TYPE_DECIMAL, DICT_ENCODING>();
     _add_map<TYPE_DECIMALV2, DICT_ENCODING>();
 }
 

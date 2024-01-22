@@ -277,33 +277,6 @@ TEST_F(DictPageTest, TestSmallDataSizeWithInt16_t) {
     test_encode_decode_page_template<TYPE_SMALLINT>(ints.get(), size, size);
 }
 
-TEST_F(DictPageTest, TestSmallDataSizeWithDecimal) {
-    const uint32_t size = 100 * 100;
-    std::unique_ptr<decimal12_t[]> decimals(new decimal12_t[size]);
-    for (int i = 0; i < 100; i++) {
-        for (int j = 0; j < 100; j++) {
-            decimals.get()[i * 100 + j] = decimal12_t(i, j);
-        }
-    }
-    test_encode_decode_page_template<TYPE_DECIMAL>(decimals.get(), size, size);
-}
-
-TEST_F(DictPageTest, TestSameValueWithDecimal) {
-    const int F = 10;
-    const int I = 100;
-    const uint32_t size = F * I;
-    std::unique_ptr<decimal12_t[]> decimals(new decimal12_t[size]);
-    for (int i = 0; i < F; i++) {
-        for (int j = 0; j < I; j++) {
-            decimals.get()[i * I + j] = decimal12_t(i, j);
-        }
-    }
-    std::unique_ptr<decimal12_t[]> decimals_expand(new decimal12_t[size * 2]);
-    std::memcpy(decimals_expand.get(), decimals.get(), size * sizeof(decimal12_t));
-    std::memcpy(decimals_expand.get() + size, decimals.get(), size * sizeof(decimal12_t));
-    test_encode_decode_page_template<TYPE_DECIMAL>(decimals_expand.get(), size, size * 2);
-}
-
 TEST_F(DictPageTest, TestSmallDataSizeWithDecimalV2) {
     const uint32_t size = 100 * 100;
     std::unique_ptr<DecimalV2Value[]> decimals(new DecimalV2Value[size]);
