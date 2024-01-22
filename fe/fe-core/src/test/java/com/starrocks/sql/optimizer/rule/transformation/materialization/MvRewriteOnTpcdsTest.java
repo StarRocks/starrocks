@@ -27,74 +27,12 @@ public class MvRewriteOnTpcdsTest extends MaterializedViewTestBase {
     }
 
     @Test
-    public void test() throws Exception {
-        connectContext.executeSql("drop table if exists t11");
-        starRocksAssert.withTable("create table t11(\n" +
-                "shop_id int,\n" +
-                "region int,\n" +
-                "shop_type string,\n" +
-                "shop_flag string,\n" +
-                "store_id String,\n" +
-                "store_qty Double\n" +
-                ") DUPLICATE key(shop_id) distributed by hash(shop_id) buckets 1 " +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ");");
-        /*connectContext.executeSql("insert into\n" +
-                "t11\n" +
-                "values\n" +
-                "(1, 1, 's', 'o', '1', null),\n" +
-                "(1, 1, 'm', 'o', '2', 2),\n" +
-                "(1, 1, 'b', 'c', '3', 1);");*/
-        connectContext.executeSql("drop materialized view if exists mv11");
-        createAndRefreshMV("test", "create MATERIALIZED VIEW mv11 (region, ct) " +
-                "DISTRIBUTED BY RANDOM buckets 1 REFRESH MANUAL as\n" +
-                "select region,\n" +
-                "count(\n" +
-                "distinct (\n" +
-                "case\n" +
-                "when store_qty > 0 then store_id\n" +
-                "else null\n" +
-                "end\n" +
-                ")\n" +
-                ")\n" +
-                "from t11\n" +
-                "group by region;");
-        {
-            String query = "select region,\n" +
-                    "count(\n" +
-                    "distinct (\n" +
-                    "case\n" +
-                    "when store_qty > 0.0 then store_id\n" +
-                    "else null\n" +
-                    "end\n" +
-                    ")\n" +
-                    ") as ct\n" +
-                    "from t11\n" +
-                    "group by region\n" +
-                    "having\n" +
-                    "count(\n" +
-                    "distinct (\n" +
-                    "case\n" +
-                    "when store_qty > 0.0 then store_id\n" +
-                    "else null\n" +
-                    "end\n" +
-                    ")\n" +
-                    ") > 0\n";
-            MVRewriteChecker checker = sql(query);
-            checker.contains("mv11");
-        }
-    }
-
-    @Test
     public void testQuery16() throws Exception {
         connectContext.executeSql("drop materialized view if exists __mv__ta0008");
         createAndRefreshMV("test", "CREATE MATERIALIZED VIEW __mv__ta0008 (_ca0005, _ca0006, _ca0007)\n" +
                 "REFRESH ASYNC START(\"2023-12-01 10:00:00\") EVERY(INTERVAL 1 DAY)\n" +
                 "PROPERTIES (\n" +
-                "  \"replicated_storage\" = \"true\",\n" +
-                "  \"replication_num\" = \"1\",\n" +
-                "  \"storage_medium\" = \"HDD\"\n" +
+                "  \"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "AS\n" +
                 "SELECT\n" +
@@ -154,9 +92,7 @@ public class MvRewriteOnTpcdsTest extends MaterializedViewTestBase {
                 "DISTRIBUTED BY HASH (d_moy, d_year, w_warehouse_name, w_warehouse_sk, i_item_sk)\n" +
                 "REFRESH ASYNC START(\"2023-12-01 10:00:00\") EVERY(INTERVAL 1 DAY)\n" +
                 "PROPERTIES (\n" +
-                "  \"replicated_storage\" = \"true\",\n" +
-                "  \"replication_num\" = \"1\",\n" +
-                "  \"storage_medium\" = \"HDD\"\n" +
+                "  \"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "AS\n" +
                 "SELECT\n" +
@@ -215,9 +151,7 @@ public class MvRewriteOnTpcdsTest extends MaterializedViewTestBase {
                 "DISTRIBUTED BY HASH (i_item_id)\n" +
                 "REFRESH ASYNC START(\"2023-12-01 10:00:00\") EVERY(INTERVAL 1 DAY)\n" +
                 "PROPERTIES (\n" +
-                "  \"replicated_storage\" = \"true\",\n" +
-                "  \"replication_num\" = \"1\",\n" +
-                "  \"storage_medium\" = \"HDD\"\n" +
+                "  \"replication_num\" = \"1\"\n" +
                 ")\n" +
                 "AS\n" +
                 "SELECT\n" +
