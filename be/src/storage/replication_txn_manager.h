@@ -90,7 +90,8 @@ private:
 
 private:
     mutable std::shared_mutex _mutex;
-    std::unordered_map<TTransactionId, std::unordered_map<TPartitionId, std::vector<TTabletId>>> _transaction_map;
+    std::unordered_map<TTransactionId, std::unordered_map<TPartitionId, std::unordered_set<TTabletId>>>
+            _transaction_map;
     std::unordered_map<TTabletId, std::unordered_map<TTransactionId, ReplicationTxnMetaPB>> _tablet_map;
 };
 
