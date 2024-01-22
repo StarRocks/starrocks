@@ -22,7 +22,7 @@ For an understanding of the basic principles of Routine Load, refer to the secti
 
 Ensure you have a running StarRocks cluster. For demonstration purposes, this article follow the [deployment guide](https://docs.starrocks.io/zh/docs/3.0/quick_start/deploy_with_docker/) to install a StarRocks cluster on a Linux machine via Docker.
 
-Creating a database and test table with the primary key model:
+Creating a database and a Primary Key table for testing:
 
 ```sql
 create database automq_db;

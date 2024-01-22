@@ -191,7 +191,7 @@ Hive 外表字符串支持的长度从 64 KB 扩展为 1 MB。长度超过 1 MB 
 
 - 通过重构部分热点代码和降低锁粒度优化导入性能，减少长尾延迟。 [#6641](https://github.com/StarRocks/starrocks/pull/6641)
 - 在 FE 的审计日志中添加每个查询所消耗部署 BE 机器的 CPU 和内存信息。 [#6208](https://github.com/StarRocks/starrocks/pull/6208) [#6209](https://github.com/StarRocks/starrocks/pull/6209)
-- 支持在主键模型表和更新模型表中使用 JSON 数据类型。 [#6544](https://github.com/StarRocks/starrocks/pull/6544)
+- 支持在主键表和更新表中使用 JSON 数据类型。 [#6544](https://github.com/StarRocks/starrocks/pull/6544)
 - 通过降低锁粒度和 BE 汇报 (report) 请求去重减少 FE 负荷，优化部署大量 BE 时的汇报性能并解决大规模集群中 Routine Load 任务卡住的问题。 [#6293](https://github.com/StarRocks/starrocks/pull/6293)
 
 ### 问题修复
@@ -208,11 +208,19 @@ Hive 外表字符串支持的长度从 64 KB 扩展为 1 MB。长度超过 1 MB 
 
 ### 新功能
 
+<<<<<<< HEAD
 - 【公测中】发布资源组管理功能。通过使用资源组来控制 CPU、内存的资源使用，让不同租户的大小查询在同一集群执行时，既能实现资源隔离，又能合理使用资源。相关文档，请参见[资源组](../administration/resource_group.md)。
 - 【公测中】实现 Java UDF 框架，支持使用 Java 语法编写 UDF（用户自定义函数），扩展 StarRocks 的函数功能。相关文档，请参见 [Java UDF](../sql-reference/sql-functions/JAVA_UDF.md)。
 - 【公测中】导入数据至主键模型时，支持更新部分列。在订单更新、多流 JOIN 等实时数据更新场景下，仅需要更新与业务相关的列。相关文档，请参见 [主键模型的表支持部分更新](../loading/Load_to_Primary_Key_tables.md#部分更新)。
 - 【公测中】支持 JSON 数据类型和函数。相关文档，请参见 [JSON](../sql-reference/sql-statements/data-types/JSON.md)。
 - 支持通过外表查询 Apache Hudi 的数据，进一步完善了数据湖分析的功能。相关文档，请参见 [Apache Hudi 外表](../data_source/External_table.md#deprecated-hudi-外部表)。
+=======
+- 【公测中】发布资源组管理功能。通过使用资源组来控制 CPU、内存的资源使用，让不同租户的大小查询在同一集群执行时，既能实现资源隔离，又能合理使用资源。相关文档，请参见[资源组](https://docs.starrocks.io/zh/docs/administration/resource_group/)。
+- 【公测中】实现 Java UDF 框架，支持使用 Java 语法编写 UDF（用户自定义函数），扩展 StarRocks 的函数功能。相关文档，请参见 [Java UDF](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/JAVA_UDF/)。
+- 【公测中】导入数据至主键表时，支持更新部分列。在订单更新、多流 JOIN 等实时数据更新场景下，仅需要更新与业务相关的列。相关文档，请参见 [主键表支持部分更新](https://docs.starrocks.io/zh/docs/loading/Load_to_Primary_Key_tables#部分更新)。
+- 【公测中】支持 JSON 数据类型和函数。相关文档，请参见 [JSON](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-types/JSON/)。
+- 支持通过外表查询 Apache Hudi 的数据，进一步完善了数据湖分析的功能。相关文档，请参见 [Apache Hudi 外表](https://docs.starrocks.io/zh/docs/data_source/External_table#deprecated-hudi-外部表)。
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 - 新增如下函数:
   - ARRAY 函数，[array_agg](../sql-reference/sql-functions/array-functions/array_agg.md)、[array_sort](../sql-reference/sql-functions/array-functions/array_sort.md)、[array_distinct](../sql-reference/sql-functions/array-functions/array_distinct.md)、[array_join](../sql-reference/sql-functions/array-functions/array_join.md)、[reverse](../sql-reference/sql-functions/string-functions/reverse.md)、[array_slice](../sql-reference/sql-functions/array-functions/array_slice.md)、[array_concat](../sql-reference/sql-functions/array-functions/array_concat.md)、[array_difference](../sql-reference/sql-functions/array-functions/array_difference.md)、[arrays_overlap](../sql-reference/sql-functions/array-functions/arrays_overlap.md)、[array_intersect](../sql-reference/sql-functions/array-functions/array_intersect.md)。
   - BITMAP 函数，包括 [bitmap_max](../sql-reference/sql-functions/bitmap-functions/bitmap_max.md)、[bitmap_min](../sql-reference/sql-functions/bitmap-functions/bitmap_min.md)。
@@ -231,7 +239,7 @@ Hive 外表字符串支持的长度从 64 KB 扩展为 1 MB。长度超过 1 MB 
 
 修复了如下问题：
 
-- 修复主键模型的表导入数据和 COMMIT 时产生死锁的问题。[#4998](https://github.com/StarRocks/starrocks/pull/4998)
+- 修复主键表导入数据和 COMMIT 时产生死锁的问题。[#4998](https://github.com/StarRocks/starrocks/pull/4998)
 - 解决 FE（包含 BDBJE）的一系列稳定性问题。[#4428](https://github.com/StarRocks/starrocks/pull/4428)、[#4666](https://github.com/StarRocks/starrocks/pull/4666)、[#2](https://github.com/StarRocks/bdb-je/pull/2)
 - 修复 SUM 函数对大量数据求和时返回结果溢出的问题。[#3944](https://github.com/StarRocks/starrocks/pull/3944)
 - 修复 ROUND 和 TRUNCATE 函数返回结果的精度问题。[#4256](https://github.com/StarRocks/starrocks/pull/4256)
