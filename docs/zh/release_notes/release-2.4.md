@@ -4,6 +4,43 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 2.4
 
+<<<<<<< HEAD
+=======
+## 2.4.5
+
+发布日期：2023 年 4 月 21 日
+
+### 功能优化
+
+- 禁止使用 List Partition 语法，因为它可能导致元数据升级出错。 [#15401](https://github.com/StarRocks/starrocks/pull/15401)
+- 物化视图支持 BITMAP、HLL 和 PERCENTILE 类型。 [#15731](https://github.com/StarRocks/starrocks/pull/15731)
+- 优化 `storage_medium` 的推导机制。当 BE 同时使用 SSD 和 HDD 作为存储介质时，如果配置了 `storage_cooldown_time`，StarRocks 设置 `storage_medium` 为 `SSD`。反之，则 StarRocks 设置 `storage_medium` 为 `HDD`。 [#18649](https://github.com/StarRocks/starrocks/pull/18649)
+- 优化 Thread Dump 的准确性。 [#16748](https://github.com/StarRocks/starrocks/pull/16748)
+- 通过在导入前触发元数据 Compaction 来优化导入效率。 [#19347](https://github.com/StarRocks/starrocks/pull/19347)
+- 优化 Stream Load Planner 超时。 [#18992](https://github.com/StarRocks/starrocks/pull/18992/files)
+- 通过禁止收集 Value 列统计数据优化更新表性能。 [#19563](https://github.com/StarRocks/starrocks/pull/19563)
+
+### 问题修复
+
+修复了如下问题：
+
+- 在 CREATE TABLE 中使用不支持的数据类型时返回 NPE。 [# 20999](https://github.com/StarRocks/starrocks/issues/20999)
+- 使用 Broadcast Join 和 short-circuit 的查询返回错误结果。 [#20952](https://github.com/StarRocks/starrocks/issues/20952)
+- 错误的数据删除逻辑导致的磁盘占用问题。 [#20590](https://github.com/StarRocks/starrocks/pull/20590)
+- AuditLoader 插件既无法被安装也不能被删除。 [#20468](https://github.com/StarRocks/starrocks/issues/20468)
+- 如果调度一个 Tablet 时抛出异常，则与其同一批的其他 Tablet 无法被调度。 [#20681](https://github.com/StarRocks/starrocks/pull/20681)
+- 在创建同步物化视图时使用了不支持的 SQL 函数时，返回未知错误。 [#20348](https://github.com/StarRocks/starrocks/issues/20348)
+- 多个 COUNT DISTINCT 重写错误。 [#19714](https://github.com/StarRocks/starrocks/pull/19714)
+- 查询正在 Compaction 中的 Tablet 返回错误结果。 [#20084](https://github.com/StarRocks/starrocks/issues/20084)
+- 聚合查询返回错误结果。 [#19725](https://github.com/StarRocks/starrocks/issues/19725)
+- 将 NULL Parquet 数据加载到 NOT NULL 列时不返回错误消息。 [#19885](https://github.com/StarRocks/starrocks/pull/19885)
+- 在持续触发资源隔离的并发限制时，查询并发数量指标下降缓慢。 [#19363](https://github.com/StarRocks/starrocks/pull/19363)
+- 重放 `InsertOverwriteJob` 状态变更日志时，FE 启动失败。 [#19061](https://github.com/StarRocks/starrocks/issues/19061)
+- 主键表死锁。 [#18488](https://github.com/StarRocks/starrocks/pull/18488)
+- 对于 Colocation 表，可以通过命令手动指定副本状态为 `bad`：`ADMIN SET REPLICA STATUS PROPERTIES("tablet_id" = "10003", "backend_id" = "10001", "status" = "bad");`，如果 BE 数量小于等于副本数量，则该副本无法被修复。 [#17876](https://github.com/StarRocks/starrocks/issues/17876)
+- ARRAY 相关函数引起的问题。 [#18556](https://github.com/StarRocks/starrocks/pull/18556)
+
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 ## 2.4.4
 
 发布日期：2023 年 2 月 22 日
@@ -147,7 +184,11 @@ displayed_sidebar: "Chinese"
 
 ### 新增特性
 
+<<<<<<< HEAD
 - 支持构建异步多表物化视图，实现多表 JOIN 查询加速。异步物化视图支持所有[数据模型](../table_design/table_types/table_types.md)。相关文档，请参见 [物化视图](../using_starrocks/Materialized_view.md)。
+=======
+- 支持构建异步多表物化视图，实现多表 JOIN 查询加速。异步物化视图支持所有[表类型](https://docs.starrocks.io/zh/docs/table_design/table_types/table_types/)。相关文档，请参见 [物化视图](https://docs.starrocks.io/zh/docs/using_starrocks/Materialized_view/)。
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 
 - 支持通过 INSERT OVERWRITE 语句批量写入并覆盖数据。相关文档，请参见 [INSERT 导入](../loading/InsertInto.md)。
 
@@ -165,7 +206,11 @@ displayed_sidebar: "Chinese"
 
 - 支持 FQDN 访问：您可以用域名或结合主机名与端口的方式作为 FE 或 BE 节点的唯一标识，有效避免因 IP 变更导致无法访问的问题。相关文档，请参见 [启用 FQDN 访问](../administration/enable_fqdn.md)。
 
+<<<<<<< HEAD
 - flink-connector-starrocks 支持主键模型 Partial Update。相关文档，请参见[使用 flink-connector-starrocks 导入至 StarRocks](../loading/Flink-connector-starrocks.md)。
+=======
+- flink-connector-starrocks 支持主键表 Partial Update。相关文档，请参见[使用 flink-connector-starrocks 导入至 StarRocks](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/)。
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 
 - 函数相关：
   - 新增 array_contains_all 函数，用于判断特定数组是否为另一数组的子集。相关文档，请参见[array_contains_all](../sql-reference/sql-functions/array-functions/array_contains_all.md)。
@@ -173,7 +218,7 @@ displayed_sidebar: "Chinese"
 
 ### 功能优化
 
-- 主键模型支持持久化 VARCHAR 类型主键索引。自 2.4.0 版本起，主键模型的主键索引磁盘持久化模式和常驻内存模式支持相同的数据类型。
+- 主键表支持持久化 VARCHAR 类型主键索引。自 2.4.0 版本起，主键表的主键索引磁盘持久化模式和常驻内存模式支持相同的数据类型。
 
 - 优化外表查询性能。
   - 支持查询 Parquet 格式文件时延迟物化，提升小范围过滤场景下的数据湖查询性能。
@@ -191,7 +236,7 @@ displayed_sidebar: "Chinese"
 
 - 调整了计算默认 PageCache Size 和一致性校验内存的方法，避免多实例部署时的 OOM 问题。
 
-- 去除数据导入主键模型时的 final_merge 操作，主键模型大数据量单批次导入性能提升至两倍。
+- 去除数据导入主键表时的 final_merge 操作，主键表大数据量单批次导入性能提升至两倍。
 
 - 支持 Stream Load 事务接口：支持和 Apache Flink®、Apache Kafka® 等其他系统之间实现跨系统的两阶段提交，并提升高并发 Stream Load 导入场景下的性能。
 
@@ -210,7 +255,7 @@ displayed_sidebar: "Chinese"
 
 - 导入相关问题：
   - Broker Load 导入时设定 ARRAY 列失败。 [#9158](https://github.com/StarRocks/starrocks/pull/9158)
-  - 通过 Broker Load 向非明细模型表导入数据后，副本数据不一致。[#8714](https://github.com/StarRocks/starrocks/pull/8714)
+  - 通过 Broker Load 向非明细表导入数据后，副本数据不一致。[#8714](https://github.com/StarRocks/starrocks/pull/8714)
   - 执行 ALTER ROUTINE LOAD 过程中出现 NPE 错误。 [#7804](https://github.com/StarRocks/starrocks/pull/7804)
 
 - 数据湖分析相关问题：

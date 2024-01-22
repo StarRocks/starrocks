@@ -665,7 +665,7 @@
       "items": [
         {
           "type": "category",
-          "label": "数据模型",
+          "label": "表类型",
           "link": {"type": "doc", "id": "table_design/table_types/table_types"},
           "items": ["table_design/table_types/duplicate_key_table", "table_design/table_types/aggregate_table", "table_design/table_types/unique_key_table", "table_design/table_types/primary_key_table" ]
         },

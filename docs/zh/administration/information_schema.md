@@ -86,8 +86,8 @@ StarRocks 优化了 `information_schema` 中以下表提供的元数据信息：
 | TABLE_SCHEMA     | 表所属的数据库名称。                                         |
 | TABLE_NAME       | 表名。                                                       |
 | TABLE_ENGINE     | 表的引擎类型。                                               |
-| TABLE_MODEL      | 表的数据模型。 有效值：“DUP_KEYS”、“AGG_KEYS”、“UNQ_KEYS” 或 “PRI_KEYS”。 |
-| PRIMARY_KEY      | 主键模型或更新模型表的主键。如果该表不是主键模型或更新模型表，则返回空字符串。 |
+| TABLE_MODEL      | 表类型。有效值：“DUP_KEYS”、“AGG_KEYS”、“UNQ_KEYS” 或 “PRI_KEYS”。 |
+| PRIMARY_KEY      | 主键表或更新表的唯一约束键。如果该表不是主键表或更新表，则返回空字符串。 |
 | PARTITION_KEY    | 表的分区键。                                                 |
 | DISTRIBUTE_KEY   | 表的分桶键。                                                 |
 | DISTRIBUTE_TYPE  | 表的分桶方式。                                               |

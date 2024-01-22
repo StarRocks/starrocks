@@ -4,6 +4,158 @@ displayed_sidebar: "Chinese"
 
 # StarRocks version 2.3
 
+<<<<<<< HEAD
+=======
+## 2.3.18
+
+发布日期： 2023 年 10 月 11 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 第三方库 librdkafka 的缺陷，会导致 Routine Load 中导入任务消费时被卡住，新建的导入任务也无法执行。[#28301](https://github.com/StarRocks/starrocks/pull/28301)
+- 由于内存统计不准确有几率会导致 Spark 或者 Flink connector 读取数据报错。[#31200](https://github.com/StarRocks/starrocks/pull/31200) [#30751](https://github.com/StarRocks/starrocks/pull/30751)
+- Stream Load 中包括 `if` 关键字时，会引起 BE crash。[#31926](https://github.com/StarRocks/starrocks/pull/31926)
+- 向有分区的 StarRocks 外表写入数据时有报错 `"get TableMeta failed from TNetworkAddress"`。[#30466](https://github.com/StarRocks/starrocks/pull/30466)
+
+## 2.3.17
+
+发布日期： 2023 年 9 月 4 日
+
+### 问题修复
+
+修复了如下问题：
+
+- Routine Load 消费失败。[#29883](https://github.com/StarRocks/starrocks/issues/29883) [#18550](https://github.com/StarRocks/starrocks/pull/18550)
+
+## 2.3.16
+
+发布日期： 2023 年 8 月 4 日
+
+### 问题修复
+
+修复了如下问题：
+
+- LabelCleaner 线程卡死导致 FE 内存泄漏。[#28311](https://github.com/StarRocks/starrocks/pull/28311) [#28636](https://github.com/StarRocks/starrocks/pull/28636)
+
+## 2.3.15
+
+发布日期： 2023 年 7 月 31 日
+
+### 功能优化
+
+- 优化 Tablet 调度逻辑，避免某些情况下 Tablet 长时间处于挂起状态或者 FE crash。[#21647](https://github.com/StarRocks/starrocks/pull/21647) [#23062](https://github.com/StarRocks/starrocks/pull/23062) [#25785](https://github.com/StarRocks/starrocks/pull/25785)
+- 优化 TabletChecker 的调度逻辑，避免重复调度暂时无法修复的 Tablet。[#27648](https://github.com/StarRocks/starrocks/pull/27648)
+- 分区元信息里面会记录 visibleTxnId，对应 visible version，方便在 Tablet 副本版本号不一致时，追踪当时创建这个版本的 txn。[#27924](https://github.com/StarRocks/starrocks/pull/27924)
+
+### 问题修复
+
+修复了如下问题：
+
+- FE 中表级别 scan 统计信息错误，导致表查询和导入的 metrics 信息不正确。[#28022](https://github.com/StarRocks/starrocks/pull/28022)
+- 当 Join 列是 BINARY 类型且过大时 BE 会 crash。[#25084](https://github.com/StarRocks/starrocks/pull/25084)
+- Aggregate 算子在某些情况下会触发线程安全问题，导致 BE crash。[#26092](https://github.com/StarRocks/starrocks/pull/26092)
+- [RESTORE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/RESTORE/) 后同一个 Tablet 在 BE 和 FE 上的 version 不一致。[#26518](https://github.com/StarRocks/starrocks/pull/26518/files)
+- [RECOVER](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/RECOVER/) 的表自动创建分区失败。[#26813](https://github.com/StarRocks/starrocks/pull/26813)
+- 严格模式下，INSERT INTO 的数据存在质量问题，导入事务会一直处于 pending 状态，导致 DDL 语句卡住。[#27140](https://github.com/StarRocks/starrocks/pull/27140)
+- 低基数优化开启时，某些情况下 INSERT INTO 导入任务报错 `[42000][1064] Dict Decode failed, Dict can't take cover all key :0`。[#27395](https://github.com/StarRocks/starrocks/pull/27395)
+- 某些情况下 INSERT INTO SELECT 在 Pipeline 未开启时执行超时。[#26594](https://github.com/StarRocks/starrocks/pull/26594)
+- 如果查询条件为 `WHERE partition_column < xxx`，并且所使用的分区列值仅精确至小时，没有精确至分秒，例如 `2023-7-21 22`，则返回数据为空。[#27780](https://github.com/StarRocks/starrocks/pull/27780)
+
+## 2.3.14
+
+发布日期： 2023 年 6 月 28 日
+
+### 功能优化
+
+- 优化 CREATE TABLE 超时报错信息，增加参数调整建议。[#24510](https://github.com/StarRocks/starrocks/pull/24510)
+- 主键表积累大量 Tablet 版本后内存占用的优化。[#20760](https://github.com/StarRocks/starrocks/pull/20760)
+- StarRocks 外表元数据的同步改为数据加载时进行。[#24739](https://github.com/StarRocks/starrocks/pull/24739)
+- 解除 NetworkTime 对系统时钟的依赖，以解决系统时钟误差导致 Exchange 网络耗时估算异常的问题。[#24858](https://github.com/StarRocks/starrocks/pull/24858)
+
+### 问题修复
+
+修复了如下问题：
+
+- 对于频繁 TRUNCATE 的小表，应用低基数字典优化时查询报错。[#23185](https://github.com/StarRocks/starrocks/pull/23185)
+- 对包含 UNION 且第一个孩子是常量 NULL 的 View 进行查询时，会导致 BE crash。[#13792](https://github.com/StarRocks/starrocks/pull/13792)  
+- 基于 Bitmap Index 的查询有些情况下会返回错误。[#23484](https://github.com/StarRocks/starrocks/pull/23484)
+- BE 中 Round DOUBLE/FLOAT 转换成 DECIMAL 和 FE 不一致。[#23152](https://github.com/StarRocks/starrocks/pull/23152)
+- Schema change 和数据导入同时进行时 Schema change 偶尔会卡住。[#23456](https://github.com/StarRocks/starrocks/pull/23456)
+- 使用 Broker Load、Spark Connector、或 Flink Connector 导入 Parquet 文件时偶尔会导致 BE OOM。[#25254](https://github.com/StarRocks/starrocks/pull/25254)
+- 查询语句中 ORDER BY 后是常量且有 LIMIT 时会报错 `unknown error`。[#25538](https://github.com/StarRocks/starrocks/pull/25538)
+
+## 2.3.13
+
+发布日期： 2023 年 6 月 1 日
+
+### 功能优化
+
+- 优化了因 `thrift_server_max_worker_threads` 设置过小导致 INSERT INTO ... SELECT 超时场景下的报错信息。 [#21964](https://github.com/StarRocks/starrocks/pull/21964)
+- 降低多表关联时，使用 `bitmap_contains` 函数的内存消耗，并优化性能。 [#20617](https://github.com/StarRocks/starrocks/pull/20617)、[#20653](https://github.com/StarRocks/starrocks/pull/20653)
+
+### 问题修复
+
+修复了如下问题：
+
+- Truncate 操作对分区名大小写敏感导致 Truncate Partition 失败。 [#21809](https://github.com/StarRocks/starrocks/pull/21809)
+- 导入的 Parquet 格式文件中含 int96 timestamp 类型数据时，会导致数据溢出。[#22355](https://github.com/StarRocks/starrocks/issues/22355)
+- 删除物化视图后使用 DECOMMISSION 下线 BE 节点失败。[#22743](https://github.com/StarRocks/starrocks/issues/22743)
+- 当查询的执行计划包括从 BroadcastJoin 节点至 BucketShuffleJoin 节点，例如 `SELECT * FROM t1 JOIN [Broadcast] t2 ON t1.a = t2.b JOIN [Bucket] t3 ON t2.b = t3.c;`，并且 BroadcastJoin 左表等值 Join 的 Key 的数据在进行 BucketShuffleJoin 之前被删除掉了，则会导致 BE crash。[#23227](https://github.com/StarRocks/starrocks/pull/23227)
+- 当查询的执行计划包括从 CrossJoin 节点至 HashJoin 节点、并且一个 fragment instance 中 HashJoin 的右表为空，则返回结果会不正确。[#23877](https://github.com/StarRocks/starrocks/pull/23877)
+- 物化视图创建临时分区失败导致 BE 下线卡住。 [#22745](https://github.com/StarRocks/starrocks/pull/22745)
+- 如果 SQL 语句中 STRING 类型的值包含多个转义字符，则该 SQL 语句解析失败。[#23119](https://github.com/StarRocks/starrocks/issues/23119)
+- 无法查询分区列最大值的数据。[#23153](https://github.com/StarRocks/starrocks/issues/23153)
+- StarRocks 2.4 回退到 2.3 后导入作业报错。[#23642](https://github.com/StarRocks/starrocks/pull/23642)
+- 列裁剪复用问题。[#16624](https://github.com/StarRocks/starrocks/issues/16624)
+
+## 2.3.12
+
+发布日期： 2023 年 4 月 25 日
+
+### 功能优化
+
+如果表达式的返回值可以合法转换为 Boolean 值，则会对其进行隐式转换。[# 21792](https://github.com/StarRocks/starrocks/pull/21792)
+
+### 问题修复
+
+修复了如下问题：
+
+- 如果用户的 LOAD 权限为表级别，则导入作业失败后导入事务回滚时报错提示 `Access denied; you need (at least one of) the LOAD privilege(s) for this operation`。[# 21129](https://github.com/StarRocks/starrocks/issues/21129)
+- 执行 ALTER SYSTEM DROP BACKEND 删除一个 BE 后，可能会导致该 BE 上的两副本表的副本不能修复，进而导致导入作业因为没有可用的副本而失败。[# 20681](https://github.com/StarRocks/starrocks/pull/20681)
+- 建表时使用不支持的数据类型，报错信息有误。[# 20999](https://github.com/StarRocks/starrocks/issues/20999)
+- Broadcast Join 的短路逻辑异常，导致查询结果不正确。[# 20952](https://github.com/StarRocks/starrocks/issues/20952)
+- 使用物化视图后磁盘占用率大幅增加。[# 20590](https://github.com/StarRocks/starrocks/pull/20590)
+- 未能彻底卸载插件 Audit Loader。[# 20468](https://github.com/StarRocks/starrocks/issues/20468)
+- `INSERT INTO XXX SELECT` 返回结果显示的数据行数和 `SELECT COUNT(*) FROM XXX` 返回结果显示的数据行数不一致。[# 20084](https://github.com/StarRocks/starrocks/issues/20084)
+- 如果子查询使用窗口函数，父查询使用 GROUP BY 子句，则查询结果无法聚合。[# 19725](https://github.com/StarRocks/starrocks/issues/19725)
+- 启动 BE 后，BE 进程存在但是 BE 所有端口无法开启。[# 19347](https://github.com/StarRocks/starrocks/pull/19347)
+- 如果磁盘 IO 利用率过高，导致主键表的事务提交过慢，则查询该表时可能会返回报错 `backend not found`。[# 18835](https://github.com/StarRocks/starrocks/issues/18835)
+
+## 2.3.11
+
+发布日期： 2023 年 3 月 28 日
+
+### 功能优化
+
+- 复杂查询会导致大量 `ColumnRefOperators`。原先通过 `BitSet` 来存储 `ColumnRefOperator::id`，会占用较多内存。为了减少内存占用，现在用 `RoaringBitMap` 取代原来的 `BitSet` 来存储  `ColumnRefOperator::id`。[#16499](https://github.com/StarRocks/starrocks/pull/16499)
+- 增加新的 I/O 调度策略，降低大查询对小查询的性能影响。如果需要开启新的 I/O 调度策略，则需要在 **be.conf** 中设置 BE 静态参数 `pipeline_scan_queue_mode=1` 并重启 BE。[#19009](https://github.com/StarRocks/starrocks/pull/19009)
+
+### 问题修复
+
+修复了如下问题：
+
+- 当表的过期数据未正常回收时，该表会占用较高的磁盘容量。[#19796](https://github.com/StarRocks/starrocks/pull/19796)
+- 使用 Broker Load 导入 Parquet 文件，导入 `NULL` 值至 NOT NULL 的列时，报错提示不明确。[#19885](https://github.com/StarRocks/starrocks/pull/19885)
+- 频繁创建大量临时分区以替换原有分区时，导致 FE 内存泄露和 Full GC。[#19283](https://github.com/StarRocks/starrocks/pull/19283)
+- 对于 Colocation 表，可以通过命令手动指定副本状态为 bad  `ADMIN SET REPLICA STATUS PROPERTIES("tablet_id" = "10003", "backend_id" = "10001", "status" = "bad");`，如果 BE 数量小于等于副本数量，则该副本无法被修复。[#19443](https://github.com/StarRocks/starrocks/pull/19443)
+- 向 Follower FE 发起 INSERT INTO SELECT 请求时，参数 `parallel_fragment_exec_instance_num` 不生效。[#18841](https://github.com/StarRocks/starrocks/pull/18841)
+- 使用运算符 `<=>` 对某个值和 `NULL` 值进行比较时，比较结果不正确。[#19210](https://github.com/StarRocks/starrocks/pull/19210)
+- 在持续触发资源隔离的并发限制时，查询并发数量指标下降缓慢。[#19363](https://github.com/StarRocks/starrocks/pull/19363)
+- 高并发导入时可能报错 `"get database read lock timeout, database=xxx"`。[#16748](https://github.com/StarRocks/starrocks/pull/16748) [#18992](https://github.com/StarRocks/starrocks/pull/18992)
+
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 ## 2.3.10
 
 发布日期： 2023 年 3 月 9 日
@@ -46,7 +198,7 @@ displayed_sidebar: "Chinese"
 修复了如下问题：
 
 - 在大查询完成后释放资源时，小概率导致其他查询变慢，特别是在开启资源组或大查询异常结束时。[#16454](https://github.com/StarRocks/starrocks/pull/16454) [#16602](https://github.com/StarRocks/starrocks/pull/16602)
-- 针对主键模型的表，如果一个副本的元数据版本比较落后，增量克隆会触发大量版本的元数据积压没有及时 GC，可能会导致 BE 上发生 OOM。 [#15935](https://github.com/StarRocks/starrocks/pull/15935)
+- 针对主键表，如果一个副本的元数据版本比较落后，增量克隆会触发大量版本的元数据积压没有及时 GC，可能会导致 BE 上发生 OOM。 [#15935](https://github.com/StarRocks/starrocks/pull/15935)
 - 如果 FE 向 BE 发送单次偶发的心跳，心跳连接超时，FE 会认为该 BE 不可用，最终导致该 BE 上的事务运行失败。[# 16386](https://github.com/StarRocks/starrocks/pull/16386)
 - 通过 StarRocks 外表功能导入数据时，如果源 StarRocks 集群为低版本，目标 StarRocks 集群为高版本（并且高版本为 2.2.8 ~ 2.2.11，2.3.4 ~ 2.3.7，2.4.1 或 2.4.2)，则数据导入失败。[#16173](https://github.com/StarRocks/starrocks/pull/16173)
 - 当查询高并发并且内存使用率比较高时 BE 崩溃。 [#16047](https://github.com/StarRocks/starrocks/pull/16047)
@@ -72,7 +224,7 @@ displayed_sidebar: "Chinese"
 ### 功能优化
 
 - Pipeline 执行引擎支持 INSERT INTO 语句。如果需要启用，则需要设置 FE 配置项 `enable_pipeline_load_for_insert` 为 `true`。 [#14723](https://github.com/StarRocks/starrocks/pull/14723)
-- 优化主键模型 Compaction 阶段所占内存。[#13861](https://github.com/StarRocks/starrocks/pull/13861) 、[#13862](https://github.com/StarRocks/starrocks/pull/13862)
+- 优化主键表 Compaction 阶段所占内存。[#13861](https://github.com/StarRocks/starrocks/pull/13861) 、[#13862](https://github.com/StarRocks/starrocks/pull/13862)
 
 ### 问题修复
 
@@ -80,7 +232,7 @@ displayed_sidebar: "Chinese"
 
 - 修复开启资源隔离后，多个资源组同时执行查询，可能会导致 BE 挂死的问题。[#14905](https://github.com/StarRocks/starrocks/pull/14905)
 - 创建物化视图 `CREATE MATERIALIZED VIEW AS SELECT`，如果 `SELECT` 查询中未使用聚合函数，使用 GROUP BY，例如`CREATE MATERIALIZED VIEW test_view AS` `select a,b from test group by b,a order by a;`，则 BE 节点全部崩溃。[#13743](https://github.com/StarRocks/starrocks/pull/13743)
-- 执行 INSERT INTO 高频导入至主键模型的表，进行数据变更后，立即重启 BE，重启缓慢。[#15128](https://github.com/StarRocks/starrocks/pull/15128)
+- 执行 INSERT INTO 高频导入至主键表，进行数据变更后，立即重启 BE，重启缓慢。[#15128](https://github.com/StarRocks/starrocks/pull/15128)
 - 如果环境中只安装 JRE 未安装 JDK，则重启 FE 后查询失败。修复后，在该环境无法成功重启 FE，会直接报错 `Error: JAVA_HOME can not be jre`，您需要在环境中安装 JDK。[#14332](https://github.com/StarRocks/starrocks/pull/14332)
 - 查询导致 BE 崩溃。[#14221](https://github.com/StarRocks/starrocks/pull/14221)
 - 设置 exec_mem_limit 时不支持使用表达式。[#13647](https://github.com/StarRocks/starrocks/pull/13647)
@@ -92,7 +244,7 @@ displayed_sidebar: "Chinese"
 - BE 负载很高时，资源组的监控指标 starrocks_be_resource_group_running_queries 统计错误。[#14043](https://github.com/StarRocks/starrocks/pull/14043)
 - 如果查询语句使用 OUTER JOIN，可能会导致 BE 节点崩溃。[#14840](https://github.com/StarRocks/starrocks/pull/14840)
 - 2.4 版本使用了异步物化视图后回滚到 2.3 版本，导致 FE 无法启动。[#14400](https://github.com/StarRocks/starrocks/pull/14400)
-- 主键模型的表部分地方使用了delete_range，如果性能不佳可能会导致后续从 RocksDB 读取数据过慢，导致 CPU 资源占用率过高。[#15130](https://github.com/StarRocks/starrocks/pull/15130)
+- 主键表部分地方使用了delete_range，如果性能不佳可能会导致后续从 RocksDB 读取数据过慢，导致 CPU 资源占用率过高。[#15130](https://github.com/StarRocks/starrocks/pull/15130)
 
 ### 行为变更
 
@@ -194,7 +346,7 @@ displayed_sidebar: "Chinese"
 - 修复导入大批量数据时报错的问题。 [#10370](https://github.com/StarRocks/starrocks/issues/10370) [#10380](https://github.com/StarRocks/starrocks/issues/10380)
 - 修复多个 Catalog 配置为相同 Thrift 服务地址时，删除其中一个 Catalog 会导致其他 Catalog 的增量元数据同步失效的问题。 [#10511](https://github.com/StarRocks/starrocks/pull/10511)
 - 修复 BE 内存占用统计不准确的问题。 [#9837](https://github.com/StarRocks/starrocks/pull/9837)
-- 修复完整克隆 (Full Clone) 后，查询主键模型表时报错的问题。[#10811](https://github.com/StarRocks/starrocks/pull/10811)
+- 修复完整克隆 (Full Clone) 后，查询主键表时报错的问题。[#10811](https://github.com/StarRocks/starrocks/pull/10811)
 - 修复拥有逻辑视图的 SELECT 权限但无法查询的问题。[#10563](https://github.com/StarRocks/starrocks/pull/10563)
 - 修复逻辑视图命名无限制的问题。逻辑视图的命名规范同数据库表的命名规范。[#10558](https://github.com/StarRocks/starrocks/pull/10558)
 
@@ -231,8 +383,13 @@ displayed_sidebar: "Chinese"
 
 ### 新增特性
 
+<<<<<<< HEAD
 - 主键模型支持完整的 DELETE WHERE 语法。相关文档，请参见 [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md#delete-与主键类型表)。
 - 主键模型支持持久化主键索引，基于磁盘而不是内存维护索引，大幅降低内存使用。相关文档，请参见[主键模型](../table_design/table_types/primary_key_table.md#使用说明)。
+=======
+- 主键表支持完整的 DELETE WHERE 语法。相关文档，请参见 [DELETE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/DELETE#delete-与主键类型表)。
+- 主键表支持持久化主键索引，基于磁盘而不是内存维护索引，大幅降低内存使用。相关文档，请参见[主键表](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table#使用说明)。
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 - 全局低基数字典优化支持实时数据导入，实时场景下字符串数据的查询性能提升一倍。
 - 支持以异步的方式执行 CTAS，并将结果写入新表。相关文档，请参见 [CREATE TABLE AS SELECT](../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md)。
 - 资源组相关功能：

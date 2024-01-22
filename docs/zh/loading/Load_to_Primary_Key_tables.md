@@ -4,8 +4,12 @@ displayed_sidebar: "Chinese"
 
 # 通过导入实现数据变更
 
+<<<<<<< HEAD
 
 StarRocks 的[主键模型](../table_design/table_types/primary_key_table.md)支持通过 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 或 [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../loading/SparkLoad.md) 导入作业或 [INSERT](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 语句对 StarRocks 表进行数据变更。
+=======
+StarRocks 的[主键表](../table_design/table_types/primary_key_table.md)支持通过 [Stream Load](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[Broker Load](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 或 [Routine Load](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md) 导入作业，对 StarRocks 表进行数据变更，包括插入、更新和删除数据。不支持通过 [Spark Load](../sql-reference/sql-statements/data-manipulation/SPARK_LOAD.md) 导入作业或 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md) 语句对 StarRocks 表进行数据变更。
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 
 StarRocks 还支持部分更新 (Partial Update) 和条件更新 (Conditional Update)。
 
@@ -21,7 +25,7 @@ StarRocks 还支持部分更新 (Partial Update) 和条件更新 (Conditional Up
 
 ## 内部实现
 
-StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分 INSERT 和 UPDATE 操作。
+StarRocks 的主键表目前支持 UPSERT 和 DELETE 操作，不支持区分 INSERT 和 UPDATE 操作。
 
 在创建导入作业时，StarRocks 支持在导入作业的创建语句或命令中添加 `__op` 字段，用于指定操作类型。
 
@@ -90,7 +94,7 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
 
 2. 准备 StarRocks 表。
 
-   a. 在数据库 `test_db` 中创建一张名为 `table1` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
+   a. 在数据库 `test_db` 中创建一张名为 `table1` 的主键表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
 
       ```SQL
       CREATE TABLE `table1`
@@ -251,7 +255,7 @@ SELECT * FROM table1;
 
 2. 准备 StarRocks 表。
 
-   a. 在数据库 `test_db` 中创建一张名为 `table2` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
+   a. 在数据库 `test_db` 中创建一张名为 `table2` 的主键表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
 
       ```SQL
       CREATE TABLE `table2`
@@ -363,7 +367,7 @@ SELECT * FROM table2;
 
 2. 准备 StarRocks 表。
 
-   a. 在数据库 `test_db` 中创建一张名为 `table3` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
+   a. 在数据库 `test_db` 中创建一张名为 `table3` 的主键表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
 
       ```SQL
       CREATE TABLE `table3`
@@ -463,7 +467,7 @@ SELECT * FROM table3;
 
 ## 部分更新
 
-自 StarRocks v2.2 起，主键模型表支持部分更新 (Partial Update)，您可以选择只更新部分指定的列。这里以 CSV 格式的数据文件为例进行说明。
+自 StarRocks v2.2 起，主键表支持部分更新 (Partial Update)，您可以选择只更新部分指定的列。这里以 CSV 格式的数据文件为例进行说明。
 
 > **注意**
 >
@@ -485,7 +489,7 @@ SELECT * FROM table3;
 
 2. 准备 StarRocks 表。
 
-   a. 在数据库 `test_db` 中创建一张名为 `table4` 的主键模型表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
+   a. 在数据库 `test_db` 中创建一张名为 `table4` 的主键表。表包含 `id`、`name` 和 `score` 三列，分别代表用户 ID、用户名称和用户得分，主键为 `id` 列，如下所示：
 
       ```SQL
       CREATE TABLE `table4`
@@ -593,7 +597,7 @@ SELECT * FROM table4;
 
 ## 条件更新
 
-自 StarRocks v2.5 起，主键模型表支持条件更新 (Conditional Update)。您可以指定某一非主键列为更新条件，这样只有当导入的数据中该列的值大于等于当前值的时候，更新才会生效。
+自 StarRocks v2.5 起，主键表支持条件更新 (Conditional Update)。您可以指定某一非主键列为更新条件，这样只有当导入的数据中该列的值大于等于当前值的时候，更新才会生效。
 
 条件更新功能用于解决数据乱序的问题。如果上游数据发生乱序，可以使用条件更新功能保证新的数据不被老的数据覆盖。
 
@@ -622,7 +626,7 @@ SELECT * FROM table4;
 
 2. 准备 StarRocks 表。
 
-   a. 在数据库 `test_db` 中创建一张名为 `table5` 的主键模型表。表包含 `id`、`version` 和 `score` 三列，分别代表用户 ID、版本号和用户得分，主键为 `id` 列，如下所示：
+   a. 在数据库 `test_db` 中创建一张名为 `table5` 的主键表。表包含 `id`、`version` 和 `score` 三列，分别代表用户 ID、版本号和用户得分，主键为 `id` 列，如下所示：
 
       ```SQL
       CREATE TABLE `table5`

@@ -11,8 +11,12 @@ Spark Load 通过外部的 Spark 资源实现对导入数据的预处理，提�
 > **注意**
 >
 > * Spark Load 操作需要目标表的 INSERT 权限。如果您的用户账号没有 INSERT 权限，请参考 [GRANT](../sql-reference/sql-statements/account-management/GRANT.md) 给用户赋权。
+<<<<<<< HEAD
 > * v3.0.4 之前，使用 Spark Load 导入数据至 StarRocks 表时，不支持该表分桶列的数据类型为 DATE、DATETIME 或者 DECIMAL。
 > * Spark Load 不支持导入至主键模型表。
+=======
+> * Spark Load 不支持导入至主键表。
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 
 ## 背景信息
 
