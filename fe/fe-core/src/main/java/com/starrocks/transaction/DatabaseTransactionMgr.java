@@ -66,6 +66,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
@@ -1131,7 +1132,13 @@ public class DatabaseTransactionMgr {
                             transactionState);
                     continue;
                 }
-                partitionCommitInfo.setVersion(partition.getNextVersion());
+                if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+                    Map<Long, Long> partitionVersions = ((ReplicationTxnCommitAttachment) transactionState
+                            .getTxnCommitAttachment()).getPartitionVersions();
+                    partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
+                } else {
+                    partitionCommitInfo.setVersion(partition.getNextVersion());
+                }
                 partitionCommitInfo.setVersionTime(table.isCloudNativeTable() ? 0 : commitTs);
             }
         }
