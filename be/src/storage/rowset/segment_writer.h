@@ -131,6 +131,8 @@ public:
 
     const std::string& segment_path() const;
 
+    uint64_t current_filesz() const;
+
 private:
     Status _write_short_key_index();
     Status _write_footer();
