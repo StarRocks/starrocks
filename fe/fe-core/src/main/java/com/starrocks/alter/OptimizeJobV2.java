@@ -37,9 +37,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.PartitionUtils;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -498,7 +498,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
             targetTable.setState(OlapTableState.NORMAL);
 
             LOG.info("optimize job {} finish replace partitions dbId:{}, tableId:{},"
-                    + "source partitions:{}, tmp partitions:{}, allOptimized:{}",
+                            + "source partitions:{}, tmp partitions:{}, allOptimized:{}",
                     jobId, dbId, tableId, sourcePartitionNames, tmpPartitionNames, allPartitionOptimized);
         } catch (Exception e) {
             LOG.warn("optimize table failed dbId:{}, tableId:{} exception: {}", dbId, tableId, e);
@@ -679,7 +679,7 @@ public class OptimizeJobV2 extends AlterJobV2 implements GsonPostProcessable {
         targetTable.setState(OlapTableState.NORMAL);
 
         LOG.info("finish replay optimize job {} dbId:{}, tableId:{},"
-                + "source partitions:{}, tmp partitions:{}, allOptimized:{}",
+                        + "source partitions:{}, tmp partitions:{}, allOptimized:{}",
                 jobId, dbId, tableId, sourcePartitionNames, tmpPartitionNames, allPartitionOptimized);
     }
 

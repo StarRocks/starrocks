@@ -2754,8 +2754,34 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean allow_system_reserved_names = false;
 
-    @ConfField(mutable = true)
+    /**
+     * Whether to use LockManager to manage lock usage
+     */
     public static boolean use_lock_manager = false;
+
+    /**
+     * Number of Hash of Lock Table
+     */
+    public static int lock_table_num = 32;
+
+    /**
+     * Whether to enable deadlock unlocking operation.
+     * It is turned off by default and only deadlock detection is performed.
+     * If turned on, LockManager will try to relieve the deadlock by killing the victim.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_unlock_deadlock = false;
+
+    /**
+     * when a lock cannot be obtained, we cannot determine whether it is because the required
+     * lock is being used normally or if a deadlock has occurred.
+     * Therefore, based on the configuration parameter `dead_lock_detection_delay_time_ms`
+     * is used to control the waiting time before deadlock detection.
+     * If a lock is obtained during this period, there is no need to perform deadlock detection.
+     * Avoid frequent and unnecessary deadlock detection due to lock contention
+     */
+    @ConfField(mutable = true)
+    public static long dead_lock_detection_delay_time_ms = 3000; // 3s
 
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;
