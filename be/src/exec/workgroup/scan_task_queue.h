@@ -73,7 +73,9 @@ public:
     ScanTask(WorkGroup* workgroup, WorkFunction work_function)
             : workgroup(workgroup), work_function(std::move(work_function)) {}
     ScanTask(WorkGroup* workgroup, WorkFunction work_function, YieldFunction yield_function)
-            : workgroup(workgroup), work_function(std::move(work_function)), yield_function(std::move(yield_function)) {}
+            : workgroup(workgroup),
+              work_function(std::move(work_function)),
+              yield_function(std::move(yield_function)) {}
     ~ScanTask() = default;
 
     DISALLOW_COPY(ScanTask);
@@ -91,15 +93,12 @@ public:
 
     bool is_finished() const { return work_context.is_finished(); }
 
-    bool has_yield_function() const {
-        return yield_function != nullptr;
-    }
+    bool has_yield_function() const { return yield_function != nullptr; }
 
     void execute_yield_function() {
         DCHECK(yield_function != nullptr) << "yield function must be set";
         yield_function(std::move(*this));
     }
-    
 
 public:
     WorkGroup* workgroup;

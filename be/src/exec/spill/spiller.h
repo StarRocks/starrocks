@@ -153,8 +153,7 @@ public:
     Status flush(RuntimeState* state, MemGuard&& guard);
 
     template <class MemGuard>
-    Status set_flush_all_call_back(const FlushAllCallBack& callback, RuntimeState* state,
-                                   const MemGuard& guard) {
+    Status set_flush_all_call_back(const FlushAllCallBack& callback, RuntimeState* state, const MemGuard& guard) {
         auto flush_call_back = [this, callback, state, guard]() {
             auto defer = DeferOp([&]() { guard.scoped_end(); });
             RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
@@ -211,9 +210,7 @@ public:
     const ChunkBuilder& chunk_builder() { return _chunk_builder; }
 
     Status reset_state(RuntimeState* state);
-    IOTaskExecutorPtr local_io_executor() const {
-        return _local_io_executor;
-    }
+    IOTaskExecutorPtr local_io_executor() const { return _local_io_executor; }
 
 private:
     Status _acquire_input_stream(RuntimeState* state);

@@ -44,8 +44,8 @@ Status SpillableChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr
             auto chunk_st = process_task();
             if (chunk_st.ok()) {
                 if (!chunk_st.value()->is_empty()) {
-                    RETURN_IF_ERROR(_spiller->spill(state, chunk_st.value(),
-                                                    TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
+                    RETURN_IF_ERROR(
+                            _spiller->spill(state, chunk_st.value(), TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
                 }
             } else if (chunk_st.status().is_end_of_file()) {
                 return Status::OK();

@@ -613,7 +613,7 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
                     LOG(INFO) << "no output data, break";
                     break;
                 }
-    
+
                 auto hash_column = down_cast<SpillHashColumn*>(chunk->columns().back().get());
                 const auto& hash_data = hash_column->get_data();
                 // hash data

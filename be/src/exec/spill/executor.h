@@ -114,9 +114,7 @@ struct IOTaskExecutor {
         }
     }
 
-    void force_submit(workgroup::ScanTask io_task) {
-        pool->force_submit(std::move(io_task));
-    }
+    void force_submit(workgroup::ScanTask io_task) { pool->force_submit(std::move(io_task)); }
 };
 using IOTaskExecutorPtr = std::shared_ptr<IOTaskExecutor>;
 

@@ -297,10 +297,8 @@ StatusOr<ChunkPtr> SpillerReader::sync_restore(RuntimeState* state, MemGuard&& g
     return chunk;
 }
 
-
 template <class MemGuard>
-Status PartitionedSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chunk,
-                                       MemGuard&& guard) {
+Status PartitionedSpillerWriter::spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard) {
     DCHECK(!chunk->is_empty());
     DCHECK(!is_full());
 
@@ -337,8 +335,7 @@ Status PartitionedSpillerWriter::flush_if_full(RuntimeState* state, MemGuard&& g
 }
 
 template <class MemGuard>
-Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush,
-                                       MemGuard&& guard) {
+Status PartitionedSpillerWriter::flush(RuntimeState* state, bool is_final_flush, MemGuard&& guard) {
     std::vector<SpilledPartition*> splitting_partitions, spilling_partitions;
     RETURN_IF_ERROR(_choose_partitions_to_flush(is_final_flush, splitting_partitions, spilling_partitions));
 
