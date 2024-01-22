@@ -76,7 +76,8 @@ public class HiveViewTest extends PlanTestBase {
 
     @Test
     public void testHiveViewParseFail() throws Exception {
-        HiveView hiveView = new HiveView(1, "hive0", "test", null, "select\n" +
+        HiveView hiveView = new HiveView(1, "hive0", "testDb", "test", null,
+                "select\n" +
                  "    t1b,t1a\n" +
                  "from\n" +
                  "    test_all_type\n" +
@@ -90,6 +91,15 @@ public class HiveViewTest extends PlanTestBase {
     public void testQueryHiveViewWithTrinoSQLDialect() throws Exception {
         String sql = "select * from hive0.tpch.customer_alias_view where c_custkey = 1";
         connectContext.getSessionVariable().setSqlDialect("trino");
+        String sqlPlan = getFragmentPlan(sql);
+        assertContains(sqlPlan, "0:HdfsScanNode\n" +
+                "     TABLE: customer");
+    }
+
+    @Test
+    public void testQueryTrinoViewWithoutDb() throws Exception {
+        // test query trino view without db
+        String sql = "select * from hive0.tpch.customer_view_without_db where c_custkey = 1";
         String sqlPlan = getFragmentPlan(sql);
         assertContains(sqlPlan, "0:HdfsScanNode\n" +
                 "     TABLE: customer");

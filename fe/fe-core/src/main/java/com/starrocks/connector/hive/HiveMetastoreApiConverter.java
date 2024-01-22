@@ -144,12 +144,12 @@ public class HiveMetastoreApiConverter {
                     TrinoViewDefinition.class);
             hiveViewText = trinoViewDefinition.getOriginalSql();
             hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
-                    table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition), hiveViewText,
-                    HiveView.Type.Trino);
+                    table.getDbName(), table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition),
+                    hiveViewText, HiveView.Type.Trino);
         } else {
             hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
-                    table.getTableName(), toFullSchemasForHiveTable(table), table.getViewExpandedText(),
-                    HiveView.Type.Hive);
+                    table.getDbName(), table.getTableName(), toFullSchemasForHiveTable(table),
+                    table.getViewExpandedText(), HiveView.Type.Hive);
         }
 
         try {
