@@ -191,6 +191,7 @@ public class TimestampArithmeticExpr extends Expr {
         MINUTE("MINUTE"),                           // MINUTES
         SECOND("SECOND"),                           // SECONDS
         MICROSECOND("MICROSECOND"),                 // MICROSECONDS
+        MILLISECOND("MILLISECOND"),                 // MILLISECOND
         SECOND_MICROSECOND("SECOND_MICROSECOND"),   // 'SECONDS.MICROSECONDS'
         MINUTE_MICROSECOND("MINUTE_MICROSECOND"),   // 'MINUTES:SECONDS.MICROSECONDS'
         MINUTE_SECOND("MINUTE_SECOND"),             // 'MINUTES:SECONDS'
