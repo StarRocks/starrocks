@@ -109,12 +109,12 @@ public class PaimonScanNode extends ScanNode {
         return scanRangeLocationsList;
     }
 
-    public long getEstimatedLength(long rowcount, TupleDescriptor tupleDescriptor) {
+    public long getEstimatedLength(long rowCount, TupleDescriptor tupleDescriptor) {
         List<Column> dataColumns = tupleDescriptor.getSlots().stream().map(s -> s.getColumn())
                 .collect(Collectors.toList());
-        long presentRowNums = dataColumns.stream().mapToInt(column -> column.getType().getTypeSize()).sum();
+        long rowSize = dataColumns.stream().mapToInt(column -> column.getType().getTypeSize()).sum();
 
-        return rowcount * presentRowNums;
+        return rowCount * rowSize;
     }
 
     public void setupScanRangeLocations(TupleDescriptor tupleDescriptor, ScalarOperator predicate) {
