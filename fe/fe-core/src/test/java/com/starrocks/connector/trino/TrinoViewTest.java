@@ -68,6 +68,9 @@ public class TrinoViewTest {
             {
                 table.getViewOriginalText();
                 result = viewOriginalText;
+
+                table.getDbName();
+                result = "testDb";
             }
         };
 
@@ -106,6 +109,9 @@ public class TrinoViewTest {
             {
                 table.getViewOriginalText();
                 result = viewOriginalText;
+
+                table.getDbName();
+                result = "testDb";
             }
         };
 
