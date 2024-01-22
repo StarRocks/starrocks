@@ -37,7 +37,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.catalog.system.sys.GrantsTo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.util.KafkaUtil;
