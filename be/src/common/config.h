@@ -1060,7 +1060,7 @@ CONF_mInt64(max_allow_pindex_l2_num, "5");
 // Number of max major compaction threads
 CONF_mInt32(pindex_major_compaction_num_threads, "0");
 // Limit of major compaction per disk.
-CONF_mInt32(pindex_major_compaction_limit_per_disk, "2");
+CONF_mInt32(pindex_major_compaction_limit_per_disk, "1");
 // control the persistent index schedule compaction interval
 CONF_mInt64(pindex_major_compaction_schedule_interval_seconds, "15");
 // control the local persistent index in shared_data gc/evict interval
