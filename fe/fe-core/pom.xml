@@ -855,6 +855,12 @@ under the License.
             <groupId>com.aliyun.odps</groupId>
             <artifactId>odps-sdk-table-api</artifactId>
         </dependency>
+
+        <dependency>
+            <groupId>com.zaxxer</groupId>
+            <artifactId>HikariCP</artifactId>
+            <version>${hikaricp.version}</version>
+        </dependency>
     </dependencies>
 
     <build>
