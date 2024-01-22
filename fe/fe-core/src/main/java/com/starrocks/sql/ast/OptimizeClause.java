@@ -32,7 +32,10 @@ public class OptimizeClause extends AlterTableClause {
     private PartitionNames partitionNames;
 
     @SerializedName(value = "sourcePartitionIds")
-    List<Long> sourcePartitionIds = Lists.newArrayList();
+    private List<Long> sourcePartitionIds = Lists.newArrayList();
+
+    @SerializedName(value = "isTableOptimize")
+    private boolean isTableOptimize = false;
 
     private List<String> sortKeys = null;
 
@@ -92,6 +95,14 @@ public class OptimizeClause extends AlterTableClause {
 
     public List<Long> getSourcePartitionIds() {
         return sourcePartitionIds;
+    }
+
+    public boolean isTableOptimize() {
+        return isTableOptimize;
+    }
+
+    public void setTableOptimize(boolean tableOptimize) {
+        isTableOptimize = tableOptimize;
     }
 
     public static OptimizeClause read(DataInput in) throws IOException {

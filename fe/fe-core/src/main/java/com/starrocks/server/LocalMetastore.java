@@ -1194,6 +1194,11 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
 
+        if (olapTable.getDefaultDistributionInfo().getType() !=
+                copiedTable.getDefaultDistributionInfo().getType()) {
+            metaChanged = true;
+        }
+
         if (metaChanged) {
             throw new DdlException("Table[" + tableName + "]'s meta has been changed. try again.");
         }
@@ -5016,6 +5021,10 @@ public class LocalMetastore implements ConnectorMetadata {
                         break;
                     }
                 }
+            }
+
+            if (olapTable.getDefaultDistributionInfo().getType() != copiedTbl.getDefaultDistributionInfo().getType()) {
+                metaChanged = true;
             }
 
             if (metaChanged) {
