@@ -65,6 +65,7 @@ import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -1270,6 +1271,16 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "inspect_all_pipes", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
     public static ConstantOperator inspect_all_pipes() {
         ConnectContext connectContext = ConnectContext.get();
+        authOperatorPrivilege();
+        String currentDb = connectContext.getDatabase();
+        Database db = GlobalStateMgr.getCurrentState().mayGetDb(connectContext.getDatabase())
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, currentDb));
+        String json = GlobalStateMgr.getCurrentState().getPipeManager().getPipesOfDb(db.getId());
+        return ConstantOperator.createVarchar(json);
+    }
+
+    private static void authOperatorPrivilege() {
+        ConnectContext connectContext = ConnectContext.get();
         try {
             Authorizer.checkSystemAction(
                     connectContext.getCurrentUserIdentity(),
@@ -1281,11 +1292,17 @@ public class ScalarOperatorFunctions {
                     connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
                     PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
         }
-        String currentDb = connectContext.getDatabase();
-        Database db = GlobalStateMgr.getCurrentState().mayGetDb(connectContext.getDatabase())
-                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, currentDb));
-        String json = GlobalStateMgr.getCurrentState().getPipeManager().getPipesOfDb(db.getId());
-        return ConstantOperator.createVarchar(json);
+    }
+
+    /**
+     * Return all status about the TaskManager
+     */
+    @ConstantFunction(name = "inspect_task_runs", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectTaskRuns() {
+        ConnectContext connectContext = ConnectContext.get();
+        authOperatorPrivilege();
+        TaskRunManager trm = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
+        return ConstantOperator.createVarchar(trm.inspect());
     }
 
     @ConstantFunction.List(list = {

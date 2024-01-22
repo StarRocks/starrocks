@@ -112,6 +112,7 @@ public class TaskManager {
             registerPeriodicalTask();
             dispatchScheduler.scheduleAtFixedRate(() -> {
                 if (!taskRunManager.tryTaskRunLock()) {
+                    LOG.warn("TaskRun scheduler cannot acquire the lock");
                     return;
                 }
                 try {
