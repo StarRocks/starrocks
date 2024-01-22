@@ -35,6 +35,7 @@
 package com.starrocks.backup;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -753,8 +754,8 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     }
 
     @Override
-    public long estimateCount() {
-        return dbIdToBackupOrRestoreJob.size();
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("BackupOrRestoreJob", (long) dbIdToBackupOrRestoreJob.size());
     }
 }
 

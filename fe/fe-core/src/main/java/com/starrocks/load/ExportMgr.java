@@ -34,6 +34,7 @@
 
 package com.starrocks.load;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.Gson;
@@ -477,7 +478,7 @@ public class ExportMgr implements MemoryTrackable {
     }
 
     @Override
-    public long estimateCount() {
-        return idToJob.size();
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("ExportJob", (long) idToJob.size());
     }
 }

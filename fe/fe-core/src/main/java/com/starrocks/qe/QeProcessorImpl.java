@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.MvId;
 import com.starrocks.common.Config;
@@ -295,8 +296,8 @@ public final class QeProcessorImpl implements QeProcessor, MemoryTrackable {
     }
 
     @Override
-    public long estimateCount() {
-        return coordinatorMap.size();
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("QueryInfo", (long) coordinatorMap.size());
     }
 
     public static final class QueryInfo {

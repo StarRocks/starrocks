@@ -14,6 +14,7 @@
 
 package com.starrocks.load.streamload;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -646,7 +647,7 @@ public class StreamLoadMgr implements MemoryTrackable {
     }
 
     @Override
-    public long estimateCount() {
-        return idToStreamLoadTask.size();
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("StreamLoad", (long) idToStreamLoadTask.size());
     }
 }

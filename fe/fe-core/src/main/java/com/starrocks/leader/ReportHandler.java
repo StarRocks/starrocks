@@ -38,6 +38,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -137,12 +138,13 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
     }
 
     @Override
-    public long estimateCount() {
+    public Map<String, Long> estimateCount() {
         long count = 0;
         for (Map<Long, ReportTask> taskMap : pendingTaskMap.values()) {
             count += taskMap.size();
         }
-        return count;
+        return ImmutableMap.of("PendingTask", count,
+                                "ReportQueue", (long) reportQueue.size());
     }
 
     public enum ReportType {

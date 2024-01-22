@@ -35,6 +35,7 @@
 package com.starrocks.common.util;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
@@ -88,8 +89,9 @@ public class ProfileManager implements MemoryTrackable {
     }
 
     @Override
-    public long estimateCount() {
-        return profileMap.size();
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("Profile", (long) profileMap.size(),
+                               "LoadProfile", (long) loadProfileMap.size());
     }
 
     public static class ProfileElement {

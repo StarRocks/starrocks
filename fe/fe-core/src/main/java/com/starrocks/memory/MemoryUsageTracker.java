@@ -48,28 +48,28 @@ public class MemoryUsageTracker extends FrontendDaemon {
     private void initMemoryTracker() {
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
 
-        registerMemoryReference("Load", currentState.getLoadMgr());
-        registerMemoryReference("Load", currentState.getRoutineLoadMgr());
-        registerMemoryReference("Load", currentState.getStreamLoadMgr());
+        registerMemoryTracker("Load", currentState.getLoadMgr());
+        registerMemoryTracker("Load", currentState.getRoutineLoadMgr());
+        registerMemoryTracker("Load", currentState.getStreamLoadMgr());
 
-        registerMemoryReference("Export", currentState.getExportMgr());
-        registerMemoryReference("Delete", currentState.getDeleteMgr());
-        registerMemoryReference("Transaction", currentState.getGlobalTransactionMgr());
-        registerMemoryReference("Backup", currentState.getBackupHandler());
-        registerMemoryReference("Task", currentState.getTaskManager());
-        registerMemoryReference("Task", currentState.getTaskManager().getTaskRunManager());
-        registerMemoryReference("Tablet", currentState.getTabletInvertedIndex());
-        registerMemoryReference("Profile", ProfileManager.getInstance());
-        registerMemoryReference("Partition", new PartitionMemoryTracker());
+        registerMemoryTracker("Export", currentState.getExportMgr());
+        registerMemoryTracker("Delete", currentState.getDeleteMgr());
+        registerMemoryTracker("Transaction", currentState.getGlobalTransactionMgr());
+        registerMemoryTracker("Backup", currentState.getBackupHandler());
+        registerMemoryTracker("Task", currentState.getTaskManager());
+        registerMemoryTracker("Task", currentState.getTaskManager().getTaskRunManager());
+        registerMemoryTracker("Tablet", currentState.getTabletInvertedIndex());
+        registerMemoryTracker("Profile", ProfileManager.getInstance());
+        registerMemoryTracker("LocalCatalog", new InternalCatalogMemoryTracker());
 
         QeProcessor qeProcessor = QeProcessorImpl.INSTANCE;
         if (qeProcessor instanceof QeProcessorImpl) {
-            registerMemoryReference("Coordinator", (QeProcessorImpl) qeProcessor);
+            registerMemoryTracker("Coordinator", (QeProcessorImpl) qeProcessor);
         }
 
         IDictManager dictManager = IDictManager.getInstance();
         if (dictManager instanceof CacheDictManager) {
-            registerMemoryReference("Dict", (CacheDictManager) dictManager);
+            registerMemoryTracker("Dict", (CacheDictManager) dictManager);
         }
 
         LOG.info("Memory usage tracker init success");
@@ -77,7 +77,7 @@ public class MemoryUsageTracker extends FrontendDaemon {
         initialize = true;
     }
 
-    public static void registerMemoryReference(String moduleName, MemoryTrackable object) {
+    public static void registerMemoryTracker(String moduleName, MemoryTrackable object) {
         REFERENCE.computeIfAbsent(moduleName, k -> new HashMap<>());
         REFERENCE.get(moduleName).put(object.getClass().getSimpleName(), object);
     }
@@ -96,13 +96,19 @@ public class MemoryUsageTracker extends FrontendDaemon {
                 MemoryTrackable tracker = statEntry.getValue();
                 startTime = System.currentTimeMillis();
                 long currentEstimateSize = tracker.estimateSize();
-                long currentEstimateCount = tracker.estimateCount();
+                Map<String, Long> counterMap = tracker.estimateCount();
                 endTime = System.currentTimeMillis();
                 estimateSize += currentEstimateSize;
-                estimateCount += currentEstimateCount;
-                LOG.info("({}ms) Module {} - {} estimated {} of memory and {} object used",
+
+                StringBuilder sb  = new StringBuilder();
+                for (Map.Entry<String, Long> subEntry : counterMap.entrySet()) {
+                    sb.append(subEntry.getKey()).append(" with ").append(subEntry.getValue())
+                            .append(" object(s). ");
+                }
+
+                LOG.info("({}ms) Module {} - {} estimated {} of memory. Contains {}",
                         endTime - startTime, moduleName, className,
-                        new ByteSizeValue(currentEstimateSize), currentEstimateCount);
+                        new ByteSizeValue(currentEstimateSize), sb.toString());
             }
             memoryStat.setCurrentConsumption(estimateSize);
             memoryStat.setObjectCount(estimateCount);

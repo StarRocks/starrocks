@@ -15,6 +15,7 @@
 
 package com.starrocks.scheduler;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
 import com.starrocks.common.Config;
@@ -312,14 +313,17 @@ public class TaskRunManager implements MemoryTrackable {
     }
 
     @Override
-    public long estimateCount() {
-        int validPendingCount = 0;
+    public Map<String, Long> estimateCount() {
+        long validPendingCount = 0;
         for (Long taskId : pendingTaskRunMap.keySet()) {
             PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
             if (taskRuns != null && !taskRuns.isEmpty()) {
                 validPendingCount += taskRuns.size();
             }
         }
-        return validPendingCount + runningTaskRunMap.size() + taskRunHistory.getTaskRunCount();
+
+        return ImmutableMap.of("PendingTaskRun", validPendingCount,
+                "RunningTaskRun", (long) runningTaskRunMap.size(),
+                "HistoryTaskRun", taskRunHistory.getTaskRunCount());
     }
 }

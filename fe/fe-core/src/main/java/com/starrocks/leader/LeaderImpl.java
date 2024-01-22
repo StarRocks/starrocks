@@ -172,7 +172,7 @@ public class LeaderImpl {
 
     public LeaderImpl() {
         reportHandler.start();
-        MemoryUsageTracker.registerMemoryReference("Report", reportHandler);
+        MemoryUsageTracker.registerMemoryTracker("Report", reportHandler);
     }
 
     public TMasterResult finishTask(TFinishTaskRequest request) {

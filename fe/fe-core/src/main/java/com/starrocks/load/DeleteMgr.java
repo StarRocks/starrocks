@@ -37,6 +37,7 @@ package com.starrocks.load;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -866,12 +867,12 @@ public class DeleteMgr implements Writable, MemoryTrackable {
     }
 
     @Override
-    public long estimateCount() {
-        int count = 0;
+    public Map<String, Long> estimateCount() {
+        long count = 0;
         for (List<MultiDeleteInfo> value : dbToDeleteInfos.values()) {
             count += value.size();
         }
-        return count;
+        return ImmutableMap.of("DeleteInfo", count);
     }
 
 }

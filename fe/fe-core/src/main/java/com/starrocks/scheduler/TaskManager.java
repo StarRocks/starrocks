@@ -19,6 +19,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
@@ -900,8 +901,8 @@ public class TaskManager implements MemoryTrackable {
     }
 
     @Override
-    public long estimateCount() {
-        return idToTaskMap.size();
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("Task", (long) idToTaskMap.size());
     }
 
     @Override

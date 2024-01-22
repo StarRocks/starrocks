@@ -35,6 +35,7 @@ import org.checkerframework.checker.nullness.qual.NonNull;
 
 import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
@@ -292,7 +293,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     }
 
     @Override
-    public long estimateCount() {
-        return dictStatistics.asMap().size();
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("ColumnDict", (long) dictStatistics.asMap().size());
     }
 }

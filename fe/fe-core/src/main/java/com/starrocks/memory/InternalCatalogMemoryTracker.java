@@ -14,6 +14,7 @@
 
 package com.starrocks.memory;
 
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -24,8 +25,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
-public class PartitionMemoryTracker implements MemoryTrackable {
+public class InternalCatalogMemoryTracker implements MemoryTrackable {
 
     @Override
     public long estimateSize() {
@@ -45,7 +47,7 @@ public class PartitionMemoryTracker implements MemoryTrackable {
     }
 
     @Override
-    public long estimateCount() {
+    public Map<String, Long> estimateCount() {
         long estimateCount = 0;
         List<Database> databases = new ArrayList<>(GlobalStateMgr.getCurrentState().getIdToDb().values());
         for (Database database : databases) {
@@ -55,7 +57,7 @@ public class PartitionMemoryTracker implements MemoryTrackable {
                 estimateCount += partitions.size();
             }
         }
-        return estimateCount;
+        return ImmutableMap.of("Partition", estimateCount);
     }
 
 }

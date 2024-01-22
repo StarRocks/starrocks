@@ -37,6 +37,7 @@ package com.starrocks.catalog;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -876,8 +877,8 @@ public class TabletInvertedIndex implements MemoryTrackable {
     }
 
     @Override
-    public long estimateCount() {
-        return tabletMetaMap.size();
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("TabletMeta", (long) tabletMetaMap.size());
     }
 }
 

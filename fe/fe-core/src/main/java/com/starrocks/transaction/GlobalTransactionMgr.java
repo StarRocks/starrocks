@@ -34,6 +34,7 @@
 
 package com.starrocks.transaction;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -802,11 +803,11 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     }
 
     @Override
-    public long estimateCount() {
-        int count = 0;
+    public Map<String, Long> estimateCount() {
+        long count = 0;
         for (DatabaseTransactionMgr databaseTransactionMgr : dbIdToDatabaseTransactionMgrs.values()) {
             count += databaseTransactionMgr.getTransactionNum();
         }
-        return count;
+        return ImmutableMap.of("Transaction", count);
     }
 }

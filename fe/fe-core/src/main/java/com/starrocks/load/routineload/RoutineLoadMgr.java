@@ -36,6 +36,7 @@ package com.starrocks.load.routineload;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -735,8 +736,8 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
     }
 
     @Override
-    public long estimateCount() {
-        return idToRoutineLoadJob.size();
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("RoutineLoad", (long) idToRoutineLoadJob.size());
     }
 
 }

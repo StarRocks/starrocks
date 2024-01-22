@@ -35,6 +35,7 @@
 package com.starrocks.load.loadv2;
 
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -808,7 +809,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
     }
 
     @Override
-    public long estimateCount() {
-        return idToLoadJob.size();
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("LoadJob", (long) idToLoadJob.size());
     }
 }
