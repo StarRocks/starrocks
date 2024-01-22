@@ -199,11 +199,7 @@ displayed_sidebar: "Chinese"
 
 - 支持 FQDN 访问：您可以用域名或结合主机名与端口的方式作为 FE 或 BE 节点的唯一标识，有效避免因 IP 变更导致无法访问的问题。相关文档，请参见 [启用 FQDN 访问](../administration/enable_fqdn.md)。
 
-<<<<<<< HEAD
-- flink-connector-starrocks 支持主键模型 Partial Update。相关文档，请参见[使用 flink-connector-starrocks 导入至 StarRocks](../loading/Flink-connector-starrocks.md)。
-=======
 - flink-connector-starrocks 支持主键表 Partial Update。相关文档，请参见[使用 flink-connector-starrocks 导入至 StarRocks](https://docs.starrocks.io/zh/docs/loading/Flink-connector-starrocks/)。
->>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 
 - 函数相关：
   - 新增 array_contains_all 函数，用于判断特定数组是否为另一数组的子集。相关文档，请参见[array_contains_all](../sql-reference/sql-functions/array-functions/array_contains_all.md)。
