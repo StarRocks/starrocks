@@ -1,5 +1,4 @@
 -- name: testHiveCatalog
-set enable_dynamic_prune_scan_range=false;
 
 create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
 
