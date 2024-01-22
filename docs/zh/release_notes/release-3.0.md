@@ -181,13 +181,8 @@ displayed_sidebar: "Chinese"
 
 - 支持自增列属性 [AUTO_INCREMENT](../sql-reference/sql-statements/auto_increment.md)，提供表内全局唯一 ID，简化数据管理。
 - 支持[导入时自动创建分区和使用分区表达式定义分区规则](https://docs.starrocks.io/zh/docs/3.0/table_design/automatic_partitioning/)，提高了分区创建的易用性和灵活性。
-<<<<<<< HEAD
-- Primary Key 模型表支持更丰富的 [UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md) 和 [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md) 语法，包括使用 CTE 和对多表的引用。
-- Broker Load 和 INSERT INTO 增加 Load Profile，支持通过 profile 查看并分析导入作业详情。使用方法与 [查看分析Query Profile](../administration/query_profile.md) 相同。
-=======
 - 主键表支持更丰富的 [UPDATE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/UPDATE/) 和 [DELETE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/DELETE/) 语法，包括使用 CTE 和对多表的引用。
 - Broker Load 和 INSERT INTO 增加 Load Profile，支持通过 profile 查看并分析导入作业详情。使用方法与 [查看分析Query Profile](https://docs.starrocks.io/zh/docs/administration/query_profile/) 相同。
->>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 
 **数据湖分析**
 
