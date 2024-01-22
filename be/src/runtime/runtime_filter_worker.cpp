@@ -521,7 +521,9 @@ RuntimeFilterWorker::RuntimeFilterWorker(ExecEnv* env) : _exec_env(env), _thread
     Thread::set_thread_name(_thread, "runtime_filter");
 }
 
-RuntimeFilterWorker::~RuntimeFilterWorker() {
+RuntimeFilterWorker::~RuntimeFilterWorker() = default;
+
+void RuntimeFilterWorker::close() {
     _queue.shutdown();
     _thread.join();
 }

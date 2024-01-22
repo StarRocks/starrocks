@@ -728,7 +728,7 @@ public class ShowExecutorTest {
         NodeMgr nodeMgr = new NodeMgr();
         new MockUp<GlobalStateMgr>() {
             @Mock
-            NodeMgr getNodeMgr(){
+            NodeMgr getNodeMgr() {
                 return nodeMgr;
             }
 
@@ -745,7 +745,6 @@ public class ShowExecutorTest {
                 result = clusterInfo;
             }
         };
-
 
         new MockUp<SystemInfoService>() {
             @Mock
@@ -801,7 +800,7 @@ public class ShowExecutorTest {
         NodeMgr nodeMgr = new NodeMgr();
         new MockUp<GlobalStateMgr>() {
             @Mock
-            NodeMgr getNodeMgr(){
+            NodeMgr getNodeMgr() {
                 return nodeMgr;
             }
 

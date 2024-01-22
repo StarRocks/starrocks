@@ -83,6 +83,8 @@ public abstract class RangerAccessController extends ExternalAccessController {
         rangerPlugin = new RangerBasePlugin(rangerPluginContext);
         rangerPlugin.init(); // this will initialize policy engine and policy refresher
         rangerPlugin.setResultProcessor(new RangerDefaultAuditHandler());
+
+        rangerPlugin.cleanup();
     }
 
     @Override

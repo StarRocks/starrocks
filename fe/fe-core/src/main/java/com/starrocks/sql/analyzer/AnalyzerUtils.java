@@ -70,8 +70,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
@@ -118,6 +118,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -1213,6 +1214,10 @@ public class AnalyzerUtils {
             }
         }
         return null;
+    }
+
+    public static Type[] replaceNullTypes2Booleans(Type[] types) {
+        return Arrays.stream(types).map(type -> replaceNullType2Boolean(type)).toArray(Type[]::new);
     }
 
     public static Type replaceNullType2Boolean(Type type) {

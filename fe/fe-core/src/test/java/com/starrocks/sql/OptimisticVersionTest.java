@@ -16,7 +16,7 @@ package com.starrocks.sql;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
