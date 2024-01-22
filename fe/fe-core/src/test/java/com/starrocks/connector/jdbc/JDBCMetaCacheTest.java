@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.jdbc;
 
-
 import com.google.common.collect.Lists;
 import com.mockrunner.mock.jdbc.MockResultSet;
 import com.starrocks.catalog.Database;
@@ -34,7 +33,6 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
@@ -110,7 +108,7 @@ public class JDBCMetaCacheTest {
                 minTimes = 0;
 
                 connection.getMetaData().getTables("test", null, null,
-                        new String[] { "TABLE", "VIEW" });
+                        new String[] {"TABLE", "VIEW"});
                 result = tableResult;
                 minTimes = 0;
 
