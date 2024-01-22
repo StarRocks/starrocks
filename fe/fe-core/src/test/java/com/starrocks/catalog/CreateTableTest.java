@@ -72,6 +72,7 @@ public class CreateTableTest {
         UtFrameUtils.addMockBackend(10004);
         Config.enable_strict_storage_medium_check = true;
         Config.enable_auto_tablet_distribution = true;
+        Config.enable_experimental_rowstore = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -1670,6 +1671,30 @@ public class CreateTableTest {
                 ");";
 
         ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.withTable(sql1));
+    }
+
+    @Test
+    public void testColumnWithRowExperimental() {
+        Config.enable_experimental_rowstore = false;
+        try {
+            StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+            starRocksAssert.useDatabase("test");
+            String sql1 = "CREATE TABLE test.dwd_column_with_row_experimental_test (\n" +
+                    "ship_id int(11) NOT NULL COMMENT \" \",\n" +
+                    "sub_ship_id bigint(20) NOT NULL COMMENT \"\" ,\n" +
+                    "address_code bigint(20) NOT NULL COMMENT \" \"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "PRIMARY KEY(ship_id, sub_ship_id) COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(ship_id, sub_ship_id) " +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"storage_type\" = \"column_with_row\"" +
+                    ");";
+
+            ExceptionChecker.expectThrows(DdlException.class, () -> starRocksAssert.withTable(sql1));
+        } finally {
+            Config.enable_experimental_rowstore = true;
+        }
     }
 
     @Test
