@@ -2631,4 +2631,13 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long jdbc_meta_default_cache_expire_sec = 600L;
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_pool_size = 8;
+
+    @ConfField(mutable = false)
+    public static int jdbc_minimum_idle_connections = 1;
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_idle_timeout_ms = 600000;
 }
