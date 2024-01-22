@@ -64,6 +64,7 @@ import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -181,9 +182,10 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(date.getDatetime().plusYears(year.getInt()));
     }
 
-    @ConstantFunction.List(list = {
-            @ConstantFunction(name = "months_add", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true),
-            @ConstantFunction(name = "add_months", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
+    @ConstantFunction.List(list = {@ConstantFunction(name = "months_add", argTypes = {DATETIME,
+            INT}, returnType = DATETIME, isMonotonic = true),
+            @ConstantFunction(name = "add_months", argTypes = {DATETIME,
+                    INT}, returnType = DATETIME, isMonotonic = true)
     })
     public static ConstantOperator monthsAdd(ConstantOperator date, ConstantOperator month) {
         return ConstantOperator.createDatetime(date.getDatetime().plusMonths(month.getInt()));
@@ -213,9 +215,8 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(date.getDatetime().plusSeconds(second.getInt()));
     }
 
-
-    @ConstantFunction.List(list = {
-            @ConstantFunction(name = "date_trunc", argTypes = {VARCHAR, DATETIME}, returnType = DATETIME, isMonotonic = true),
+    @ConstantFunction.List(list = {@ConstantFunction(name = "date_trunc", argTypes = {VARCHAR,
+            DATETIME}, returnType = DATETIME, isMonotonic = true),
             @ConstantFunction(name = "date_trunc", argTypes = {VARCHAR, DATE}, returnType = DATE, isMonotonic = true)
     })
     public static ConstantOperator dateTrunc(ConstantOperator fmt, ConstantOperator date) {
@@ -274,9 +275,10 @@ public class ScalarOperatorFunctions {
 
     }
 
-    @ConstantFunction.List(list = {
-            @ConstantFunction(name = "date_format", argTypes = {DATETIME, VARCHAR}, returnType = VARCHAR, isMonotonic = true),
-            @ConstantFunction(name = "date_format", argTypes = {DATE, VARCHAR}, returnType = VARCHAR, isMonotonic = true)
+    @ConstantFunction.List(list = {@ConstantFunction(name = "date_format", argTypes = {DATETIME,
+            VARCHAR}, returnType = VARCHAR, isMonotonic = true),
+            @ConstantFunction(name = "date_format", argTypes = {DATE,
+                    VARCHAR}, returnType = VARCHAR, isMonotonic = true)
     })
     public static ConstantOperator dateFormat(ConstantOperator date, ConstantOperator fmtLiteral) {
         String format = fmtLiteral.getVarchar();
@@ -503,8 +505,7 @@ public class ScalarOperatorFunctions {
         ConnectContext connectContext = ConnectContext.get();
         Instant instant = connectContext.getStartTimeInstant();
         int factor = NOW_PRECISION_FACTORS[fspVal - 1];
-        LocalDateTime startTime = Instant.ofEpochSecond(
-                instant.getEpochSecond(), instant.getNano() / factor * factor)
+        LocalDateTime startTime = Instant.ofEpochSecond(instant.getEpochSecond(), instant.getNano() / factor * factor)
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         return ConstantOperator.createDatetime(startTime);
     }
@@ -628,7 +629,8 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDate(ld.atTime(0, 0, 0));
     }
 
-    @ConstantFunction(name = "time_slice", argTypes = {DATETIME, INT, VARCHAR}, returnType = DATETIME, isMonotonic = true)
+    @ConstantFunction(name = "time_slice", argTypes = {DATETIME, INT,
+            VARCHAR}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator timeSlice(ConstantOperator datetime, ConstantOperator interval,
                                              ConstantOperator unit) throws AnalysisException {
         return timeSlice(datetime, interval, unit, ConstantOperator.createVarchar("floor"));
@@ -1248,6 +1250,23 @@ public class ScalarOperatorFunctions {
         }
         String json = obj.toString();
         return ConstantOperator.createVarchar(json);
+    }
+
+    private static void authOperatorPrivilege() {
+        ConnectContext connectContext = ConnectContext.get();
+        Authorizer.checkSystemAction(connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                PrivilegeType.OPERATE);
+    }
+
+    /**
+     * Return all status about the TaskManager
+     */
+    @ConstantFunction(name = "inspect_task_runs", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectTaskRuns() {
+        ConnectContext connectContext = ConnectContext.get();
+        authOperatorPrivilege();
+        TaskRunManager trm = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
+        return ConstantOperator.createVarchar(trm.inspect());
     }
 
     @ConstantFunction.List(list = {
