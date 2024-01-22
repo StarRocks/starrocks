@@ -2790,4 +2790,14 @@ public class Config extends ConfigBase {
     // limit for the number of host disconnections in the last {black_host_history_sec} seconds
     @ConfField(mutable = true)
     public static long black_host_connect_failures_within_time = 5;
+
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_pool_size = 8;
+
+    @ConfField(mutable = false)
+    public static int jdbc_minimum_idle_connections = 1;
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_idle_timeout_ms = 600000;
 }

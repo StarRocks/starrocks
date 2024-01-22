@@ -24,12 +24,15 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.zaxxer.hikari.HikariConfig;
+import com.zaxxer.hikari.HikariDataSource;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -54,6 +57,8 @@ public class JDBCMetadata implements ConnectorMetadata {
     private JDBCMetaCache<JDBCTableName, Integer> tableIdCache;
     private JDBCMetaCache<JDBCTableName, Table> tableInstanceCache;
     private JDBCMetaCache<JDBCTableName, List<Partition>> partitionInfoCache;
+
+    private HikariDataSource dataSource;
 
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this.properties = properties;
@@ -92,9 +97,20 @@ public class JDBCMetadata implements ConnectorMetadata {
         }
     }
 
+    private void configHikariDataSource() {
+        HikariConfig config = new HikariConfig();
+        config.setJdbcUrl(properties.get(JDBCResource.URI));
+        config.setUsername(properties.get(JDBCResource.USER));
+        config.setPassword(properties.get(JDBCResource.PASSWORD));
+        config.setDriverClassName(properties.get(JDBCResource.DRIVER_CLASS));
+        config.setMaximumPoolSize(Config.jdbc_connection_pool_size);
+        config.setMinimumIdle(Config.jdbc_minimum_idle_connections);
+        config.setIdleTimeout(Config.jdbc_connection_idle_timeout_ms);
+        dataSource = new HikariDataSource(config);
+    }
+
     public Connection getConnection() throws SQLException {
-        return DriverManager.getConnection(properties.get(JDBCResource.URI),
-                properties.get(JDBCResource.USER), properties.get(JDBCResource.PASSWORD));
+        return dataSource.getConnection();
     }
 
     @Override
