@@ -22,12 +22,9 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.PartitionUtil;
-<<<<<<< HEAD
-=======
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.UtFrameUtils;
 import com.zaxxer.hikari.HikariDataSource;
->>>>>>> bd2b1ec236 ([Enhancement] use jdbc connection pool in jdbc metadata (#39637))
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -137,31 +134,7 @@ public class MysqlSchemaResolverTest {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1");
-<<<<<<< HEAD
             Assert.assertTrue(partitionNames.size() > 0);
-=======
-            Assert.assertFalse(partitionNames.isEmpty());
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            Assert.fail();
-        }
-    }
-
-    @Test
-    public void testListPartitionNamesWithCache() {
-        try {
-            JDBCCacheTestUtil.openCacheEnable(connectContext);
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1");
-            Assert.assertFalse(partitionNames.isEmpty());
-            List<String> partitionNamesWithCache = jdbcMetadata.listPartitionNames("test", "tbl1");
-            Assert.assertFalse(partitionNamesWithCache.isEmpty());
-            JDBCCacheTestUtil.closeCacheEnable(connectContext);
-            Map<String, String> properties = new HashMap<>();
-            jdbcMetadata.refreshCache(properties);
-            List<String> partitionNamesWithOutCache = jdbcMetadata.listPartitionNames("test", "tbl1");
-            Assert.assertTrue(partitionNamesWithOutCache.isEmpty());
->>>>>>> bd2b1ec236 ([Enhancement] use jdbc connection pool in jdbc metadata (#39637))
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
@@ -235,31 +208,6 @@ public class MysqlSchemaResolverTest {
     }
 
     @Test
-<<<<<<< HEAD
-=======
-    public void testGetPartitionsWithCache() {
-        try {
-            JDBCCacheTestUtil.openCacheEnable(connectContext);
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", Type.VARCHAR)),
-                    Arrays.asList(new Column("d", Type.VARCHAR)), "test", "catalog", properties);
-            int size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
-            Assert.assertTrue(size > 0);
-            int sizeWithCache = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
-            Assert.assertTrue(sizeWithCache > 0);
-            JDBCCacheTestUtil.closeCacheEnable(connectContext);
-            Map<String, String> properties = new HashMap<>();
-            jdbcMetadata.refreshCache(properties);
-            int sizeWithOutCache = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
-            Assert.assertEquals(0, sizeWithOutCache);
-        } catch (Exception e) {
-            System.out.println(e.getMessage());
-            Assert.fail();
-        }
-    }
-
-    @Test
->>>>>>> bd2b1ec236 ([Enhancement] use jdbc connection pool in jdbc metadata (#39637))
     public void testGetPartitions_NonPartitioned() throws DdlException {
         JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
         List<Column> columns = Arrays.asList(new Column("d", Type.VARCHAR));

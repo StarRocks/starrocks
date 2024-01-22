@@ -23,11 +23,8 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
 import com.starrocks.common.jmockit.Deencapsulation;
-=======
 import com.zaxxer.hikari.HikariDataSource;
->>>>>>> bd2b1ec236 ([Enhancement] use jdbc connection pool in jdbc metadata (#39637))
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;

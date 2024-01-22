@@ -21,11 +21,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
->>>>>>> bd2b1ec236 ([Enhancement] use jdbc connection pool in jdbc metadata (#39637))
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableId;

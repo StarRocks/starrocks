@@ -855,22 +855,12 @@ under the License.
             <groupId>com.aliyun.odps</groupId>
             <artifactId>odps-sdk-table-api</artifactId>
         </dependency>
-<<<<<<< HEAD
-=======
-
-        <dependency>
-            <groupId>com.carrotsearch</groupId>
-            <artifactId>junit-benchmarks</artifactId>
-            <version>0.7.2</version>
-            <scope>test</scope>
-        </dependency>
 
         <dependency>
             <groupId>com.zaxxer</groupId>
             <artifactId>HikariCP</artifactId>
             <version>${hikaricp.version}</version>
         </dependency>
->>>>>>> bd2b1ec236 ([Enhancement] use jdbc connection pool in jdbc metadata (#39637))
     </dependencies>
 
     <build>
