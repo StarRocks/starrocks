@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.ImmutableList;
@@ -21,11 +20,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.Table;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
->>>>>>> bd2b1ec236 ([Enhancement] use jdbc connection pool in jdbc metadata (#39637))
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorTableId;
@@ -57,7 +52,6 @@ public class JDBCMetadata implements ConnectorMetadata {
     public JDBCMetadata(Map<String, String> properties, String catalogName) {
         this(properties, catalogName, null);
     }
-
 
     public JDBCMetadata(Map<String, String> properties, String catalogName, HikariDataSource dataSource) {
         this.properties = properties;
@@ -191,7 +185,7 @@ public class JDBCMetadata implements ConnectorMetadata {
             } else {
                 return Lists.newArrayList();
             }
-        } catch (SQLException  | StarRocksConnectorException e) {
+        } catch (SQLException | StarRocksConnectorException e) {
             LOG.warn(e.getMessage());
             return Lists.newArrayList();
         }

@@ -2631,17 +2631,6 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long jdbc_meta_default_cache_expire_sec = 600L;
-<<<<<<< HEAD
-=======
-
-    // the retention time for host disconnection events
-    @ConfField(mutable = true)
-    public static long black_host_history_sec = 2 * 60; // 2min
-
-    // limit for the number of host disconnections in the last {black_host_history_sec} seconds
-    @ConfField(mutable = true)
-    public static long black_host_connect_failures_within_time = 5;
-
 
     @ConfField(mutable = false)
     public static int jdbc_connection_pool_size = 8;
@@ -2651,5 +2640,4 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = false)
     public static int jdbc_connection_idle_timeout_ms = 600000;
->>>>>>> bd2b1ec236 ([Enhancement] use jdbc connection pool in jdbc metadata (#39637))
 }

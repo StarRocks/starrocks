@@ -28,11 +28,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.sql.Connection;
-<<<<<<< HEAD
-import java.sql.DriverManager;
-=======
-import java.sql.ResultSet;
->>>>>>> bd2b1ec236 ([Enhancement] use jdbc connection pool in jdbc metadata (#39637))
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;

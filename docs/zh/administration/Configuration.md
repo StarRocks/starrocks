@@ -929,11 +929,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：FE 节点上 MySQL 服务器的端口。
 - 默认值：9030
 
-<<<<<<< HEAD:docs/zh/administration/Configuration.md
-##### mysql_service_nio_enabled  
-=======
 #### mysql_service_nio_enabled
->>>>>>> bd2b1ec236 ([Enhancement] use jdbc connection pool in jdbc metadata (#39637)):docs/zh/administration/FE_configuration.md
 
 - 含义：是否开启 MySQL 服务器的异步 I/O 选项。
 - 默认值：TRUE
@@ -1028,11 +1024,7 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：允许回滚的最大事务数。
 - 默认值：100
 
-<<<<<<< HEAD:docs/zh/administration/Configuration.md
-##### bdbje_replica_ack_timeout_second  
-=======
 #### bdbje_replica_ack_timeout_second
->>>>>>> bd2b1ec236 ([Enhancement] use jdbc connection pool in jdbc metadata (#39637)):docs/zh/administration/FE_configuration.md
 
 - 含义：FE 所在 StarRocks 集群中，元数据从 Leader FE 写入到多个 Follower FE 时，Leader FE 等待足够多的 Follower FE 发送 ACK 消息的超时时间。当写入的元数据较多时，可能返回 ACK 的时间较长，进而导致等待超时。如果超时，会导致写元数据失败，FE 进程退出，此时可以适当地调大该参数取值。
 - 单位：秒
@@ -1293,7 +1285,6 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 - 含义：是否开启定期收集指标 (Metrics) 的功能。取值范围：`TRUE` 和 `FALSE`。`TRUE` 表示开该功能。`FALSE`表示关闭该功能。
 - 默认值：TRUE
 
-<<<<<<< HEAD:docs/zh/administration/Configuration.md
 ## BE 配置项
 
 部分 BE 节点配置项为动态参数，您可以通过命令在线修改。其他配置项为静态参数，需要通过修改 **be.conf** 文件后重启 BE 服务使相关修改生效。
@@ -1401,7 +1392,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：单列上允许下推的最大谓词数量，如果超出数量限制，谓词不会下推到存储层。
 - 默认值：1024
 
-#### exchg_node_buffer_size_bytes  
+#### exchg_node_buffer_size_bytes
 
 - 含义：Exchange 算子中，单个查询在接收端的 buffer 容量。<br />这是一个软限制，如果数据的发送速度过快，接收端会触发反压来限制发送速度。
 - 单位：字节
@@ -1443,7 +1434,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：秒
 - 默认值：30
 
-#### max_percentage_of_error_disk  
+#### max_percentage_of_error_disk
 
 - 含义：错误磁盘达到一定比例，BE 退出。
 - 单位：%
@@ -1454,7 +1445,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：每个 row block 最多存放的行数。
 - 默认值：1024
 
-#### pending_data_expire_time_sec  
+#### pending_data_expire_time_sec
 
 - 含义：存储引擎保留的未生效数据的最大时长。
 - 单位：秒
@@ -1530,7 +1521,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：毫秒
 - 默认值：500
 
-#### load_error_log_reserve_hours  
+#### load_error_log_reserve_hours
 
 - 含义：导入数据信息保留的时长。
 - 单位：小时
@@ -1542,7 +1533,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：MB
 - 默认值：102400
 
-#### streaming_load_max_batch_size_mb  
+#### streaming_load_max_batch_size_mb
 
 - 含义：流式导入单个 JSON 文件大小的上限。
 - 单位：MB
@@ -1623,7 +1614,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 单位：字节
 - 默认值：107374182400
 
-#### tablet_meta_checkpoint_min_new_rowsets_num  
+#### tablet_meta_checkpoint_min_new_rowsets_num
 
 - 含义：自上次 TabletMeta Checkpoint 至今新创建的 rowset 数量。
 - 默认值：10
@@ -1761,7 +1752,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 默认值：false
 - 引入版本：3.0
 
-#### hdfs_client_hedged_read_threadpool_size  
+#### hdfs_client_hedged_read_threadpool_size
 
 - 含义：指定 HDFS 客户端侧 Hedged Read 线程池的大小，即 HDFS 客户端侧允许有多少个线程用于服务 Hedged Read。该参数从 3.0 版本起支持，对应 HDFS 集群配置文件 `hdfs-site.xml` 中的 `dfs.client.hedged.read.threadpool.size` 参数。
 - 默认值：128
@@ -1947,7 +1938,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：文件句柄缓存的容量。
 - 默认值：16384
-  
+
 #### min_file_descriptor_number
 
 - 含义：BE 进程的文件句柄 limit 要求的下线。
@@ -2071,12 +2062,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：是否启用 Data Cache。<ul><li>`true`：启用。</li><li>`false`：不启用，为默认值。</li></ul> 如要启用，设置该参数值为 `true`。
 - 默认值：false
 
-#### block_cache_disk_path  
+#### block_cache_disk_path
 
 - 含义：磁盘路径。支持添加多个路径，多个路径之间使用分号(;) 隔开。建议 BE 机器有几个磁盘即添加几个路径。配置路径后，StarRocks 会自动创建名为 **cachelib_data** 的文件用于缓存 block。
 - 默认值：N/A
 
-#### block_cache_meta_path  
+#### block_cache_meta_path
 
 - 含义：Block 的元数据存储目录，可自定义。推荐创建在 **`$STARROCKS_HOME`** 路径下。
 - 默认值：N/A
@@ -2103,24 +2094,24 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：JDBC 连接池大小。每个 BE 节点上访问 `jdbc_url` 相同的外表时会共用同一个连接池。
 - 默认值：8
 
-#### jdbc_minimum_idle_connections  
+#### jdbc_minimum_idle_connections
 
 - 含义：JDBC 连接池中最少的空闲连接数量。
 - 默认值：1
 
-#### jdbc_connection_idle_timeout_ms  
+#### jdbc_connection_idle_timeout_ms
 
 - 含义：JDBC 空闲连接超时时间。如果 JDBC 连接池内的连接空闲时间超过此值，连接池会关闭超过 `jdbc_minimum_idle_connections` 配置项中指定数量的空闲连接。
 - 单位：毫秒
 - 默认值：600000
 
-#### query_cache_capacity  
+#### query_cache_capacity
 
 - 含义：指定 Query Cache 的大小。单位：字节。默认为 512 MB。最小不低于 4 MB。如果当前的 BE 内存容量无法满足您期望的 Query Cache 大小，可以增加 BE 的内存容量，然后再设置合理的 Query Cache 大小。<br />每个 BE 都有自己私有的 Query Cache 存储空间，BE 只 Populate 或 Probe 自己本地的 Query Cache 存储空间。
 - 单位：字节
 - 默认值：536870912
 
-#### enable_event_based_compaction_framework  
+#### enable_event_based_compaction_framework
 
 - 含义：是否开启 Event-based Compaction Framework。`true` 代表开启。`false` 代表关闭。开启则能够在 tablet 数比较多或者单个 tablet 数据量比较大的场景下大幅降低 compaction 的开销。
 - 默认值：TRUE
@@ -2130,20 +2121,3 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 - 含义：在存算分离集群中，RPC 请求的最大并发数。当达到此阈值时，新请求会被拒绝。将此项设置为 0 表示对并发不做限制。
 - 单位：N/A
 - 默认值：0
-=======
-#### jdbc_connection_pool_size
-
-- 含义：访问JDBC Catalog, JDBC Connection Pool容量上限
-- 默认值：8
-
-#### jdbc_minimum_idle_connections
-
-- 含义：访问JDBC Catalog, JDBC Connection Pool中处于idle状态的最低数量
-- 默认值：1
-
-#### jdbc_connection_idle_timeout_ms
-
-- 含义：访问JDBC Catalog, 超过这个时间的连接被认为是idle状态
-- 单位：毫秒
-- 默认值：600000
->>>>>>> bd2b1ec236 ([Enhancement] use jdbc connection pool in jdbc metadata (#39637)):docs/zh/administration/FE_configuration.md
