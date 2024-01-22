@@ -241,7 +241,8 @@ public class SelectAnalyzer {
                 if (item.getExpr() instanceof SlotRef) {
                     name = item.getAlias() == null ? ((SlotRef) item.getExpr()).getColumnName() : item.getAlias();
                 } else {
-                    name = item.getAlias() == null ? AstToStringBuilder.toString(item.getExpr(), false) : item.getAlias();
+                    name = item.getAlias() == null ?
+                            AstToStringBuilder.getAliasName(item.getExpr(), false, false) : item.getAlias();
                 }
 
                 analyzeExpression(item.getExpr(), analyzeState, scope);
@@ -256,7 +257,7 @@ public class SelectAnalyzer {
                             true, item.getExpr().isNullable()));
                 }
 
-                // outputExprInOrderByScope is used to record which expressions in outputExpression are to be
+                // outputExprInOrderByScope is used to record which expressions in outputExpressioskn are to be
                 // recorded in the first level of OrderByScope (order by expressions can refer to columns in output)
                 // Which columns satisfy the condition?
                 // 1. An expression of type SlotRef.
