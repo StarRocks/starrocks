@@ -144,7 +144,7 @@ Status ReplicationTxnManager::init(const std::vector<starrocks::DataDir*>& data_
                         continue;
                     }
 
-                    _transaction_map[transaction_id][partition_id].push_back(tablet_id);
+                    _transaction_map[transaction_id][partition_id].insert(tablet_id);
                     _tablet_map[tablet_id][transaction_id] = txn_meta_pb;
                 }
             }
@@ -382,11 +382,13 @@ StatusOr<TabletSharedPtr> ReplicationTxnManager::prepare_txn(TTransactionId tran
         std::lock_guard push_lock(tablet->get_push_lock());
 
         std::lock_guard guard(_mutex);
-        _transaction_map[transaction_id][partition_id].push_back(tablet_id);
+        _transaction_map[transaction_id][partition_id].insert(tablet_id);
         ReplicationTxnMetaPB& saved_txn_meta = _tablet_map[tablet_id][transaction_id];
-        saved_txn_meta.set_txn_id(transaction_id);
-        saved_txn_meta.set_txn_state(ReplicationTxnStatePB::TXN_PREPARED);
-        saved_txn_meta.set_tablet_id(tablet_id);
+        if (!saved_txn_meta.has_txn_id()) {
+            saved_txn_meta.set_txn_id(transaction_id);
+            saved_txn_meta.set_txn_state(ReplicationTxnStatePB::TXN_PREPARED);
+            saved_txn_meta.set_tablet_id(tablet_id);
+        }
 
         break;
     }
@@ -999,7 +1001,7 @@ Status ReplicationTxnManager::save_tablet_txn_meta(DataDir* data_dir, TTransacti
     RETURN_IF_ERROR(save_tablet_txn_meta(tablet_txn_dir_path, txn_meta));
 
     std::lock_guard guard(_mutex);
-    _transaction_map[transaction_id][partition_id].push_back(tablet_id);
+    _transaction_map[transaction_id][partition_id].insert(tablet_id);
     _tablet_map[tablet_id][transaction_id].CopyFrom(txn_meta);
 
     return Status::OK();
