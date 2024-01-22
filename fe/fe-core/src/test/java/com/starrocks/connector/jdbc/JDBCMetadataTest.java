@@ -23,7 +23,11 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
+<<<<<<< HEAD
 import com.starrocks.common.jmockit.Deencapsulation;
+=======
+import com.zaxxer.hikari.HikariDataSource;
+>>>>>>> bd2b1ec236 ([Enhancement] use jdbc connection pool in jdbc metadata (#39637))
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -31,7 +35,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
@@ -45,7 +48,7 @@ import static com.starrocks.catalog.JDBCResource.DRIVER_CLASS;
 public class JDBCMetadataTest {
 
     @Mocked
-    DriverManager driverManager;
+    HikariDataSource dataSource;
 
     @Mocked
     Connection connection;
@@ -96,10 +99,9 @@ public class JDBCMetadataTest {
         partitionsResult.addColumn("PARTITION_EXPRESSION", Arrays.asList("`d`"));
         partitionsResult.addColumn("MODIFIED_TIME", Arrays.asList("2023-08-01"));
 
-
         new Expectations() {
             {
-                driverManager.getConnection(anyString, anyString, anyString);
+                dataSource.getConnection();
                 result = connection;
                 minTimes = 0;
 
@@ -133,7 +135,7 @@ public class JDBCMetadataTest {
     @Test
     public void testListDatabaseNames() {
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             dbResult.beforeFirst();
             List<String> result = jdbcMetadata.listDbNames();
             List<String> expectResult = Lists.newArrayList("test");
@@ -146,7 +148,7 @@ public class JDBCMetadataTest {
     @Test
     public void testGetDb() {
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             dbResult.beforeFirst();
             Database db = jdbcMetadata.getDb("test");
             Assert.assertEquals("test", db.getOriginName());
@@ -158,7 +160,7 @@ public class JDBCMetadataTest {
     @Test
     public void testListTableNames() {
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             List<String> result = jdbcMetadata.listTableNames("test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
             Assert.assertEquals(expectResult, result);
@@ -177,7 +179,7 @@ public class JDBCMetadataTest {
             }
         };
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Table table = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
             Assert.assertTrue(table.getPartitionColumns().isEmpty());
@@ -203,7 +205,7 @@ public class JDBCMetadataTest {
             }
         };
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Table table = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
             Assert.assertFalse(table.getPartitionColumns().isEmpty());
@@ -215,7 +217,7 @@ public class JDBCMetadataTest {
 
     @Test
     public void testColumnTypes() {
-        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
         Table table = jdbcMetadata.getTable("test", "tbl1");
         List<Column> columns = table.getColumns();
         Assert.assertEquals(columns.size(), columnResult.getRowCount());
@@ -238,7 +240,7 @@ public class JDBCMetadataTest {
         // user/password are optional fields for jdbc.
         properties.put(JDBCResource.USER, "");
         properties.put(JDBCResource.PASSWORD, "");
-        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+        JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
         Table table = jdbcMetadata.getTable("test", "tbl1");
         Assert.assertNotNull(table);
     }
@@ -246,7 +248,7 @@ public class JDBCMetadataTest {
     @Test
     public void testCacheTableId() {
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Table table1 = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertTrue(table1.getId() == 100000);
         } catch (Exception e) {
@@ -255,4 +257,15 @@ public class JDBCMetadataTest {
         }
     }
 
+    @Test
+    public void testCreateHikariDataSource() {
+        properties = new HashMap<>();
+        properties.put(DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
+        properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
+        properties.put(JDBCResource.USER, "root");
+        properties.put(JDBCResource.PASSWORD, "123456");
+        properties.put(JDBCResource.CHECK_SUM, "xxxx");
+        properties.put(JDBCResource.DRIVER_URL, "xxxx");
+        new JDBCMetadata(properties, "catalog");
+    }
 }
