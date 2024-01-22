@@ -179,6 +179,9 @@ public class PipeManagerTest {
             if (watch.elapsed(TimeUnit.SECONDS) > 60) {
                 Assert.fail("wait for pipe but failed: elapsed " + watch.elapsed(TimeUnit.SECONDS));
             }
+            if (pipe.getState() == Pipe.State.ERROR) {
+                Assert.fail("pipe in ERROR state: " + pipe);
+            }
             pipe.schedule();
             try {
                 Thread.sleep(100);
@@ -283,13 +286,17 @@ public class PipeManagerTest {
 
     private void mockTaskLongRunning(long runningSecs, Constants.TaskRunState result) {
         new MockUp<TaskRunExecutor>() {
+            /**
+             * @see TaskRunExecutor#executeTaskRun(TaskRun)
+             */
             @Mock
-            public void executeTaskRun(TaskRun taskRun) {
+            public boolean executeTaskRun(TaskRun taskRun) {
 
                 ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
                 executorService.schedule(() -> {
                     taskRun.getFuture().complete(result);
                 }, runningSecs, TimeUnit.SECONDS);
+                return true;
             }
         };
     }
@@ -297,15 +304,18 @@ public class PipeManagerTest {
     private void mockTaskExecutor(Supplier<Constants.TaskRunState> runnable) {
 
         new MockUp<TaskRunExecutor>() {
+            /**
+             * @see TaskRunExecutor#executeTaskRun(TaskRun)
+             */
             @Mock
-            public void executeTaskRun(TaskRun taskRun) {
+            public boolean executeTaskRun(TaskRun taskRun) {
                 try {
                     Constants.TaskRunState result = runnable.get();
                     taskRun.getFuture().complete(result);
                 } catch (Exception e) {
                     taskRun.getFuture().completeExceptionally(e);
                 }
-
+                return true;
             }
         };
     }
