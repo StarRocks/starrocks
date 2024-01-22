@@ -60,7 +60,50 @@ Parameters in brackets [] is optional.
 Example 1: Show a specific materialized view
 
 ```Plain
+<<<<<<< HEAD
 MySQL > SHOW MATERIALIZED VIEW WHERE NAME = "lo_mv1"\G
+=======
+-- Create Table: customer
+CREATE TABLE customer ( C_CUSTKEY     INTEGER NOT NULL,
+                        C_NAME        VARCHAR(25) NOT NULL,
+                        C_ADDRESS     VARCHAR(40) NOT NULL,
+                        C_NATIONKEY   INTEGER NOT NULL,
+                        C_PHONE       CHAR(15) NOT NULL,
+                        C_ACCTBAL     double   NOT NULL,
+                        C_MKTSEGMENT  CHAR(10) NOT NULL,
+                        C_COMMENT     VARCHAR(117) NOT NULL,
+                        PAD char(1) NOT NULL)
+    ENGINE=OLAP
+DUPLICATE KEY(`c_custkey`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c_custkey`)
+PROPERTIES (
+"replication_num" = "3",
+"storage_format" = "DEFAULT"
+);
+
+-- Create MV: customer_mv
+CREATE MATERIALIZED VIEW customer_mv
+DISTRIBUTED BY HASH(c_custkey)
+REFRESH MANUAL
+PROPERTIES (
+    "replication_num" = "3"
+)
+AS SELECT
+              c_custkey, c_phone, c_acctbal, count(1) as c_count, sum(c_acctbal) as c_sum
+   FROM
+              customer
+   GROUP BY c_custkey, c_phone, c_acctbal;
+
+-- Refresh the MV
+REFRESH MATERIALIZED VIEW customer_mv;
+```
+
+Example 1: Show a specific materialized view.
+
+```Plain
+mysql> SHOW MATERIALIZED VIEWS WHERE NAME='customer_mv'\G;
+>>>>>>> 3e4491fd52 ([Doc] Fix replication_num in MV (#39627))
 *************************** 1. row ***************************
            id: 475899
          name: lo_mv1

@@ -79,7 +79,7 @@ DUPLICATE KEY(`c_custkey`)
 COMMENT "OLAP"
 DISTRIBUTED BY HASH(`c_custkey`) BUCKETS 10
 PROPERTIES (
-"replication_num" = "1",
+"replication_num" = "3",
 "storage_format" = "DEFAULT"
 );
 
@@ -88,7 +88,7 @@ CREATE MATERIALIZED VIEW customer_mv
 DISTRIBUTED BY HASH(c_custkey) buckets 10
 REFRESH MANUAL
 PROPERTIES (
-    "replication_num" = "1"
+    "replication_num" = "3"
 )
 AS SELECT
               c_custkey, c_phone, c_acctbal, count(1) as c_count, sum(c_acctbal) as c_sum
