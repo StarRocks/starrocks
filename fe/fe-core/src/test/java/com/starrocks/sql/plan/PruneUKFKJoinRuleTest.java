@@ -145,7 +145,7 @@ public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
                             "t_fk left outer join t_uk on t_uk.v1 = t_fk.v1";
             String plan = getFragmentPlan(sql);
             assertNotContains(plan, "HASH JOIN");
-            assertContains(plan, "v1 IS NOT NULL");
+            assertNotContains(plan, "v1 IS NOT NULL");
         }
         {
             String sql =
@@ -153,7 +153,7 @@ public class PruneUKFKJoinRuleTest extends TPCDSPlanTestBase {
                             "t_uk right outer join t_fk on t_uk.v1 = t_fk.v1";
             String plan = getFragmentPlan(sql);
             assertNotContains(plan, "HASH JOIN");
-            assertContains(plan, "v1 IS NOT NULL");
+            assertNotContains(plan, "v1 IS NOT NULL");
         }
         {
             String sql = "select t_fk.*, t_fk.v2 * 3 +5 from " +

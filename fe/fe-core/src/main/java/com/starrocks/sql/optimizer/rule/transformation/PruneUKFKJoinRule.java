@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 public class PruneUKFKJoinRule extends TransformationRule {
     public PruneUKFKJoinRule() {
@@ -76,15 +77,22 @@ public class PruneUKFKJoinRule extends TransformationRule {
             OptExpression ukChildOpt = joinOpt.inputAt(ukChildIdx);
             OptExpression fkChildOpt = joinOpt.inputAt(1 - ukChildIdx);
 
-            // The uk side child can be pruned if the following conditions are met:
-            // 1. uk is the only column that is used by join output.
-            // 2. uk is the only column that is used by join
-            // 3. uk is the only column that is used by its children.
-            if (!isNonUKColumnUsedByJoinOutput(property, joinOpt, ukChildOpt) &&
-                    !isNonUKColumnUsedByJoinItself(property, joinOpt, ukChildOpt) &&
-                    !isNonUKColumnUsedByUKSideChildren(property, ukChildOpt)) {
+            boolean notOuterJoin = !joinType.isOuterJoin();
 
-                OptExpression filterOpt = buildFilterOpt(property, ukChildOpt, fkChildOpt);
+            // The uk side child can be pruned if the following conditions are met:
+            // For Outer Join:
+            //   1. uk is the only column from uk table that is used by join output.
+            //   2. uk is the only column from uk table that is used by join.
+            //   3. uk is the only column from uk table that is used by its children.
+            // For Inner and Semi Join:
+            //   1. uk is the only column from uk table that is used by join output.
+            //   2. no column from uk table can be used by join.
+            //   3. no column from uk table can be used by its children.
+            if (!isNonUKTableColumnUsedByJoinOutput(property, joinOpt, ukChildOpt) &&
+                    !isNonUKTableColumnUsedByJoinItself(property, joinOpt, ukChildOpt, notOuterJoin) &&
+                    !isNonUKTableColumnUsedByUKSideChildren(property, ukChildOpt, notOuterJoin)) {
+
+                OptExpression filterOpt = buildFilterOpt(property, ukChildOpt, fkChildOpt, notOuterJoin);
                 OptExpression newProjectOpt = buildProjectOpt(property, projectOp, filterOpt);
 
                 return Lists.newArrayList(newProjectOpt);
@@ -94,41 +102,49 @@ public class PruneUKFKJoinRule extends TransformationRule {
         return Lists.newArrayList();
     }
 
-    private boolean isNonUKColumnUsedByJoinOutput(UKFKConstraints.JoinProperty property,
-                                                  OptExpression joinOpt, OptExpression ukChildOpt) {
+    private boolean isNonUKTableColumnUsedByJoinOutput(UKFKConstraints.JoinProperty property,
+                                                       OptExpression joinOpt, OptExpression ukChildOpt) {
         RowOutputInfo ukRowOutputInfo = ukChildOpt.getRowOutputInfo();
-        ColumnRefSet nonUkColumnRefs = ukRowOutputInfo.getOutputColumnRefSet();
-        nonUkColumnRefs.except(Collections.singletonList(property.ukColumnRef));
+        ColumnRefSet ukTableColumnRefs = ukRowOutputInfo.getOutputColumnRefSet();
+        ukTableColumnRefs.except(Collections.singletonList(property.ukColumnRef));
 
         RowOutputInfo joinRowOutputInfo = joinOpt.getRowOutputInfo();
         ColumnRefSet joinOutputColumnRefs = joinRowOutputInfo.getOutputColumnRefSet();
 
-        return joinOutputColumnRefs.containsAny(nonUkColumnRefs);
+        return joinOutputColumnRefs.containsAny(ukTableColumnRefs);
     }
 
-    private boolean isNonUKColumnUsedByJoinItself(
-            UKFKConstraints.JoinProperty property,
-            OptExpression joinOpt, OptExpression ukChildOpt) {
+    private boolean isNonUKTableColumnUsedByJoinItself(UKFKConstraints.JoinProperty property,
+                                                       OptExpression joinOpt, OptExpression ukChildOpt,
+                                                       boolean exceptUK) {
         RowOutputInfo ukRowOutputInfo = ukChildOpt.getRowOutputInfo();
-        ColumnRefSet nonUkColumnRefs = ukRowOutputInfo.getOutputColumnRefSet();
-        nonUkColumnRefs.except(Collections.singletonList(property.ukColumnRef));
+        ColumnRefSet ukTableColumnRefs = ukRowOutputInfo.getOutputColumnRefSet();
+        if (exceptUK) {
+            ukTableColumnRefs.except(Collections.singletonList(property.ukColumnRef));
+        }
 
         LogicalJoinOperator joinOp = joinOpt.getOp().cast();
         ColumnRefSet joinUsedColumns = new ColumnRefSet();
         if (joinOp.getOnPredicate() != null) {
-            joinUsedColumns.union(joinOp.getOnPredicate().getUsedColumns());
+            Utils.extractConjuncts(joinOp.getOnPredicate())
+                    .stream().filter(p -> !Objects.equals(property.predicate, p))
+                    .forEach(p -> joinUsedColumns.union(p.getUsedColumns()));
         }
 
-        return joinUsedColumns.containsAny(nonUkColumnRefs);
+        return joinUsedColumns.containsAny(ukTableColumnRefs);
     }
 
-    private boolean isNonUKColumnUsedByUKSideChildren(
-            UKFKConstraints.JoinProperty property, OptExpression ukChildOpt) {
-        ColumnRefSet nonUkColumnRefs = property.ukConstraint.nonUKColumnRefs;
+    private boolean isNonUKTableColumnUsedByUKSideChildren(UKFKConstraints.JoinProperty property,
+                                                           OptExpression ukChildOpt,
+                                                           boolean exceptUK) {
+        ColumnRefSet ukTableColumnRefs = property.ukConstraint.nonUKColumnRefs;
+        if (!exceptUK) {
+            ukTableColumnRefs.union(Collections.singletonList(property.ukColumnRef));
+        }
 
         ColumnRefSet childrenUsedColumns = UsedColumnRefCollector.collect(ukChildOpt);
 
-        return childrenUsedColumns.containsAny(nonUkColumnRefs);
+        return childrenUsedColumns.containsAny(ukTableColumnRefs);
     }
 
     private ScalarOperator collectUKPredicate(OptExpression ukChildOpt) {
@@ -148,7 +164,8 @@ public class PruneUKFKJoinRule extends TransformationRule {
 
     private OptExpression buildFilterOpt(UKFKConstraints.JoinProperty property,
                                          OptExpression ukChildOpt,
-                                         OptExpression fkChildOpt) {
+                                         OptExpression fkChildOpt,
+                                         boolean addIsNullPredicate) {
         ScalarOperator ukPredicate = collectUKPredicate(ukChildOpt);
         if (ukPredicate != null) {
             Map<ColumnRefOperator, ScalarOperator> replaceMap = Maps.newHashMap();
@@ -156,10 +173,14 @@ public class PruneUKFKJoinRule extends TransformationRule {
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(replaceMap, true);
             ukPredicate = rewriter.rewrite(ukPredicate);
         }
-
-        IsNullPredicateOperator isNullPredicate = new IsNullPredicateOperator(true, property.fkColumnRef);
-        ScalarOperator predicate = Utils.compoundAnd(ukPredicate, isNullPredicate);
-        LogicalFilterOperator filterOp = new LogicalFilterOperator(predicate);
+        if (addIsNullPredicate) {
+            IsNullPredicateOperator isNullPredicate = new IsNullPredicateOperator(true, property.fkColumnRef);
+            ukPredicate = Utils.compoundAnd(ukPredicate, isNullPredicate);
+        }
+        if (ukPredicate == null) {
+            return fkChildOpt;
+        }
+        LogicalFilterOperator filterOp = new LogicalFilterOperator(ukPredicate);
         return OptExpression.create(filterOp, fkChildOpt);
     }
 
