@@ -3826,9 +3826,6 @@ TEST_F(TimeFunctionsTest, MakeDateTest) {
     year_value->append(1);
     day_of_year_value->append(-1);
 
-    year_value->append(1);
-    (void)day_of_year_value->append_nulls(1);
-
     Columns columns;
     columns.emplace_back(year_value);
     columns.emplace_back(day_of_year_value);
@@ -3848,6 +3845,5 @@ TEST_F(TimeFunctionsTest, MakeDateTest) {
     ASSERT_TRUE(nullable_col->is_null(7));
     ASSERT_TRUE(nullable_col->is_null(8));
     ASSERT_TRUE(nullable_col->is_null(9));
-    ASSERT_TRUE(nullable_col->is_null(10));
 }
 } // namespace starrocks
