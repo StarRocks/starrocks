@@ -29,6 +29,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/empty_iterator.h"
 #include "storage/kv_store.h"
+#include "storage/primary_key_dump.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_options.h"
@@ -47,8 +48,6 @@
 #include "testutil/assert.h"
 #include "util/defer_op.h"
 #include "util/path_util.h"
-
-#include "storage/primary_key_dump.h"
 
 namespace starrocks {
 
@@ -723,6 +722,7 @@ public:
                           const TabletMetaSharedPtr& snapshot_tablet_meta);
     void load_snapshot(const std::string& meta_dir, const TabletSharedPtr& tablet, SegmentFooterPB* footer);
     void test_schema_change_optimiazation_adding_generated_column(bool enable_persistent_index);
+    void test_pk_dump(size_t rowset_cnt);
 
 protected:
     TabletSharedPtr _tablet;

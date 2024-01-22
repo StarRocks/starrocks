@@ -126,28 +126,15 @@ std::string get_usage(const std::string& progname) {
           "--root_path=/path/to/storage/path --tablet_id=tabletid | "
           "./meta_tool --operation=delete_persistent_index_meta "
           "--root_path=/path/to/storage/path --table_id=tableid\n";
-<<<<<<< HEAD
     ss << "./meta_tool --operation=compact_meta --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=get_meta_stats --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=ls --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=show_meta --pb_meta_path=path\n";
     ss << "./meta_tool --operation=show_segment_footer --file=/path/to/segment/file\n";
     ss << "./meta_tool --operation=dump_segment_data --file=/path/to/segment/file\n";
+    ss << "./meta_tool.sh --operation=print_pk_dump --file=/path/to/pk/dump/file\n";
     ss << "./meta_tool --operation=dump_short_key_index --file=/path/to/segment/file --key_column_count=2\n";
     ss << "./meta_tool --operation=check_table_meta_consistency --root_path=/path/to/storage/path "
-=======
-    ss << "./meta_tool.sh --operation=compact_meta --root_path=/path/to/storage/path\n";
-    ss << "./meta_tool.sh --operation=get_meta_stats --root_path=/path/to/storage/path\n";
-    ss << "./meta_tool.sh --operation=ls --root_path=/path/to/storage/path\n";
-    ss << "./meta_tool.sh --operation=show_meta --pb_meta_path=path\n";
-    ss << "./meta_tool.sh --operation=show_segment_footer --file=/path/to/segment/file\n";
-    ss << "./meta_tool.sh --operation=dump_segment_data --file=/path/to/segment/file\n";
-    ss << "./meta_tool.sh --operation=dump_column_size --file=/path/to/segment/file\n";
-    ss << "./meta_tool.sh --operation=print_pk_dump --file=/path/to/pk/dump/file\n";
-    ss << "./meta_tool.sh --operation=dump_short_key_index --file=/path/to/segment/file --key_column_count=2\n";
-    ss << "./meta_tool.sh --operation=calc_checksum [--column_index=xx] --file=/path/to/segment/file\n";
-    ss << "./meta_tool.sh --operation=check_table_meta_consistency --root_path=/path/to/storage/path "
->>>>>>> 64a6c8309b ([Feature] support primary key dump (#38297))
           "--table_id=tableid\n";
     ss << "./meta_tool --operation=scan_dcgs --root_path=/path/to/storage/path "
           "--tablet_id=tabletid\n";
@@ -908,19 +895,6 @@ int meta_tool_main(int argc, char** argv) {
             std::cout << "dump segment data failed: " << st << std::endl;
             return -1;
         }
-<<<<<<< HEAD
-=======
-    } else if (FLAGS_operation == "dump_column_size") {
-        if (FLAGS_file == "") {
-            std::cout << "no file flag for dump segment file" << std::endl;
-            return -1;
-        }
-        starrocks::SegmentDump segment_dump(FLAGS_file);
-        Status st = segment_dump.dump_column_size();
-        if (!st.ok()) {
-            std::cout << "dump column size failed: " << st << std::endl;
-            return -1;
-        }
     } else if (FLAGS_operation == "print_pk_dump") {
         if (FLAGS_file == "") {
             std::cout << "no file flag for pk dump file" << std::endl;
@@ -952,7 +926,6 @@ int meta_tool_main(int argc, char** argv) {
             return -1;
         }
 
->>>>>>> 64a6c8309b ([Feature] support primary key dump (#38297))
     } else if (FLAGS_operation == "dump_short_key_index") {
         starrocks::MemChunkAllocator::init_instance(nullptr, 2ul * 1024 * 1024 * 1024);
         if (FLAGS_file == "") {

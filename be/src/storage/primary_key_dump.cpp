@@ -67,7 +67,6 @@ Status PrimaryKeyDump::_dump_rowset_meta() {
         RowsetMetaIdPB rowset_meta_id;
         rowset_meta_id.set_rowset_id(each.first);
         each.second->rowset_meta()->to_rowset_pb(rowset_meta_id.mutable_rowset_meta());
-        rowset_meta_id.mutable_rowset_meta()->clear_tablet_schema();
         _dump_pb.add_rowset_metas()->CopyFrom(rowset_meta_id);
     }
     return Status::OK();
@@ -152,8 +151,7 @@ Status PrimaryKeyDump::_dump_dcg() {
 
 class PrimaryKeyChunkDumper {
 public:
-    PrimaryKeyChunkDumper(PrimaryKeyDump* dump, PrimaryKeyColumnPB* pk_column_pb)
-            : _dump(dump), _pk_column_pb(pk_column_pb) {}
+    PrimaryKeyChunkDumper(PrimaryKeyColumnPB* pk_column_pb) : _pk_column_pb(pk_column_pb) {}
     ~PrimaryKeyChunkDumper() { (void)fs::delete_file(_tmp_file); }
     Status init(const TabletSchemaCSPtr& tablet_schema, const std::string& tablet_path) {
         _tmp_file = tablet_path + "/PrimaryKeyChunkDumper_" + std::to_string(static_cast<int64_t>(pthread_self()));
@@ -162,7 +160,7 @@ public:
         WritableFileOptions opts{.sync_on_close = true, .mode = FileSystem::OpenMode::CREATE_OR_OPEN_WITH_TRUNCATE};
         ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, _tmp_file));
         SegmentWriterOptions writer_options;
-        _writer = std::make_unique<SegmentWriter>(std::move(wfile), _pk_column_pb->segment_id(), tablet_schema,
+        _writer = std::make_unique<SegmentWriter>(std::move(wfile), _pk_column_pb->segment_id(), tablet_schema.get(),
                                                   writer_options);
         RETURN_IF_ERROR(_writer->init(false));
         return Status::OK();
@@ -181,7 +179,6 @@ public:
     }
 
 private:
-    PrimaryKeyDump* _dump;
     PrimaryKeyColumnPB* _pk_column_pb;
     std::unique_ptr<SegmentWriter> _writer;
     PagePointerPB _page;
@@ -196,14 +193,12 @@ public:
     StatusOr<ChunkIteratorPtr> read(const std::string& dump_filepath, const Schema& schema,
                                     const TabletSchemaCSPtr& tablet_schema, const PrimaryKeyColumnPB& pk_column_pb) {
         RETURN_IF_ERROR(_copy_to_tmp_file(dump_filepath, pk_column_pb));
-        size_t footer_size_hint = 16 * 1024;
         ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(_tmp_file));
         SegmentReadOptions seg_options;
         seg_options.fs = fs;
         seg_options.stats = &_stats;
-        seg_options.tablet_schema = tablet_schema;
-        ASSIGN_OR_RETURN(auto seg_ptr, Segment::open(fs, _tmp_file, pk_column_pb.segment_id(), tablet_schema,
-                                                     &footer_size_hint, nullptr));
+        ASSIGN_OR_RETURN(auto seg_ptr,
+                         Segment::open(fs, FileInfo{_tmp_file}, pk_column_pb.segment_id(), tablet_schema));
         return seg_ptr->new_iterator(schema, seg_options);
     }
 
@@ -221,10 +216,10 @@ private:
     OlapReaderStatistics _stats;
 };
 
-static std::pair<Schema, std::shared_ptr<TabletSchema>> build_pkey_schema(const TabletSchemaCSPtr& tablet_schema) {
+static std::pair<Schema, std::shared_ptr<TabletSchema>> build_pkey_schema(const TabletSchema& tablet_schema) {
     vector<uint32_t> pk_columns;
     vector<int32_t> pk_columns2;
-    for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
+    for (size_t i = 0; i < tablet_schema.num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
         pk_columns2.push_back((int32_t)i);
     }
@@ -235,8 +230,7 @@ static std::pair<Schema, std::shared_ptr<TabletSchema>> build_pkey_schema(const 
 
 Status PrimaryKeyDump::_dump_segment_keys() {
     // 1. generate primary key schema
-    auto tablet_schema = _tablet->tablet_schema();
-    auto schema_pair = build_pkey_schema(tablet_schema);
+    auto schema_pair = build_pkey_schema(_tablet->tablet_schema());
     Schema& pkey_schema = schema_pair.first;
     auto pkey_tschema = schema_pair.second;
     // 2. scan all rowset
@@ -247,7 +241,7 @@ Status PrimaryKeyDump::_dump_segment_keys() {
     auto chunk = chunk_shared_ptr.get();
     for (auto& rowset : *rowset_map) {
         RowsetReleaseGuard guard(rowset.second);
-        auto res = rowset.second->get_segment_iterators2(pkey_schema, tablet_schema, nullptr, 0, &stats);
+        auto res = rowset.second->get_segment_iterators2(pkey_schema, nullptr, 0, &stats);
         if (!res.ok()) {
             return res.status();
         }
@@ -260,7 +254,7 @@ Status PrimaryKeyDump::_dump_segment_keys() {
             }
             PrimaryKeyColumnPB pk_column_pb;
             pk_column_pb.set_segment_id(rowset.second->rowset_meta()->get_rowset_seg_id() + i);
-            PrimaryKeyChunkDumper dumper(this, &pk_column_pb);
+            PrimaryKeyChunkDumper dumper(&pk_column_pb);
             RETURN_IF_ERROR(dumper.init(pkey_tschema, _tablet->schema_hash_path()));
             while (true) {
                 chunk->reset();
@@ -351,7 +345,7 @@ Status PrimaryKeyDump::deserialize_pkcol_pkindex_from_meta(
     // 1. deserialize pk column
     for (const auto& primary_key_column : dump_pb.primary_key_column()) {
         TabletSchemaCSPtr tablet_schema = std::make_shared<TabletSchema>(dump_pb.tablet_meta().schema());
-        auto schema_pair = build_pkey_schema(tablet_schema);
+        auto schema_pair = build_pkey_schema(*tablet_schema);
         Schema& pkey_schema = schema_pair.first;
         auto pkey_tschema = schema_pair.second;
         auto chunk_shared_ptr = ChunkHelper::new_chunk(pkey_schema, 4096);
