@@ -274,10 +274,8 @@ public class SimpleSchedulerTest {
         String host = backendA.getHost();
         List<Integer> ports = new ArrayList<Integer>();
         Collections.addAll(ports, backendA.getBePort(), backendA.getBrpcPort(), backendA.getHttpPort());
-        Exception exception = Assert.assertThrows(IllegalArgumentException.class, () -> {
-            NetUtils.checkAccessibleForAllPorts(host, ports);
-        });
-        Assert.assertTrue(exception.getMessage().contains("port out of range:-1"));
+        boolean accessible = NetUtils.checkAccessibleForAllPorts(host, ports);
+        Assert.assertFalse(accessible);
 
         SimpleScheduler.removeFromBlacklist(Long.valueOf(100));
         address = SimpleScheduler.getBackendHost(immutableBackends, ref);
