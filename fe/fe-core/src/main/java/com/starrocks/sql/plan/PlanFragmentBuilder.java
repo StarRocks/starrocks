@@ -833,7 +833,7 @@ public class PlanFragmentBuilder {
                     map(entry -> entry.first).collect(Collectors.toSet()));
 
             scanNode.setUsePkIndex(node.isUsePkIndex());
-            scanNode.setPriority(context.getScanPriorities().get(node));
+            scanNode.setPriority(context.getScanPriorities().getOrDefault(node, -1));
             context.getScanNodes().add(scanNode);
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
