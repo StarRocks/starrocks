@@ -33,7 +33,7 @@ Release date: December 19, 2023
 
 **Features**
 
-Add the open source license as Apache license. [#9](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/9)
+Added Apache License as the open-source software license. [#9](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/9)
 
 #### 1.0.2
 
@@ -41,7 +41,7 @@ Release date: December 14, 2023
 
 **Features**
 
-Support the source data to be of DECIMAL type. [#7](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/7)
+Supports the source data to be of DECIMAL type. [#7](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/7)
 
 #### 1.0.1
 
@@ -49,8 +49,8 @@ Release date: November 28, 2023
 
 **Features**
 
-- Support loading debezium data into Primary key tables. [#4](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/4)
-- Support parsing JSON data without schema registry. [#6](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/6)
+- Supports loading Debezium data into Primary Key tables. [#4](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/4)
+- Supports parsing JSON data without schema registry. [#6](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/6)
 
 #### 1.0.0
 

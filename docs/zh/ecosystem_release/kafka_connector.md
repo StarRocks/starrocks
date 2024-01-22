@@ -41,7 +41,7 @@ displayed_sidebar: "Chinese"
 
 **新增功能**
 
-支持源数据为 Decimal 类型。[#7](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/7)
+支持源数据为 DECIMAL 类型。[#7](https://github.com/StarRocks/starrocks-connector-for-kafka/pull/7)
 
 #### 1.0.1
 
