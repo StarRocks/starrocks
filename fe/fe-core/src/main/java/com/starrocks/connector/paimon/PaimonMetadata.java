@@ -43,7 +43,6 @@ import org.apache.logging.log4j.Logger;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.InternalRow;
-import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.predicate.PredicateBuilder;
 import org.apache.paimon.reader.RecordReader;
@@ -57,7 +56,6 @@ import org.apache.paimon.table.source.StreamTableScan;
 import org.apache.paimon.table.source.TableRead;
 import org.apache.paimon.table.source.TableScan;
 import org.apache.paimon.table.system.FileMonitorTable;
-import org.apache.paimon.table.system.ReadOptimizedTable;
 import org.apache.paimon.table.system.SchemasTable;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
@@ -180,10 +178,6 @@ public class PaimonMetadata implements ConnectorMetadata {
             LOG.error("Get paimon table {}.{} createtime failed, error: {}", dbName, tblName, e);
         }
         PaimonTable table = new PaimonTable(this.catalogName, dbName, tblName, fullSchema, paimonNativeTable, createTime);
-        if (!(paimonNativeTable instanceof AbstractFileStoreTable ||
-                paimonNativeTable instanceof ReadOptimizedTable)) {
-            table.setSystemTable(true);
-        }
         tables.put(identifier, table);
         return table;
     }
@@ -249,12 +243,7 @@ public class PaimonMetadata implements ConnectorMetadata {
     public static long getRowCount(List<? extends Split> splits) {
         long rowCount = 0;
         for (Split split : splits) {
-            if (split instanceof DataSplit) {
-                DataSplit dataSplit = (DataSplit) split;
-                rowCount += dataSplit.dataFiles().stream().map(DataFileMeta::rowCount).reduce(0L, Long::sum);
-            } else {
-                rowCount += split.rowCount();
-            }
+            rowCount += split.rowCount();
         }
         return rowCount;
     }

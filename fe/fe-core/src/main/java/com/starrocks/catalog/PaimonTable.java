@@ -38,8 +38,6 @@ public class PaimonTable extends Table {
     private final org.apache.paimon.table.Table paimonNativeTable;
     private final List<String> partColumnNames;
     private final List<String> paimonFieldNames;
-    private long latestSnapshotId;
-    private boolean isSystemTable = false;
 
     public PaimonTable(String catalogName, String dbName, String tblName, List<Column> schema,
                        org.apache.paimon.table.Table paimonNativeTable, long createTime) {
@@ -53,14 +51,6 @@ public class PaimonTable extends Table {
                 .map(DataField::name)
                 .collect(Collectors.toList());
         this.createTime = createTime;
-    }
-
-    public boolean isSystemTable() {
-        return isSystemTable;
-    }
-
-    public void setSystemTable(boolean systemTable) {
-        isSystemTable = systemTable;
     }
 
     @Override
@@ -152,13 +142,5 @@ public class PaimonTable extends Table {
     @Override
     public int hashCode() {
         return Objects.hash(catalogName, databaseName, tableName, createTime);
-    }
-
-    public long getLatestSnapshotId() {
-        return latestSnapshotId;
-    }
-
-    public void setLatestSnapshotId(long latestSnapshotId) {
-        this.latestSnapshotId = latestSnapshotId;
     }
 }
