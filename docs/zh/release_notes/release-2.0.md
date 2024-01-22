@@ -147,7 +147,7 @@ displayed_sidebar: "Chinese"
 - Broker Load支持华为OBS [#1182](https://github.com/StarRocks/starrocks/pull/1182)
 - 支持国密算法sm3
 - 适配ARM类国产CPU：通过鲲鹏架构验证
-- 主键表正式发布，该类型的表支持Stream Load、Broker Load、Routine Load，同时提供了基于Flink-cdc的MySQL数据的秒级同步工具。[参考文档](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)
+- 主键表正式发布，该类型的表支持 Stream Load、Broker Load、Routine Load，同时提供了基于Flink-cdc的MySQL数据的秒级同步工具。[参考文档](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)
 
 ### 功能优化
 
