@@ -50,6 +50,7 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 采用Range+Hash组合分布的建表语句如下，其中分区键为 `event_day`，分桶键为 `site_id`：
 
+<<<<<<< HEAD
 ```SQL
 CREATE TABLE site_access(
     event_day DATE,
@@ -67,6 +68,100 @@ PARTITION BY RANGE(event_day)
 )
 DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 ```
+=======
+    ```SQL
+    CREATE TABLE site_access1 (
+        event_day DATE,
+        site_id INT DEFAULT '10', 
+        pv BIGINT DEFAULT '0' ,
+        city_code VARCHAR(100),
+        user_name VARCHAR(32) DEFAULT ''
+    )
+    DUPLICATE KEY (event_day,site_id,pv);
+    -- 没有设置任何分区和分桶方式，默认为 Random 分布（目前仅支持明细表）
+    ```
+
+- Hash 分布
+
+    ```SQL
+    CREATE TABLE site_access2 (
+        event_day DATE,
+        site_id INT DEFAULT '10',
+        city_code SMALLINT,
+        user_name VARCHAR(32) DEFAULT '',
+        pv BIGINT SUM DEFAULT '0'
+    )
+    AGGREGATE KEY (event_day, site_id, city_code, user_name)
+    -- 设置分桶方式为哈希分桶，并且必须指定分桶键
+    DISTRIBUTED BY HASH(event_day,site_id); 
+    ```
+
+- Range + Random 分布
+
+    ```SQL
+    CREATE TABLE site_access3 (
+        event_day DATE,
+        site_id INT DEFAULT '10', 
+        pv BIGINT DEFAULT '0' ,
+        city_code VARCHAR(100),
+        user_name VARCHAR(32) DEFAULT ''
+    )
+    DUPLICATE KEY(event_day,site_id,pv)
+    -- 设为分区方式为表达式分区，并且使用时间函数的分区表达式（当然您也可以设置分区方式为 Range 分区）
+    PARTITION BY date_trunc('day', event_day);
+    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细表）
+    ```
+
+- Range + Hash 分布
+
+    ```SQL
+    CREATE TABLE site_access4 (
+        event_day DATE,
+        site_id INT DEFAULT '10',
+        city_code VARCHAR(100),
+        user_name VARCHAR(32) DEFAULT '',
+        pv BIGINT SUM DEFAULT '0'
+    )
+    AGGREGATE KEY(event_day, site_id, city_code, user_name)
+    -- 设为分区方式为表达式分区，并且使用时间函数的分区表达式（当然您也可以设置分区方式为 Range 分区）
+    PARTITION BY date_trunc('day', event_day)
+    -- 设置分桶方式为哈希分桶，必须指定分桶键
+    DISTRIBUTED BY HASH(event_day, site_id);
+    ```
+
+- List + Random 分布
+
+    ```SQL
+    CREATE TABLE t_recharge_detail1 (
+        id bigint,
+        user_id bigint,
+        recharge_money decimal(32,2), 
+        city varchar(20) not null,
+        dt date not null
+    )
+    DUPLICATE KEY(id)
+    -- 设为分区方式为表达式分区，并且使用列分区表达式（当然您也可以设置分区方式为 List 分区）
+    PARTITION BY (city);
+    -- 没有设置分桶方式，默认为随机分桶（目前仅支持明细表）
+    ```
+
+- List + Hash 分布
+
+    ```SQL
+    CREATE TABLE t_recharge_detail2 (
+        id bigint,
+        user_id bigint,
+        recharge_money decimal(32,2), 
+        city varchar(20) not null,
+        dt date not null
+    )
+    DUPLICATE KEY(id)
+    -- 设为分区方式为表达式分区，并且使用列分区表达式（当然您也可以设置分区方式为 List 分区）
+    PARTITION BY (city)
+    -- 设置分桶方式为哈希分桶，并且必须指定分桶键
+    DISTRIBUTED BY HASH(city,id); 
+    ```
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 
 #### 分区
 
@@ -294,9 +389,61 @@ SHOW PARTITIONS FROM site_access;
 
 ### 选择分桶键
 
+<<<<<<< HEAD
 对每个分区的数据，StarRocks 会根据分桶键和分桶数量进行哈希分桶。
 假设存在列同时满足高基数和经常作为查询条件，则优先选择其为分桶键，进行哈希分桶。
 如果不存在这些同时满足两个条件的列，则需要根据查询进行判断。
+=======
+对每个分区的数据，StarRocks 将数据随机地分布在所有分桶中，适用于数据量不大，对查询性能要求不高的场景。如果您不设置分桶方式，则默认由 StarRocks 使用随机分桶，并且自动设置分桶数量。
+
+不过值得注意的是，如果查询海量数据且查询时经常使用一些列会作为条件列，随机分桶提供的查询性能可能不够理想。在该场景下建议您使用[哈希分桶](#哈希分桶)，当查询时经常使用这些列作为条件列时，只需要扫描和计算查询命中的少量分桶，则可以显著提高查询性能。
+
+**使用限制**
+
+- 仅支持明细表。
+- 不支持指定 [Colocation Group](../using_starrocks/Colocate_join.md)。
+- 不支持 [Spark Load](../loading/SparkLoad.md)。
+
+如下建表示例中，没有使用 `DISTRIBUTED BY xxx` 语句，即表示默认由 StarRocks 使用随机分桶，并且由 StarRocks 自动设置分桶数量。
+
+```SQL
+CREATE TABLE site_access1(
+    event_day DATE,
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT ''
+)
+DUPLICATE KEY(event_day,site_id,pv);
+```
+
+当然，如果您比较熟悉 StarRocks 的分桶机制，使用随机分桶建表时，也可以手动设置分桶数量。
+
+```SQL
+CREATE TABLE site_access2(
+    event_day DATE,
+    site_id INT DEFAULT '10', 
+    pv BIGINT DEFAULT '0' ,
+    city_code VARCHAR(100),
+    user_name VARCHAR(32) DEFAULT ''
+)
+DUPLICATE KEY(event_day,site_id,pv)
+DISTRIBUTED BY RANDOM BUCKETS 8; -- 手动设置分桶数量为 8
+```
+
+### 哈希分桶
+
+对每个分区的数据，StarRocks 会根据分桶键和[分桶数量](#设置分桶数量)进行哈希分桶。在哈希分桶中，使用特定的列值作为输入，通过哈希函数计算出一个哈希值，然后将数据根据该哈希值分配到相应的桶中。
+
+**优点**
+
+- 提高查询性能。相同分桶键值的行会被分配到一个分桶中，在查询时能减少扫描数据量。
+- 均匀分布数据。通过选取较高基数（唯一值的数量较多）的列作为分桶键，能更均匀的分布数据到每一个分桶中。
+
+**如何选择分桶键**
+
+假设存在列同时满足高基数和经常作为查询条件，则建议您选择其为分桶键，进行哈希分桶。 如果不存在这些同时满足两个条件的列，则需要根据查询进行判断。
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 
 - 如果查询比较复杂，则建议选择高基数的列为分桶键，保证数据在各个分桶中尽量均衡，提高集群资源利用率。
 - 如果查询比较简单，则建议选择经常作为查询条件的列为分桶键，提高查询效率。
@@ -379,6 +526,7 @@ DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 10;
     ```
 
     ```SQL
+<<<<<<< HEAD
     CREATE TABLE site_access(
         site_id INT DEFAULT '10',
         city_code SMALLINT,
@@ -414,6 +562,14 @@ DISTRIBUTED BY HASH(site_id,city_code) BUCKETS 10;
   - 手动设置分桶数量
 
     您新增分区的时候，也可以手动指定分桶数量。新增分区的分桶数量的计算方式可以参考如上建表时手动设置分桶数量。
+=======
+    ALTER TABLE t DISTRIBUTED BY HASH(k1, k2) BUCKETS 20;
+    -- 如果是 StarRocks 的版本是 3.1及以上，并且使用的是明细表，则建议直接改成默认分桶设置，即随机分桶并且由 StarRocks 自动设置分桶数量
+    ALTER TABLE t DISTRIBUTED BY RANDOM;
+    ```
+
+- 如果表为主键表，当业务的查询模式有较大变化，经常需要用到表中另外几个列作为条件列时，则可以调整排序键。如下：
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 
     ```SQL
     ALTER TABLE <table_name> ADD PARTITION <partition_name>

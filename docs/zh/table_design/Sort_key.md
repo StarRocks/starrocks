@@ -10,15 +10,21 @@ displayed_sidebar: "Chinese"
 
 ## 排序原理
 
-在明细模型中，排序列就是通过 `DUPLICATE KEY` 关键字指定的列。
+在明细表中，排序列就是通过 `DUPLICATE KEY` 关键字指定的列。
 
-在聚合模型中，排序列就是通过 `AGGREGATE KEY` 关键字指定的列。
+在聚合表中，排序列就是通过 `AGGREGATE KEY` 关键字指定的列。
 
-在更新模型中，排序列就是通过 `UNIQUE KEY` 关键字指定的列。
+在更新表中，排序列就是通过 `UNIQUE KEY` 关键字指定的列。
 
+<<<<<<< HEAD
 在主键模型中，排序列就是主键列，通过 `PRIMARY KEY` 关键字指定。
 
 在定义排序列时，需要注意以下几点：
+=======
+自 3.0 版本起，主键表解耦了主键列和排序列，排序列通过 `ORDER BY` 关键字指定，主键列通过 `PRIMARY KEY` 关键字指定。
+
+在明细表、聚合表、更新表中定义排序列时，需要注意以下几点：
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 
 - 排序列必须从定义的第一列开始、并且是连续的。
 
@@ -37,11 +43,11 @@ displayed_sidebar: "Chinese"
   - `city_code` 和 `user_id`
   - `site_id`、`city_code` 和 `pv`
 
-下面通过示例来说明如何创建使用各个数据模型的表，以下建表语句适用于至少部署三个 BE 节点的集群环境下。
+下面通过示例来说明如何创建使用各个类型的表，以下建表语句适用于至少部署三个 BE 节点的集群环境下。
 
-### 明细模型
+### 明细表
 
-创建一个名为 `site_access_duplicate` 的明细模型表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
+创建一个名为 `site_access_duplicate` 的明细表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
 
 建表语句如下：
 
@@ -57,9 +63,17 @@ DUPLICATE KEY(site_id, city_code)
 DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 ```
 
+<<<<<<< HEAD
 ### 聚合模型
+=======
+> **注意**
+>
+> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](./Data_distribution.md#设置分桶数量)。
 
-创建一个名为 `site_access_aggregate` 的聚合模型表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
+### 聚合表
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
+
+创建一个名为 `site_access_aggregate` 的聚合表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
 
 建表语句如下：
 
@@ -77,11 +91,11 @@ DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 
 >**注意**
 >
-> 聚合模型表中，如果某列未指定 `agg_type`，则该列为 Key 列；如果某列指定了 `agg_type`，则该列为 Value 列。参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。上述示例指定排序列为 `site_id` 和 `city_code`，因此必须给 `user_id` 和 `pv` 列分别指定 `agg_type`。
+> 聚合表中，如果某列未指定 `agg_type`，则该列为 Key 列；如果某列指定了 `agg_type`，则该列为 Value 列。参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md)。上述示例指定排序列为 `site_id` 和 `city_code`，因此必须给 `user_id` 和 `pv` 列分别指定 `agg_type`。
 
-### 更新模型
+### 更新表
 
-创建一个名为 `site_access_unique` 的更新模型表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
+创建一个名为 `site_access_unique` 的更新表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
 
 建表语句如下：
 
@@ -97,9 +111,13 @@ UNIQUE KEY(site_id, city_code)
 DISTRIBUTED BY HASH(site_id) BUCKETS 10;
 ```
 
-### 主键模型
+### 主键表
 
+<<<<<<< HEAD
 创建一个名为 `site_access_primary` 的主键模型表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 和 `city_code` 为排序列。
+=======
+创建一个名为 `site_access_primary` 的主键表，包含 `site_id`、`city_code`、`user_id` 和 `pv` 四列，其中 `site_id` 为主键列，`site_id` 和 `city_code` 为排序列。
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 
 建表语句如下：
 

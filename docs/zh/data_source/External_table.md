@@ -1192,6 +1192,47 @@ PROPERTIES (
 SELECT COUNT(*) FROM hudi_tbl;
 ~~~
 
+<<<<<<< HEAD
+=======
+## (Deprecated) MySQL 外部表
+
+星型模型中，数据一般划分为维度表 (dimension table) 和事实表 (fact table)。维度表数据量少，但会涉及 UPDATE 操作。目前 StarRocks 中还不直接支持 UPDATE 操作（可以通过更新表或者主键表实现），在一些场景下，可以把维度表存储在 MySQL 中，查询时直接读取维度表。
+
+在使用 MySQL 的数据之前，需在 StarRocks 创建外部表 (CREATE EXTERNAL TABLE)，与之相映射。StarRocks 中创建 MySQL 外部表时需要指定 MySQL 的相关连接信息，如下所示。
+
+~~~sql
+CREATE EXTERNAL TABLE mysql_external_table
+(
+    k1 DATE,
+    k2 INT,
+    k3 SMALLINT,
+    k4 VARCHAR(2048),
+    k5 DATETIME
+)
+ENGINE=mysql
+PROPERTIES
+(
+    "host" = "127.0.0.1",
+    "port" = "3306",
+    "user" = "mysql_user",
+    "password" = "mysql_passwd",
+    "database" = "mysql_db_test",
+    "table" = "mysql_table_test"
+);
+~~~
+
+参数说明：
+
+* **host**：MySQL 连接地址
+* **port**：MySQL 连接端口号
+* **user**：MySQL 登录用户名
+* **password**：MySQL 登录密码
+* **database**：MySQL 数据库名
+* **table**：MySQL 数据库表名
+
+<br/>
+
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 ## 常见问题
 
 ### StarRocks 外部表同步出错，应该如何解决？

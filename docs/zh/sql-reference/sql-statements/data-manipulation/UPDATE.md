@@ -4,7 +4,7 @@ displayed_sidebar: "Chinese"
 
 # UPDATE
 
-该语句用于更新一张主键模型表中的数据行。
+该语句用于更新一张主键表中的数据行。
 
 2.3 ～ 2.5 版本，StarRocks 提供 UPDATE 语句，并且仅支持单表 UPDATE 且不支持公用表表达式（CTE）。
 

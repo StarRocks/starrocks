@@ -47,7 +47,7 @@ MySQL [(none)]> SHOW DATABASES;
 
 在新建的数据库中创建表。
 
-StarRocks 支持 [多种数据模型](../table_design/table_types/table_types.md)，以适用不同的应用场景。以下示例基于 [明细表模型](../table_design/table_types/duplicate_key_table.md) 编写建表语句。
+StarRocks 支持 [多种表类型](../table_design/table_types/table_types.md)，以适用不同的应用场景。以下示例基于 [明细表](../table_design/table_types/duplicate_key_table.md) 编写建表语句。
 
 更多建表语法，参考 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 。
 
@@ -90,9 +90,9 @@ DISTRIBUTED BY HASH(`recruit_date`, `region_num`);
 
 #### 排序键
 
-StarRocks 表内部组织存储数据时会按照指定列排序，这些列为排序列（Sort Key）。明细模型中由 `DUPLICATE KEY` 指定排序列。以上示例中的 `recruit_date` 以及 `region_num` 两列为排序列。
+StarRocks 表内部组织存储数据时会按照指定列排序，这些列为排序列（Sort Key）。明细表中由 `DUPLICATE KEY` 指定排序列。以上示例中的 `recruit_date` 以及 `region_num` 两列为排序列。
 
-> 注意：排序列在建表时应定义在其他列之前。排序键详细描述以及不同数据模型的表的设置方法请参考 [排序键](../table_design/Sort_key.md)。
+> 注意：排序列在建表时应定义在其他列之前。排序键详细描述以及不同类型表中排序键的设置方法请参考 [排序键](../table_design/Sort_key.md)。
 
 #### 字段类型
 
@@ -108,15 +108,15 @@ StarRocks 表中支持多种字段类型，除以上示例中已经列举的字�
 
 创建表时合理的分区和分桶设计可以优化表的查询性能。有关分区分桶列如何选择，详见 [数据分布](../table_design/Data_distribution.md)。
 
-#### 数据模型
+#### 表类型
 
-`DUPLICATE` 关键字表示当前表为明细模型，`KEY` 中的列表示当前表的排序列。StarRocks 支持多种数据模型，分别为 [明细模型](../table_design/table_types/duplicate_key_table.md)，[聚合模型](../table_design/table_types/aggregate_table.md)，[更新模型](../table_design/table_types/unique_key_table.md)，[主键模型](../table_design/table_types/primary_key_table.md)。不同模型的适用于多种业务场景，合理选择可优化查询效率。
+`DUPLICATE` 关键字表示当前表为明细表，`KEY` 中的列表示当前表的排序列。StarRocks 支持多种表类型，分别为 [明细表](../table_design/table_types/duplicate_key_table.md)，[聚合表](../table_design/table_types/aggregate_table.md)，[更新表](../table_design/table_types/unique_key_table.md)，[主键表](../table_design/table_types/primary_key_table.md)。不同类型的表适用于多种业务场景，合理选择可优化查询效率。
 
 #### 索引
 
 StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [排序键](../table_design/Sort_key.md)。支持的索引类型有 [Bitmap 索引](../using_starrocks/Bitmap_index.md)，[Bloomfilter 索引](../using_starrocks/Bloomfilter_index.md) 等。
 
-> 注意：索引创建对表模型和列有要求，详细说明见对应索引介绍章节。
+> 注意：索引创建对表类型和列有要求，详细说明见对应索引介绍章节。
 
 #### ENGINE 类型
 

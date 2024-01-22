@@ -118,9 +118,9 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 
 1. BITMAP_UNION 聚合类型列在导入时的原始数据类型必须是 `TINYINT, SMALLINT, INT, BIGINT`。
 2. 如果在建表时 `REPLACE_IF_NOT_NULL` 列指定了 NOT NULL，那么 StarRocks 仍然会将其转化 NULL，不会向用户报错。用户可以借助这个类型完成「部分列导入」的功能。
-  该类型只对聚合模型有用 (`key_desc` 的 `type` 为 `AGGREGATE KEY`)。
+  该类型只对聚合表有用 (`key_desc` 的 `type` 为 `AGGREGATE KEY`)。
 
-**NULL | NOT NULL**：列数据是否允许为 `NULL`。其中明细模型、聚合模型和更新模型表中所有列都默认指定 `NULL`。主键模型表的指标列默认指定 `NULL`，维度列默认指定 `NOT NULL`。如源数据文件中存在 `NULL` 值，可以用 `\N` 来表示，导入时 StarRocks 会将其解析为 `NULL`。
+**NULL | NOT NULL**：列数据是否允许为 `NULL`。其中明细表、聚合表和更新表中所有列都默认指定 `NULL`。主键表的指标列默认指定 `NULL`，维度列默认指定 `NOT NULL`。如源数据文件中存在 `NULL` 值，可以用 `\N` 来表示，导入时 StarRocks 会将其解析为 `NULL`。
 
 **DEFAULT "default_value"**：列数据的默认值。导入数据时，如果该列对应的源数据文件中的字段为空，则自动填充 `DEFAULT` 关键字中指定的默认值。支持以下三种指定方式：
 
@@ -423,12 +423,52 @@ DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
 
 更多选择分桶键的信息，请参见[选择分桶键](../../../table_design/Data_distribution.md#选择分桶键).
 
+<<<<<<< HEAD
 **注意**
 
 * **建表时，必须指定分桶键**。
 * 作为分桶键的列，该列的值不支持更新。
 * 分桶键指定后不支持修改。
 * 自 2.5.0 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[确定分桶数量](../../../table_design/Data_distribution.md#确定分桶数量)。
+=======
+  * 不支持主键表、更新表和聚合表。
+  * 不支持指定 [Colocation Group](../../../using_starrocks/Colocate_join.md)。
+  * 不支持 [Spark Load](../../../loading/SparkLoad.md)。
+  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
+
+  更多随机分桶的信息，请参见[随机分桶](../../../table_design/Data_distribution.md#随机分桶自-v31)。
+
+* 哈希分桶
+
+  语法：
+
+  ```SQL
+  DISTRIBUTED BY HASH (k1[,k2 ...]) [BUCKETS num]
+  ```
+
+  对每个分区的数据，StarRocks 会根据分桶键和分桶数量进行哈希分桶。
+
+  对于分桶键的选择，如果列是高基数且经常作为查询条件，则优先选择其为分桶键，进行哈希分桶。
+  如果不存在同时满足两个条件的列，则需要根据查询进行判断。
+  * 如果查询比较复杂，则建议选择高基数的列为分桶键，保证数据在各个分桶中尽量均衡，提高集群资源利用率。
+  * 如果查询比较简单，则建议选择经常作为查询条件的列为分桶键，提高查询效率。
+  并且，如果数据倾斜情况严重，您还可以使用多个列作为数据的分桶键，但是建议不超过 3 个列。
+  更多选择分桶键的信息，请参见[选择分桶键](../../../table_design/Data_distribution.md#哈希分桶).
+
+  **注意事项**
+
+  * **建表时，必须指定分桶键**。
+  * 作为分桶键的列，该列的值不支持更新。
+  * 分桶键指定后不支持修改。
+  * 自 2.5.7 版本起，建表时**无需手动指定分桶数量**，StarRocks 自动设置分桶数量。如果您需要手动设置分桶数量，请参见[设置分桶数量](../../../table_design/Data_distribution.md#设置分桶数量)。
+
+### **ORDER BY**
+
+自 3.0 版本起，主键表解耦了主键和排序键，排序键通过 `ORDER BY` 指定，可以为任意列的排列组合。
+> **注意**
+>
+> 如果指定了排序键，就根据排序键构建前缀索引；如果没指定排序键，就根据主键构建前缀索引。
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 
 ### **PROPERTIES**
 
@@ -464,15 +504,46 @@ PROPERTIES (
 
 说明：
 
+<<<<<<< HEAD
 * 当表为单分区表时，以上属性为表的属性。
 * 当表为两级分区时，以上属性属于每一个分区。
 * 如果希望不同分区有不同属性，可以通过 ADD PARTITION 或 MODIFY PARTITION 命令进行操作，具体参见[ALTER TABLE](../data-definition/ALTER_TABLE.md)。
+=======
+  * `storage_cooldown_time`：该表自动降冷**时间点**（绝对时间）。数据在该时间点之后数据从 SSD 自动降冷到 HDD，设置的时间必须大于当前时间。取值格式为："yyyy-MM-dd HH:mm:ss"。如果需要不同分区具有不同自动降冷时间点，则需要执行 [ALTER TABLE ... ADD PARTITION 或 ALTER TABLE ... MODIFY PARTITION](../data-definition/ALTER_TABLE.md) 手动指定。
+
+  **使用说明**
+
+  * 目前 StarRocks 提供如下数据自动降冷的相关参数，对比如下：
+    * `storage_cooldown_ttl`：表的属性，指定该表中分区自动降冷时间间隔，由系统自动降冷表中到达时间点（时间间隔+分区时间上界）的分区。并且表按照分区粒度自动降冷，更加灵活。
+    * `storage_cooldown_time`：表的属性，指定该表的自动降冷时间点（绝对时间）。建表后也可以为不同分区配置不同时间点。
+    * `storage_cooldown_second`：FE 静态参数，指定集群范围内所有表的自动降冷时延。
+  * 表属性 `storage_cooldown_ttl` 或 `storage_cooldown_time` 比 FE 静态参数 `storage_cooldown_second` 优先级高。
+  * 配置以上参数时，必须指定 `"storage_medium = "SSD"`。
+  * 不配置以上参数时，则不进行自动降冷。
+  * 执行 `SHOW PARTITIONS FROM <table_name>` 查看各个分区的自动降冷时间点。
+
+  **限制**
+  * 不支持表达式分区和 List 分区。
+  * 不支持分区列为非日期类型。
+  * 不支持多个分区列。
+  * 不支持主键表。
+
+**设置分区 Tablet 副本数**
+
+`replication_num`：分区 Tablet 副本数。默认为 3。
+
+```sql
+PROPERTIES (
+    "replication_num" = "<num>"
+)
+```
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 
 #### 创建表时为列添加 bloom filter 索引
 
 如果 Engine 类型为 olap, 可以指定某列使用 bloom filter 索引。bloom filter 索引使用时有如下限制：
 
-* 主键模型和明细模型中所有列都可以创建 Bloom filter 索引；聚合模型和更新模型中，只有维度列（即 Key 列）支持创建 Bloom filter 索引。
+* 主键表和明细表中所有列都可以创建 Bloom filter 索引；聚合表和更新表中，只有维度列（即 Key 列）支持创建 Bloom filter 索引。
 * 不支持为 TINYINT、FLOAT、DOUBLE 和 DECIMAL 类型的列创建 Bloom filter 索引。
 * Bloom filter 索引只能提高查询条件为 `in` 和 `=` 的查询效率，值越分散效果越好。
 
@@ -574,6 +645,80 @@ ROLLUP (rollup_name (column_name1, column_name2, ...)
 [PROPERTIES ("key" = "value", ...)],...)
 ```
 
+<<<<<<< HEAD
+=======
+#### 为 View Delta Join 查询改写定义 Unique Key 和外键约束
+
+要在 View Delta Join 场景中启用查询重写，您必须为 Delta Join 中的表定义 Unique Key 约束 `foreign_key_constraints` 和外键约束 `foreign_key_constraints`。详细信息，请参阅 [异步物化视图 - 基于 View Delta Join 场景改写查询](../../../using_starrocks/query_rewrite_with_materialized_views.md#view-delta-join-改写)。
+
+```SQL
+PROPERTIES (
+    "unique_constraints" = "<unique_key>[, ...]",
+    "foreign_key_constraints" = "
+    (<child_column>[, ...]) 
+    REFERENCES 
+    [catalog_name].[database_name].<parent_table_name>(<parent_column>[, ...])
+    [;...]
+    "
+)
+```
+
+* `child_column`：当前表中的外键列。 您可以定义多个 `child_column`。
+* `catalog_name`：待 Join 表所在的数据目录名。未指定此参数时使用默认目录。
+* `database_name`：待 Join 表所在的数据库名。未指定此参数时使用当前数据库。
+* `parent_table_name`：待 Join 表名。
+* `parent_column`：待 Join 列名，必须为相应表的 Primary Key 或 Unique Key。
+
+> **注意**
+>
+> * `unique_constraints` 约束和 `foreign_key_constraints` 约束仅用于查询重写。导入数据时，不保证进行外键约束校验。您必须确保导入的数据满足约束条件。
+> * 主键表的 Primary Key 或更新表的 Unique Key 默认是其 `unique_constraints`，您无需手动设置。
+> * `foreign_key_constraints` 中的 `child_column` 必须对应另一个表的 `unique_constraints` 中的 `unique_key`。
+> * `child_column` 和 `parent_column` 的数量必须一致。
+> * `child_column` 和对应的 `parent_column` 的数据类型必须匹配。
+
+#### 为 StarRocks 存算分离集群创建云原生表
+
+为了[使用 StarRocks 存算分离集群](../../../deployment/shared_data/s3.md)，您需要通过以下 PROPERTIES 创建云原生表：
+
+```SQL
+PROPERTIES (
+    "datacache.enable" = "{ true | false }",
+    "datacache.partition_duration" = "<string_value>",
+    "enable_async_write_back" = "{ true | false }"
+)
+```
+
+* `datacache.enable`：是否启用本地磁盘缓存。默认值：`true`。
+
+  * 当该属性设置为 `true` 时，数据会同时导入对象存储（或 HDFS）和本地磁盘（作为查询加速的缓存）。
+  * 当该属性设置为 `false` 时，数据仅导入到对象存储中。
+
+  > **说明**
+  >
+  > 如需启用本地磁盘缓存，必须在 BE 配置项 `storage_root_path` 中指定磁盘目录。更多信息，请参见 [BE 配置项](../../../administration/BE_configuration.md)。
+
+* `datacache.partition_duration`：热数据的有效期。当启用本地磁盘缓存时，所有数据都会导入至本地磁盘缓存中。当缓存满时，StarRocks 会从缓存中删除最近较少使用（Less recently used）的数据。当有查询需要扫描已删除的数据时，StarRocks 会检查该数据是否在有效期内。如果数据在有效期内，StarRocks 会再次将数据导入至缓存中。如果数据不在有效期内，StarRocks 不会将其导入至缓存中。该属性为字符串，您可以使用以下单位指定：`YEAR`、`MONTH`、`DAY` 和 `HOUR`，例如，`7 DAY` 和 `12 HOUR`。如果不指定，StarRocks 将所有数据都作为热数据进行缓存。
+
+  > **说明**
+  >
+  > 仅当 `datacache.enable` 设置为 `true` 时，此属性可用。
+
+* `enable_async_write_back`：是否允许数据异步写入对象存储。默认值：`false`。
+
+  * 当该属性设置为 `true` 时，导入任务在数据写入本地磁盘缓存后立即返回成功，数据将异步写入对象存储。允许数据异步写入可以提升导入性能，但如果系统发生故障，可能会存在一定的数据可靠性风险。
+  * 当该属性设置为 `false` 时，只有在数据同时写入对象存储和本地磁盘缓存后，导入任务才会返回成功。禁用数据异步写入保证了更高的可用性，但会导致较低的导入性能。
+
+#### 设置 fast schema evolution
+
+`fast_schema_evolution`: 是否开启该表的 fast schema evolution，取值：`TRUE` 或 `FALSE`（默认）。开启后增删列时可以提高 schema change 速度并降低资源使用。目前仅支持在建表时开启该属性，建表后不支持通过 [ALTER TABLE](../data-definition/ALTER_TABLE.md) 修改该属性。自 3.2.0 版本起，支持该参数。
+
+> **NOTE**
+>
+> * StarRocks 存算分离集群不支持该参数。
+> * 如果您需要在集群范围内设置该配置，例如集群范围内关闭 fast schema evolution，则可以设置 FE 动态参数 [`enable_fast_schema_evolution`](../../../administration/FE_configuration.md#enable_fast_schema_evolution)。
+
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 ## 示例
 
 ### 创建 Hash 分桶表并根据 key 列对数据进行聚合
@@ -862,7 +1007,38 @@ PROPERTIES
 );
 ```
 
+<<<<<<< HEAD
 ## 参考文档
+=======
+### 创建一张主键表并且指定排序键
+
+假设需要按地域、最近活跃时间实时分析用户情况，则可以将表示用户 ID 的 `user_id` 列作为主键，表示地域的 `address` 列和表示最近活跃时间的 `last_active` 列作为排序键。建表语句如下：
+
+```SQL
+create table users (
+    user_id bigint NOT NULL,
+    name string NOT NULL,
+    email string NULL,
+    address string NULL,
+    age tinyint NULL,
+    sex tinyint NULL,
+    last_active datetime,
+    property0 tinyint NOT NULL,
+    property1 tinyint NOT NULL,
+    property2 tinyint NOT NULL,
+    property3 tinyint NOT NULL
+) 
+PRIMARY KEY (`user_id`)
+DISTRIBUTED BY HASH(`user_id`)
+ORDER BY(`address`,`last_active`)
+PROPERTIES(
+    "replication_num" = "3",
+    "enable_persistent_index" = "true"
+);
+```
+
+## References
+>>>>>>> 53dc0006b6 ([Doc] change the Chinese proper name "data model" to table type  (#39474))
 
 * [SHOW CREATE TABLE](../data-manipulation/SHOW_CREATE_TABLE.md)
 * [SHOW TABLES](../data-manipulation/SHOW_TABLES.md)

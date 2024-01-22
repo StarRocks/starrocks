@@ -10,13 +10,13 @@ displayed_sidebar: "Chinese"
 
 您可以在建表阶段通过以下方式优化 StarRocks 性能。
 
-### 选择数据模型
+### 选择表类型
 
-StarRocks 支持四种数据模型：主键模型 (PRIMARY KEY)，聚合模型 (AGGREGATE KEY)，更新模型 (UNIQUE KEY)，以及明细模型 (DUPLICATE KEY)。四种模型中数据都是依据 KEY 进行排序。
+StarRocks 支持四种表类型：主键表 (PRIMARY KEY)，聚合表 (AGGREGATE KEY)，更新表 (UNIQUE KEY)，以及明细表 (DUPLICATE KEY)。四种类型的表中数据都是依据 KEY 进行排序。
 
-* **AGGREGATE KEY 模型**
+* **聚合表**
 
-    AGGREGATE KEY 相同时，新旧记录被聚合，目前支持的聚合函数有 SUM，MIN，MAX，以及 REPLACE。AGGREGATE KEY 模型可以提前聚合数据，适合报表和多维分析业务。
+    聚合表中，如果新写入的记录的 Key 列与表中的旧记录相同时，新旧记录被聚合，目前支持的聚合函数有 SUM，MIN，MAX，以及 REPLACE。聚合表可以提前聚合数据，适合报表和多维分析业务。
 
     ```sql
     CREATE TABLE site_visit
@@ -30,9 +30,9 @@ StarRocks 支持四种数据模型：主键模型 (PRIMARY KEY)，聚合模型 (
     DISTRIBUTED BY HASH(siteid) BUCKETS 10;
     ```
 
-* **UNIQUE KEY 模型**
+* **更新表 (UNIQUE KEY)**
 
-    UNIQUE KEY 相同时，新记录覆盖旧记录。目前 UNIQUE KEY 的实现与 AGGREGATE KEY 的 REPLACE 聚合方法一样，二者本质上可以认为相同。UNIQUE KEY 模型适用于有更新的分析业务。
+    更新表中，如果新写入的记录的 Key 列与表中的旧记录相同时，则新记录会覆盖旧记录。目前 UNIQUE KEY 的实现与 AGGREGATE KEY 的 REPLACE 聚合方法一样，二者本质上可以认为相同。更新表适用于有更新的分析业务。
 
     ```sql
     CREATE TABLE sales_order
@@ -46,9 +46,9 @@ StarRocks 支持四种数据模型：主键模型 (PRIMARY KEY)，聚合模型 (
     DISTRIBUTED BY HASH(orderid) BUCKETS 10;
     ```
 
-* **DUPLICATE KEY 模型**
+* **明细表 (DUPLICATE KEY)**
 
-    DUPLICATE KEY 只用于排序，相同 DUPLICATE KEY 的记录会同时存在。DUPLICATE KEY 模型适用于数据无需提前聚合的分析业务。
+    明细表只用于排序，相同 DUPLICATE KEY 的记录会同时存在。明细表适用于数据无需提前聚合的分析业务。
 
     ```sql
     CREATE TABLE session_data
@@ -66,9 +66,9 @@ StarRocks 支持四种数据模型：主键模型 (PRIMARY KEY)，聚合模型 (
     DISTRIBUTED BY HASH(sessionid, visitorid) BUCKETS 10;
     ```
 
-* **PRIMARY KEY 模型**
+* **主键表 (PRIMARY KEY)**
 
-    PRIMARY KEY 模型保证同一个主键下仅存在一条记录。相对于更新模型，主键模型在查询时不需要执行聚合操作，并且支持谓词和索引下推，能够在支持实时和频繁更新等场景的同时，提供高效查询。
+    主键表保证同一个主键下仅存在一条记录。相对于更新表，主键表在查询时不需要执行聚合操作，并且支持谓词和索引下推，能够在支持实时和频繁更新等场景的同时，提供高效查询。
 
     ```sql
     CREATE TABLE orders (
@@ -118,7 +118,7 @@ StarRocks 支持选择更灵活的星型模型 (star schema) 来替代传统建�
 
 * 维度更新成本更高。宽表中，维度信息更新会反应到整张表中，其更新的频率直接影响查询的效率。
 * 维护成本更高。宽表的建设需要额外的开发工作、存储空间和数据 Backfill 成本。
-* 导入成本更高。宽表的 Schema 字段数较多，聚合模型中可能包含更多 Key 列，其导入过程中需要排序的列会增加，进而导致导入时间变长。
+* 导入成本更高。宽表的 Schema 字段数较多，聚合表中可能包含更多 Key 列，其导入过程中需要排序的列会增加，进而导致导入时间变长。
 
 建议您优先使用星型模型，可以在保证灵活的基础上获得高效的指标分析效果。但如果您的业务对于高并发或者低延迟有较高的要求，您仍可以选择宽表模型进行加速。StarRocks 提供与 ClickHouse 相当的宽表查询性能。
 
@@ -152,7 +152,7 @@ StarRocks 支持对数据进行有序存储，在数据有序的基础上为其�
 
 ### 使用倒排索引
 
-StarRocks 支持倒排索引，采用位图技术构建索引（Bitmap Index）。您可以将索引应用在 DUPLICATE KEY 数据模型的所有列和 AGGREGATE KEY 和 UNIQUE KEY 模型的 Key 列上。位图索引适合取值空间较小的列，例如性别、城市、省份等信息列上。随着取值空间的增加，位图索引会同步膨胀。
+StarRocks 支持倒排索引，采用位图技术构建索引（Bitmap Index）。您可以将索引应用在明细表的所有列、聚合表和更新表的 Key 列上。位图索引适合取值空间较小的列，例如性别、城市、省份等信息列上。随着取值空间的增加，位图索引会同步膨胀。
 
 ### 使用物化视图
 
