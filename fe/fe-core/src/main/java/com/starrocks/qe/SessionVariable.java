@@ -445,6 +445,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     }
     public static final String FOLLOWER_QUERY_FORWARD_MODE = "follower_query_forward_mode";
 
+    public static final String ENABLE_ARRAY_DISTINCT_AFTER_AGG_OPT = "enable_array_distinct_after_agg_opt";
+
     public enum MaterializedViewRewriteMode {
         DISABLE,            // disable materialized view rewrite
         DEFAULT,            // default, choose the materialized view or not by cost optimizer
@@ -1579,6 +1581,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public boolean isCboDecimalCastStringStrict() {
         return cboDecimalCastStringStrict;
     }
+
+    @VarAttr(name = ENABLE_ARRAY_DISTINCT_AFTER_AGG_OPT)
+    private boolean enableArrayDistinctAfterAggOpt = true;
 
     public String getCboEqBaseType() {
         return cboEqBaseType;
@@ -3027,6 +3032,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableStrictOrderBy(boolean enableStrictOrderBy) {
         this.enableStrictOrderBy = enableStrictOrderBy;
+    }
+
+    public boolean getEnableArrayDistinctAfterAggOpt() {
+        return  enableArrayDistinctAfterAggOpt;
     }
 
     // Serialize to thrift object
