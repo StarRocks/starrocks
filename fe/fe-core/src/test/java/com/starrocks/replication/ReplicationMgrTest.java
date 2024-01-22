@@ -61,6 +61,8 @@ public class ReplicationMgrTest {
     private static Database db;
     private static OlapTable table;
     private static OlapTable srcTable;
+    private static Partition partition;
+    private static Partition srcPartition;
     private ReplicationJob job;
     private ReplicationMgr replicationMgr;
 
@@ -80,8 +82,10 @@ public class ReplicationMgrTest {
                 AnalyzeTestUtil.getConnectContext());
         GlobalStateMgr.getCurrentState().createTable(createTableStmt);
         table = (OlapTable) db.getTable("single_partition_duplicate_key");
-
         srcTable = DeepCopy.copyWithGson(table, OlapTable.class);
+
+        partition = table.getPartitions().iterator().next();
+        srcPartition = srcTable.getPartitions().iterator().next();
 
         new MockUp<AgentTaskExecutor>() {
             @Mock
@@ -93,12 +97,11 @@ public class ReplicationMgrTest {
 
     @Before
     public void setUp() throws Exception {
-        Partition partition = table.getPartitions().iterator().next();
-        Partition srcPartition = srcTable.getPartitions().iterator().next();
         partition.updateVersionForRestore(10);
-        srcPartition.updateVersionForRestore(partition.getCommittedVersion() + 100);
+        srcPartition.updateVersionForRestore(100);
 
-        job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable, GlobalStateMgr.getCurrentSystemInfo());
+        job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
+                GlobalStateMgr.getCurrentSystemInfo());
         replicationMgr = new ReplicationMgr();
         replicationMgr.addReplicationJob(job);
     }
@@ -151,6 +154,8 @@ public class ReplicationMgrTest {
 
         replicationMgr.runAfterCatalogReady();
         Assert.assertEquals(ReplicationJobState.COMMITTED, job.getState());
+
+        Assert.assertEquals(partition.getCommittedVersion(), srcPartition.getVisibleVersion());
 
         replicationMgr.replayReplicationJob(job);
     }
