@@ -36,7 +36,7 @@ Status SpillableChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr
     bool first_time_spill = _spiller->spilled_append_rows() == 0;
     CHECK(!_spill_channel->has_task());
 
-    RETURN_IF_ERROR(_spiller->spill(state, chunk, io_executor(), TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
+    RETURN_IF_ERROR(_spiller->spill(state, chunk, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
 
     if (first_time_spill) {
         auto process_task = _spill_process_task();
@@ -44,7 +44,7 @@ Status SpillableChunksSorterFullSort::update(RuntimeState* state, const ChunkPtr
             auto chunk_st = process_task();
             if (chunk_st.ok()) {
                 if (!chunk_st.value()->is_empty()) {
-                    RETURN_IF_ERROR(_spiller->spill(state, chunk_st.value(), io_executor(),
+                    RETURN_IF_ERROR(_spiller->spill(state, chunk_st.value(),
                                                     TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
                 }
             } else if (chunk_st.status().is_end_of_file()) {
@@ -66,14 +66,14 @@ Status SpillableChunksSorterFullSort::do_done(RuntimeState* state) {
 
     if (_sorted_chunks.empty() && _unsorted_chunk == nullptr && _staging_unsorted_chunks.empty()) {
         // force flush
-        RETURN_IF_ERROR(_spiller->flush(state, io_executor(), TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
+        RETURN_IF_ERROR(_spiller->flush(state, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
     } else {
         // TODO: avoid sort multi times
         // spill sorted chunks
         auto spill_process_task = _spill_process_task();
         _spill_channel->add_spill_task({std::move(spill_process_task)});
         std::function<StatusOr<ChunkPtr>()> flush_task = [this, state]() -> StatusOr<ChunkPtr> {
-            RETURN_IF_ERROR(_spiller->flush(state, io_executor(), TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
+            RETURN_IF_ERROR(_spiller->flush(state, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
             return Status::EndOfFile("eos");
         };
         _spill_channel->add_spill_task({std::move(flush_task)});
@@ -158,7 +158,7 @@ std::function<StatusOr<ChunkPtr>()> SpillableChunksSorterFullSort::_spill_proces
 }
 
 Status SpillableChunksSorterFullSort::_get_result_from_spiller(ChunkPtr* chunk, bool* eos) {
-    auto chunk_st = _spiller->restore(_state, io_executor(), TRACKER_WITH_SPILLER_GUARD(_state, _spiller));
+    auto chunk_st = _spiller->restore(_state, TRACKER_WITH_SPILLER_GUARD(_state, _spiller));
     if (chunk_st.status().is_end_of_file()) {
         *eos = true;
     }

@@ -49,11 +49,14 @@ public:
         _stream = std::move(stream);
     }
 
-    template <class TaskExecutor, class MemGuard>
-    StatusOr<ChunkPtr> restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    template <class MemGuard>
+    StatusOr<ChunkPtr> restore(RuntimeState* state, MemGuard&& guard);
 
-    template <class TaskExecutor, class MemGuard>
-    [[nodiscard]] Status trigger_restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    template <class MemGuard>
+    Status trigger_restore(RuntimeState* state, MemGuard&& guard);
+
+    template <class MemGuard>
+    StatusOr<ChunkPtr> sync_restore(RuntimeState* state, MemGuard&& guard);
 
     bool has_output_data() { return _stream && _stream->is_ready(); }
 
@@ -146,11 +149,11 @@ public:
         return _decrease_running_flush_tasks();
     }
 
-    template <class TaskExecutor, class MemGuard>
-    Status spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard);
+    template <class MemGuard>
+    Status spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard);
 
-    template <class TaskExecutor, class MemGuard>
-    Status flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    template <class MemGuard>
+    Status flush(RuntimeState* state, MemGuard&& guard);
 
     void prepare(RuntimeState* state) override;
 
@@ -240,14 +243,14 @@ public:
         return _decrease_running_flush_tasks();
     }
 
-    template <class TaskExecutor, class MemGuard>
-    Status spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard);
+    template <class MemGuard>
+    Status spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard);
 
-    template <class TaskExecutor, class MemGuard>
-    Status flush(RuntimeState* state, bool is_final_flush, TaskExecutor&& executor, MemGuard&& guard);
+    template <class MemGuard>
+    Status flush(RuntimeState* state, bool is_final_flush, MemGuard&& guard);
 
-    template <class TaskExecutor, class MemGuard>
-    Status flush_if_full(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    template <class MemGuard>
+    Status flush_if_full(RuntimeState* state, MemGuard&& guard);
 
     void get_spill_partitions(std::vector<const SpillPartitionInfo*>* partitions) override;
 

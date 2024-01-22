@@ -105,7 +105,7 @@ bool SpillableHashJoinProbeOperator::has_output() const {
             } else if (!_current_reader[i]->has_restore_task()) {
                 // if trigger_restore returns error, should record this status and return it in pull_chunk
                 _update_status(_current_reader[i]->trigger_restore(
-                        runtime_state(), *_executor,
+                        runtime_state(),
                         RESOURCE_TLS_MEMTRACER_GUARD(runtime_state(), std::weak_ptr(_current_reader[i]))));
                 if (!_status().ok()) {
                     return true;
@@ -200,7 +200,6 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
         res->fnv_hash(hash_values.data(), 0, num_rows);
     }
 
-    auto& executor = _join_builder->io_executor();
     auto partition_processer = [&chunk, this, state, &hash_values](spill::SpilledPartition* probe_partition,
                                                                    const std::vector<uint32_t>& selection, int32_t from,
                                                                    int32_t size) {
@@ -233,7 +232,7 @@ Status SpillableHashJoinProbeOperator::_push_probe_chunk(RuntimeState* state, co
         }
         probe_partition->num_rows += size;
     };
-    RETURN_IF_ERROR(_probe_spiller->partitioned_spill(state, chunk, hash_column.get(), partition_processer, executor,
+    RETURN_IF_ERROR(_probe_spiller->partitioned_spill(state, chunk, hash_column.get(), partition_processer,
                                                       TRACKER_WITH_SPILLER_GUARD(state, _probe_spiller)));
 
     return Status::OK();
@@ -260,9 +259,9 @@ Status SpillableHashJoinProbeOperator::_load_partition_build_side(workgroup::Yie
             if (state->is_cancelled()) {
                 return Status::Cancelled("cancelled");
             }
-
-            RETURN_IF_ERROR(reader->trigger_restore(state, SyncTaskExecutor{}, MemTrackerGuard(tls_mem_tracker)));
-            auto chunk_st = reader->restore(state, SyncTaskExecutor{}, MemTrackerGuard(tls_mem_tracker));
+            // @TODO change to sync_restore interface
+            
+            auto chunk_st = reader->sync_restore(state, MemTrackerGuard(tls_mem_tracker));
 
             if (chunk_st.ok() && chunk_st.value() != nullptr && !chunk_st.value()->is_empty()) {
                 int64_t old_mem_usage = hash_table_mem_usage;
@@ -350,11 +349,11 @@ Status SpillableHashJoinProbeOperator::_restore_probe_partition(RuntimeState* st
         if (_probe_read_eofs[i]) continue;
         if (!_current_reader[i]->has_restore_task()) {
             RETURN_IF_ERROR(_current_reader[i]->trigger_restore(
-                    state, *_executor, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_current_reader[i]))));
+                    state,RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_current_reader[i]))));
         }
         if (_current_reader[i]->has_output_data()) {
             auto chunk_st = _current_reader[i]->restore(
-                    state, *_executor, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_current_reader[i])));
+                    state,  RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_current_reader[i])));
             if (chunk_st.ok() && chunk_st.value() && !chunk_st.value()->is_empty()) {
                 RETURN_IF_ERROR(_probers[i]->push_probe_chunk(state, std::move(chunk_st.value())));
             } else if (chunk_st.status().is_end_of_file()) {

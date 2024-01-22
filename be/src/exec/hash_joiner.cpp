@@ -183,7 +183,7 @@ Status HashJoiner::append_chunk_to_ht(const ChunkPtr& chunk) {
 Status HashJoiner::append_chunk_to_spill_buffer(RuntimeState* state, const ChunkPtr& chunk) {
     update_build_rows(chunk->num_rows());
     auto io_executor = spill_channel()->io_executor();
-    RETURN_IF_ERROR(spiller()->spill(state, chunk, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller())));
+    RETURN_IF_ERROR(spiller()->spill(state, chunk, TRACKER_WITH_SPILLER_GUARD(state, spiller())));
     return Status::OK();
 }
 
@@ -192,7 +192,7 @@ Status HashJoiner::append_spill_task(RuntimeState* state, std::function<StatusOr
     while (!spiller()->is_full()) {
         auto chunk_st = spill_task();
         if (chunk_st.ok()) {
-            RETURN_IF_ERROR(spiller()->spill(state, chunk_st.value(), io_executor(),
+            RETURN_IF_ERROR(spiller()->spill(state, chunk_st.value(),
                                              TRACKER_WITH_SPILLER_GUARD(state, spiller())));
         } else if (chunk_st.status().is_end_of_file()) {
             return Status::OK();

@@ -106,6 +106,7 @@ struct IOTaskExecutor {
         }
     }
 };
+using IOTaskExecutorPtr = std::shared_ptr<IOTaskExecutor>;
 
 struct SyncTaskExecutor {
     template <class Func>

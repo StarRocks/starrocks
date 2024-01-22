@@ -122,7 +122,7 @@ StatusOr<ChunkPtr> SpillableAggregateBlockingSourceOperator::_pull_spilled_chunk
         DCHECK(_accumulator.need_input());
         auto executor = _aggregator->spill_channel()->io_executor();
         ASSIGN_OR_RETURN(auto chunk,
-                         spiller->restore(state, *executor, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller)));
+                         spiller->restore(state, TRACKER_WITH_SPILLER_READER_GUARD(state, spiller)));
         if (chunk->is_empty()) {
             return chunk;
         }

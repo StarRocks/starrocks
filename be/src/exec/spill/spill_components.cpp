@@ -605,14 +605,15 @@ Status PartitionedSpillerWriter::_split_partition(workgroup::YieldContext& yield
         while (true) {
             {
                 SCOPED_RAW_TIMER(&yield_ctx.time_spent_ns);
-                RETURN_IF_ERROR(reader->trigger_restore(_runtime_state, SyncTaskExecutor{}, EmptyMemGuard{}));
-                if (!reader->has_output_data()) {
-                    break;
-                }
-                ASSIGN_OR_RETURN(auto chunk, reader->restore(_runtime_state, SyncTaskExecutor{}, EmptyMemGuard{}));
+                ASSIGN_OR_RETURN(auto chunk, reader->sync_restore(_runtime_state, EmptyMemGuard{}));
                 if (chunk->is_empty()) {
                     continue;
                 }
+                if (!reader->has_output_data()) {
+                    LOG(INFO) << "no output data, break";
+                    break;
+                }
+    
                 auto hash_column = down_cast<SpillHashColumn*>(chunk->columns().back().get());
                 const auto& hash_data = hash_column->get_data();
                 // hash data

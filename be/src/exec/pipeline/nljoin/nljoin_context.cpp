@@ -49,7 +49,7 @@ Status NJJoinBuildInputChannel::add_chunk_to_spill_buffer(RuntimeState* state, C
     _num_rows += build_chunk->num_rows();
     RETURN_IF_ERROR(_accumulator.push(std::move(build_chunk)));
     if (auto chunk = _accumulator.pull()) {
-        RETURN_IF_ERROR(_spiller->spill(state, chunk, executor, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
+        RETURN_IF_ERROR(_spiller->spill(state, chunk, TRACKER_WITH_SPILLER_GUARD(state, _spiller)));
     }
 
     return Status::OK();
@@ -69,7 +69,7 @@ void NJJoinBuildInputChannel::close() {
 }
 
 Status SpillableNLJoinChunkStream::prefetch(RuntimeState* state, spill::IOTaskExecutor& executor) {
-    return _reader->trigger_restore(state, executor, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
+    return _reader->trigger_restore(state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
 }
 
 bool SpillableNLJoinChunkStream::has_output() {
@@ -77,7 +77,7 @@ bool SpillableNLJoinChunkStream::has_output() {
 }
 
 StatusOr<ChunkPtr> SpillableNLJoinChunkStream::get_next(RuntimeState* state, spill::IOTaskExecutor& executor) {
-    return _reader->restore(state, executor, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
+    return _reader->restore(state, RESOURCE_TLS_MEMTRACER_GUARD(state, std::weak_ptr(_reader)));
 }
 
 Status SpillableNLJoinChunkStream::reset(RuntimeState* state, spill::Spiller* dummy_spiller) {

@@ -95,7 +95,7 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
 
     auto flush_function = [this](RuntimeState* state, auto io_executor) {
         auto& spiller = _join_builder->spiller();
-        return spiller->flush(state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
+        return spiller->flush(state, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
     auto io_executor = _join_builder->spill_channel()->io_executor();
@@ -107,7 +107,7 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
                     _join_builder->enter_probe_phase();
                     return Status::OK();
                 },
-                state, *io_executor, TRACKER_WITH_SPILLER_GUARD(state, spiller));
+                state, TRACKER_WITH_SPILLER_GUARD(state, spiller));
     };
 
     WARN_IF_ERROR(publish_runtime_filters(state),

@@ -25,6 +25,7 @@
 #include "common/status.h"
 #include "exec/spill/block_manager.h"
 #include "exec/spill/common.h"
+#include "exec/spill/executor.h"
 #include "exec/spill/input_stream.h"
 #include "exec/spill/mem_table.h"
 #include "exec/spill/options.h"
@@ -127,20 +128,20 @@ public:
     // no thread-safe
     // TaskExecutor: Executor for runing io tasks
     // MemGuard: interface for record/update memory usage in io tasks
-    template <class TaskExecutor, class MemGuard>
-    Status spill(RuntimeState* state, const ChunkPtr& chunk, TaskExecutor&& executor, MemGuard&& guard);
+    template <class MemGuard>
+    Status spill(RuntimeState* state, const ChunkPtr& chunk, MemGuard&& guard);
 
-    template <class Processer, class TaskExecutor, class MemGuard>
+    template <class Processer, class MemGuard>
     Status partitioned_spill(RuntimeState* state, const ChunkPtr& chunk, SpillHashColumn* hash_column,
-                             Processer&& processer, TaskExecutor&& executor, MemGuard&& guard);
+                             Processer&& processer, MemGuard&& guard);
 
     // restore chunk from spilled chunks
-    template <class TaskExecutor, class MemGuard>
-    StatusOr<ChunkPtr> restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    template <class MemGuard>
+    StatusOr<ChunkPtr> restore(RuntimeState* state, MemGuard&& guard);
 
     // trigger a restore task
-    template <class TaskExecutor, class MemGuard>
-    Status trigger_restore(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
+    template <class MemGuard>
+    Status trigger_restore(RuntimeState* state, MemGuard&& guard);
 
     bool is_full() { return _writer->is_full(); }
 
@@ -148,18 +149,19 @@ public:
 
     // all data has been sent
     // prepared for as read
-    template <class TaskExecutor, class MemGuard>
-    Status flush(RuntimeState* state, TaskExecutor&& executor, MemGuard&& guard);
     template <class MemGuard>
-    Status set_flush_all_call_back(const FlushAllCallBack& callback, RuntimeState* state, IOTaskExecutor& executor,
+    Status flush(RuntimeState* state, MemGuard&& guard);
+
+    template <class MemGuard>
+    Status set_flush_all_call_back(const FlushAllCallBack& callback, RuntimeState* state,
                                    const MemGuard& guard) {
-        auto flush_call_back = [this, callback, state, &executor, guard]() {
+        auto flush_call_back = [this, callback, state, guard]() {
             auto defer = DeferOp([&]() { guard.scoped_end(); });
             RETURN_IF(!guard.scoped_begin(), Status::Cancelled("cancelled"));
             RETURN_IF_ERROR(callback());
             if (!_is_cancel && spilled()) {
                 RETURN_IF_ERROR(_acquire_input_stream(state));
-                RETURN_IF_ERROR(trigger_restore(state, executor, guard));
+                RETURN_IF_ERROR(trigger_restore(state, guard));
             }
             return Status::OK();
         };
@@ -209,6 +211,9 @@ public:
     const ChunkBuilder& chunk_builder() { return _chunk_builder; }
 
     Status reset_state(RuntimeState* state);
+    IOTaskExecutorPtr local_io_executor() const {
+        return _local_io_executor;
+    }
 
 private:
     Status _acquire_input_stream(RuntimeState* state);
@@ -237,6 +242,7 @@ private:
     std::shared_ptr<spill::BlockGroup> _block_group;
 
     std::atomic_bool _is_cancel = false;
+    std::shared_ptr<IOTaskExecutor> _local_io_executor;
 };
 
 } // namespace starrocks::spill
