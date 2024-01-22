@@ -326,16 +326,10 @@ public:
 
     Status pk_index_major_compaction();
 
-<<<<<<< HEAD
-=======
-    // get the max rowset creation time for largest major version
-    int64_t max_rowset_creation_time();
-
     Status get_rowset_stats(std::map<uint32_t, std::string>* output_rowset_stats);
 
     Status primary_index_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 
->>>>>>> 64a6c8309b ([Feature] support primary key dump (#38297))
 private:
     friend class Tablet;
     friend class PrimaryIndex;
