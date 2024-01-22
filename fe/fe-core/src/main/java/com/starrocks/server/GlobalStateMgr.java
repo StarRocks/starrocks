@@ -110,6 +110,9 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
+import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.ConnectorTblMetaInfoMgr;
@@ -159,8 +162,6 @@ import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.meta.MetaContext;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
@@ -533,6 +534,8 @@ public class GlobalStateMgr {
 
     private ReplicationMgr replicationMgr;
 
+    private LockManager lockManager;
+
     private final ResourceUsageMonitor resourceUsageMonitor = new ResourceUsageMonitor();
     private final SlotManager slotManager = new SlotManager(resourceUsageMonitor);
     private final SlotProvider slotProvider = new SlotProvider();
@@ -773,6 +776,8 @@ public class GlobalStateMgr {
         } else {
             this.storageVolumeMgr = new SharedNothingStorageVolumeMgr();
         }
+
+        this.lockManager = new LockManager();
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -1048,6 +1053,14 @@ public class GlobalStateMgr {
 
     public ReplicationMgr getReplicationMgr() {
         return replicationMgr;
+    }
+
+    public LockManager getLockManager() {
+        return lockManager;
+    }
+
+    public void setLockManager(LockManager lockManager) {
+        this.lockManager = lockManager;
     }
 
     // Use tryLock to avoid potential deadlock
