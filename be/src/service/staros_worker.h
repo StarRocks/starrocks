@@ -105,6 +105,26 @@ private:
     mutable std::shared_mutex _mtx;
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
     std::unique_ptr<Cache> _fs_cache;
+
+    inline bool has_shard_info_changed(const ShardInfo& existing_shard, const ShardInfo& incoming_shard) {
+        // If incoming_shard's hash_code is zero, it indicates the ShardInfo is from an older starmgr.
+        if (incoming_shard.hash_code == 0) {
+            if (existing_shard.hash_code != 0) {
+                // There are two possibilities:
+                // 1. New starlet receives the information of old starmgr. In this case, it can be updated.
+                // 2. Starmgr's hash code happens to be 0. In this case, it also needs to be updated.
+                return true;
+            } else {
+                // Both Starmgr and starlet's hash_code are 0, we can only compare the path_info.fs_info().version()
+                // to determine difference.
+                return existing_shard.path_info.has_fs_info() && incoming_shard.path_info.has_fs_info() &&
+                       existing_shard.path_info.fs_info().version() < incoming_shard.path_info.fs_info().version();
+            }
+        }
+
+        // If hash_code is not zero, then compare based on hash_code.
+        return existing_shard.hash_code != incoming_shard.hash_code;
+    }
 };
 
 extern std::shared_ptr<StarOSWorker> g_worker;

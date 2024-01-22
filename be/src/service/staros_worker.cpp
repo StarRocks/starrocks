@@ -81,8 +81,7 @@ StarOSWorker::~StarOSWorker() = default;
 absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
     std::unique_lock l(_mtx);
     auto it = _shards.find(shard.id);
-    if (it != _shards.end() && it->second.shard_info.path_info.has_fs_info() && shard.path_info.has_fs_info() &&
-        it->second.shard_info.path_info.fs_info().version() < shard.path_info.fs_info().version()) {
+    if (it != _shards.end() && has_shard_info_changed(it->second.shard_info, shard)) {
         auto st = invalidate_fs(it->second.shard_info);
         if (!st.ok()) {
             return st;

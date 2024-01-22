@@ -14,12 +14,15 @@
 
 package com.starrocks.alter;
 
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Table;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
 import com.staros.proto.FileStoreType;
 import com.staros.proto.S3FileStoreInfo;
+import com.starrocks.alter.AlterJobMgr;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -36,19 +39,23 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.Utils;
+import com.starrocks.persist.BatchModifyPartitionsInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
@@ -80,9 +87,12 @@ public class LakeTableAlterMetaJobTest {
     private static final int NUM_BUCKETS = 4;
     private ConnectContext connectContext;
     private LakeTableAlterMetaJob alterMetaJob;
+    private AlterJobMgr alterJobMgr;
     private Database db;
     private LakeTable table;
     private List<Long> shadowTabletIds = new ArrayList<>();
+    private PartitionInfo partitionInfo;
+    private long partitionId;
 
     public LakeTableAlterMetaJobTest() {
         connectContext = new ConnectContext(null);
@@ -125,13 +135,23 @@ public class LakeTableAlterMetaJobTest {
             public void logModifyEnablePersistentIndex(ModifyTablePropertyOperationLog info) {
 
             }
+
+            @Mock
+            public void logBatchModifyPartition(BatchModifyPartitionsInfo info) {
+
+            }
+
+            @Mock
+            public void logAlterTableProperties(ModifyTablePropertyOperationLog info) {
+
+            }
         };
 
         GlobalStateMgr.getCurrentState().setEditLog(new EditLog(new ArrayBlockingQueue<>(100)));
         final long dbId = GlobalStateMgr.getCurrentState().getNextId();
-        final long partitionId = GlobalStateMgr.getCurrentState().getNextId();
         final long tableId = GlobalStateMgr.getCurrentState().getNextId();
         final long indexId = GlobalStateMgr.getCurrentState().getNextId();
+        partitionId = GlobalStateMgr.getCurrentState().getNextId();
 
         GlobalStateMgr.getCurrentState().setStarOSAgent(new StarOSAgent());
 
@@ -143,7 +163,7 @@ public class LakeTableAlterMetaJobTest {
 
         Column c0 = new Column("c0", Type.INT, true, AggregateType.NONE, false, null, null);
         DistributionInfo dist = new HashDistributionInfo(NUM_BUCKETS, Collections.singletonList(c0));
-        PartitionInfo partitionInfo = new RangePartitionInfo(Collections.singletonList(c0));
+        partitionInfo = new RangePartitionInfo(Collections.singletonList(c0));
         partitionInfo.setDataProperty(partitionId, DataProperty.DEFAULT_DATA_PROPERTY);
 
         table = new LakeTable(tableId, "t0", Collections.singletonList(c0), keysType, partitionInfo, dist);
@@ -405,5 +425,131 @@ public class LakeTableAlterMetaJobTest {
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
         Assertions.assertThrows(DdlException.class,
                 () -> schemaChangeHandler.createAlterMetaJob(alterList, db, table));
+    }
+
+    @Test
+    public void testModifyDataCachePartitionDurationAbourtMonths() throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "7 months");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        List<AlterClause> alterList = Collections.singletonList(modify);
+        schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
+        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+
+        Assert.assertEquals("7 months", TimeUtils.toHumanReadableString(
+                table.getTableProperty().getDataCachePartitionDuration()));
+
+    }
+
+    @Test
+    public void testModifyDataCachePartitionDurationAbourtDays() throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "2 days");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        List<AlterClause> alterList = Collections.singletonList(modify);
+        schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
+        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+
+        Assert.assertEquals("2 days", TimeUtils.toHumanReadableString(
+                table.getTableProperty().getDataCachePartitionDuration()));
+
+    }
+
+    @Test
+    public void testModifyDataCachePartitionDurationAboutHours() throws Exception {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, "4 hours");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        List<AlterClause> alterList = Collections.singletonList(modify);
+        schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
+        table.setState(OlapTable.OlapTableState.SCHEMA_CHANGE);
+
+        Assert.assertEquals("4 hours", TimeUtils.toHumanReadableString(
+                table.getTableProperty().getDataCachePartitionDuration()));
+    }
+
+    @Test
+    public void testModifyPartitionsPropertyDatacacheEnable() throws Exception {
+        alterJobMgr = new AlterJobMgr();
+        Map<String, String> properties = new HashMap<>();
+        List<String> partitionNames = Lists.newArrayList();
+        partitionNames.add("t0");
+
+        new MockUp<Preconditions>() {
+            @Mock
+            public void checkArgument(boolean param) {
+
+            }
+        };
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void updateShardGroup(List<Partition> partitionsList, boolean enableCache) throws DdlException {
+                throw new DdlException("Mock exception");
+            }
+        };
+
+        // Get the opposite status of current datacache.enable
+        String str = partitionInfo.getDataCacheInfo(partitionId).isEnabled() ?
+                "false" : "true";
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, str);
+        table.setState(OlapTable.OlapTableState.NORMAL);
+        partitionInfo.setIsInMemory(partitionId, false);
+        // Although the updateShardGroup called inside modifyPartitionsProperty below will
+        // throw an exception, it will be processed inside modifyPartitionsProperty.
+        ExceptionChecker.expectThrowsNoException(() ->
+                alterJobMgr.modifyPartitionsProperty(db, table, partitionNames, properties));
+    }
+
+    @Test
+    public void testAlterTablePropertiesDatacacheEnable() throws Exception {
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void updateShardGroup(List<Partition> partitionsList, boolean enableCache) throws DdlException {
+
+            }
+        };
+        // Get the opposite status of current datacache.enable
+        String str = partitionInfo.getDataCacheInfo(partitionId).isEnabled() ?
+                "false" : "true";
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, str);
+        partitionInfo.setIsInMemory(partitionId, false);
+
+        LocalMetastore localMetaStore = new LocalMetastore(GlobalStateMgr.getCurrentState(),
+                GlobalStateMgr.getCurrentState().getRecycleBin(),
+                GlobalStateMgr.getCurrentState().getColocateTableIndex());
+        localMetaStore.alterTableProperties(db, table, properties);
+    }
+
+    @Test
+    public void testAnalyzeAndCreateJobDatacacheEnable() throws Exception {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
+                    throws DdlException {
+
+            }
+        };
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public void updateShardGroup(List<Partition> partitionsList, boolean enableCache) throws DdlException {
+
+            }
+        };
+
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, "true");
+        ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
+
+        List<AlterClause> alterList = Collections.singletonList(modify);
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        schemaChangeHandler.analyzeAndCreateJob(alterList, db, table);
     }
 }

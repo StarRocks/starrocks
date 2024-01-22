@@ -160,4 +160,16 @@ public class LakeTableTest {
         LakeTable lakeTable = new LakeTable();
         Assert.assertNotNull(lakeTable.getIndexIdToMeta());
     }
+
+    @Test
+    public void testSetDataCacheEnable() {
+        LakeTable lakeTable = new LakeTable();
+        FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
+        lakeTable.setStorageInfo(pathInfo, new DataCacheInfo(false, false));
+
+        lakeTable.setDataCacheEnable(true);
+        Assert.assertTrue(lakeTable.getTableProperty().getStorageInfo().getDataCacheInfo().isEnabled());
+        lakeTable.setDataCacheEnable(false);
+        Assert.assertFalse(lakeTable.getTableProperty().getStorageInfo().getDataCacheInfo().isEnabled());
+    }
 }

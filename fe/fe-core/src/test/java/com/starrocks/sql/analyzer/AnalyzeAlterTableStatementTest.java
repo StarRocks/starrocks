@@ -112,6 +112,9 @@ public class AnalyzeAlterTableStatementTest {
         analyzeSuccess("ALTER TABLE test.t0 SET (\"default.replication_num\" = \"2\");");
         analyzeSuccess("ALTER TABLE test.t0 SET (\"datacache.partition_duration\" = \"10 days\");");
         analyzeFail("ALTER TABLE test.t0 SET (\"datacache.partition_duration\" = \"abcd\");", "Cannot parse text to Duration");
+        analyzeSuccess("ALTER TABLE test.t0 SET (\"datacache.enable\" = \"true\");");
+        analyzeSuccess("ALTER TABLE test.t0 SET (\"datacache.enable\" = \"false\");");
+        analyzeFail("ALTER TABLE test.t0 SET (\"datacache.enable\" = \"abcd\");", "must be bool type(false/true)");
         analyzeFail("ALTER TABLE test.t0 SET (\"default.replication_num\" = \"2\", \"dynamic_partition.enable\" = \"true\");",
                 "Can only set one table property at a time");
         analyzeFail("ALTER TABLE test.t0 SET (\"abc\" = \"2\");",

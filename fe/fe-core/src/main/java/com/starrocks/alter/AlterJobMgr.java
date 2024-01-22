@@ -77,6 +77,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
@@ -138,6 +139,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -859,6 +861,10 @@ public class AlterJobMgr {
         if (olapTable.getState() != OlapTableState.NORMAL) {
             throw InvalidOlapTableStateException.of(olapTable.getState(), olapTable.getName());
         }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE) &&
+                !olapTable.isCloudNativeTableOrMaterializedView()) {
+            throw new DdlException("Property 'datacache.enable' is only supported in shared-data mode");
+        }
 
         for (String partitionName : partitionNames) {
             Partition partition = olapTable.getPartition(partitionName);
@@ -897,8 +903,11 @@ public class AlterJobMgr {
         // 4. tablet type
         TTabletType tTabletType =
                 PropertyAnalyzer.analyzeTabletType(properties);
+        // 5. enable data cache
+        boolean newEnableDataCache = PropertyAnalyzer.analyzeDataCacheEnable(properties);
 
         // modify meta here
+        List<Partition> partitionsToUpdateShardGroup = new ArrayList<>();
         for (String partitionName : partitionNames) {
             Partition partition = olapTable.getPartition(partitionName);
             // 1. date property
@@ -948,12 +957,43 @@ public class AlterJobMgr {
             if (tTabletType != partitionInfo.getTabletType(partition.getId())) {
                 partitionInfo.setTabletType(partition.getId(), tTabletType);
             }
+            // 5. enable data cache
+            if (olapTable.isCloudNativeTableOrMaterializedView()) {
+                DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(partition.getId());
+                if (dataCacheInfo == null || newEnableDataCache != dataCacheInfo.isEnabled()) {
+                    partitionsToUpdateShardGroup.add(olapTable.getPartition(partitionName));
+                    boolean asyncWriteBack = dataCacheInfo == null ? false : dataCacheInfo.isAsyncWriteBack();
+                    partitionInfo.setDataCacheInfo(partition.getId(), new DataCacheInfo(newEnableDataCache, asyncWriteBack));
+                }
+            }
+
             ModifyPartitionInfo info = new ModifyPartitionInfo(db.getId(), olapTable.getId(), partition.getId(),
-                    newDataProperty, newReplicationNum, hasInMemory ? newInMemory : oldInMemory);
+                    newDataProperty, newReplicationNum, hasInMemory ? newInMemory : oldInMemory, newEnableDataCache);
             modifyPartitionInfos.add(info);
         }
 
-        // log here
+        if (!partitionsToUpdateShardGroup.isEmpty()) {
+            // The updateShardGroup function is called centrally here, rather than iteratively within a for-loop, to
+            // ensure that updateShardGroup and the persistence of ModifyPartitionInfo are closely enough,
+            // thereby preventing metadata inconsistency.
+            try {
+                GlobalStateMgr.getCurrentState().getStarOSAgent().updateShardGroup(
+                        partitionsToUpdateShardGroup, newEnableDataCache);
+            } catch (DdlException e) {
+                // Revert changes above and then CONTINUE the alter job for the other properties
+                // This means that if multiple properties are set at the same time, there may be only partial success!
+                for (ModifyPartitionInfo info : modifyPartitionInfos) {
+                    // revert changes in partitionInfo
+                    DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(info.getPartitionId());
+                    partitionInfo.setDataCacheInfo(info.getPartitionId(),
+                            new DataCacheInfo(dataCacheInfo.isAsyncWriteBack(), !newEnableDataCache));
+                    // revert changes in modifyPartitionInfos
+                    info.setDataCacheEnable(!newEnableDataCache);
+                }
+                LOG.error(e.getMessage());
+            }
+        }
+
         BatchModifyPartitionsInfo info = new BatchModifyPartitionsInfo(modifyPartitionInfos);
         GlobalStateMgr.getCurrentState().getEditLog().logBatchModifyPartition(info);
     }
@@ -975,6 +1015,12 @@ public class AlterJobMgr {
                 if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
                     olapTable.setReplicationNum(replicationNum);
                 }
+            }
+            if (olapTable.isCloudNativeTable()) {
+                DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(info.getPartitionId());
+                boolean asyncWriteBack = dataCacheInfo == null ? false : dataCacheInfo.isAsyncWriteBack();
+                partitionInfo.setDataCacheInfo(info.getPartitionId(),
+                        new DataCacheInfo(info.getDataCacheEnable(), asyncWriteBack));
             }
             partitionInfo.setIsInMemory(info.getPartitionId(), info.isInMemory());
         } finally {
