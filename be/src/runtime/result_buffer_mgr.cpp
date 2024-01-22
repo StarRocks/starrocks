@@ -53,7 +53,7 @@ ResultBufferMgr::ResultBufferMgr() {
     });
 }
 
-ResultBufferMgr::~ResultBufferMgr() {
+void ResultBufferMgr::stop() {
     _is_stop = true;
     _cancel_thread->join();
 }
