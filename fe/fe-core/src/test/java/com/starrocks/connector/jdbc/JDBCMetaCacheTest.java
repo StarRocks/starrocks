@@ -14,7 +14,6 @@
 
 package com.starrocks.connector.jdbc;
 
-
 import com.google.common.collect.Lists;
 import com.mockrunner.mock.jdbc.MockResultSet;
 import com.starrocks.catalog.Database;
@@ -23,6 +22,7 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.UtFrameUtils;
+import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -33,7 +33,6 @@ import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
@@ -51,7 +50,7 @@ public class JDBCMetaCacheTest {
     public ExpectedException expectedEx = ExpectedException.none();
 
     @Mocked
-    DriverManager driverManager;
+    HikariDataSource dataSource;
 
     @Mocked
     Connection connection;
@@ -100,7 +99,7 @@ public class JDBCMetaCacheTest {
 
         new Expectations() {
             {
-                driverManager.getConnection(anyString, anyString, anyString);
+                dataSource.getConnection();
                 result = connection;
                 minTimes = 0;
 
@@ -109,7 +108,7 @@ public class JDBCMetaCacheTest {
                 minTimes = 0;
 
                 connection.getMetaData().getTables("test", null, null,
-                        new String[] { "TABLE", "VIEW" });
+                        new String[] {"TABLE", "VIEW"});
                 result = tableResult;
                 minTimes = 0;
 
@@ -131,7 +130,7 @@ public class JDBCMetaCacheTest {
     @Test
     public void testListDatabaseNames() {
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             dbResult.beforeFirst();
             List<String> result = jdbcMetadata.listDbNames();
             List<String> expectResult = Lists.newArrayList("test");
@@ -144,7 +143,7 @@ public class JDBCMetaCacheTest {
     @Test
     public void testGetDb() {
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             dbResult.beforeFirst();
             Database db = jdbcMetadata.getDb("test");
             Assert.assertEquals("test", db.getOriginName());
@@ -156,7 +155,7 @@ public class JDBCMetaCacheTest {
     @Test
     public void testListTableNames() {
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             List<String> result = jdbcMetadata.listTableNames("test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
             Assert.assertEquals(expectResult, result);
@@ -168,7 +167,7 @@ public class JDBCMetaCacheTest {
     @Test
     public void testGetTable() {
         try {
-            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog");
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
             Table table = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
             Table table2 = jdbcMetadata.getTable("test", "tbl1");

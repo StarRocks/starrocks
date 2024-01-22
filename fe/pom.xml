@@ -58,6 +58,7 @@ under the License.
         <sonar.organization>starrocks</sonar.organization>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
         <odps.version>0.45.5-public</odps.version>
+        <hikaricp.version>3.4.5</hikaricp.version>
     </properties>
 
     <profiles>
