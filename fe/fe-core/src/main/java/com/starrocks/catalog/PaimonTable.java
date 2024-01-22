@@ -20,7 +20,7 @@ import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.thrift.TPaimonTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
-import org.apache.paimon.table.AbstractFileStoreTable;
+import org.apache.paimon.table.DataTable;
 import org.apache.paimon.types.DataField;
 
 import java.util.ArrayList;
@@ -77,8 +77,8 @@ public class PaimonTable extends Table {
 
     @Override
     public String getTableLocation() {
-        if (paimonNativeTable instanceof AbstractFileStoreTable) {
-            return ((AbstractFileStoreTable) paimonNativeTable).location().toString();
+        if (paimonNativeTable instanceof DataTable) {
+            return ((DataTable) paimonNativeTable).location().toString();
         } else {
             return paimonNativeTable.name().toString();
         }
