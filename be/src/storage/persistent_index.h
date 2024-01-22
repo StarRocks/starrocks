@@ -785,14 +785,8 @@ public:
 
     void reset_cancel_major_compaction();
 
-<<<<<<< HEAD
-=======
-    static void modify_l2_versions(const std::vector<EditVersion>& input_l2_versions,
-                                   const EditVersion& output_l2_version, PersistentIndexMetaPB& index_meta);
-
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 
->>>>>>> 64a6c8309b ([Feature] support primary key dump (#38297))
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
                                       const EditVersionWithMerge& min_l2_version);
