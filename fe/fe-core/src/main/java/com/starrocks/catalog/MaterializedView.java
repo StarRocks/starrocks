@@ -123,7 +123,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     @Override
-    public Boolean getUseFastSchemaEvolution() {
+    public boolean getUseFastSchemaEvolution() {
         return false;
     }
 
@@ -503,6 +503,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * active the materialized again & reload the state.
      */
     public void setActive() {
+        LOG.warn("set {} to active", name);
         this.active = true;
         this.inactiveReason = null;
         // reset mv rewrite cache when it is active again
@@ -510,6 +511,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     public void setInactiveAndReason(String reason) {
+        LOG.warn("set {} to inactive because of {}", name, reason);
         this.active = false;
         this.inactiveReason = reason;
         CachingMvPlanContextBuilder.getInstance().invalidateFromCache(this);
@@ -1614,7 +1616,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 continue;
             }
             List<Column> partitionColumns = PartitionUtil.getPartitionColumns(table);
-            if (partitionColumns == null) {
+            if (partitionColumns.isEmpty()) {
                 continue;
             }
             SlotRef slotRef = tableToSlotMap.get(table);
@@ -1774,12 +1776,11 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * Post actions after restore. Rebuild the materialized view by using table name instead of table ids
      * because the table ids have changed since the restore.
      *
-     * @param db : the new database after restore.
      * @return : rebuild status, ok if success other error status.
      */
     @Override
-    public Status doAfterRestore(Database db, MvRestoreContext mvRestoreContext) throws DdlException {
-        super.doAfterRestore(db, mvRestoreContext);
+    public Status doAfterRestore(MvRestoreContext mvRestoreContext) throws DdlException {
+        super.doAfterRestore(mvRestoreContext);
 
         if (baseTableInfos == null) {
             setInactiveAndReason("base mv is not active: base info is null");
@@ -1787,8 +1788,12 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                     String.format("Materialized view %s's base info is not found", this.name));
         }
 
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            return new Status(Status.ErrCode.NOT_FOUND,
+                    String.format("Materialized view %s's db %s is not found", this.name, this.dbId));
+        }
         List<BaseTableInfo> newBaseTableInfos = Lists.newArrayList();
-
 
         boolean isSetInactive = false;
         Map<TableName, MvBaseTableBackupInfo> mvBaseTableToBackupTableInfo = mvRestoreContext.getMvBaseTableToBackupTableInfo();
@@ -1804,7 +1809,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 // be backed up and restored before.
                 LOG.info(String.format("Materialized view %s can not find the base table from mvBaseTableToBackupTableInfo, " +
                         "old base table name:%s, try to find in current env", this.name, remoteDbTblName));
-                if (!restoreBaseTableInfoIfNoRestored(db, this, baseTableInfo, newBaseTableInfos)) {
+                if (!restoreBaseTableInfoIfNoRestored(this, baseTableInfo, newBaseTableInfos)) {
                     isSetInactive = true;
                 }
             } else {
@@ -1863,6 +1868,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 String.format("New baseTableInfos' size should be qual to old baseTableInfos, baseTableInfos:%s," +
                                 "newBaseTableInfos:%s", oldBaseTableInfosStr, newBaseTableInfosStr));
         this.baseTableInfos = newBaseTableInfos;
+
+        // change ExpressionRangePartitionInfo because mv's db may be changed.
+        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
+            expressionRangePartitionInfo.renameTableName(db.getFullName(), this.name);
+        }
+
         setActive();
 
         fixRelationship();

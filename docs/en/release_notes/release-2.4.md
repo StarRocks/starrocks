@@ -16,7 +16,7 @@ Release date: April 21, 2023
 - Optimized the accuracy of thread dump. [#16748](https://github.com/StarRocks/starrocks/pull/16748)
 - Optimized load efficiency by triggering metadata compaction before loading. [#19347](https://github.com/StarRocks/starrocks/pull/19347)
 - Optimized the Stream Load planner timeout. [#18992](https://github.com/StarRocks/starrocks/pull/18992/files)
-- Optimized the Unique key table performance by forbidding the collection of statistics from value columns. [#19563](https://github.com/StarRocks/starrocks/pull/19563)
+- Optimized the Unique Key table performance by forbidding the collection of statistics from value columns. [#19563](https://github.com/StarRocks/starrocks/pull/19563)
 
 ### Bug Fixes
 

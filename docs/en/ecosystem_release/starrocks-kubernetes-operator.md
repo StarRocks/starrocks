@@ -15,8 +15,7 @@ The Operator provided by StarRocks is used to deploy StarRocks clusters in the K
 
 **Source codes:**
 
-- [starrocks-kubernetes-operator](https://github.com/StarRocks/starrocks-kubernetes-operator)
-- [kube-starrocks Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator/tree/main/helm-charts/charts/kube-starrocks)
+[starrocks-kubernetes-operator and kube-starrocks Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator)
 
 **Download URL of the resources:**
 

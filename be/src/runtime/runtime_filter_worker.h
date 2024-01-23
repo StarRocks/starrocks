@@ -127,6 +127,7 @@ class RuntimeFilterWorker {
 public:
     RuntimeFilterWorker(ExecEnv* env);
     ~RuntimeFilterWorker();
+    void close();
     // open query for creating runtime filter merger.
     void open_query(const TUniqueId& query_id, const TQueryOptions& query_options, const TRuntimeFilterParams& params,
                     bool is_pipeline);

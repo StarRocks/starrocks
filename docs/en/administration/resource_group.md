@@ -70,6 +70,14 @@ You can specify CPU and memory resource quotas for a resource group on a BE by u
 
   The CPU core limit for this resource group on a single BE node. It takes effect only when it is set to greater than `0`. Range: [0, `avg_be_cpu_cores`], where `avg_be_cpu_cores` represents the average number of CPU cores across all BE nodes. Default: 0.
 
+- `spill_mem_limit_threshold`
+
+  The memory usage threshold (percentage) at which a resource group triggers the spilling of intermediate results. The valid range is (0, 1). The default value is 1, indicating the threshold does not take effect. This parameter was introduced in v3.1.7.
+  - If automatic spilling is enabled (that is, the system variable `spill_mode` is set to `auto`) but the resource group feature is disabled, the system will trigger spilling when the memory usage of a query exceeds 80% of `query_mem_limit`. Here, `query_mem_limit` is the maximum memory that a single query can use, controlled by the system variable `query_mem_limit`, with a default value of 0, indicating no limit.
+  - If automatic spilling is enabled, and the query hits a resource group (including all system built-in resource groups), spilling will be triggered if the query meets any of the following conditions:
+    - The memory used by all queries in the current resource group exceeds `current BE node memory limit * mem_limit * spill_mem_limit_threshold`.
+    - The current query consumes more than 80% of `query_mem_limit`.
+
 On the basis of the above resource consumption restrictions, you can further restrict the resource consumption for big queries with the following parameters:
 
 - `big_query_cpu_second_limit`: This parameter specifies the CPU upper time limit for a big query on a single BE. Concurrent queries add up the time. The unit is second. This parameter takes effect only when it is set greater than 0. Default: 0.
@@ -318,6 +326,7 @@ The resource limits of `default_wg` are as follows:
 - `big_query_cpu_second_limit`: 0.
 - `big_query_scan_rows_limit`: 0.
 - `big_query_mem_limit`: 0.
+- `spill_mem_limit_threshold`: 1.
 
 ### Monitoring resource groups
 

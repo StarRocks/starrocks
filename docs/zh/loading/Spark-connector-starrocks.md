@@ -385,15 +385,15 @@ MySQL [test]> select * from score_board;
 
 ## 最佳实践
 
-### 导入至主键模型表
+### 导入至主键表
 
-本节将展示如何将数据导入到 StarRocks 主键模型表中，以实现部分更新和条件更新。部分更新和条件更新的更多介绍，请参见[通过导入实现数据变更](./Load_to_Primary_Key_tables.md)。
+本节将展示如何将数据导入到 StarRocks 主键表中，以实现部分更新和条件更新。部分更新和条件更新的更多介绍，请参见[通过导入实现数据变更](./Load_to_Primary_Key_tables.md)。
 
 以下示例使用 Spark SQL。
 
 #### 准备工作
 
-在 StarRocks 中创建一个名为 `test` 的数据库，并在其中创建一个名为 `score_board` 的主键模型表。
+在 StarRocks 中创建一个名为 `test` 的数据库，并在其中创建一个名为 `score_board` 的主键表。
 
 ```SQL
 CREATE DATABASE `test`;

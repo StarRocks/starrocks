@@ -605,7 +605,8 @@ public class UtFrameUtils {
                                     connectContext.getSessionVariable().getSqlMode()).get(0);
                     com.starrocks.sql.analyzer.Analyzer.analyze(viewStatement, connectContext);
                 } catch (Exception e) {
-                    System.out.println(e.getMessage());
+                    System.out.println("invalid view def: " + createTableStmt.getInlineViewDef()
+                            + "\nError msg:"  + e.getMessage());
                     throw e;
                 }
             } catch (SemanticException | AnalysisException e) {

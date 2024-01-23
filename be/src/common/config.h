@@ -348,10 +348,6 @@ CONF_mInt64(size_tiered_level_multiple_dupkey, "10");
 CONF_mInt64(size_tiered_level_num, "7");
 
 CONF_Bool(enable_check_string_lengths, "true");
-// 5GB
-CONF_mInt64(min_cumulative_compaction_size, "5368709120");
-// 20GB
-CONF_mInt64(min_base_compaction_size, "21474836480");
 
 // Max row source mask memory bytes, default is 200M.
 // Should be smaller than compaction_mem_limit.
@@ -881,7 +877,7 @@ CONF_String(query_debug_trace_dir, "${STARROCKS_HOME}/query_debug_trace");
 
 #ifdef USE_STAROS
 CONF_Int32(starlet_port, "9070");
-CONF_mInt32(starlet_cache_thread_num, "64");
+CONF_mInt32(starlet_cache_thread_num, "16");
 // Root dir used for cache if cache enabled.
 CONF_String(starlet_cache_dir, "");
 // Cache backend check interval (in seconds), for async write sync check and ttl clean, e.t.c.
@@ -900,7 +896,7 @@ CONF_mDouble(starlet_cache_evict_percent, "0.1");
 CONF_mInt32(starlet_cache_evict_throughput_mb, "200");
 // Buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
 // Only support in S3/HDFS currently.
-CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "131072");
+CONF_mInt32(starlet_fs_stream_buffer_size_bytes, "1048576");
 CONF_mBool(starlet_use_star_cache, "true");
 // TODO: support runtime change
 CONF_Int32(starlet_star_cache_mem_size_percent, "0");
@@ -925,6 +921,7 @@ CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_mBool(lake_print_delete_log, "true");
 CONF_mBool(lake_compaction_check_txn_log_first, "false");
+CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
@@ -938,6 +935,7 @@ CONF_mInt64(lake_vacuum_retry_max_attempts, "5");
 CONF_mInt64(lake_vacuum_retry_min_delay_ms, "10");
 CONF_mBool(enable_primary_key_recover, "false");
 CONF_mBool(lake_enable_compaction_async_write, "false");
+CONF_mInt64(lake_pk_compaction_max_input_rowsets, "5");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 

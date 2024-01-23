@@ -37,6 +37,14 @@
 #include <rapidjson/prettywriter.h>
 #include <rapidjson/stringbuffer.h>
 
+#include <vector>
+
+#include "column/column_helper.h"
+#include "column/json_column.h"
+#include "column/nullable_column.h"
+#include "gutil/casts.h"
+#include "util/json.h"
+
 namespace starrocks {
 
 std::string to_json(const Status& status) {
@@ -109,6 +117,66 @@ Status from_json(const std::string& json_value, std::map<std::string, std::map<s
         return Status::JsonFormatError("Parse json(" + json_value + ") error!");
     }
     return Status::OK();
+}
+
+void JsonFlater::flatten(const Column* json_column, std::vector<ColumnPtr>* result) {
+    DCHECK(result->size() == _flat_paths.size());
+
+    // input
+    const JsonColumn* json_data = nullptr;
+    if (json_column->is_nullable()) {
+        // append null column
+        auto* nullable_column = down_cast<const NullableColumn*>(json_column);
+        json_data = down_cast<const JsonColumn*>(nullable_column->data_column().get());
+    } else {
+        json_data = down_cast<const JsonColumn*>(json_column);
+    }
+
+    // output
+    std::vector<JsonColumn*> flat_jsons;
+    std::vector<NullColumn*> flat_nulls;
+    for (auto& col : *result) {
+        auto* flat_nullable = down_cast<NullableColumn*>(col.get());
+        flat_jsons.emplace_back(down_cast<JsonColumn*>(flat_nullable->data_column().get()));
+        flat_nulls.emplace_back(down_cast<NullColumn*>(flat_nullable->null_column().get()));
+    }
+
+    for (size_t i = 0; i < json_column->size(); i++) {
+        if (json_column->is_null(i)) {
+            for (size_t k = 0; k < result->size(); k++) {
+                (*result)[k]->append_nulls(1);
+            }
+            continue;
+        }
+
+        auto* obj = json_data->get_object(i);
+        auto vslice = obj->to_vslice();
+        if (UNLIKELY(!vslice.isObject() || vslice.isNull())) {
+            for (size_t k = 0; k < result->size(); k++) {
+                (*result)[k]->append_nulls(1);
+            }
+            continue;
+        } else if (vslice.isEmptyObject() || vslice.isNone()) {
+            for (size_t k = 0; k < result->size(); k++) {
+                // push none
+                flat_jsons[k]->append(JsonValue::from_none());
+                flat_nulls[k]->append(0);
+            }
+            continue;
+        }
+        for (size_t k = 0; k < _flat_paths.size(); k++) {
+            auto st = obj->get_obj(_flat_paths[k]);
+            if (st.ok() && !st.value().to_vslice().isNull()) {
+                flat_jsons[k]->append(st.value());
+                flat_nulls[k]->append(0);
+            } else {
+                (*result)[k]->append_nulls(1);
+            }
+        }
+    }
+    for (auto& col : *result) {
+        down_cast<NullableColumn*>(col.get())->update_has_null();
+    }
 }
 
 } // namespace starrocks

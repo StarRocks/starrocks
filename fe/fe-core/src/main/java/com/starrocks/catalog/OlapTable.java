@@ -505,7 +505,7 @@ public class OlapTable extends Table {
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
             Preconditions.checkState(expressionRangePartitionInfo.getPartitionExprs().size() == 1);
-            expressionRangePartitionInfo.renameTableName(newName);
+            expressionRangePartitionInfo.renameTableName("", newName);
         }
     }
 
@@ -828,7 +828,7 @@ public class OlapTable extends Table {
         return Status.OK;
     }
 
-    public Status doAfterRestore(Database db, MvRestoreContext mvRestoreContext) throws DdlException {
+    public Status doAfterRestore(MvRestoreContext mvRestoreContext) throws DdlException {
         if (relatedMaterializedViews == null || relatedMaterializedViews.isEmpty()) {
             return Status.OK;
         }
@@ -858,10 +858,8 @@ public class OlapTable extends Table {
                 continue;
             }
             MaterializedView mv = (MaterializedView) mvTable;
-            if (mv.isActive()) {
-                continue;
-            }
-            mv.doAfterRestore(db, mvRestoreContext);
+            // Do this no matter whether mv is active or not to restore version map for mv rewrite.
+            mv.doAfterRestore(mvRestoreContext);
         }
         return Status.OK;
     }
@@ -2790,7 +2788,7 @@ public class OlapTable extends Table {
         tableProperty.setForeignKeyConstraints(foreignKeyConstraints);
     }
 
-    public Boolean getUseFastSchemaEvolution() {
+    public boolean getUseFastSchemaEvolution() {
         if (tableProperty != null) {
             return tableProperty.getUseFastSchemaEvolution();
         }

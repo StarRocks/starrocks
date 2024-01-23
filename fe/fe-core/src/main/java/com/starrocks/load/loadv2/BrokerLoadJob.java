@@ -52,23 +52,26 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.LoadPriority;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo.FileGroupAggKey;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.FailMsg;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.task.PriorityLeaderTask;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TPartialUpdateMode;
 import com.starrocks.thrift.TReportExecStatusParams;
@@ -331,6 +334,66 @@ public class BrokerLoadJob extends BulkLoadJob {
         }
     }
 
+    @Override
+    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
+        if (!txnOperated) {
+            return;
+        }
+        writeLock();
+        try {
+            // check if job has been completed
+            if (isTxnDone()) {
+                LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
+                        .add("state", state)
+                        .add("error_msg", "this task will be ignored when job is: " + state)
+                        .build());
+                return;
+            }
+            if (retryTime <= 0 || !txnStatusChangeReason.contains("timeout") || !isTimeout()) {
+                // record attachment in load job
+                unprotectUpdateLoadingStatus(txnState);
+                // cancel load job
+                unprotectedExecuteCancel(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, txnStatusChangeReason), true);
+                return;
+            }
+
+            retryTime--;
+            failMsg = new FailMsg(FailMsg.CancelType.TIMEOUT, txnStatusChangeReason);
+            LOG.warn("Retry timeout load jobs. job: {}, retryTime: {}", id, retryTime);
+            unprotectedClearTasksBeforeRetry(failMsg);
+            try {
+                state = JobState.PENDING;
+                unprotectedExecute();
+            } catch (Exception e) {
+                cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.ETL_RUN_FAIL, e.getMessage()), true, true);
+            }
+        } finally {
+            writeUnlock();
+        }
+    }
+
+    protected void unprotectedClearTasksBeforeRetry(FailMsg failMsg) {
+        // get load ids of all loading tasks, we will cancel their coordinator process later
+        List<TUniqueId> loadIds = Lists.newArrayList();
+        for (PriorityLeaderTask loadTask : idToTasks.values()) {
+            if (loadTask instanceof LoadLoadingTask) {
+                loadIds.add(((LoadLoadingTask) loadTask).getLoadId());
+            }
+        }
+        newLoadingTasks.clear();
+        reset();
+
+        // set failMsg
+        this.failMsg = failMsg;
+        // cancel all running coordinators, so that the scheduler's worker thread will be released
+        for (TUniqueId loadId : loadIds) {
+            Coordinator coordinator = QeProcessorImpl.INSTANCE.getCoordinator(loadId);
+            if (coordinator != null) {
+                coordinator.cancel(failMsg.getMsg());
+            }
+        }
+    }
+
     private void onLoadingTaskFinished(BrokerLoadingTaskAttachment attachment) {
         writeLock();
         try {
@@ -397,10 +460,6 @@ public class BrokerLoadJob extends BulkLoadJob {
                 // Sleep and retry.
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(Math.max(e.getAllowCommitTime() - System.currentTimeMillis(), 0));
             } catch (UserException e) {
-                LOG.warn(new LogBuilder(LogKey.LOAD_JOB, id)
-                        .add("database_id", dbId)
-                        .add("error_msg", "Failed to commit txn with error:" + e.getMessage())
-                        .build(), e);
                 cancelJobWithoutCheck(new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL, e.getMessage()), true, true);
                 break;
             }

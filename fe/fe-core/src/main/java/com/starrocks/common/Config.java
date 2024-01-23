@@ -553,12 +553,13 @@ public class Config extends ConfigBase {
 
     /**
      * If true, FE will reset bdbje replication group(that is, to remove all electable nodes' info)
-     * and is supposed to start as Leader.
-     * If all the electable nodes can not start, we can copy the metadata
-     * to another node and set this config to true to try to restart the FE.
+     * and is supposed to start as Leader. After reset, this node will be the only member in the cluster,
+     * and the others node should be rejoin to this cluster by `Alter system add/drop follower/observer 'xxx'`;
+     * Use this configuration only when the leader cannot be successfully elected
+     * (Because most of the follower data has been damaged).
      */
     @ConfField
-    public static String metadata_failure_recovery = "false";
+    public static String bdbje_reset_election_group = "false";
 
     /**
      * If the bdb data is corrupted, and you want to start the cluster only with image, set this param to true
@@ -1198,6 +1199,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long dynamic_partition_check_interval_seconds = 600;
+
+    /**
+     * If set to true, memory tracker feature will open
+     */
+    @ConfField(mutable = true)
+    public static boolean memory_tracker_enable = true;
+
+    /**
+     * Decide how often to track the memory usage of the FE process
+     */
+    @ConfField(mutable = true)
+    public static long memory_tracker_interval_seconds = 60;
 
     /**
      * If batch creation of partitions is allowed to create half of the partitions, it is easy to generate holes.
@@ -2293,6 +2306,9 @@ public class Config extends ConfigBase {
     // ***********************************************************
 
     @ConfField(mutable = true)
+    public static boolean enable_experimental_rowstore = false;
+
+    @ConfField(mutable = true)
     public static boolean enable_experimental_mv = true;
 
     /**
@@ -2466,6 +2482,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean enable_sync_publish = true;
+
     /**
      * Normally FE will quit when replaying a bad journal. This configuration provides a bypass mechanism.
      * If this was set to a positive value, FE will skip the corresponding bad journals before it quits.
@@ -2473,6 +2490,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static String metadata_journal_skip_bad_journal_ids = "";
+
+    /**
+     * Set this configuration to true to ignore specific operation (with IgnorableOnReplayFailed annotation) replay failures.
+     */
+    @ConfField
+    public static boolean metadata_journal_ignore_replay_failure = false;
 
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.
@@ -2641,6 +2664,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_fast_schema_evolution = true;
 
+    // This configuration will be removed after the shared data mode supports fast schema evolution
+    @ConfField(mutable = true)
+    public static boolean experimental_enable_fast_schema_evolution_in_shared_data = false;
+
     @ConfField(mutable = false)
     public static int pipe_listener_interval_millis = 1000;
     @ConfField(mutable = false)
@@ -2754,8 +2781,34 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean allow_system_reserved_names = false;
 
-    @ConfField(mutable = true)
+    /**
+     * Whether to use LockManager to manage lock usage
+     */
     public static boolean use_lock_manager = false;
+
+    /**
+     * Number of Hash of Lock Table
+     */
+    public static int lock_table_num = 32;
+
+    /**
+     * Whether to enable deadlock unlocking operation.
+     * It is turned off by default and only deadlock detection is performed.
+     * If turned on, LockManager will try to relieve the deadlock by killing the victim.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_unlock_deadlock = false;
+
+    /**
+     * when a lock cannot be obtained, we cannot determine whether it is because the required
+     * lock is being used normally or if a deadlock has occurred.
+     * Therefore, based on the configuration parameter `dead_lock_detection_delay_time_ms`
+     * is used to control the waiting time before deadlock detection.
+     * If a lock is obtained during this period, there is no need to perform deadlock detection.
+     * Avoid frequent and unnecessary deadlock detection due to lock contention
+     */
+    @ConfField(mutable = true)
+    public static long dead_lock_detection_delay_time_ms = 3000; // 3s
 
     @ConfField(mutable = true)
     public static long routine_load_unstable_threshold_second = 3600;
@@ -2782,4 +2835,22 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static long jdbc_meta_default_cache_expire_sec = 600L;
+
+    // the retention time for host disconnection events
+    @ConfField(mutable = true)
+    public static long black_host_history_sec = 2 * 60; // 2min
+
+    // limit for the number of host disconnections in the last {black_host_history_sec} seconds
+    @ConfField(mutable = true)
+    public static long black_host_connect_failures_within_time = 5;
+
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_pool_size = 8;
+
+    @ConfField(mutable = false)
+    public static int jdbc_minimum_idle_connections = 1;
+
+    @ConfField(mutable = false)
+    public static int jdbc_connection_idle_timeout_ms = 600000;
 }

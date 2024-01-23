@@ -209,8 +209,8 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
         std::vector<bool> single_or_not{true, false};
 
         for (bool single_flag : single_or_not) {
-            // use 20 to save ci's time, change bigger to test more case
-            for (int32_t i = 0; i < 20; i++) {
+            // use 2 to save ci's time, change bigger to test more case
+            for (int32_t i = 0; i < 2; i++) {
                 oprands.clear();
                 for (int32_t j = 0; j < 4; j++) {
                     int num = index == 0 ? dist_small(rng) : dist_big(rng);

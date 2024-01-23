@@ -11,20 +11,14 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+package com.starrocks.common.util.concurrent.lock;
 
-package com.starrocks.meta.lock;
-
-public class LockType {
-    public static final LockType READ = new LockType(0);
-    public static final LockType WRITE = new LockType(1);
-
-    private final int id;
-
-    private LockType(int id) {
-        this.id = id;
+public class NotSupportLockException extends IllegalLockStateException {
+    public NotSupportLockException() {
+        super("Lock operations under the new framework are currently not supported.");
     }
 
-    public final boolean isWriteLock() {
-        return id == 1;
+    public NotSupportLockException(String message) {
+        super(message);
     }
 }

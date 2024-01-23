@@ -431,10 +431,40 @@ BE dynamic parameters are as follows.
 - **Default:** 10 (Number of Threads)
 - **Description:** The thread pool size allowed on each BE for interacting with Kafka. Currently, the FE responsible for processing Routine Load requests depends on BEs to interact with Kafka, and each BE in StarRocks has its own thread pool for interactions with Kafka. If a large number of Routine Load tasks are distributed to a BE, the BE's thread pool for interactions with Kafka may be too busy to process all tasks in a timely manner. In this situation, you can adjust the value of this parameter to suit your needs.
 
+#### lake_enable_vertical_compaction_fill_data_cache
+
+- **Default:** false
+- **Description:** Whether to allow compaction tasks to cache data on local disks in a shared-data cluster.
+- **Introduced in:** v3.1.7, v3.2.3
+
+#### compact_threads
+
+- **Default:** 4
+- **Description:** The maximum number of threads used for concurrent compaction tasks. This configuration is changed to dynamic from v3.1.7 and v3.2.2 onwards.
+- **Introduced in:** v3.0.0
+
 #### update_compaction_ratio_threshold
 
 - **Default:** 0.5
 - **Description:** The maximum proportion of data that a compaction can merge for a Primary Key table in a shared-data cluster. We recommend shrinking this value if a single tablet becomes excessively large. This parameter is supported from v3.1.5 onwards.
+
+#### create_tablet_worker_count
+
+- **Default**: 3
+- **Unit**: N/A
+- **Description**: The number of threads used to create a tablet. This configuration is changed to dynamic from v3.1.7 onwards.
+
+#### number_tablet_writer_threads
+
+- **Default**: 16
+- **Unit**: N/A
+- **Description**: The number of threads used for Stream Load. This configuration is changed to dynamic from v3.1.7 onwards.
+
+#### pipeline_connector_scan_thread_num_per_cpu
+
+- **Default**: 8
+- **Unit**: N/A
+- **Description**: The number of scan threads assigned to Pipeline Connector per CPU core in the BE node. This configuration is changed to dynamic from v3.1.7 onwards.
 
 ## Configure BE static parameters
 
@@ -507,12 +537,6 @@ BE static parameters are as follows.
 - **Default**: 1
 - **Unit**: N/A
 - **Description**: The thread count of the BE heartbeat service.
-
-#### create_tablet_worker_count
-
-- **Default**: 3
-- **Unit**: N/A
-- **Description**: The number of threads used to create a tablet.
 
 #### drop_tablet_worker_count
 
@@ -777,12 +801,6 @@ BE static parameters are as follows.
 - **Default**: 4
 - **Unit**: Hour
 - **Description**: The reservation time for the files produced by small-scale loadings.
-
-#### number_tablet_writer_threads
-
-- **Default**: 16
-- **Unit**: N/A
-- **Description**: The number of threads used for Stream Load.
 
 #### streaming_load_rpc_max_alive_time_sec
 

@@ -2,7 +2,7 @@
 
 ## 功能
 
-重新尝试导入指定 Pipe 中所有数据文件或某个数据文件。
+重新尝试导入指定 Pipe 中所有数据文件或某个数据文件。该命令自 3.2 版本起支持。
 
 ## 语法
 
@@ -33,3 +33,11 @@ ALTER PIPE [ IF EXISTS ] user_behavior_replica RETRY ALL;
 ```SQL
 ALTER PIPE [ IF EXISTS ] user_behavior_replica RETRY FILE 's3://starrocks-datasets/user_behavior_ten_million_rows.parquet';
 ```
+
+## 相关文档
+
+- [CREATE PIPE](../data-manipulation/CREATE_PIPE.md)
+- [ALTER PIPE](../data-manipulation/ALTER_PIPE.md)
+- [DROP PIPE](../data-manipulation/DROP_PIPE.md)
+- [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
+- [SUSPEND or RESUME PIPE](../data-manipulation/SUSPEND_or_RESUME_PIPE.md)

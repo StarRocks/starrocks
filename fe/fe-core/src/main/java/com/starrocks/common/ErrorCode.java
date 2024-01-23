@@ -315,7 +315,11 @@ public enum ErrorCode {
                     "Current role(s): %s. Inactivated role(s): %s."),
     ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER(5204, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
-    ;
+
+    /**
+     * 5300 - 5399: Lock and Transaction
+     */
+    ERR_LOCK_ERROR(5300, new byte[] {'5', '5', 'P', '0', '3'}, "Attempt to acquire lock fail : %s");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

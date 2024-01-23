@@ -62,6 +62,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -80,9 +81,9 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.fs.HdfsUtil;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
@@ -512,6 +513,18 @@ public class RestoreJob extends AbstractJob {
                     if (localTbl instanceof OlapTable && localTbl.hasAutoIncrementColumn()) {
                         // it must be !isReplay == true
                         ((OlapTable) localTbl).sendDropAutoIncrementMapTask();
+                    }
+                    if (localTbl.isMaterializedView()) {
+                        MaterializedView mv = (MaterializedView) localTbl;
+                        if (mv.isActive()) {
+                            // Skip to restore existed mv if mv is existed and active in the current local db,
+                            // mv should be refreshed by local table changes rather than backup/restore because we don't
+                            // track mv's version map with data's restore.
+                            // eg: we restore mv's data (old version) but not restore associated version map which may
+                            // cause wrong result if it can be used to rewrite.
+                            LOG.warn("Skip to restore existed and active mv: {}", mv.getName());
+                            continue;
+                        }
                     }
 
                     tblInfo.checkAndRecoverAutoIncrementId(localTbl);
@@ -1436,7 +1449,7 @@ public class RestoreJob extends AbstractJob {
                     if (tbl instanceof OlapTable) {
                         OlapTable olapTable = (OlapTable) tbl;
                         try {
-                            olapTable.doAfterRestore(db, mvRestoreContext);
+                            olapTable.doAfterRestore(mvRestoreContext);
                         } catch (Exception e) {
                             // no throw exceptions
                             LOG.warn(String.format("rebuild olap table %s failed: ", olapTable.getName()), e);

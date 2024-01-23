@@ -19,6 +19,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
@@ -30,6 +31,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.QueryableReentrantLock;
+import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -48,6 +50,7 @@ import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.spark.util.SizeEstimator;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -72,7 +75,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.scheduler.SubmitResult.SubmitStatus.SUBMITTED;
 
-public class TaskManager {
+public class TaskManager implements MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(TaskManager.class);
 
@@ -114,6 +117,7 @@ public class TaskManager {
             registerPeriodicalTask();
             dispatchScheduler.scheduleAtFixedRate(() -> {
                 if (!taskRunManager.tryTaskRunLock()) {
+                    LOG.warn("TaskRun scheduler cannot acquire the lock");
                     return;
                 }
                 try {
@@ -895,6 +899,16 @@ public class TaskManager {
             taskRunManager.taskRunUnlock();
         }
         LOG.info("remove run history:{}", historyToDelete);
+    }
+
+    @Override
+    public Map<String, Long> estimateCount() {
+        return ImmutableMap.of("Task", (long) idToTaskMap.size());
+    }
+
+    @Override
+    public long estimateSize() {
+        return SizeEstimator.estimate(idToTaskMap.values());
     }
 
     private static class SerializeData {

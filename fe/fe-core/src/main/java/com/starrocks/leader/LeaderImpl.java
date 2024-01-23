@@ -73,12 +73,13 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.OlapDeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
-import com.starrocks.meta.lock.LockType;
-import com.starrocks.meta.lock.Locker;
+import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -171,6 +172,7 @@ public class LeaderImpl {
 
     public LeaderImpl() {
         reportHandler.start();
+        MemoryUsageTracker.registerMemoryTracker("Report", reportHandler);
     }
 
     public TMasterResult finishTask(TFinishTaskRequest request) {
@@ -252,13 +254,13 @@ public class LeaderImpl {
                         PushTask pushTask = (PushTask) task;
                         if (pushTask.getPushType() == TPushType.DELETE) {
                             LOG.info("remove push replica. tabletId: {}, backendId: {}", task.getSignature(),
-                                     pushTask.getBackendId());
+                                    pushTask.getBackendId());
 
                             String failMsg = "Backend: " + task.getBackendId() + "Tablet: " + pushTask.getTabletId() +
-                                             " error msg: " + taskStatus.getError_msgs().toString();
+                                    " error msg: " + taskStatus.getError_msgs().toString();
                             pushTask.countDownLatch(pushTask.getBackendId(), pushTask.getTabletId(), failMsg);
-                            AgentTaskQueue.removeTask(pushTask.getBackendId(), TTaskType.REALTIME_PUSH, 
-                                                      task.getSignature());
+                            AgentTaskQueue.removeTask(pushTask.getBackendId(), TTaskType.REALTIME_PUSH,
+                                    task.getSignature());
                         }
                     }
                     return result;

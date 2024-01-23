@@ -224,7 +224,8 @@ public class SchemaChangeHandlerWithMVTest extends TestWithFeService {
                             "group by timestamp",
                     "alter table sc_dup3 drop column op_id");
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Can not drop/modify the column timestamp, because the column " +
+            Assert.assertTrue(e.getMessage(),
+                    e.getMessage().contains("Can not drop/modify the column timestamp, because the column " +
                     "is used in the related rollup mv1, please drop the rollup index first."));
         }
     }

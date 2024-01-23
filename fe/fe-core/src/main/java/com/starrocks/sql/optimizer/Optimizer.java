@@ -37,6 +37,7 @@ import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRul
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewRule;
 import com.starrocks.sql.optimizer.rule.transformation.ApplyExceptionRule;
+import com.starrocks.sql.optimizer.rule.transformation.ArrayDistinctAfterAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.ConvertToEqualForNullRule;
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
@@ -368,6 +369,7 @@ public class Optimizer {
         // @todo: resolve recursive optimization question:
         //  MergeAgg -> PruneColumn -> PruneEmptyWindow -> MergeAgg/Project -> PruneColumn...
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoAggRule());
+
         rootTaskContext.setRequiredColumns(requiredColumns.clone());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
 
@@ -428,6 +430,12 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_EMPTY_OPERATOR);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_PROJECT);
+
+        // ArrayDistinctAfterAggRule must run before pushDownAggregation,
+        // because push down agg won't have array_distinct project
+        if (sessionVariable.getEnableArrayDistinctAfterAggOpt()) {
+            ruleRewriteOnlyOnce(tree, rootTaskContext, new ArrayDistinctAfterAggRule());
+        }
 
         tree = pushDownAggregation(tree, rootTaskContext, requiredColumns);
 

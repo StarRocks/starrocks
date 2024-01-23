@@ -840,7 +840,7 @@ public class ExpressionAnalyzer {
 
             List<Expr> queryExpressions = Lists.newArrayList();
             node.collect(arg -> arg instanceof Subquery, queryExpressions);
-            if (queryExpressions.size() > 0 && node.getChildren().size() > 2) {
+            if (!queryExpressions.isEmpty() && node.getChildren().size() > 2) {
                 throw new SemanticException("In Predicate only support literal expression list", node.getPos());
             }
 
@@ -855,7 +855,7 @@ public class ExpressionAnalyzer {
 
             for (Expr child : node.getChildren()) {
                 Type type = child.getType();
-                if (type.isJsonType() && queryExpressions.size() > 0) { // TODO: enable it after support join on JSON
+                if (type.isJsonType() && !queryExpressions.isEmpty()) { // TODO: enable it after support join on JSON
                     throw new SemanticException("In predicate of JSON does not support subquery", child.getPos());
                 }
                 if (!Type.canCastTo(type, compatibleType)) {
@@ -1310,9 +1310,15 @@ public class ExpressionAnalyzer {
                         throw new SemanticException(fnName + " should have at least one input", node.getPos());
                     }
                     int start = argumentTypes.length - node.getParams().getOrderByElemNum();
-                    if (fnName.equals(FunctionSet.GROUP_CONCAT) && start < 2) {
-                        throw new SemanticException(fnName + " should have output expressions before [ORDER BY]",
-                                node.getPos());
+                    if (fnName.equals(FunctionSet.GROUP_CONCAT)) {
+                        if (start < 2) {
+                            throw new SemanticException(fnName + " should have output expressions before [ORDER BY]",
+                                    node.getPos());
+                        }
+                        if (node.getParams().isDistinct() && !node.getChild(start - 1).isConstant()) {
+                            throw new SemanticException(fnName + " distinct should use constant separator", node.getPos());
+                        }
+
                     } else if (fnName.equals(FunctionSet.ARRAY_AGG) && start != 1) {
                         throw new SemanticException(fnName + " should have exact one output expressions before" +
                                 " [ORDER BY]", node.getPos());
