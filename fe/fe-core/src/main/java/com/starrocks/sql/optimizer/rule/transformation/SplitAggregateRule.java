@@ -17,12 +17,9 @@ package com.starrocks.sql.optimizer.rule.transformation;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.AggregateFunction;
-import com.starrocks.catalog.Function;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.common.ErrorType;
@@ -30,33 +27,26 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+=======
+>>>>>>> 16d958075c ([Refactor] refactor split agg rule  (#39556))
 import com.starrocks.sql.optimizer.operator.AggType;
-import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
+=======
+>>>>>>> 16d958075c ([Refactor] refactor split agg rule  (#39556))
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
-import com.starrocks.sql.optimizer.statistics.Statistics;
-import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
-import org.apache.commons.collections4.CollectionUtils;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
+<<<<<<< HEAD
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT;
 import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT;
@@ -562,6 +552,15 @@ public class SplitAggregateRule extends TransformationRule {
 
     private Map<ColumnRefOperator, CallOperator> createNormalAgg(AggType aggType,
                                                                  Map<ColumnRefOperator, CallOperator> aggregationMap) {
+=======
+public abstract class SplitAggregateRule extends TransformationRule {
+    protected SplitAggregateRule(RuleType ruleType) {
+        super(ruleType, Pattern.create(OperatorType.LOGICAL_AGGR, OperatorType.PATTERN_LEAF));
+    }
+
+    protected Map<ColumnRefOperator, CallOperator> createNormalAgg(AggType aggType,
+                                                                   Map<ColumnRefOperator, CallOperator> aggregationMap) {
+>>>>>>> 16d958075c ([Refactor] refactor split agg rule  (#39556))
         Map<ColumnRefOperator, CallOperator> newAggregationMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationMap.entrySet()) {
             ColumnRefOperator column = entry.getKey();
@@ -583,7 +582,7 @@ public class SplitAggregateRule extends TransformationRule {
             } else {
                 callOperator = new CallOperator(aggregation.getFnName(), intermediateType,
                         aggregation.getChildren(), aggregation.getFunction(),
-                        aggregation.isDistinct());
+                        aggregation.isDistinct(), aggregation.isRemovedDistinct());
             }
 
             newAggregationMap.put(
@@ -594,141 +593,19 @@ public class SplitAggregateRule extends TransformationRule {
         return newAggregationMap;
     }
 
-    private Type getIntermediateType(CallOperator aggregation) {
+    // For Multi args aggregation functions, if they have const args,
+    // We should also pass the const args to merge phase aggregator for performance.
+    // For example, for intersect_count(user_id, dt, '20191111'),
+    // We should pass '20191111' to update and merge phase aggregator in BE both.
+    protected static void appendConstantColumns(List<ScalarOperator> arguments, CallOperator aggregation) {
+        if (aggregation.getChildren().size() > 1) {
+            aggregation.getChildren().stream().filter(ScalarOperator::isConstantRef).forEach(arguments::add);
+        }
+    }
+
+    protected Type getIntermediateType(CallOperator aggregation) {
         AggregateFunction af = (AggregateFunction) aggregation.getFunction();
         Preconditions.checkState(af != null);
         return af.getIntermediateType() == null ? af.getReturnType() : af.getIntermediateType();
-    }
-
-    // The phase concept please refer to AggregateInfo::AggPhase
-    private Map<ColumnRefOperator, CallOperator> createDistinctAggForSecondPhase(
-            AggType aggType, Map<ColumnRefOperator, CallOperator> aggregationMap) {
-        Map<ColumnRefOperator, CallOperator> newAggregationMap = Maps.newHashMap();
-        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationMap.entrySet()) {
-            ColumnRefOperator column = entry.getKey();
-            CallOperator aggregation = entry.getValue();
-            CallOperator callOperator;
-            Type intermediateType = getIntermediateType(aggregation);
-            if (!aggregation.isDistinct()) {
-                List<ScalarOperator> arguments =
-                        Lists.newArrayList(new ColumnRefOperator(column.getId(), intermediateType, column.getName(),
-                                aggregation.isNullable()));
-                appendConstantColumns(arguments, aggregation);
-
-                if (aggType.isGlobal()) {
-                    callOperator = new CallOperator(
-                            aggregation.getFnName(),
-                            aggregation.getType(),
-                            arguments,
-                            aggregation.getFunction());
-                } else {
-                    callOperator = new CallOperator(
-                            aggregation.getFnName(),
-                            intermediateType,
-                            arguments,
-                            aggregation.getFunction());
-                }
-            } else {
-                if (aggregation.getFnName().equalsIgnoreCase(FunctionSet.COUNT)) {
-                    // COUNT(DISTINCT ...) -> COUNT(IF(IsNull(<agg slot 1>), NULL, IF(IsNull(<agg slot 2>), NULL, ...)))
-                    // We need the nested IF to make sure that we do not count
-                    // column-value combinations if any of the distinct columns are NULL.
-                    // This behavior is consistent with MySQL.
-                    ScalarOperator newChildren = createCountDistinctAggParam(aggregation.getChildren());
-                    // because of the change of children, we need to get function again.
-                    Function fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {newChildren.getType()},
-                            Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                    aggregation = new CallOperator(aggregation.getFnName(), aggregation.getType(),
-                            Lists.newArrayList(newChildren), fn);
-                }
-                // Remove distinct
-                callOperator = new CallOperator(aggregation.getFnName(), aggType.isAnyGlobal() ?
-                        aggregation.getType() : intermediateType,
-                        aggregation.getChildren(), aggregation.getFunction());
-            }
-            newAggregationMap.put(column, callOperator);
-        }
-        return newAggregationMap;
-    }
-
-    /**
-     * Creates an IF function call that returns NULL if any of the children
-     * at indexes [firstIdx, lastIdx] return NULL.
-     * For example, the resulting IF function would like this for 3 scala operator:
-     * IF(IsNull(child1), NULL, IF(IsNull(child2), NULL, child3))
-     */
-    private ScalarOperator createCountDistinctAggParam(List<ScalarOperator> children) {
-        Preconditions.checkState(children.size() >= 1);
-        if (children.size() == 1) {
-            return children.get(0);
-        }
-        int firstIdx = 0;
-        int lastIdx = children.size() - 1;
-
-        ScalarOperator elseOperator = children.get(lastIdx);
-        for (int i = lastIdx - 1; i >= firstIdx; --i) {
-            ArrayList<ScalarOperator> ifArgs = Lists.newArrayList();
-            ScalarOperator isNullColumn = children.get(i);
-            // Build expr: IF(IsNull(slotRef), NULL, elseExpr)
-            IsNullPredicateOperator isNullPredicateOperator = new IsNullPredicateOperator(isNullColumn);
-            ifArgs.add(isNullPredicateOperator);
-            ifArgs.add(ConstantOperator.createNull(elseOperator.getType()));
-            ifArgs.add(elseOperator);
-            Type[] argumentTypes = ifArgs.stream().map(arg -> arg.getType()).toArray(Type[]::new);
-
-            Function fn = Expr.getBuiltinFunction(FunctionSet.IF, argumentTypes,
-                    Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            elseOperator = new CallOperator(FunctionSet.IF, fn.getReturnType(), ifArgs, fn);
-
-        }
-        return elseOperator;
-    }
-
-    // The phase concept please refer to AggregateInfo::AggPhase
-    private LogicalAggregationOperator createDistinctAggForFirstPhase(
-            ColumnRefFactory columnRefFactory,
-            List<ColumnRefOperator> groupKeys,
-            Map<ColumnRefOperator, CallOperator> aggregationMap,
-            AggType type) {
-        Set<ColumnRefOperator> newGroupKeys = Sets.newHashSet(groupKeys);
-
-        Map<ColumnRefOperator, CallOperator> localAggMap = Maps.newHashMap();
-        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregationMap.entrySet()) {
-            ColumnRefOperator column = entry.getKey();
-            CallOperator aggregation = entry.getValue();
-
-            // Add distinct column to group by column
-            if (aggregation.isDistinct()) {
-                for (int i = 0; i < aggregation.getUsedColumns().cardinality(); ++i) {
-                    newGroupKeys.add(columnRefFactory.getColumnRef(aggregation.getUsedColumns().getColumnIds()[i]));
-                }
-                continue;
-            }
-
-            Type intermediateType = getIntermediateType(aggregation);
-            CallOperator callOperator;
-            if (!type.isLocal()) {
-                List<ScalarOperator> arguments =
-                        Lists.newArrayList(
-                                new ColumnRefOperator(column.getId(), aggregation.getType(), column.getName(),
-                                        aggregation.isNullable()));
-                appendConstantColumns(arguments, aggregation);
-
-                callOperator = new CallOperator(
-                        aggregation.getFnName(),
-                        aggregation.getType(),
-                        arguments,
-                        aggregation.getFunction());
-            } else {
-                callOperator = new CallOperator(aggregation.getFnName(), intermediateType,
-                        aggregation.getChildren(), aggregation.getFunction());
-            }
-
-            localAggMap
-                    .put(new ColumnRefOperator(column.getId(), intermediateType, column.getName(), column.isNullable()),
-                            callOperator);
-        }
-
-        return new LogicalAggregationOperator(type, Lists.newArrayList(newGroupKeys), localAggMap);
     }
 }

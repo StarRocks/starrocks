@@ -53,6 +53,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> partitionByColumns;
     private final Map<ColumnRefOperator, CallOperator> aggregations;
 
+<<<<<<< HEAD
     // When generate plan fragment, we need this info.
     // For select count(distinct id_bigint), sum(id_int) from test_basic;
     // In the distinct local (update serialize) agg stage:
@@ -63,6 +64,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
     // if singleDistinctFunctionPos is -1, means no single distinct function
     private final int singleDistinctFunctionPos;
 
+=======
+>>>>>>> 16d958075c ([Refactor] refactor split agg rule  (#39556))
     // The flag for this aggregate operator has split to
     // two stage aggregate or three stage aggregate
     private final boolean isSplit;
@@ -80,7 +83,6 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
                                          List<ColumnRefOperator> groupBys,
                                          List<ColumnRefOperator> partitionByColumns,
                                          Map<ColumnRefOperator, CallOperator> aggregations,
-                                         int singleDistinctFunctionPos,
                                          boolean isSplit,
                                          long limit,
                                          ScalarOperator predicate,
@@ -90,7 +92,6 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         this.groupBys = groupBys;
         this.partitionByColumns = partitionByColumns;
         this.aggregations = aggregations;
-        this.singleDistinctFunctionPos = singleDistinctFunctionPos;
         this.isSplit = isSplit;
         this.limit = limit;
         this.predicate = predicate;
@@ -131,12 +132,8 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
         return partitionByColumns;
     }
 
-    public boolean hasSingleDistinct() {
-        return singleDistinctFunctionPos > -1;
-    }
-
-    public int getSingleDistinctFunctionPos() {
-        return singleDistinctFunctionPos;
+    public boolean hasRemovedDistinctFunc() {
+        return aggregations.values().stream().anyMatch(CallOperator::isRemovedDistinct);
     }
 
     public boolean isSplit() {
@@ -156,7 +153,7 @@ public class PhysicalHashAggregateOperator extends PhysicalOperator {
 
     public String getNeededPreaggregationMode() {
         String mode = ConnectContext.get().getSessionVariable().getStreamingPreaggregationMode();
-        if (canUseStreamingPreAgg() && (type.isDistinctLocal() || hasSingleDistinct())) {
+        if (canUseStreamingPreAgg() && (type.isDistinctLocal() || hasRemovedDistinctFunc())) {
             mode = SessionVariableConstants.FORCE_PREAGGREGATION;
         }
         return mode;

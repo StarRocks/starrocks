@@ -35,13 +35,21 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
+<<<<<<< HEAD
 import com.starrocks.catalog.FunctionSet;
+=======
+import com.starrocks.catalog.Function;
+>>>>>>> 16d958075c ([Refactor] refactor split agg rule  (#39556))
 import com.starrocks.common.io.Writable;
 
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+<<<<<<< HEAD
 import java.util.ArrayList;
+=======
+import java.util.Arrays;
+>>>>>>> 16d958075c ([Refactor] refactor split agg rule  (#39556))
 import java.util.List;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -69,11 +77,6 @@ public class FunctionParams implements Writable {
         this.isDistinct = isDistinct;
         this.exprs = exprs;
         this.orderByElements = orderByElements;
-        // add order-by exprs in exprs, so that treating them as function's children
-        if(orderByElements != null && !orderByElements.isEmpty()) {
-            this.exprs.addAll(orderByElements.stream().map(OrderByElement::getExpr)
-                    .collect(Collectors.toList()));
-        }
     }
 
     // c'tor for non-star, non-distinct params
