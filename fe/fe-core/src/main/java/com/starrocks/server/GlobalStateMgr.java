@@ -160,6 +160,7 @@ import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.load.streamload.StreamLoadMgr;
+import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
@@ -541,6 +542,8 @@ public class GlobalStateMgr {
     private final DictionaryMgr dictionaryMgr = new DictionaryMgr();
     private RefreshDictionaryCacheTaskDaemon refreshDictionaryCacheTaskDaemon;
 
+    private MemoryUsageTracker memoryUsageTracker;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -800,6 +803,8 @@ public class GlobalStateMgr {
 
         this.replicationMgr = new ReplicationMgr();
         nodeMgr.registerLeaderChangeListener(slotProvider::leaderChangeListener);
+
+        this.memoryUsageTracker = new MemoryUsageTracker();
     }
 
     public static void destroyCheckpoint() {
@@ -1478,6 +1483,9 @@ public class GlobalStateMgr {
         lockChecker.start();
 
         refreshDictionaryCacheTaskDaemon.start();
+
+        // The memory tracker should be placed at the end
+        memoryUsageTracker.start();
     }
 
     private void transferToNonLeader(FrontendNodeType newType) {
