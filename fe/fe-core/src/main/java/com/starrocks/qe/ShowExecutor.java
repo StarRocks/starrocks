@@ -282,7 +282,7 @@ public class ShowExecutor {
         metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
     }
 
-    public ShowResultSet execute() throws AnalysisException, DdlException, AccessDeniedException {
+    public ShowResultSet execute() throws AnalysisException, DdlException {
         if (stmt instanceof ShowMaterializedViewsStmt) {
             handleShowMaterializedView();
         } else if (stmt instanceof ShowAuthorStmt) {
@@ -1862,7 +1862,7 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
-    private void handleShowTablet() throws AnalysisException, AccessDeniedException {
+    private void handleShowTablet() throws AnalysisException {
         ShowTabletStmt showStmt = (ShowTabletStmt) stmt;
         List<List<String>> rows = Lists.newArrayList();
 
@@ -1901,7 +1901,10 @@ public class ShowExecutor {
                     tableName = table.getName();
                     Pair<Boolean, Boolean> privResult = Authorizer.checkPrivForShowTablet(connectContext, dbName, table);
                     if (!privResult.first) {
-                        throw new AccessDeniedException(
+                        // TODO(yiming): Refactor it, throw AccessDeniedException. We throw RuntimeException here,
+                        //  because the caller of this method is not prepared to handle AccessDeniedException,
+                        //  and change the it will incur a lot of chain modification.
+                        throw new RuntimeException(
                                 ErrorReport.reportCommon(null, ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
                                         "ANY ON TABLE/MV OBJECT"));
                     }
@@ -1975,7 +1978,8 @@ public class ShowExecutor {
                 Pair<Boolean, Boolean> privResult = Authorizer.checkPrivForShowTablet(
                         connectContext, db.getFullName(), table);
                 if (!privResult.first) {
-                    throw new AccessDeniedException(
+                    // TODO(yiming): Refactor it, throw AccessDeniedException.
+                    throw new RuntimeException(
                             ErrorReport.reportCommon(null, ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
                                     "ANY ON TABLE/MV OBJECT"));
                 }

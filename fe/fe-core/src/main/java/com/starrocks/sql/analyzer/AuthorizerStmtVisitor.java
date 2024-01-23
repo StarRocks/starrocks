@@ -217,7 +217,7 @@ import java.util.regex.Pattern;
 public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     // For show tablet detail command, if user has any privilege on the corresponding table, user can run it
     // TODO(yiming): match "/dbs", not only show tablet detail cmd, need to change privilege check for other proc node
-    private static final Pattern showTabletDetailCmdPattern =
+    private static final Pattern SHOW_TABLET_DETAIL_CMD_PATTERN =
             Pattern.compile("/dbs/\\d+/\\d+/partitions/\\d+/\\d+/\\d+/?");
 
     public AuthorizerStmtVisitor() {
@@ -1921,7 +1921,7 @@ public class AuthorizerStmtVisitor extends AstVisitor<Void, ConnectContext> {
     @Override
     public Void visitShowProcStmt(ShowProcStmt statement, ConnectContext context) {
         try {
-            if (!showTabletDetailCmdPattern.matcher(statement.getPath()).matches()) {
+            if (!SHOW_TABLET_DETAIL_CMD_PATTERN.matcher(statement.getPath()).matches()) {
                 Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                         PrivilegeType.OPERATE);
             }

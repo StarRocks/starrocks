@@ -1512,7 +1512,7 @@ public class StmtExecutor {
     }
 
     // Process show statement
-    private void handleShow() throws IOException, AnalysisException, DdlException, AccessDeniedException {
+    private void handleShow() throws IOException, AnalysisException, DdlException {
         ShowExecutor executor = new ShowExecutor(context, (ShowStmt) parsedStmt);
         ShowResultSet resultSet = executor.execute();
         if (resultSet == null) {
