@@ -198,17 +198,17 @@ BE dynamic parameters are as follows.
 #### max_cumulative_compaction_num_singleton_deltas
 
 - **Default:** 1000
-- **Description:** The maximum number of segments merged in a single Cumulative Compaction.
+- **Description:** The maximum number of segments that can be merged in a single Cumulative Compaction. You can reduce this value if OOM occurs during compaction.
 
 #### max_compaction_candidate_num
 
 - **Default:** 40960
-- **Description:** The maximum number of compaction candidate tablets. If it is too large, it will cause high memory usage and CPU load consumption.
+- **Description:** The maximum number of candidate tablets for compaction. If the value is too large, it will cause high memory usage and high CPU load.
 
 #### update_compaction_check_interval_seconds
 
-- **Default:** 60 seconds
-- **Description:** The time interval at which to check the Update Compaction of the Primary Key table.
+- **Default:** 60
+- **Description:** The time interval at which to check Update Compaction for Primary Key tables.
 
 #### update_compaction_num_threads_per_disk
 
@@ -218,42 +218,42 @@ BE dynamic parameters are as follows.
 #### update_compaction_per_tablet_min_interval_seconds
 
 - **Default:** 120
-- **Description:** The minimum time interval for Update Compaction of each tablet in the Primary key model.
+- **Description:** The minimum time interval at which Update Compaction is triggered for each tablet in a Primary Key table.
 
 #### max_update_compaction_num_singleton_deltas
 
 - **Default:** 1000
-- **Description:** The maximum number of rowsets merged in a single Update Compaction.
+- **Description:** The maximum number of rowsets that can be merged in a single Update Compaction.
 
 #### update_compaction_size_threshold
 
 - **Default:** 268435456 bytes
-- **Description:** The Compaction Score of the Primary key model is calculated based on the file size, which is different from the number of files of other models. This parameter can be used to make the Compaction Score of the Primary key model similar to that of other models, making it easier for users to understand.
+- **Description:** The Compaction Score of Primary Key tables is calculated based on the file size, which is different from other table types. This parameter can be used to make the Compaction Score of Primary Key tables similar to that of other table types, making it easier for users to understand.
 
 #### update_compaction_result_bytes
 
-- **Default:** 1073741824 bytes
-- **Description:** The maximum result size of a single Update Compaction merge.
+- **Default:** 1073741824
+- **Description:** The maximum result size of a single Update Compaction.
 
 #### update_compaction_delvec_file_io_amp_ratio
 
 - **Default:** 2
-- **Description:** Used to control the priority of compaction for rowsets containing delvec files in the Primary Key table model. The larger the value, the higher the priority.
+- **Description:** Used to control the priority of compaction for rowsets that contain Delvec files in Primary Key tables. The larger the value, the higher the priority.
 
 #### repair_compaction_interval_seconds
 
 - **Default:** 600
-- **Description:** Repair Compaction thread polling interval.
+- **Description:** The interval to poll Repair Compaction threads.
 
 #### manual_compaction_threads
 
 - **Default:** 4
-- **Description:** Manual Compaction Number of threads.
+- **Description:** Number of threads for Manual Compaction.
 
 #### enable_rowset_verify
 
 - **Default:** false
-- **Description:** When enabled, the correctness of the generated rowset will be checked after Compaction and Schema Change.
+- **Description:** Whether to verify the correctness of generated rowsets. When enabled, the correctness of the generated rowsets will be checked after Compaction and Schema Change.
 
 #### enable_size_tiered_compaction_strategy
 
@@ -263,12 +263,12 @@ BE dynamic parameters are as follows.
 #### min_compaction_failure_interval_sec
 
 - **Default:** 120 seconds
-- **Description:** The minimum time interval that a Tablet Compaction can be scheduled since the last compaction failure.
+- **Description:** The minimum interval at which to a tablet compaction can be scheduled since the previous compaction failure.
 
 #### max_compaction_concurrency
 
 - **Default:** -1
-- **Description:** The maximum concurrency of compactions (both Base Compaction and Cumulative Compaction). The value -1 indicates that no limit is imposed on the concurrency.
+- **Description:** The maximum concurrency of compactions (including both Base Compaction and Cumulative Compaction). The value `-1` indicates that no limit is imposed on the concurrency.
 
 #### periodic_counter_update_period_ms
 
@@ -399,27 +399,27 @@ BE dynamic parameters are as follows.
 #### min_cumulative_compaction_failure_interval_sec
 
 - **Default:** 30 seconds
-- **Description:** The minimum time interval at which Cumulative Compaction retries upon failures.
+- **Description:** The minimum interval at which Cumulative Compaction retries upon failures.
 
 #### size_tiered_level_num
 
 - **Default:** 7 (Number of Levels for Size-tiered Compaction)
-- **Description:** The number of levels for the Size-tiered Compaction strategy. At most one rowset is reserved for each level. Therefore, under a stable condition, there are, at most, as many rowsets as the level number specified in this configuration item.
+- **Description:** The number of levels for the Size-tiered Compaction policy. At most one rowset is reserved for each level. Therefore, under a stable condition, there are, at most, as many rowsets as the level number specified in this configuration item.
 
 #### size_tiered_level_multiple
 
 - **Default:** 5 (Multiple of Data Size Between Contiguous Levels in Size-tiered Compaction)
-- **Description:** The multiple of data size between two contiguous levels in the Size-tiered Compaction strategy.
+- **Description:** The multiple of data size between two contiguous levels in the Size-tiered Compaction policy.
 
 #### size_tiered_level_multiple_dupkey
 
 - **Default:** 10
-- **Description:** In the Size-tiered Compaction strategy, the multiple of the data amount difference between two adjacent levels of the Duplicate table model.
+- **Description:** In the Size-tiered Compaction policy, the multiple of the data amount difference between two adjacent levels for Duplicate Key tables.
 
 #### size_tiered_min_level_size
 
 - **Default:** 131,072 Bytes
-- **Description:** The data size of the minimum level in the Size-tiered Compaction strategy. Rowsets smaller than this value immediately trigger the data compaction.
+- **Description:** The data size of the minimum level in the Size-tiered Compaction policy. Rowsets smaller than this value immediately trigger the data compaction.
 
 #### storage_page_cache_limit
 
@@ -477,6 +477,12 @@ BE static parameters are as follows.
 - **Default**: -1
 - **Unit**: N/A
 - **Description**: The number of bthreads of a bRPC. The value -1 indicates the same number with the CPU threads.
+
+#### compaction_memory_limit_per_worker
+
+- **Default**: 2147483648 (2 GB)
+- **Unit**: byte
+- **Description**: The maximum memory usage per compaction thread.
 
 #### priority_networks
 
@@ -746,7 +752,7 @@ BE static parameters are as follows.
 #### enable_check_string_lengths
 
 - **Default**: true
-- **Description**: Whether to check the data length during import to solve the problem of Compaction failure caused by out-of-bounds VARCHAR type data.
+- **Description**: Whether to check the data length during loading to solve the problem of Compaction failure caused by out-of-bounds VARCHAR type data.
 
 #### max_row_source_mask_memory_bytes
 

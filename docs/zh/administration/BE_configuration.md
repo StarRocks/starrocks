@@ -222,55 +222,55 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### min_cumulative_compaction_num_singleton_deltas
 
-- 含义：触发 CumulativeCompaction 的最小 segment 数。
+- 含义：触发 Cumulative Compaction 的最小 segment 数。
 - 默认值：5
 
 #### max_cumulative_compaction_num_singleton_deltas
 
-- 含义：单次 CumulativeCompaction 合并的最大 segment 数。
+- 含义：单次 Cumulative Compaction 能合并的最大 segment 数。如果 Compaction 时出现内存不足的情况，可以调小该值。
 - 默认值：1000
 
 #### max_compaction_candidate_num
 
-- 含义：Compaction 候选 tablet 的最大数量。太大会导致内存占用和cpu负载消耗高。
+- 含义：Compaction 候选 tablet 的最大数量。太大会导致内存占用和 CPU 负载高。
 - 默认值：40960
 
 #### update_compaction_check_interval_seconds
 
-- 含义：Primary key 模型 Update compaction 的检查间隔。
+- 含义：Primary Key 表 Update Compaction 的检查间隔。
 - 单位：秒
 - 默认值：60
 
 #### update_compaction_num_threads_per_disk
 
-- 含义：每次磁盘 Update Compaction 线程的数目。
+- 含义：每个磁盘 Update Compaction 线程的数目。
 - 默认值：1
 
 #### update_compaction_per_tablet_min_interval_seconds
 
-- 含义：Primary key 模型每个 tablet 做 Update compaction 的最小时间间隔。
+- 含义：Primary Key 表每个 tablet 做 Update Compaction 的最小时间间隔。
 - 默认值：120
 
 #### max_update_compaction_num_singleton_deltas
 
-- 含义：单次 Update Compaction 合并的最大 rowset 数。
+- 含义：单次 Update Compaction 合并的最大 Rowset 数。
 - 默认值：1000
 
 #### update_compaction_size_threshold
 
-- 含义：Primary key 模型的 Compaction Score 是基于文件大小计算的，与其他模型的文件数量不同。通过该参数可以使 Primary key 模型的 Compaction Score 与其他模型的相近，便于用户理解。
+- 含义：Primary Key 表的 Compaction Score 是基于文件大小计算的，与其他表类型的文件数量不同。通过该参数可以使 Primary key 表的 Compaction Score 与其他类型表的相近，便于用户理解。
 - 单位：字节
 - 默认值：268435456
 
 #### update_compaction_result_bytes
 
-- 含义：单次 Update Compaction 合并的最大结果大小。
+- 含义：单次 Update Compaction 合并的最大结果的大小。
 - 单位：字节
 - 默认值：1073741824
 
 #### update_compaction_delvec_file_io_amp_ratio
 
-- 含义：用于控制 Primary Key 表模型包含 delvec 文件的 rowset 做 Compaction 的优先级。该值越大优先级越高。
+- 含义：用于控制 Primary Key 表包含 Delvec 文件的 Rowset 做 Compaction 的优先级。该值越大优先级越高。
 - 默认值：2
 
 #### repair_compaction_interval_seconds
@@ -285,8 +285,13 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### enable_rowset_verify
 
-- 含义：开启后，会在 Compaction、Schema Change 后检查生成的 rowset 的正确性。
+- 含义：是否检查 Rowset 的正确性。开启后，会在 Compaction、Schema Change 后检查生成的 Rowset 的正确性。
 - 默认值：false
+
+#### enable_size_tiered_compaction_strategy
+
+- 含义：是否开启 Size-tiered Compaction 策略。
+- 默认值：true
 
 #### min_compaction_failure_interval_sec
 
@@ -459,7 +464,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 #### size_tiered_level_multiple_dupkey
 
-- 含义：Size-tiered Compaction 策略中，Duplicate表模型相邻两个 level 之间相差的数据量的倍数。
+- 含义：Size-tiered Compaction 策略中，Duplicate Key 表相邻两个 level 之间相差的数据量的倍数。
 - 默认值：10
 
 #### size_tiered_min_level_size
@@ -542,6 +547,12 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 
 - 含义：bRPC 的 bthreads 线程数量，-1 表示和 CPU 核数一样。
 - 默认值：-1
+
+#### compaction_memory_limit_per_worker
+
+- 含义：单个 Compaction 线程的最大内存使用量。
+- 单位：byte
+- 默认值：2147483648 (2 GB)
 
 #### priority_networks
 
