@@ -243,7 +243,7 @@ BE dynamic parameters are as follows.
 #### repair_compaction_interval_seconds
 
 - **Default:** 600
-- **Description:** The interval to poll Repair Compaction threads.
+- **Description:** The time interval to poll Repair Compaction threads.
 
 #### manual_compaction_threads
 
@@ -263,7 +263,7 @@ BE dynamic parameters are as follows.
 #### min_compaction_failure_interval_sec
 
 - **Default:** 120 seconds
-- **Description:** The minimum interval at which to a tablet compaction can be scheduled since the previous compaction failure.
+- **Description:** The minimum time interval at which a tablet compaction can be scheduled since the previous compaction failure.
 
 #### max_compaction_concurrency
 
@@ -399,7 +399,7 @@ BE dynamic parameters are as follows.
 #### min_cumulative_compaction_failure_interval_sec
 
 - **Default:** 30 seconds
-- **Description:** The minimum interval at which Cumulative Compaction retries upon failures.
+- **Description:** The minimum time interval at which Cumulative Compaction retries upon failures.
 
 #### size_tiered_level_num
 
