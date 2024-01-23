@@ -16,6 +16,7 @@
 
 #include <iostream>
 
+#include "common/logging.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "types/logical_type.h"
@@ -115,6 +116,12 @@ inline LogicalType delegate_type(LogicalType type) {
 inline bool is_integer_type(LogicalType type) {
     return type == TYPE_TINYINT || type == TYPE_SMALLINT || type == TYPE_INT || type == TYPE_BIGINT ||
            type == TYPE_LARGEINT;
+}
+
+inline LogicalType promote_integer_types(LogicalType type1, LogicalType type2) {
+    DCHECK(is_integer_type(type1) && is_integer_type(type2));
+    if (type1 > type2) return type1;
+    return type2;
 }
 
 inline bool is_float_type(LogicalType type) {

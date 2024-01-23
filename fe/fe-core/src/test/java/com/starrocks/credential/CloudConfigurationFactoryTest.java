@@ -18,7 +18,8 @@ import com.starrocks.credential.aws.AWSCloudCredential;
 import com.starrocks.thrift.TCloudConfiguration;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.iceberg.aws.AwsProperties;
+import org.apache.iceberg.aws.AwsClientProperties;
+import org.apache.iceberg.aws.s3.S3FileIOProperties;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -30,19 +31,20 @@ public class CloudConfigurationFactoryTest {
     @Test
     public void testBuildCloudConfigurationForTabular() {
         Map<String, String> map = new HashMap<>();
-        map.put(AwsProperties.S3FILEIO_ACCESS_KEY_ID, "ak");
-        map.put(AwsProperties.S3FILEIO_SECRET_ACCESS_KEY, "sk");
-        map.put(AwsProperties.S3FILEIO_SESSION_TOKEN, "token");
-        map.put(AwsProperties.CLIENT_REGION, "region");
+        map.put(S3FileIOProperties.ACCESS_KEY_ID, "ak");
+        map.put(S3FileIOProperties.SECRET_ACCESS_KEY, "sk");
+        map.put(S3FileIOProperties.SESSION_TOKEN, "token");
+        map.put(AwsClientProperties.CLIENT_REGION, "region");
         CloudConfiguration cloudConfiguration = CloudConfigurationFactory.buildCloudConfigurationForTabular(map);
         Assert.assertNotNull(cloudConfiguration);
         Assert.assertEquals(CloudType.AWS, cloudConfiguration.getCloudType());
         Assert.assertEquals(
-                "AWSCloudConfiguration{resources='', jars='', hdpuser='', cred=AWSCloudCredential{" +
-                        "useAWSSDKDefaultBehavior=false, useInstanceProfile=false, " +
-                        "accessKey='ak', secretKey='sk', sessionToken='token', iamRoleArn='', " +
-                        "externalId='', region='region', endpoint=''}, enablePathStyleAccess=false, " +
-                        "enableSSL=true}", cloudConfiguration.toConfString());
+                "AWSCloudConfiguration{resources='', jars='', hdpuser='', " +
+                        "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
+                        "useInstanceProfile=false, accessKey='ak', secretKey='sk', " +
+                        "sessionToken='token', iamRoleArn='', stsRegion='', stsEndpoint='', externalId='', " +
+                        "region='region', endpoint=''}, enablePathStyleAccess=false, enableSSL=true}",
+                cloudConfiguration.toConfString());
     }
 
     @Test
@@ -66,9 +68,10 @@ public class CloudConfigurationFactoryTest {
         cc.toFileStoreInfo();
         Assert.assertEquals(cc.toConfString(),
                 "AWSCloudConfiguration{resources='', jars='', hdpuser='', " +
-                        "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, " +
-                        "useInstanceProfile=false, accessKey='XX', secretKey='YY', sessionToken='', iamRoleArn='', " +
-                        "externalId='', region='ZZ', endpoint=''}, enablePathStyleAccess=false, enableSSL=true}");
+                        "cred=AWSCloudCredential{useAWSSDKDefaultBehavior=false, useInstanceProfile=false, " +
+                        "accessKey='XX', secretKey='YY', sessionToken='', iamRoleArn='', stsRegion='', " +
+                        "stsEndpoint='', externalId='', region='ZZ', endpoint=''}, " +
+                        "enablePathStyleAccess=false, enableSSL=true}");
     }
 
     @Test
@@ -236,8 +239,9 @@ public class CloudConfigurationFactoryTest {
         HiveConf conf = new HiveConf();
         conf.set(CloudConfigurationConstants.AWS_GLUE_USE_AWS_SDK_DEFAULT_BEHAVIOR, "true");
         AWSCloudCredential cred = CloudConfigurationFactory.buildGlueCloudCredential(conf);
-        Assert.assertEquals(cred.toCredString(),
-                "AWSCloudCredential{useAWSSDKDefaultBehavior=true, useInstanceProfile=false, accessKey='', secretKey='', " +
-                        "sessionToken='', iamRoleArn='', externalId='', region='us-east-1', endpoint=''}");
+        Assert.assertNotNull(cred);
+        Assert.assertEquals("AWSCloudCredential{useAWSSDKDefaultBehavior=true, useInstanceProfile=false, " +
+                        "accessKey='', secretKey='', sessionToken='', iamRoleArn='', stsRegion='', " +
+                        "stsEndpoint='', externalId='', region='us-east-1', endpoint=''}", cred.toCredString());
     }
 }

@@ -298,18 +298,54 @@ StatusOr<ColumnPtr> TimeFunctions::timestamp(FunctionContext* context, const Col
     return columns[0];
 }
 
+static const std::vector<int> NOW_PRECISION_FACTORS = {1000000, 100000, 10000, 1000, 100, 10, 1};
+
 StatusOr<ColumnPtr> TimeFunctions::now(FunctionContext* context, const Columns& columns) {
     starrocks::RuntimeState* state = context->state();
+    int64_t timestamp_us = state->timestamp_us();
     DateTimeValue dtv;
-    auto timestamp_ms = state->timestamp_ms();
-    if (dtv.from_unixtime(timestamp_ms / 1000, state->timezone_obj())) {
-        TimestampValue ts;
-        ts.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(),
-                          timestamp_ms % 1000);
-        return ColumnHelper::create_const_column<TYPE_DATETIME>(ts, 1);
-    } else {
+    if (!dtv.from_unixtime(timestamp_us / 1000000, state->timezone_obj())) {
         return ColumnHelper::create_const_null_column(1);
     }
+    if (columns.empty()) {
+        TimestampValue ts;
+        ts.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(), 0);
+        return ColumnHelper::create_const_column<TYPE_DATETIME>(ts, 1);
+    }
+
+    if (context->is_constant_column(1)) {
+        auto col = context->get_constant_column(1);
+        if (col->only_null()) {
+            return Status::InvalidArgument("the precision of now function must between 0 and 6");
+        }
+        int precision = ColumnHelper::get_const_value<TYPE_INT>(col);
+        if (precision < 0 || precision > 6) {
+            return Status::InvalidArgument("the precision of now function must between 0 and 6");
+        }
+        TimestampValue ts;
+        ts.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(),
+                          timestamp_us % 1000000 / NOW_PRECISION_FACTORS[precision] * NOW_PRECISION_FACTORS[precision]);
+        return ColumnHelper::create_const_column<TYPE_DATETIME>(ts, 1);
+    }
+
+    auto size = columns[0]->size();
+    auto precision_viewer = ColumnViewer<TYPE_INT>(columns[0]);
+    ColumnBuilder<TYPE_DATETIME> result(size);
+    for (int row = 0; row < size; row++) {
+        if (precision_viewer.is_null(row)) {
+            return Status::InvalidArgument("the precision of now function must between 0 and 6");
+        }
+        int precision = precision_viewer.value(row);
+        if (precision < 0 || precision > 6) {
+            return Status::InvalidArgument("the precision of now function must between 0 and 6");
+        }
+        int factor = NOW_PRECISION_FACTORS[precision];
+        TimestampValue ts;
+        ts.from_timestamp(dtv.year(), dtv.month(), dtv.day(), dtv.hour(), dtv.minute(), dtv.second(),
+                          timestamp_us % 1000000 / factor * factor);
+        result.append(ts);
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
 }
 
 StatusOr<ColumnPtr> TimeFunctions::curtime(FunctionContext* context, const Columns& columns) {
@@ -644,6 +680,134 @@ DEFINE_UNARY_FN_WITH_IMPL(to_dateImpl, v) {
 }
 DEFINE_TIME_UNARY_FN(to_date, TYPE_DATETIME, TYPE_DATE);
 
+struct TeradataFormatState {
+    std::unique_ptr<TeradataFormat> formatter;
+};
+
+// to_tera_date
+Status TimeFunctions::to_tera_date_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    if (!context->is_notnull_constant_column(1)) {
+        return Status::NotSupported("The 2rd argument must be literal");
+    }
+    auto* state = new TeradataFormatState();
+    context->set_function_state(scope, state);
+    state->formatter = std::make_unique<TeradataFormat>();
+    auto format_col = context->get_constant_column(1);
+    auto format_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(format_col);
+    if (!state->formatter->prepare(format_str)) {
+        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str));
+    }
+    return Status::OK();
+}
+
+Status TimeFunctions::to_tera_date_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state = reinterpret_cast<TeradataFormatState*>(context->get_function_state(scope));
+        delete state;
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> TimeFunctions::to_tera_date(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    size_t size = columns[0]->size(); // minimum number of rows.
+    ColumnBuilder<TYPE_DATE> result(size);
+    auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+
+    auto state = reinterpret_cast<TeradataFormatState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (!state->formatter) {
+        return Status::InvalidArgument("invalid date format");
+    }
+
+    for (size_t i = 0; i < size; ++i) {
+        if (str_viewer.is_null(i)) {
+            result.append_null();
+        } else {
+            std::string_view str(str_viewer.value(i));
+
+            DateTimeValue date_time_value;
+            if (!state->formatter->parse(str, &date_time_value)) {
+                result.append_null();
+            } else {
+                TimestampValue ts = TimestampValue::create(
+                        date_time_value.year(), date_time_value.month(), date_time_value.day(), date_time_value.hour(),
+                        date_time_value.minute(), date_time_value.second(), date_time_value.microsecond());
+                result.append((DateValue)ts);
+            }
+        }
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+// to_tera_timestamp
+Status TimeFunctions::to_tera_timestamp_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    if (!context->is_notnull_constant_column(1)) {
+        return Status::NotSupported("The 2rd argument must be literal");
+    }
+    auto* state = new TeradataFormatState();
+    context->set_function_state(scope, state);
+    state->formatter = std::make_unique<TeradataFormat>();
+    auto format_col = context->get_constant_column(1);
+    auto format_str = ColumnHelper::get_const_value<TYPE_VARCHAR>(format_col);
+    if (!state->formatter->prepare(format_str)) {
+        return Status::NotSupported(fmt::format("The format parameter {} is invalid", format_str));
+    }
+    return Status::OK();
+}
+
+// to_tera_timestamp
+Status TimeFunctions::to_tera_timestamp_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state = reinterpret_cast<TeradataFormatState*>(context->get_function_state(scope));
+        delete state;
+    }
+    return Status::OK();
+}
+
+// to_tera_timestamp
+StatusOr<ColumnPtr> TimeFunctions::to_tera_timestamp(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    size_t size = columns[0]->size(); // minimum number of rows.
+    ColumnBuilder<TYPE_DATETIME> result(size);
+    auto str_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+
+    auto state = reinterpret_cast<TeradataFormatState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (!state->formatter) {
+        return Status::InvalidArgument("invalid datetime format");
+    }
+
+    for (size_t i = 0; i < size; ++i) {
+        if (str_viewer.is_null(i)) {
+            result.append_null();
+        } else {
+            std::string_view str(str_viewer.value(i));
+
+            DateTimeValue date_time_value;
+            if (!state->formatter->parse(str, &date_time_value)) {
+                result.append_null();
+            } else {
+                TimestampValue ts = TimestampValue::create(
+                        date_time_value.year(), date_time_value.month(), date_time_value.day(), date_time_value.hour(),
+                        date_time_value.minute(), date_time_value.second(), date_time_value.microsecond());
+                result.append(ts);
+            }
+        }
+    }
+
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
 template <TimeUnit UNIT>
 TimestampValue timestamp_add(TimestampValue tsv, int count) {
     return tsv.add<UNIT>(count);
@@ -716,9 +880,14 @@ Status TimeFunctions::time_slice_prepare(FunctionContext* context, FunctionConte
     Slice format_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_format);
     auto period_unit = format_slice.to_string();
 
-    ColumnPtr column_time_base = context->get_constant_column(3);
-    Slice time_base_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_time_base);
-    auto time_base = time_base_slice.to_string();
+    std::string time_base;
+    if (UNLIKELY(context->get_num_constant_columns() == 3)) {
+        time_base = "floor";
+    } else {
+        ColumnPtr column_time_base = context->get_constant_column(3);
+        Slice time_base_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_time_base);
+        time_base = time_base_slice.to_string();
+    }
 
     ScalarFunction function;
     const FunctionContext::TypeDesc* boundary = context->get_arg_type(0);

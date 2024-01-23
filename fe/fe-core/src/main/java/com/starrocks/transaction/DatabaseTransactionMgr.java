@@ -65,6 +65,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.FeNameFormat;
@@ -322,7 +323,7 @@ public class DatabaseTransactionMgr {
             transactionState.setPrepareTime(System.currentTimeMillis());
             unprotectUpsertTransactionState(transactionState, false);
 
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_BEGIN.increase(1L);
             }
 
@@ -330,7 +331,7 @@ public class DatabaseTransactionMgr {
         } catch (DuplicatedRequestException e) {
             throw e;
         } catch (Exception e) {
-            if (MetricRepo.isInit) {
+            if (MetricRepo.hasInit) {
                 MetricRepo.COUNTER_TXN_REJECT.increase(1L);
             }
             throw e;
@@ -736,40 +737,51 @@ public class DatabaseTransactionMgr {
                         Config.lake_batch_publish_min_version_num,
                         Config.lake_batch_publish_max_version_num, txnId);
                 List<TransactionState> states = txnsWithDependency.stream().map(id -> idToRunningTransactionState.get(id))
+                        .filter(Objects::nonNull)
                         .collect(Collectors.toList());
+                if (states.isEmpty()) {
+                    continue;
+                }
+                if (states.size() == 1) { // fast path: no batch
+                    result.add(new TransactionStateBatch(states));
+                    continue;
+                }
+
+                // Only single table transactions will be batched together.
+                Preconditions.checkState(states.get(0).getTableIdList().size() == 1);
+
+                long tableId = states.get(0).getTableIdList().get(0);
+
                 // check whether version is consequent
                 // for schema change will occupy a version
                 Map<Long, PartitionCommitInfo> versions = new HashMap<>();
-                long tableId = -1;
-                if (states.size() != 0) {
-                    tableId = states.get(0).getTableIdList().get(0);
-                    versions.putAll(states.get(0).getTableCommitInfo(tableId).getIdToPartitionCommitInfo());
-                }
 
-                boolean consecutive = true;
-                for (int i = 1; i < states.size() && consecutive; i++) {
+                outerLoop:
+                for (int i = 0; i < states.size(); i++) {
                     TransactionState state = states.get(i);
-                    for (Map.Entry<Long, PartitionCommitInfo> item :
-                            state.getTableCommitInfo(tableId).getIdToPartitionCommitInfo().entrySet()) {
-                        if (versions.containsKey(item.getKey())) {
+                    TableCommitInfo tableInfo = state.getTableCommitInfo(tableId);
+                    // TableCommitInfo could be null if the table has been dropped before this transaction is committed.
+                    if (tableInfo == null) {
+                        states = states.subList(0, Math.max(i, 1));
+                        break;
+                    }
+                    Map<Long, PartitionCommitInfo> partitionInfoMap = tableInfo.getIdToPartitionCommitInfo();
+                    for (Map.Entry<Long, PartitionCommitInfo> item : partitionInfoMap.entrySet()) {
+                        PartitionCommitInfo currTxnInfo = item.getValue();
+                        PartitionCommitInfo prevTxnInfo = versions.get(item.getKey());
+                        if (prevTxnInfo != null && prevTxnInfo.getVersion() + 1 != currTxnInfo.getVersion()) {
+                            assert i > 0;
                             // version is not consecutive
                             // may schema change occupy a version
-                            if (versions.get(item.getKey()).getVersion() + 1 != item.getValue().getVersion()) {
-                                states = states.subList(0, i);
-                                consecutive = false;
-                                break;
-                            }
+                            states = states.subList(0, i);
+                            break outerLoop;
                         }
-
-                        versions.put(item.getKey(), item.getValue());
+                        versions.put(item.getKey(), currTxnInfo);
                     }
-
                 }
 
-                if (states.size() != 0) {
-                    TransactionStateBatch batch = new TransactionStateBatch(states);
-                    result.add(batch);
-                }
+                TransactionStateBatch batch = new TransactionStateBatch(states);
+                result.add(batch);
             }
         } finally {
             readUnlock();
@@ -806,7 +818,9 @@ public class DatabaseTransactionMgr {
                         continue;
                     }
 
-                    if (partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
+                    // The version of a replication transaction may not continuously
+                    if (txn.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
+                            partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                         return false;
                     }
 
@@ -924,7 +938,9 @@ public class DatabaseTransactionMgr {
                                 transactionState);
                         continue;
                     }
-                    if (partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
+                    // The version of a replication transaction may not continuously
+                    if (transactionState.getSourceType() != TransactionState.LoadJobSourceType.REPLICATION &&
+                            partition.getVisibleVersion() != partitionCommitInfo.getVersion() - 1) {
                         // prevent excessive logging
                         if (transactionState.getLastErrTimeMs() + 3000 < System.nanoTime() / 1000000) {
                             LOG.debug("transactionId {} partition commitInfo version {} is not equal with " +
@@ -1142,7 +1158,13 @@ public class DatabaseTransactionMgr {
                             transactionState);
                     continue;
                 }
-                partitionCommitInfo.setVersion(partition.getNextVersion());
+                if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
+                    Map<Long, Long> partitionVersions = ((ReplicationTxnCommitAttachment) transactionState
+                            .getTxnCommitAttachment()).getPartitionVersions();
+                    partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
+                } else {
+                    partitionCommitInfo.setVersion(partition.getNextVersion());
+                }
                 partitionCommitInfo.setVersionTime(table.isCloudNativeTable() ? 0 : commitTs);
             }
         }

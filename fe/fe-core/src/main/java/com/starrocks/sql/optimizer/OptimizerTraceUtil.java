@@ -46,8 +46,15 @@ public class OptimizerTraceUtil {
                                     String format, Object... object) {
         Tracers.log(Tracers.Module.MV, input -> {
             String str = MessageFormatter.arrayFormat(format, object).getMessage();
-            Object[] args = new Object[] {ctx.getQueryId(), mv == null ? "GLOBAL" : mv.getName(), str};
-            return MessageFormatter.arrayFormat("[MV TRACE] [PREPARE {}][{}] {}", args).getMessage();
+            Object[] args = new Object[] {mv == null ? "GLOBAL" : mv.getName(), str};
+            return MessageFormatter.arrayFormat("[MV TRACE] [PREPARE {}] {}", args).getMessage();
+        });
+    }
+
+    public static void logMVRewrite(String mvName, String format, Object... objects) {
+        Tracers.log(Tracers.Module.MV, input -> {
+            String str = MessageFormatter.arrayFormat(format, objects).getMessage();
+            return MessageFormatter.format("[MV TRACE] [REWRITE {}] {}", mvName, str).getMessage();
         });
     }
 
@@ -67,12 +74,26 @@ public class OptimizerTraceUtil {
                                     String format, Object... object) {
         Tracers.log(Tracers.Module.MV, input -> {
             Object[] args = new Object[] {
-                    optimizerContext.getQueryId(),
                     rule.type().name(),
-                    String.format(format, object)
+                    MessageFormatter.arrayFormat(format, object).getMessage()
             };
-            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {} {}] {}", args).getMessage();
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] {}", args).getMessage();
         });
+    }
+
+    public static void logMVRewriteRule(String ruleName, String format, Object... object) {
+        Tracers.log(Tracers.Module.MV, input -> {
+            Object[] args = new Object[] {
+                    ruleName,
+                    MessageFormatter.arrayFormat(format, object).getMessage()
+            };
+            return MessageFormatter.arrayFormat("[MV TRACE] [REWRITE {}] {}", args).getMessage();
+        });
+    }
+
+    public static void logRuleExhausted(OptimizerContext ctx, Rule rule) {
+        Tracers.log(Tracers.Module.OPTIMIZER,
+                args -> String.format("[TRACE QUERY %s] RULE %s exhausted \n", ctx.getQueryId(), rule));
     }
 
     public static void logApplyRule(OptimizerContext ctx, Rule rule,

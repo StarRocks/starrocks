@@ -217,7 +217,7 @@ public class Trino2SRFunctionCallTransformer {
                 ImmutableList.of(Expr.class));
 
         // json_extract -> json_query
-        registerFunctionTransformer("json_extract", 2, "json_query",
+        registerFunctionTransformer("json_extract", 2, "get_json_string",
                 ImmutableList.of(Expr.class, Expr.class));
 
         // json_size -> json_length

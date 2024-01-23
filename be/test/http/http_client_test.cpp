@@ -124,14 +124,28 @@ TEST_F(HttpClientTest, download) {
     ASSERT_TRUE(st.ok());
     client.set_basic_auth("test1", "");
     std::string local_file = ".http_client_test.dat";
-    st = client.download(local_file);
-    ASSERT_TRUE(st.ok());
+    auto st_or = client.download(local_file);
+    ASSERT_TRUE(st_or.ok());
     char buf[50];
     auto fp = fopen(local_file.c_str(), "r");
     auto size = fread(buf, 1, 50, fp);
     buf[size] = 0;
     ASSERT_STREQ("test1", buf);
     unlink(local_file.c_str());
+}
+
+TEST_F(HttpClientTest, download_to_memory) {
+    HttpClient client;
+    auto st = client.init(hostname + "/simple_get");
+    ASSERT_TRUE(st.ok());
+    client.set_basic_auth("test1", "");
+    std::string value;
+    st = client.download([&](const void* data, size_t length) {
+        value.append((const char*)data, length);
+        return Status::OK();
+    });
+    ASSERT_TRUE(st.ok());
+    ASSERT_EQ("test1", value);
 }
 
 TEST_F(HttpClientTest, get_failed) {

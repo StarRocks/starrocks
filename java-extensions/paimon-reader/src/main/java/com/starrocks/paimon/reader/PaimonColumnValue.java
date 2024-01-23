@@ -94,7 +94,7 @@ public class PaimonColumnValue implements ColumnValue {
 
     @Override
     public byte[] getBytes() {
-        return new byte[0];
+        return (byte[]) fieldData;
     }
 
     @Override

@@ -2,7 +2,7 @@
 displayed_sidebar: "Chinese"
 ---
 
-# Broker Load 常见问题
+# Broker Load 导入常见问题
 
 ## 1. Broker Load 是否支持再次执行已经执行成功、处于 FINISHED 状态的导入作业？
 
@@ -22,7 +22,7 @@ Broker Load 是一种异步的导入方式，创建导入作业的语句没报�
 
 ## 5. 导入报 "failed to send batch" 或 "TabletWriter add batch with unknown id" 错误应该如何处理？
 
-该错误由数据写入超时而引起。需要修改[系统变量](../../reference/System_variable.md) `query_timeout` 和 [BE 配置项](../../administration/Configuration.md#配置-be-静态参数) `streaming_load_rpc_max_alive_time_sec` 的配置。
+该错误由数据写入超时而引起。需要修改[系统变量](../../reference/System_variable.md) `query_timeout` 和 [BE 配置项](../../administration/BE_configuration.md) `streaming_load_rpc_max_alive_time_sec` 的配置。
 
 ## 6. 导入报 "LOAD-RUN-FAIL; msg:OrcScannerAdapter::init_include_columns. col name = xxx not found" 错误应该如何处理？
 

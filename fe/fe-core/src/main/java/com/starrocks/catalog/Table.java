@@ -118,7 +118,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         @SerializedName("PAIMON")
         PAIMON,
         @SerializedName("HIVE_VIEW")
-        HIVE_VIEW;
+        HIVE_VIEW,
+        @SerializedName("ODPS")
+        ODPS;
 
         public static String serialize(TableType type) {
             if (type == CLOUD_NATIVE) {
@@ -350,6 +352,10 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
         return type == TableType.PAIMON;
     }
 
+    public boolean isOdpsTable() {
+        return type == TableType.ODPS;
+    }
+
     public boolean isJDBCTable() {
         return type == TableType.JDBC;
     }
@@ -453,6 +459,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
             table = LakeMaterializedView.read(in);
             table.setTypeRead(true);
             return table;
+        } else if (type == TableType.ODPS) {
+            table = new OdpsTable();
         } else {
             throw new IOException("Unknown table type: " + type.name());
         }
@@ -540,6 +548,9 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable {
     }
 
     public Partition getPartition(String partitionName) {
+        return null;
+    }
+    public Partition getPartition(String partitionName, boolean isTempPartition) {
         return null;
     }
 

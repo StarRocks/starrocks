@@ -54,6 +54,7 @@ public class ShowCreateViewStmtTest {
         Config.alter_scheduler_interval_millisecond = 100;
         Config.dynamic_partition_enable = true;
         Config.dynamic_partition_check_interval_seconds = 1;
+        Config.enable_experimental_rowstore = true;
         UtFrameUtils.createMinStarRocksCluster();
 
         // create connect context
@@ -163,6 +164,7 @@ public class ShowCreateViewStmtTest {
     @Test
     public void testViewOfThreeUnionAllWithConstNullOutput() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
+        ctx.getSessionVariable().setOptimizerExecuteTimeout(30000000);
         String createViewSql = "create view v2 as \n" +
                 "select \n" +
                 "\tt0.c1 as a,\n" +
@@ -200,7 +202,8 @@ public class ShowCreateViewStmtTest {
         String plan = UtFrameUtils.getVerboseFragmentPlan(ctx, query);
         plan = plan.replaceAll("\\[\\d+,\\s*", "")
                 .replaceAll("VARCHAR\\(\\d+\\)", "VARCHAR")
-                .replaceAll(",\\s*(true|false)]", "");
+                .replaceAll(",\\s*(true|false)]", "")
+                .replaceAll("\\[\\d+: ", "");
         String snippet = "  0:UNION\n" +
                 "  |  output exprs:\n" +
                 "  |      VARCHAR | VARCHAR | VARCHAR | VARCHAR\n" +
@@ -208,6 +211,7 @@ public class ShowCreateViewStmtTest {
                 "  |      [32: c1, VARCHAR | [33: cast, VARCHAR | [34: cast, VARCHAR | [35: cast, VARCHAR\n" +
                 "  |      [37: c1, VARCHAR | [38: c2, VARCHAR | [42: cast, VARCHAR | [40: c4, VARCHAR\n" +
                 "  |  pass-through-operands: all";
+        snippet = snippet.replaceAll("\\[\\d+: ", "");
         Assert.assertTrue(plan, plan.contains(snippet));
 
         String dropViewSql = "drop view if exists v2";

@@ -305,10 +305,9 @@ public class FragmentInstance {
         } else {
             int sessionVarSinkDop = ConnectContext.get().getSessionVariable().getPipelineSinkDop();
             if (sessionVarSinkDop > 0) {
-                return Math.min(dop, sessionVarSinkDop);
-            } else {
-                return Math.min(dop, IcebergTableSink.ICEBERG_SINK_MAX_DOP);
+                return sessionVarSinkDop;
             }
+            return dop;
         }
     }
 

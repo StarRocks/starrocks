@@ -451,6 +451,8 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
 
         TKafkaRLTaskProgress kafka_progress;
         kafka_progress.partitionCmtOffset = ctx->kafka_info->cmt_offset;
+        kafka_progress.partitionCmtOffsetTimestamp = ctx->kafka_info->cmt_offset_timestamp;
+        kafka_progress.__isset.partitionCmtOffsetTimestamp = true;
 
         rl_attach.kafkaRLTaskProgress = kafka_progress;
         rl_attach.__isset.kafkaRLTaskProgress = true;

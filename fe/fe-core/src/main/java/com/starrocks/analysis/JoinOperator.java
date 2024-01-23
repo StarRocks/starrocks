@@ -60,6 +60,8 @@ public enum JoinOperator {
     public static final String HINT_SHUFFLE = "SHUFFLE";
     public static final String HINT_COLOCATE = "COLOCATE";
     public static final String HINT_BROADCAST = "BROADCAST";
+
+    public static final String HINT_SKEW = "SKEW";
     public static final String HINT_UNREORDER = "UNREORDER";
 
     private final String description;

@@ -150,7 +150,7 @@ Status GroupReader::_do_get_next(ChunkPtr* chunk, size_t* row_count) {
         }
         active_chunk->merge(std::move(*lazy_chunk));
     } else if (active_rows == 0) {
-        _param.stats->skip_read_rows += count;
+        _param.stats->late_materialize_skip_rows += count;
         _column_reader_opts.context->rows_to_skip += count;
         *row_count = 0;
         return status;
@@ -169,6 +169,7 @@ Status GroupReader::_do_get_next(ChunkPtr* chunk, size_t* row_count) {
 }
 
 Status GroupReader::_do_get_next_new(ChunkPtr* chunk, size_t* row_count) {
+    SCOPED_RAW_TIMER(&_param.stats->group_chunk_read_ns);
     if (_is_group_filtered) {
         *row_count = 0;
         return Status::EndOfFile("");
@@ -216,7 +217,7 @@ Status GroupReader::_do_get_next_new(ChunkPtr* chunk, size_t* row_count) {
             has_filter = true;
             ASSIGN_OR_RETURN(size_t hit_count, _read_range_round_by_round(r, &chunk_filter, &active_chunk));
             if (hit_count == 0) {
-                _param.stats->skip_read_rows += count;
+                _param.stats->late_materialize_skip_rows += count;
                 continue;
             }
             active_chunk->filter_range(chunk_filter, 0, count);
@@ -329,7 +330,10 @@ void GroupReader::close() {
     } else {
         _param.lazy_column_coalesce_counter->fetch_sub(1, std::memory_order_relaxed);
     }
-    _param.stats->group_min_round_cost = _column_read_order_ctx->get_min_round_cost();
+    _param.stats->group_min_round_cost = _param.stats->group_min_round_cost == 0
+                                                 ? _column_read_order_ctx->get_min_round_cost()
+                                                 : std::min(_param.stats->group_min_round_cost,
+                                                            int64_t(_column_read_order_ctx->get_min_round_cost()));
     _column_readers.clear();
 }
 
@@ -522,8 +526,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             offset = column.data_page_offset;
         }
         int64_t size = column.total_compressed_size;
-        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size, .active = active};
-        ranges->emplace_back(r);
+        ranges->emplace_back(offset, size, active);
         *end_offset = std::max(*end_offset, offset + size);
     }
 }
@@ -565,8 +568,7 @@ void GroupReader::_collect_field_io_range(const ParquetField& field, const TypeD
             offset = column.data_page_offset;
         }
         int64_t size = column.total_compressed_size;
-        auto r = io::SharedBufferedInputStream::IORange{.offset = offset, .size = size, .active = active};
-        ranges->emplace_back(r);
+        ranges->emplace_back(offset, size, active);
         *end_offset = std::max(*end_offset, offset + size);
     }
 }

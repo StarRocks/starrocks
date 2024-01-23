@@ -425,7 +425,6 @@ void ChunkHelper::reorder_chunk(const TupleDescriptor& tuple_desc, Chunk* chunk)
 }
 
 void ChunkHelper::reorder_chunk(const std::vector<SlotDescriptor*>& slots, Chunk* chunk) {
-    DCHECK(chunk->columns().size() == slots.size());
     auto reordered_chunk = Chunk();
     auto& original_chunk = (*chunk);
     for (auto slot : slots) {

@@ -56,6 +56,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -145,6 +146,7 @@ public class HiveMetastoreApiConverter {
                 .setTableLocation(toTableLocation(table.getSd(), table.getParameters()))
                 .setProperties(toHiveProperties(table,
                         HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name())))
+                .setSerdeProperties(toSerDeProperties(table))
                 .setStorageFormat(
                         HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name()))
                 .setCreateTime(table.getCreateTime())
@@ -237,14 +239,16 @@ public class HiveMetastoreApiConverter {
                     TrinoViewDefinition.class);
             hiveViewText = trinoViewDefinition.getOriginalSql();
             hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
-                    table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition), hiveViewText);
+                    table.getDbName(), table.getTableName(), toFullSchemasForTrinoView(table, trinoViewDefinition),
+                    hiveViewText, HiveView.Type.Trino);
         } else {
             hiveView = new HiveView(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName,
-                    table.getTableName(), toFullSchemasForHiveTable(table), table.getViewExpandedText());
+                    table.getDbName(), table.getTableName(), toFullSchemasForHiveTable(table),
+                    table.getViewExpandedText(), HiveView.Type.Hive);
         }
 
         try {
-            hiveView.getQueryStatementWithSRParser();
+            hiveView.getQueryStatement();
         } catch (StarRocksPlannerException e) {
             throw new StarRocksConnectorException("failed to parse hive view text", e);
         }
@@ -359,6 +363,15 @@ public class HiveMetastoreApiConverter {
         }
 
         return hiveProperties;
+    }
+
+    public static Map<String, String> toSerDeProperties(Table table) {
+        Map<String, String> serdeProperties = new HashMap<>();
+        if (table.getSd() != null && table.getSd().getSerdeInfo() != null &&
+                table.getSd().getSerdeInfo().getParameters() != null) {
+            serdeProperties = table.getSd().getSerdeInfo().getParameters();
+        }
+        return serdeProperties;
     }
 
     public static List<Column> toFullSchemasForHiveTable(Table table) {

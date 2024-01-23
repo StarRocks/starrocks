@@ -34,6 +34,8 @@
 
 #pragma once
 
+#include <fmt/format.h>
+
 #include <atomic>
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/list_hook.hpp>
@@ -48,6 +50,9 @@
 
 #include "common/status.h"
 #include "gutil/ref_counted.h"
+#include "util/bthreads/semaphore.h"
+// resolve `barrier` macro conflicts with boost/thread.hpp header file
+#undef barrier
 #include "util/monotime.h"
 #include "util/priority_queue.h"
 
@@ -240,6 +245,8 @@ public:
         std::lock_guard l(_lock);
         return _active_threads;
     }
+
+    int max_threads() const { return _max_threads.load(std::memory_order_acquire); }
 
 private:
     friend class ThreadPoolBuilder;
@@ -477,6 +484,38 @@ private:
 
     ThreadPoolToken(const ThreadPoolToken&) = delete;
     const ThreadPoolToken& operator=(const ThreadPoolToken&) = delete;
+};
+
+// A class use to limit the number of tasks submitted to the thread pool.
+class ConcurrencyLimitedThreadPoolToken {
+public:
+    explicit ConcurrencyLimitedThreadPoolToken(ThreadPool* pool, int max_concurrency)
+            : _pool(pool), _sem(std::make_shared<bthreads::CountingSemaphore<>>(max_concurrency)) {}
+
+    DISALLOW_COPY_AND_MOVE(ConcurrencyLimitedThreadPoolToken);
+
+    Status submit_func(std::function<void()> task, std::chrono::system_clock::time_point deadline) {
+        if (!_sem->try_acquire_until(deadline)) {
+            auto t = MilliSecondsSinceEpochFromTimePoint(deadline);
+            return Status::TimedOut(fmt::format("acquire semaphore reached deadline={}", t));
+        }
+        auto task_with_semaphore_release = [sem = _sem, task = std::move(task)]() {
+            task();
+            // The `ConcurrencyLimitedThreadPoolToken` object may have been destroyed
+            // before `release()` the semaphore, so we use `std::shared_ptr` to manage
+            // the semaphore to ensure it's still alive when calling `release()`.
+            sem->release();
+        };
+        auto st = _pool->submit_func(std::move(task_with_semaphore_release));
+        if (!st.ok()) {
+            _sem->release();
+        }
+        return st;
+    }
+
+private:
+    ThreadPool* _pool;
+    std::shared_ptr<bthreads::CountingSemaphore<>> _sem;
 };
 
 } // namespace starrocks

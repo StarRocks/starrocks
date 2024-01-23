@@ -257,6 +257,7 @@ public:
 
     // Caller should always check the returned value with `invalid_id()`.
     SchemaId id() const { return _id; }
+    void set_id(SchemaId id) { _id = id; }
     size_t estimate_row_size(size_t variable_len) const;
     int32_t field_index(int32_t col_unique_id) const;
     size_t field_index(std::string_view field_name) const;
@@ -306,8 +307,8 @@ public:
 
     std::string debug_string() const;
 
-    size_t mem_usage() const {
-        size_t mem_usage = sizeof(TabletSchema);
+    int64_t mem_usage() const {
+        int64_t mem_usage = sizeof(TabletSchema);
         for (const auto& col : _cols) {
             mem_usage += col.mem_usage();
         }

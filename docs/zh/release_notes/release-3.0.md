@@ -31,7 +31,7 @@ displayed_sidebar: "Chinese"
 - 在线修改 FE 动态参数 `max_broker_load_job_concurrency` 不生效。[#29964](https://github.com/StarRocks/starrocks/pull/29964) [#29720](https://github.com/StarRocks/starrocks/pull/29720)
 - Refresh 物化视图，同时并发地修改物化视图的刷新策略，有概率会导致 FE 无法启动。[#29691](https://github.com/StarRocks/starrocks/pull/29691)
 - 执行 `select count(distinct(int+double)) from table_name` 会报错 `unknown error`。 [#30054](https://github.com/StarRocks/starrocks/pull/30054)
-- 主键模型表 Restore 之后，BE 重启后元数据发生错误，导致元数据不一致。[#30135](https://github.com/StarRocks/starrocks/pull/30135)
+- 主键表 Restore 之后，BE 重启后元数据发生错误，导致元数据不一致。[#30135](https://github.com/StarRocks/starrocks/pull/30135)
 
 ## 3.0.5
 
@@ -60,7 +60,7 @@ displayed_sidebar: "Chinese"
 - 当 sub_bitmap 函数的输入值不是 BITMAP 类型时，会导致 BE crash。[#27982](https://github.com/StarRocks/starrocks/pull/27982)
 - 更新 AUTO_INCREMENT 列时会导致 BE crash。[#27199](https://github.com/StarRocks/starrocks/pull/27199)
 - 物化视图 Outer join 和 Anti join 改写错误。 [#28028](https://github.com/StarRocks/starrocks/pull/28028)
-- 主键模型部分列更新时平均 row size 预估不准导致内存占用过多。 [#27485](https://github.com/StarRocks/starrocks/pull/27485)
+- 主键表部分列更新时平均 row size 预估不准导致内存占用过多。 [#27485](https://github.com/StarRocks/starrocks/pull/27485)
 - 激活失效物化视图时可能导致 FE crash。[#27959](https://github.com/StarRocks/starrocks/pull/27959)
 - 查询无法改写至基于 Hudi Catalog 外部表创建的物化视图。[#28023](https://github.com/StarRocks/starrocks/pull/28023)
 - 删除 Hive 表后，即使手动更新元数据缓存，仍然可以查询到 Hive 表数据。[#28223](https://github.com/StarRocks/starrocks/pull/28223)
@@ -158,7 +158,7 @@ displayed_sidebar: "Chinese"
 
 修复了如下问题：
 
-- SHOW CREATE TABLE 返回的**主键模型表**建表信息错误。[#24237](https://github.com/StarRocks/starrocks/issues/24237)
+- SHOW CREATE TABLE 返回的**主键表**建表信息错误。[#24237](https://github.com/StarRocks/starrocks/issues/24237)
 - Routine Load 过程中 BE crash。[#20677](https://github.com/StarRocks/starrocks/issues/20677)
 - 创建分区表时指定不支持的 Properties 导致 NPE。[#21374](https://github.com/StarRocks/starrocks/issues/21374)
 - SHOW TABLE STATUS 结果展示不全。[#24279](https://github.com/StarRocks/starrocks/issues/24279)
@@ -180,9 +180,9 @@ displayed_sidebar: "Chinese"
 **存储和导入**
 
 - 支持自增列属性 [AUTO_INCREMENT](../sql-reference/sql-statements/auto_increment.md)，提供表内全局唯一 ID，简化数据管理。
-- 支持[导入时自动创建分区和使用分区表达式定义分区规则](https://docs.starrocks.io/zh-cn/3.0/table_design/automatic_partitioning)，提高了分区创建的易用性和灵活性。
-- Primary Key 模型表支持更丰富的 [UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md) 和 [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md) 语法，包括使用 CTE 和对多表的引用。
-- Broker Load 和 INSERT INTO 增加 Load Profile，支持通过 profile 查看并分析导入作业详情。使用方法与 [查看分析Query Profile](../administration/query_profile.md) 相同。
+- 支持[导入时自动创建分区和使用分区表达式定义分区规则](https://docs.starrocks.io/zh/docs/3.0/table_design/automatic_partitioning/)，提高了分区创建的易用性和灵活性。
+- 主键表支持更丰富的 [UPDATE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/UPDATE/) 和 [DELETE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/DELETE/) 语法，包括使用 CTE 和对多表的引用。
+- Broker Load 和 INSERT INTO 增加 Load Profile，支持通过 profile 查看并分析导入作业详情。使用方法与 [查看分析Query Profile](https://docs.starrocks.io/zh/docs/administration/query_profile/) 相同。
 
 **数据湖分析**
 
@@ -222,10 +222,10 @@ displayed_sidebar: "Chinese"
 
 **存储与导入**
 
-- 数据导入提供了更丰富的 CSV 格式参数，包括 `skip_header`、`trim_space`、`enclose` 和 `escape`。参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)、[BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER_LOAD.md) 和 [ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD.md)。
-- [Primary Key 模型表](../table_design/table_types/primary_key_table.md)解耦了主键和排序键，支持通过 `ORDER BY` 单独指定排序键。
-- 优化 Primary Key 模型表在大数据导入、部分列更新、以及开启持久化索引等场景的内存占用。 [#12068](https://github.com/StarRocks/starrocks/pull/12068) [#14187](https://github.com/StarRocks/starrocks/pull/14187) [#15729](https://github.com/StarRocks/starrocks/pull/15729)
-- 提供异步 ETL 命令接口，支持创建异步 INSERT 任务。更多信息，参考[INSERT](../loading/InsertInto.md) 和 [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md)。 ([#20609](https://github.com/StarRocks/starrocks/issues/20609))
+- 数据导入提供了更丰富的 CSV 格式参数，包括 `skip_header`、`trim_space`、`enclose` 和 `escape`。参见 [STREAM LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/STREAM_LOAD/)、[BROKER LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/BROKER_LOAD/) 和 [ROUTINE LOAD](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/CREATE_ROUTINE_LOAD/)。
+- [主键表](https://docs.starrocks.io/zh/docs/table_design/table_types/primary_key_table/)解耦了主键和排序键，支持通过 `ORDER BY` 单独指定排序键。
+- 优化主键表在大数据导入、部分列更新、以及开启持久化索引等场景的内存占用。 [#12068](https://github.com/StarRocks/starrocks/pull/12068) [#14187](https://github.com/StarRocks/starrocks/pull/14187) [#15729](https://github.com/StarRocks/starrocks/pull/15729)
+- 提供异步 ETL 命令接口，支持创建异步 INSERT 任务。更多信息，参考[INSERT](https://docs.starrocks.io/zh/docs/loading/InsertInto/) 和 [SUBMIT TASK](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/SUBMIT_TASK/)。 ([#20609](https://github.com/StarRocks/starrocks/issues/20609))
 
 **物化视图**
 

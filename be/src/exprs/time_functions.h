@@ -350,6 +350,28 @@ public:
     DEFINE_VECTORIZED_FN(to_date);
 
     /**
+     * date to_tera_date(varchar, varchar)
+     * @param context
+     * @param columns [VARCHAR] Columns that hold timestamps, [VARCHAR] Columns that hold constant date foramt.
+     * @return  DateColumn  Date that corresponds to the timestamp.
+     */
+
+    DEFINE_VECTORIZED_FN(to_tera_date);
+    static Status to_tera_date_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status to_tera_date_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    /**
+     * datetime to_tera_timestamp(varchar, varchar)
+     * @param context
+     * @param columns [VARCHAR] Columns that hold timestamps, [VARCHAR] Columns that hold constant date foramt.
+     * @return  DateColumn  Date that corresponds to the timestamp.
+     */
+
+    DEFINE_VECTORIZED_FN(to_tera_timestamp);
+    static Status to_tera_timestamp_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status to_tera_timestamp_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
+    /**
      * Calculate days from the first timestamp to the second timestamp. Only the date part of the timestamps are used in calculation.
      * @param context
      * @param columns [TimestampColumn] Columns that holds two groups timestamps for calculation.

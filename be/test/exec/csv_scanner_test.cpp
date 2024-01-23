@@ -21,6 +21,7 @@
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
 #include "fs/fs_memory.h"
+#include "fs/fs_util.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
@@ -62,6 +63,7 @@ protected:
         RuntimeState* state = _obj_pool.add(new RuntimeState(TUniqueId(), TQueryOptions(), TQueryGlobals(), nullptr));
         state->set_desc_tbl(desc_tbl);
         state->init_instance_mem_tracker();
+        state->_query_options.query_type = TQueryType::LOAD;
 
         /// TBrokerScanRangeParams
         TBrokerScanRangeParams* params = _obj_pool.add(new TBrokerScanRangeParams());
@@ -780,13 +782,13 @@ TEST_P(CSVScannerTest, test_ENCLOSE) {
     EXPECT_EQ("bb|BB", chunk->get(1)[1].get_slice());
     EXPECT_EQ("cc\nadf,1,3455", chunk->get(2)[1].get_slice());
     EXPECT_EQ("dd", chunk->get(3)[1].get_slice());
-    EXPECT_EQ("\"ee", chunk->get(4)[1].get_slice());
+    EXPECT_EQ("\"ee\"", chunk->get(4)[1].get_slice());
     EXPECT_EQ("", chunk->get(5)[1].get_slice());
     EXPECT_EQ("\"cd\"", chunk->get(6)[1].get_slice());
 
     EXPECT_EQ("abc", chunk->get(0)[2].get_slice());
     EXPECT_EQ("", chunk->get(1)[2].get_slice());
-    EXPECT_EQ("\"e", chunk->get(2)[2].get_slice());
+    EXPECT_EQ("e", chunk->get(2)[2].get_slice());
     EXPECT_EQ("abc|ef\ngh", chunk->get(3)[2].get_slice());
     EXPECT_EQ("", chunk->get(4)[2].get_slice());
     EXPECT_EQ("ab", chunk->get(5)[2].get_slice());
@@ -982,6 +984,79 @@ TEST_P(CSVScannerTest, test_empty) {
     run_test(TYPE_INT);
     run_test(TYPE_DATE);
     run_test(TYPE_DATETIME);
+}
+
+// 21431,"Rowdy" Roddy Piper, Superstar,,,,1,-999
+TEST_P(CSVScannerTest, test_enclose_fanatics) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT),     TypeDescriptor(TYPE_VARCHAR),
+                                      TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_INT),
+                                      TypeDescriptor(TYPE_INT),     TypeDescriptor(TYPE_INT),
+                                      TypeDescriptor(TYPE_INT),     TypeDescriptor(TYPE_INT)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(types.size());
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file22");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", ",", 0, true, '"', '\\');
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(1, chunk->num_rows());
+    EXPECT_EQ(8, chunk->num_columns());
+    EXPECT_EQ(21431, chunk->get(0)[0].get_int32());
+    EXPECT_EQ("\"Rowdy\" Roddy Piper", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("Superstar", chunk->get(0)[2].get_slice());
+    EXPECT_TRUE(chunk->get(0)[3].is_null());
+    EXPECT_TRUE(chunk->get(0)[4].is_null());
+    EXPECT_TRUE(chunk->get(0)[5].is_null());
+    EXPECT_EQ(1, chunk->get(0)[6].get_int32());
+    EXPECT_EQ(-999, chunk->get(0)[7].get_int32());
+}
+
+TEST_P(CSVScannerTest, test_column_count_inconsistent) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+    types.emplace_back(TYPE_DOUBLE);
+    types.emplace_back(TYPE_VARCHAR);
+    types.emplace_back(TYPE_DATE);
+
+    types[2].len = 10;
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range_one;
+    range_one.__set_path("./be/test/exec/test_data/csv_scanner/csv_file1");
+    range_one.__set_start_offset(0);
+    range_one.__set_num_of_columns_from_file(types.size());
+    ranges.push_back(range_one);
+
+    auto scanner = create_csv_scanner(types, ranges);
+    EXPECT_NE(scanner, nullptr);
+
+    auto st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    scanner->use_v2(_use_v2);
+
+    auto log_file_path = "test_column_count_inconsistent_error_log_file";
+    std::ofstream wfile(log_file_path, std::ofstream::out);
+    scanner->TEST_runtime_state()->_error_log_file = &wfile;
+    auto res = scanner->get_next();
+    ASSERT_TRUE(res.status().is_end_of_file()) << res.status().to_string();
+    wfile.close();
+    scanner->TEST_runtime_state()->_error_log_file = nullptr;
+
+    std::ifstream rfile(log_file_path, std::ifstream::in);
+    std::string line;
+    line.resize(1024);
+    rfile.getline(line.data(), line.size());
+    auto found = line.find("Value count does not match column count: expected = 4, actual = 5");
+    ASSERT_TRUE(found != std::string::npos);
+    rfile.close();
+
+    (void)fs::remove(log_file_path);
 }
 
 INSTANTIATE_TEST_CASE_P(CSVScannerTestParams, CSVScannerTest, Values(true, false));

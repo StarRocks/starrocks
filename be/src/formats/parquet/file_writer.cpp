@@ -19,6 +19,7 @@
 #include <arrow/io/file.h>
 #include <arrow/io/interfaces.h>
 #include <parquet/arrow/writer.h>
+#include <runtime/current_thread.h>
 
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -237,6 +238,10 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
         return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::None(),
                                                       ::parquet::Type::DOUBLE, -1, file_column_id.field_id);
     }
+    case TYPE_BINARY:
+    case TYPE_VARBINARY:
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::None(),
+                                                      ::parquet::Type::BYTE_ARRAY, -1, file_column_id.field_id);
     case TYPE_CHAR:
     case TYPE_VARCHAR: {
         return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::String(),
@@ -414,7 +419,12 @@ Status SyncFileWriter::close() {
     }
 
     RETURN_IF_ERROR(_flush_row_group());
-    _writer->Close();
+    try {
+        _writer->Close();
+    } catch (const ::parquet::ParquetStatusException& e) {
+        LOG(WARNING) << "close writer error: " << e.what();
+        return Status::IOError(fmt::format("{}: {}", "close writer error", e.what()));
+    }
 
     auto arrow_st = _outstream->Close();
     if (!arrow_st.ok()) {
@@ -432,13 +442,14 @@ AsyncFileWriter::AsyncFileWriter(std::unique_ptr<WritableFile> writable_file, st
                                  std::shared_ptr<::parquet::WriterProperties> properties,
                                  std::shared_ptr<::parquet::schema::GroupNode> schema,
                                  const std::vector<ExprContext*>& output_expr_ctxs, PriorityThreadPool* executor_pool,
-                                 RuntimeProfile* parent_profile, int64_t max_file_size)
+                                 RuntimeProfile* parent_profile, int64_t max_file_size, RuntimeState* state)
         : FileWriterBase(std::move(writable_file), std::move(properties), std::move(schema), output_expr_ctxs,
                          max_file_size),
           _file_location(std::move(file_location)),
           _partition_location(std::move(partition_location)),
           _executor_pool(executor_pool),
-          _parent_profile(parent_profile) {
+          _parent_profile(parent_profile),
+          _state(state) {
     _io_timer = ADD_TIMER(_parent_profile, "FileWriterIoTimer");
 }
 
@@ -449,6 +460,7 @@ Status AsyncFileWriter::_flush_row_group() {
     }
 
     bool ok = _executor_pool->try_offer([&]() {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_state->instance_mem_tracker());
         SCOPED_TIMER(_io_timer);
         if (_chunk_writer != nullptr) {
             try {
@@ -483,6 +495,7 @@ Status AsyncFileWriter::_flush_row_group() {
 Status AsyncFileWriter::close(RuntimeState* state,
                               const std::function<void(starrocks::parquet::AsyncFileWriter*, RuntimeState*)>& cb) {
     bool ret = _executor_pool->try_offer([&, state, cb]() {
+        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_state->instance_mem_tracker());
         SCOPED_TIMER(_io_timer);
         {
             auto lock = std::unique_lock(_m);

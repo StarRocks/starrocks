@@ -61,6 +61,11 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
         // this is a load plan, and load is not finished, just make a brief report
         runtime_state->update_report_load_status(&params);
         params.__set_load_type(runtime_state->query_options().load_job_type);
+
+        if (query_ctx->enable_profile()) {
+            profile->to_thrift(&params.profile);
+            params.__isset.profile = true;
+        }
     } else {
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
             runtime_state->update_report_load_status(&params);
@@ -105,6 +110,13 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Quer
             params.commitInfos.reserve(runtime_state->tablet_commit_infos().size());
             for (auto& info : runtime_state->tablet_commit_infos()) {
                 params.commitInfos.push_back(info);
+            }
+        }
+        if (!runtime_state->tablet_fail_infos().empty()) {
+            params.__isset.failInfos = true;
+            params.failInfos.reserve(runtime_state->tablet_fail_infos().size());
+            for (auto& info : runtime_state->tablet_fail_infos()) {
+                params.failInfos.push_back(info);
             }
         }
         if (!runtime_state->sink_commit_infos().empty()) {
@@ -297,11 +309,23 @@ ExecStateReporter::ExecStateReporter() {
     if (!status.ok()) {
         LOG(FATAL) << "Cannot create thread pool for ExecStateReport: error=" << status.to_string();
     }
+
+    status = ThreadPoolBuilder("priority_ex_state_report") // priority exec state reporter with infinite queue
+                     .set_min_threads(1)
+                     .set_max_threads(2)
+                     .set_idle_timeout(MonoDelta::FromMilliseconds(2000))
+                     .build(&_priority_thread_pool);
+    if (!status.ok()) {
+        LOG(FATAL) << "Cannot create thread pool for priority ExecStateReport: error=" << status.to_string();
+    }
 }
 
-void ExecStateReporter::submit(std::function<void()>&& report_task) {
-    auto st = _thread_pool->submit_func(std::move(report_task));
-    st.permit_unchecked_error();
+void ExecStateReporter::submit(std::function<void()>&& report_task, bool priority) {
+    if (priority) {
+        (void)_priority_thread_pool->submit_func(std::move(report_task));
+    } else {
+        (void)_thread_pool->submit_func(std::move(report_task));
+    }
 }
 
 } // namespace starrocks::pipeline

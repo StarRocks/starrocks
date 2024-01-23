@@ -151,7 +151,7 @@ Release date: April 28, 2023
 #### Storage engine and data ingestion
 
 - The [AUTO_INCREMENT](../sql-reference/sql-statements/auto_increment.md) attribute is supported to provide globally unique IDs, which simplifies data management.
-- [Automatic partitioning and partitioning expressions](../table_design/dynamic_partitioning.md) are supported, which makes partition creation easier to use and more flexible.
+- [Automatic partitioning and partitioning expressions](https://docs.starrocks.io/docs/3.0/table_design/automatic_partitioning/) are supported, which makes partition creation easier to use and more flexible.
 - Primary Key tables support more complete [UPDATE](../sql-reference/sql-statements/data-manipulation/UPDATE.md) and [DELETE](../sql-reference/sql-statements/data-manipulation/DELETE.md#primary-key-tables) syntax, including the use of CTEs and references to multiple tables.
 - Added Load Profile for Broker Load and INSERT INTO jobs. You can view the details of a load job by querying the load profile. The usage is the same as [Analyze query profile](../administration/query_profile.md).
 

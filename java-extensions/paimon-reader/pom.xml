@@ -15,7 +15,7 @@
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
         <java-extensions.home>${basedir}/../</java-extensions.home>
-        <paimon.version>0.5.0-incubating</paimon.version>
+        <paimon.version>0.6.0-incubating</paimon.version>
         <slf4j.version>1.7.32</slf4j.version>
         <hive.version>2.3.9</hive.version>
         <hadoop.version>3.3.4</hadoop.version>
@@ -185,19 +185,7 @@
 
         <dependency>
             <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-s3-impl</artifactId>
-            <version>${paimon.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-oss</artifactId>
-            <version>${paimon.version}</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.paimon</groupId>
-            <artifactId>paimon-oss-impl</artifactId>
             <version>${paimon.version}</version>
         </dependency>
     </dependencies>

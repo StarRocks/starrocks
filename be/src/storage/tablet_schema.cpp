@@ -486,6 +486,7 @@ Status TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t versi
     _sort_key_uids.clear();
 
     _schema_version = version;
+    _id = index.schema_id();
     if (index.id() == index_id) {
         for (auto& pcolumn : index.column_param().columns_desc()) {
             TabletColumn column;
@@ -499,6 +500,9 @@ Status TabletSchema::build_current_tablet_schema(int64_t index_id, int32_t versi
             _unique_id_to_index[column.unique_id()] = _num_columns;
             _cols.emplace_back(std::move(column));
             _num_columns++;
+        }
+        if (ori_tablet_schema->columns().back().name() == Schema::FULL_ROW_COLUMN) {
+            _cols.emplace_back(ori_tablet_schema->columns().back());
         }
     }
 

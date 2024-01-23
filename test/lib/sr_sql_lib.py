@@ -27,6 +27,7 @@ import bz2
 import configparser
 import datetime
 import json
+import logging
 import os
 import re
 import subprocess
@@ -56,8 +57,41 @@ LOG_DIR = os.path.join(root_path, "log")
 if not os.path.exists(LOG_DIR):
     os.mkdir(LOG_DIR)
 
+
+class Filter(logging.Filter):
+    """
+    Msg filters by log levels
+    """
+
+    # pylint: disable= super-init-not-called
+    def __init__(self, msg_level=logging.WARNING):
+        super().__init__()
+        self.msg_level = msg_level
+
+    def filter(self, record):
+        # replace secret infos
+        for secret_k, secret_v in SECRET_INFOS.items():
+            try:
+                record.msg = record.msg.replace(secret_v, '${%s}' % secret_k)
+            except Exception:
+                record.msg = str(record.msg).replace(secret_v, '${%s}' % secret_k)
+
+        if record.levelno >= self.msg_level:
+            return False
+        return True
+
+
+def self_print(msg):
+    # replace secret infos
+    for secret_k, secret_v in SECRET_INFOS.items():
+        msg = msg.replace(secret_v, '${%s}' % secret_k)
+
+    print(msg)
+
+
 __LOG_FILE = os.path.join(LOG_DIR, "sql_test.log")
 log.init_comlog("sql", log.INFO, __LOG_FILE, log.ROTATION, 100 * 1024 * 1024, False)
+logging.getLogger().addFilter(Filter())
 
 T_R_DB = "t_r_db"
 T_R_TABLE = "t_r_table"
@@ -70,6 +104,8 @@ NAME_FLAG = "-- name: "
 UNCHECK_FLAG = "[UC]"
 ORDER_FLAG = "[ORDER]"
 REGEX_FLAG = "[REGEX]"
+
+SECRET_INFOS = {}
 
 
 class StarrocksSQLApiLib(object):
@@ -132,6 +168,11 @@ class StarrocksSQLApiLib(object):
         for env_key, env_value in config_parser.items("env"):
             if not env_value:
                 env_value = os.environ.get(env_key, "")
+            else:
+                # save secrets info
+                if 'aws' in env_key:
+                    SECRET_INFOS[env_key] = env_value
+
             self.__setattr__(env_key, env_value)
 
     def connect_starrocks(self):
@@ -916,14 +957,15 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_equal("FINISHED", status, "wait alter table finish error")
 
-    def wait_async_materialized_view_finish(self, mv_name, check_count=60):
+    def wait_async_materialized_view_finish(self, mv_name, min_success_num = 1, check_count=60):
         """
         wait async materialized view job finish and return status
         """
         status = ""
         show_sql = "SHOW MATERIALIZED VIEWS WHERE name='" + mv_name + "'"
         count = 0
-        while count < check_count:
+        success_num = 0
+        while count < check_count and success_num < min_success_num:
             res = self.execute_sql(show_sql, True)
             status = res["result"][-1][12]
             if status != "SUCCESS":
@@ -931,7 +973,7 @@ class StarrocksSQLApiLib(object):
             else:
                 # sleep another 5s to avoid FE's async action.
                 time.sleep(1)
-                break
+                success_num += 1
             count += 1
         tools.assert_equal("SUCCESS", status, "wait aysnc materialized view finish error")
 
@@ -1348,3 +1390,12 @@ class StarrocksSQLApiLib(object):
             counter = counter + 1
 
         tools.assert_true(finished, "analyze timeout")
+    def assert_table_cardinality(self, sql, rows):
+        """
+        assert table with an expected row counts
+        """
+        res = self.execute_sql(sql, True)
+        expect = r"cardinality=" + rows
+        match = re.search(expect, str(res["result"]))
+        print(expect)
+        tools.assert_true(match, "expected cardinality: " + rows + ". but found: " + str(res["result"]))

@@ -15,10 +15,13 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.hive.HiveCatalog;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -30,12 +33,12 @@ import java.util.Map;
 public class IcebergHiveCatalogTest {
 
     @Test
-    public void testListAllDatabases(@Mocked IcebergHiveCatalog hiveCatalog) {
+    public void testListAllDatabases(@Mocked HiveCatalog hiveCatalog) {
         new Expectations() {
             {
-                hiveCatalog.listAllDatabases();
-                result = Arrays.asList("db1", "db2");
-                minTimes = 0;
+                hiveCatalog.listNamespaces();
+                result = ImmutableList.of(Namespace.of("db1"), Namespace.of("db2"));
+                times = 1;
             }
         };
 

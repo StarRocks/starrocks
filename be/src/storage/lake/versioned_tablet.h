@@ -21,13 +21,18 @@
 
 namespace starrocks {
 class TabletSchema;
-}
+class Schema;
+class ThreadPool;
+} // namespace starrocks
 
 namespace starrocks::lake {
 
 class Rowset;
 class TabletManager;
 class TabletMetadataPB;
+class TabletWriter;
+class TabletReader;
+enum WriterType : int;
 
 // A tablet contains shards of data. There can be multiple versions of the same
 // tablet. This class represents a specific version of a tablet.
@@ -38,16 +43,39 @@ class VersionedTablet {
     using TabletSchemaPtr = std::shared_ptr<const TabletSchema>;
 
 public:
+    // Default constructor. After construction, valid() is false
+    VersionedTablet() : _tablet_mgr(nullptr), _metadata() {}
+
     // |tablet_mgr| cannot be nullptr and must outlive this VersionedTablet.
     // |metadata| cannot be nullptr.
     explicit VersionedTablet(TabletManager* tablet_mgr, TabletMetadataPtr metadata)
             : _tablet_mgr(tablet_mgr), _metadata(std::move(metadata)) {}
 
+    bool valid() const { return _metadata != nullptr; }
+
+    // Same as metadata()->id()
+    int64_t id() const;
+
+    // Same as metadata()->version()
+    int64_t version() const;
+
     const TabletMetadataPtr& metadata() const { return _metadata; }
 
     TabletSchemaPtr get_schema() const;
 
-    StatusOr<RowsetList> get_rowsets() const;
+    // Prerequisite: valid() == true
+    RowsetList get_rowsets() const;
+
+    // `segment_max_rows` is used in vertical writer
+    StatusOr<std::unique_ptr<TabletWriter>> new_writer(WriterType type, int64_t txn_id,
+                                                       uint32_t max_rows_per_segment = 0,
+                                                       ThreadPool* flush_pool = nullptr);
+
+    StatusOr<std::unique_ptr<TabletReader>> new_reader(Schema schema);
+
+    TabletManager* tablet_manager() const { return _tablet_mgr; }
+
+    bool has_delete_predicates() const;
 
 private:
     TabletManager* _tablet_mgr;

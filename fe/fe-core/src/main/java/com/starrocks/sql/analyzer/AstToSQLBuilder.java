@@ -36,6 +36,7 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
+import org.apache.commons.collections.MapUtils;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 
@@ -133,11 +134,25 @@ public class AstToSQLBuilder {
             return "";
         }
 
+        private void visitVarHint(StringBuilder sqlBuilder, Map<String, String> hints) {
+            if (MapUtils.isNotEmpty(hints)) {
+                sqlBuilder.append("/*+SET_VAR(");
+                sqlBuilder.append(hints.entrySet().stream()
+                        .map(entry -> String.format("%s='%s'", entry.getKey(), entry.getValue()))
+                        .collect(Collectors.joining(",")));
+                sqlBuilder.append(")*/ ");
+            }
+        }
+
         @Override
         public String visitSelect(SelectRelation stmt, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
             SelectList selectList = stmt.getSelectList();
             sqlBuilder.append("SELECT ");
+
+            // set_var
+            visitVarHint(sqlBuilder, selectList.getOptHints());
+
             if (selectList.isDistinct()) {
                 sqlBuilder.append("DISTINCT ");
             }
@@ -363,6 +378,10 @@ public class AstToSQLBuilder {
         public String visitInsertStatement(InsertStmt insert, Void context) {
             StringBuilder sb = new StringBuilder();
             sb.append("INSERT ");
+
+            // set_var
+            visitVarHint(sb, insert.getOptHints());
+
             if (insert.isOverwrite()) {
                 sb.append("OVERWRITE ");
             } else {

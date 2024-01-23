@@ -28,6 +28,8 @@ set(EXEC_FILES
     scan_node.cpp
     select_node.cpp
     sort_exec_exprs.cpp
+    short_circuit.cpp
+    short_circuit_hybrid.cpp
     olap_common.cpp
     tablet_info.cpp
     tablet_sink.cpp
@@ -96,6 +98,7 @@ set(EXEC_FILES
     hdfs_scanner_parquet.cpp
     hdfs_scanner_text.cpp
     hdfs_scanner_partition.cpp
+    mor_processor.cpp
     json_scanner.cpp
     json_parser.cpp
     avro_scanner.cpp
@@ -146,6 +149,7 @@ set(EXEC_FILES
     schema_scanner/schema_routine_load_jobs_scanner.cpp
     schema_scanner/schema_stream_loads_scanner.cpp
     schema_scanner/sys_object_dependencies.cpp
+    schema_scanner/sys_fe_locks.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge_column.cpp

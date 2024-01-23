@@ -113,6 +113,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MarkedCountDownLatch;
+import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
 import com.starrocks.common.Pair;
@@ -1171,6 +1172,11 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
 
+        if (olapTable.getDefaultDistributionInfo().getType() !=
+                copiedTable.getDefaultDistributionInfo().getType()) {
+            metaChanged = true;
+        }
+
         if (metaChanged) {
             throw new DdlException("Table[" + tableName + "]'s meta has been changed. try again.");
         }
@@ -1435,8 +1441,12 @@ public class LocalMetastore implements ConnectorMetadata {
                 // update partition info
                 updatePartitionInfo(partitionInfo, newPartitions, existPartitionNameSet, addPartitionClause, olapTable);
 
-                colocateTableIndex.updateLakeTableColocationInfo(olapTable, true /* isJoin */,
-                        null /* expectGroupId */);
+                try {
+                    colocateTableIndex.updateLakeTableColocationInfo(olapTable, true /* isJoin */,
+                            null /* expectGroupId */);
+                } catch (DdlException e) {
+                    LOG.info("table {} update colocation info failed when add partition, {}", olapTable.getId(), e.getMessage());
+                }
 
                 // add partition log
                 addPartitionLog(db, olapTable, partitionDescs, addPartitionClause, partitionInfo, partitionList,
@@ -3115,7 +3125,7 @@ public class LocalMetastore implements ConnectorMetadata {
         // create mv
         long mvId = GlobalStateMgr.getCurrentState().getNextId();
         MaterializedView materializedView;
-        if (RunMode.getCurrentRunMode().isAllowCreateOlapTable()) {
+        if (RunMode.isSharedNothingMode()) {
             if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
                 materializedView =
                         MaterializedViewMgr.getInstance().createSinkTable(stmt, partitionInfo, mvId, db.getId());
@@ -3126,7 +3136,7 @@ public class LocalMetastore implements ConnectorMetadata {
                                 baseDistribution, mvRefreshScheme);
             }
         } else {
-            Preconditions.checkState(RunMode.getCurrentRunMode().isAllowCreateLakeTable());
+            Preconditions.checkState(RunMode.isSharedDataMode());
             if (refreshSchemeDesc.getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
                 throw new DdlException("Incremental materialized view in shared_data mode is not supported");
             }
@@ -3566,9 +3576,13 @@ public class LocalMetastore implements ConnectorMetadata {
         new AlterMVJobExecutor().process(stmt, ConnectContext.get());
     }
 
-    private String executeRefreshMvTask(String dbName, MaterializedView materializedView, ExecuteOption executeOption)
+    private String executeRefreshMvTask(String dbName, MaterializedView materializedView,
+                                        ExecuteOption executeOption)
             throws DdlException {
         MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
+        LOG.info("Start to execute refresh materialized view task, mv: {}, refreshType: {}, executionOption:{}",
+                materializedView.getName(), refreshType, executeOption);
+
         if (refreshType.equals(MaterializedView.RefreshType.INCREMENTAL)) {
             MaterializedViewMgr.getInstance().onTxnPublish(materializedView);
         } else if (refreshType != MaterializedView.RefreshType.SYNC) {
@@ -3623,9 +3637,7 @@ public class LocalMetastore implements ConnectorMetadata {
         taskRunProperties.put(TaskRun.FORCE, Boolean.toString(force));
 
         ExecuteOption executeOption = new ExecuteOption(priority, mergeRedundant, taskRunProperties);
-        if (isManual) {
-            executeOption.setManual();
-        }
+        executeOption.setManual(isManual);
         executeOption.setSync(isSync);
         return executeRefreshMvTask(dbName, materializedView, executeOption);
     }
@@ -3695,7 +3707,8 @@ public class LocalMetastore implements ConnectorMetadata {
 
             db.dropTable(oldTableName);
             db.registerTableUnlocked(olapTable);
-            inactiveRelatedMaterializedView(db, olapTable, String.format("based table %s renamed ", oldTableName));
+            inactiveRelatedMaterializedView(db, olapTable,
+                    MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(oldTableName));
         } finally {
             db.writeUnlock();
         }
@@ -3722,7 +3735,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 mv.setInactiveAndReason(reason);
 
                 // recursive inactive
-                inactiveRelatedMaterializedView(db, mv, String.format("base table %s inactive", mv.getName()));
+                inactiveRelatedMaterializedView(db, mv,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableActive(mv.getName()));
             } else {
                 LOG.info("Ignore materialized view {} does not exists", mvId);
             }
@@ -3742,7 +3756,8 @@ public class LocalMetastore implements ConnectorMetadata {
             db.dropTable(tableName);
             table.setName(newTableName);
             db.registerTableUnlocked(table);
-            inactiveRelatedMaterializedView(db, table, String.format("base table {} renamed", tableName));
+            inactiveRelatedMaterializedView(db, table,
+                    MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(tableName));
 
             LOG.info("replay rename table[{}] to {}, tableId: {}", tableName, newTableName, table.getId());
         } finally {
@@ -3969,6 +3984,14 @@ public class LocalMetastore implements ConnectorMetadata {
             try {
                 PropertyAnalyzer.analyzeStorageCoolDownTTL(properties, true);
                 results.put(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL, null);
+            } catch (AnalysisException ex) {
+                throw new RuntimeException(ex.getMessage());
+            }
+        }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION)) {
+            try {
+                PropertyAnalyzer.analyzeDataCachePartitionDuration(properties);
+                results.put(PropertyAnalyzer.PROPERTIES_DATACACHE_PARTITION_DURATION, null);
             } catch (AnalysisException ex) {
                 throw new RuntimeException(ex.getMessage());
             }
@@ -4272,7 +4295,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
                 ModifyTablePropertyOperationLog info =
                         new ModifyTablePropertyOperationLog(db.getId(), table.getId(), property);
-                GlobalStateMgr.getCurrentState().getEditLog().logSetHasForbitGlobalDict(info);
+                GlobalStateMgr.getCurrentState().getEditLog().logSetHasForbiddenGlobalDict(info);
             }
         } finally {
             db.readUnlock();
@@ -4309,7 +4332,7 @@ public class LocalMetastore implements ConnectorMetadata {
         db.writeLock();
         try {
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
-            if (opCode == OperationType.OP_SET_FORBIT_GLOBAL_DICT) {
+            if (opCode == OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT) {
                 String enAble = properties.get(PropertyAnalyzer.ENABLE_LOW_CARD_DICT_TYPE);
                 Preconditions.checkState(enAble != null);
                 if (olapTable != null) {
@@ -4691,6 +4714,10 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
             }
 
+            if (olapTable.getDefaultDistributionInfo().getType() != copiedTbl.getDefaultDistributionInfo().getType()) {
+                metaChanged = true;
+            }
+
             if (metaChanged) {
                 throw new DdlException("Table[" + copiedTbl.getName() + "]'s meta has been changed. try again.");
             }
@@ -4698,7 +4725,12 @@ public class LocalMetastore implements ConnectorMetadata {
             // replace
             truncateTableInternal(olapTable, newPartitions, truncateEntireTable, false);
 
-            colocateTableIndex.updateLakeTableColocationInfo(olapTable, true /* isJoin */, null /* expectGroupId */);
+            try {
+                colocateTableIndex.updateLakeTableColocationInfo(olapTable, true /* isJoin */,
+                        null /* expectGroupId */);
+            } catch (DdlException e) {
+                LOG.info("table {} update colocation info failed when truncate table, {}", olapTable.getId(), e.getMessage());
+            }
 
             // write edit log
             TruncateTableInfo info = new TruncateTableInfo(db.getId(), olapTable.getId(), newPartitions,
@@ -4951,6 +4983,11 @@ public class LocalMetastore implements ConnectorMetadata {
             if (olapTable == null) {
                 return;
             }
+            if (replaceTempPartitionLog.isUnPartitionedTable()) {
+                olapTable.replacePartition(replaceTempPartitionLog.getPartitions().get(0),
+                        replaceTempPartitionLog.getTempPartitions().get(0));
+                return;
+            } 
             olapTable.replaceTempPartitions(replaceTempPartitionLog.getPartitions(),
                     replaceTempPartitionLog.getTempPartitions(),
                     replaceTempPartitionLog.isStrictRange(),

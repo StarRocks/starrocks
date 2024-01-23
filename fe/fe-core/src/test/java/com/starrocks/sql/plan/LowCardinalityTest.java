@@ -1890,4 +1890,16 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  output: sum(24: fee_zb)\n" +
                 "  |  group by: 55: c_mr");
     }
+
+    @Test
+    public void testInformationFunc() throws Exception {
+        String sql = "select if(current_role = 'root', concat(S_ADDRESS, 'ccc'), '***') from supplier order by 1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:SORT\n" +
+                "  |  order by: <slot 9> 9: if ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 9> : if(CURRENT_ROLE() = 'root', DictExpr(10: S_ADDRESS,[concat(<place-holder>, 'ccc')]), '***')");
+    }
 }

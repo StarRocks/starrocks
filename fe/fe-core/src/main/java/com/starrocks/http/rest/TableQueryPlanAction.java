@@ -36,10 +36,12 @@ package com.starrocks.http.rest;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Strings;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -258,6 +260,13 @@ public class TableQueryPlanAction extends RestBaseAction {
                     "The Sql is invalid");
         }
 
+        if (execPlan.getScanNodes().isEmpty() && FeConstants.enablePruneEmptyOutputScan) {
+            result.put("partitions", Maps.newHashMap());
+            result.put("opaqued_query_plan", "");
+            result.put("status", 200);
+            return;
+        }
+
         // acquire ScanNode to obtain pruned tablet
         // in this way, just retrieve only one scannode
         if (execPlan.getScanNodes().size() != 1) {
@@ -274,6 +283,7 @@ public class TableQueryPlanAction extends RestBaseAction {
         }
 
         TQueryPlanInfo tQueryPlanInfo = new TQueryPlanInfo();
+        tQueryPlanInfo.output_names = execPlan.getColNames();
 
         // acquire TPlanFragment
         TPlanFragment tPlanFragment = fragments.get(0).toThrift();

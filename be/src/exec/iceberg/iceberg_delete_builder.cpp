@@ -130,6 +130,51 @@ Status ORCPositionDeleteBuilder::build(const std::string& timezone, const std::s
     }
 }
 
+Status ORCEqualityDeleteBuilder::build(const std::string& timezone, const std::string& delete_file_path,
+                                       int64_t file_length, const std::shared_ptr<DefaultMORProcessor> mor_processor,
+                                       std::vector<SlotDescriptor*> slot_descs, RuntimeState* state) {
+    std::unique_ptr<RandomAccessFile> file;
+    ASSIGN_OR_RETURN(file, _fs->new_random_access_file(delete_file_path));
+
+    auto input_stream = std::make_unique<ORCHdfsFileStream>(file.get(), file_length, nullptr);
+    std::unique_ptr<orc::Reader> reader;
+    try {
+        const orc::ReaderOptions options;
+        reader = createReader(std::move(input_stream), options);
+    } catch (std::exception& e) {
+        const auto s =
+                strings::Substitute("ORCEqualityDeleteBuilder::build create orc::Reader failed. reason = $0", e.what());
+        LOG(WARNING) << s;
+        return Status::InternalError(s);
+    }
+
+    const auto orc_reader = std::make_unique<OrcChunkReader>(4096, slot_descs);
+    orc_reader->disable_broker_load_mode();
+    orc_reader->set_current_file_name(delete_file_path);
+    RETURN_IF_ERROR(orc_reader->set_timezone(timezone));
+    RETURN_IF_ERROR(orc_reader->init(std::move(reader)));
+
+    orc::RowReader::ReadPosition position;
+
+    while (true) {
+        Status status = orc_reader->read_next(&position);
+        if (status.is_end_of_file()) {
+            break;
+        }
+
+        RETURN_IF_ERROR(status);
+
+        auto ret = orc_reader->get_chunk();
+        if (!ret.ok()) {
+            return ret.status();
+        }
+
+        ChunkPtr chunk = ret.value();
+        RETURN_IF_ERROR(mor_processor->append_chunk_to_hashtable(state, chunk));
+    }
+    return Status::OK();
+}
+
 SlotDescriptor IcebergDeleteFileMeta::gen_slot_helper(const IcebergColumnMeta& meta) {
     TSlotDescriptor desc;
     desc.__set_id(meta.id);
@@ -161,5 +206,4 @@ SlotDescriptor& IcebergDeleteFileMeta::get_delete_file_pos_slot() {
 
     return k_delete_file_pos_slot;
 }
-
 } // namespace starrocks

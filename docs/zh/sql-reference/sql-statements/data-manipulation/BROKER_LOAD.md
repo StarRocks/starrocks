@@ -30,7 +30,7 @@ WITH BROKER
 ]
 ```
 
-注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包含起来。参见[关键字](../keywords.md)。
+注意在 StarRocks 中，部分文字是 SQL 语言的保留关键字，不能直接用于 SQL 语句。如果想在 SQL 语句中使用这些保留关键字，必须用反引号 (`) 包裹起来。参见[关键字](../keywords.md)。
 
 ## 参数说明
 
@@ -92,12 +92,12 @@ INTO TABLE <table_name>
   > - Broker Load 支持通过 S3 或 S3A 协议访问 AWS S3，因此从 AWS S3 导入数据时，您在文件路径中传入的目标文件的 S3 URI 可以使用 `s3://` 或 `s3a://` 作为前缀。
   > - 由于 Broker Load 只支持通过 gs 协议访问 Google GCS，因此当从 Google GCS 导入数据时，必须确保文件路径传入的目标文件的 GCS URI 使用 `gs://` 为前缀。
   > - 从 Blob Storage 导入数据时，需要使用 wasb 或 wasbs 作为文件协议访问目标数据：
-  >   - 如果您的存储账号支持通过 HTTP 协议进行访问，请使用 wasb 文件协议，文件路径格式为 `wasb://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`。
-  >   - 如果您的存储账号支持通过 HTTPS 协议进行访问，请使用 wasbs 文件协议，文件路径格式为 `wasbs://<container>@<storage_account>.blob.core.windows.net/<path>/<file_name>/*`。
-  > - 从 Azure Data Lake Storage Gen1 导入数据时，需要使用 adl 作为文件协议访问目标数据，文件路径格式为 `adl://<data_lake_storage_gen1_name>.azuredatalakestore.net/<path>/<file_name>`。
+  >   - 如果您的存储账号支持通过 HTTP 协议进行访问，请使用 wasb 文件协议，文件路径格式为 `wasb://<container_name>@<storage_account_name>.blob.core.windows.net/<path>/<file_name>/*`。
+  >   - 如果您的存储账号支持通过 HTTPS 协议进行访问，请使用 wasbs 文件协议，文件路径格式为 `wasbs://<container_name>@<storage_account_name>.blob.core.windows.net/<path>/<file_name>/*`。
   > - 从 Data Lake Storage Gen2 导入数据时，需要使用 abfs 或 abfss 作为文件协议访问目标数据：
-  >   - 如果您的存储账号支持通过 HTTP 协议进行访问，请使用 abfs 文件协议，文件路径格式为 `abfs://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
-  >   - 如果您的存储账号支持通过 HTTPS 协议进行访问，请使用 abfss 文件协议，文件路径格式为 `abfss://<container>@<storage_account>.dfs.core.windows.net/<file_name>`。
+  >   - 如果您的存储账号支持通过 HTTP 协议进行访问，请使用 abfs 文件协议，文件路径格式为 `abfs://<container_name>@<storage_account_name>.dfs.core.windows.net/<file_name>`。
+  >   - 如果您的存储账号支持通过 HTTPS 协议进行访问，请使用 abfss 文件协议，文件路径格式为 `abfss://<container_name>@<storage_account_name>.dfs.core.windows.net/<file_name>`。
+  > - 从 Azure Data Lake Storage Gen1 导入数据时，需要使用 adl 作为文件协议访问目标数据，文件路径格式为 `adl://<data_lake_storage_gen1_name>.azuredatalakestore.net/<path>/<file_name>`。
   
 - `INTO TABLE`
 
@@ -111,7 +111,7 @@ INTO TABLE <table_name>
 
   > **说明**
   >
-  > 该参数仅适用于目标 StarRocks 表使用聚合模型、并且所有 Value 列的聚合函数均为 `sum` 的情况。
+  > 该参数仅适用于目标 StarRocks 表使用聚合表、并且所有 Value 列的聚合函数均为 `sum` 的情况。
 
 - `PARTITION`
 
@@ -504,8 +504,8 @@ StarRocks 访问存储系统的认证配置。
 - 基于 Shared Key 进行认证和鉴权
 
   ```SQL
-  "azure.blob.storage_account" = "<blob_storage_account_name>",
-  "azure.blob.shared_key" = "<blob_storage_account_shared_key>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.shared_key" = "<storage_account_shared_key>"
   ```
 
   `StorageCredentialParams` 包含如下参数。
@@ -518,18 +518,68 @@ StarRocks 访问存储系统的认证配置。
 - 基于 SAS Token 进行认证和鉴权
 
   ```SQL
-  "azure.blob.account_name" = "<blob_storage_account_name>",
-  "azure.blob.container_name" = "<blob_container_name>",
-  "azure.blob.sas_token" = "<blob_storage_account_SAS_token>"
+  "azure.blob.storage_account" = "<storage_account_name>",
+  "azure.blob.container" = "<container_name>",
+  "azure.blob.sas_token" = "<storage_account_SAS_token>"
   ```
 
   `StorageCredentialParams` 包含如下参数。
 
   | **参数**                  | **是否必须** | **说明**                                 |
   | ------------------------- | ------------ | ---------------------------------------- |
-  | azure.blob.account_name   | 是           | Blob Storage 账号的用户名。              |
-  | azure.blob.container_name | 是           | 用于存储数据的 Blob 容器的名称。         |
+  | azure.blob.storage_account| 是           | Blob Storage 账号的用户名。              |
+  | azure.blob.container      | 是           | 用于存储数据的 Blob 容器的名称。         |
   | azure.blob.sas_token      | 是           | 用于访问 Blob Storage 账号的 SAS Token。 |
+
+##### Azure Data Lake Storage Gen2
+
+如果存储系统为 Data Lake Storage Gen2，请按如下配置 `StorageCredentialParams`：
+
+- 基于 Managed Identity 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_use_managed_identity" = "true",
+  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
+  "azure.adls2.oauth2_client_id" = "<service_client_id>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                                | **是否必须** | **说明**                                                |
+  | --------------------------------------- | ------------ | ------------------------------------------------------- |
+  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
+  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属的 Tenant 的 ID。                               |
+  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
+
+- 基于 Shared Key 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.storage_account" = "<storage_account_name>",
+  "azure.adls2.shared_key" = "<storage_account_shared_key>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                    | **是否必须** | **说明**                                   |
+  | --------------------------- | ------------ | ------------------------------------------ |
+  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
+  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
+
+- 基于 Service Principal 进行认证和鉴权
+
+  ```SQL
+  "azure.adls2.oauth2_client_id" = "<service_client_id>",
+  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
+  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
+  ```
+
+  `StorageCredentialParams` 包含如下参数。
+
+  | **参数**                           | **是否必须** | **说明**                                                     |
+  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
+  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
+  | azure.adls2.oauth2_client_secret   | 是           | 新建 Client (Application) Secret。                           |
+  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
 
 ##### Azure Data Lake Storage Gen1
 
@@ -562,56 +612,6 @@ StarRocks 访问存储系统的认证配置。
   | azure.adls1.oauth2_client_id  | 是           | Service Principal 的 Client (Application) ID。               |
   | azure.adls1.oauth2_credential | 是           | 新建 Client (Application) Secret。                           |
   | azure.adls1.oauth2_endpoint   | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
-
-##### Azure Data Lake Storage Gen2
-
-如果存储系统为 Data Lake Storage Gen2，请按如下配置 `StorageCredentialParams`：
-
-- 基于 Managed Identity 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.oauth2_use_managed_identity" = "true",
-  "azure.adls2.oauth2_tenant_id" = "<service_principal_tenant_id>",
-  "azure.adls2.oauth2_client_id" = "<service_client_id>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                                | **是否必须** | **说明**                                                |
-  | --------------------------------------- | ------------ | ------------------------------------------------------- |
-  | azure.adls2.oauth2_use_managed_identity | 是           | 指定是否开启 Managed Identity 鉴权方式。设置为 `true`。 |
-  | azure.adls2.oauth2_tenant_id            | 是           | 数据所属的 Tenant 的 ID。                               |
-  | azure.adls2.oauth2_client_id            | 是           | Managed Identity 的 Client (Application) ID。           |
-
-- 基于 Shared Key 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.storage_account" = "<storage_account_name>",
-  "azure.adls2.shared_key" = "<shared_key>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                    | **是否必须** | **说明**                                   |
-  | --------------------------- | ------------ | ------------------------------------------ |
-  | azure.adls2.storage_account | 是           | Data Lake Storage Gen2 账号的用户名。      |
-  | azure.adls2.shared_key      | 是           | Data Lake Storage Gen2 账号的 Shared Key。 |
-
-- 基于 Service Principal 进行认证和鉴权
-
-  ```SQL
-  "azure.adls2.oauth2_client_id" = "<service_client_id>",
-  "azure.adls2.oauth2_client_secret" = "<service_principal_client_secret>",
-  "azure.adls2.oauth2_client_endpoint" = "<service_principal_client_endpoint>"
-  ```
-
-  `StorageCredentialParams` 包含如下参数。
-
-  | **参数**                           | **是否必须** | **说明**                                                     |
-  | ---------------------------------- | ------------ | ------------------------------------------------------------ |
-  | azure.adls2.oauth2_client_id       | 是           | Service Principal 的 Client (Application) ID。               |
-  | azure.adls2.oauth2_client_secret   | 是           | 新建 Client (Application) Secret。                           |
-  | azure.adls2.oauth2_client_endpoint | 是           | Service Principal 或 Application 的 OAuth 2.0 Token Endpoint (v1)。 |
 
 ### opt_properties
 
@@ -683,11 +683,21 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 - `priority`
 
-   指定导入作业的优先级。取值范围：`LOWEST`、`LOW`、`NORMAL`、`HIGH` 和 `HIGHEST`。默认值：`NORMAL`。Broker Load 通过 [FE 配置项](../../../administration/Configuration.md) `max_broker_load_job_concurrency` 指定 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出的作业会按照优先级在队列中排队等待调度。
+   指定导入作业的优先级。取值范围：`LOWEST`、`LOW`、`NORMAL`、`HIGH` 和 `HIGHEST`。默认值：`NORMAL`。Broker Load 通过 [FE 配置项](../../../administration/FE_configuration.md) `max_broker_load_job_concurrency` 指定 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出的作业会按照优先级在队列中排队等待调度。
 
    已经创建成功的导入作业，如果处于 **QUEUEING** 状态或者 **LOADING** 状态，那么您可以使用 [ALTER LOAD](../data-manipulation/ALTER_LOAD.md) 语句修改该作业的优先级。
 
    StarRocks 自 v2.5 版本起支持为导入作业设置 `priority` 参数。
+
+- `merge_condition`
+
+  用于指定作为更新生效条件的列名。这样只有当导入的数据中该列的值大于等于当前值的时候，更新才会生效。
+  
+  Broker Load 自 3.1 版本起支持条件更新。参见[通过导入实现数据变更](../../../loading/Load_to_Primary_Key_tables.md#条件更新)。
+  
+  > **说明**
+  >
+  > 指定的列必须为非主键列，且仅主键表支持条件更新。
 
 ## 列映射
 
@@ -708,7 +718,7 @@ PROPERTIES ("<key1>" = "<value1>"[, "<key2>" = "<value2>" ...])
 
 ## 相关配置项
 
-[FE 配置项](../../../administration/Configuration.md#fe-配置项) `max_broker_load_job_concurrency` 指定了 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。
+[FE 配置项](../../../administration/FE_configuration.md#fe-配置项) `max_broker_load_job_concurrency` 指定了 StarRocks 集群中可以并行执行的 Broker Load 作业的最大数量。
 
 StarRocks v2.4 及以前版本中，如果某一时间段内提交的 Broker Load 作业总数超过最大数量，则超出作业会按照各自的提交时间放到队列中排队等待调度。
 

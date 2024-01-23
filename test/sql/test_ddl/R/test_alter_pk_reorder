@@ -33,6 +33,10 @@ insert into tab1 values (500,500,500,500,500);
 insert into tab1 values (600,600,600,600,600);
 -- result:
 -- !result
+select * from tab1 where k1 = 100;
+-- result:
+100	100	100	100	100
+-- !result
 alter table tab1 order by (k2,k1);
 -- result:
 -- !result
@@ -53,7 +57,10 @@ select * from tab1;
 600	600	600	600	600
 700	700	700	700	700
 -- !result
-
+select * from tab1 where k2 = 100;
+-- result:
+100	100	100	100	100
+-- !result
 -- name: test_alter_pk_reorder_column_type
 CREATE TABLE `test_alter_pk_reorder_column_type` (
   `k1` date NOT NULL COMMENT "",

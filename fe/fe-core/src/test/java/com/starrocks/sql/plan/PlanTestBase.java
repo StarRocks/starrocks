@@ -499,7 +499,7 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 "  `L_TAX` double NOT NULL COMMENT \"\",\n" +
                 "  `L_RETURNFLAG` char(1) NOT NULL COMMENT \"\",\n" +
                 "  `L_LINESTATUS` char(1) NOT NULL COMMENT \"\",\n" +
-                "  `L_SHIPDATE` date NOT NULL COMMENT \"\",\n" +
+                "  `L_SHIPDATE` date NULL COMMENT \"\",\n" +
                 "  `L_COMMITDATE` date NOT NULL COMMENT \"\",\n" +
                 "  `L_RECEIPTDATE` date NOT NULL COMMENT \"\",\n" +
                 "  `L_SHIPINSTRUCT` char(25) NOT NULL COMMENT \"\",\n" +
@@ -1024,6 +1024,19 @@ public class PlanTestBase extends PlanTestNoneDBBase {
                 ") ENGINE=OLAP\n" +
                 "PRIMARY KEY(`pk1`)\n" +
                 "DISTRIBUTED BY HASH(`pk1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        starRocksAssert.withTable("CREATE TABLE `tprimary_bool` (\n" +
+                "  `pk1` bigint NOT NULL COMMENT \"\",\n" +
+                "  `pk2` BOOLEAN NOT NULL COMMENT \"\",\n" +
+                "  `v3` string NOT NULL COMMENT \"\",\n" +
+                "  `v4` int NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(pk1, pk2)\n" +
+                "DISTRIBUTED BY HASH(pk1, pk2) BUCKETS 3\n" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\"\n" +

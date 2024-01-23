@@ -306,6 +306,24 @@ public class CatalogUtils {
         }
     }
 
+    public static int divisibleBucketNum(int backendNum) {
+        while (backendNum > 7) {
+            if (backendNum % 2 == 0) {
+                backendNum = backendNum / 2;
+            } else if (backendNum % 3 == 0) {
+                backendNum = backendNum / 3;
+            } else if (backendNum % 5 == 0) {
+                backendNum = backendNum / 5;
+            } else if (backendNum % 7 == 0) {
+                backendNum = backendNum / 7;
+            } else {
+                backendNum = backendNum / 2;
+            }
+        }
+
+        return backendNum;
+    }
+
     public static int calPhysicalPartitionBucketNum() {
         int backendNum = GlobalStateMgr.getCurrentSystemInfo().getBackendIds().size();
 
@@ -313,7 +331,7 @@ public class CatalogUtils {
             backendNum = backendNum + GlobalStateMgr.getCurrentSystemInfo().getAliveComputeNodeNumber();
         }
 
-        return Math.min(backendNum, 16);
+        return divisibleBucketNum(backendNum);
     }
 
     public static int calBucketNumAccordingToBackends() {

@@ -50,13 +50,13 @@
 #include "common/closure_guard.h"
 #include "common/config.h"
 #include "common/status.h"
-#include "exec/orc_scanner.h"
-#include "exec/parquet_scanner.h"
+#include "exec/file_scanner.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/fragment_executor.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/pipeline/stream_epoch_manager.h"
+#include "exec/short_circuit.h"
 #include "gen_cpp/AgentService_types.h"
 #include "gen_cpp/BackendService.h"
 #include "gen_cpp/InternalService_types.h"
@@ -802,39 +802,9 @@ void PInternalServiceImplBase<T>::_get_file_schema(google::protobuf::RpcControll
     }
 
     RuntimeState state(_exec_env);
-    RuntimeProfile profile{"dummy_profile", false};
-    ScannerCounter counter{};
-    std::unique_ptr<FileScanner> p_scanner;
-
-    auto tp = scan_range.ranges[0].format_type;
-    {
-        switch (tp) {
-        case TFileFormatType::FORMAT_PARQUET:
-            p_scanner = std::make_unique<ParquetScanner>(&state, &profile, scan_range, &counter, true);
-            break;
-
-        case TFileFormatType::FORMAT_ORC:
-            p_scanner = std::make_unique<ORCScanner>(&state, &profile, scan_range, &counter, true);
-            break;
-
-        default:
-            auto err_msg = fmt::format("get file schema failed, format: {} not supported", to_string(tp));
-            LOG(WARNING) << err_msg;
-            st = Status::InvalidArgument(err_msg);
-            return;
-        }
-    }
-
-    st = p_scanner->open();
-    if (!st.ok()) {
-        LOG(WARNING) << "open file scanner failed: " << st;
-        return;
-    }
-
-    DeferOp defer2([&p_scanner] { p_scanner->close(); });
 
     std::vector<SlotDescriptor> schema;
-    st = p_scanner->get_schema(&schema);
+    st = FileScanner::sample_schema(&state, scan_range, &schema);
     if (!st.ok()) {
         LOG(WARNING) << "get schema failed: " << st;
         return;
@@ -1121,6 +1091,46 @@ void PInternalServiceImplBase<T>::list_fail_point(google::protobuf::RpcControlle
     });
 #endif
     Status::OK().to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+Status PInternalServiceImplBase<T>::_exec_short_circuit(brpc::Controller* cntl, const PExecShortCircuitRequest*,
+                                                        PExecShortCircuitResult* response) {
+    auto ser_request = cntl->request_attachment().to_string();
+    std::shared_ptr<TExecShortCircuitParams> t_requests = std::make_shared<TExecShortCircuitParams>();
+    {
+        const auto* buf = (const uint8_t*)ser_request.data();
+        uint32_t len = ser_request.size();
+        RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_requests.get()));
+    }
+    ShortCircuitExecutor executor{_exec_env};
+    RETURN_IF_ERROR(executor.prepare(*t_requests));
+    RETURN_IF_ERROR(executor.execute());
+    RETURN_IF_ERROR(executor.fetch_data(cntl, *response));
+    return Status::OK();
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::exec_short_circuit(google::protobuf::RpcController* cntl_base,
+                                                     const PExecShortCircuitRequest* request,
+                                                     PExecShortCircuitResult* response,
+                                                     google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+
+    StarRocksMetrics::instance()->short_circuit_request_total.increment(1);
+    MonotonicStopWatch watch;
+    watch.start();
+
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    if (k_starrocks_exit.load(std::memory_order_relaxed)) {
+        cntl->SetFailed(brpc::EINTERNAL, "BE is shutting down");
+        return;
+    }
+
+    auto st = _exec_short_circuit(cntl, request, response);
+    st.to_protobuf(response->mutable_status());
+    uint64_t elapsed_time_ns = watch.elapsed_time();
+    StarRocksMetrics::instance()->short_circuit_request_duration_us.increment(elapsed_time_ns / 1000);
 }
 
 template class PInternalServiceImplBase<PInternalService>;

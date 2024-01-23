@@ -196,13 +196,13 @@ private:
     // tablet schema owned by delta writer, all write will use this tablet schema
     // it's build from unsafe_tablet_schema_ref（stored when create tablet） and OlapTableSchema
     // every request will have it's own tablet schema so simple schema change can work
-    TabletSchemaSPtr _tablet_schema;
+    TabletSchemaCSPtr _tablet_schema;
 
     std::unique_ptr<FlushToken> _flush_token;
     std::unique_ptr<ReplicateToken> _replicate_token;
     bool _with_rollback_log;
     // initial value is max value
-    size_t _memtable_buffer_row = -1;
+    size_t _memtable_buffer_row = std::numeric_limits<size_t>::max();
     bool _partial_schema_with_sort_key = false;
     std::atomic<bool> _is_immutable = false;
 

@@ -87,6 +87,10 @@ public class TableFunction extends Function {
             functionSet.addBuiltin(func);
         }
 
+        TableFunction funcUnnestBitmap = new TableFunction(new FunctionName("unnest_bitmap"),
+                Lists.newArrayList("unnest_bitmap"), Lists.newArrayList(Type.BITMAP), Lists.newArrayList(Type.BIGINT));
+        functionSet.addBuiltin(funcUnnestBitmap);
+
         for (Type type : Lists.newArrayList(Type.TINYINT, Type.SMALLINT, Type.INT, Type.BIGINT, Type.LARGEINT)) {
             // generate_series with default step size: 1
             TableFunction func = new TableFunction(new FunctionName("generate_series"),

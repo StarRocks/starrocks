@@ -30,6 +30,7 @@ displayed_sidebar: "Chinese"
 
 | Connector | Flink       | StarRocks  | Java | Scala      |
 | --------- | ----------- | ---------- | ---- | ---------- |
+| 1.2.9 | 1.15 ～ 1.18 | 2.1 及以上 | 8 | 2.11、2.12 |
 | 1.2.8     | 1.13 ~ 1.17 | 2.1 及以上 | 8    | 2.11、2.12 |
 | 1.2.7     | 1.11 ~ 1.15 | 2.1 及以上 | 8    | 2.11、2.12 |
 
@@ -41,7 +42,22 @@ displayed_sidebar: "Chinese"
 
 ### 1.2
 
-**1.2.8**
+#### 1.2.9
+
+本版本发布包含如下新增特性和问题修复。值得注意的变化是，Flink connector 已与 Flink CDC 3.0 集成，可轻松地从 CDC 数据源（如 MySQL、Kafka）构建流式 ELT 管道到 StarRocks。更多信息，您参见 [Flink CDC 同步（支持 schema change）](../loading/Flink-connector-starrocks.md#flink-cdc同步支持-schema-change)。
+
+**新增特性**
+
+- 实现 catalog 以支持 Flink CDC 3.0。[#295](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/295)
+- 实现 [FLP-191](https://cwiki.apache.org/confluence/display/FLINK/FLIP-191%3A+Extend+unified+Sink+interface+to+support+small+file+compaction)中的新 Sink API，以支持[Flink CDC 3.0](https://github.com/ververica/flink-cdc-connectors/issues/2600)。[#301](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/301)
+- 支持 Flink 1.18。[#305](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/305)
+
+**问题修复**
+
+- 修复了误导性的线程名称和日志。[#290](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/290)
+- 修复了在写入多个表时错误的 stream-load-sdk 配置。[#298](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/298)
+
+#### 1.2.8
 
 本版本发布包含如下功能优化和问题修复。其中重点优化如下：
 

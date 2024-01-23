@@ -175,6 +175,8 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(tablet_base_max_compaction_score);
     REGISTER_STARROCKS_METRIC(tablet_update_max_compaction_score);
 
+    REGISTER_STARROCKS_METRIC(max_tablet_rowset_num);
+
     REGISTER_STARROCKS_METRIC(push_request_write_bytes_per_second);
     REGISTER_STARROCKS_METRIC(query_scan_bytes_per_second);
     REGISTER_STARROCKS_METRIC(max_disk_io_util_percent);
@@ -192,6 +194,9 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(disk_sync_total);
     REGISTER_STARROCKS_METRIC(blocks_open_reading);
     REGISTER_STARROCKS_METRIC(blocks_open_writing);
+
+    REGISTER_STARROCKS_METRIC(short_circuit_request_total);
+    REGISTER_STARROCKS_METRIC(short_circuit_request_duration_us);
 }
 
 void StarRocksMetrics::initialize(const std::vector<std::string>& paths, bool init_system_metrics,

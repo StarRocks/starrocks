@@ -1,4 +1,5 @@
 set(EXEC_FILES
+        ./agent/agent_task_test.cpp
         ./agent/master_info_test.cpp
         ./column/array_column_test.cpp
         ./column/binary_column_test.cpp
@@ -22,6 +23,7 @@ set(EXEC_FILES
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
         ./fs/fs_broker_test.cpp
+        ./fs/fs_hdfs_test.cpp
         ./fs/fs_posix_test.cpp
         ./fs/fs_memory_test.cpp
         ./fs/fs_s3_test.cpp
@@ -39,8 +41,8 @@ set(EXEC_FILES
         ./exec/pipeline/pipeline_file_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/query_context_manger_test.cpp
-        ./exec/pipeline/query_context_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
+        ./exec/pipeline/sink/table_function_table_sink_operator_test.cpp
         ./exec/query_cache/query_cache_test.cpp
         ./exec/query_cache/transform_operator.cpp
         ./exec/schema_columns_scanner_test.cpp
@@ -58,6 +60,7 @@ set(EXEC_FILES
         ./exec/chunks_sorter_test.cpp
         ./exec/connector_scan_node_test.cpp
         ./exec/csv_scanner_test.cpp
+        ./exec/file_scanner_test.cpp
         ./exec/file_scan_node_test.cpp
         ./exec/hdfs_scanner_test.cpp
         ./exec/hdfs_scan_node_test.cpp
@@ -179,6 +182,7 @@ set(EXEC_FILES
         ./io/s3_input_stream_test.cpp
         ./io/fd_input_stream_test.cpp
         ./io/seekable_input_stream_test.cpp
+        ./io/shared_buffered_input_stream_test.cpp
         ./io/spill_test.cpp
         ./storage/decimal12_test.cpp
         ./storage/disjunctive_predicates_test.cpp
@@ -186,6 +190,7 @@ set(EXEC_FILES
         ./storage/del_vector_test.cpp
         ./storage/delete_handler_test.cpp
         ./storage/delta_column_group_test.cpp
+        ./storage/fast_schema_evolution_test.cpp
         ./storage/file_utils_test.cpp
         ./storage/tablet_schema_map_test.cpp
         ./storage/hll_test.cpp
@@ -218,6 +223,7 @@ set(EXEC_FILES
         ./storage/lake/primary_key_publish_test.cpp
         ./storage/lake/meta_file_test.cpp
         ./storage/lake/metacache_test.cpp
+        ./storage/lake/replication_txn_manager_test.cpp
         ./storage/rowset_update_state_test.cpp
         ./storage/rowset_column_update_state_test.cpp
         ./storage/rowset_column_partial_update_test.cpp
@@ -272,6 +278,8 @@ set(EXEC_FILES
         ./storage/projection_iterator_test.cpp
         ./storage/push_handler_test.cpp
         ./storage/range_test.cpp
+        ./storage/replication_txn_manager_test.cpp
+        ./storage/segment_stream_converter_test.cpp
         ./storage/row_source_mask_test.cpp
         ./storage/union_iterator_test.cpp
         ./storage/unique_iterator_test.cpp
@@ -391,6 +399,7 @@ set(EXEC_FILES
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         ./storage/compaction_parallelization_test.cpp
+        ./storage/lake/local_pk_index_manager_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON" OR "${WITH_CACHELIB}" STREQUAL "ON")

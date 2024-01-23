@@ -27,6 +27,11 @@ This SQL statement can：
   - `colocate_with`
   - All session variable-related properties. For information on session variables, see [System variables](../../../reference/System_variable.md).
 
+:::tip
+- This operation requires the ALTER privilege on the target materialized view. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+- ALTER MATERIALIZED VIEW does not support directly modifying the query statement used to build the materialized view. You can build a new materialized view and swap it with the original one using ALTER MATERIALIZED VIEW SWAP WITH.
+:::
+
 ## Syntax
 
 ```SQL

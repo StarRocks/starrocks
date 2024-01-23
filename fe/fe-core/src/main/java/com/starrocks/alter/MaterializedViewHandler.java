@@ -722,7 +722,7 @@ public class MaterializedViewHandler extends AlterHandler {
             throw new DdlException("Base index[" + baseIndexName + "] does not exist");
         }
         // check state
-        for (Partition partition : olapTable.getPartitions()) {
+        for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
             MaterializedIndex baseIndex = partition.getIndex(baseIndexId);
             // up to here. index's state should only be NORMAL
             Preconditions.checkState(baseIndex.getState() == IndexState.NORMAL, baseIndex.getState().name());
@@ -808,7 +808,7 @@ public class MaterializedViewHandler extends AlterHandler {
         int mvSchemaHash = olapTable.getSchemaHashByIndexId(mvIndexId);
         Preconditions.checkState(mvSchemaHash != -1);
 
-        for (Partition partition : olapTable.getPartitions()) {
+        for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
             MaterializedIndex materializedIndex = partition.getIndex(mvIndexId);
             Preconditions.checkNotNull(materializedIndex);
         }
@@ -824,7 +824,7 @@ public class MaterializedViewHandler extends AlterHandler {
     private long dropMaterializedView(String mvName, OlapTable olapTable) {
         long mvIndexId = olapTable.getIndexIdByName(mvName);
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
-        for (Partition partition : olapTable.getPartitions()) {
+        for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
             MaterializedIndex rollupIndex = partition.getIndex(mvIndexId);
             // delete rollup index
             partition.deleteRollupIndex(mvIndexId);
@@ -846,7 +846,7 @@ public class MaterializedViewHandler extends AlterHandler {
 
             TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
             OlapTable olapTable = (OlapTable) db.getTable(tableId);
-            for (Partition partition : olapTable.getPartitions()) {
+            for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
                 MaterializedIndex rollupIndex = partition.deleteRollupIndex(rollupIndexId);
 
                 if (!GlobalStateMgr.isCheckpointThread()) {

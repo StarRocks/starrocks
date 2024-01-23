@@ -33,13 +33,13 @@ class TabletWriter;
 
 class VerticalCompactionTask : public CompactionTask {
 public:
-    explicit VerticalCompactionTask(int64_t txn_id, int64_t version, Tablet tablet,
+    explicit VerticalCompactionTask(int64_t txn_id, VersionedTablet tablet,
                                     std::vector<std::shared_ptr<Rowset>> input_rowsets)
-            : CompactionTask(txn_id, version, std::move(tablet), std::move(input_rowsets)) {}
+            : CompactionTask(txn_id, std::move(tablet), std::move(input_rowsets)) {}
 
     ~VerticalCompactionTask() override = default;
 
-    Status execute(Progress* progress, CancelFunc cancel_func) override;
+    Status execute(Progress* progress, CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) override;
 
 private:
     StatusOr<int32_t> calculate_chunk_size_for_column_group(const std::vector<uint32_t>& column_group);

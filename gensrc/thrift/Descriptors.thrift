@@ -154,6 +154,7 @@ enum TSchemaTableType {
     SCH_BE_LOGS,
     SCH_BE_BVARS,
     SCH_BE_CLOUD_NATIVE_COMPACTIONS,
+    
     STARROCKS_ROLE_EDGES,
     STARROCKS_GRANT_TO_ROLES,
     STARROCKS_GRANT_TO_USERS,
@@ -163,6 +164,7 @@ enum TSchemaTableType {
     SCH_PIPES,
     SCH_FE_METRICS,
     STARROCKS_OBJECT_DEPENDENCIES,
+    SYS_FE_LOCKS,
 }
 
 enum THdfsCompression {
@@ -265,11 +267,12 @@ struct TOlapTableColumnParam {
 }
 
 struct TOlapTableIndexSchema {
-    1: required i64 id
+    1: required i64 id // index id
     2: required list<string> columns
     3: required i32 schema_hash
     4: optional TOlapTableColumnParam column_param
     5: optional Exprs.TExpr where_clause
+    6: optional i64 schema_id // schema id
 }
 
 struct TOlapTableSchemaParam {
@@ -386,6 +389,9 @@ struct THdfsTable {
 
     // hive table serde_lib
     9: optional string serde_lib
+
+    // hive table serde properties
+    10: optional map<string, string> serde_properties
 }
 
 struct TFileTable {

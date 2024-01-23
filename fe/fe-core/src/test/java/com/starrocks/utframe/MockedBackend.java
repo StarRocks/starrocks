@@ -27,6 +27,7 @@ import com.starrocks.proto.PCancelPlanFragmentResult;
 import com.starrocks.proto.PCollectQueryStatisticsResult;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
 import com.starrocks.proto.PExecPlanFragmentResult;
+import com.starrocks.proto.PExecShortCircuitResult;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PGetFileSchemaResult;
 import com.starrocks.proto.PListFailPointResponse;
@@ -45,6 +46,7 @@ import com.starrocks.rpc.PBackendService;
 import com.starrocks.rpc.PCollectQueryStatisticsRequest;
 import com.starrocks.rpc.PExecBatchPlanFragmentsRequest;
 import com.starrocks.rpc.PExecPlanFragmentRequest;
+import com.starrocks.rpc.PExecShortCircuitRequest;
 import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.PGetFileSchemaRequest;
 import com.starrocks.rpc.PListFailPointRequest;
@@ -121,6 +123,7 @@ public class MockedBackend {
     private final int heartBeatPort;
     private final int beThriftPort;
     private final int httpPort;
+    private final int starletPort;
 
     final MockHeatBeatClient heatBeatClient;
 
@@ -139,12 +142,13 @@ public class MockedBackend {
         brpcPort = BASE_PORT.getAndIncrement();
         heartBeatPort = BASE_PORT.getAndIncrement();
         httpPort = BASE_PORT.getAndIncrement();
+        starletPort = BASE_PORT.getAndIncrement();
 
-        heatBeatClient = new MockHeatBeatClient(beThriftPort, httpPort, brpcPort);
+        heatBeatClient = new MockHeatBeatClient(beThriftPort, httpPort, brpcPort, starletPort);
         thriftClient = new MockBeThriftClient(this);
         pbService = new MockPBackendService();
 
-        ((MockGenericPool<?>) ClientPool.heartbeatPool).register(this);
+        ((MockGenericPool<?>) ClientPool.beHeartbeatPool).register(this);
         ((MockGenericPool<?>) ClientPool.backendPool).register(this);
 
         new MockUp<BrpcProxy>() {
@@ -185,16 +189,22 @@ public class MockedBackend {
         return httpPort;
     }
 
+    public int getStarletPort() {
+        return starletPort;
+    }
+
     private static class MockHeatBeatClient extends HeartbeatService.Client {
         private final int brpcPort;
         private final int beThriftPort;
         private final int httpPort;
+        private final int starletPort;
 
-        public MockHeatBeatClient(int beThriftPort, int beHttpPort, int beBrpcPort) {
+        public MockHeatBeatClient(int beThriftPort, int beHttpPort, int beBrpcPort, int starletPort) {
             super(null);
             this.brpcPort = beBrpcPort;
             this.beThriftPort = beThriftPort;
             this.httpPort = beHttpPort;
+            this.starletPort = starletPort;
         }
 
         @Override
@@ -212,6 +222,7 @@ public class MockedBackend {
         public THeartbeatResult recv_heartbeat() {
             TBackendInfo backendInfo = new TBackendInfo(beThriftPort, httpPort);
             backendInfo.setBrpc_port(brpcPort);
+            backendInfo.setStarlet_port(starletPort);
             return new THeartbeatResult(new TStatus(TStatusCode.OK), backendInfo);
         }
     }
@@ -450,6 +461,11 @@ public class MockedBackend {
 
         @Override
         public Future<PListFailPointResponse> listFailPointAsync(PListFailPointRequest request) {
+            return null;
+        }
+
+        @Override
+        public Future<PExecShortCircuitResult> execShortCircuit(PExecShortCircuitRequest request) {
             return null;
         }
     }

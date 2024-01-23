@@ -20,6 +20,7 @@ StarRocks 提供的 Flink connector，相比于 Flink 提供的 [flink-connector
 
 | Connector | Flink       | StarRocks  | Java | Scala      |
 | --------- | ----------- | ---------- | ---- | ---------- |
+| 1.2.9 | 1.15 ～ 1.18 | 2.1 及以上 | 8 | 2.11、2.12 |
 | 1.2.8     | 1.13 ~ 1.17 | 2.1 及以上 | 8    | 2.11、2.12 |
 | 1.2.7     | 1.11 ~ 1.15 | 2.1 及以上 | 8    | 2.11、2.12 |
 
@@ -107,9 +108,9 @@ Flink connector JAR 文件的命名格式如下：
 | sink.buffer-flush.max-rows        | No       | 500000        | 积攒在内存的数据条数，达到该阈值后数据通过 Stream Load 一次性导入 StarRocks。取值范围：[64000, 5000000]。该参数只在 `sink.version` 为 `V1`，`sink.semantic` 为 `at-least-once` 才会生效。 |
 | sink.buffer-flush.interval-ms     | No       | 300000        | 数据发送的间隔，用于控制数据写入 StarRocks 的延迟，取值范围：[1000, 3600000]。该参数只在 `sink.semantic` 为 `at-least-once`才会生效。 |
 | sink.max-retries                  | No       | 3             | Stream Load 失败后的重试次数。超过该数量上限，则数据导入任务报错。取值范围：[0, 10]。该参数只在 `sink.version` 为 `V1` 才会生效。 |
-| sink.connect.timeout-ms           | No       | 1000          | 与 FE 建立 HTTP 连接的超时时间。取值范围：[100, 60000]。     |
+| sink.connect.timeout-ms           | No       |  30000            | 与 FE 建立 HTTP 连接的超时时间。取值范围：[100, 60000]。  Flink connector v1.2.9 之前，默认值为 `1000`。  |
 | sink.wait-for-continue.timeout-ms | No       | 10000         | 此参数自 Flink connector 1.2.7 开始支持。等待 FE HTTP 100-continue 应答的超时时间。取值范围：[3000, 60000]。 |
-| sink.ignore.update-before         | No       | TRUE          | 此参数自 Flink connector 1.2.8 开始支持。将数据导入到主键模型表时，是否忽略来自 Flink 的 UPDATE_BEFORE 记录。如果将此参数设置为 false，则将该记录在主键模型表中视为DELETE 操作。 |
+| sink.ignore.update-before         | No       | TRUE          | 此参数自 Flink connector 1.2.8 开始支持。将数据导入到主键表时，是否忽略来自 Flink 的 UPDATE_BEFORE 记录。如果将此参数设置为 false，则将该记录在主键表中视为 DELETE 操作。 |
 | sink.parallelism                  | No       | NONE          | 写入的并行度。仅适用于Flink SQL。如果未设置， Flink planner 将决定并行度。**在多并行度的场景中，用户需要确保数据按正确顺序写入。** |
 | sink.properties.*                 | No       | NONE          | Stream Load 的参数，控制 Stream Load 导入行为。例如 参数 sink.properties.format 表示 Stream Load 所导入的数据格式，如 CSV 或者 JSON。全部参数和解释，请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM_LOAD.md)。 |
 | sink.properties.format            | No       | csv           | Stream Load 导入时的数据格式。Flink connector 会将内存的数据转换为对应格式，然后通过 Stream Load 导入至 StarRocks。取值为 CSV 或者 JSON。 |
@@ -208,7 +209,7 @@ Flink connector 提供以下指标来监控导入情况。
 
 #### 创建 StarRocks 表
 
-创建数据库 `test`，并创建主键模型表  `score_board`。
+创建数据库 `test`，并创建主键表  `score_board`。
 
 ```SQL
 CREATE DATABASE test;
@@ -242,7 +243,7 @@ DISTRIBUTED BY HASH(id);
     ./bin/sql-client.sh
     ```
 
-- 在 Flink SQL 客户端，创建一个表 `score_board`，并且插入数据。 注意，如果您想将数据导入到 StarRocks 主键模型表中，您必须在 Flink 表的 DDL 中定义主键。对于其他类型的 StarRocks 表，这是可选的。
+- 在 Flink SQL 客户端，创建一个表 `score_board`，并且插入数据。 注意，如果您想将数据导入到 StarRocks 主键表中，您必须在 Flink 表的 DDL 中定义主键。对于其他类型的 StarRocks 表，这是可选的。
 
     ```sql
     CREATE TABLE `score_board` (
@@ -414,15 +415,27 @@ DISTRIBUTED BY HASH(id);
     }  
     ```
 
+### 使用 Flink CDC 3.0 同步数据（支持 schema change）
+
+[Flink CDC 3.0 框架](https://github.com/ververica/flink-cdc-connectors/releases)可以轻松地从 CDC 数据源（如 MySQL、Kafka）到 StarRocks 构建[流式 ELT 管道](https://ververica.github.io/flink-cdc-connectors/master/content/overview/cdc-pipeline.html)。该管道能够将整个数据库、分库分表以及来自源端的 schema change 同步到 StarRocks。
+
+自 v1.2.9 起，StarRocks 提供的 Flink connector 已经集成至该框架中，并且被命名为 [StarRocks Pipeline Connector](https://ververica.github.io/flink-cdc-connectors/master/content/pipelines/starrocks-pipeline.html)。StarRocks Pipeline Connector 支持：
+
+- 自动创建数据库/表
+- 同步 schema change
+- 同步全量和增量数据
+
+快速上手教程可以参考[从 MySQL 到 StarRocks 的流式 ELT 管道](https://ververica.github.io/flink-cdc-connectors/master/content/quickstart/mysql-starrocks-pipeline-tutorial.html)。
+
 ## 最佳实践
 
-### 导入至主键模型表
+### 导入至主键表
 
-本节将展示如何将数据导入到 StarRocks 主键模型表中，以实现部分更新和条件更新。以下示例使用 Flink SQL。 部分更新和条件更新的更多介绍，请参见[通过导入实现数据变更](./Load_to_Primary_Key_tables.md)。
+本节将展示如何将数据导入到 StarRocks 主键表中，以实现部分更新和条件更新。以下示例使用 Flink SQL。 部分更新和条件更新的更多介绍，请参见[通过导入实现数据变更](./Load_to_Primary_Key_tables.md)。
 
 #### 准备工作
 
-在StarRocks中创建一个名为`test`的数据库，并在其中创建一个名为`score_board`的主键模型表。
+在StarRocks中创建一个名为`test`的数据库，并在其中创建一个名为`score_board`的主键表。
 
 ```sql
 CREATE DATABASE `test`;

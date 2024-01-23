@@ -1128,6 +1128,23 @@ public class ExpressionAnalyzer {
                 argumentTypes = node.getChildren().stream().map(Expr::getType).toArray(Type[]::new);
             } else if (DecimalV3FunctionAnalyzer.argumentTypeContainDecimalV2(fnName, argumentTypes)) {
                 fn = DecimalV3FunctionAnalyzer.getDecimalV2Function(node, argumentTypes);
+            } else if (FunctionSet.BITMAP_UNION.equals(fnName)) {
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+                if (session.getSessionVariable().isEnableRewriteBitmapUnionToBitmapAgg() &&
+                        node.getChild(0) instanceof FunctionCallExpr) {
+                    FunctionCallExpr arg0Func = (FunctionCallExpr) node.getChild(0);
+                    // Convert bitmap_union(to_bitmap(v1)) to bitmap_agg(v1) when v1's type
+                    // is a numeric type.
+                    if (FunctionSet.TO_BITMAP.equals(arg0Func.getFnName().getFunction())) {
+                        Expr toBitmapArg0 = arg0Func.getChild(0);
+                        Type toBitmapArg0Type = toBitmapArg0.getType();
+                        if (toBitmapArg0Type.isIntegerType() || toBitmapArg0Type.isBoolean()
+                                || toBitmapArg0Type.isLargeIntType()) {
+                            node.setChild(0, toBitmapArg0);
+                            node.resetFnName("", FunctionSet.BITMAP_AGG);
+                        }
+                    }
+                }
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }
@@ -1799,7 +1816,8 @@ public class ExpressionAnalyzer {
             if (strictModeIdx >= 0) {
                 expectTypes.add(Type.BOOLEAN);
             }
-            List<Type> actualTypes = params.stream()
+
+            List<Type> actualTypes = node.getChildren().stream()
                     .map(expr -> ScalarType.createType(expr.getType().getPrimitiveType())).collect(Collectors.toList());
             if (!Objects.equals(expectTypes, actualTypes)) {
                 List<String> expectTypeNames = new ArrayList<>();

@@ -47,6 +47,8 @@ public class BeTabletsSystemTable {
                         .column("SHARD_ID", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("SCHEMA_HASH", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("INDEX_DISK", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("MEDIUM_TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("NUM_SEGMENT", ScalarType.createType(PrimitiveType.BIGINT))
                         .build(), TSchemaTableType.SCH_BE_TABLETS);
     }
 }

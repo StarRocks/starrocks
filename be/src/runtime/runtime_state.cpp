@@ -101,18 +101,22 @@ RuntimeState::RuntimeState(const TQueryGlobals& query_globals)
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     if (query_globals.__isset.time_zone) {
         _timezone = query_globals.time_zone;
-        _timestamp_ms = query_globals.timestamp_ms;
+        if (query_globals.__isset.timestamp_us) {
+            _timestamp_us = query_globals.timestamp_us;
+        } else {
+            _timestamp_us = query_globals.timestamp_ms * 1000;
+        }
     } else if (!query_globals.now_string.empty()) {
         _timezone = TimezoneUtils::default_time_zone;
         DateTimeValue dt;
         dt.from_date_str(query_globals.now_string.c_str(), query_globals.now_string.size());
         int64_t timestamp;
         dt.unix_timestamp(&timestamp, _timezone);
-        _timestamp_ms = timestamp * 1000;
+        _timestamp_us = timestamp * 1000000;
     } else {
         //Unit test may set into here
         _timezone = TimezoneUtils::default_time_zone;
-        _timestamp_ms = 0;
+        _timestamp_us = 0;
     }
     TimezoneUtils::find_cctz_time_zone(_timezone, _timezone_obj);
 }
@@ -121,7 +125,7 @@ RuntimeState::RuntimeState(ExecEnv* exec_env) : _exec_env(exec_env) {
     _profile = std::make_shared<RuntimeProfile>("<unnamed>");
     _query_options.batch_size = DEFAULT_CHUNK_SIZE;
     _timezone = TimezoneUtils::default_time_zone;
-    _timestamp_ms = 0;
+    _timestamp_us = 0;
 }
 
 RuntimeState::~RuntimeState() {
@@ -144,18 +148,22 @@ void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOpti
     _query_options = query_options;
     if (query_globals.__isset.time_zone) {
         _timezone = query_globals.time_zone;
-        _timestamp_ms = query_globals.timestamp_ms;
+        if (query_globals.__isset.timestamp_us) {
+            _timestamp_us = query_globals.timestamp_us;
+        } else {
+            _timestamp_us = query_globals.timestamp_ms * 1000;
+        }
     } else if (!query_globals.now_string.empty()) {
         _timezone = TimezoneUtils::default_time_zone;
         DateTimeValue dt;
         dt.from_date_str(query_globals.now_string.c_str(), query_globals.now_string.size());
         int64_t timestamp;
         dt.unix_timestamp(&timestamp, _timezone);
-        _timestamp_ms = timestamp * 1000;
+        _timestamp_us = timestamp * 1000000;
     } else {
         //Unit test may set into here
         _timezone = TimezoneUtils::default_time_zone;
-        _timestamp_ms = 0;
+        _timestamp_us = 0;
     }
     if (query_globals.__isset.last_query_id) {
         _last_query_id = query_globals.last_query_id;
@@ -480,10 +488,6 @@ Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list,
         }
     }
     return Status::OK();
-}
-
-std::shared_ptr<QueryStatistics> RuntimeState::intermediate_query_statistic() {
-    return _query_ctx->intermediate_query_statistic();
 }
 
 std::shared_ptr<QueryStatisticsRecvr> RuntimeState::query_recv() {

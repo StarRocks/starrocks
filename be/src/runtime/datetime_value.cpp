@@ -138,7 +138,8 @@ bool JodaFormat::prepare(std::string_view format) {
             ++repeat_count;
         }
 
-        switch (*ptr) {
+        char ch = *ptr;
+        switch (ch) {
         case joda::JodaFormatChar::ERA:
         case joda::JodaFormatChar::CENURY:
             // NOT SUPPORTED
@@ -311,16 +312,16 @@ bool JodaFormat::prepare(std::string_view format) {
         }
         case joda::JodaFormatChar::CLOCKHOUR_OF_HALFDAY:
         case joda::JodaFormatChar::CLOCKHOUR_OF_DAY:
-            _token_parsers.emplace_back([&, repeat_count]() {
+            _token_parsers.emplace_back([&, ch, repeat_count]() {
                 int64_t int_value = 0;
                 const char* tmp = val + std::min<int>(repeat_count, val_end - val);
                 if (!str_to_int64(val, &tmp, &int_value)) {
                     return false;
                 }
-                if (UNLIKELY(*ptr == joda::JodaFormatChar::CLOCKHOUR_OF_DAY && int_value > 23)) {
+                if (UNLIKELY(ch == joda::JodaFormatChar::CLOCKHOUR_OF_DAY && int_value > 24)) {
                     return false;
                 }
-                if (UNLIKELY(*ptr == joda::JodaFormatChar::CLOCKHOUR_OF_HALFDAY && int_value > 11)) {
+                if (UNLIKELY(ch == joda::JodaFormatChar::CLOCKHOUR_OF_HALFDAY && int_value > 12)) {
                     return false;
                 }
                 _hour = int_value;
@@ -331,16 +332,16 @@ bool JodaFormat::prepare(std::string_view format) {
             break;
         case joda::JodaFormatChar::HOUR_OF_HALFDAY:
         case joda::JodaFormatChar::HOUR_OF_DAY: {
-            _token_parsers.emplace_back([&, repeat_count]() {
+            _token_parsers.emplace_back([&, ch, repeat_count]() {
                 int64_t int_value = 0;
                 const char* tmp = val + std::min<int>(repeat_count, val_end - val);
                 if (!str_to_int64(val, &tmp, &int_value)) {
                     return false;
                 }
-                if (UNLIKELY(*ptr == joda::JodaFormatChar::HOUR_OF_DAY && int_value > 24)) {
+                if (UNLIKELY(ch == joda::JodaFormatChar::HOUR_OF_DAY && int_value > 23)) {
                     return false;
                 }
-                if (UNLIKELY(*ptr == joda::JodaFormatChar::HOUR_OF_HALFDAY && int_value > 12)) {
+                if (UNLIKELY(ch == joda::JodaFormatChar::HOUR_OF_HALFDAY && int_value > 11)) {
                     return false;
                 }
 
@@ -410,7 +411,6 @@ bool JodaFormat::prepare(std::string_view format) {
             break;
         }
         default: {
-            char ch = *ptr;
             _token_parsers.emplace_back([&, ch]() {
                 if (ch != *val) {
                     return false;
@@ -2379,6 +2379,272 @@ std::size_t operator-(const DateTimeValue& v1, const DateTimeValue& v2) {
 
 std::size_t hash_value(DateTimeValue const& value) {
     return HashUtil::hash(&value, sizeof(DateTimeValue), 0);
+}
+
+// NOTE: This is only a subset of teradata date format and is compatible with Presto.
+// see: https://github.com/trinodb/docs.trino.io/blob/master/318/_sources/functions/teradata.rst.txt
+// see: https://docs.teradata.com/r/SQL-Data-Types-and-Literals/July-2021/Data-Type-Conversion-Functions/TO_DATE/Argument-Types-and-Rules/format_arg-Format-Elements
+// - / , . ; :	Punctuation characters are ignored
+// dd	Day of month (1-31)
+// hh	Hour of day (1-12)
+// hh24	Hour of the day (0-23)
+// mi	Minute (0-59)
+// mm	Month (01-12)
+// ss	Second (0-59)
+// yyyy	4-digit year
+// yy	2-digit year
+enum TeradataFormatChar : char {
+    T1 = '-',   // Punctuation characters are ignored
+    T2 = '/',   // Punctuation characters are ignored
+    T3 = ',',   // Punctuation characters are ignored
+    T4 = '.',   // Punctuation characters are ignored
+    T5 = ';',   // Punctuation characters are ignored
+    T6 = ':',   // Punctuation characters are ignored
+    T7 = ' ',   // Punctuation characters are ignored
+    T8 = '\r',  // Punctuation characters are ignored
+    T9 = '\n',  // Punctuation characters are ignored
+    T10 = '\t', // Punctuation characters are ignored
+    D = 'd',    // Day of month (1-31)
+    H = 'h',    // Hour of day (1-12), , // Hour of the day (0-23)
+    M = 'm',    // Minute (0-59)
+    I = 'i',    // Month (01-12)
+    S = 's',    // Second (0-59)
+    Y = 'y',    // 2-digit year
+    A = 'a',    // am
+    P = 'p',    // pm
+    UNRECOGNIZED
+};
+
+bool TeradataFormat::prepare(std::string_view format) {
+    const char* ptr = format.data();
+    const char* end = format.data() + format.length();
+    while (ptr < end) {
+        const char* next_ch_ptr = ptr;
+        uint32_t repeat_count = 0;
+        for (char ch = *ptr; ch == *next_ch_ptr && next_ch_ptr < end; ++next_ch_ptr) {
+            ++repeat_count;
+        }
+
+        switch (*ptr) {
+        case TeradataFormatChar::T1:
+        case TeradataFormatChar::T2:
+        case TeradataFormatChar::T3:
+        case TeradataFormatChar::T4:
+        case TeradataFormatChar::T5:
+        case TeradataFormatChar::T6:
+        case TeradataFormatChar::T7:
+        case TeradataFormatChar::T8:
+        case TeradataFormatChar::T9:
+        case TeradataFormatChar::T10: {
+            //  - / , . ; :	Punctuation characters are ignored
+            auto ignored_char = *ptr;
+            _token_parsers.emplace_back([&, repeat_count, ignored_char]() {
+                if (*val != ignored_char) {
+                    return false;
+                }
+                val++;
+                return true;
+            });
+            break;
+        }
+        case TeradataFormatChar::D: {
+            // dd
+            if (repeat_count != 2) {
+                return false;
+            }
+            _token_parsers.emplace_back([&, repeat_count]() {
+                int64_t int_value = 0;
+                const char* tmp = val + std::min<int>(2, val_end - val);
+                if (!str_to_int64(val, &tmp, &int_value)) {
+                    return false;
+                }
+                _day = int_value;
+                val = tmp;
+                return true;
+            });
+            break;
+        }
+        case TeradataFormatChar::H: {
+            if (repeat_count != 2) {
+                return false;
+            }
+
+            if (next_ch_ptr != end && *next_ch_ptr == '2') {
+                // hh24
+                ptr += 2;
+                ++next_ch_ptr;
+                if (next_ch_ptr == end || *next_ch_ptr != '4') {
+                    return false;
+                }
+                ++next_ch_ptr;
+            }
+            _token_parsers.emplace_back([&, repeat_count]() {
+                int64_t int_value = 0;
+                const char* tmp = val + std::min<int>(2, val_end - val);
+                if (!str_to_int64(val, &tmp, &int_value)) {
+                    return false;
+                }
+                _hour = int_value;
+                val = tmp;
+                return true;
+            });
+            break;
+        }
+        case TeradataFormatChar::A: {
+            // am
+            if (repeat_count != 1) {
+                return false;
+            }
+            if (next_ch_ptr == end || *next_ch_ptr != 'm') {
+                return false;
+            }
+            next_ch_ptr++;
+            ptr++;
+            _token_parsers.emplace_back([&]() {
+                if (*val != 'a') {
+                    return false;
+                }
+                val++;
+                if (*val != 'm') {
+                    return false;
+                }
+                val++;
+                return true;
+            });
+            break;
+        }
+        case TeradataFormatChar::P: {
+            // pm
+            if (repeat_count != 1) {
+                return false;
+            }
+            if (next_ch_ptr == end || *next_ch_ptr != 'm') {
+                return false;
+            }
+            next_ch_ptr++;
+            ptr++;
+            _token_parsers.emplace_back([&]() {
+                if (*val != 'p') {
+                    return false;
+                }
+                val++;
+                if (*val != 'm') {
+                    return false;
+                }
+                val++;
+                _hour += 12;
+                return true;
+            });
+            break;
+        }
+        case TeradataFormatChar::M: {
+            if (repeat_count == 2) {
+                // mm
+                _token_parsers.emplace_back([&, repeat_count]() {
+                    int64_t int_value = 0;
+                    const char* tmp = val + std::min<int>(2, val_end - val);
+                    if (!str_to_int64(val, &tmp, &int_value)) {
+                        return false;
+                    }
+                    _month = int_value;
+                    val = tmp;
+                    return true;
+                });
+            } else if (repeat_count == 1) {
+                if (next_ch_ptr == end || *next_ch_ptr != TeradataFormatChar::I) {
+                    return false;
+                }
+                next_ch_ptr++;
+                ptr++;
+
+                // mi
+                _token_parsers.emplace_back([&, repeat_count]() {
+                    int64_t int_value = 0;
+                    const char* tmp = val + std::min<int>(2, val_end - val);
+                    ;
+                    if (!str_to_int64(val, &tmp, &int_value)) {
+                        return false;
+                    }
+                    _minute = int_value;
+                    val = tmp;
+                    return true;
+                });
+            } else {
+                return false;
+            }
+            break;
+        }
+        case TeradataFormatChar::S: {
+            if (repeat_count != 2) {
+                return false;
+            }
+            // ss
+            _token_parsers.emplace_back([&, repeat_count]() {
+                int64_t int_value = 0;
+                const char* tmp = val + std::min<int>(2, val_end - val);
+                if (!str_to_int64(val, &tmp, &int_value)) {
+                    return false;
+                }
+                _second = int_value;
+                val = tmp;
+                return true;
+            });
+            break;
+        }
+        case TeradataFormatChar::Y: {
+            // yy
+            if (repeat_count == 2) {
+                _token_parsers.emplace_back([&, repeat_count]() {
+                    int64_t int_value = 0;
+                    const char* tmp = val + std::min<int>(2, val_end - val);
+                    ;
+                    if (!str_to_int64(val, &tmp, &int_value)) {
+                        return false;
+                    }
+                    int_value += int_value >= 70 ? 1900 : 2000;
+                    _year = int_value;
+                    val = tmp;
+                    return true;
+                });
+            } else if (repeat_count == 4) {
+                // yyyy
+                _token_parsers.emplace_back([&, repeat_count]() {
+                    int64_t int_value = 0;
+                    const char* tmp = val + std::min<int>(4, val_end - val);
+                    ;
+                    if (!str_to_int64(val, &tmp, &int_value)) {
+                        return false;
+                    }
+                    _year = int_value;
+                    val = tmp;
+                    return true;
+                });
+            } else {
+                return false;
+            }
+            break;
+        }
+        default: {
+            return false;
+        }
+        }
+        ptr += repeat_count;
+    }
+
+    return true;
+}
+
+bool TeradataFormat::parse(std::string_view str, DateTimeValue* output) {
+    val = str.data();
+    val_end = str.data() + str.length();
+
+    for (auto& p : _token_parsers) {
+        if (!p()) {
+            return false;
+        }
+    }
+    *output = DateTimeValue(type(), year(), month(), day(), hour(), minute(), second(), microsecond());
+    return true;
 }
 
 } // namespace starrocks

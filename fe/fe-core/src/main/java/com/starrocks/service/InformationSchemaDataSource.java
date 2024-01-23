@@ -25,8 +25,8 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.cluster.ClusterNamespace;
@@ -84,7 +84,7 @@ public class InformationSchemaDataSource {
             }
         }
 
-        String catalogName = null;
+        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (authInfo.isSetCatalog_name()) {
             catalogName = authInfo.getCatalog_name();
         }
@@ -102,8 +102,7 @@ public class InformationSchemaDataSource {
         for (String fullName : dbNames) {
 
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser, null,
-                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, fullName);
+                Authorizer.checkAnyActionOnOrInDb(currentUser, null, catalogName, fullName);
             } catch (AccessDeniedException e) {
                 continue;
             }
@@ -311,7 +310,7 @@ public class InformationSchemaDataSource {
         TAuthInfo authInfo = request.getAuth_info();
         AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
 
-        String catalogName = null;
+        String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (authInfo.isSetCatalog_name()) {
             catalogName = authInfo.getCatalog_name();
         }
@@ -345,6 +344,8 @@ public class InformationSchemaDataSource {
 
                         TTableInfo info = new TTableInfo();
 
+                        // refer to https://dev.mysql.com/doc/refman/8.0/en/information-schema-tables-table.html
+                        // the catalog name is always `def`
                         info.setTable_catalog(DEF);
                         info.setTable_schema(dbName);
                         info.setTable_name(table.getName());
@@ -394,11 +395,11 @@ public class InformationSchemaDataSource {
     public static TTableInfo genNormalTableInfo(Table table, TTableInfo info) {
 
         OlapTable olapTable = (OlapTable) table;
-        Collection<Partition> partitions = table.getPartitions();
+        Collection<PhysicalPartition> partitions = olapTable.getPhysicalPartitions();
         long lastUpdateTime = 0L;
         long totalRowsOfTable = 0L;
         long totalBytesOfTable = 0L;
-        for (Partition partition : partitions) {
+        for (PhysicalPartition partition : partitions) {
             if (partition.getVisibleVersionTime() > lastUpdateTime) {
                 lastUpdateTime = partition.getVisibleVersionTime();
             }

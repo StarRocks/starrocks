@@ -492,8 +492,8 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 }
 
 Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks,
-                               pipeline::Operator* refill_op) {
-    RETURN_IF_ERROR(_reset_state(state));
+                               pipeline::Operator* refill_op, bool reset_sink_complete) {
+    RETURN_IF_ERROR(_reset_state(state, reset_sink_complete));
     // begin_pending_reset_state just tells the Aggregator, the chunks are intermediate type, it should call
     // merge method of agg functions to process these chunks.
     begin_pending_reset_state();
@@ -507,10 +507,12 @@ Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector
     return Status::OK();
 }
 
-Status Aggregator::_reset_state(RuntimeState* state) {
+Status Aggregator::_reset_state(RuntimeState* state, bool reset_sink_complete) {
     _is_ht_eos = false;
     _num_input_rows = 0;
-    _is_sink_complete = false;
+    if (reset_sink_complete) {
+        _is_sink_complete = false;
+    }
     _it_hash.reset();
     _num_rows_processed = 0;
 
@@ -1351,27 +1353,30 @@ Status Aggregator::convert_hash_map_to_chunk(int32_t chunk_size, ChunkPtr* chunk
             }
         }
 
-        {
-            SCOPED_TIMER(_agg_stat->group_by_append_timer);
-            hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index);
-        }
+        if (read_index > 0) {
+            {
+                SCOPED_TIMER(_agg_stat->group_by_append_timer);
+                hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index);
+            }
 
-        {
-            SCOPED_TIMER(_agg_stat->agg_append_timer);
-            if (!use_intermediate) {
-                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                    TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
-                                                                          _agg_states_offsets[i],
-                                                                          agg_result_columns[i].get()));
-                }
-            } else {
-                for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-                    TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
-                                                                           _agg_states_offsets[i],
-                                                                           agg_result_columns[i].get()));
+            {
+                SCOPED_TIMER(_agg_stat->agg_append_timer);
+                if (!use_intermediate) {
+                    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                        TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index,
+                                                                              _tmp_agg_states, _agg_states_offsets[i],
+                                                                              agg_result_columns[i].get()));
+                    }
+                } else {
+                    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+                        TRY_CATCH_BAD_ALLOC(_agg_functions[i]->batch_serialize(_agg_fn_ctxs[i], read_index,
+                                                                               _tmp_agg_states, _agg_states_offsets[i],
+                                                                               agg_result_columns[i].get()));
+                    }
                 }
             }
         }
+
         RETURN_IF_ERROR(check_has_error());
         _is_ht_eos = (it == end);
 

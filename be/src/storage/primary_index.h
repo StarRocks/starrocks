@@ -135,6 +135,12 @@ public:
 
     size_t key_size() { return _key_size; }
 
+    Status reset(Tablet* tablet, EditVersion version, PersistentIndexMetaPB* index_meta);
+
+    void reset_cancel_major_compaction();
+
+    Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
+
 protected:
     void _set_schema(const Schema& pk_schema);
 

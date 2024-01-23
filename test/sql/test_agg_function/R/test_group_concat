@@ -1651,6 +1651,8 @@ TomEnglish,王武程咬金语文北京上海
 张三掩耳盗铃Math数学欧拉方程,张三此地无银三百两英文English
 李四大闹天空英语外语美誉
 -- !result
+
+
 -- name: testLegacyGroupConcat
 CREATE TABLE t1 (
     id        tinyint(4)      NULL,
@@ -1694,4 +1696,25 @@ fruit, fruit, fruit, fruit, fruit, fruit
 select group_concat( value, '-' ) from t1;
 -- result:
 fruit-fruit-fruit-fruit-fruit-fruit
+-- !result
+set sql_mode = 32;
+-- result:
+-- !result
+select /*+ set_var(sql_mode = 'GROUP_CONCAT_LEGACY') */ id, group_concat( value ) from t1 group by id order by id;
+-- result:
+1	fruit, fruit, fruit
+2	fruit, fruit, fruit
+-- !result
+select /*+ set_var(sql_mode = 68719476736) */ group_concat( value, '-' ) from t1;
+-- result:
+fruit-fruit-fruit-fruit-fruit-fruit
+-- !result
+select /*+ set_var(sql_mode = 'GROUP_CONCAT_LEGACY') */ /*+ set_var(sql_mode = 'ONLY_FULL_GROUP_BY') */ id, group_concat( value, '-' ) from t1 group by id order by id;
+-- result:
+1	fruit-,fruit-,fruit-
+2	fruit-,fruit-,fruit-
+-- !result
+select /*+ set_var(sql_mode = 68719476736) */ /*+ set_var(sql_mode = 32) */ group_concat( value ) from t1;
+-- result:
+fruit,fruit,fruit,fruit,fruit,fruit
 -- !result

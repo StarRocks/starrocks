@@ -18,6 +18,9 @@
 #include "block_cache/cache_options.h"
 #include "block_cache/io_buffer.h"
 #include "common/status.h"
+#include "starcache/star_cache.h"
+
+using DataCacheMetrics = starcache::CacheMetrics;
 
 namespace starrocks {
 
@@ -44,7 +47,7 @@ public:
     // Remove data from cache. The offset must be aligned by block size
     virtual Status remove(const std::string& key) = 0;
 
-    virtual std::unordered_map<std::string, double> cache_stats() = 0;
+    virtual const DataCacheMetrics cache_metrics() = 0;
 
     virtual void record_read_remote(size_t size, int64_t lateny_us) = 0;
 

@@ -308,17 +308,19 @@ public class InsertOverwriteJobRunner {
     private void executeInsert() throws Exception {
         long insertStartTimestamp = System.currentTimeMillis();
         // should replan here because prepareInsert has changed the targetPartitionNames of insertStmt
-        ExecPlan newPlan = StatementPlanner.plan(insertStmt, context);
-        // Use `handleDMLStmt` instead of `handleDMLStmtWithProfile` because cannot call `writeProfile` in
-        // InsertOverwriteJobRunner.
-        // InsertOverWriteJob is executed as below:
-        // - StmtExecutor#handleDMLStmtWithProfile
-        //    - StmtExecutor#executeInsert
-        //  - StmtExecutor#handleInsertOverwrite#InsertOverwriteJobMgr#run
-        //  - InsertOverwriteJobRunner#executeInsert
-        //  - StmtExecutor#handleDMLStmt <- no call `handleDMLStmt` again.
-        // `writeProfile` is called in `handleDMLStmt`, and no need call it again later.
-        stmtExecutor.handleDMLStmt(newPlan, insertStmt);
+        try (ConnectContext.ScopeGuard guard = context.bindScope()) {
+            ExecPlan newPlan = StatementPlanner.plan(insertStmt, context);
+            // Use `handleDMLStmt` instead of `handleDMLStmtWithProfile` because cannot call `writeProfile` in
+            // InsertOverwriteJobRunner.
+            // InsertOverWriteJob is executed as below:
+            // - StmtExecutor#handleDMLStmtWithProfile
+            //    - StmtExecutor#executeInsert
+            //  - StmtExecutor#handleInsertOverwrite#InsertOverwriteJobMgr#run
+            //  - InsertOverwriteJobRunner#executeInsert
+            //  - StmtExecutor#handleDMLStmt <- no call `handleDMLStmt` again.
+            // `writeProfile` is called in `handleDMLStmt`, and no need call it again later.
+            stmtExecutor.handleDMLStmt(newPlan, insertStmt);
+        }
         insertElapse = System.currentTimeMillis() - insertStartTimestamp;
         if (context.getState().getStateType() == QueryState.MysqlStateType.ERR) {
             LOG.warn("insert overwrite failed. error message:{}", context.getState().getErrorMessage());
@@ -426,7 +428,7 @@ public class InsertOverwriteJobRunner {
                     LOG.error("table {} update colocation info failed after insert overwrite, {}.", tableId, e.getMessage());
                 }
 
-                targetTable.lastSchemaUpdateTime.set(System.currentTimeMillis());
+                targetTable.lastSchemaUpdateTime.set(System.nanoTime());
             }
         } catch (Exception e) {
             LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}",

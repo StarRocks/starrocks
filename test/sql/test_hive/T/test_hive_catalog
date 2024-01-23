@@ -5,4 +5,13 @@ create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive", "hive.
 -- only partition column Predicate with runtime filter
 select * from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy where col_date = (select max(col_date) from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy);
 
+-- partition value is null and with runtime filter for parquet
+select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet a inner join[shuffle] (select b.id as id from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet b inner join[shuffle] hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet c on b.city=c.city) d on a.id = d.id order by 1, 2, 3, 4;
+
+-- a sql more close to real scenario and same issue as above
+select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet a join hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet b on a.id = b.id where a.city=(select max(city) from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_parquet) and a.name is not null order by 1, 2, 3, 4, 5, 6;
+
+-- partition value is null and with runtime filter for orc
+select * from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_orc a inner join[shuffle] (select b.id as id from hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_orc b inner join[shuffle] hive_sql_test_${uuid0}.hive_oss_db.string_par_with_null_orc c on b.city=c.city) d on a.id = d.id order by 1, 2, 3, 4;
+
 drop catalog hive_sql_test_${uuid0}

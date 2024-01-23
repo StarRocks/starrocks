@@ -166,7 +166,8 @@ public class Authorizer {
             case FILE:
             case SCHEMA:
             case PAIMON:
-                checkAnyActionOnTable(currentUser, roleIds, new TableName(dbName, tbl.getName()));
+            case ODPS:
+                checkAnyActionOnTable(currentUser, roleIds, new TableName(tbl.getCatalogName(), dbName, tbl.getName()));
                 break;
             case MATERIALIZED_VIEW:
             case CLOUD_NATIVE_MATERIALIZED_VIEW:

@@ -68,7 +68,7 @@ UpdateManager::UpdateManager(MemTracker* mem_tracker)
 
     int64_t byte_limits = ParseUtil::parse_mem_spec(config::mem_limit, MemInfo::physical_mem());
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
-    _index_cache.set_capacity(byte_limits * update_mem_percent);
+    _index_cache.set_capacity(byte_limits * update_mem_percent / 100);
     _update_column_state_cache.set_mem_tracker(_update_state_mem_tracker.get());
 }
 
@@ -243,9 +243,11 @@ void UpdateManager::clear_cached_del_vec(const std::vector<TabletSegmentId>& tsi
     }
 }
 
-StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore* meta, int64_t tablet_id,
+StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore* meta, const std::string& tablet_path,
+                                                                        int64_t tablet_id,
                                                                         int64_t min_readable_version) {
     std::vector<std::pair<TabletSegmentId, int64_t>> clear_dcgs;
+    std::vector<std::string> clear_filenames;
     const int64_t begin_ms = UnixMillis();
     auto is_timeout = [begin_ms]() {
         if (UnixMillis() > begin_ms + 10) { // only hold cache_clock for 10ms max.
@@ -259,7 +261,8 @@ StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore*
         auto itr = _delta_column_group_cache.lower_bound(TabletSegmentId(tablet_id, 0));
         while (itr != _delta_column_group_cache.end() && !is_timeout() && itr->first.tablet_id == tablet_id) {
             // gc not required delta column group
-            DeltaColumnGroupListHelper::garbage_collection(itr->second, itr->first, min_readable_version, clear_dcgs);
+            DeltaColumnGroupListHelper::garbage_collection(itr->second, itr->first, min_readable_version, tablet_path,
+                                                           &clear_dcgs, &clear_filenames);
             itr++;
         }
     }
@@ -274,6 +277,10 @@ StatusOr<size_t> UpdateManager::clear_delta_column_group_before_version(KVStore*
         }
     }
     RETURN_IF_ERROR(meta->write_batch(&wb));
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(tablet_path));
+    for (const auto& filename : clear_filenames) {
+        WARN_IF_ERROR(fs->delete_file(filename), "delete file fail, filename: " + filename);
+    }
     return clear_dcgs.size();
 }
 
@@ -542,6 +549,16 @@ Status UpdateManager::on_rowset_finished(Tablet* tablet, Rowset* rowset) {
             _index_cache.remove(index_entry);
         }
     }
+
+    // tablet maybe dropped during ingestion, add some log
+    if (!st.ok()) {
+        if (tablet->tablet_state() == TABLET_SHUTDOWN) {
+            std::string msg = strings::Substitute("tablet $0 in TABLET_SHUTDOWN, maybe deleted by other thread",
+                                                  tablet->tablet_id());
+            LOG(WARNING) << msg;
+        }
+    }
+
     VLOG(1) << "UpdateManager::on_rowset_finished finish tablet:" << tablet->tablet_id()
             << " rowset:" << rowset_unique_id;
     return st;

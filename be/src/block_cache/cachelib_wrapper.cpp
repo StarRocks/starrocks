@@ -97,6 +97,12 @@ std::unordered_map<std::string, double> CacheLibWrapper::cache_stats() {
     return navy_stats;
 }
 
+const DataCacheMetrics CacheLibWrapper::cache_metrics() {
+    // not implemented
+    DataCacheMetrics metrics{};
+    return metrics;
+}
+
 Status CacheLibWrapper::write_object(const std::string& key, const void* ptr, size_t size,
                                      std::function<void()> deleter, CacheHandle* handle, WriteCacheOptions* options) {
     return Status::NotSupported("not supported write object in cachelib");

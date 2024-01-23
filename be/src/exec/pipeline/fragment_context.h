@@ -138,9 +138,11 @@ public:
     bool is_stream_pipeline() const { return _is_stream_pipeline; }
     void count_down_epoch_pipeline(RuntimeState* state, size_t val = 1);
 
+#ifdef BE_TEST
     // for ut
     void set_is_stream_test(bool is_stream_test) { _is_stream_test = is_stream_test; }
     bool is_stream_test() const { return _is_stream_test; }
+#endif
 
     size_t expired_log_count() { return _expired_log_count; }
 
@@ -187,7 +189,9 @@ private:
     // STREAM MV
     std::atomic<size_t> _num_finished_epoch_pipelines = 0;
     bool _is_stream_pipeline = false;
+#ifdef BE_TEST
     bool _is_stream_test = false;
+#endif
 
     bool _enable_adaptive_dop = false;
     AdaptiveDopParam _adaptive_dop_param;

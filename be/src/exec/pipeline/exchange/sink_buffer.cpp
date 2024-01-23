@@ -17,6 +17,7 @@
 #include <bthread/bthread.h>
 
 #include <chrono>
+#include <string_view>
 
 #include "fmt/core.h"
 #include "util/time.h"
@@ -30,7 +31,9 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
           _mem_tracker(fragment_ctx->runtime_state()->instance_mem_tracker()),
           _brpc_timeout_ms(fragment_ctx->runtime_state()->query_options().query_timeout * 1000),
           _is_dest_merge(is_dest_merge),
-          _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()) {
+          _rpc_http_min_size(fragment_ctx->runtime_state()->get_rpc_http_min_size()),
+          _sent_audit_stats_frequency_upper_limit(
+                  std::max((int64_t)64, BitUtil::RoundUpToPowerOfTwo(fragment_ctx->num_drivers() * 4))) {
     for (const auto& dest : destinations) {
         const auto& instance_id = dest.fragment_instance_id;
         // instance_id.lo == -1 indicates that the destination is pseudo for bucket shuffle join.
@@ -48,7 +51,6 @@ SinkBuffer::SinkBuffer(FragmentContext* fragment_ctx, const std::vector<TPlanFra
             _num_finished_rpcs[instance_id.lo] = 0;
             _num_in_flight_rpcs[instance_id.lo] = 0;
             _network_times[instance_id.lo] = TimeTrace{};
-            _eos_query_stats[instance_id.lo] = std::make_shared<QueryStatistics>();
             _mutexes[instance_id.lo] = std::make_unique<Mutex>();
             _dest_addrs[instance_id.lo] = dest.brpc_server;
 
@@ -88,6 +90,19 @@ Status SinkBuffer::add_request(TransmitChunkInfo& request) {
         _request_enqueued++;
     }
     {
+        // set stats every _sent_audit_stats_frequency, so FE can get approximate stats even missing eos chunks.
+        // _sent_audit_stats_frequency grows exponentially to reduce the costs of collecting stats but
+        // let the first (limited) chunks' stats approach truth。
+        auto request_sequence = _request_sequence++;
+        if (!request.params->eos() && (request_sequence & (_sent_audit_stats_frequency - 1)) == 0) {
+            if (_sent_audit_stats_frequency < _sent_audit_stats_frequency_upper_limit) {
+                _sent_audit_stats_frequency = _sent_audit_stats_frequency << 1;
+            }
+            if (auto part_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic()) {
+                part_stats->to_pb(request.params->mutable_query_statistics());
+            }
+        }
+
         auto& instance_id = request.fragment_instance_id;
         RETURN_IF_ERROR(_try_to_send_rpc(instance_id, [&]() { _buffers[instance_id.lo].push(request); }));
     }
@@ -230,31 +245,6 @@ void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_
     }
 }
 
-void SinkBuffer::_try_to_merge_query_statistics(TransmitChunkInfo& request) {
-    if (!request.params->has_query_statistics()) {
-        return;
-    }
-    auto& query_statistics = request.params->query_statistics();
-    bool need_merge = false;
-    if (query_statistics.scan_rows() > 0 || query_statistics.scan_bytes() > 0 || query_statistics.cpu_cost_ns() > 0) {
-        need_merge = true;
-    }
-    if (!need_merge && query_statistics.stats_items_size() > 0) {
-        for (int i = 0; i < query_statistics.stats_items_size(); i++) {
-            const auto& stats_item = query_statistics.stats_items(i);
-            if (stats_item.scan_rows() > 0 || stats_item.scan_bytes()) {
-                need_merge = true;
-                break;
-            }
-        }
-    }
-    if (need_merge) {
-        auto& instance_id = request.fragment_instance_id;
-        _eos_query_stats[instance_id.lo]->merge_pb(query_statistics);
-        request.params->clear_query_statistics();
-    }
-}
-
 Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works) {
     std::lock_guard<Mutex> l(*_mutexes[instance_id.lo]);
     pre_works();
@@ -319,8 +309,6 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             // eos is the last packet to send to finish the input stream of the corresponding of
             // ExchangeSourceOperator and eos is sent exactly-once.
             if (_num_sinkers[instance_id.lo] > 1) {
-                // to reduce uncessary rpc requests, we merge all query statistics in eos requests into one and send it through the last eos request
-                _try_to_merge_query_statistics(request);
                 if (request.params->chunks_size() == 0) {
                     continue;
                 } else {
@@ -335,10 +323,9 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
                     return Status::OK();
                 }
                 // this is the last eos query, set query stats
-                _eos_query_stats[instance_id.lo]->merge_pb(request.params->query_statistics());
-                request.params->clear_query_statistics();
-                _eos_query_stats[instance_id.lo]->to_pb(request.params->mutable_query_statistics());
-                _eos_query_stats[instance_id.lo]->clear();
+                if (auto final_stats = _fragment_ctx->runtime_state()->query_ctx()->intermediate_query_statistic()) {
+                    final_stats->to_pb(request.params->mutable_query_statistics());
+                }
             }
         }
 
@@ -356,7 +343,7 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             _first_send_time = MonotonicNanos();
         }
 
-        closure->addFailedHandler([this](const ClosureContext& ctx) noexcept {
+        closure->addFailedHandler([this](const ClosureContext& ctx, std::string_view rpc_error_msg) noexcept {
             _is_finishing = true;
             {
                 std::lock_guard<Mutex> l(*_mutexes[ctx.instance_id.lo]);
@@ -366,8 +353,9 @@ Status SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::fun
             --_total_in_flight_rpc;
 
             const auto& dest_addr = _dest_addrs[ctx.instance_id.lo];
-            std::string err_msg = fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}]",
-                                              print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port);
+            std::string err_msg =
+                    fmt::format("transmit chunk rpc failed [dest_instance_id={}] [dest={}:{}] detail:{}",
+                                print_id(ctx.instance_id), dest_addr.hostname, dest_addr.port, rpc_error_msg);
 
             _fragment_ctx->cancel(Status::ThriftRpcError(err_msg));
             LOG(WARNING) << err_msg;

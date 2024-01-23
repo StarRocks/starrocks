@@ -126,7 +126,8 @@ public:
     void set_chunk_size(int chunk_size) { _query_options.batch_size = chunk_size; }
     bool use_column_pool() const;
     bool abort_on_default_limit_exceeded() const { return _query_options.abort_on_default_limit_exceeded; }
-    int64_t timestamp_ms() const { return _timestamp_ms; }
+    int64_t timestamp_ms() const { return _timestamp_us / 1000; }
+    int64_t timestamp_us() const { return _timestamp_us; }
     const std::string& timezone() const { return _timezone; }
     const cctz::time_zone& timezone_obj() const { return _timezone_obj; }
     const std::string& user() const { return _user; }
@@ -397,7 +398,6 @@ public:
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
-    std::shared_ptr<QueryStatistics> intermediate_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
     Status reset_epoch();
@@ -449,7 +449,7 @@ private:
     std::string _user;
 
     //Query-global timestamp_ms
-    int64_t _timestamp_ms = 0;
+    int64_t _timestamp_us = 0;
     std::string _timezone;
     cctz::time_zone _timezone_obj;
 

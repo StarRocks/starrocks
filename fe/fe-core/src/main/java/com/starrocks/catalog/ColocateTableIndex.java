@@ -987,7 +987,7 @@ public class ColocateTableIndex implements Writable {
             TablePropertyInfo info = new TablePropertyInfo(table.getId(), groupId, properties);
             GlobalStateMgr.getCurrentState().getEditLog().logModifyTableColocate(info);
         }
-        table.lastSchemaUpdateTime.set(System.currentTimeMillis());
+        table.lastSchemaUpdateTime.set(System.nanoTime());
         LOG.info("finished modify table's colocation property. table: {}, is replay: {}",
                 table.getName(), isReplay);
     }
@@ -1067,7 +1067,7 @@ public class ColocateTableIndex implements Writable {
     }
 
     private void constructLakeGroups(GlobalStateMgr globalStateMgr) {
-        if (!RunMode.allowCreateLakeTable()) {
+        if (RunMode.isSharedNothingMode()) {
             return;
         }
 

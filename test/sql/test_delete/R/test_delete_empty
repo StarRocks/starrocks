@@ -1,0 +1,20 @@
+-- name: test_delete_empty
+CREATE TABLE `test_delete` (
+    `stat_date` varchar(65533) NOT NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`stat_date`)
+COMMENT ""
+PARTITION BY (`stat_date`)
+DISTRIBUTED BY HASH(`stat_date`)
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+delete from test_delete where stat_date = '2023-12-19';
+-- result:
+-- !result

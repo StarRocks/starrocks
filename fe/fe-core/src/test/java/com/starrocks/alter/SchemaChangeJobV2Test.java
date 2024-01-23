@@ -238,6 +238,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         alterClauses.add(new ModifyTablePropertiesClause(properties));
         Database db = CatalogMocker.mockDb();
         OlapTable olapTable = (OlapTable) db.getTable(CatalogMocker.TEST_TBL2_ID);
+        olapTable.setUseFastSchemaEvolution(false);
         schemaChangeHandler.process(alterClauses, db, olapTable);
         Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().isExist());
         Assert.assertTrue(olapTable.getTableProperty().getDynamicPartitionProperty().getEnable());
@@ -332,8 +333,8 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Assert.assertEquals(1, result.getJobId());
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, result.getJobState());
 
-        Assert.assertNotNull(Deencapsulation.getField(result, "partitionIndexMap"));
-        Assert.assertNotNull(Deencapsulation.getField(result, "partitionIndexTabletMap"));
+        Assert.assertNotNull(Deencapsulation.getField(result, "physicalPartitionIndexMap"));
+        Assert.assertNotNull(Deencapsulation.getField(result, "physicalPartitionIndexTabletMap"));
 
         Map<Long, SchemaVersionAndHash> map = Deencapsulation.getField(result, "indexSchemaVersionAndHashMap");
         Assert.assertEquals(10, map.get(1000L).schemaVersion);

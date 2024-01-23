@@ -19,6 +19,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -65,8 +67,7 @@ public class ApplyRuleTask extends OptimizerTask {
 
     @Override
     public void execute() {
-        if (groupExpression.hasRuleExplored(rule) ||
-                groupExpression.isUnused()) {
+        if (groupExpression.hasRuleExplored(rule) || groupExpression.isUnused()) {
             return;
         }
         // Apply rule and get all new OptExpressions
@@ -85,6 +86,16 @@ public class ApplyRuleTask extends OptimizerTask {
             List<OptExpression> targetExpressions;
             try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, rule.getClass().getSimpleName())) {
                 targetExpressions = rule.transform(extractExpr, context.getOptimizerContext());
+            } catch (StarRocksPlannerException e) {
+                if (e.getType() == ErrorType.RULE_EXHAUSTED) {
+                    break;
+                } else {
+                    throw e;
+                }
+            }
+            if (rule.exhausted(context.getOptimizerContext())) {
+                OptimizerTraceUtil.logRuleExhausted(context.getOptimizerContext(), rule);
+                break;
             }
 
             newExpressions.addAll(targetExpressions);

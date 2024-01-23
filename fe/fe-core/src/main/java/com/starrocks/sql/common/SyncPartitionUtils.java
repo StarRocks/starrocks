@@ -31,6 +31,7 @@ import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -63,7 +64,6 @@ import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.starrocks.scheduler.PartitionBasedMvRefreshProcessor.ICEBERG_ALL_PARTITION;
 import static com.starrocks.sql.common.TimeUnitUtils.DAY;
 import static com.starrocks.sql.common.TimeUnitUtils.HOUR;
 import static com.starrocks.sql.common.TimeUnitUtils.MINUTE;
@@ -635,6 +635,9 @@ public class SyncPartitionUtils {
         if (versionMap == null) {
             return;
         }
+        if (StringUtils.isEmpty(tableName.getCatalog()) || InternalCatalog.isFromDefault(tableName)) {
+            return;
+        }
         Expr expr = mv.getPartitionRefTableExprs().get(0);
         Table baseTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(tableName.getCatalog(),
                 tableName.getDb(), tableName.getTbl());
@@ -650,9 +653,6 @@ public class SyncPartitionUtils {
             if (baseTableVersionMap != null) {
                 baseTableVersionMap.keySet().removeIf(partitionName -> {
                     try {
-                        if (partitionName.equals(ICEBERG_ALL_PARTITION)) {
-                            return false;
-                        }
                         boolean isListPartition = mv.getPartitionInfo() instanceof ListPartitionInfo;
                         Set<String> partitionNames = PartitionUtil.getMVPartitionName(baseTable, partitionColumn,
                                 Lists.newArrayList(partitionName), isListPartition, expr);

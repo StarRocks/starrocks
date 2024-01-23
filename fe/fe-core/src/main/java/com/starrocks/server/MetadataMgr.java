@@ -35,6 +35,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.CatalogConnector;
@@ -217,6 +218,10 @@ public class MetadataMgr {
         return db;
     }
 
+    public Database getDb(Long databaseId) {
+        return localMetastore.getDb(databaseId);
+    }
+
     public List<String> listTableNames(String catalogName, String dbName) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
         ImmutableSet.Builder<String> tableNames = ImmutableSet.builder();
@@ -243,7 +248,7 @@ public class MetadataMgr {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
                 }
 
-                if (listTableNames(catalogName, dbName).contains(tableName)) {
+                if (tableExists(catalogName, dbName, tableName)) {
                     if (stmt.isSetIfNotExists()) {
                         LOG.info("create table[{}] which already exists", tableName);
                         return false;
@@ -293,6 +298,19 @@ public class MetadataMgr {
             connectorTblMetaInfoMgr.setTableInfoForConnectorTable(catalogName, dbName, connectorTable);
         }
         return connectorTable;
+    }
+
+    public Table getTable(Long databaseId, Long tableId) {
+        Database database = localMetastore.getDb(databaseId);
+        if (database == null) {
+            return null;
+        }
+        return database.getTable(tableId);
+    }
+
+    public boolean tableExists(String catalogName, String dbName, String tblName) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        return connectorMetadata.map(metadata -> metadata.tableExists(dbName, tblName)).orElse(false);
     }
 
     public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String catalogName, String dbName, String tblName) {
@@ -374,7 +392,6 @@ public class MetadataMgr {
         return statistics.build();
     }
 
-
     public Statistics getTableStatistics(OptimizerContext session,
                                          String catalogName,
                                          Table table,
@@ -382,7 +399,9 @@ public class MetadataMgr {
                                          List<PartitionKey> partitionKeys,
                                          ScalarOperator predicate,
                                          long limit) {
-        Statistics statistics = getTableStatisticsFromInternalStatistics(table, columns);
+        // FIXME: In testing env, `_statistics_.external_column_statistics` is not created, ignore query columns stats from it.
+        Statistics statistics = FeConstants.runningUnitTest ? null :
+                getTableStatisticsFromInternalStatistics(table, columns);
         if (statistics == null || statistics.getColumnStatistics().values().stream().allMatch(ColumnStatistic::isUnknown)) {
             session.setObtainedFromInternalStatistics(false);
             Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
@@ -451,6 +470,18 @@ public class MetadataMgr {
                 metadata.finishSink(dbName, tableName, sinkCommitInfos);
             } catch (StarRocksConnectorException e) {
                 LOG.error("table sink commit failed", e);
+                throw new StarRocksConnectorException(e.getMessage());
+            }
+        });
+    }
+
+    public void abortSink(String catalogName, String dbName, String tableName, List<TSinkCommitInfo> sinkCommitInfos) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+        connectorMetadata.ifPresent(metadata -> {
+            try {
+                metadata.abortSink(dbName, tableName, sinkCommitInfos);
+            } catch (StarRocksConnectorException e) {
+                LOG.error("table sink abort failed", e);
                 throw new StarRocksConnectorException(e.getMessage());
             }
         });

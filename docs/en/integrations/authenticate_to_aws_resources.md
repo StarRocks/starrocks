@@ -1,5 +1,7 @@
 ---
 displayed_sidebar: "English"
+sidebar_label: AWS
+description: "This topic describes how to authenticate with AWS"
 ---
 
 # Authenticate to AWS resources
@@ -189,7 +191,7 @@ The following examples create a Hive catalog named `hive_catalog_hms` or `hive_c
       "type" = "hive",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
   );
   ```
 
@@ -220,7 +222,7 @@ The following examples create a Hive catalog named `hive_catalog_hms` or `hive_c
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
       "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
   );
   ```
 
@@ -254,7 +256,7 @@ The following examples create a Hive catalog named `hive_catalog_hms` or `hive_c
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_access_key>",
       "aws.s3.region" = "us-west-2",
-      "hive.metastore.uris" = "thrift://xx.xx.xx:9083"
+      "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
   );
   ```
 

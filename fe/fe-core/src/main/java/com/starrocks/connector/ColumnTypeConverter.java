@@ -50,6 +50,7 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.SmallIntType;
 import org.apache.paimon.types.TimestampType;
 import org.apache.paimon.types.TinyIntType;
+import org.apache.paimon.types.VarBinaryType;
 import org.apache.paimon.types.VarCharType;
 
 import java.util.ArrayList;
@@ -499,6 +500,10 @@ public class ColumnTypeConverter {
         private static final PaimonToHiveTypeVisitor INSTANCE = new PaimonToHiveTypeVisitor();
 
         public Type visit(BinaryType binaryType) {
+            return ScalarType.createType(PrimitiveType.VARBINARY);
+        }
+
+        public Type visit(VarBinaryType varBinaryType) {
             return ScalarType.createType(PrimitiveType.VARBINARY);
         }
 

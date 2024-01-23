@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "English"
+description: "Jupyter notebooks with StarRocks"
 ---
 
 # Jupyter

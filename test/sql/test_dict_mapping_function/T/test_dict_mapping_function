@@ -1,0 +1,39 @@
+-- name: test_expression_cast
+CREATE DATABASE test_expression_cast_db;
+USE test_expression_cast_db;
+CREATE TABLE `t_expression_cast` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `id2` bigint(20) NOT NULL AUTO_INCREMENT COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+INSERT INTO t_expression_cast VALUES (1, DEFAULT),(2, DEFAULT),(3, DEFAULT);
+
+CREATE TABLE `test_table` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `id2` bigint(20) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+
+shell: curl --location-trusted -u root: -T ${root_path}/lib/../common/data/stream_load/sr_dict_mapping_case_1.csv -XPUT -H partial_update:false -H label:stream_load_dict_mapping_case_1 -H column_separator:, -H columns:"xx, id1=xx, id2=dict_mapping('test_expression_cast_db.t_expression_cast', cast(xx as BIGINT))" ${url}/api/test_expression_cast_db/test_table/_stream_load
+sync;
+
+SELECT * FROM test_table;
+DROP TABLE t_expression_cast;
+DROP DATABASE test_expression_cast_db;

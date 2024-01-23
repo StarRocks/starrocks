@@ -1,5 +1,6 @@
 ---
 displayed_sidebar: "Chinese"
+toc_max_heading_level: 4
 ---
 
 # 从 HDFS 导入
@@ -86,10 +87,10 @@ LIMIT 3;
 
 > **说明**
 >
-> 使用表结构推断功能时，CREATE TABLE 语句不支持设置副本数，因此您需要在建表前把副本数设置好。例如，您可以通过如下命令设置副本数为 `1`：
+> 使用表结构推断功能时，CREATE TABLE 语句不支持设置副本数，因此您需要在建表前把副本数设置好。例如，您可以通过如下命令设置副本数为 `3`：
 >
 > ```SQL
-> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "1");
+> ADMIN SET FRONTEND CONFIG ('default_replication_num' = "3");
 > ```
 
 通过如下语句创建数据库、并切换至该数据库：
@@ -121,16 +122,16 @@ DESCRIBE user_behavior_inferred;
 
 系统返回如下查询结果：
 
-```Plaintext
-+--------------+------------------+------+-------+---------+-------+
-| Field        | Type             | Null | Key   | Default | Extra |
-+--------------+------------------+------+-------+---------+-------+
-| UserID       | bigint           | YES  | true  | NULL    |       |
-| ItemID       | bigint           | YES  | true  | NULL    |       |
-| CategoryID   | bigint           | YES  | true  | NULL    |       |
-| BehaviorType | varchar(1048576) | YES  | false | NULL    |       |
-| Timestamp    | varchar(1048576) | YES  | false | NULL    |       |
-+--------------+------------------+------+-------+---------+-------+
+```Plain
++--------------+-----------+------+-------+---------+-------+
+| Field        | Type      | Null | Key   | Default | Extra |
++--------------+-----------+------+-------+---------+-------+
+| UserID       | bigint    | YES  | true  | NULL    |       |
+| ItemID       | bigint    | YES  | true  | NULL    |       |
+| CategoryID   | bigint    | YES  | true  | NULL    |       |
+| BehaviorType | varbinary | YES  | false | NULL    |       |
+| Timestamp    | varbinary | YES  | false | NULL    |       |
++--------------+-----------+------+-------+---------+-------+
 ```
 
 将系统推断出来的表结构跟手动建表的表结构从以下几个方面进行对比：
@@ -173,7 +174,7 @@ SELECT * from user_behavior_inferred LIMIT 3;
 
 该示例主要演示如何根据源 Parquet 格式文件中数据的特点、以及目标表未来的查询用途等对目标表进行定义和创建。在创建表之前，您可以先查看一下保存在 HDFS 中的源文件，从而了解源文件中数据的特点，例如：
 
-- 源文件中包含一个数据类型为 `datetime` 的 `Timestamp` 列，因此建表语句中也应该定义这样一个数据类型为 `datetime` 的 `Timestamp` 列。
+- 源文件中包含一个数据类型为 VARBINARY 的 `Timestamp` 列，因此建表语句中也应该定义这样一个数据类型为 VARBINARY 的 `Timestamp` 列。
 - 源文件中的数据中没有 `NULL` 值，因此建表语句中也不需要定义任何列为允许 `NULL` 值。
 - 根据查询到的数据类型，可以在建表语句中定义 `UserID` 列为排序键和分桶键。根据实际业务场景需要，您还可以定义其他列比如 `ItemID` 或者定义 `UserID` 与其他列的组合作为排序键。
 
@@ -193,15 +194,11 @@ CREATE TABLE user_behavior_declared
     ItemID int(11),
     CategoryID int(11),
     BehaviorType varchar(65533),
-    Timestamp datetime
+    Timestamp varbinary
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 建表完成后，您可以通过 INSERT INTO SELECT FROM FILES() 向表内导入数据：
@@ -238,7 +235,7 @@ SELECT * from user_behavior_declared LIMIT 3;
 
 #### 查看导入进度
 
-通过 `information_schema.loads` 视图查看导入作业的进度。该功能自 3.1 版本起支持。例如：
+通过 StarRocks Information Schema 库中的 `loads` 视图查看导入作业的进度。该功能自 3.1 版本起支持。例如：
 
 ```SQL
 SELECT * FROM information_schema.loads ORDER BY JOB_ID DESC;
@@ -274,7 +271,7 @@ SELECT * FROM information_schema.loads WHERE LABEL = 'insert_0d86c3f9-851f-11ee-
 REJECTED_RECORD_PATH: NULL
 ```
 
-有关 `loads` 视图提供的字段详情，参见 [Information Schema](../reference/information_schema/loads.md)。
+有关 `loads` 视图提供的字段详情，参见 [`loads`](../reference/information_schema/loads.md)。
 
 > **NOTE**
 >
@@ -288,7 +285,6 @@ REJECTED_RECORD_PATH: NULL
 
 ### Broker Load 优势
 
-- Broker Load 支持在导入过程中执行[数据转换](../loading/Etl_in_loading.md)、以及 [UPSERT、DELETE 等数据变更操作](../loading/Load_to_Primary_Key_tables.md)。
 - Broker Load 在后台运行，客户端不需要保持连接也能确保导入作业不中断。
 - Broker Load 作业默认超时时间为 4 小时，适合导入数据较大、导入运行时间较长的场景。
 - 除 Parquet 和 ORC 文件格式，Broker Load 还支持 CSV 文件格式。
@@ -323,15 +319,11 @@ CREATE TABLE user_behavior
     ItemID int(11),
     CategoryID int(11),
     BehaviorType varchar(65533),
-    Timestamp datetime
+    Timestamp varbinary
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 #### 提交导入作业
@@ -464,15 +456,11 @@ CREATE TABLE user_behavior_replica
     ItemID int(11),
     CategoryID int(11),
     BehaviorType varchar(65533),
-    Timestamp datetime
+    Timestamp varbinary
 )
 ENGINE = OLAP 
 DUPLICATE KEY(UserID)
-DISTRIBUTED BY HASH(UserID)
-PROPERTIES
-(
-    "replication_num" = "1"
-);
+DISTRIBUTED BY HASH(UserID);
 ```
 
 #### 提交导入作业

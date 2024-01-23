@@ -33,4 +33,4 @@ MySQL > select week_iso ('2008-02-20 00:00:00');
 
 ## Keywords
 
-WEEK_I
+WEEK_ISO

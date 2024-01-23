@@ -10,9 +10,11 @@ Adds a regular expression to the SQL blacklist to forbid certain SQL patterns. W
 
 For more about SQL Blacklist, see [Manage SQL Blacklist](../../../administration/Blacklist.md).
 
-> **NOTE**
->
-> Only users with the ADMIN privilege can add SQL regular expressions to the SQL blacklist.
+:::tip
+
+This operation requires the SYSTEM-level BLACKLIST privilege. You can follow the instructions in [GRANT](../account-management/GRANT.md) to grant this privilege.
+
+:::
 
 ## Syntax
 

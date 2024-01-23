@@ -72,6 +72,7 @@ public class CreateTableTest {
         UtFrameUtils.addMockBackend(10004);
         Config.enable_strict_storage_medium_check = true;
         Config.enable_auto_tablet_distribution = true;
+        Config.enable_experimental_rowstore = true;
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
@@ -83,7 +84,7 @@ public class CreateTableTest {
 
     private static void createTable(String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().createTable(createTableStmt);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
     }
 
     private static void alterTableWithNewParser(String sql) throws Exception {
@@ -585,7 +586,7 @@ public class CreateTableTest {
         ExceptionChecker.expectThrowsNoException(
                 () -> createTable("create table test.tmp1\n" + "(k1 int, k2 int)\n"));
         ExceptionChecker.expectThrowsNoException(
-                () -> createTable("create table test.tmp2\n" + "(k1 int, k2 float)\n"));
+                () -> createTable("create table test.tmp2\n" + "(k1 int, k2 float) PROPERTIES(\"replication_num\" = \"1\");\n"));
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "Data type of first column cannot be HLL",
                 () -> createTable("create table test.tmp3\n" + "(k1 hll, k2 float)\n"));
     }
@@ -607,7 +608,7 @@ public class CreateTableTest {
                 .getTable("aggregate_table_sum");
         String columns = table.getColumns().toString();
         System.out.println("columns = " + columns);
-        Assert.assertTrue(columns.contains("`sum_decimal` decimal128(38, 4) SUM"));
+        Assert.assertTrue(columns.contains("`sum_decimal` decimal(38, 4) SUM"));
         Assert.assertTrue(columns.contains("`sum_bigint` bigint(20) SUM "));
     }
 
@@ -1670,6 +1671,30 @@ public class CreateTableTest {
                 ");";
 
         ExceptionChecker.expectThrowsNoException(() -> starRocksAssert.withTable(sql1));
+    }
+
+    @Test
+    public void testColumnWithRowExperimental() {
+        Config.enable_experimental_rowstore = false;
+        try {
+            StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+            starRocksAssert.useDatabase("test");
+            String sql1 = "CREATE TABLE test.dwd_column_with_row_experimental_test (\n" +
+                    "ship_id int(11) NOT NULL COMMENT \" \",\n" +
+                    "sub_ship_id bigint(20) NOT NULL COMMENT \"\" ,\n" +
+                    "address_code bigint(20) NOT NULL COMMENT \" \"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "PRIMARY KEY(ship_id, sub_ship_id) COMMENT \"OLAP\"\n" +
+                    "DISTRIBUTED BY HASH(ship_id, sub_ship_id) " +
+                    "PROPERTIES (\n" +
+                    "\"replication_num\" = \"1\",\n" +
+                    "\"storage_type\" = \"column_with_row\"" +
+                    ");";
+
+            ExceptionChecker.expectThrows(DdlException.class, () -> starRocksAssert.withTable(sql1));
+        } finally {
+            Config.enable_experimental_rowstore = true;
+        }
     }
 
     @Test

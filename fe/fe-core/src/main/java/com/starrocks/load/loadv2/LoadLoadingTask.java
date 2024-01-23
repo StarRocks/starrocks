@@ -68,7 +68,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 public class LoadLoadingTask extends LoadTask {
     private static final Logger LOG = LogManager.getLogger(LoadLoadingTask.class);
@@ -104,6 +103,8 @@ public class LoadLoadingTask extends LoadTask {
     private final List<List<TBrokerFileStatus>> fileStatusList;
     private final int fileNum;
 
+    private final LoadJob.JSONOptions jsonOptions;
+
     private LoadLoadingTask(Builder builder) {
         super(builder.callback, TaskType.LOADING, builder.priority);
         this.db = builder.db;
@@ -124,11 +125,11 @@ public class LoadLoadingTask extends LoadTask {
         this.loadJobType = builder.loadJobType;
         this.originStmt = builder.originStmt;
         this.partialUpdateMode = builder.partialUpdateMode;
-        this.retryTime = 1; // load task retry does not satisfy transaction's atomic
         this.failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL);
         this.loadId = builder.loadId;
         this.fileStatusList = builder.fileStatusList;
         this.fileNum = builder.fileNum;
+        this.jsonOptions = builder.jsonOptions;
     }
 
     public void prepare() throws UserException {
@@ -136,6 +137,8 @@ public class LoadLoadingTask extends LoadTask {
                 timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
                 brokerDesc, fileGroups, fileStatusList, fileNum);
         loadPlanner.setPartialUpdateMode(partialUpdateMode);
+        loadPlanner.setMergeConditionStr(mergeConditionStr);
+        loadPlanner.setJsonOptions(jsonOptions);
         loadPlanner.plan();
     }
 
@@ -149,9 +152,6 @@ public class LoadLoadingTask extends LoadTask {
 
     @Override
     protected void executeTask() throws Exception {
-        LOG.info("begin to execute loading task. load id: {} job: {}. db: {}, tbl: {}. left retry: {}",
-                DebugUtil.printId(loadId), callback.getCallbackId(), db.getOriginName(), table.getName(), retryTime);
-        retryTime--;
         executeOnce();
     }
 
@@ -269,15 +269,6 @@ public class LoadLoadingTask extends LoadTask {
         return jobDeadlineMs - System.currentTimeMillis();
     }
 
-    @Override
-    public void updateRetryInfo() {
-        super.updateRetryInfo();
-        UUID uuid = UUID.randomUUID();
-        this.loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
-
-        loadPlanner.updateLoadInfo(this.loadId);
-    }
-
     public static class Builder {
         private TUniqueId loadId;
         private Database db;
@@ -302,6 +293,8 @@ public class LoadLoadingTask extends LoadTask {
         private int fileNum = 0;
         private LoadTaskCallback callback;
         private int priority;
+
+        private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
 
         public Builder setCallback(LoadTaskCallback callback) {
             this.callback = callback;
@@ -415,6 +408,11 @@ public class LoadLoadingTask extends LoadTask {
 
         public Builder setFileNum(int fileNum) {
             this.fileNum = fileNum;
+            return this;
+        }
+
+        public Builder setJSONOptions(LoadJob.JSONOptions options) {
+            this.jsonOptions = options;
             return this;
         }
 

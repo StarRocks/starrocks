@@ -50,6 +50,7 @@ class Schema;
 class TabletReader;
 class ChunkChanger;
 class SegmentIterator;
+class PrimaryKeyDump;
 
 // save the context when reading from delta column files
 struct GetDeltaColumnContext {
@@ -232,7 +233,8 @@ public:
                         ChunkChanger* chunk_changer, const TabletSchemaCSPtr& base_tablet_schema,
                         const std::string& err_msg_header = "");
 
-    Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false);
+    Status load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup = false,
+                         bool save_source_schema = false);
 
     Status get_latest_applied_version(EditVersion* latest_applied_version);
 
@@ -331,10 +333,15 @@ public:
     // get the max rowset creation time for largest major version
     int64_t max_rowset_creation_time();
 
+    Status get_rowset_stats(std::map<uint32_t, std::string>* output_rowset_stats);
+
+    Status primary_index_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
     friend class PersistentIndex;
+    friend class UpdateManager;
     friend class RowsetUpdateState;
 
     template <typename K, typename V>
@@ -445,7 +452,7 @@ private:
 
     std::timed_mutex* get_index_lock() { return &_index_lock; }
 
-    Status _get_extra_file_size(int64_t* pindex_size, int64_t* col_size);
+    Status _get_extra_file_size(int64_t* pindex_size, int64_t* col_size) const;
 
 private:
     Tablet& _tablet;

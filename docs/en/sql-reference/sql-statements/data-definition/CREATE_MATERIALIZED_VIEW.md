@@ -191,7 +191,7 @@ The bucketing strategy of the asynchronous materialized view. StarRocks supports
 
   > **NOTE**
   >
-  > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [determine the number of buckets](../../../table_design/Data_distribution.md#determine-the-number-of-buckets).
+  > Since v2.5.7, StarRocks can automatically set the number of buckets (BUCKETS) when you create a table or add a partition. You no longer need to manually set the number of buckets. For detailed information, see [set the number of buckets](../../../table_design/Data_distribution.md#set-the-number-of-buckets).
 
 - **Random bucketing**:
 
@@ -283,7 +283,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
 
 **query_statement** (required)
 
-The query statement to create the asynchronous materialized view.
+The query statement to create the asynchronous materialized view. From v3.1.6 onwards, StarRocks supports creating asynchronous materialized views with Common Table Expression (CTE).
 
 > **CAUTION**
 >

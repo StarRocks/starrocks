@@ -22,8 +22,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
@@ -34,7 +32,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.connector.hive.HiveWriteUtils;
-import com.starrocks.external.starrocks.TableMetaSyncer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
@@ -68,7 +65,14 @@ public class InsertAnalyzer {
         /*
          *  Target table
          */
-        Table table = getTargetTable(insertStmt, session);
+        Table table;
+        if (insertStmt.getTargetTable() != null) {
+            // For the OLAP external table,
+            // the target table is synchronized from another cluster and saved into InsertStmt during beginTransaction.
+            table = insertStmt.getTargetTable();
+        } else {
+            table = getTargetTable(insertStmt, session);
+        }
 
         if (table instanceof OlapTable) {
             OlapTable olapTable = (OlapTable) table;
@@ -187,12 +191,12 @@ public class InsertAnalyzer {
             if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() &&
                     !column.isAutoIncrement() && !column.isGeneratedColumn() &&
                     !mentionedColumns.contains(column.getName())) {
-                String msg = "";
+                StringBuilder msg = new StringBuilder();
                 for (String s : mentionedColumns) {
-                    msg = msg + " " + s + " ";
+                    msg.append(" ").append(s).append(" ");
                 }
                 throw new SemanticException("'%s' must be explicitly mentioned in column permutation: %s",
-                        column.getName(), msg);
+                        column.getName(), msg.toString());
             }
         }
 
@@ -283,29 +287,10 @@ public class InsertAnalyzer {
             }
         }
     }
-  
-    private static ExternalOlapTable getOLAPExternalTableMeta(Database database, ExternalOlapTable externalOlapTable) {
-        // copy the table, and release database lock when synchronize table meta
-        ExternalOlapTable copiedTable = new ExternalOlapTable();
-        externalOlapTable.copyOnlyForQuery(copiedTable);
-        int lockTimes = 0;
-        while (database.isReadLockHeldByCurrentThread()) {
-            database.readUnlock();
-            lockTimes++;
-        }
-        try {
-            new TableMetaSyncer().syncTable(copiedTable);
-        } finally {
-            while (lockTimes-- > 0) {
-                database.readLock();
-            }
-        }
-        return copiedTable;
-    }
 
     private static Table getTargetTable(InsertStmt insertStmt, ConnectContext session) {
         if (insertStmt.useTableFunctionAsTargetTable()) {
-            return insertStmt.makeTableFunctionTable();
+            return insertStmt.makeTableFunctionTable(session.getSessionVariable());
         }
 
         MetaUtils.normalizationTableName(session, insertStmt.getTableName());
@@ -319,12 +304,7 @@ public class InsertAnalyzer {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
         }
 
-        Database database = MetaUtils.getDatabase(catalogName, dbName);
         Table table = MetaUtils.getTable(catalogName, dbName, tableName);
-
-        if (table instanceof ExternalOlapTable) {
-            table = getOLAPExternalTableMeta(database, (ExternalOlapTable) table);
-        }
 
         if (table instanceof MaterializedView && !insertStmt.isSystem()) {
             throw new SemanticException(
@@ -339,7 +319,7 @@ public class InsertAnalyzer {
             }
             if (table instanceof OlapTable && ((OlapTable) table).getState() != NORMAL) {
                 String msg =
-                        String.format("table state is %s, please wait to insert overwrite util table state is normal",
+                        String.format("table state is %s, please wait to insert overwrite until table state is normal",
                                 ((OlapTable) table).getState());
                 throw unsupportedException(msg);
             }

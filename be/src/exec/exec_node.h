@@ -244,6 +244,11 @@ public:
 
     static void may_add_chunk_accumulate_operator(OpFactories& ops, pipeline::PipelineBuilderContext* context, int id);
 
+    void set_children(std::vector<ExecNode*>&& children) { _children = std::move(children); }
+
+    [[nodiscard]] static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
+                                                       const DescriptorTbl& descs, ExecNode** node);
+
 protected:
     friend class DataSink;
 
@@ -294,11 +299,9 @@ protected:
     /// Valid to call in or after Prepare().
     bool is_in_subplan() const { return false; }
 
-    static Status create_vectorized_node(RuntimeState* state, ObjectPool* pool, const TPlanNode& tnode,
-                                         const DescriptorTbl& descs, ExecNode** node);
-
-    static Status create_tree_helper(RuntimeState* state, ObjectPool* pool, const std::vector<TPlanNode>& tnodes,
-                                     const DescriptorTbl& descs, ExecNode* parent, int* node_idx, ExecNode** root);
+    [[nodiscard]] static Status create_tree_helper(RuntimeState* state, ObjectPool* pool,
+                                                   const std::vector<TPlanNode>& tnodes, const DescriptorTbl& descs,
+                                                   ExecNode* parent, int* node_idx, ExecNode** root);
 
     virtual bool is_scan_node() const { return false; }
 

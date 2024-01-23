@@ -40,6 +40,8 @@ public abstract class ScalarOperator implements Cloneable {
     // whether the ScalarOperator is pushdown from equivalence derivation
     protected boolean isPushdown = false;
 
+    protected boolean isCorrelated = false;
+
     private List<String> hints = Collections.emptyList();
 
     public ScalarOperator(OperatorType opType, Type type) {
@@ -195,6 +197,11 @@ public abstract class ScalarOperator implements Cloneable {
         return isConstantNull() || isConstantFalse();
     }
 
+    public boolean isConstantTrue() {
+        return this instanceof ConstantOperator && this.getType() == Type.BOOLEAN &&
+                ((ConstantOperator) this).getBoolean();
+    }
+
     public void setHints(List<String> hints) {
         this.hints = hints;
     }
@@ -217,6 +224,14 @@ public abstract class ScalarOperator implements Cloneable {
 
     public void setIsPushdown(boolean isPushdown) {
         this.isPushdown = isPushdown;
+    }
+
+    public boolean isCorrelated() {
+        return isCorrelated;
+    }
+
+    public void setCorrelated(boolean correlated) {
+        isCorrelated = correlated;
     }
 
     // whether ScalarOperator are equals without id

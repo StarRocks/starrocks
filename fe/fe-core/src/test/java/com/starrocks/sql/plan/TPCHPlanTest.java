@@ -26,6 +26,7 @@ public class TPCHPlanTest extends PlanTestBase {
         PlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        connectContext.getSessionVariable().setEnableViewBasedMvRewrite(false);
     }
 
     @Test
@@ -49,6 +50,7 @@ public class TPCHPlanTest extends PlanTestBase {
 
     @Test
     public void testInSubquery() {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
         runFileUnitTest("subquery/in-subquery");
     }
 

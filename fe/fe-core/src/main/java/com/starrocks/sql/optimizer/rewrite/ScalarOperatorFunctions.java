@@ -65,6 +65,7 @@ import com.starrocks.privilege.AuthorizationMgr;
 import com.starrocks.privilege.ObjectType;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -139,6 +140,9 @@ public class ScalarOperatorFunctions {
 
     private static final Map<String, TemporalUnit> TIME_SLICE_UNIT_MAPPING;
 
+    private static final int MAX_NOW_PRECISION = 6;
+    private static final Integer[] NOW_PRECISION_FACTORS = new Integer[MAX_NOW_PRECISION];
+
     static {
         for (int shiftBy = 0; shiftBy < CONSTANT_128; ++shiftBy) {
             INT_128_MASK1_ARR1[shiftBy] = INT_128_OPENER.subtract(BigInteger.ONE).shiftRight(shiftBy + 1);
@@ -154,6 +158,9 @@ public class ScalarOperatorFunctions {
                 .put("week", ChronoUnit.WEEKS)
                 .put("quarter", IsoFields.QUARTER_YEARS)
                 .build();
+        for (int i = 0, val = 100000000; i < 6; i++, val /= 10) {
+            NOW_PRECISION_FACTORS[i] = val;
+        }
     }
 
     /**
@@ -332,6 +339,13 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createDatetime(ld.atTime(0, 0, 0), Type.DATE);
     }
 
+    @ConstantFunction(name = "to_date", argTypes = {DATETIME}, returnType = DATE, isMonotonic = true)
+    public static ConstantOperator toDate(ConstantOperator dateTime) {
+        LocalDateTime dt = dateTime.getDatetime();
+        dt.truncatedTo(ChronoUnit.DAYS);
+        return ConstantOperator.createDate(dt);
+    }
+
     @ConstantFunction(name = "years_sub", argTypes = {DATETIME, INT}, returnType = DATETIME, isMonotonic = true)
     public static ConstantOperator yearsSub(ConstantOperator date, ConstantOperator year) {
         return ConstantOperator.createDatetime(date.getDatetime().minusYears(year.getInt()));
@@ -469,7 +483,7 @@ public class ScalarOperatorFunctions {
     })
     public static ConstantOperator now() {
         ConnectContext connectContext = ConnectContext.get();
-        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
+        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime() / 1000 * 1000)
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         return ConstantOperator.createDatetime(startTime);
     }
@@ -487,11 +501,12 @@ public class ScalarOperatorFunctions {
         if (fspVal > 6) {
             throw new AnalysisException("Too-big precision " + fspVal + "specified for 'now'. Maximum is 6.");
         }
-        // Here only the syntax is implemented for the metabase to use.
-        // If you want to achieve a precise type, you need to change the BE code
-        // and consider the transitivity of the FE expression.
+
         ConnectContext connectContext = ConnectContext.get();
-        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime())
+        Instant instant = connectContext.getStartTimeInstant();
+        int factor = NOW_PRECISION_FACTORS[fspVal - 1];
+        LocalDateTime startTime = Instant.ofEpochSecond(
+                instant.getEpochSecond(), instant.getNano() / factor * factor)
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         return ConstantOperator.createDatetime(startTime);
     }
@@ -510,7 +525,7 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "utc_timestamp", argTypes = {}, returnType = DATETIME)
     public static ConstantOperator utcTimestamp() {
         // for consistency with mysql, ignore milliseconds
-        LocalDateTime utcStartTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime())
+        LocalDateTime utcStartTime = Instant.ofEpochMilli(ConnectContext.get().getStartTime() / 1000 * 1000)
                 .atZone(ZoneOffset.UTC).toLocalDateTime();
         return ConstantOperator.createDatetime(utcStartTime);
     }
@@ -1256,6 +1271,16 @@ public class ScalarOperatorFunctions {
     @ConstantFunction(name = "inspect_all_pipes", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
     public static ConstantOperator inspect_all_pipes() {
         ConnectContext connectContext = ConnectContext.get();
+        authOperatorPrivilege();
+        String currentDb = connectContext.getDatabase();
+        Database db = GlobalStateMgr.getCurrentState().mayGetDb(connectContext.getDatabase())
+                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, currentDb));
+        String json = GlobalStateMgr.getCurrentState().getPipeManager().getPipesOfDb(db.getId());
+        return ConstantOperator.createVarchar(json);
+    }
+
+    private static void authOperatorPrivilege() {
+        ConnectContext connectContext = ConnectContext.get();
         try {
             Authorizer.checkSystemAction(
                     connectContext.getCurrentUserIdentity(),
@@ -1267,11 +1292,17 @@ public class ScalarOperatorFunctions {
                     connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
                     PrivilegeType.OPERATE.name(), ObjectType.SYSTEM.name(), null);
         }
-        String currentDb = connectContext.getDatabase();
-        Database db = GlobalStateMgr.getCurrentState().mayGetDb(connectContext.getDatabase())
-                .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_DB_ERROR, currentDb));
-        String json = GlobalStateMgr.getCurrentState().getPipeManager().getPipesOfDb(db.getId());
-        return ConstantOperator.createVarchar(json);
+    }
+
+    /**
+     * Return all status about the TaskManager
+     */
+    @ConstantFunction(name = "inspect_task_runs", argTypes = {}, returnType = VARCHAR, isMetaFunction = true)
+    public static ConstantOperator inspectTaskRuns() {
+        ConnectContext connectContext = ConnectContext.get();
+        authOperatorPrivilege();
+        TaskRunManager trm = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
+        return ConstantOperator.createVarchar(trm.inspect());
     }
 
     @ConstantFunction.List(list = {

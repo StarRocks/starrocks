@@ -138,6 +138,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     private List<String> dataColumnNames = Lists.newArrayList();
     @SerializedName(value = "prop")
     private Map<String, String> hiveProperties = Maps.newHashMap();
+    @SerializedName(value = "sp")
+    private Map<String, String> serdeProperties = Maps.newHashMap();
 
     // For `insert into target_table select from hive_table, we set it to false when executing this kind of insert query.
     // 1. `useMetadataCache` is false means that this query need to list all selected partitions files from hdfs/s3.
@@ -157,7 +159,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public HiveTable(long id, String name, List<Column> fullSchema, String resourceName, String catalog,
                      String hiveDbName, String hiveTableName, String tableLocation, long createTime,
                      List<String> partColumnNames, List<String> dataColumnNames, Map<String, String> properties,
-                     HiveStorageFormat storageFormat, HiveTableType hiveTableType) {
+                     Map<String, String> serdeProperties, HiveStorageFormat storageFormat, HiveTableType hiveTableType) {
         super(id, name, TableType.HIVE, fullSchema);
         this.resourceName = resourceName;
         this.catalogName = catalog;
@@ -168,6 +170,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         this.partColumnNames = partColumnNames;
         this.dataColumnNames = dataColumnNames;
         this.hiveProperties = properties;
+        this.serdeProperties = serdeProperties;
         this.storageFormat = storageFormat;
         this.hiveTableType = hiveTableType;
     }
@@ -377,6 +380,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         tHdfsTable.setInput_format(hiveProperties.get(HIVE_TABLE_INPUT_FORMAT));
         tHdfsTable.setHive_column_names(hiveProperties.get(HIVE_TABLE_COLUMN_NAMES));
         tHdfsTable.setHive_column_types(hiveProperties.get(HIVE_TABLE_COLUMN_TYPES));
+        tHdfsTable.setSerde_properties(serdeProperties);
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.HDFS_TABLE, fullSchema.size(),
                 0, hiveTableName, hiveDbName);
@@ -569,6 +573,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         private List<String> partitionColNames = Lists.newArrayList();
         private List<String> dataColNames = Lists.newArrayList();
         private Map<String, String> properties = Maps.newHashMap();
+        private Map<String, String> serdeProperties = Maps.newHashMap();
         private HiveStorageFormat storageFormat;
         private HiveTableType hiveTableType = HiveTableType.MANAGED_TABLE;
 
@@ -635,6 +640,11 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             return this;
         }
 
+        public Builder setSerdeProperties(Map<String, String> serdeProperties) {
+            this.serdeProperties = serdeProperties;
+            return this;
+        }
+
         public Builder setStorageFormat(HiveStorageFormat storageFormat) {
             this.storageFormat = storageFormat;
             return this;
@@ -647,7 +657,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
         public HiveTable build() {
             return new HiveTable(id, tableName, fullSchema, resourceName, catalogName, hiveDbName, hiveTableName,
-                    tableLocation, createTime, partitionColNames, dataColNames, properties, storageFormat, hiveTableType);
+                    tableLocation, createTime, partitionColNames, dataColNames, properties, serdeProperties,
+                    storageFormat, hiveTableType);
         }
     }
 }

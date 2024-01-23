@@ -113,6 +113,7 @@ private:
     std::unique_ptr<ThreadPool> _thread_pool_move_dir;
     std::unique_ptr<ThreadPool> _thread_pool_update_tablet_meta_info;
     std::unique_ptr<ThreadPool> _thread_pool_drop_auto_increment_map;
+    std::unique_ptr<ThreadPool> _thread_pool_replication;
 
     std::unique_ptr<PushTaskWorkerPool> _push_workers;
     std::unique_ptr<PublishVersionTaskWorkerPool> _publish_version_workers;
@@ -158,7 +159,7 @@ void AgentServer::Impl::init_or_die() {
 // But it seems that there's no limit for the number of tablets of a partition.
 // Since a large queue size brings a little overhead, a big one is chosen here.
 #ifdef BE_TEST
-        BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", 1, 1, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
+        BUILD_DYNAMIC_TASK_THREAD_POOL("publish_version", 1, 3, DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE,
                                        _thread_pool_publish_version);
 #else
         int max_publish_version_worker_count = config::transaction_publish_version_worker_count;
@@ -177,9 +178,8 @@ void AgentServer::Impl::init_or_die() {
         BUILD_DYNAMIC_TASK_THREAD_POOL("drop", 1, config::drop_tablet_worker_count, std::numeric_limits<int>::max(),
                                        _thread_pool_drop);
 
-        BUILD_DYNAMIC_TASK_THREAD_POOL("create_tablet", config::create_tablet_worker_count,
-                                       config::create_tablet_worker_count, std::numeric_limits<int>::max(),
-                                       _thread_pool_create_tablet);
+        BUILD_DYNAMIC_TASK_THREAD_POOL("create_tablet", 1, config::create_tablet_worker_count,
+                                       std::numeric_limits<int>::max(), _thread_pool_create_tablet);
 
         BUILD_DYNAMIC_TASK_THREAD_POOL("alter_tablet", 0, config::alter_tablet_worker_count,
                                        std::numeric_limits<int>::max(), _thread_pool_alter_tablet);
@@ -230,6 +230,10 @@ void AgentServer::Impl::init_or_die() {
                                                 MIN_CLONE_TASK_THREADS_IN_POOL),
                                        DEFAULT_DYNAMIC_THREAD_POOL_QUEUE_SIZE, _thread_pool_clone);
 
+        BUILD_DYNAMIC_TASK_THREAD_POOL(
+                "replication", 0, config::replication_threads > 0 ? config::replication_threads : CpuInfo::num_cores(),
+                std::numeric_limits<int>::max(), _thread_pool_replication);
+
         // It is the same code to create workers of each type, so we use a macro
         // to make code to be more readable.
 #ifndef BE_TEST
@@ -276,6 +280,7 @@ void AgentServer::Impl::stop() {
 
 #ifndef BE_TEST
         _thread_pool_clone->shutdown();
+        _thread_pool_replication->shutdown();
 #define STOP_POOL(type, pool_name) pool_name->stop();
 #else
 #define STOP_POOL(type, pool_name)
@@ -341,6 +346,8 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
             HANDLE_TYPE(TTaskType::MOVE, move_dir_req);
             HANDLE_TYPE(TTaskType::UPDATE_TABLET_META_INFO, update_tablet_meta_info_req);
             HANDLE_TYPE(TTaskType::DROP_AUTO_INCREMENT_MAP, drop_auto_increment_map_req);
+            HANDLE_TYPE(TTaskType::REMOTE_SNAPSHOT, remote_snapshot_req);
+            HANDLE_TYPE(TTaskType::REPLICATE_SNAPSHOT, replicate_snapshot_req);
 
         case TTaskType::REALTIME_PUSH:
             if (!task.__isset.push_req) {
@@ -397,6 +404,9 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
                       << ", task_count_in_queue=" << register_pair.second;                                         \
             ret_st = pool->submit_func(                                                                            \
                     std::bind(do_func, std::make_shared<AGENT_REQ>(*task, task->request, time(nullptr)), env));    \
+            if (!ret_st.ok()) {                                                                                    \
+                LOG(WARNING) << "fail to submit task. reason: " << ret_st.message() << ", task: " << task;         \
+            }                                                                                                      \
         } else {                                                                                                   \
             LOG(INFO) << "Submit task failed, already exists type=" << t_task_type << ", signature=" << signature; \
         }                                                                                                          \
@@ -466,6 +476,14 @@ void AgentServer::Impl::submit_tasks(TAgentResult& agent_result, const std::vect
         case TTaskType::DROP_AUTO_INCREMENT_MAP:
             HANDLE_TASK(TTaskType::DROP_AUTO_INCREMENT_MAP, all_tasks, run_drop_auto_increment_map_task,
                         DropAutoIncrementMapAgentTaskRequest, drop_auto_increment_map_req, _exec_env);
+            break;
+        case TTaskType::REMOTE_SNAPSHOT:
+            HANDLE_TASK(TTaskType::REMOTE_SNAPSHOT, all_tasks, run_remote_snapshot_task, RemoteSnapshotAgentTaskRequest,
+                        remote_snapshot_req, _exec_env);
+            break;
+        case TTaskType::REPLICATE_SNAPSHOT:
+            HANDLE_TASK(TTaskType::REPLICATE_SNAPSHOT, all_tasks, run_replicate_snapshot_task,
+                        ReplicateSnapshotAgentTaskRequest, replicate_snapshot_req, _exec_env);
             break;
         case TTaskType::REALTIME_PUSH:
         case TTaskType::PUSH: {
@@ -543,6 +561,10 @@ void AgentServer::Impl::update_max_thread_by_type(int type, int new_val) {
     case TTaskType::CLONE:
         st = _thread_pool_clone->update_max_threads(new_val);
         break;
+    case TTaskType::REMOTE_SNAPSHOT:
+    case TTaskType::REPLICATE_SNAPSHOT:
+        st = _thread_pool_replication->update_max_threads(new_val > 0 ? new_val : CpuInfo::num_cores());
+        break;
     default:
         break;
     }
@@ -600,6 +622,10 @@ ThreadPool* AgentServer::Impl::get_thread_pool(int type) const {
         break;
     case TTaskType::DROP_AUTO_INCREMENT_MAP:
         ret = _thread_pool_drop_auto_increment_map.get();
+        break;
+    case TTaskType::REMOTE_SNAPSHOT:
+    case TTaskType::REPLICATE_SNAPSHOT:
+        ret = _thread_pool_replication.get();
         break;
     case TTaskType::PUSH:
     case TTaskType::REALTIME_PUSH:

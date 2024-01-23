@@ -61,6 +61,7 @@ import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
@@ -110,6 +111,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.catalog.FunctionSet.IGNORE_NULL_WINDOW_FUNCTION;
 import static java.util.stream.Collectors.toList;
 
 /**
@@ -134,7 +136,6 @@ public class AstToStringBuilder {
         // when you just want to a function name as its alias set it false
         protected boolean addFunctionDbName;
 
-
         public AST2StringBuilderVisitor() {
             this(true);
         }
@@ -142,7 +143,6 @@ public class AstToStringBuilder {
         public AST2StringBuilderVisitor(boolean addFunctionDbName) {
             this.addFunctionDbName = addFunctionDbName;
         }
-
 
         // ------------------------------------------- Privilege Statement -------------------------------------------------
 
@@ -956,6 +956,15 @@ public class AstToStringBuilder {
                     sb.append(visit(node.getChild(end)));
                 }
                 sb.append(")");
+            } else if (IGNORE_NULL_WINDOW_FUNCTION.contains(functionName)) {
+                List<String> p = node.getChildren().stream().map(child -> {
+                    String str = visit(child);
+                    if (child instanceof SlotRef && node.getIgnoreNulls()) {
+                        str += " ignore nulls";
+                    }
+                    return str;
+                }).collect(Collectors.toList());
+                sb.append(Joiner.on(", ").join(p)).append(")");
             } else {
                 List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
                 sb.append(Joiner.on(", ").join(p)).append(")");
@@ -1260,6 +1269,18 @@ public class AstToStringBuilder {
                         append(new PrintableMap<>(properties, "=", true, false))
                         .append(")");
             }
+            return sb.toString();
+        }
+
+        @Override
+        public String visitCreateCatalogStatement(CreateCatalogStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            sb.append("CREATE EXTERNAL CATALOG '");
+            sb.append(stmt.getCatalogName()).append("' ");
+            if (stmt.getComment() != null) {
+                sb.append("COMMENT \"").append(stmt.getComment()).append("\" ");
+            }
+            sb.append("PROPERTIES(").append(new PrintableMap<>(stmt.getProperties(), " = ", true, false, true)).append(")");
             return sb.toString();
         }
     }

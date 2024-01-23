@@ -21,6 +21,7 @@
 
 #include "absl/strings/str_format.h"
 #include "common/config.h"
+#include "common/gflags_utils.h"
 #include "common/logging.h"
 #include "common/shutdown_hook.h"
 #include "file_store.pb.h"
@@ -44,6 +45,10 @@ DECLARE_int32(cachemgr_evict_interval);
 DECLARE_double(cachemgr_evict_low_water);
 // cache will stop evict cache files if free space is above this value(percentage)
 DECLARE_double(cachemgr_evict_high_water);
+// cache will evict file cache at this percent if star cache is turned on
+DECLARE_double(cachemgr_evict_percent);
+// cache will evict file cache at this speed if star cache is turned on
+DECLARE_int32(cachemgr_evict_throughput_mb);
 // type:Integer. CacheManager cache directory allocation policy. (0:default, 1:random, 2:round-robin)
 DECLARE_int32(cachemgr_dir_allocate_policy);
 // buffer size in starlet fs buffer stream, size <= 0 means not use buffer stream.
@@ -343,20 +348,28 @@ void init_staros_worker() {
     // skip staros reinit aws sdk
     staros::starlet::fslib::skip_aws_init_api = true;
 
-    FLAGS_cachemgr_threadpool_size = config::starlet_cache_thread_num;
+    staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_threadpool_size",
+                                                          std::to_string(config::starlet_cache_thread_num));
+    staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_low_water",
+                                                          std::to_string(config::starlet_cache_evict_low_water));
+    staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_high_water",
+                                                          std::to_string(config::starlet_cache_evict_high_water));
+    staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_stream_buffer_size_bytes",
+                                                          std::to_string(config::starlet_fs_stream_buffer_size_bytes));
+    staros::starlet::common::GFlagsUtils::UpdateFlagValue("fs_enable_buffer_prefetch",
+                                                          std::to_string(config::starlet_fs_read_prefetch_enable));
+    staros::starlet::common::GFlagsUtils::UpdateFlagValue(
+            "fs_buffer_prefetch_threadpool_size", std::to_string(config::starlet_fs_read_prefetch_threadpool_size));
+    staros::starlet::common::GFlagsUtils::UpdateFlagValue("cachemgr_evict_interval",
+                                                          std::to_string(config::starlet_cache_evict_interval));
+
     FLAGS_cachemgr_check_interval = config::starlet_cache_check_interval;
-    FLAGS_cachemgr_evict_interval = config::starlet_cache_evict_interval;
-    FLAGS_cachemgr_evict_low_water = config::starlet_cache_evict_low_water;
-    FLAGS_cachemgr_evict_high_water = config::starlet_cache_evict_high_water;
     FLAGS_cachemgr_dir_allocate_policy = config::starlet_cache_dir_allocate_policy;
-    FLAGS_fs_stream_buffer_size_bytes = config::starlet_fs_stream_buffer_size_bytes;
     FLAGS_fslib_s3_virtual_address_domainlist = config::starlet_s3_virtual_address_domainlist;
     // use the same configuration as the external query
     FLAGS_fslib_s3client_max_connections = config::object_storage_max_connection;
     FLAGS_fslib_s3client_max_items = config::starlet_s3_client_max_cache_capacity;
     FLAGS_fslib_s3client_max_instance_per_item = config::starlet_s3_client_num_instances_per_cache;
-    FLAGS_fs_enable_buffer_prefetch = config::starlet_fs_read_prefetch_enable;
-    FLAGS_fs_buffer_prefetch_threadpool_size = config::starlet_fs_read_prefetch_threadpool_size;
 
     fslib::FLAGS_use_star_cache = config::starlet_use_star_cache;
     fslib::FLAGS_star_cache_mem_size_percent = config::starlet_star_cache_mem_size_percent;

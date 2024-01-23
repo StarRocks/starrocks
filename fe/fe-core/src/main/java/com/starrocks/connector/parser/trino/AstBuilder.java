@@ -187,6 +187,7 @@ import static com.starrocks.analysis.AnalyticWindow.BoundaryType.FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.PRECEDING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_FOLLOWING;
 import static com.starrocks.analysis.AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING;
+import static com.starrocks.connector.parser.trino.TrinoParserUtils.alignWithInputDatetimeType;
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
 import static java.util.stream.Collectors.toList;
 
@@ -976,17 +977,17 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         Expr right = (Expr) visit(node.getRight(), context);
 
         if (left instanceof com.starrocks.sql.ast.IntervalLiteral) {
-            return new TimestampArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), right,
+            return alignWithInputDatetimeType(new TimestampArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), right,
                     ((com.starrocks.sql.ast.IntervalLiteral) left).getValue(),
                     ((com.starrocks.sql.ast.IntervalLiteral) left).getUnitIdentifier().getDescription(),
-                    true);
+                    true));
         }
 
         if (right instanceof com.starrocks.sql.ast.IntervalLiteral) {
-            return new TimestampArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), left,
+            return alignWithInputDatetimeType(new TimestampArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), left,
                     ((com.starrocks.sql.ast.IntervalLiteral) right).getValue(),
                     ((com.starrocks.sql.ast.IntervalLiteral) right).getUnitIdentifier().getDescription(),
-                    false);
+                    false));
         }
 
         return new ArithmeticExpr(BINARY_OPERATOR_MAP.get(node.getOperator()), left, right);

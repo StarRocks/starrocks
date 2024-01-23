@@ -51,6 +51,7 @@ import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.ast.ValuesRelation;
+import com.starrocks.sql.common.QueryDebugOptions;
 import com.starrocks.system.HeartbeatFlags;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TTabletInternalParallelMode;
@@ -208,6 +209,17 @@ public class SetStmtAnalyzer {
                         EnumUtils.getEnumList(SessionVariable.FollowerQueryForwardMode.class), ",");
                 throw new SemanticException(String.format("Unsupported follower query forward mode: %s, " +
                         "supported list is %s", queryFollowerForwardMode, supportedList));
+            }
+        }
+
+        // query_debug_options
+        if (variable.equalsIgnoreCase(SessionVariable.QUERY_DEBUG_OPTIONS)) {
+            String queryDebugOptions = resolvedExpression.getStringValue();
+            try {
+                QueryDebugOptions.read(queryDebugOptions);
+            } catch (Exception e) {
+                throw new SemanticException(String.format("Unsupported query_debug_options: %s, " +
+                        "it should be the `QueryDebugOptions` class's json deserialized string", queryDebugOptions));
             }
         }
 

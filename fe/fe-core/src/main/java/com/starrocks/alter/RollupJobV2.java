@@ -121,11 +121,11 @@ import java.util.stream.Collectors;
 public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(RollupJobV2.class);
 
-    // partition id -> (rollup tablet id -> base tablet id)
+    // physical partition id -> (rollup tablet id -> base tablet id)
     @SerializedName(value = "partitionIdToBaseRollupTabletIdMap")
-    private Map<Long, Map<Long, Long>> partitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
+    private Map<Long, Map<Long, Long>> physicalPartitionIdToBaseRollupTabletIdMap = Maps.newHashMap();
     @SerializedName(value = "partitionIdToRollupIndex")
-    private Map<Long, MaterializedIndex> partitionIdToRollupIndex = Maps.newHashMap();
+    private Map<Long, MaterializedIndex> physicalPartitionIdToRollupIndex = Maps.newHashMap();
 
     // rollup and base schema info
     @SerializedName(value = "baseIndexId")
@@ -193,12 +193,12 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
 
     public void addTabletIdMap(long partitionId, long rollupTabletId, long baseTabletId) {
         Map<Long, Long> tabletIdMap =
-                partitionIdToBaseRollupTabletIdMap.computeIfAbsent(partitionId, k -> Maps.newHashMap());
+                physicalPartitionIdToBaseRollupTabletIdMap.computeIfAbsent(partitionId, k -> Maps.newHashMap());
         tabletIdMap.put(rollupTabletId, baseTabletId);
     }
 
     public void addMVIndex(long partitionId, MaterializedIndex mvIndex) {
-        this.partitionIdToRollupIndex.put(partitionId, mvIndex);
+        this.physicalPartitionIdToRollupIndex.put(partitionId, mvIndex);
     }
 
     public String getRollupIndexName() {
@@ -230,7 +230,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         AgentBatchTask batchTask = new AgentBatchTask();
         // count total replica num
         int totalReplicaNum = 0;
-        for (MaterializedIndex rollupIdx : partitionIdToRollupIndex.values()) {
+        for (MaterializedIndex rollupIdx : physicalPartitionIdToRollupIndex.values()) {
             for (Tablet tablet : rollupIdx.getTablets()) {
                 totalReplicaNum += ((LocalTablet) tablet).getImmutableReplicas().size();
             }
@@ -244,17 +244,18 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             }
             MaterializedIndexMeta index = tbl.getIndexMetaByIndexId(tbl.getBaseIndexId());
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
-            for (Map.Entry<Long, MaterializedIndex> entry : this.partitionIdToRollupIndex.entrySet()) {
+            for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
                 if (partition == null) {
                     continue;
                 }
-                TStorageMedium storageMedium = tbl.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
-                TTabletType tabletType = tbl.getPartitionInfo().getTabletType(partitionId);
+                TStorageMedium storageMedium = tbl.getPartitionInfo()
+                        .getDataProperty(partition.getParentId()).getStorageMedium();
+                TTabletType tabletType = tbl.getPartitionInfo().getTabletType(partition.getParentId());
                 MaterializedIndex rollupIndex = entry.getValue();
 
-                Map<Long, Long> tabletIdMap = this.partitionIdToBaseRollupTabletIdMap.get(partitionId);
+                Map<Long, Long> tabletIdMap = this.physicalPartitionIdToBaseRollupTabletIdMap.get(partitionId);
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
                     List<Replica> rollupReplicas = ((LocalTablet) rollupTablet).getImmutableReplicas();
@@ -347,14 +348,14 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
         for (Partition partition : tbl.getPartitions()) {
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 long partitionId = physicalPartition.getId();
-                MaterializedIndex rollupIndex = this.partitionIdToRollupIndex.get(partitionId);
+                MaterializedIndex rollupIndex = this.physicalPartitionIdToRollupIndex.get(partitionId);
                 Preconditions.checkNotNull(rollupIndex);
                 Preconditions.checkState(rollupIndex.getState() == IndexState.SHADOW, rollupIndex.getState());
                 physicalPartition.createRollupIndex(rollupIndex);
             }
         }
 
-        tbl.setIndexMeta(rollupIndexId, rollupIndexName, rollupSchema, 0 /* initial schema version */,
+        tbl.setIndexMeta(rollupIndexId, rollupIndexName, rollupSchema, rollupSchemaVersion /* initial schema version */,
                 rollupSchemaHash, rollupShortKeyColumnCount, TStorageType.COLUMN, rollupKeysType, origStmt);
         MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(rollupIndexId);
         Preconditions.checkNotNull(indexMeta);
@@ -445,7 +446,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 throw new AlterCancelException("Table " + tableId + " does not exist");
             }
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
-            for (Map.Entry<Long, MaterializedIndex> entry : this.partitionIdToRollupIndex.entrySet()) {
+            for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
                 Preconditions.checkNotNull(partition, partitionId);
@@ -454,7 +455,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 long visibleVersion = partition.getVisibleVersion();
 
                 MaterializedIndex rollupIndex = entry.getValue();
-                Map<Long, Long> tabletIdMap = this.partitionIdToBaseRollupTabletIdMap.get(partitionId);
+                Map<Long, Long> tabletIdMap = this.physicalPartitionIdToBaseRollupTabletIdMap.get(partitionId);
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
                     long baseTabletId = tabletIdMap.get(rollupTabletId);
@@ -619,7 +620,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 throw new AlterCancelException("Table " + tableId + " does not exist");
             }
             Preconditions.checkState(tbl.getState() == OlapTableState.ROLLUP);
-            for (Map.Entry<Long, MaterializedIndex> entry : this.partitionIdToRollupIndex.entrySet()) {
+            for (Map.Entry<Long, MaterializedIndex> entry : this.physicalPartitionIdToRollupIndex.entrySet()) {
                 long partitionId = entry.getKey();
                 PhysicalPartition partition = tbl.getPhysicalPartition(partitionId);
                 if (partition == null) {
@@ -627,7 +628,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
                 }
 
                 long visiableVersion = partition.getVisibleVersion();
-                short expectReplicationNum = tbl.getPartitionInfo().getReplicationNum(partition.getId());
+                short expectReplicationNum = tbl.getPartitionInfo().getReplicationNum(partition.getParentId());
 
                 MaterializedIndex rollupIndex = entry.getValue();
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
@@ -681,7 +682,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             }
         }
         tbl.rebuildFullSchema();
-        tbl.lastSchemaUpdateTime.set(System.currentTimeMillis());
+        tbl.lastSchemaUpdateTime.set(System.nanoTime());
     }
 
     /**
@@ -716,8 +717,8 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             try {
                 OlapTable tbl = (OlapTable) db.getTable(tableId);
                 if (tbl != null) {
-                    for (Long partitionId : partitionIdToRollupIndex.keySet()) {
-                        MaterializedIndex rollupIndex = partitionIdToRollupIndex.get(partitionId);
+                    for (Long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
+                        MaterializedIndex rollupIndex = physicalPartitionIdToRollupIndex.get(partitionId);
                         for (Tablet rollupTablet : rollupIndex.getTablets()) {
                             invertedIndex.deleteTablet(rollupTablet.getId());
                         }
@@ -772,9 +773,10 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     private void addTabletToInvertedIndex(OlapTable tbl) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         // add all rollup replicas to tablet inverted index
-        for (Long partitionId : partitionIdToRollupIndex.keySet()) {
-            MaterializedIndex rollupIndex = partitionIdToRollupIndex.get(partitionId);
-            TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
+        for (Long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
+            MaterializedIndex rollupIndex = physicalPartitionIdToRollupIndex.get(partitionId);
+            PhysicalPartition physicalPartition = tbl.getPhysicalPartition(partitionId);
+            TStorageMedium medium = tbl.getPartitionInfo().getDataProperty(physicalPartition.getParentId()).getStorageMedium();
             TabletMeta rollupTabletMeta = new TabletMeta(dbId, tableId, partitionId, rollupIndexId,
                     rollupSchemaHash, medium);
 
@@ -914,7 +916,7 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
     }
 
     public Map<Long, MaterializedIndex> getPartitionIdToRollupIndex() {
-        return partitionIdToRollupIndex;
+        return physicalPartitionIdToRollupIndex;
     }
 
     private void setColumnsDefineExpr(Map<String, Expr> columnNameToDefineExpr) {
@@ -943,14 +945,14 @@ public class RollupJobV2 extends AlterJobV2 implements GsonPostProcessable {
             long partitionId = in.readLong();
             int size2 = in.readInt();
             Map<Long, Long> tabletIdMap =
-                    partitionIdToBaseRollupTabletIdMap.computeIfAbsent(partitionId, k -> Maps.newHashMap());
+                    physicalPartitionIdToBaseRollupTabletIdMap.computeIfAbsent(partitionId, k -> Maps.newHashMap());
             for (int j = 0; j < size2; j++) {
                 long rollupTabletId = in.readLong();
                 long baseTabletId = in.readLong();
                 tabletIdMap.put(rollupTabletId, baseTabletId);
             }
 
-            partitionIdToRollupIndex.put(partitionId, MaterializedIndex.read(in));
+            physicalPartitionIdToRollupIndex.put(partitionId, MaterializedIndex.read(in));
         }
 
         baseIndexId = in.readLong();

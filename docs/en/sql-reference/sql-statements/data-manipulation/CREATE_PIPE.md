@@ -6,7 +6,7 @@ displayed_sidebar: "English"
 
 ## Description
 
-Creates a new pipe for defining the INSERT INTO SELECT FROM FILES statement used by the system to load data from a specified source data file to a destination table.
+Creates a new pipe for defining the INSERT INTO SELECT FROM FILES statement used by the system to load data from a specified source data file to a destination table. This command is supported from v3.2 onwards.
 
 ## Syntax
 
@@ -20,7 +20,11 @@ AS <INSERT_SQL>
 
 ### db_name
 
-The name of the database to which the pipe belongs.
+The unique name of the database to which the pipe belongs.
+
+> **NOTICE**
+>
+> Each pipe belongs to a specific database. If you drop the database to which a pipe belongs, the pipe is deleted along with the database, and cannot be recovered even if the database is recovered.
 
 ### pipe_name
 
@@ -70,3 +74,11 @@ SELECT * FROM FILES
 > Substitute your credentials for `AAA` and `BBB` in the above command. Any valid `aws.s3.access_key` and `aws.s3.secret_key` can be used, as the object is readable by any AWS authenticated user.
 
 This example uses the IAM user-based authentication method and a Parquet file that has the same schema as the StarRocks table. For more information about the other authentication methods and the CREATE PIPE usage, see [Authenticate to AWS resources](../../../integrations/authenticate_to_aws_resources.md) and [FILES](../../../sql-reference/sql-functions/table-functions/files.md).
+
+## References
+
+- [ALTER PIPE](../data-manipulation/ALTER_PIPE.md)
+- [DROP PIPE](../data-manipulation/DROP_PIPE.md)
+- [SHOW PIPES](../data-manipulation/SHOW_PIPES.md)
+- [SUSPEND or RESUME PIPE](../data-manipulation/SUSPEND_or_RESUME_PIPE.md)
+- [RETRY FILE](../data-manipulation/RETRY_FILE.md)

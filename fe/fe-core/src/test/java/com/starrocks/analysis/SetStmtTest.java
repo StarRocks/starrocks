@@ -50,6 +50,7 @@ import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.sql.common.QueryDebugOptions;
 import mockit.Mocked;
 import org.apache.commons.lang3.EnumUtils;
 import org.junit.Assert;
@@ -209,6 +210,65 @@ public class SetStmtTest {
                 Assert.assertEquals("Getting analyzing error. Detail message: " +
                         "Unsupported follower query forward mode: bad_case, " +
                         "supported list is DEFAULT,FOLLOWER,LEADER.", e.getMessage());;
+            }
+        }
+    }
+
+    @Test
+    public void testQueryDebuOptions() throws AnalysisException {
+        // normal
+        {
+            String[] jsons = {
+                    "",
+                    "{'enableNormalizePredicateAfterMVRewrite':'true'}",
+                    "{'maxRefreshMaterializedViewRetryNum':2}",
+                    "{'enableNormalizePredicateAfterMVRewrite':'true', 'maxRefreshMaterializedViewRetryNum':2}",
+            };
+            for (String json : jsons) {
+                try {
+                    SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.QUERY_DEBUG_OPTIONS,
+                            new StringLiteral(json));
+                    SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                } catch (Exception e) {
+                    Assert.fail();;
+                }
+            }
+        }
+        // bad
+        {
+            String[] jsons = {
+                    "abc",
+                    "{abc",
+            };
+            for (String json : jsons) {
+                try {
+                    SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.QUERY_DEBUG_OPTIONS,
+                            new StringLiteral(json));
+                    SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                    Assert.fail();;
+                } catch (Exception e) {
+                    Assert.assertTrue(e.getMessage().contains("Unsupported query_debug_option"));
+                    e.printStackTrace();
+                }
+            }
+        }
+        // non normal
+        {
+            String[] jsons = {
+                    "{'enableNormalizePredicateAfterMVRewrite2':'true'}",
+                    "{'maxRefreshMaterializedViewRetryNum2':'2'}"
+            };
+            for (String json : jsons) {
+                try {
+                    SystemVariable setVar = new SystemVariable(SetType.SESSION, SessionVariable.QUERY_DEBUG_OPTIONS,
+                            new StringLiteral(json));
+                    SetStmtAnalyzer.analyze(new SetStmt(Lists.newArrayList(setVar)), ctx);
+                    QueryDebugOptions debugOptions = QueryDebugOptions.read(json);
+                    Assert.assertEquals(debugOptions.getMaxRefreshMaterializedViewRetryNum(), 1);
+                    Assert.assertEquals(debugOptions.isEnableNormalizePredicateAfterMVRewrite(), false);
+                } catch (Exception e) {
+                    Assert.fail();;
+                }
             }
         }
     }

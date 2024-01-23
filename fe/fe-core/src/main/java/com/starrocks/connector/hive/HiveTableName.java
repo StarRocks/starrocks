@@ -53,12 +53,12 @@ public class HiveTableName {
         }
 
         HiveTableName other = (HiveTableName) o;
-        return Objects.equals(databaseName, other.databaseName) &&
-                Objects.equals(tableName, other.tableName);
+        return Objects.equals(databaseName.toLowerCase(), other.databaseName.toLowerCase()) &&
+                Objects.equals(tableName.toLowerCase(), other.tableName.toLowerCase());
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(databaseName, tableName);
+        return Objects.hash(databaseName.toLowerCase(), tableName.toLowerCase());
     }
 }

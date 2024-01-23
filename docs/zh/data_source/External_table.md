@@ -584,7 +584,7 @@ StarRocks 使用 Hive 资源来管理使用到的 Hive 集群相关配置，如 
 CREATE EXTERNAL RESOURCE "hive0"
 PROPERTIES (
   "type" = "hive",
-  "hive.metastore.uris" = "thrift://10.10.44.98:9083"
+  "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 
 -- 查看 StarRocks 中创建的资源。
@@ -898,7 +898,7 @@ CREATE EXTERNAL RESOURCE "iceberg0"
 PROPERTIES (
    "type" = "iceberg",
    "iceberg.catalog.type" = "HIVE",
-   "iceberg.catalog.hive.metastore.uris" = "thrift://192.168.0.81:9083" 
+   "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083" 
 );
 ~~~
 
@@ -1067,7 +1067,7 @@ select count(*) from iceberg_tbl;
 CREATE EXTERNAL RESOURCE "hudi0" 
 PROPERTIES ( 
     "type" = "hudi", 
-    "hive.metastore.uris" = "thrift://192.168.7.251:9083"
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ~~~
 
@@ -1159,7 +1159,7 @@ SELECT COUNT(*) FROM hudi_tbl;
 
 ## (Deprecated) MySQL 外部表
 
-星型模型中，数据一般划分为维度表 (dimension table) 和事实表 (fact table)。维度表数据量少，但会涉及 UPDATE 操作。目前 StarRocks 中还不直接支持 UPDATE 操作（可以通过 Unique/Primary 数据模型实现），在一些场景下，可以把维度表存储在 MySQL 中，查询时直接读取维度表。
+星型模型中，数据一般划分为维度表 (dimension table) 和事实表 (fact table)。维度表数据量少，但会涉及 UPDATE 操作。目前 StarRocks 中还不直接支持 UPDATE 操作（可以通过更新表或者主键表实现），在一些场景下，可以把维度表存储在 MySQL 中，查询时直接读取维度表。
 
 在使用 MySQL 的数据之前，需在 StarRocks 创建外部表 (CREATE EXTERNAL TABLE)，与之相映射。StarRocks 中创建 MySQL 外部表时需要指定 MySQL 的相关连接信息，如下所示。
 

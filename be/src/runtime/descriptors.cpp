@@ -176,6 +176,7 @@ HdfsTableDescriptor::HdfsTableDescriptor(const TTableDescriptor& tdesc, ObjectPo
     _hive_column_types = tdesc.hdfsTable.hive_column_types;
     _input_format = tdesc.hdfsTable.input_format;
     _serde_lib = tdesc.hdfsTable.serde_lib;
+    _serde_properties = tdesc.hdfsTable.serde_properties;
 }
 
 const std::string& HdfsTableDescriptor::get_hive_column_names() const {
@@ -192,6 +193,10 @@ const std::string& HdfsTableDescriptor::get_input_format() const {
 
 const std::string& HdfsTableDescriptor::get_serde_lib() const {
     return _serde_lib;
+}
+
+const std::map<std::string, std::string> HdfsTableDescriptor::get_serde_properties() const {
+    return _serde_properties;
 }
 
 FileTableDescriptor::FileTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
@@ -325,6 +330,22 @@ PaimonTableDescriptor::PaimonTableDescriptor(const TTableDescriptor& tdesc, Obje
 
 const std::string& PaimonTableDescriptor::get_paimon_native_table() const {
     return _paimon_native_table;
+}
+
+OdpsTableDescriptor::OdpsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
+        : HiveTableDescriptor(tdesc, pool) {
+    _columns = tdesc.hdfsTable.columns;
+    _partition_columns = tdesc.hdfsTable.partition_columns;
+    _database_name = tdesc.dbName;
+    _table_name = tdesc.tableName;
+}
+
+const std::string& OdpsTableDescriptor::get_database_name() const {
+    return _database_name;
+}
+
+const std::string& OdpsTableDescriptor::get_table_name() const {
+    return _table_name;
 }
 
 HiveTableDescriptor::HiveTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool) : TableDescriptor(tdesc) {}
@@ -671,6 +692,10 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         }
         case TTableType::JDBC_TABLE: {
             desc = pool->add(new JDBCTableDescriptor(tdesc));
+            break;
+        }
+        case TTableType::ODPS_TABLE: {
+            desc = pool->add(new OdpsTableDescriptor(tdesc, pool));
             break;
         }
         default:

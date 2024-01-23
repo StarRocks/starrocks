@@ -121,11 +121,12 @@ public class CoordinatorPreprocessor {
         this.fragmentAssignmentStrategyFactory = new FragmentAssignmentStrategyFactory(connectContext, jobSpec, executionDAG);
     }
 
-    public static TQueryGlobals genQueryGlobals(long startTime, String timezone) {
+    public static TQueryGlobals genQueryGlobals(Instant startTime, String timezone) {
         TQueryGlobals queryGlobals = new TQueryGlobals();
-        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
+        String nowString = DATE_FORMAT.format(startTime.atZone(ZoneId.of(timezone)));
         queryGlobals.setNow_string(nowString);
-        queryGlobals.setTimestamp_ms(startTime);
+        queryGlobals.setTimestamp_ms(startTime.toEpochMilli());
+        queryGlobals.setTimestamp_us(startTime.getEpochSecond() * 1000000 + startTime.getNano() / 1000);
         if (timezone.equals("CST")) {
             queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
         } else {

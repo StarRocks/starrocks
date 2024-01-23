@@ -8,6 +8,8 @@ displayed_sidebar: "English"
 From v3.0 onwards, we recommend that you use catalogs to query data from Hive, Iceberg, and Hudi. See [Hive catalog](../data_source/catalog/hive_catalog.md), [Iceberg catalog](../data_source/catalog/iceberg_catalog.md), and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
 
 From v3.1 onwards, we recommend that you use [JDBC catalog](../data_source/catalog/jdbc_catalog.md) to query data from MySQL and PostgreSQL and use [Elasticsearch catalog](../data_source/catalog/elasticsearch_catalog.md) to query data from Elasticsearch.
+
+The external table feature was designed to help with importing data into StarRocks NOT to perform queries against external systems as a normal operation.   Although you can query and use functions like JOIN, it is not performant.   A more performant solution would be to import the data into StarRocks. 
 :::
 
 StarRocks supports access to other data sources by using external tables. External tables are created based on data tables that are stored in other data sources. StarRocks only stores the metadata of the data tables. You can use external tables to directly query data in other data sources. StarRocks supports the following data sources: MySQL, StarRocks, Elasticsearch, Apache Hive™, Apache Iceberg, and Apache Hudi. **Currently, you can only write data from another StarRocks cluster into the current StarRocks cluster. You cannot read data from it. For data sources other than StarRocks, you can only read data from these data sources.**
@@ -571,7 +573,7 @@ A Hive resource corresponds to a Hive cluster. You must configure the Hive clust
 CREATE EXTERNAL RESOURCE "hive0"
 PROPERTIES (
   "type" = "hive",
-  "hive.metastore.uris" = "thrift://10.10.44.98:9083"
+  "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ~~~
 
@@ -761,7 +763,7 @@ CREATE EXTERNAL RESOURCE "iceberg0"
 PROPERTIES (
    "type" = "iceberg",
    "iceberg.catalog.type" = "HIVE",
-   "iceberg.catalog.hive.metastore.uris" = "thrift://192.168.0.81:9083" 
+   "iceberg.catalog.hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083" 
 );
 ~~~
 
@@ -930,7 +932,7 @@ Execute the following statement to create a Hudi resource named `hudi0`:
 CREATE EXTERNAL RESOURCE "hudi0" 
 PROPERTIES ( 
     "type" = "hudi", 
-    "hive.metastore.uris" = "thrift://192.168.7.251:9083"
+    "hive.metastore.uris" = "thrift://xx.xx.xx.xx:9083"
 );
 ~~~
 

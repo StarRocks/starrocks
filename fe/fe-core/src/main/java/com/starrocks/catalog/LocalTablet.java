@@ -190,6 +190,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         return num;
     }
 
+    @Override
+    public List<Replica> getAllReplicas() {
+        return replicas;
+    }
+
     /**
      * @return Immutable list of replicas
      * notice: the list is immutable, not replica

@@ -20,7 +20,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -236,7 +236,7 @@ public class CompactionScheduler extends Daemon {
         try {
             // lake table or lake materialized view
             OlapTable table = (OlapTable) db.getTable(partition.getTableId());
-            return table != null && table.getPartition(partition.getPartitionId()) != null;
+            return table != null && table.getPhysicalPartition(partition.getPartitionId()) != null;
         } finally {
             db.readUnlock();
         }
@@ -252,7 +252,7 @@ public class CompactionScheduler extends Daemon {
         long txnId;
         long currentVersion;
         OlapTable table;
-        Partition partition;
+        PhysicalPartition partition;
         Map<Long, List<Long>> beToTablets;
 
         db.readLock();
@@ -266,7 +266,7 @@ public class CompactionScheduler extends Daemon {
                 compactionManager.enableCompactionAfter(partitionIdentifier, MIN_COMPACTION_INTERVAL_MS_ON_FAILURE);
                 return null;
             }
-            partition = (table != null) ? table.getPartition(partitionIdentifier.getPartitionId()) : null;
+            partition = (table != null) ? table.getPhysicalPartition(partitionIdentifier.getPartitionId()) : null;
             if (partition == null) {
                 compactionManager.removePartition(partitionIdentifier);
                 return null;
@@ -343,7 +343,7 @@ public class CompactionScheduler extends Daemon {
     }
 
     @NotNull
-    private Map<Long, List<Long>> collectPartitionTablets(Partition partition) {
+    private Map<Long, List<Long>> collectPartitionTablets(PhysicalPartition partition) {
         List<MaterializedIndex> visibleIndexes = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE);
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (MaterializedIndex index : visibleIndexes) {

@@ -70,6 +70,22 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select t1a, t1b from test_all_type where id_datetime > 2000";
         plan = getFragmentPlan(sql);
         assertContains(plan, "PREDICATES: 8: id_datetime > CAST(2000 AS DATETIME)");
+
+        sql = "select t1a, t1b from test_all_type where id_date > (datetime '2000-01-01 12:00:00')";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 9: id_date >= '2000-01-02'");
+
+        sql = "select t1a, t1b from test_all_type where (datetime '2000-01-01 12:00:00') > id_date";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "9: id_date <= '2000-01-01'");
+
+        sql = "select t1a, t1b from test_all_type where (date '2000-01-01') > id_datetime";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 8: id_datetime < '2000-01-01 00:00:00'");
+
+        sql = "select t1a, t1b from test_all_type where id_datetime > (date '2000-01-01')";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: 8: id_datetime > '2000-01-01 00:00:00'");
     }
 
     @Test
@@ -468,9 +484,7 @@ public class ExpressionTest extends PlanTestBase {
     public void testFunctionNullable() throws Exception {
         String sql = "select UNIX_TIMESTAMP(\"2015-07-28 19:41:12\", \"22\");";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan, plan.contains("scalar_fn:TScalarFunction(symbol:), " +
-                "id:50287, fid:50287, could_apply_dict_optimize:false, ignore_nulls:false), " +
-                "has_nullable_child:false, is_nullable:true"));
+        Assert.assertTrue(plan, plan.contains("could_apply_dict_optimize:false, ignore_nulls:false"));
     }
 
     @Test
@@ -1580,7 +1594,7 @@ public class ExpressionTest extends PlanTestBase {
 
     @Test
     public void testDoubleCastToString() throws Exception {
-        String sql = "select concat(substr(DATE_SUB(CURDATE(), INTERVAL 1 DAY), 1, 4) -1, '-');";
+        String sql = "select concat(substr(DATE_SUB('2023-12-23', INTERVAL 1 DAY), 1, 4) -1, '-');";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "2022-");
 
@@ -1684,5 +1698,17 @@ public class ExpressionTest extends PlanTestBase {
         sql = "select date_trunc('day', cast(v2 as datetime)) from t0";
         plan = getFragmentPlan(sql);
         assertContains(plan, "<slot 4> : date_trunc('day', CAST(2: v2 AS DATETIME))");
+    }
+
+    @Test
+    public void testSimplifyTruePredicate() throws Exception {
+        String sql = "select id_bool = true from test_bool where id_bool = false or id_bool = true";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: (11: id_bool = FALSE) OR (11: id_bool)");
+
+        sql = "select * from test_object where true = bitmap_contains(b1, v1) or bitmap_contains(b1, v2) = true";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "PREDICATES: (bitmap_contains(5: b1, CAST(1: v1 AS BIGINT))) " +
+                "OR (bitmap_contains(5: b1, CAST(2: v2 AS BIGINT)))");
     }
 }

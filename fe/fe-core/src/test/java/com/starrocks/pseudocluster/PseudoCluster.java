@@ -16,7 +16,6 @@ package com.starrocks.pseudocluster;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.ibm.icu.impl.Assert;
 import com.staros.proto.FileCacheInfo;
 import com.staros.proto.FilePathInfo;
 import com.staros.proto.FileStoreInfo;
@@ -29,7 +28,7 @@ import com.staros.proto.WorkerInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.ClientPool;
@@ -45,6 +44,7 @@ import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.HeartbeatService;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.utframe.UtFrameUtils;
+import junit.framework.Assert;
 import org.apache.commons.dbcp2.BasicDataSource;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
@@ -60,6 +60,7 @@ import java.sql.SQLSyntaxErrorException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -100,6 +101,10 @@ public class PseudoCluster {
         } catch (Exception ex) {
             ex.printStackTrace();
         }
+    }
+
+    public void setServerPrepareStatement() {
+        dataSource.setConnectionProperties("useServerPrepStmts=true");
     }
 
     public void setQueryTimeout(int timeout) {
@@ -269,6 +274,10 @@ public class PseudoCluster {
         return backends.get(host);
     }
 
+    public Collection<PseudoBackend> getBackends() {
+        return backends.values();
+    }
+
     public PseudoBackend getBackendByHost(String host) {
         PseudoBackend be = backends.get(host);
         if (be == null) {
@@ -294,7 +303,7 @@ public class PseudoCluster {
             }
             OlapTable olapTable = (OlapTable) table;
             List<Long> ret = Lists.newArrayList();
-            for (Partition partition : olapTable.getPartitions()) {
+            for (PhysicalPartition partition : olapTable.getPhysicalPartitions()) {
                 for (MaterializedIndex index : partition.getMaterializedIndices(
                         MaterializedIndex.IndexExtState.ALL)) {
                     for (Tablet tablet : index.getTablets()) {
@@ -380,7 +389,7 @@ public class PseudoCluster {
             try {
                 FileUtils.forceDelete(new File(getRunDir()));
             } catch (IOException e) {
-                Assert.fail(e);
+                Assert.fail("shutdown failed " + e);
             }
         }
     }
@@ -410,7 +419,7 @@ public class PseudoCluster {
         dataSource.setMaxIdle(40);
         cluster.dataSource = dataSource;
 
-        ClientPool.heartbeatPool = cluster.heartBeatPool;
+        ClientPool.beHeartbeatPool = cluster.heartBeatPool;
         ClientPool.backendPool = cluster.backendThriftPool;
         BrpcProxy.setInstance(cluster.brpcProxy);
 

@@ -1,0 +1,135 @@
+-- name: test_create_mv_with_params
+create external catalog mv_iceberg_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+set catalog mv_iceberg_${uuid0};
+-- result:
+-- !result
+create database mv_ice_db_${uuid0};
+-- result:
+-- !result
+use mv_ice_db_${uuid0};
+-- result:
+-- !result
+create table mv_ice_tbl_${uuid0} (
+  col_str string,
+  col_int int,
+  dt date
+) partition by(dt);
+-- result:
+-- !result
+insert into mv_ice_tbl_${uuid0} values 
+  ('1d8cf2a2c0e14fa89d8117792be6eb6f', 2000, '2023-12-01'),
+  ('3e82e36e56718dc4abc1168d21ec91ab', 2000, '2023-12-01'),
+  ('abc', 2000, '2023-12-02'),
+  (NULL, 2000, '2023-12-02'),
+  ('ab1d8cf2a2c0e14fa89d8117792be6eb6f', 2001, '2023-12-03'),
+  ('3e82e36e56718dc4abc1168d21ec91ab', 2001, '2023-12-03'),
+  ('abc', 2001, '2023-12-04'),
+  (NULL, 2001, '2023-12-04');
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create database test_create_mv_with_params;
+-- result:
+-- !result
+use test_create_mv_with_params;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_iceberg_mv0_${uuid0} PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties (
+    "replication_num" = "1",
+    "partition_refresh_number" = "1"
+)
+AS SELECT dt,sum(col_int) 
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
+-- result:
+-- !result
+refresh materialized view test_iceberg_mv0_${uuid0};
+function: wait_async_materialized_view_finish("test_iceberg_mv0_${uuid0}", 2)
+-- result:
+None
+-- !result
+select count(*) > 1 from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv0_${uuid0}%";
+-- result:
+1
+-- !result
+SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
+-- result:
+2023-12-01	4000
+2023-12-02	4000
+2023-12-03	4002
+2023-12-04	4002
+-- !result
+drop materialized view test_iceberg_mv0_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_iceberg_mv1_${uuid0} PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties (
+    "replication_num" = "1"
+)
+AS SELECT dt,sum(col_int) 
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
+-- result:
+-- !result
+refresh materialized view test_iceberg_mv1_${uuid0};
+function: wait_async_materialized_view_finish("test_iceberg_mv1_${uuid0}", 2)
+-- result:
+None
+-- !result
+select count(*) > 1 from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv1_${uuid0}%";
+-- result:
+0
+-- !result
+SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
+-- result:
+2023-12-01	4000
+2023-12-02	4000
+2023-12-03	4002
+2023-12-04	4002
+-- !result
+drop materialized view test_iceberg_mv1_${uuid0};
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_iceberg_mv2_${uuid0} PARTITION BY dt 
+REFRESH DEFERRED MANUAL 
+properties (
+    "replication_num" = "1",
+    "partition_refresh_number" = "1"
+)
+AS SELECT dt,sum(col_int) 
+FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt;
+-- result:
+-- !result
+refresh materialized view test_iceberg_mv2_${uuid0} with sync mode;
+function: wait_async_materialized_view_finish("test_iceberg_mv2_${uuid0}")
+-- result:
+None
+-- !result
+select count(*) = 1 from information_schema.task_runs where `database`='test_create_mv_with_params' and `DEFINITION` like "%test_iceberg_mv2_${uuid0}%";
+-- result:
+1
+-- !result
+SELECT dt,sum(col_int)  FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.mv_ice_tbl_${uuid0}  GROUP BY dt order by dt;
+-- result:
+2023-12-01	4000
+2023-12-02	4000
+2023-12-03	4002
+2023-12-04	4002
+-- !result
+drop materialized view test_iceberg_mv2_${uuid0};
+-- result:
+-- !result
+drop database test_create_mv_with_params;
+-- result:
+-- !result

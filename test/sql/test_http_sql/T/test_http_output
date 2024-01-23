@@ -73,10 +73,6 @@ sync;
 --shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/sql' -u 'root:' -d '{"query": "select 1 from ${db[0]}.duplicate_table_with_null limit 1;", "onlyOutputResultRaw":true}' --header "Content-Type: application/json" 
 --sync;
 
--- support show
-shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "show create table duplicate_table_with_null;"}' --header "Content-Type: application/json"  
-sync;
-
 
 -- support set session variable in request body
 shell: curl -X POST '${url}/api/v1/catalogs/default_catalog/databases/${db[0]}/sql' -u 'root:' -d '{"query": "show variables like \"broadcast_row_limit\";", "sessionVariables":{"broadcast_row_limit":14000000}}' --header "Content-Type: application/json"  

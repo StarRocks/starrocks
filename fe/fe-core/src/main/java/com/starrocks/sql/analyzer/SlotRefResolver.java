@@ -104,12 +104,14 @@ public class SlotRefResolver {
 
         @Override
         public Expr visitSubquery(SubqueryRelation node, SlotRef slot) {
-            String tableName = slot.getTblNameWithoutAnalyzed().getTbl();
-            if (!node.getAlias().getTbl().equalsIgnoreCase(tableName)) {
-                return null;
+            if (slot.getTblNameWithoutAnalyzed() != null) {
+                String tableName = slot.getTblNameWithoutAnalyzed().getTbl();
+                if (!node.getAlias().getTbl().equalsIgnoreCase(tableName)) {
+                    return null;
+                }
+                slot = (SlotRef) slot.clone();
+                slot.setTblName(null); //clear table name here, not check it inside
             }
-            slot = (SlotRef) slot.clone();
-            slot.setTblName(null); //clear table name here, not check it inside
             return node.getQueryStatement().getQueryRelation().accept(this, slot);
         }
 
@@ -166,13 +168,15 @@ public class SlotRefResolver {
 
         @Override
         public Expr visitCTE(CTERelation node, SlotRef slot) {
-            String tableName = slot.getTblNameWithoutAnalyzed().getTbl();
-            String cteName = node.getAlias() != null ? node.getAlias().getTbl() : node.getName();
-            if (!cteName.equalsIgnoreCase(tableName)) {
-                return null;
+            if (slot.getTblNameWithoutAnalyzed() != null) {
+                String tableName = slot.getTblNameWithoutAnalyzed().getTbl();
+                String cteName = node.getAlias() != null ? node.getAlias().getTbl() : node.getName();
+                if (!cteName.equalsIgnoreCase(tableName)) {
+                    return null;
+                }
+                slot = (SlotRef) slot.clone();
+                slot.setTblName(null); //clear table name here, not check it inside
             }
-            slot = (SlotRef) slot.clone();
-            slot.setTblName(null); //clear table name here, not check it inside
             return node.getCteQueryStatement().getQueryRelation().accept(this, slot);
         }
 

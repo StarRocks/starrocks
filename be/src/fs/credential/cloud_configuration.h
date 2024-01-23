@@ -30,6 +30,8 @@ public:
     std::string secret_key;
     std::string session_token;
     std::string iam_role_arn;
+    std::string sts_region;
+    std::string sts_endpoint;
     std::string external_id;
     std::string region;
     std::string endpoint;
@@ -38,7 +40,8 @@ public:
         return use_aws_sdk_default_behavior == rhs.use_aws_sdk_default_behavior &&
                use_instance_profile == rhs.use_instance_profile && access_key == rhs.access_key &&
                secret_key == rhs.secret_key && session_token == rhs.session_token && iam_role_arn == rhs.iam_role_arn &&
-               external_id == rhs.external_id && region == rhs.region && endpoint == rhs.endpoint;
+               sts_region == rhs.sts_region && sts_endpoint == rhs.sts_endpoint && external_id == rhs.external_id &&
+               region == rhs.region && endpoint == rhs.endpoint;
     }
 };
 

@@ -4,7 +4,9 @@ displayed_sidebar: "Chinese"
 
 # CBO 统计信息
 
-本文介绍 StarRocks CBO（Cost-based Optimizer）优化器的基本概念，以及如何为 CBO 优化器采集统计信息。StarRocks 2.4 版本引入直方图作为统计信息，提供更准确的数据分布统计。
+本文介绍 StarRocks CBO 优化器（Cost-based Optimizer）的基本概念，以及如何为 CBO 优化器采集统计信息来优化查询计划。StarRocks 2.4 版本引入直方图作为统计信息，提供更准确的数据分布统计。
+
+3.2 之前版本支持对 StarRocks 内表采集统计信息。从 3.2 版本起，支持采集 Hive，Iceberg，Hudi 表的统计信息，无需依赖其他系统。
 
 ## 什么是 CBO 优化器
 
@@ -12,7 +14,7 @@ CBO 优化器是查询优化的关键。一条 SQL 查询到达 StarRocks 后，
 
 StarRocks CBO 优化器采用 Cascades 框架，基于多种统计信息进行代价估算，能够在数万级别的执行计划中，选择代价最低的执行计划，提升复杂查询的效率和性能。StarRocks 1.16.0 版本推出自研的 CBO 优化器。1.19 版本及以上，该特性默认开启。
 
-统计信息是 CBO 优化器的重要组成部分，统计信息的准确与否决定了代价估算是否准确，进而决定了CBO 优化器的性能好坏。下文详细介绍统计信息的类型、采集策略、以及如何创建采集任务和查看统计信息。
+统计信息是 CBO 优化器的重要组成部分，统计信息的准确与否决定了代价估算是否准确，对于 CBO 选择最优 Plan 至关重要，进而决定了 CBO 优化器的性能好坏。下文详细介绍统计信息的类型、采集策略、以及如何创建采集任务和查看统计信息。
 
 ## 统计信息数据类型
 
@@ -22,7 +24,7 @@ StarRocks 会采集多种统计信息，为查询优化提供代价估算的参�
 
 StarRocks 默认定期采集表和列的如下基础信息：
 
-- row_count : 表的总行数
+- row_count: 表的总行数
 
 - data_size: 列的数据大小
 
@@ -34,17 +36,46 @@ StarRocks 默认定期采集表和列的如下基础信息：
 
 - max: 列的最大值
 
-基础统计信息存储在 `_statistics_.table_statistic_v1` 表中，您可以在 StarRocks 集群 `_statistics_` 数据库下查看。
+全量的统计信息存储在 StarRocks 集群 `_statistics_` 数据库下的 `column_statistics` 表中，您可以在 `_statistics_` 数据库下查看。查询时会返回类似如下信息：
+
+```sql
+SELECT * FROM _statistics_.column_statistics\G
+*************************** 1. row ***************************
+      table_id: 10174
+  partition_id: 10170
+   column_name: is_minor
+         db_id: 10169
+    table_name: zj_test.source_wiki_edit
+partition_name: p06
+     row_count: 2
+     data_size: 2
+           ndv: NULL
+    null_count: 0
+           max: 1
+           min: 0
+```
 
 ### 直方图
 
 从 2.4 版本开始，StarRocks 引入直方图 (Histogram)。直方图常用于估算数据分布，当数据存在倾斜时，直方图可以弥补基础统计信息估算存在的偏差，输出更准确的数据分布信息。
 
-StarRocks 采用等深直方图 (Equi-height Histogram)，即选定若干个 bucket，每个 bucket 中的数据量几乎相等。对于出现频次较高、对选择率（selectivity）影响较大的数值，StarRocks 会分配单独的桶进行存储。桶数量越多时，直方图的估算精度就越高，但是也会增加统计信息的内存使用。您可以根据业务情况调整直方图的桶个数和单个采集任务的 MCV（most common value) 个数。
+StarRocks 采用等深直方图 (Equi-height Histogram)，即选定若干个 bucket，每个 bucket 中的数据量几乎相等。对于出现频次较高、对选择率（selectivity）影响较大的数值，StarRocks 会分配单独的桶进行存储。桶数量越多时，直方图的估算精度就越高，但是也会增加统计信息的内存使用。您可以根据业务情况调整直方图的桶个数和单个采集任务的 MCV（most common value）个数。
 
 **直方图适用于有明显数据倾斜，并且有频繁查询请求的列。如果您的表数据分布比较均匀，可以不使用直方图。直方图支持的列类型为数值类型、DATE、DATETIME 或字符串类型。**
 
-目前直方图仅支持**手动抽样**采集。直方图统计信息存储在 `_statistics_` 数据库的 `histogram_statistics` 表中。
+目前直方图仅支持**手动抽样**采集。直方图统计信息存储在 StarRocks 集群 `_statistics_` 数据库的 `histogram_statistics` 表中。查询时会返回类似如下信息：
+
+```sql
+SELECT * FROM _statistics_.histogram_statistics\G
+*************************** 1. row ***************************
+   table_id: 10174
+column_name: added
+      db_id: 10169
+ table_name: zj_test.source_wiki_edit
+    buckets: NULL
+        mcv: [["23","1"],["5","1"]]
+update_time: 2023-12-01 15:17:10.274000
+```
 
 ## 采集类型
 
@@ -69,32 +100,40 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 
 从 2.4.5 版本开始，支持用户配置自动全量采集的时间段，防止因集中采集而导致的集群性能抖动。采集时间段可通过 `statistic_auto_analyze_start_time` 和 `statistic_auto_analyze_end_time` 这两个 FE 配置项来配置。
 
-触发自动采集的判断条件：
+在调度周期内，触发新的自动采集任务需要满足下面的条件：
 
-- 上次统计信息采集之后，该表是否发生过数据变更。
-- 分区数据是否发生过修改，未发生过修改的分区不做重新采集。
-- 采集是否落在配置的自动采集时间段内（默认为全天采集，可进行修改）。
-- 该表的统计信息健康度（`statistic_auto_collect_ratio`）是否低于配置阈值。
+- `enable_statistic_collect`设置为true
+- 采集落在配置的自动采集时间段内（默认为全天采集，可进行修改）。
+- 最新一次统计信息采集任务的更新时间早于分区数据更新的时间。
+- 该表的统计信息健康度（`statistic_auto_collect_ratio`）低于配置阈值。
+
+  *需要注意的是如果某张表的数据变更后，手动触发了对它的抽样采集任务会使得第采样任务的更新时间晚于数据更新时间，不会在这一个调度周期内生成该表的全量采集任务。*
 
 > 健康度计算公式：
 >
-> 1. 当更新分区数量小于 10个 时：1 - MIN(上次统计信息采集后的更新行数/总行数)
+> 1. 当更新分区数量小于 10个时：1 - (上次统计信息采集后的更新行数/总行数)
 >
 > 2. 当更新分区数量大于等于 10 个时： 1 - MIN(上次统计信息采集后的更新行数/总行数, 上次统计信息采集后的更新的分区数/总分区数)
 
 同时，StarRocks 对于不同更新频率、不同大小的表，做了详细的配置策略。
 
-对于数据量较小的表，**StarRocks 默认不做限制，即使表的更新频率很高，也会实时采集**。可以通过 `statistic_auto_collect_small_table_size` 配置小表的大小阈值，或者通过`statistic_auto_collect_small_table_interval` 配置小表的采集间隔。
+- 对于数据量较小的表，**StarRocks 默认不做限制，即使表的更新频率很高，也会实时采集**。可以通过 `statistic_auto_collect_small_table_size` 配置小表的大小阈值，或者通过 `statistic_auto_collect_small_table_interval` 配置小表的采集间隔。
 
-对于数据量较大的表，StarRocks按照以下策略限制：
+- 对于数据量较大的表，StarRocks 按照以下策略限制：
 
-- 默认采集的间隔不低于 12 小时，通过  `statistic_auto_collect_large_table_interval` 配置。
+  - 默认采集的间隔不低于 12 小时，通过 `statistic_auto_collect_large_table_interval` 配置。
 
-- 满足采集间隔的条件下，当健康度低于抽样阈采集值时，触发抽样采集，通过 `statistic_auto_collect_sample_threshold` 配置。
+  - 满足采集间隔的条件下，当健康度低于抽样采集阈值时，触发抽样采集，通过 `statistic_auto_collect_sample_threshold` 配置。
 
-- 满足采集间隔的条件下，健康度高于抽样采集阈值，低于采集阈值时，触发全量采集，通过 `statistic_auto_collect_ratio` 配置。
+  - 满足采集间隔的条件下，健康度高于抽样采集阈值，低于采集阈值时，触发全量采集，通过 `statistic_auto_collect_ratio` 配置。
 
-- 当收集的最大分区大小大于 100G 时，触发抽样采集，通过 `statistic_max_full_collect_data_size` 配置。
+  - 当采集的最大分区大小大于 100G 时，触发抽样采集，通过 `statistic_max_full_collect_data_size` 配置。
+
+:::tip
+
+需要注意的是如果某张表的数据变更后，手动触发了对它的抽样采集任务会使得采样任务的更新时间晚于数据更新时间，不会在这一个调度周期内生成该表的全量采集任务。
+
+:::
 
 自动全量采集任务由系统自动执行，默认配置如下。您可以通过 [ADMIN SET CONFIG](../sql-reference/sql-statements/Administration/ADMIN_SET_CONFIG.md) 命令修改。
 
@@ -108,14 +147,14 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 | statistic_auto_analyze_start_time           | STRING  | 00:00:00     | 用于配置自动全量采集的起始时间。取值范围：`00:00:00` ~ `23:59:59`。       |
 | statistic_auto_analyze_end_time             | STRING  | 23:59:59     | 用于配置自动全量采集的结束时间。取值范围：`00:00:00` ~ `23:59:59`。       |
 | statistic_auto_collect_small_table_size     | LONG    | 5368709120   | 自动全量采集任务的小表阈值，默认 5 GB，单位：Byte。                         |
-| statistic_auto_collect_small_table_interval | LONG    | 3600         | 自动全量采集任务的小表采集间隔，单位：秒。                               |
-| statistic_auto_collect_large_table_interval | LONG    | 86400        | 自动全量采集任务的大表采集间隔，单位：秒。                               |
+| statistic_auto_collect_small_table_interval | LONG    | 0         | 自动全量采集任务的小表采集间隔，单位：秒。                               |
+| statistic_auto_collect_large_table_interval | LONG    | 43200        | 自动全量采集任务的大表采集间隔，默认 12 小时，单位：秒。                               |
 | statistic_auto_collect_ratio                | DOUBLE  | 0.8          | 触发自动统计信息收集的健康度阈值。如果统计信息的健康度小于该阈值，则触发自动采集。           |
 | statistic_auto_collect_sample_threshold     | DOUBLE  | 0.3          | 触发自动统计信息抽样收集的健康度阈值。如果统计信息的健康度小于该阈值，则触发自动抽样采集。       |
-| statistic_max_full_collect_data_size        | LONG    | 107374182400 | 自动统计信息采集的最大分区大小。单位：Byte。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。 |
-| statistic_full_collect_buffer               | LONG    | 20971520     | 自动全量采集任务写入的缓存大小，单位：Byte。                              |
+| statistic_max_full_collect_data_size        | LONG    | 107374182400 | 自动统计信息采集的最大分区大小，默认 100 GB。单位：Byte。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。 |
+| statistic_full_collect_buffer               | LONG    | 20971520     | 自动全量采集任务写入的缓存大小，单位：Byte。默认值：20971520（20 MB）。                              |
 | statistic_collect_max_row_count_per_query   | LONG    | 5000000000   | 统计信息采集单次最多查询的数据行数。统计信息任务会按照该配置自动拆分为多次任务执行。 |
-| statistic_collect_too_many_version_sleep    | LONG    | 600000       | 当统计信息表的写入版本过多时(Too many tablet 异常)，自动采集任务的休眠时间，单位：秒。 |
+| statistic_collect_too_many_version_sleep    | LONG    | 600000       | 当统计信息表的写入版本过多时 (Too many tablet 异常)，自动采集任务的休眠时间。单位：毫秒。默认值：600000（10 分钟）。 |
 
 ### 手动采集 (Manual Collection)
 
@@ -126,7 +165,7 @@ StarRocks 提供灵活的信息采集方式，您可以根据业务场景选择�
 ```SQL
 ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name])
 [WITH SYNC | ASYNC MODE]
-PROPERTIES (property [,property]);
+[PROPERTIES (property [,property])]
 ```
 
 参数说明：
@@ -140,7 +179,7 @@ PROPERTIES (property [,property]);
 
 - `col_name`: 要采集统计信息的列，多列使用逗号分隔。如果不指定，表示采集整张表的信息。
 
-- `PROPERTIES`: 采集任务的自定义参数。如果不配置，则采用`fe.conf`中的默认配置。
+- `PROPERTIES`: 采集任务的自定义参数。如果不配置，则采用 `fe.conf` 中的默认配置。
 
 | **PROPERTIES**                | **类型** | **默认值** | **说明**                           |
 |-------------------------------|--------|---------|----------------------------------|
@@ -179,7 +218,7 @@ ANALYZE SAMPLE TABLE tbl_name (v1, v2, v3) PROPERTIES(
 ANALYZE TABLE tbl_name UPDATE HISTOGRAM ON col_name [, col_name]
 [WITH SYNC | ASYNC MODE]
 [WITH N BUCKETS]
-PROPERTIES (property [,property]);
+[PROPERTIES (property [,property])]
 ```
 
 参数说明：
@@ -197,6 +236,7 @@ PROPERTIES (property [,property]);
 | statistic_sample_collect_rows  | INT    | 200000   | 最小采样行数。如果参数取值超过了实际的表行数，默认进行全量采集。 |
 | histogram_mcv_size             | INT    | 100      | 直方图 most common value (MCV) 的数量。 |
 | histogram_sample_ratio         | FLOAT  | 0.1      | 直方图采样比例。                         |
+| histogram_buckets_size                      | LONG    | 64           | 直方图默认分桶数。                                                                                             |
 | histogram_max_sample_row_count | LONG   | 10000000 | 直方图最大采样行数。                       |
 
 直方图的采样行数由多个参数共同控制，采样行数取 `statistic_sample_collect_rows` 和表总行数 `histogram_sample_ratio` 两者中的最大值。最多不超过 `histogram_max_sample_row_count` 指定的行数。如果超过，则按照该参数定义的上限行数进行采集。
@@ -223,17 +263,17 @@ PROPERTIES(
 
 可以通过 CREATE ANALYZE 语句创建自定义自动采集任务。
 
-创建自定义自动采集任务之前，需要先关闭自动全量采集 `enable_collect_full_statistic=false`，否则自定义采集任务不生效。 在关闭 `enable_collect_full_statistic=false`后， **StarRocks会自动创建自定义采集任务，默认采集抽样采集所有表。**
+创建自定义自动采集任务之前，需要先关闭自动全量采集 `enable_collect_full_statistic=false`，否则自定义采集任务不生效。在关闭 `enable_collect_full_statistic=false` 后，**StarRocks 会自动创建自定义采集任务，默认采集所有表。**
 
 ```SQL
 -- 定期采集所有数据库的统计信息。
-CREATE ANALYZE [FULL|SAMPLE] ALL PROPERTIES (property [,property]);
+CREATE ANALYZE [FULL|SAMPLE] ALL [PROPERTIES (property [,property])]
 
 -- 定期采集指定数据库下所有表的统计信息。
-CREATE ANALYZE [FULL|SAMPLE] DATABASE db_name PROPERTIES (property [,property]);
+CREATE ANALYZE [FULL|SAMPLE] DATABASE db_name [PROPERTIES (property [,property])]
 
 -- 定期采集指定表、列的统计信息。
-CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name]) PROPERTIES (property [,property]);
+CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name]) [PROPERTIES (property [,property])]
 ```
 
 参数说明：
@@ -245,7 +285,7 @@ CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name]) PROPERTIES (p
 
 - `col_name`: 要采集统计信息的列，多列使用逗号 (,)分隔。如果不指定，表示采集整张表的信息。
 
-- `PROPERTIES`: 采集任务的自定义参数。如果不配置，则采用`fe.conf`中的默认配置。
+- `PROPERTIES`: 采集任务的自定义参数。如果不配置，则采用 `fe.conf` 中的默认配置。
 
 | **PROPERTIES**                        | **类型** | **默认值** | **说明**                                                                                                                           |
 |---------------------------------------|--------|---------|----------------------------------------------------------------------------------------------------------------------------------|
@@ -253,7 +293,7 @@ CREATE ANALYZE [FULL|SAMPLE] TABLE tbl_name (col_name [,col_name]) PROPERTIES (p
 | statistics_max_full_collect_data_size | INT    | 100     | 自动统计信息采集的最大分区的大小。单位: GB。如果某个分区超过该值，则放弃全量统计信息采集，转为对该表进行抽样统计信息采集。                                                                  |
 | statistic_sample_collect_rows         | INT    | 200000  | 抽样采集的采样行数。如果该参数取值超过了实际的表行数，则进行全量采集。                                                                                              |
 | statistic_exclude_pattern             | STRING | NULL    | 自动采集时，需要排除的库表，支持正则表达式匹配，匹配的格式为 `database.table`。                                                                                  |
-| statistic_auto_collect_interval       | LONG   | 0       | 自动采集的间隔时间，StarRocks 默认根据表大小选择使用`statistic_auto_collect_small_table_interval` 或者 `statistic_auto_collect_large_table_interval`，单位：秒。 |
+| statistic_auto_collect_interval       | LONG   |  0      | 自动采集的间隔时间，单位：秒。StarRocks 默认根据表大小选择使用 `statistic_auto_collect_small_table_interval` 或者 `statistic_auto_collect_large_table_interval`。如果创建 Analyze 任务时在 PROPERTIES 中指定了 `statistic_auto_collect_interval`，则直接按照该值的间隔执行 Analyze 任务，而不用依据 `statistic_auto_collect_small_table_interval` 或 `statistic_auto_collect_large_table_interval` 参数。|
 
 **示例**
 
@@ -292,7 +332,7 @@ CREATE ANALYZE SAMPLE TABLE tbl_name(c1, c2, c3) PROPERTIES(
     
 -- 自动采集所有数据库的统计信息，不收集`db_name.tbl_name`表。
 CREATE ANALYZE SAMPLE DATABASE db_name PROPERTIES (
-   "statistic_exclude_pattern" = "db_name\.tbl_name"
+   "statistic_exclude_pattern" = "db_name.tbl_name"
 );    
 ```
 
@@ -330,7 +370,7 @@ SHOW ANALYZE JOB where `database` = 'test';
 #### 删除自动采集任务
 
 ```SQL
-DROP ANALYZE <ID>;
+DROP ANALYZE <ID>
 ```
 
 **示例**
@@ -344,7 +384,7 @@ DROP ANALYZE 266030;
 您可以通过 SHOW ANALYZE STATUS 语句查看当前所有采集任务的状态。该语句不支持查看自定义采集任务的状态，如要查看，请使用 SHOW ANALYZE JOB。
 
 ```SQL
-SHOW ANALYZE STATUS [LIKE | WHERE predicate];
+SHOW ANALYZE STATUS [LIKE | WHERE predicate]
 ```
 
 您可以使用 `Like` 或 `Where` 来筛选需要返回的信息。
@@ -370,7 +410,7 @@ SHOW ANALYZE STATUS [LIKE | WHERE predicate];
 ### 基础统计信息元数据
 
 ```SQL
-SHOW STATS META [WHERE predicate];
+SHOW STATS META [WHERE predicate]
 ```
 
 该语句返回如下列。
@@ -388,7 +428,7 @@ SHOW STATS META [WHERE predicate];
 ### 直方图统计信息元数据
 
 ```SQL
-SHOW HISTOGRAM META [WHERE predicate];
+SHOW HISTOGRAM META [WHERE predicate]
 ```
 
 该语句返回如下列。
@@ -412,10 +452,12 @@ StarRocks 支持手动删除统计信息。手动删除统计信息时，会删�
 DROP STATS tbl_name
 ```
 
+该命令将删除 `default_catalog._statistics_` 下表中存储的统计信息，FE cache 的对应表统计信息也将失效。
+
 ### 删除直方图统计信息
 
 ```SQL
-ANALYZE TABLE tbl_name DROP HISTOGRAM ON col_name [, col_name];
+ANALYZE TABLE tbl_name DROP HISTOGRAM ON col_name [, col_name]
 ```
 
 ## 取消采集任务
@@ -425,35 +467,211 @@ ANALYZE TABLE tbl_name DROP HISTOGRAM ON col_name [, col_name];
 手动采集任务的任务 ID 可以在 SHOW ANALYZE STATUS 中查看。自定义自动采集任务的任务 ID 可以在 SHOW ANALYZE JOB 中查看。
 
 ```SQL
-KILL ANALYZE <ID>;
+KILL ANALYZE <ID>
 ```
 
-## FE配置项说明
+## 其他 FE 配置项
 
-| **FE配置项**                                   | **类型**  | **默认值**      | **说明**                                                                                                            |
-|---------------------------------------------|---------|--------------|-------------------------------------------------------------------------------------------------------------------|
-| enable_statistic_collect                    | BOOLEAN | TRUE         | 是否采集统计信息。该参数默认打开。                                                                                                 |
-| enable_collect_full_statistic               | BOOLEAN | TRUE         | 是否开启自动全量统计信息采集。该参数默认打开。                                                                                           |
-| statistic_collect_interval_sec              | LONG    | 300          | 自动定期任务中，检测数据更新的间隔时间，默认为 5 分钟。单位：秒。                                                                                |
-| statistic_auto_analyze_start_time           | STRING  | 00:00:00     | 用于配置自动全量采集的起始时间。取值范围：`00:00:00` ~ `23:59:59`。                                                                     |
-| statistic_auto_analyze_end_time             | STRING  | 23:59:59     | 用于配置自动全量采集的结束时间。取值范围：`00:00:00` ~ `23:59:59`。                                                                     |
-| statistic_auto_collect_small_table_size     | LONG    | 5368709120   | 自动全量采集任务的小表阈值，默认 5GB，单位：Byte。                                                                                       |
-| statistic_auto_collect_small_table_interval | LONG    | 3600         | 自动全量采集任务的小表采集间隔，单位：秒。                                                                                             |
-| statistic_auto_collect_large_table_interval | LONG    | 86400        | 自动全量采集任务的大表采集间隔，单位：秒。                                                                                             |
-| statistic_auto_collect_ratio                | DOUBLE  | 0.8          | 触发自动统计信息收集的健康度阈值。如果统计信息的健康度小于该阈值，则触发自动采集。                                                                         |
-| statistic_auto_collect_sample_threshold     | DOUBLE  | 0.3          | 触发自动统计信息抽样收集的健康度阈值。如果统计信息的健康度小于该阈值，则触发自动抽样采集。                                                                     |
-| statistic_max_full_collect_data_size        | LONG    | 107374182400 | 自动统计信息采集的最大分区大小。单位：Byte。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。                                                               |
-| statistic_collect_max_row_count_per_query   | LONG    | 5000000000   | 统计信息采集单次最多查询的数据行数。统计信息任务会按照该配置自动拆分为多次任务执行。                                                                        |
-| statistic_full_collect_buffer               | LONG    | 20971520     | 自动全量采集任务写入的缓存大小，单位：Byte。                                                                                            |
-| statistic_collect_too_many_version_sleep    | LONG    | 600000       | 当统计信息表的写入版本过多时(Too many tablet异常)，自动采集任务的休眠时间，单位：秒。                                                               |
-| statistic_sample_collect_rows               | LONG    | 200000       | 最小采样行数。如果指定了采集类型为抽样采集（SAMPLE），需要设置该参数。<br />如果参数取值超过了实际的表行数，默认进行全量采集。                                               |
+| **FE 配置项**        | **类型** | **默认值** | **说明**                                              |
+| ------------------------------------ | -------- | ----------------- | ------------------------------------------------------------ |
 | statistic_collect_concurrency               | INT     | 3            | 手动采集任务的最大并发数，默认为 3，即最多可以有 3 个手动采集任务同时运行。<br />超出的任务处于 PENDING 状态，等待调度。                                              |
-| histogram_buckets_size                      | LONG    | 64           | 直方图默认分桶数。                                                                                                         |
-| histogram_mcv_size                          | LONG    | 100          | 直方图默认 most common value 的数量。                                                                                      |
-| histogram_sample_ratio                      | FLOAT   | 0.1          | 直方图默认采样比例。                                                                                                        |
-| histogram_max_sample_row_count              | LONG    | 10000000     | 直方图最大采样行数。                                                                                                        |
 | statistic_manager_sleep_time_sec            | LONG    | 60           | 统计信息相关元数据调度间隔周期。单位：秒。系统根据这个间隔周期，来执行如下操作：<ul><li>创建统计信息表；</li><li>删除已经被删除的表的统计信息；</li><li>删除过期的统计信息历史记录。</li></ul> |
 | statistic_analyze_status_keep_second        | LONG    | 259200       | 采集任务记录保留时间，默认为 3 天。单位：秒。                                                                                          |
+
+## 系统变量
+
+`statistic_collect_parallel` 用于调整 BE 上能并发执行的统计信息收集任务的个数，默认值为 1，可以调大该数值来加快收集任务的执行速度。
+
+## 采集 Hive/Iceberg/Hudi 表的统计信息
+
+从 3.2 版本起，支持采集 Hive, Iceberg, Hudi 表的统计信息。**采集的语法和内表相同，但是只支持手动全量采集和自动全量采集两种方式，不支持抽样采集和直方图采集**。收集的统计信息会写入到 `_statistics_` 数据库的 `external_column_statistics` 表中，不会写入到 Hive Metastore 中，因此无法和其他查询引擎共用。您可以通过查询 `default_catalog._statistics_.external_column_statistics` 表中是否写入了表的统计信息。
+
+查询时，会返回如下信息：
+
+```sql
+SELECT * FROM _statistics_.external_column_statistics\G
+*************************** 1. row ***************************
+    table_uuid: hive_catalog.tn_test.ex_hive_tbl.1673596430
+partition_name: 
+   column_name: k1
+  catalog_name: hive_catalog
+       db_name: tn_test
+    table_name: ex_hive_tbl
+     row_count: 3
+     data_size: 12
+           ndv: NULL
+    null_count: 0
+           max: 3
+           min: 2
+   update_time: 2023-12-01 14:57:27.137000
+```
+
+### 使用限制
+
+对 Hive、Iceberg、Hudi 表采集统计信息时，有如下限制：
+
+1. 目前只支持采集 Hive、Iceberg、Hudi 表的统计信息。
+2. 目前只支持全量采集，不支持抽样采集和直方图采集。
+3. 全量自动采集，需要创建一个采集任务，系统不会默认自动采集外部数据源的统计信息。
+4. 对于自动采集任务，只支持采集指定表的统计信息，不支持采集所有数据库、数据库下所有表的统计信息。
+5. 对于自动采集任务，目前只有 Hive 和 Iceberg 表可以每次检查数据是否发生更新，数据发生了更新才会执行采集任务, 并且只会采集数据发生了更新的分区。Hudi 表目前无法判断是否发生了数据更新，所以会根据采集间隔周期性全表采集。
+
+以下示例默认在 External Catalog 指定数据库下采集表的统计信息。如果是在 `default_catalog` 下采集 External Catalog 下表的统计信息，引用表名时可以使用 `[catalog_name.][database_name.]<table_name>` 格式。
+
+### 手动采集
+
+#### 创建手动采集任务
+
+语法：
+
+```sql
+ANALYZE [FULL] TABLE tbl_name (col_name [,col_name])
+[WITH SYNC | ASYNC MODE]
+[PROPERTIES(property [,property])]
+```
+
+示例：
+
+```sql
+ANALYZE TABLE ex_hive_tbl(k1);
++----------------------------------+---------+----------+----------+
+| Table                            | Op      | Msg_type | Msg_text |
++----------------------------------+---------+----------+----------+
+| hive_catalog.tn_test.ex_hive_tbl | analyze | status   | OK       |
++----------------------------------+---------+----------+----------+
+```
+
+#### 查看 Analyze 任务执行状态
+
+语法：
+
+```sql
+SHOW ANALYZE STATUS [LIKE | WHERE predicate]
+```
+
+示例：
+
+```sql
+SHOW ANALYZE STATUS where `table` = 'ex_hive_tbl';
++-------+----------------------+-------------+---------+------+----------+---------+---------------------+---------------------+------------+--------+
+| Id    | Database             | Table       | Columns | Type | Schedule | Status  | StartTime           | EndTime             | Properties | Reason |
++-------+----------------------+-------------+---------+------+----------+---------+---------------------+---------------------+------------+--------+
+| 16400 | hive_catalog.tn_test | ex_hive_tbl | k1      | FULL | ONCE     | SUCCESS | 2023-12-04 16:31:42 | 2023-12-04 16:31:42 | {}         |        |
+| 16465 | hive_catalog.tn_test | ex_hive_tbl | k1      | FULL | ONCE     | SUCCESS | 2023-12-04 16:37:35 | 2023-12-04 16:37:35 | {}         |        |
+| 16467 | hive_catalog.tn_test | ex_hive_tbl | k1      | FULL | ONCE     | SUCCESS | 2023-12-04 16:37:46 | 2023-12-04 16:37:46 | {}         |        |
++-------+----------------------+-------------+---------+------+----------+---------+---------------------+---------------------+------------+--------+
+```
+
+#### 查看统计信息元数据
+
+查看表的统计信息元数据。
+
+语法：
+
+```sql
+SHOW STATS META [WHERE predicate]
+```
+
+示例：
+
+```sql
+SHOW STATS META where `table` = 'ex_hive_tbl';
++----------------------+-------------+---------+------+---------------------+------------+---------+
+| Database             | Table       | Columns | Type | UpdateTime          | Properties | Healthy |
++----------------------+-------------+---------+------+---------------------+------------+---------+
+| hive_catalog.tn_test | ex_hive_tbl | k1      | FULL | 2023-12-04 16:37:46 | {}         |         |
++----------------------+-------------+---------+------+---------------------+------------+---------+
+```
+
+#### 取消采集任务
+
+取消正在运行中（Running）的统计信息采集任务。
+
+语法：
+
+```sql
+KILL ANALYZE <ID>
+```
+
+任务 ID 可以在 SHOW ANALYZE STATUS 中查看。
+
+### 自动采集
+
+对于外部数据源中的表，需要创建一个自动采集任务，StarRocks 会根据采集任务中指定的属性，周期性检查采集任务是否需要执行，默认检查时间为 5 min。Hive 和 Iceberg 仅在发现有数据更新时，才会自动执行一次采集任务。
+
+Hudi 目前不支持感知数据更新，所以只能周期性采集（采集周期由采集线程的时间间隔和用户设置的采集间隔决定，参考下面的属性进行调整）。
+
+- statistic_collect_interval_sec
+
+  自动定期任务中，检查是否需要采集统计信息的间隔周期，默认 5 分钟。
+
+- statistic_auto_collect_small_table_rows
+
+  自动采集中，用于判断外部数据源下的表 (Hive, Iceberg, Hudi) 是否为小表的行数门限，默认值为 10000000 行。该参数 3.2 版本引入。
+
+- statistic_auto_collect_small_table_interval
+
+  自动采集中小表的采集间隔，单位：秒。默认值：0。
+
+- statistic_auto_collect_large_table_interval
+
+  自动采集中大表的采集间隔，单位：秒。默认值：43200 (12 小时)。
+
+自动采集线程每间隔 `statistic_collect_interval_sec` 时间就会进行一次任务检查，发现是否有需要执行的任务，当表中行数小于 `statistic_auto_collect_small_table_rows` 时，则将采集间隔设置为小表的采集间隔，否则设置为大表的采集间隔。如果 `上次更新时间 + 采集间隔 > 当前时间`，则需要更新，否则无需更新，这样可以避免频繁为大表执行 Analyze 任务。
+
+#### 创建自动采集任务
+
+语法：
+
+```sql
+CREATE ANALYZE TABLE tbl_name (col_name [,col_name])
+[PROPERTIES (property [,property])]
+```
+
+示例：
+
+```sql
+CREATE ANALYZE TABLE ex_hive_tbl (k1)
+PROPERTIES ("statistic_auto_collect_interval" = "5");
+
+Query OK, 0 rows affected (0.01 sec)
+```
+
+示例：
+
+#### 查看 Analyze 任务执行状态
+
+同手动采集。
+
+#### 查看统计信息元数据
+
+同手动采集。
+
+#### 查看自动采集任务
+
+语法：
+
+```sql
+SHOW ANALYZE JOB [WHERE predicate]
+```
+
+示例：
+
+```sql
+SHOW ANALYZE JOB WHERE `id` = '17204';
+
+Empty set (0.00 sec)
+```
+
+#### 取消采集任务
+
+同手动采集。
+
+#### 删除 Hive/Iceberg/Hudi 表统计信息
+
+```sql
+DROP STATS tbl_name
+```
 
 ## 更多信息
 

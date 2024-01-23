@@ -41,6 +41,7 @@ import com.starrocks.backup.BackupJobInfo.BackupPartitionInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
 import com.starrocks.backup.BackupJobInfo.BackupTabletInfo;
 import com.starrocks.backup.RestoreJob.RestoreJobState;
+import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -264,7 +265,7 @@ public class RestoreJobPrimaryKeyTest {
         backupMeta = new BackupMeta(tbls);
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
                 jobInfo, false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta);
+                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
     }
 
     @Ignore
@@ -394,6 +395,5 @@ public class RestoreJobPrimaryKeyTest {
         partNames = Lists.newArrayList(tbl.getPartitionNames());
         System.out.println("tbl signature: " + tbl.getSignature(BackupHandler.SIGNATURE_VERSION, partNames, true));
     }
-
 }
 

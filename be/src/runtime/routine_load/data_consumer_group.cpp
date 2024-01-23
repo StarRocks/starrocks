@@ -117,6 +117,7 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
 
     // copy one
     std::map<int32_t, int64_t> cmt_offset = ctx->kafka_info->cmt_offset;
+    std::map<int32_t, int64_t> cmt_offset_timestamp;
 
     //improve performance
     Status (KafkaConsumerPipe::*append_data)(const char* data, size_t size, char row_delimiter);
@@ -164,6 +165,8 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 return result_st;
             }
 
+            ctx->kafka_info->cmt_offset_timestamp = cmt_offset_timestamp;
+
             if (left_bytes == ctx->max_batch_size) {
                 // nothing to be consumed, we have to cancel it, because
                 // we do not allow finishing stream load pipe without data.
@@ -209,6 +212,10 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                 // but the standard usage is to record the last offset + 1.
                 if (msg->offset() > 0) {
                     cmt_offset[msg->partition()] = msg->offset() - 1;
+                    auto timestamp = msg->timestamp();
+                    if (timestamp.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_NOT_AVAILABLE) {
+                        cmt_offset_timestamp[msg->partition()] = msg->timestamp().timestamp;
+                    }
                 }
             } else {
                 Status st = Status::OK();
@@ -218,6 +225,11 @@ Status KafkaDataConsumerGroup::start_all(StreamLoadContext* ctx) {
                     received_rows++;
                     left_bytes -= msg->len();
                     cmt_offset[msg->partition()] = msg->offset();
+
+                    auto timestamp = msg->timestamp();
+                    if (timestamp.type != RdKafka::MessageTimestamp::MSG_TIMESTAMP_NOT_AVAILABLE) {
+                        cmt_offset_timestamp[msg->partition()] = msg->timestamp().timestamp;
+                    }
                     VLOG(3) << "consume partition[" << msg->partition() << " - " << msg->offset() << "]";
                 } else {
                     // failed to append this msg, we must stop
