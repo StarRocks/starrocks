@@ -17,10 +17,12 @@ package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Queues;
+import com.google.gson.JsonObject;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.Util;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
@@ -193,13 +195,17 @@ public class TaskRunManager {
                         break;
                     }
                     TaskRun pendingTaskRun = taskRunQueue.poll();
-                    taskRunExecutor.executeTaskRun(pendingTaskRun);
-                    runningTaskRunMap.put(taskId, pendingTaskRun);
-                    // RUNNING state persistence is for FE FOLLOWER update state
-                    TaskRunStatusChange statusChange = new TaskRunStatusChange(taskId, pendingTaskRun.getStatus(),
-                            Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
-                    GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
-                    currentRunning++;
+                    if (taskRunExecutor.executeTaskRun(pendingTaskRun)) {
+                        LOG.info("start to schedule pending task run to execute: {}", pendingTaskRun);
+                        runningTaskRunMap.put(taskId, pendingTaskRun);
+                        // RUNNING state persistence is for FE FOLLOWER update state
+                        TaskRunStatusChange statusChange = new TaskRunStatusChange(taskId, pendingTaskRun.getStatus(),
+                                Constants.TaskRunState.PENDING, Constants.TaskRunState.RUNNING);
+                        GlobalStateMgr.getCurrentState().getEditLog().logUpdateTaskRun(statusChange);
+                        currentRunning++;
+                    } else {
+                        LOG.warn("failed to scheduled task-run {}", pendingTaskRun);
+                    }
                 }
             }
         }
@@ -266,5 +272,17 @@ public class TaskRunManager {
 
     public long getHistoryTaskRunCount() {
         return taskRunHistory.getTaskRunCount();
+    }
+
+    /**
+     * For diagnosis purpose
+     *
+     * @return JSON-representation of the whole status
+     */
+    public String inspect() {
+        JsonObject res = new JsonObject();
+        res.addProperty("running", GsonUtils.GSON.toJson(runningTaskRunMap));
+        res.addProperty("pending", GsonUtils.GSON.toJson(pendingTaskRunMap));
+        return res.toString();
     }
 }
