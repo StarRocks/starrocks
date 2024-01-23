@@ -68,6 +68,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -126,27 +127,6 @@ public class MvRewritePreprocessor {
     }
 
     /**
-     * When {@link MvPlanContext} already existed, check the related mvs by using it
-     * in {@link #chooseBestRelatedMVs(Set, Set, OptExpression)}.
-     */
-    class MVWithPlanContextCache {
-        private final boolean isValidPlan;
-        private final int scanOpNumDiff;
-        public MVWithPlanContextCache(boolean isValidPlan, int scanOpNumDiff) {
-            this.isValidPlan = isValidPlan;
-            this.scanOpNumDiff = scanOpNumDiff;
-        }
-
-        public boolean isValidPlan() {
-            return isValidPlan;
-        }
-
-        public int getScanOpNumDiff() {
-            return scanOpNumDiff;
-        }
-    }
-    
-    /**
      * To avoid MvRewriteProcessor cost too much optimizer time, reduce all related mvs to a limited size.
      * <h3>Why to Choose The Best Related MVs Strategy</h3>
      *
@@ -172,29 +152,32 @@ public class MvRewritePreprocessor {
      *  2. consider random factor so can cache and use more mvs.
      * </p>
      */
-    static class MVRelatedOrdering implements Comparator<MaterializedView> {
-        private final Set<String> queryTableNames;
-        private final int queryScanOpNum;
-        private final Map<MaterializedView, MVWithPlanContextCache> mvWithPlanContextCacheMap;
+    public static class MVCorrelation implements Comparable<MVCorrelation> {
+        private final MaterializedView mv;
+        private final long mvQueryIntersectedTablesNum;
+        private final int mvQueryScanOpNumDiff;
+        private final long mvRefreshTimestamp;
 
-        public MVRelatedOrdering(Set<Table> queryTables,
-                                 int queryScanOpNum,
-                                 Map<MaterializedView, MVWithPlanContextCache> mvPlanContextsMap) {
-            this.queryTableNames = queryTables.stream()
-                    .map(t -> t.getName())
-                    .collect(Collectors.toSet());
-            this.queryScanOpNum = queryScanOpNum;
-            this.mvWithPlanContextCacheMap = mvPlanContextsMap;
+        public MVCorrelation(MaterializedView mv,
+                             long mvQueryIntersectedTablesNum,
+                             int mvQueryScanOpNumDiff,
+                             long mvRefreshTimestamp) {
+            this.mv = mv;
+            this.mvQueryIntersectedTablesNum = mvQueryIntersectedTablesNum;
+            this.mvQueryScanOpNumDiff = mvQueryScanOpNumDiff;
+            this.mvRefreshTimestamp = mvRefreshTimestamp;
         }
 
-        /**
-         * Get mv and a query's interacted table num. Bigger is Better.
-         */
-        private long getInteractedTablesNum(MaterializedView mv) {
-            List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
+        public MaterializedView getMv() {
+            return this.mv;
+        }
+
+        public static long getMvQueryIntersectedTableNum(List<BaseTableInfo> baseTableInfos,
+                                                         Set<String> queryTableNames) {
             return baseTableInfos.stream()
                     .filter(baseTableInfo -> {
                         String baseTableName = baseTableInfo.getTableName();
+                        // assert not null
                         if (Strings.isNullOrEmpty(baseTableName)) {
                             return false;
                         }
@@ -202,41 +185,41 @@ public class MvRewritePreprocessor {
                     }).count();
         }
 
-
-        /**
-         * Get mv's base tables' number and query scan op number's diff number. Bigger is Better.
-         */
-        private long getBaseTablesNum(MaterializedView mv) {
-            // TODO: Get the real base table size rather than distinct size.
-            int mvScanOpNum = mv.getBaseTableInfos().size();
-            return Optional.ofNullable(mvWithPlanContextCacheMap.get(mv))
-                    .map(x -> x.getScanOpNumDiff())
-                    .orElse(-1 * Math.abs(queryScanOpNum - mvScanOpNum));
-        }
-
-        public static int getScanOpDiff(MaterializedView mv,
-                                        List<MvPlanContext> planContexts,
-                                        int queryScanOpNum) {
+        public static int getMvQueryScanOpDiff(List<MvPlanContext> planContexts,
+                                               int mvBaseTableSize,
+                                               int queryScanOpNum) {
+            int diff = Math.abs(queryScanOpNum - mvBaseTableSize);
+            if (planContexts == null || planContexts.isEmpty()) {
+                return diff;
+            }
             return planContexts.stream()
                     .map(mvPlanContext -> mvPlanContext.getMvScanOpNum())
-                    .map(num -> -1 * Math.abs(queryScanOpNum - num))
-                    .max(Comparator.comparing(Integer::intValue))
-                    .orElse(-1 * Math.abs(queryScanOpNum - mv.getBaseTableInfos().size()));
-        }
-
-        /**
-         * Get mv's last refresh time. Bigger is Better.
-         */
-        private long getMVLastRefreshTime(MaterializedView mv) {
-            return mv.getLastRefreshTime();
+                    .map(num -> Math.abs(queryScanOpNum - num))
+                    .min(Comparator.comparing(Integer::intValue))
+                    .orElse(diff);
         }
 
         @Override
-        public int compare(MaterializedView mv1, MaterializedView mv2) {
-            return Comparator.comparingLong(this::getInteractedTablesNum)
-                    .thenComparing(this::getBaseTablesNum)
-                    .thenComparing(this::getMVLastRefreshTime)
-                    .compare(mv1, mv2);
+        public int compareTo(@NotNull MVCorrelation other) {
+            // 1. compare intersected table nums, larger is better.
+            int result = Long.compare(this.mvQueryIntersectedTablesNum, other.mvQueryIntersectedTablesNum);
+            if (result != 0) {
+                return result;
+            }
+            // 2. compare base table num diff,  less is better
+            result = Integer.compare(other.mvQueryScanOpNumDiff, this.mvQueryScanOpNumDiff);
+            if (result != 0) {
+                return result;
+            }
+            // 3. compare refresh timestamp, larger is better.
+            return Long.compare(this.mvRefreshTimestamp, other.mvRefreshTimestamp);
+        }
+
+        @Override
+        public String toString() {
+            return String.format("Correlation: mv=%s, mvQueryInteractedTablesNum=%s, " +
+                    "mvQueryScanOpNumDiff=%s, mvRefreshTimestamp=%s", mv.getName(),
+                    mvQueryIntersectedTablesNum, mvQueryScanOpNumDiff, mvRefreshTimestamp);
         }
     }
 
@@ -503,8 +486,7 @@ public class MvRewritePreprocessor {
     }
 
     private boolean isMVValidToRewriteQuery(MaterializedView mv,
-                                            Set<Table> queryTables,
-                                            Map<MaterializedView, MVWithPlanContextCache> mvWithPlanContextCacheMap) {
+                                            Set<Table> queryTables) {
         if (!mv.isActive())  {
             logMVPrepare(connectContext, mv, "MV is not active: {}", mv.getName());
             return false;
@@ -514,12 +496,41 @@ public class MvRewritePreprocessor {
             return false;
         }
         // if mv is in plan cache(avoid building plan), check whether it's valid
-        MVWithPlanContextCache mvWithPlanContextCache = mvWithPlanContextCacheMap.get(mv);
-        if (mvWithPlanContextCache != null && !mvWithPlanContextCache.isValidPlan()) {
+        List<MvPlanContext> planContexts = CachingMvPlanContextBuilder.getInstance().getPlanContextFromCacheIfPresent(mv);
+        if (planContexts != null && planContexts.stream().noneMatch(mvPlanContext -> mvPlanContext.isValidMvPlan())) {
             logMVPrepare(connectContext, mv, "MV has not a valid plan: {}", mv.getName());
             return false;
         }
         return true;
+    }
+
+    private Set<MaterializedView> chooseBestRelatedMVsByCorrelations(Set<Table> queryTables,
+                                                                     Set<MaterializedView> validMVs,
+                                                                     OptExpression queryOptExpression,
+                                                                     int maxRelatedMVsLimit) {
+        int queryScanOpNum = MvUtils.getOlapScanNode(queryOptExpression).size();
+        Set<String> queryTableNames = queryTables.stream().map(t -> t.getName()).collect(Collectors.toSet());
+        Queue<MVCorrelation> bestRelatedMVs = new PriorityQueue<>(maxRelatedMVsLimit);
+        for (MaterializedView mv : validMVs) {
+            List<BaseTableInfo> baseTableInfos = mv.getBaseTableInfos();
+            long mvQueryInteractedTableNum = MVCorrelation.getMvQueryIntersectedTableNum(baseTableInfos, queryTableNames);
+            List<MvPlanContext> planContexts =
+                    CachingMvPlanContextBuilder.getInstance().getPlanContextFromCacheIfPresent(mv);
+            int mvQueryScanOpDiff = MVCorrelation.getMvQueryScanOpDiff(planContexts, baseTableInfos.size(), queryScanOpNum);
+            MVCorrelation mvCorrelation = new MVCorrelation(mv, mvQueryInteractedTableNum,
+                    mvQueryScanOpDiff, mv.getLastRefreshTime());
+            if (bestRelatedMVs.size() < maxRelatedMVsLimit) {
+                bestRelatedMVs.add(mvCorrelation);
+            } else if (bestRelatedMVs.peek().compareTo(mvCorrelation) < 0) {
+                // if the peek is less than new mv(larger is better), poll it and add new one
+                bestRelatedMVs.poll();
+                bestRelatedMVs.add(mvCorrelation);
+            }
+        }
+        logMVPrepare(connectContext, "Choose the best {} related mvs from all {} mvs because related " +
+                        "mv exceeds max config limit {}",
+                bestRelatedMVs.size(), validMVs.size(), maxRelatedMVsLimit);
+        return bestRelatedMVs.stream().map(cor -> cor.getMv()).collect(Collectors.toSet());
     }
 
     @VisibleForTesting
@@ -531,19 +542,8 @@ public class MvRewritePreprocessor {
         logMVPrepare(connectContext, "Choose {} mvs from {} after user config", validMVs.size(), relatedMVs.size());
 
         // 2. choose all valid mvs and filter mvs that cannot be rewritten for the query
-        int queryScanOpNum = MvUtils.getOlapScanNode(queryOptExpression).size();
-        Map<MaterializedView, MVWithPlanContextCache> mvWithPlanCacheMap = Maps.newHashMap();
-        for (MaterializedView mv : validMVs) {
-            List<MvPlanContext> planContexts =
-                    CachingMvPlanContextBuilder.getInstance().getPlanContextFromCacheIfPresent(mv);
-            if (planContexts != null && !planContexts.isEmpty()) {
-                boolean isValidPlan = planContexts.stream().anyMatch(plan -> plan.isValidMvPlan());
-                int scanNumDiff = MVRelatedOrdering.getScanOpDiff(mv, planContexts, queryScanOpNum);
-                mvWithPlanCacheMap.put(mv, new MVWithPlanContextCache(isValidPlan, scanNumDiff));
-            }
-        }
         validMVs = validMVs.stream()
-                .filter(mv -> isMVValidToRewriteQuery(mv, queryTables, mvWithPlanCacheMap))
+                .filter(mv -> isMVValidToRewriteQuery(mv, queryTables))
                 .collect(Collectors.toSet());
         logMVPrepare(connectContext, "Choose {} valid mvs from {} after checking valid",
                 validMVs.size(), relatedMVs.size());
@@ -553,20 +553,7 @@ public class MvRewritePreprocessor {
         if (maxRelatedMVsLimit < 1 && validMVs.size() <= maxRelatedMVsLimit) {
             return validMVs;
         }
-
-        Comparator<MaterializedView> ordering = new MVRelatedOrdering(queryTables, queryScanOpNum, mvWithPlanCacheMap);
-        Queue<MaterializedView> bestRelatedMVs = new PriorityQueue<>(maxRelatedMVsLimit, ordering);
-        for (MaterializedView mv : validMVs) {
-            bestRelatedMVs.add(mv);
-            if (bestRelatedMVs.size() > maxRelatedMVsLimit) {
-                bestRelatedMVs.poll();
-            }
-        }
-        logMVPrepare(connectContext, "Choose the best {} related mvs from all {} mvs because related " +
-                        "mv exceeds max config limit {}",
-                bestRelatedMVs.size(), validMVs.size(), maxRelatedMVsLimit);
-
-        return bestRelatedMVs.stream().collect(Collectors.toSet());
+        return chooseBestRelatedMVsByCorrelations(queryTables, validMVs, queryOptExpression, maxRelatedMVsLimit);
     }
 
     private Set<MvWithPlanContext> getMvWithPlanContext(Set<MaterializedView> validMVs) {
