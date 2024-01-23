@@ -5981,6 +5981,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             // remove const order-by items
             orderByElements = orderByElements.stream().filter(x -> !x.getExpr().isConstant()).collect(toList());
         }
+        if (CollectionUtils.isNotEmpty(orderByElements)) {
+            orderByElements.stream().forEach(e -> exprs.add(e.getExpr()));
+        }
         FunctionCallExpr functionCallExpr = new FunctionCallExpr(functionName,
                 context.aggregationFunction().ASTERISK_SYMBOL() == null ?
                         new FunctionParams(isDistinct, exprs, orderByElements) :
