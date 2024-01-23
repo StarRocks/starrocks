@@ -77,7 +77,6 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.ListComparator;
@@ -1837,8 +1836,7 @@ public class SchemaChangeHandler extends AlterHandler {
             return;
         }
 
-        if (metaType == TTabletMetaType.INMEMORY ||
-                metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
+        if (metaType == TTabletMetaType.INMEMORY ||  metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
             for (Partition partition : partitions) {
                 updatePartitionTabletMeta(db, olapTable.getName(), partition.getName(), metaValue, metaType);
             }
@@ -2009,8 +2007,8 @@ public class SchemaChangeHandler extends AlterHandler {
                                                 String partitionName,
                                                 BinlogConfig binlogConfig,
                                                 TTabletMetaType metaType) throws DdlException {
-        // be id -> <tablet id,schemaHash>
-        Map<Long, Set<Pair<Long, Integer>>> beIdToTabletIdWithHash = Maps.newHashMap();
+        // be id -> Set<tablet id>
+        Map<Long, Set<Long>> beIdToTabletId = Maps.newHashMap();
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
@@ -2023,12 +2021,10 @@ public class SchemaChangeHandler extends AlterHandler {
 
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 MaterializedIndex baseIndex = physicalPartition.getBaseIndex();
-                int schemaHash = olapTable.getSchemaHashByIndexId(baseIndex.getId());
                 for (Tablet tablet : baseIndex.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                        Set<Pair<Long, Integer>> tabletIdWithHash =
-                                beIdToTabletIdWithHash.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
-                        tabletIdWithHash.add(new Pair<>(tablet.getId(), schemaHash));
+                        Set<Long> tabletSet = beIdToTabletId.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
+                        tabletSet.add(tablet.getId());
                     }
                 }
             }
@@ -2037,13 +2033,14 @@ public class SchemaChangeHandler extends AlterHandler {
             locker.unLockDatabase(db, LockType.READ);
         }
 
-        int totalTaskNum = beIdToTabletIdWithHash.keySet().size();
-        MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> countDownLatch = new MarkedCountDownLatch<>(totalTaskNum);
+        int totalTaskNum = beIdToTabletId.keySet().size();
+        MarkedCountDownLatch<Long, Set<Long>> countDownLatch = new MarkedCountDownLatch<>(totalTaskNum);
         AgentBatchTask batchTask = new AgentBatchTask();
-        for (Map.Entry<Long, Set<Pair<Long, Integer>>> kv : beIdToTabletIdWithHash.entrySet()) {
+        for (Map.Entry<Long, Set<Long>> kv : beIdToTabletId.entrySet()) {
             countDownLatch.addMark(kv.getKey(), kv.getValue());
-            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(kv.getKey(), kv.getValue(),
-                    binlogConfig, countDownLatch, metaType);
+            UpdateTabletMetaInfoTask task = UpdateTabletMetaInfoTask.updateBinlogConfig(kv.getKey(), kv.getValue(),
+                    binlogConfig);
+            task.setLatch(countDownLatch);
             batchTask.addTask(task);
         }
         if (!FeConstants.runningUnitTest) {
@@ -2071,9 +2068,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 if (!countDownLatch.getStatus().ok()) {
                     errMsg += " Error: " + countDownLatch.getStatus().getErrorMsg();
                 } else {
-                    List<Map.Entry<Long, Set<Pair<Long, Integer>>>> unfinishedMarks = countDownLatch.getLeftMarks();
+                    List<Map.Entry<Long, Set<Long>>> unfinishedMarks = countDownLatch.getLeftMarks();
                     // only show at most 3 results
-                    List<Map.Entry<Long, Set<Pair<Long, Integer>>>> subList =
+                    List<Map.Entry<Long, Set<Long>>> subList =
                             unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
                     if (!subList.isEmpty()) {
                         errMsg += " Unfinished mark: " + Joiner.on(", ").join(subList);
@@ -2095,8 +2092,8 @@ public class SchemaChangeHandler extends AlterHandler {
                                           String partitionName,
                                           boolean metaValue,
                                           TTabletMetaType metaType) throws DdlException {
-        // be id -> <tablet id,schemaHash>
-        Map<Long, Set<Pair<Long, Integer>>> beIdToTabletIdWithHash = Maps.newHashMap();
+        // be id -> <tablet id>
+        Map<Long, Set<Long>> beIdToTabletSet = Maps.newHashMap();
         Locker locker = new Locker();
         locker.lockDatabase(db, LockType.READ);
         try {
@@ -2109,12 +2106,10 @@ public class SchemaChangeHandler extends AlterHandler {
 
             for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
                 for (MaterializedIndex index : physicalPartition.getMaterializedIndices(IndexExtState.VISIBLE)) {
-                    int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
                     for (Tablet tablet : index.getTablets()) {
                         for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                            Set<Pair<Long, Integer>> tabletIdWithHash =
-                                    beIdToTabletIdWithHash.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
-                            tabletIdWithHash.add(new Pair<>(tablet.getId(), schemaHash));
+                            Set<Long> tabletSet = beIdToTabletSet.computeIfAbsent(replica.getBackendId(), k -> Sets.newHashSet());
+                            tabletSet.add(tablet.getId());
                         }
                     }
                 }
@@ -2123,13 +2118,17 @@ public class SchemaChangeHandler extends AlterHandler {
             locker.unLockDatabase(db, LockType.READ);
         }
 
-        int totalTaskNum = beIdToTabletIdWithHash.keySet().size();
-        MarkedCountDownLatch<Long, Set<Pair<Long, Integer>>> countDownLatch = new MarkedCountDownLatch<>(totalTaskNum);
+        int totalTaskNum = beIdToTabletSet.keySet().size();
+        MarkedCountDownLatch<Long, Set<Long>> countDownLatch = new MarkedCountDownLatch<>(totalTaskNum);
         AgentBatchTask batchTask = new AgentBatchTask();
-        for (Map.Entry<Long, Set<Pair<Long, Integer>>> kv : beIdToTabletIdWithHash.entrySet()) {
+        for (Map.Entry<Long, Set<Long>> kv : beIdToTabletSet.entrySet()) {
             countDownLatch.addMark(kv.getKey(), kv.getValue());
-            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(kv.getKey(), kv.getValue(),
-                    metaValue, countDownLatch, metaType);
+            long backendId = kv.getKey();
+            Set<Long> tablets = kv.getValue();
+            UpdateTabletMetaInfoTask task = UpdateTabletMetaInfoTask.updateBooleanProperty(backendId, tablets,
+                    metaValue, metaType);
+            Preconditions.checkState(task != null, "task is null");
+            task.setLatch(countDownLatch);
             batchTask.addTask(task);
         }
         if (!FeConstants.runningUnitTest) {
@@ -2157,9 +2156,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 if (!countDownLatch.getStatus().ok()) {
                     errMsg += " Error: " + countDownLatch.getStatus().getErrorMsg();
                 } else {
-                    List<Map.Entry<Long, Set<Pair<Long, Integer>>>> unfinishedMarks = countDownLatch.getLeftMarks();
+                    List<Map.Entry<Long, Set<Long>>> unfinishedMarks = countDownLatch.getLeftMarks();
                     // only show at most 3 results
-                    List<Map.Entry<Long, Set<Pair<Long, Integer>>>> subList =
+                    List<Map.Entry<Long, Set<Long>>> subList =
                             unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));
                     if (!subList.isEmpty()) {
                         errMsg += " Unfinished mark: " + Joiner.on(", ").join(subList);

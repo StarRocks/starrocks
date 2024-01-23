@@ -109,14 +109,11 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTablet;
 import com.starrocks.thrift.TTabletInfo;
-import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
 import com.starrocks.thrift.TTxnType;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOp;
 import org.apache.commons.lang.StringUtils;
-import org.apache.commons.lang3.tuple.ImmutableTriple;
-import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.spark.util.SizeEstimator;
@@ -455,7 +452,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         // db id -> tablet id
         ListMultimap<Long, Long> tabletRecoveryMap = ArrayListMultimap.create();
 
-        Set<Pair<Long, Integer>> tabletWithoutPartitionId = Sets.newHashSet();
+        Set<Long> tabletWithoutPartitionId = Sets.newHashSet();
 
         // 1. do the diff. find out (intersection) / (be - meta) / (meta - be)
         GlobalStateMgr.getCurrentInvertedIndex().tabletReport(backendId, backendTablets, storageMediumMap,
@@ -1296,23 +1293,22 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         }
     }
 
-    private static void handleSetTabletPartitionId(long backendId, Set<Pair<Long, Integer>> tabletWithoutPartitionId) {
+    private static void handleSetTabletPartitionId(long backendId, Set<Long> tabletWithoutPartitionId) {
         if (!tabletWithoutPartitionId.isEmpty()) {
             LOG.info("find [{}] tablets without partition id, try to set them", tabletWithoutPartitionId.size());
         }
-        if (tabletWithoutPartitionId.size() < 1) {
+        if (tabletWithoutPartitionId.isEmpty()) {
             return;
         }
         AgentBatchTask batchTask = new AgentBatchTask();
-        UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(
-                backendId, tabletWithoutPartitionId, TTabletMetaType.PARTITIONID);
+        UpdateTabletMetaInfoTask task = UpdateTabletMetaInfoTask.updatePartitionId(backendId, tabletWithoutPartitionId);
         batchTask.addTask(task);
         AgentTaskExecutor.submit(batchTask);
     }
 
     private static void handleSetTabletInMemory(long backendId, Map<Long, TTablet> backendTablets) {
-        // <tablet id, tablet schema hash, tablet in memory>
-        List<Triple<Long, Integer, Boolean>> tabletToInMemory = Lists.newArrayList();
+        // <tablet id, tablet in memory>
+        List<Pair<Long, Boolean>> tabletToInMemory = Lists.newArrayList();
 
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         for (TTablet backendTablet : backendTablets.values()) {
@@ -1345,7 +1341,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     }
                     boolean feIsInMemory = olapTable.getPartitionInfo().getIsInMemory(partitionId);
                     if (beIsInMemory != feIsInMemory) {
-                        tabletToInMemory.add(new ImmutableTriple<>(tabletId, tabletInfo.schema_hash, feIsInMemory));
+                        tabletToInMemory.add(new Pair<>(tabletId, feIsInMemory));
                     }
                 } finally {
                     locker.unLockDatabase(db, LockType.READ);
@@ -1357,8 +1353,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         if (!tabletToInMemory.isEmpty()) {
             LOG.info("find [{}] tablet(s) which need to be set with in-memory state", tabletToInMemory.size());
             AgentBatchTask batchTask = new AgentBatchTask();
-            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToInMemory,
-                    TTabletMetaType.INMEMORY);
+            UpdateTabletMetaInfoTask task = UpdateTabletMetaInfoTask.updateIsInMemory(backendId, tabletToInMemory);
             batchTask.addTask(task);
             AgentTaskExecutor.submit(batchTask);
         }
@@ -1373,7 +1368,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
     }
 
     private static void handleSetTabletEnablePersistentIndex(long backendId, Map<Long, TTablet> backendTablets) {
-        List<Triple<Long, Integer, Boolean>> tabletToEnablePersistentIndex = Lists.newArrayList();
+        List<Pair<Long, Boolean>> tabletToEnablePersistentIndex = Lists.newArrayList();
 
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         for (TTablet backendTablet : backendTablets.values()) {
@@ -1400,8 +1395,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     }
                     boolean feEnablePersistentIndex = olapTable.enablePersistentIndex();
                     if (beEnablePersistentIndex != feEnablePersistentIndex) {
-                        tabletToEnablePersistentIndex.add(new ImmutableTriple<>(tabletId, tabletInfo.schema_hash,
-                                feEnablePersistentIndex));
+                        tabletToEnablePersistentIndex.add(new Pair<>(tabletId, feEnablePersistentIndex));
                     }
                 } finally {
                     locker.unLockDatabase(db, LockType.READ);
@@ -1413,8 +1407,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             LOG.info("find [{}] tablet(s) which need to be set with persistent index enabled",
                     tabletToEnablePersistentIndex.size());
             AgentBatchTask batchTask = new AgentBatchTask();
-            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToEnablePersistentIndex,
-                    TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+            UpdateTabletMetaInfoTask task = UpdateTabletMetaInfoTask.updateEnablePersistentIndex(backendId,
+                    tabletToEnablePersistentIndex);
             batchTask.addTask(task);
             if (FeConstants.runningUnitTest) {
                 AgentTaskExecutor.submit(batchTask);
@@ -1428,7 +1422,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
     }
 
     private static void handleSetPrimaryIndexCacheExpireSec(long backendId, Map<Long, TTablet> backendTablets) {
-        List<Triple<Long, Integer, Integer>> tabletToPrimaryCacheExpireSec = Lists.newArrayList();
+        List<Pair<Long, Integer>> tabletToPrimaryCacheExpireSec = Lists.newArrayList();
 
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         for (TTablet backendTablet : backendTablets.values()) {
@@ -1455,8 +1449,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     }
                     int fePrimaryIndexCacheExpireSec = olapTable.primaryIndexCacheExpireSec();
                     if (bePrimaryIndexCacheExpireSec != fePrimaryIndexCacheExpireSec) {
-                        tabletToPrimaryCacheExpireSec.add(new ImmutableTriple<>(tabletId, tabletInfo.schema_hash,
-                                fePrimaryIndexCacheExpireSec));
+                        tabletToPrimaryCacheExpireSec.add(new Pair<>(tabletId, fePrimaryIndexCacheExpireSec));
                     }
                 } finally {
                     locker.unLockDatabase(db, LockType.READ);
@@ -1468,8 +1461,8 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
             LOG.info("find [{}] tablet(s) which need to be set primary index cache expire sec",
                     tabletToPrimaryCacheExpireSec.size());
             AgentBatchTask batchTask = new AgentBatchTask();
-            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToPrimaryCacheExpireSec,
-                    TTabletMetaType.PRIMARY_INDEX_CACHE_EXPIRE_SEC);
+            UpdateTabletMetaInfoTask task = UpdateTabletMetaInfoTask.updatePrimaryIndexCacheExpireTime(backendId,
+                    tabletToPrimaryCacheExpireSec);
             batchTask.addTask(task);
             if (!FeConstants.runningUnitTest) {
                 AgentTaskExecutor.submit(batchTask);
@@ -1478,7 +1471,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
     }
 
     private static void handleSetTabletBinlogConfig(long backendId, Map<Long, TTablet> backendTablets) {
-        List<Triple<Long, Integer, BinlogConfig>> tabletToBinlogConfig = Lists.newArrayList();
+        List<Pair<Long, BinlogConfig>> tabletToBinlogConfig = Lists.newArrayList();
 
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentInvertedIndex();
         for (TTablet backendTablet : backendTablets.values()) {
@@ -1513,10 +1506,9 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                     }
                     Long feBinlogConfigVersion = binlogConfig.getVersion();
                     if (beBinlogConfigVersion < feBinlogConfigVersion) {
-                        tabletToBinlogConfig.add(new ImmutableTriple<>(tabletId, tabletInfo.schema_hash,
-                                olapTable.getCurBinlogConfig()));
+                        tabletToBinlogConfig.add(new Pair<>(tabletId, olapTable.getCurBinlogConfig()));
                     } else if (beBinlogConfigVersion == feBinlogConfigVersion) {
-                        if (olapTable.isBinlogEnabled() && olapTable.getBinlogAvailableVersion().size() == 0) {
+                        if (olapTable.isBinlogEnabled() && olapTable.getBinlogAvailableVersion().isEmpty()) {
                             // not to check here is that the function may need to get the write db lock
                             needToCheck = true;
                         }
@@ -1539,8 +1531,7 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
         LOG.debug("find [{}] tablets need set binlog config ", tabletToBinlogConfig.size());
         if (!tabletToBinlogConfig.isEmpty()) {
             AgentBatchTask batchTask = new AgentBatchTask();
-            UpdateTabletMetaInfoTask task = new UpdateTabletMetaInfoTask(backendId, tabletToBinlogConfig,
-                    TTabletMetaType.BINLOG_CONFIG);
+            UpdateTabletMetaInfoTask task = UpdateTabletMetaInfoTask.updateBinlogConfig(backendId, tabletToBinlogConfig);
             batchTask.addTask(task);
             AgentTaskExecutor.submit(batchTask);
         }
