@@ -77,12 +77,12 @@ public class StructTypePlanTest extends PlanTestBase {
                 "  |----6:EXCHANGE\n" +
                 "  |    \n" +
                 "  3:EXCHANGE");
-        assertContains(plan, "CAST(3: c2 AS struct<a int(11), b varchar(10)>)");
+        assertContains(plan, "CAST(3: c2 AS STRUCT<int(11), varchar(10)>)");
 
         sql = "select index_struct[1].`index` from index_struct_nest";
         plan = getFragmentPlan(sql);
         assertContains(plan, "1:Project\n" +
-                "  |  <slot 3> : 2: index_struct[1].index[true]");
+                "  |  <slot 3> : 2: index_struct[1].index");
     }
 
     @Test
