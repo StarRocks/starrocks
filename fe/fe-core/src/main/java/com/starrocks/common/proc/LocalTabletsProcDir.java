@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -45,8 +46,6 @@ import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.ListComparator;
@@ -54,6 +53,9 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.privilege.AccessDeniedException;
+import com.starrocks.privilege.ObjectType;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -205,9 +207,11 @@ public class LocalTabletsProcDir implements ProcDirInterface {
         Pair<Boolean, Boolean> privResult = Authorizer.checkPrivForShowTablet(
                 ConnectContext.get(), db.getFullName(), table);
         if (!privResult.first) {
-            throw new RuntimeException(
-                    ErrorReport.reportCommon(null, ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                            "ANY ON TABLE/MV OBJECT"));
+            ConnectContext connectContext = ConnectContext.get();
+            AccessDeniedException.reportAccessDenied(
+                    InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                    connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                    PrivilegeType.ANY.name(), ObjectType.TABLE.name(), null);
         }
         Boolean hideIpPort = privResult.second;
         return fetchComparableResult(-1, -1, null, hideIpPort);

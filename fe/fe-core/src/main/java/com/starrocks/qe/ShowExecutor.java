@@ -1901,12 +1901,10 @@ public class ShowExecutor {
                     tableName = table.getName();
                     Pair<Boolean, Boolean> privResult = Authorizer.checkPrivForShowTablet(connectContext, dbName, table);
                     if (!privResult.first) {
-                        // TODO(yiming): Refactor it, throw AccessDeniedException. We throw RuntimeException here,
-                        //  because the caller of this method is not prepared to handle AccessDeniedException,
-                        //  and change the it will incur a lot of chain modification.
-                        throw new RuntimeException(
-                                ErrorReport.reportCommon(null, ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                                        "ANY ON TABLE/MV OBJECT"));
+                        AccessDeniedException.reportAccessDenied(
+                                InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                                connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                                PrivilegeType.ANY.name(), ObjectType.TABLE.name(), null);
                     }
 
                     OlapTable olapTable = (OlapTable) table;
@@ -1978,10 +1976,10 @@ public class ShowExecutor {
                 Pair<Boolean, Boolean> privResult = Authorizer.checkPrivForShowTablet(
                         connectContext, db.getFullName(), table);
                 if (!privResult.first) {
-                    // TODO(yiming): Refactor it, throw AccessDeniedException.
-                    throw new RuntimeException(
-                            ErrorReport.reportCommon(null, ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR,
-                                    "ANY ON TABLE/MV OBJECT"));
+                    AccessDeniedException.reportAccessDenied(
+                            InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                            connectContext.getCurrentUserIdentity(), connectContext.getCurrentRoleIds(),
+                            PrivilegeType.ANY.name(), ObjectType.TABLE.name(), null);
                 }
                 Boolean hideIpPort = privResult.second;
 
