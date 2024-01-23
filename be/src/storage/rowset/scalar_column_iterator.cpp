@@ -308,7 +308,7 @@ Status ScalarColumnIterator::_load_dict_page() {
             _reader->read_page(_opts, _reader->get_dict_page_pointer(), &_dict_page_handle, &dict_data, &dict_footer));
     // ignore dict_footer.dict_page_footer().encoding() due to only
     // PLAIN_ENCODING is supported for dict page right now
-    if (Type == TYPE_CHAR || Type == TYPE_VARCHAR) {
+    if constexpr (Type == TYPE_CHAR || Type == TYPE_VARCHAR) {
         _dict_decoder = std::make_unique<BinaryPlainPageDecoder<Type>>(dict_data);
     } else {
         _dict_decoder = std::make_unique<BitShufflePageDecoder<Type>>(dict_data);
@@ -318,7 +318,7 @@ Status ScalarColumnIterator::_load_dict_page() {
 
 template <LogicalType Type>
 Status ScalarColumnIterator::_do_init_dict_decoder() {
-    if (Type == TYPE_CHAR || Type == TYPE_VARCHAR) {
+    if constexpr (Type == TYPE_CHAR || Type == TYPE_VARCHAR) {
         auto dict_page_decoder = down_cast<BinaryDictPageDecoder<Type>*>(_page->data_decoder());
         if (dict_page_decoder->encoding_type() == DICT_ENCODING) {
             if (_dict_decoder == nullptr) {
