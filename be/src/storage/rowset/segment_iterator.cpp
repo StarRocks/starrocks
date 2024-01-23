@@ -1994,6 +1994,7 @@ void SegmentIterator::_update_stats(RandomAccessFile* rfile) {
 }
 
 void SegmentIterator::close() {
+    std::string file_name = _segment->file_name();
     if (_del_vec) {
         _del_vec.reset();
     }
@@ -2029,7 +2030,7 @@ void SegmentIterator::close() {
               << "segment seek column time: " << _opts.stats->block_seek_ns << " "
               << "segment read column time: " << _opts.stats->block_fetch_ns << " "
               << "segment inverted search time: " << t_inverted_search_time << " "
-              << "segment file name: " << _segment->file_name();
+              << "segment file name: " << file_name;
 
 }
 
