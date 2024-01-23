@@ -14,10 +14,15 @@
 
 #include "column/column_access_path.h"
 
+#include <cstddef>
+#include <vector>
+
+#include "column/column.h"
 #include "column/column_helper.h"
 #include "column/field.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
+#include "common/status.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "runtime/runtime_state.h"
@@ -25,7 +30,8 @@
 
 namespace starrocks {
 
-Status ColumnAccessPath::init(const TColumnAccessPath& column_path, RuntimeState* state, ObjectPool* pool) {
+Status ColumnAccessPath::init(const std::string& parent_path, const TColumnAccessPath& column_path, RuntimeState* state,
+                              ObjectPool* pool) {
     _type = column_path.type;
     _from_predicate = column_path.from_predicate;
 
@@ -51,22 +57,33 @@ Status ColumnAccessPath::init(const TColumnAccessPath& column_path, RuntimeState
 
     Slice slice = ColumnHelper::as_raw_column<BinaryColumn>(data)->get_slice(0);
     _path = slice.to_string();
+    _absolute_path = parent_path + _path;
 
     for (const auto& child : column_path.children) {
         ColumnAccessPathPtr child_path = std::make_unique<ColumnAccessPath>();
-        RETURN_IF_ERROR(child_path->init(child, state, pool));
+        RETURN_IF_ERROR(child_path->init(_absolute_path + "/", child, state, pool));
         _children.emplace_back(std::move(child_path));
     }
 
     return Status::OK();
 }
 
-Status ColumnAccessPath::init(const TAccessPathType::type& type, const std::string& path, uint32_t index) {
+Status ColumnAccessPath::init(TAccessPathType::type type, const std::string& path, uint32_t index) {
     _type = type;
     _path = path;
     _column_index = index;
+    _absolute_path = path;
 
     return Status::OK();
+}
+
+ColumnAccessPath* ColumnAccessPath::get_child(const std::string& path) {
+    for (const auto& child : _children) {
+        if (child->_path == path) {
+            return child.get();
+        }
+    }
+    return nullptr;
 }
 
 StatusOr<ColumnAccessPathPtr> ColumnAccessPath::convert_by_index(const Field* field, uint32_t index) {
@@ -74,7 +91,18 @@ StatusOr<ColumnAccessPathPtr> ColumnAccessPath::convert_by_index(const Field* fi
     path->_type = this->_type;
     path->_path = this->_path;
     path->_from_predicate = this->_from_predicate;
+    path->_absolute_path = this->_absolute_path;
     path->_column_index = index;
+
+    // json field has none sub-fields, and we only convert the root path, child path find reader by name
+    if (field->type()->type() == LogicalType::TYPE_JSON) {
+        // _type must be INDEX
+        for (const auto& child : this->_children) {
+            ASSIGN_OR_RETURN(auto copy, child->convert_by_index(field, -1));
+            path->_children.emplace_back(std::move(copy));
+        }
+        return path;
+    }
 
     if (!field->has_sub_fields()) {
         if (!this->_children.empty()) {
@@ -108,7 +136,7 @@ StatusOr<ColumnAccessPathPtr> ColumnAccessPath::convert_by_index(const Field* fi
             }
         }
     } else if (field->type()->type() == LogicalType::TYPE_STRUCT) {
-        // _type must be FIELD
+        // _type must be FIELD,
         std::unordered_map<std::string_view, uint32_t> name_index;
 
         for (uint32_t i = 0; i < all_field.size(); i++) {
@@ -130,10 +158,35 @@ StatusOr<ColumnAccessPathPtr> ColumnAccessPath::convert_by_index(const Field* fi
     return path;
 }
 
+size_t ColumnAccessPath::leaf_size() const {
+    if (_children.empty()) {
+        return 1;
+    }
+    size_t size = 0;
+    for (const auto& child : _children) {
+        size += child->leaf_size();
+    }
+    return size;
+}
+
 const std::string ColumnAccessPath::to_string() const {
     std::stringstream ss;
     ss << _path << "(" << _type << ")";
     return ss.str();
+}
+
+StatusOr<std::unique_ptr<ColumnAccessPath>> ColumnAccessPath::create(const TColumnAccessPath& column_path,
+                                                                     RuntimeState* state, ObjectPool* pool) {
+    auto path = std::make_unique<ColumnAccessPath>();
+    RETURN_IF_ERROR(path->init("/", column_path, state, pool));
+    return path;
+}
+
+StatusOr<std::unique_ptr<ColumnAccessPath>> ColumnAccessPath::create(const TAccessPathType::type& type,
+                                                                     const std::string& path, uint32_t index) {
+    auto p = std::make_unique<ColumnAccessPath>();
+    RETURN_IF_ERROR(p->init(type, path, index));
+    return p;
 }
 
 } // namespace starrocks
