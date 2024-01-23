@@ -152,8 +152,16 @@ public class ShowColumnStmt extends ShowStmt {
 
         where = where.substitute(aliasMap);
         where = new CompoundPredicate(CompoundPredicate.Operator.AND, where,
+<<<<<<< HEAD
                 new BinaryPredicate(BinaryPredicate.Operator.EQ, new SlotRef(TABLE_NAME, "TABLE_SCHEMA"),
                         new StringLiteral(tableName.getDb())));
+=======
+                new CompoundPredicate(CompoundPredicate.Operator.AND,
+                        new BinaryPredicate(BinaryType.EQ, new SlotRef(TABLE_NAME, "TABLE_NAME"),
+                                new StringLiteral(tableName.getTbl())),
+                        new BinaryPredicate(BinaryType.EQ, new SlotRef(TABLE_NAME, "TABLE_SCHEMA"),
+                                new StringLiteral(tableName.getDb()))));
+>>>>>>> 6751a86539 ([BugFix] Fix bug show columns does not filter by table (#39788))
         return new QueryStatement(new SelectRelation(selectList, new TableRelation(TABLE_NAME),
                 where, null, null));
     }
