@@ -23,9 +23,11 @@ import org.apache.commons.lang.exception.ExceptionUtils;
  * Access remote storage(s3/gcs/oss/hdfs) exception
  */
 public class StorageAccessException extends RuntimeException {
+    private Throwable e;
 
     public StorageAccessException(Throwable e) {
         super(e);
+        this.e = e;
     }
 
     public Throwable getRootCause() {
@@ -43,7 +45,7 @@ public class StorageAccessException extends RuntimeException {
         } else if (rootCause instanceof DdlException) {
             builder.append("Error message: ").append(rootCause.getMessage());
         } else {
-            builder.append("Unknown error");
+            builder.append("Error message: ").append(e.getMessage());
         }
         // TODO: translate error message of other storage systems
         return builder.toString();

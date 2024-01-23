@@ -236,7 +236,8 @@ public class TableFunctionTable extends Table {
             }
         } catch (UserException e) {
             LOG.error("parse files error", e);
-            throw new DdlException("failed to parse files", e);
+            String errorMsg = "failed to parse files. You may give a wrong url, please check it. " + path;
+            throw new DdlException(errorMsg, e);
         }
 
         if (fileStatuses.isEmpty()) {
