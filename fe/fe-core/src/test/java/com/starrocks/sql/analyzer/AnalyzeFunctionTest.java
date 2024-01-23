@@ -299,6 +299,9 @@ public class AnalyzeFunctionTest {
     @Test
     public void testTableFunction() throws Exception {
         analyzeSuccess("SELECT * FROM TABLE(generate_series(2, 5, 2));");
+        analyzeSuccess("SELECT * FROM TABLE(generate_series(start => 2, end => 5, step => 2));");
         analyzeSuccess("select * from table(generate_series('2023-12-31 19:00:00', '2024-01-01 00:00:00', interval 3 hour));");
+        analyzeSuccess("select * from table(generate_series"
+                + "(start => '2023-12-31 19:00:00', end => '2024-01-01 00:00:00', step => interval 3 hour));");
     }
 }

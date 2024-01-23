@@ -133,3 +133,39 @@ select * from table(generate_series('2024-03-08', '1996-04-02', interval -3 year
 2000-03-08 00:00:00
 1997-03-08 00:00:00
 -- !result
+-- name: generate_series_abnormal_case_01
+SELECT * from table(generate_series('2023-12-29 00:00:00', '2024-01-02 00:00:00', 2.4));
+-- result:
+E: (1064, "Getting analyzing error. Detail message: step/interval value expr must be integer type when use table function 'generate_series' generate time series, currently 'DECIMAL32(2,1)'.")
+-- !result
+SELECT * from table(generate_series('2023-12-29 00:00:00', '2024-01-02 00:00:00', interval 2.3 second));
+-- result:
+E: (1064, "Getting analyzing error. Detail message: step/interval value expr must be integer type when use table function 'generate_series' generate time series, currently 'DECIMAL32(2,1)'.")
+-- !result
+-- name: generate_series_abnormal_case_02
+CREATE TABLE t_datetime (seq int, start datetime, end datetime, step int) DUPLICATE KEY(`seq`) DISTRIBUTED BY HASH(seq) BUCKETS 1;
+-- result:
+-- !result
+INSERT INTO t_datetime VALUES(1, '2023-12-31 23:59:57', '2024-01-01 00:00:04', 2),(2, NULL, '2024-01-01 00:00:04', 2),(3, '2023-12-31 23:59:57', NULL, 2),(4, '2023-12-31 23:59:57', '2024-01-01 00:00:04', NULL);
+-- result:
+-- !result
+SELECT * FROM t_datetime, generate_series(t_datetime.start, t_datetime.end, interval 3 second);
+-- result:
+1	2023-12-31 23:59:57	2024-01-01 00:00:04	2	2023-12-31 23:59:57
+1	2023-12-31 23:59:57	2024-01-01 00:00:04	2	2024-01-01 00:00:00
+1	2023-12-31 23:59:57	2024-01-01 00:00:04	2	2024-01-01 00:00:03
+5	2023-12-31 23:59:57	2024-01-01 00:00:04	NULL	2023-12-31 23:59:57
+5	2023-12-31 23:59:57	2024-01-01 00:00:04	NULL	2024-01-01 00:00:00
+5	2023-12-31 23:59:57	2024-01-01 00:00:04	NULL	2024-01-01 00:00:03
+-- !result
+SELECT * FROM t_datetime, generate_series(start, end, interval step second);
+-- result:
+1	2023-12-31 23:59:57	2024-01-01 00:00:04	2	2023-12-31 23:59:57
+1	2023-12-31 23:59:57	2024-01-01 00:00:04	2	2023-12-31 23:59:59
+1	2023-12-31 23:59:57	2024-01-01 00:00:04	2	2024-01-01 00:00:01
+1	2023-12-31 23:59:57	2024-01-01 00:00:04	2	2024-01-01 00:00:03
+2	2024-01-01 00:00:06	2023-12-31 23:59:56	-3	2024-01-01 00:00:06
+2	2024-01-01 00:00:06	2023-12-31 23:59:56	-3	2024-01-01 00:00:03
+2	2024-01-01 00:00:06	2023-12-31 23:59:56	-3	2024-01-01 00:00:00
+2	2024-01-01 00:00:06	2023-12-31 23:59:56	-3	2023-12-31 23:59:57
+-- !result

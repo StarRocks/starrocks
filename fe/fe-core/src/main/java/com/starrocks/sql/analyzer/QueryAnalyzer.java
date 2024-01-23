@@ -904,13 +904,20 @@ public class QueryAnalyzer {
                     }
 
                     String unit = TimestampArithmeticExpr.TimeUnit.DAY.name();
-                    if (args.size() > stepParamIndex && args.get(stepParamIndex) instanceof IntervalLiteral) {
-                        IntervalLiteral stepExpr = (IntervalLiteral) args.get(stepParamIndex);
-                        Expr intervalValue = stepExpr.getValue();
-                        analyzeExpression(intervalValue, analyzeState, scope);
-                        argTypes[stepParamIndex] = intervalValue.getType();
-                        node.getFunctionParams().exprs().set(stepParamIndex, intervalValue);
-                        unit = stepExpr.getUnitIdentifier().getDescription();
+                    if (args.size() > stepParamIndex) {
+                        if (args.get(stepParamIndex) instanceof IntervalLiteral) {
+                            IntervalLiteral stepExpr = (IntervalLiteral) args.get(stepParamIndex);
+                            Expr intervalValue = stepExpr.getValue();
+                            analyzeExpression(intervalValue, analyzeState, scope);
+                            argTypes[stepParamIndex] = intervalValue.getType();
+                            node.getFunctionParams().exprs().set(stepParamIndex, intervalValue);
+                            unit = stepExpr.getUnitIdentifier().getDescription();
+                        }
+                        if (!argTypes[stepParamIndex].isFixedPointType()) {
+                            throw new SemanticException("step/interval value expr must be integer type " +
+                                "when use table function '%s' generate time series, currently '%s'",
+                                functionName, argTypes[stepParamIndex]);
+                        }
                     }
 
                     functionName = String.format("%s_BY_%s", FunctionSet.GENERATE_SERIES, unit);
