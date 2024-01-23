@@ -133,7 +133,7 @@ StatusOr<std::string> JindoClientFactory::get_local_user() {
     return username;
 }
 
-JdoOptions_t JindoClientFactory::get_jindo_options(const S3URI& uri, const FSOptions& opts) {
+JdoOptions_t JindoClientFactory::get_or_create_jindo_opts(const S3URI& uri, const FSOptions& opts) {
     // Priority order: 1. properties in catalog definition 2. _jindo_config_map
     std::string endpoint = "";
     std::string ak_id = "";
@@ -195,12 +195,13 @@ JdoOptions_t JindoClientFactory::get_jindo_options(const S3URI& uri, const FSOpt
 
 StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSOptions& opts) {
     std::lock_guard l(_lock);
-    auto jdo_options = get_jindo_options(uri, opts);
+    auto jdo_options = get_or_create_jindo_opts(uri, opts);
     std::string uri_prefix = uri.scheme() + "://" + uri.bucket();
 
     for (size_t i = 0; i < _items; i++) {
         if (option_equals(_configs[i], jdo_options)) {
             LOG(INFO) << "Reuse jindo client for " << uri_prefix << ", index " << i;
+            jdo_freeOptions(jdo_options);
             return _clients[i];
         }
     }
@@ -234,6 +235,7 @@ StatusOr<JdoSystem_t> JindoClientFactory::new_client(const S3URI& uri, const FSO
 
         LOG(INFO) << "Free jindo client for " << uri_prefix << ", index " << _items;
         auto old_client = _clients[idx];
+        jdo_freeOptions(_configs[idx]);
         JdoContext_t ctx = jdo_createContext1(old_client);
         jdo_destroySystem(ctx);
         Status destroy_status = io::check_jindo_status(ctx);

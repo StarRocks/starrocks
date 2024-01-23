@@ -70,7 +70,7 @@ public:
 
     bool option_equals(const JdoOptions_t& left, const JdoOptions_t& right);
     StatusOr<std::string> get_local_user();
-    JdoOptions_t get_jindo_options(const S3URI& uri, const FSOptions& opts);
+    JdoOptions_t get_or_create_jindo_opts(const S3URI& uri, const FSOptions& opts);
     StatusOr<JdoSystem_t> new_client(const S3URI& uri, const FSOptions& opts);
 
 private:
