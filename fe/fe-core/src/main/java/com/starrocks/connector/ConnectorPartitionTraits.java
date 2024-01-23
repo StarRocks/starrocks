@@ -373,6 +373,10 @@ public abstract class ConnectorPartitionTraits {
             }
             return result;
         }
+
+        public List<Column> getPartitionColumns() {
+            return ((OlapTable) table).getPartitionInfo().getPartitionColumns();
+        }
     }
 
     static class HivePartitionTraits extends DefaultTraits {
