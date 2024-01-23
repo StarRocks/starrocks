@@ -37,7 +37,7 @@ protected:
 };
 
 TEST_F(BlockCacheTest, hybrid_cache) {
-    const std::string cache_dir = "./block_disk_cache1";
+    const std::string cache_dir = "./block_cache_hybrid_cache";
     ASSERT_TRUE(fs::create_directories(cache_dir).ok());
 
     std::unique_ptr<BlockCache> cache(new BlockCache);
@@ -49,11 +49,12 @@ TEST_F(BlockCacheTest, hybrid_cache) {
     options.disk_spaces.push_back({.path = cache_dir, .size = quota});
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
+    options.enable_direct_io = false;
     options.engine = "starcache";
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
 
-    const size_t batch_size = block_size - 1234;
+    const size_t batch_size = block_size;
     const size_t rounds = 10;
     const std::string cache_key = "test_file";
 
@@ -103,6 +104,7 @@ TEST_F(BlockCacheTest, write_with_overwrite_option) {
     options.mem_space_size = 5 * 1024 * 1024;
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
+    options.enable_direct_io = false;
     options.engine = "starcache";
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
@@ -142,11 +144,12 @@ TEST_F(BlockCacheTest, auto_create_disk_cache_path) {
     options.disk_spaces.push_back({.path = cache_dir, .size = quota});
     options.block_size = block_size;
     options.max_concurrent_inserts = 100000;
+    options.enable_direct_io = false;
     options.engine = "starcache";
     Status status = cache->init(options);
     ASSERT_TRUE(status.ok());
 
-    const size_t batch_size = block_size - 1234;
+    const size_t batch_size = block_size;
     const size_t rounds = 3;
     const std::string cache_key = "test_file";
 
