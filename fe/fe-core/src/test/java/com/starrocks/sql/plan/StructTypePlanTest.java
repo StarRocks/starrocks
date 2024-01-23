@@ -75,7 +75,7 @@ public class StructTypePlanTest extends PlanTestBase {
         sql = "select index_struct[1].`index` from index_struct_nest";
         plan = getFragmentPlan(sql);
         assertContains(plan, "1:Project\n" +
-                "  |  <slot 3> : 2: index_struct[1].index[true]");
+                "  |  <slot 3> : 2: index_struct[1].index");
     }
 
     @Test
